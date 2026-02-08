@@ -8,9 +8,9 @@ import re
 from schema import get_connection, create_schema, DB_PATH
 
 QUANT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         '..', '..', 'NSE Data Analysis', 'QuantMappings')
+                         '..', '..', '..', 'NSE Data Analysis', 'QuantMappings')
 NSE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       '..', '..', 'NSE Data Analysis')
+                       '..', '..', '..', 'NSE Data Analysis')
 
 
 def read_csv(filename):

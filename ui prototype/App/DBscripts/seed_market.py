@@ -12,9 +12,9 @@ from datetime import datetime
 from schema import get_connection, create_schema, DB_PATH
 
 QUANT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         '..', '..', 'NSE Data Analysis', 'QuantMappings')
+                         '..', '..', '..', 'NSE Data Analysis', 'QuantMappings')
 EOD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       '..', '..', 'NSE Data Analysis', 'downloaded EOD data')
+                       '..', '..', '..', 'NSE Data Analysis', 'downloaded EOD data')
 
 
 def parse_float(val):

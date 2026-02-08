@@ -8,7 +8,7 @@ import os
 from schema import get_connection, create_schema, DB_PATH
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          '..', '..', 'ui prototype', 'output')
+                          '..', 'backend', 'output')
 
 
 def load_json(filename):

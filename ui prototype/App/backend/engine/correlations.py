@@ -13,7 +13,7 @@ This is the intelligence layer -- it proves (or disproves) each factor's market 
 import sys
 import os
 import math
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'db'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'DBscripts'))
 
 from schema import get_connection
 

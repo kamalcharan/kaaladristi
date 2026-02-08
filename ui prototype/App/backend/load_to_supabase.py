@@ -1,5 +1,6 @@
 import json
 import os
+from dotenv import load_dotenv
 from supabase import create_client, Client
 from datetime import datetime
 
@@ -7,9 +8,10 @@ from datetime import datetime
 # CONFIGURATION
 # =============================================================================
 
-# Replace with your Supabase credentials
-SUPABASE_URL = "https://esbklgxmizyuueeuyphr.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVzYmtsZ3htaXp5dXVlZXV5cGhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5ODI4NzAsImV4cCI6MjA4MDU1ODg3MH0.IO_FsTCG8f0-sdfq-fGH9OR5cBVrhfXM_6Pb-E4LZ1A"
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env'))
+
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 output_path = os.path.join(script_dir, 'output')
