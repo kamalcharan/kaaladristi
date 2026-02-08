@@ -1,0 +1,9 @@
+[submodule "contractnest-ui"]
+	path = contractnest-ui
+	url = https://github.com/kamalcharan/contractnest-ui.git
+[submodule "contractnest-api"]
+	path = contractnest-api
+	url = https://github.com/kamalcharan/contractnest-api.git
+[submodule "contractnest-edge"]
+	path = contractnest-edge
+	url = https://github.com/kamalcharan/contractnest-edge.git
