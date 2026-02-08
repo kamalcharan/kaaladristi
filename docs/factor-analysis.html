@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factor Analysis | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-elevated: rgba(30, 41, 59, 0.5);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-active: rgba(99, 102, 241, 0.4);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.1), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(139, 92, 246, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 72px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 32px;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-item {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            color: var(--accent-indigo);
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 72px;
+            padding: 32px 40px;
+            max-width: 1400px;
+        }
+
+        /* Header */
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        /* Factor Tabs */
+        .factor-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 32px;
+            flex-wrap: wrap;
+        }
+
+        .factor-tab {
+            padding: 10px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .factor-tab:hover {
+            border-color: var(--border-active);
+            color: var(--text-primary);
+        }
+
+        .factor-tab.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+            border-color: var(--accent-indigo);
+            color: var(--text-primary);
+        }
+
+        .factor-tab.active-now::after {
+            content: 'ACTIVE';
+            font-size: 9px;
+            padding: 2px 6px;
+            background: var(--risk-red);
+            color: white;
+            border-radius: 4px;
+            margin-left: 4px;
+        }
+
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
+        }
+
+        /* Factor Detail Card */
+        .factor-detail-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .factor-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .factor-title-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .factor-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.05));
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .factor-title h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .factor-title p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .factor-status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .factor-status-badge.active {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--risk-red);
+        }
+
+        .factor-status-badge.active::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--risk-red);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Stats Row */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--border-subtle);
+        }
+
+        .stat-item {
+            background: var(--bg-primary);
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-value.negative { color: var(--risk-red); }
+        .stat-value.positive { color: var(--risk-green); }
+        .stat-value.neutral { color: var(--risk-amber); }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Chart Section */
+        .chart-section {
+            padding: 24px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+        }
+
+        .legend-dot.rx { background: rgba(239, 68, 68, 0.3); border: 1px solid var(--risk-red); }
+        .legend-dot.direct { background: rgba(16, 185, 129, 0.3); border: 1px solid var(--risk-green); }
+
+        /* Historical Chart Visualization */
+        .historical-chart {
+            height: 200px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+            padding: 16px;
+        }
+
+        .chart-y-axis {
+            position: absolute;
+            left: 8px;
+            top: 16px;
+            bottom: 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .chart-grid {
+            position: absolute;
+            left: 40px;
+            right: 16px;
+            top: 16px;
+            bottom: 32px;
+        }
+
+        .grid-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--border-subtle);
+        }
+
+        /* Rx Period Highlights */
+        .rx-period {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            background: rgba(239, 68, 68, 0.1);
+            border-left: 2px solid var(--risk-red);
+            border-right: 2px solid var(--risk-red);
+        }
+
+        /* Price Line */
+        .price-line {
+            position: absolute;
+            left: 40px;
+            right: 16px;
+            top: 16px;
+            bottom: 32px;
+        }
+
+        .price-line svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .price-path {
+            fill: none;
+            stroke: var(--accent-cyan);
+            stroke-width: 2;
+        }
+
+        .chart-x-axis {
+            position: absolute;
+            left: 40px;
+            right: 16px;
+            bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* Occurrences Table */
+        .occurrences-section {
+            padding: 24px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .occurrences-table {
+            width: 100%;
+        }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 120px 80px 100px 100px 1fr;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 13px;
+        }
+
+        .table-row.header {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .table-row:last-child {
+            border-bottom: none;
+        }
+
+        .cell.date {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .cell.duration {
+            color: var(--text-secondary);
+        }
+
+        .cell.return {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        .cell.return.negative { color: var(--risk-red); }
+        .cell.return.positive { color: var(--risk-green); }
+
+        .cell.volatility {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .volatility-bar {
+            width: 60px;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .volatility-fill {
+            height: 100%;
+            border-radius: 3px;
+        }
+
+        .volatility-fill.high { background: var(--risk-red); width: 90%; }
+        .volatility-fill.medium { background: var(--risk-amber); width: 60%; }
+        .volatility-fill.low { background: var(--risk-green); width: 30%; }
+
+        .cell.notes {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Right Panel */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Sector Sensitivity Card */
+        .sensitivity-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .sensitivity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sensitivity-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .sector-name {
+            width: 80px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .sensitivity-bar-container {
+            flex: 1;
+            height: 24px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sensitivity-bar {
+            height: 100%;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            padding-left: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            transition: width 0.5s ease;
+        }
+
+        .sensitivity-bar.high { background: linear-gradient(90deg, rgba(239, 68, 68, 0.3), var(--risk-red)); }
+        .sensitivity-bar.medium { background: linear-gradient(90deg, rgba(245, 158, 11, 0.3), var(--risk-amber)); }
+        .sensitivity-bar.low { background: linear-gradient(90deg, rgba(16, 185, 129, 0.3), var(--risk-green)); }
+
+        /* Correlation Proof */
+        .correlation-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .proof-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .proof-item {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .proof-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .proof-value.bad { color: var(--risk-red); }
+        .proof-value.good { color: var(--risk-green); }
+
+        .proof-label {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .proof-comparison {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .comparison-title {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .comparison-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .comparison-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .comparison-label {
+            width: 60px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .comparison-bar-container {
+            flex: 1;
+            height: 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .comparison-bar {
+            height: 100%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .comparison-bar.rx { background: var(--risk-red); }
+        .comparison-bar.direct { background: var(--risk-green); }
+
+        /* Current Status Card */
+        .current-status-card {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.02));
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .status-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: rgba(239, 68, 68, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .status-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--risk-red);
+        }
+
+        .status-details {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+
+        .status-label {
+            color: var(--text-muted);
+        }
+
+        .status-value {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+        }
+
+        /* Disclaimer */
+        .disclaimer {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">⟡</div>
+            <div class="nav-items">
+                <a href="dashboard.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </a>
+                <a href="calendar.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </a>
+                <a href="factor-analysis.html" class="nav-item active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                </a>
+                <a href="history.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </a>
+                <a href="settings.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">Factor Analysis</h1>
+                <p class="page-subtitle">Historical correlation proof for each planetary factor</p>
+            </header>
+
+            <!-- Factor Tabs -->
+            <div class="factor-tabs">
+                <div class="factor-tab active active-now">☿ Mercury Retrograde</div>
+                <div class="factor-tab active-now">♂□♄ Mars-Saturn Square</div>
+                <div class="factor-tab">♄ Saturn Retrograde</div>
+                <div class="factor-tab">♂ Mars Retrograde</div>
+                <div class="factor-tab">☽ Moon Nakshatras</div>
+                <div class="factor-tab">☽ Gandanta Points</div>
+                <div class="factor-tab">☊ Rahu-Ketu Axis</div>
+            </div>
+
+            <div class="main-grid">
+                <!-- Left: Factor Detail -->
+                <div class="factor-detail-card">
+                    <div class="factor-header">
+                        <div class="factor-title-section">
+                            <div class="factor-icon">☿</div>
+                            <div class="factor-title">
+                                <h2>Mercury Retrograde</h2>
+                                <p>Communication, technology, and trade disruptions</p>
+                            </div>
+                        </div>
+                        <div class="factor-status-badge active">
+                            CURRENTLY ACTIVE
+                        </div>
+                    </div>
+
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <div class="stat-value negative">73%</div>
+                            <div class="stat-label">Down Days</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value negative">-0.8%</div>
+                            <div class="stat-label">Avg Return</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value neutral">1.8x</div>
+                            <div class="stat-label">Volatility</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">45</div>
+                            <div class="stat-label">Sample Periods</div>
+                        </div>
+                    </div>
+
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <span class="chart-title">NIFTY Performance During Mercury Retrograde (2019-2024)</span>
+                            <div class="chart-legend">
+                                <div class="legend-item"><div class="legend-dot rx"></div> Rx Period</div>
+                                <div class="legend-item"><div class="legend-dot direct"></div> Direct Period</div>
+                            </div>
+                        </div>
+                        <div class="historical-chart">
+                            <div class="chart-y-axis">
+                                <span>+3%</span>
+                                <span>0%</span>
+                                <span>-3%</span>
+                            </div>
+                            <div class="chart-grid">
+                                <div class="grid-line" style="top: 0;"></div>
+                                <div class="grid-line" style="top: 50%;"></div>
+                                <div class="grid-line" style="top: 100%;"></div>
+                            </div>
+                            <!-- Rx Period Highlights -->
+                            <div class="rx-period" style="left: 5%; width: 8%;"></div>
+                            <div class="rx-period" style="left: 22%; width: 7%;"></div>
+                            <div class="rx-period" style="left: 38%; width: 9%;"></div>
+                            <div class="rx-period" style="left: 55%; width: 7%;"></div>
+                            <div class="rx-period" style="left: 72%; width: 8%;"></div>
+                            <div class="rx-period" style="left: 88%; width: 7%;"></div>
+                            <!-- Price Line (simplified) -->
+                            <div class="price-line">
+                                <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                                    <path class="price-path" d="M0,50 L5,55 L10,48 L15,52 L20,45 L25,50 L30,42 L35,48 L40,40 L45,45 L50,38 L55,42 L60,35 L65,40 L70,32 L75,38 L80,30 L85,35 L90,28 L95,32 L100,25"/>
+                                </svg>
+                            </div>
+                            <div class="chart-x-axis">
+                                <span>Jan '19</span>
+                                <span>Jan '20</span>
+                                <span>Jan '21</span>
+                                <span>Jan '22</span>
+                                <span>Jan '23</span>
+                                <span>Jan '24</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="occurrences-section">
+                        <h3 class="section-title">Recent Occurrences (Last 10)</h3>
+                        <div class="occurrences-table">
+                            <div class="table-row header">
+                                <div class="cell">Period</div>
+                                <div class="cell">Duration</div>
+                                <div class="cell">NIFTY Return</div>
+                                <div class="cell">Volatility</div>
+                                <div class="cell">Key Events</div>
+                            </div>
+                            <div class="table-row">
+                                <div class="cell date">Dec 13 - Jan 1</div>
+                                <div class="cell duration">19 days</div>
+                                <div class="cell return negative">-1.2%</div>
+                                <div class="cell volatility"><div class="volatility-bar"><div class="volatility-fill high"></div></div> High</div>
+                                <div class="cell notes">Current period</div>
+                            </div>
+                            <div class="table-row">
+                                <div class="cell date">Aug 23 - Sep 15</div>
+                                <div class="cell duration">23 days</div>
+                                <div class="cell return negative">-2.1%</div>
+                                <div class="cell volatility"><div class="volatility-bar"><div class="volatility-fill high"></div></div> High</div>
+                                <div class="cell notes">IT sector -4.2%</div>
+                            </div>
+                            <div class="table-row">
+                                <div class="cell date">Apr 21 - May 14</div>
+                                <div class="cell duration">23 days</div>
+                                <div class="cell return negative">-0.8%</div>
+                                <div class="cell volatility"><div class="volatility-bar"><div class="volatility-fill medium"></div></div> Med</div>
+                                <div class="cell notes">Range-bound</div>
+                            </div>
+                            <div class="table-row">
+                                <div class="cell date">Dec 29 - Jan 18</div>
+                                <div class="cell duration">20 days</div>
+                                <div class="cell return positive">+0.4%</div>
+                                <div class="cell volatility"><div class="volatility-bar"><div class="volatility-fill medium"></div></div> Med</div>
+                                <div class="cell notes">Budget rally offset</div>
+                            </div>
+                            <div class="table-row">
+                                <div class="cell date">Sep 9 - Oct 2</div>
+                                <div class="cell duration">23 days</div>
+                                <div class="cell return negative">-1.8%</div>
+                                <div class="cell volatility"><div class="volatility-bar"><div class="volatility-fill high"></div></div> High</div>
+                                <div class="cell notes">Global selloff</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel -->
+                <div class="right-panel">
+                    <!-- Current Status -->
+                    <div class="current-status-card">
+                        <div class="status-header">
+                            <div class="status-icon">⚠️</div>
+                            <div class="status-title">Currently Active</div>
+                        </div>
+                        <div class="status-details">
+                            <div class="status-row">
+                                <span class="status-label">Started</span>
+                                <span class="status-value">Dec 13, 2024</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Ends</span>
+                                <span class="status-value">Jan 1, 2025</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Days Remaining</span>
+                                <span class="status-value">16 days</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">Current NIFTY</span>
+                                <span class="status-value">-0.8% since start</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sector Sensitivity -->
+                    <div class="sensitivity-card">
+                        <h3 class="card-title">Sector Sensitivity to Mercury Rx</h3>
+                        <div class="sensitivity-list">
+                            <div class="sensitivity-row">
+                                <span class="sector-name">IT</span>
+                                <div class="sensitivity-bar-container">
+                                    <div class="sensitivity-bar high" style="width: 85%;">85%</div>
+                                </div>
+                            </div>
+                            <div class="sensitivity-row">
+                                <span class="sector-name">Telecom</span>
+                                <div class="sensitivity-bar-container">
+                                    <div class="sensitivity-bar high" style="width: 72%;">72%</div>
+                                </div>
+                            </div>
+                            <div class="sensitivity-row">
+                                <span class="sector-name">Banking</span>
+                                <div class="sensitivity-bar-container">
+                                    <div class="sensitivity-bar medium" style="width: 45%;">45%</div>
+                                </div>
+                            </div>
+                            <div class="sensitivity-row">
+                                <span class="sector-name">Auto</span>
+                                <div class="sensitivity-bar-container">
+                                    <div class="sensitivity-bar medium" style="width: 38%;">38%</div>
+                                </div>
+                            </div>
+                            <div class="sensitivity-row">
+                                <span class="sector-name">FMCG</span>
+                                <div class="sensitivity-bar-container">
+                                    <div class="sensitivity-bar low" style="width: 20%;">20%</div>
+                                </div>
+                            </div>
+                            <div class="sensitivity-row">
+                                <span class="sector-name">Pharma</span>
+                                <div class="sensitivity-bar-container">
+                                    <div class="sensitivity-bar low" style="width: 15%;">15%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Correlation Proof -->
+                    <div class="correlation-card">
+                        <h3 class="card-title">Statistical Proof</h3>
+                        <div class="proof-grid">
+                            <div class="proof-item">
+                                <div class="proof-value bad">73%</div>
+                                <div class="proof-label">Down Days (Rx)</div>
+                            </div>
+                            <div class="proof-item">
+                                <div class="proof-value good">48%</div>
+                                <div class="proof-label">Down Days (Direct)</div>
+                            </div>
+                            <div class="proof-item">
+                                <div class="proof-value bad">-0.8%</div>
+                                <div class="proof-label">Avg Return (Rx)</div>
+                            </div>
+                            <div class="proof-item">
+                                <div class="proof-value good">+0.3%</div>
+                                <div class="proof-label">Avg Return (Direct)</div>
+                            </div>
+                        </div>
+                        <div class="proof-comparison">
+                            <div class="comparison-title">Average Daily Range</div>
+                            <div class="comparison-bars">
+                                <div class="comparison-row">
+                                    <span class="comparison-label">During Rx</span>
+                                    <div class="comparison-bar-container">
+                                        <div class="comparison-bar rx" style="width: 85%;">285 pts</div>
+                                    </div>
+                                </div>
+                                <div class="comparison-row">
+                                    <span class="comparison-label">Direct</span>
+                                    <div class="comparison-bar-container">
+                                        <div class="comparison-bar direct" style="width: 55%;">158 pts</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="disclaimer">
+                        ⚠️ Past performance does not guarantee future results. This analysis is for educational purposes only.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

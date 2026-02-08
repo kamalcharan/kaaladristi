@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Calendar | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #0f1629;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-elevated: rgba(30, 41, 59, 0.5);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-active: rgba(99, 102, 241, 0.4);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+            --glow-green: rgba(16, 185, 129, 0.2);
+            --glow-amber: rgba(245, 158, 11, 0.2);
+            --glow-red: rgba(239, 68, 68, 0.2);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background */
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 20% -10%, rgba(99, 102, 241, 0.12), transparent),
+                radial-gradient(ellipse 50% 50% at 80% 90%, rgba(139, 92, 246, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 72px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 32px;
+            cursor: pointer;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-item {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            position: relative;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            color: var(--accent-indigo);
+        }
+
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 24px;
+            background: var(--accent-indigo);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 72px;
+            padding: 32px 40px;
+        }
+
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .week-nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .week-nav-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .week-nav-btn:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border-color: var(--border-active);
+        }
+
+        .week-label {
+            font-size: 15px;
+            color: var(--text-secondary);
+            min-width: 180px;
+            text-align: center;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 4px;
+        }
+
+        .view-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+        }
+
+        .view-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .view-btn.active {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.low { background: var(--risk-green); }
+        .legend-dot.medium { background: var(--risk-amber); }
+        .legend-dot.high { background: var(--risk-red); }
+
+        /* Calendar Grid */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .day-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .day-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            transition: opacity 0.3s ease;
+        }
+
+        .day-card.low::before { background: var(--risk-green); }
+        .day-card.medium::before { background: var(--risk-amber); }
+        .day-card.high::before { background: var(--risk-red); }
+
+        .day-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--border-active);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .day-card.today {
+            border-color: var(--accent-indigo);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.05));
+        }
+
+        .day-card.today::after {
+            content: 'TODAY';
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            background: var(--accent-indigo);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .day-name {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .day-date {
+            font-size: 32px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            line-height: 1;
+            margin-top: 4px;
+        }
+
+        .day-card.today .day-date {
+            color: var(--accent-indigo);
+        }
+
+        /* Risk Gauge Mini */
+        .day-gauge {
+            width: 60px;
+            height: 60px;
+            position: relative;
+        }
+
+        .day-gauge svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .day-gauge-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 6;
+        }
+
+        .day-gauge-fill {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.8s ease;
+        }
+
+        .day-gauge-fill.low { stroke: var(--risk-green); }
+        .day-gauge-fill.medium { stroke: var(--risk-amber); }
+        .day-gauge-fill.high { stroke: var(--risk-red); }
+
+        .day-gauge-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .day-gauge-value.low { color: var(--risk-green); }
+        .day-gauge-value.medium { color: var(--risk-amber); }
+        .day-gauge-value.high { color: var(--risk-red); }
+
+        /* Regime Badge */
+        .day-regime {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+
+        .day-regime.low {
+            background: var(--glow-green);
+            color: var(--risk-green);
+        }
+
+        .day-regime.medium {
+            background: var(--glow-amber);
+            color: var(--risk-amber);
+        }
+
+        .day-regime.high {
+            background: var(--glow-red);
+            color: var(--risk-red);
+        }
+
+        .day-regime-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* Day Events */
+        .day-events {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .day-event {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .day-event-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        .day-event-icon.moon { background: rgba(139, 92, 246, 0.15); }
+        .day-event-icon.planet { background: rgba(6, 182, 212, 0.15); }
+        .day-event-icon.aspect { background: rgba(245, 158, 11, 0.15); }
+
+        /* Summary Section */
+        .summary-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .summary-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .summary-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        /* Week Stats */
+        .week-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .week-stat {
+            text-align: center;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+        }
+
+        .week-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .week-stat-value.low { color: var(--risk-green); }
+        .week-stat-value.high { color: var(--risk-red); }
+        .week-stat-value.avg { color: var(--risk-amber); }
+
+        .week-stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Events List */
+        .events-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .event-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .event-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .event-date {
+            text-align: center;
+            min-width: 50px;
+        }
+
+        .event-date-day {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .event-date-month {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .event-info {
+            flex: 1;
+        }
+
+        .event-title {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .event-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .event-severity {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .event-severity.warning { background: var(--risk-amber); box-shadow: 0 0 10px var(--risk-amber); }
+        .event-severity.danger { background: var(--risk-red); box-shadow: 0 0 10px var(--risk-red); }
+        .event-severity.safe { background: var(--risk-green); }
+
+        /* Risk Distribution Chart */
+        .risk-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            height: 100px;
+            padding: 16px 0;
+        }
+
+        .chart-bar {
+            flex: 1;
+            border-radius: 6px 6px 0 0;
+            transition: height 0.5s ease;
+            position: relative;
+        }
+
+        .chart-bar.low { background: linear-gradient(180deg, var(--risk-green), rgba(16, 185, 129, 0.3)); }
+        .chart-bar.medium { background: linear-gradient(180deg, var(--risk-amber), rgba(245, 158, 11, 0.3)); }
+        .chart-bar.high { background: linear-gradient(180deg, var(--risk-red), rgba(239, 68, 68, 0.3)); }
+
+        .chart-bar::after {
+            content: attr(data-day);
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .chart-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 28px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-subtle);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">⟡</div>
+            
+            <div class="nav-items">
+                <a href="dashboard.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </a>
+                <a href="calendar.html" class="nav-item active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </a>
+                <a href="history.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </a>
+                <a href="settings.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="page-header">
+                <div class="header-left">
+                    <h1 class="page-title">Risk Calendar</h1>
+                    <div class="week-nav">
+                        <button class="week-nav-btn" onclick="prevWeek()">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                        </button>
+                        <span class="week-label">Dec 16 — Dec 22, 2024</span>
+                        <button class="week-nav-btn" onclick="nextWeek()">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn active">7 Days</button>
+                    <button class="view-btn">30 Days</button>
+                </div>
+            </header>
+
+            <!-- Legend -->
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot low"></div>
+                    <span>Low Risk (0-40)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot medium"></div>
+                    <span>Medium Risk (41-70)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot high"></div>
+                    <span>High Risk (71-100)</span>
+                </div>
+            </div>
+
+            <!-- Calendar Grid -->
+            <div class="calendar-grid">
+                <!-- Monday - Today -->
+                <a href="day-detail.html" class="day-card today medium" style="text-decoration: none; color: inherit;">
+                    <div class="day-header">
+                        <div>
+                            <div class="day-name">Monday</div>
+                            <div class="day-date">16</div>
+                        </div>
+                        <div class="day-gauge">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="day-gauge-track" cx="18" cy="18" r="15"/>
+                                <circle class="day-gauge-fill medium" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="30.16"
+                                    transform="rotate(-90 18 18)"/>
+                            </svg>
+                            <div class="day-gauge-value medium">68</div>
+                        </div>
+                    </div>
+                    <div class="day-regime medium">
+                        <span class="day-regime-dot"></span>
+                        Distribution
+                    </div>
+                    <div class="day-events">
+                        <div class="day-event">
+                            <div class="day-event-icon moon">🌙</div>
+                            <span>Moon in Ardra</span>
+                        </div>
+                        <div class="day-event">
+                            <div class="day-event-icon planet">☿</div>
+                            <span>Mercury Rx</span>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Tuesday -->
+                <a href="day-detail.html" class="day-card high" style="text-decoration: none; color: inherit;">
+                    <div class="day-header">
+                        <div>
+                            <div class="day-name">Tuesday</div>
+                            <div class="day-date">17</div>
+                        </div>
+                        <div class="day-gauge">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="day-gauge-track" cx="18" cy="18" r="15"/>
+                                <circle class="day-gauge-fill high" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="18.85"
+                                    transform="rotate(-90 18 18)"/>
+                            </svg>
+                            <div class="day-gauge-value high">80</div>
+                        </div>
+                    </div>
+                    <div class="day-regime high">
+                        <span class="day-regime-dot"></span>
+                        Capital Protection
+                    </div>
+                    <div class="day-events">
+                        <div class="day-event">
+                            <div class="day-event-icon aspect">□</div>
+                            <span>Mars-Saturn Exact</span>
+                        </div>
+                        <div class="day-event">
+                            <div class="day-event-icon moon">🌙</div>
+                            <span>Moon in Moola</span>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Wednesday -->
+                <a href="day-detail.html" class="day-card medium" style="text-decoration: none; color: inherit;">
+                    <div class="day-header">
+                        <div>
+                            <div class="day-name">Wednesday</div>
+                            <div class="day-date">18</div>
+                        </div>
+                        <div class="day-gauge">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="day-gauge-track" cx="18" cy="18" r="15"/>
+                                <circle class="day-gauge-fill medium" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="37.7"
+                                    transform="rotate(-90 18 18)"/>
+                            </svg>
+                            <div class="day-gauge-value medium">60</div>
+                        </div>
+                    </div>
+                    <div class="day-regime medium">
+                        <span class="day-regime-dot"></span>
+                        Distribution
+                    </div>
+                    <div class="day-events">
+                        <div class="day-event">
+                            <div class="day-event-icon planet">♂</div>
+                            <span>Mars Rx continues</span>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Thursday -->
+                <a href="day-detail.html" class="day-card low" style="text-decoration: none; color: inherit;">
+                    <div class="day-header">
+                        <div>
+                            <div class="day-name">Thursday</div>
+                            <div class="day-date">19</div>
+                        </div>
+                        <div class="day-gauge">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="day-gauge-track" cx="18" cy="18" r="15"/>
+                                <circle class="day-gauge-fill low" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="56.55"
+                                    transform="rotate(-90 18 18)"/>
+                            </svg>
+                            <div class="day-gauge-value low">40</div>
+                        </div>
+                    </div>
+                    <div class="day-regime low">
+                        <span class="day-regime-dot"></span>
+                        Expansion
+                    </div>
+                    <div class="day-events">
+                        <div class="day-event">
+                            <div class="day-event-icon moon">🌙</div>
+                            <span>Moon in Rohini</span>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Friday -->
+                <a href="day-detail.html" class="day-card low" style="text-decoration: none; color: inherit;">
+                    <div class="day-header">
+                        <div>
+                            <div class="day-name">Friday</div>
+                            <div class="day-date">20</div>
+                        </div>
+                        <div class="day-gauge">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="day-gauge-track" cx="18" cy="18" r="15"/>
+                                <circle class="day-gauge-fill low" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="62.13"
+                                    transform="rotate(-90 18 18)"/>
+                            </svg>
+                            <div class="day-gauge-value low">34</div>
+                        </div>
+                    </div>
+                    <div class="day-regime low">
+                        <span class="day-regime-dot"></span>
+                        Accumulation
+                    </div>
+                    <div class="day-events">
+                        <div class="day-event">
+                            <div class="day-event-icon planet">☿</div>
+                            <span>Mercury Direct ✓</span>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Saturday -->
+                <a href="day-detail.html" class="day-card low" style="text-decoration: none; color: inherit;">
+                    <div class="day-header">
+                        <div>
+                            <div class="day-name">Saturday</div>
+                            <div class="day-date">21</div>
+                        </div>
+                        <div class="day-gauge">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="day-gauge-track" cx="18" cy="18" r="15"/>
+                                <circle class="day-gauge-fill low" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="65.98"
+                                    transform="rotate(-90 18 18)"/>
+                            </svg>
+                            <div class="day-gauge-value low">30</div>
+                        </div>
+                    </div>
+                    <div class="day-regime low">
+                        <span class="day-regime-dot"></span>
+                        Accumulation
+                    </div>
+                    <div class="day-events">
+                        <div class="day-event">
+                            <div class="day-event-icon moon">🌙</div>
+                            <span>Moon in Punarvasu</span>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Sunday -->
+                <a href="day-detail.html" class="day-card medium" style="text-decoration: none; color: inherit;">
+                    <div class="day-header">
+                        <div>
+                            <div class="day-name">Sunday</div>
+                            <div class="day-date">22</div>
+                        </div>
+                        <div class="day-gauge">
+                            <svg viewBox="0 0 36 36">
+                                <circle class="day-gauge-track" cx="18" cy="18" r="15"/>
+                                <circle class="day-gauge-fill medium" cx="18" cy="18" r="15"
+                                    stroke-dasharray="94.25"
+                                    stroke-dashoffset="47.13"
+                                    transform="rotate(-90 18 18)"/>
+                            </svg>
+                            <div class="day-gauge-value medium">50</div>
+                        </div>
+                    </div>
+                    <div class="day-regime medium">
+                        <span class="day-regime-dot"></span>
+                        Expansion
+                    </div>
+                    <div class="day-events">
+                        <div class="day-event">
+                            <div class="day-event-icon moon">🌙</div>
+                            <span>Moon → Moola</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <!-- Week Stats -->
+                <div class="summary-card">
+                    <div class="summary-header">
+                        <h3 class="summary-title">Week Overview</h3>
+                    </div>
+                    <div class="week-stats">
+                        <div class="week-stat">
+                            <div class="week-stat-value high">80</div>
+                            <div class="week-stat-label">Highest Risk</div>
+                        </div>
+                        <div class="week-stat">
+                            <div class="week-stat-value low">30</div>
+                            <div class="week-stat-label">Lowest Risk</div>
+                        </div>
+                        <div class="week-stat">
+                            <div class="week-stat-value avg">52</div>
+                            <div class="week-stat-label">Week Average</div>
+                        </div>
+                    </div>
+                    <div class="risk-chart">
+                        <div class="chart-bar medium" style="height: 68%" data-day="M"></div>
+                        <div class="chart-bar high" style="height: 80%" data-day="T"></div>
+                        <div class="chart-bar medium" style="height: 60%" data-day="W"></div>
+                        <div class="chart-bar low" style="height: 40%" data-day="T"></div>
+                        <div class="chart-bar low" style="height: 34%" data-day="F"></div>
+                        <div class="chart-bar low" style="height: 30%" data-day="S"></div>
+                        <div class="chart-bar medium" style="height: 50%" data-day="S"></div>
+                    </div>
+                </div>
+
+                <!-- Key Events -->
+                <div class="summary-card">
+                    <div class="summary-header">
+                        <h3 class="summary-title">Key Events This Week</h3>
+                    </div>
+                    <div class="events-list">
+                        <div class="event-item">
+                            <div class="event-date">
+                                <div class="event-date-day">17</div>
+                                <div class="event-date-month">Dec</div>
+                            </div>
+                            <div class="event-info">
+                                <div class="event-title">Mars-Saturn Square Exact</div>
+                                <div class="event-desc">Peak momentum stress — avoid leverage</div>
+                            </div>
+                            <div class="event-severity danger"></div>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-date">
+                                <div class="event-date-day">20</div>
+                                <div class="event-date-month">Dec</div>
+                            </div>
+                            <div class="event-info">
+                                <div class="event-title">Mercury Turns Direct</div>
+                                <div class="event-desc">Communication clarity returns</div>
+                            </div>
+                            <div class="event-severity safe"></div>
+                        </div>
+                        <div class="event-item">
+                            <div class="event-date">
+                                <div class="event-date-day">22</div>
+                                <div class="event-date-month">Dec</div>
+                            </div>
+                            <div class="event-info">
+                                <div class="event-title">Moon enters Moola</div>
+                                <div class="event-desc">High-risk nakshatra begins</div>
+                            </div>
+                            <div class="event-severity warning"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function prevWeek() {
+            // Navigate to previous week
+            console.log('Previous week');
+        }
+
+        function nextWeek() {
+            // Navigate to next week
+            console.log('Next week');
+        }
+    </script>
+</body>
+</html>

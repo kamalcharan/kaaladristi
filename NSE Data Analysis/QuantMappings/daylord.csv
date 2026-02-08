@@ -1,0 +1,10 @@
+﻿DayRefID,Day,PlanetRefID,Planet
+1,Monday,9,Moon
+2,Tuesday,1,Mars
+3,Wednesday,3,Mercury
+4,Thursday,5,Jupiter
+5,Friday,2,Venus
+6,Saturday,4,Saturn
+7,Sunday,6,Sun
+3,Wednesday,7,Rahu
+4,Thursday,8,Ketu

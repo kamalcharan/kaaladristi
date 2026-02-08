@@ -1,0 +1,8 @@
+{
+  "name": "KĀLA-DRISHTI",
+  "description": "Visual Time-Cycle Analytics for Financial Decision Making. Deterministic risk intelligence based on temporal cycles.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

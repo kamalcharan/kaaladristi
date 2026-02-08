@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>December 17, 2024 | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-elevated: rgba(30, 41, 59, 0.5);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-active: rgba(99, 102, 241, 0.4);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+            --glow-red: rgba(239, 68, 68, 0.2);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Background */
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(239, 68, 68, 0.12), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(245, 158, 11, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 72px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 32px;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-item {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            color: var(--accent-indigo);
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 72px;
+            padding: 32px 40px;
+            max-width: 1400px;
+        }
+
+        /* Back Nav */
+        .back-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 24px;
+            transition: color 0.2s ease;
+        }
+
+        .back-nav:hover {
+            color: var(--text-primary);
+        }
+
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 32px;
+        }
+
+        .date-section {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .date-large {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 16px;
+            padding: 20px 28px;
+            text-align: center;
+        }
+
+        .date-day-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--risk-red);
+            line-height: 1;
+        }
+
+        .date-month-year {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .date-info h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .date-info p {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        .high-risk-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--glow-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--risk-red);
+            margin-top: 12px;
+        }
+
+        .high-risk-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--risk-red);
+            animation: blink 1.5s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .nav-arrows {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-arrow {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-arrow:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            border-color: var(--border-active);
+        }
+
+        /* Main Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+        }
+
+        /* Hero Warning */
+        .hero-warning {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.02));
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 20px;
+            padding: 28px;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .warning-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            background: rgba(239, 68, 68, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            flex-shrink: 0;
+        }
+
+        .warning-content h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--risk-red);
+            margin-bottom: 8px;
+        }
+
+        .warning-content p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Section Cards */
+        .section-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .section-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            background: var(--bg-elevated);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .section-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .section-body {
+            padding: 24px;
+        }
+
+        /* Intraday Timeline */
+        .timeline {
+            position: relative;
+            padding-left: 32px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(180deg, var(--risk-green), var(--risk-amber), var(--risk-red), var(--risk-amber));
+            border-radius: 1px;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .timeline-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -28px;
+            top: 24px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid var(--bg-primary);
+        }
+
+        .timeline-item.low::before { background: var(--risk-green); box-shadow: 0 0 10px var(--risk-green); }
+        .timeline-item.medium::before { background: var(--risk-amber); box-shadow: 0 0 10px var(--risk-amber); }
+        .timeline-item.high::before { background: var(--risk-red); box-shadow: 0 0 10px var(--risk-red); }
+
+        .timeline-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .timeline-event {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .timeline-detail {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timeline-nakshatra {
+            padding: 2px 8px;
+            background: rgba(139, 92, 246, 0.15);
+            border-radius: 4px;
+            color: var(--accent-violet);
+        }
+
+        /* Aspect Table */
+        .aspect-table {
+            width: 100%;
+        }
+
+        .aspect-row {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            margin-bottom: 8px;
+        }
+
+        .aspect-planets {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 140px;
+        }
+
+        .planet-symbol {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .aspect-arrow {
+            color: var(--text-muted);
+        }
+
+        .aspect-type {
+            flex: 1;
+            padding: 0 16px;
+        }
+
+        .aspect-name {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .aspect-angle {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .aspect-orb {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            min-width: 60px;
+            text-align: right;
+        }
+
+        .aspect-orb.exact {
+            color: var(--risk-red);
+            font-weight: 600;
+        }
+
+        .aspect-impact {
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .impact-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .impact-badge.high {
+            background: var(--glow-red);
+            color: var(--risk-red);
+        }
+
+        .impact-badge.medium {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--risk-amber);
+        }
+
+        /* Right Panel */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Score Card */
+        .score-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 28px;
+            text-align: center;
+        }
+
+        .score-gauge {
+            width: 160px;
+            height: 160px;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+
+        .score-gauge svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .gauge-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 14;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 14;
+            stroke-linecap: round;
+            stroke: var(--risk-red);
+            filter: drop-shadow(0 0 15px var(--risk-red));
+        }
+
+        .gauge-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .gauge-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--risk-red);
+        }
+
+        .gauge-label {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .regime-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 20px;
+            background: var(--glow-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 30px;
+            margin-bottom: 20px;
+        }
+
+        .regime-tag span {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--risk-red);
+        }
+
+        .score-breakdown {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .breakdown-item {
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .breakdown-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .breakdown-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .breakdown-value.structural { color: var(--accent-indigo); }
+        .breakdown-value.momentum { color: var(--risk-red); }
+        .breakdown-value.volatility { color: var(--risk-amber); }
+        .breakdown-value.deception { color: var(--accent-violet); }
+
+        /* Planets Card */
+        .planets-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .planets-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .planet-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .planet-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-elevated);
+            border-radius: 10px;
+        }
+
+        .planet-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .planet-info {
+            flex: 1;
+        }
+
+        .planet-name {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .planet-position {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .planet-status {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .planet-status.retrograde {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--risk-red);
+        }
+
+        .planet-status.direct {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--risk-green);
+        }
+
+        /* Recommendation Card */
+        .recommendation-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.05));
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .recommendation-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--accent-indigo);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .recommendation-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .recommendation-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .recommendation-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 10px;
+        }
+
+        .recommendation-icon.avoid {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--risk-red);
+        }
+
+        .recommendation-icon.caution {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--risk-amber);
+        }
+
+        .recommendation-icon.ok {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--risk-green);
+        }
+
+        /* Disclaimer */
+        .disclaimer {
+            background: rgba(255, 255, 255, 0.02);
+            border-top: 1px solid var(--border-subtle);
+            padding: 16px 24px;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+            position: fixed;
+            bottom: 0;
+            left: 72px;
+            right: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">⟡</div>
+            
+            <div class="nav-items">
+                <a href="dashboard.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </a>
+                <a href="calendar.html" class="nav-item active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </a>
+                <a href="history.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </a>
+                <a href="settings.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <a href="calendar.html" class="back-nav">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back to Calendar
+            </a>
+
+            <!-- Header -->
+            <header class="page-header">
+                <div class="date-section">
+                    <div class="date-large">
+                        <div class="date-day-num">17</div>
+                        <div class="date-month-year">Dec 2024</div>
+                    </div>
+                    <div class="date-info">
+                        <h1>Tuesday, December 17</h1>
+                        <p>High-risk day — Mars-Saturn square exact at 2:30 PM IST</p>
+                        <div class="high-risk-badge">
+                            HIGH RISK DAY — CAPITAL PROTECTION MODE
+                        </div>
+                    </div>
+                </div>
+                <div class="nav-arrows">
+                    <a href="#" class="nav-arrow" title="Previous day">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </a>
+                    <a href="#" class="nav-arrow" title="Next day">
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </div>
+            </header>
+
+            <!-- Content Grid -->
+            <div class="content-grid">
+                <!-- Left Column -->
+                <div class="left-column">
+                    <!-- Hero Warning -->
+                    <div class="hero-warning">
+                        <div class="warning-icon">⚠️</div>
+                        <div class="warning-content">
+                            <h3>Critical Aspect Window Active</h3>
+                            <p>Mars-Saturn square becomes exact at 2:30 PM IST. This is historically one of the most challenging aspects for momentum trades. Expect false breakouts, stop hunts, and sudden reversals. BANKNIFTY particularly vulnerable.</p>
+                        </div>
+                    </div>
+
+                    <!-- Intraday Timeline -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-icon">⏰</div>
+                            <div>
+                                <div class="section-title">Intraday Timeline</div>
+                                <div class="section-subtitle">Moon transits and risk windows through the day</div>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="timeline">
+                                <div class="timeline-item medium">
+                                    <div class="timeline-time">09:15 AM — Market Open</div>
+                                    <div class="timeline-event">Moon in Jyeshtha — cautious start expected</div>
+                                    <div class="timeline-detail">
+                                        <span class="timeline-nakshatra">Jyeshtha Pada 3</span>
+                                        Risk: Elevated
+                                    </div>
+                                </div>
+                                <div class="timeline-item high">
+                                    <div class="timeline-time">11:30 AM — Moon enters Moola</div>
+                                    <div class="timeline-event">High-risk nakshatra transition</div>
+                                    <div class="timeline-detail">
+                                        <span class="timeline-nakshatra">Moola Pada 1</span>
+                                        Volatility spike likely
+                                    </div>
+                                </div>
+                                <div class="timeline-item high">
+                                    <div class="timeline-time">02:30 PM — Mars-Saturn Exact</div>
+                                    <div class="timeline-event">Peak stress window — avoid new positions</div>
+                                    <div class="timeline-detail">
+                                        Aspect exact within 0.1° orb
+                                    </div>
+                                </div>
+                                <div class="timeline-item medium">
+                                    <div class="timeline-time">03:30 PM — Market Close</div>
+                                    <div class="timeline-event">End-of-day volatility expected</div>
+                                    <div class="timeline-detail">
+                                        <span class="timeline-nakshatra">Moola Pada 2</span>
+                                        Position squaring
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Aspects -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-icon">🔗</div>
+                            <div>
+                                <div class="section-title">Active Planetary Aspects</div>
+                                <div class="section-subtitle">Significant geometric relationships in effect</div>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="aspect-table">
+                                <div class="aspect-row">
+                                    <div class="aspect-planets">
+                                        <div class="planet-symbol">♂</div>
+                                        <span class="aspect-arrow">—</span>
+                                        <div class="planet-symbol">♄</div>
+                                    </div>
+                                    <div class="aspect-type">
+                                        <div class="aspect-name">Mars Square Saturn</div>
+                                        <div class="aspect-angle">90° aspect • Exact at 14:30</div>
+                                    </div>
+                                    <div class="aspect-orb exact">0.1°</div>
+                                    <div class="aspect-impact">
+                                        <span class="impact-badge high">HIGH</span>
+                                    </div>
+                                </div>
+                                <div class="aspect-row">
+                                    <div class="aspect-planets">
+                                        <div class="planet-symbol">☿</div>
+                                        <span class="aspect-arrow">—</span>
+                                        <div class="planet-symbol">☊</div>
+                                    </div>
+                                    <div class="aspect-type">
+                                        <div class="aspect-name">Mercury Conjunct Rahu</div>
+                                        <div class="aspect-angle">0° aspect • Separating</div>
+                                    </div>
+                                    <div class="aspect-orb">3.2°</div>
+                                    <div class="aspect-impact">
+                                        <span class="impact-badge medium">MEDIUM</span>
+                                    </div>
+                                </div>
+                                <div class="aspect-row">
+                                    <div class="aspect-planets">
+                                        <div class="planet-symbol">♂</div>
+                                        <span class="aspect-arrow">—</span>
+                                        <div class="planet-symbol">☊</div>
+                                    </div>
+                                    <div class="aspect-type">
+                                        <div class="aspect-name">Mars Trine Rahu</div>
+                                        <div class="aspect-angle">120° aspect • Applying</div>
+                                    </div>
+                                    <div class="aspect-orb">5.8°</div>
+                                    <div class="aspect-impact">
+                                        <span class="impact-badge medium">MEDIUM</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel -->
+                <div class="right-panel">
+                    <!-- Score Card -->
+                    <div class="score-card">
+                        <div class="score-gauge">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="gauge-track" cx="50" cy="50" r="40"/>
+                                <circle class="gauge-fill" cx="50" cy="50" r="40"
+                                    stroke-dasharray="251.33"
+                                    stroke-dashoffset="50.27"
+                                    transform="rotate(-90 50 50)"/>
+                            </svg>
+                            <div class="gauge-center">
+                                <div class="gauge-value">80</div>
+                                <div class="gauge-label">Risk Score</div>
+                            </div>
+                        </div>
+
+                        <div class="regime-tag">
+                            <span>🛡️ Capital Protection</span>
+                        </div>
+
+                        <div class="score-breakdown">
+                            <div class="breakdown-item">
+                                <div class="breakdown-label">Structural</div>
+                                <div class="breakdown-value structural">70</div>
+                            </div>
+                            <div class="breakdown-item">
+                                <div class="breakdown-label">Momentum</div>
+                                <div class="breakdown-value momentum">95</div>
+                            </div>
+                            <div class="breakdown-item">
+                                <div class="breakdown-label">Volatility</div>
+                                <div class="breakdown-value volatility">75</div>
+                            </div>
+                            <div class="breakdown-item">
+                                <div class="breakdown-label">Deception</div>
+                                <div class="breakdown-value deception">68</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key Planets -->
+                    <div class="planets-card">
+                        <div class="planets-title">Key Planets Today</div>
+                        <div class="planet-list">
+                            <div class="planet-item">
+                                <div class="planet-icon">♂</div>
+                                <div class="planet-info">
+                                    <div class="planet-name">Mars</div>
+                                    <div class="planet-position">Leo 12°34' • Magha</div>
+                                </div>
+                                <span class="planet-status retrograde">Rx</span>
+                            </div>
+                            <div class="planet-item">
+                                <div class="planet-icon">♄</div>
+                                <div class="planet-info">
+                                    <div class="planet-name">Saturn</div>
+                                    <div class="planet-position">Aquarius 12°34' • Shatabhisha</div>
+                                </div>
+                                <span class="planet-status direct">Direct</span>
+                            </div>
+                            <div class="planet-item">
+                                <div class="planet-icon">☿</div>
+                                <div class="planet-info">
+                                    <div class="planet-name">Mercury</div>
+                                    <div class="planet-position">Sagittarius 8°45' • Moola</div>
+                                </div>
+                                <span class="planet-status retrograde">Rx</span>
+                            </div>
+                            <div class="planet-item">
+                                <div class="planet-icon">🌙</div>
+                                <div class="planet-info">
+                                    <div class="planet-name">Moon</div>
+                                    <div class="planet-position">Scorpio → Sagittarius</div>
+                                </div>
+                                <span class="planet-status direct">Transit</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recommendations -->
+                    <div class="recommendation-card">
+                        <div class="recommendation-title">
+                            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+                            </svg>
+                            Guidance for Today
+                        </div>
+                        <div class="recommendation-list">
+                            <div class="recommendation-item">
+                                <div class="recommendation-icon avoid">✕</div>
+                                <span>Avoid initiating new leveraged positions, especially in BANKNIFTY</span>
+                            </div>
+                            <div class="recommendation-item">
+                                <div class="recommendation-icon avoid">✕</div>
+                                <span>Do not chase breakouts — high false signal probability</span>
+                            </div>
+                            <div class="recommendation-item">
+                                <div class="recommendation-icon caution">!</div>
+                                <span>If trading, use 50% of normal position size</span>
+                            </div>
+                            <div class="recommendation-item">
+                                <div class="recommendation-icon caution">!</div>
+                                <span>Be especially careful between 2:00 PM - 3:00 PM</span>
+                            </div>
+                            <div class="recommendation-item">
+                                <div class="recommendation-icon ok">✓</div>
+                                <span>Option buyers may find opportunity in volatility</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="disclaimer">
+        ⚠️ This is time-based risk intelligence for educational purposes only. Not investment advice. Always consult a registered advisor before making trading decisions.
+    </div>
+</body>
+</html>

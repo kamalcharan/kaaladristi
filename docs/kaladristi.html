@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kāla-Drishti | Visual Time-Cycle Analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- 9.2.1 Color Palette & Variables  --- */
+        :root {
+            --bg-primary: #0F172A;      /* Background */
+            --bg-card: #1E293B;         /* Card Surface */
+            --primary-navy: #1a365d;    /* Headers */
+            --text-main: #F1F5F9;
+            --text-muted: #94A3B8;
+            
+            /* Risk Colors  */
+            --risk-green: #10B981;      /* Low Risk */
+            --risk-amber: #F59E0B;      /* Medium Risk */
+            --risk-red: #EF4444;        /* High Risk */
+            
+            /* UI Accents */
+            --border-color: rgba(255, 255, 255, 0.08);
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Header --- */
+        header {
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .logo {
+            font-weight: 600;
+            font-size: 1.25rem;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .logo span { color: var(--risk-amber); } /* "Drishti" accent */
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .avatar {
+            width: 32px; height: 32px;
+            background: var(--primary-navy);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: white;
+            font-weight: 500;
+        }
+
+        /* --- Main Layout --- */
+        main {
+            flex: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: 1fr 340px; /* Dashboard Layout */
+            gap: 24px;
+        }
+
+        /* --- Cards --- */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow-card);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* --- 9.3.1 Risk Score Hero  --- */
+        .hero-section {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 24px;
+            text-align: center;
+            position: relative;
+            background: linear-gradient(180deg, var(--bg-card) 0%, rgba(30, 41, 59, 0.4) 100%);
+        }
+
+        .risk-gauge-container {
+            position: relative;
+            width: 220px;
+            height: 220px;
+            margin-bottom: 24px;
+        }
+
+        /* SVG Circle Gauge */
+        .gauge-circle-bg {
+            fill: none;
+            stroke: #334155;
+            stroke-width: 12;
+        }
+
+        .gauge-circle-fill {
+            fill: none;
+            stroke: var(--risk-amber); /* Dynamic Color */
+            stroke-width: 12;
+            stroke-linecap: round;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+            stroke-dasharray: 565; /* 2 * PI * r (r=90) */
+            stroke-dashoffset: 180; /* Calculated based on score 68 */
+            transition: stroke-dashoffset 1s ease-out;
+        }
+
+        .score-value {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 3.5rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .risk-label {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--risk-amber);
+            margin-bottom: 8px;
+        }
+
+        .regime-tag {
+            display: inline-block;
+            padding: 6px 16px;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            color: var(--risk-amber);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 24px;
+        }
+
+        /* --- 9.4.2 Explanation Section  --- */
+        .explanation-box {
+            background: rgba(15, 23, 42, 0.6);
+            border-left: 4px solid var(--risk-amber);
+            padding: 16px 24px;
+            text-align: left;
+            max-width: 600px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .expl-row { margin-bottom: 8px; font-size: 0.95rem; line-height: 1.5; }
+        .expl-label { color: var(--text-muted); font-weight: 500; margin-right: 8px; }
+
+        /* --- 9.3.2 Calendar Strip [cite: 361] --- */
+        .calendar-section {
+            grid-column: 1 / -1;
+        }
+
+        .calendar-strip {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .day-card {
+            flex: 1;
+            min-width: 100px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .day-card:hover { background: rgba(255,255,255,0.06); }
+        .day-card.active { border-color: var(--text-muted); background: rgba(255,255,255,0.08); }
+
+        .day-name { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; }
+        .day-date { font-weight: 600; font-size: 1.1rem; font-family: 'JetBrains Mono'; }
+        
+        .risk-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+        }
+
+        /* --- Metrics & Factors Grid --- */
+        .factors-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .factor-item {
+            background: rgba(255,255,255,0.02);
+            padding: 12px;
+            border-radius: 6px;
+        }
+        
+        .factor-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem; }
+        .factor-bar-bg { height: 4px; background: #334155; border-radius: 2px; overflow: hidden; }
+        .factor-bar-fill { height: 100%; border-radius: 2px; }
+
+        /* --- Footer / Disclaimer [cite: 474] --- */
+        footer {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+            padding: 32px 24px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            line-height: 1.6;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            main { grid-template-columns: 1fr; }
+            .hero-section { padding: 32px 16px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">KĀLA-<span>DRISHTI</span></div>
+        <div class="user-profile">
+            <span>Market: <strong>NIFTY</strong></span>
+            <div class="avatar">R</div>
+        </div>
+    </header>
+
+    <main>
+        <section class="card hero-section">
+            <h2 class="card-title" style="margin-bottom: 24px;">Daily Market Risk Intelligence</h2>
+            
+            <div class="risk-gauge-container">
+                <svg width="220" height="220" viewBox="0 0 200 200">
+                    <circle class="gauge-circle-bg" cx="100" cy="100" r="90"></circle>
+                    <circle class="gauge-circle-fill" cx="100" cy="100" r="90"></circle>
+                </svg>
+                <div class="score-value">68</div>
+            </div>
+
+            <div class="risk-label">Elevated Risk</div>
+            <div class="regime-tag">Regime: Distribution</div>
+
+            <div class="explanation-box">
+                <div class="expl-row">
+                    <span class="expl-label">Condition:</span>
+                    Risk is structurally elevated today due to Mars-Saturn stress.
+                </div>
+                <div class="expl-row">
+                    <span class="expl-label">Why:</span>
+                    Momentum and volatility indicators show conflicting signals.
+                </div>
+                <div class="expl-row">
+                    <span class="expl-label">Implication:</span>
+                    False breakouts and whipsaws are more likely than usual. Reduce position sizing.
+                </div>
+            </div>
+        </section>
+
+        <aside style="display: flex; flex-direction: column; gap: 24px;">
+            
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Index Preference</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="background: rgba(16, 185, 129, 0.1); color: var(--risk-green); padding: 8px 12px; border-radius: 6px; font-weight: 600; font-size: 0.9rem;">
+                        NIFTY
+                    </div>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Relative stability favors NIFTY over BANKNIFTY today.</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Risk Drivers</span>
+                </div>
+                <div class="factors-grid">
+                    <div class="factor-item">
+                        <div class="factor-header">
+                            <span>Structural</span>
+                            <span style="font-family: 'JetBrains Mono'">15/25</span>
+                        </div>
+                        <div class="factor-bar-bg">
+                            <div class="factor-bar-fill" style="width: 60%; background: var(--risk-amber);"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="factor-item">
+                        <div class="factor-header">
+                            <span>Momentum</span>
+                            <span style="font-family: 'JetBrains Mono'">18/25</span>
+                        </div>
+                        <div class="factor-bar-bg">
+                            <div class="factor-bar-fill" style="width: 72%; background: var(--risk-red);"></div>
+                        </div>
+                    </div>
+
+                    <div class="factor-item">
+                        <div class="factor-header">
+                            <span>Volatility</span>
+                            <span style="font-family: 'JetBrains Mono'">20/25</span>
+                        </div>
+                        <div class="factor-bar-bg">
+                            <div class="factor-bar-fill" style="width: 80%; background: var(--risk-red);"></div>
+                        </div>
+                    </div>
+
+                    <div class="factor-item">
+                        <div class="factor-header">
+                            <span>Deception</span>
+                            <span style="font-family: 'JetBrains Mono'">15/25</span>
+                        </div>
+                        <div class="factor-bar-bg">
+                            <div class="factor-bar-fill" style="width: 60%; background: var(--risk-amber);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+        <section class="card calendar-section">
+            <div class="card-header">
+                <span class="card-title">7-Day Risk Forecast</span>
+                <span style="font-size: 0.8rem; color: var(--text-muted);">Tap for details</span>
+            </div>
+            
+            <div class="calendar-strip">
+                <div class="day-card active">
+                    <span class="day-name">Today</span>
+                    <span class="day-date">16</span>
+                    <div class="risk-dot" style="background: var(--risk-amber);"></div>
+                </div>
+                
+                <div class="day-card">
+                    <span class="day-name">Tue</span>
+                    <span class="day-date">17</span>
+                    <div class="risk-dot" style="background: var(--risk-green);"></div>
+                </div>
+
+                <div class="day-card">
+                    <span class="day-name">Wed</span>
+                    <span class="day-date">18</span>
+                    <div class="risk-dot" style="background: var(--risk-green);"></div>
+                </div>
+
+                <div class="day-card">
+                    <span class="day-name">Thu</span>
+                    <span class="day-date">19</span>
+                    <div class="risk-dot" style="background: var(--risk-red);"></div>
+                </div>
+
+                <div class="day-card">
+                    <span class="day-name">Fri</span>
+                    <span class="day-date">20</span>
+                    <div class="risk-dot" style="background: var(--risk-amber);"></div>
+                </div>
+
+                <div class="day-card">
+                    <span class="day-name">Sat</span>
+                    <span class="day-date">21</span>
+                    <div class="risk-dot" style="background: #334155;"></div> </div>
+
+                <div class="day-card">
+                    <span class="day-name">Sun</span>
+                    <span class="day-date">22</span>
+                    <div class="risk-dot" style="background: #334155;"></div> </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p style="max-width: 800px; margin: 0 auto;">
+            <strong>DISCLAIMER:</strong> This platform provides time-based market risk insights for educational and informational purposes only. 
+            This is not investment advice. Past patterns do not guarantee future results. Consult a registered investment advisor before making investment decisions.
+        </p>
+        <div style="margin-top: 20px; color: #475569;">
+            &copy; 2024 Kāla-Drishti Inc. | Version 1.0 [cite: 6]
+        </div>
+    </footer>
+
+</body>
+</html>

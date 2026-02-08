@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #030712;
+            --bg-card: rgba(17, 24, 39, 0.6);
+            --bg-elevated: rgba(30, 41, 59, 0.4);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-active: rgba(99, 102, 241, 0.5);
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-gold: #fbbf24;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Star Field Background */
+        .star-field {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            opacity: 0;
+            animation: twinkle var(--duration) ease-in-out infinite;
+            animation-delay: var(--delay);
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0; transform: scale(0.5); }
+            50% { opacity: var(--opacity); transform: scale(1); }
+        }
+
+        /* Constellation Lines */
+        .constellation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.15;
+        }
+
+        /* Cosmic Glow */
+        .cosmic-glow {
+            position: fixed;
+            width: 800px;
+            height: 800px;
+            border-radius: 50%;
+            filter: blur(120px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .glow-1 {
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%);
+            top: -300px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: breathe 8s ease-in-out infinite;
+        }
+
+        .glow-2 {
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.2) 0%, transparent 70%);
+            bottom: -400px;
+            right: -200px;
+            animation: breathe 10s ease-in-out infinite reverse;
+        }
+
+        @keyframes breathe {
+            0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+            50% { opacity: 0.8; transform: translateX(-50%) scale(1.1); }
+        }
+
+        /* Main Container */
+        .onboarding-container {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        /* Step Container */
+        .step {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            max-width: 600px;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .step.active {
+            display: flex;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Logo */
+        .logo-container {
+            margin-bottom: 48px;
+        }
+
+        .logo-symbol {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+
+        .logo-ring {
+            position: absolute;
+            border: 2px solid;
+            border-radius: 50%;
+            animation: orbit linear infinite;
+        }
+
+        .ring-1 {
+            width: 100%;
+            height: 100%;
+            border-color: rgba(99, 102, 241, 0.5);
+            animation-duration: 20s;
+        }
+
+        .ring-2 {
+            width: 70%;
+            height: 70%;
+            top: 15%;
+            left: 15%;
+            border-color: rgba(139, 92, 246, 0.4);
+            animation-duration: 15s;
+            animation-direction: reverse;
+        }
+
+        .ring-3 {
+            width: 40%;
+            height: 40%;
+            top: 30%;
+            left: 30%;
+            border-color: rgba(6, 182, 212, 0.5);
+            animation-duration: 10s;
+        }
+
+        .logo-center {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 30px var(--accent-indigo);
+        }
+
+        @keyframes orbit {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .logo-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 42px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+
+        .logo-sanskrit {
+            font-size: 24px;
+            color: var(--accent-gold);
+            letter-spacing: 4px;
+            opacity: 0.9;
+        }
+
+        /* Content */
+        .step-content h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 32px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            line-height: 1.3;
+        }
+
+        .step-content p {
+            font-size: 17px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 24px;
+        }
+
+        .philosophy-quote {
+            font-size: 22px;
+            font-style: italic;
+            color: var(--text-primary);
+            padding: 32px 40px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.05));
+            border-left: 3px solid var(--accent-indigo);
+            border-radius: 0 16px 16px 0;
+            margin: 32px 0;
+            line-height: 1.6;
+        }
+
+        .philosophy-author {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-style: normal;
+            margin-top: 16px;
+            display: block;
+        }
+
+        /* Selection Cards */
+        .selection-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            width: 100%;
+            max-width: 540px;
+            margin: 32px 0;
+        }
+
+        .selection-card {
+            background: var(--bg-card);
+            border: 2px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 24px 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .selection-card:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .selection-card.selected {
+            border-color: var(--accent-indigo);
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+        }
+
+        .selection-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .selection-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .selection-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .selection-check {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid var(--border-subtle);
+            margin: 12px auto 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .selection-card.selected .selection-check {
+            background: var(--accent-indigo);
+            border-color: var(--accent-indigo);
+        }
+
+        .selection-check svg {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .selection-card.selected .selection-check svg {
+            opacity: 1;
+        }
+
+        /* Risk Appetite Cards */
+        .risk-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            width: 100%;
+            max-width: 540px;
+            margin: 32px 0;
+        }
+
+        .risk-card {
+            background: var(--bg-card);
+            border: 2px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 24px 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .risk-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .risk-card.selected {
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+        }
+
+        .risk-card.low { --card-color: var(--risk-green); }
+        .risk-card.moderate { --card-color: var(--risk-amber); }
+        .risk-card.high { --card-color: var(--risk-red); }
+
+        .risk-card:hover {
+            border-color: rgba(var(--card-color), 0.5);
+        }
+
+        .risk-card.selected {
+            border-color: var(--card-color);
+            background: linear-gradient(135deg, rgba(var(--card-color), 0.15), transparent);
+        }
+
+        .risk-card.low.selected { 
+            border-color: var(--risk-green);
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .risk-card.moderate.selected { 
+            border-color: var(--risk-amber);
+            background: rgba(245, 158, 11, 0.1);
+        }
+        .risk-card.high.selected { 
+            border-color: var(--risk-red);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .risk-indicator {
+            width: 48px;
+            height: 8px;
+            border-radius: 4px;
+            margin: 0 auto 16px;
+        }
+
+        .risk-card.low .risk-indicator { background: var(--risk-green); }
+        .risk-card.moderate .risk-indicator { background: var(--risk-amber); }
+        .risk-card.high .risk-indicator { background: var(--risk-red); }
+
+        /* Disclaimer Box */
+        .disclaimer-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 28px;
+            text-align: left;
+            margin: 24px 0;
+            max-height: 280px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        .disclaimer-box::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .disclaimer-box::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+        }
+
+        .disclaimer-box::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .disclaimer-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--risk-amber);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .disclaimer-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        .disclaimer-text strong {
+            color: var(--text-primary);
+        }
+
+        /* Checkbox */
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 24px;
+            cursor: pointer;
+        }
+
+        .checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border-subtle);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .checkbox.checked {
+            background: var(--accent-indigo);
+            border-color: var(--accent-indigo);
+        }
+
+        .checkbox svg {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .checkbox.checked svg {
+            opacity: 1;
+        }
+
+        .checkbox-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: left;
+        }
+
+        /* Buttons */
+        .button-row {
+            display: flex;
+            gap: 16px;
+            margin-top: 40px;
+        }
+
+        .btn {
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .btn-ghost:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            color: white;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Progress Dots */
+        .progress-dots {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+        }
+
+        .progress-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .progress-dot.active {
+            background: var(--accent-indigo);
+            box-shadow: 0 0 15px var(--accent-indigo);
+        }
+
+        .progress-dot.completed {
+            background: var(--accent-indigo);
+        }
+
+        /* Market Toggle */
+        .market-toggles {
+            display: flex;
+            gap: 16px;
+            margin: 32px 0;
+        }
+
+        .market-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 24px;
+            background: var(--bg-card);
+            border: 2px solid var(--border-subtle);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .market-toggle:hover {
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .market-toggle.active {
+            border-color: var(--accent-indigo);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .toggle-switch {
+            width: 44px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .market-toggle.active .toggle-switch {
+            background: var(--accent-indigo);
+        }
+
+        .toggle-knob {
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .market-toggle.active .toggle-knob {
+            left: 22px;
+        }
+
+        .market-info {
+            text-align: left;
+        }
+
+        .market-name {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .market-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Final Step Animation */
+        .success-icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 32px;
+            animation: scaleIn 0.5s ease-out;
+            box-shadow: 0 0 60px rgba(99, 102, 241, 0.4);
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .success-icon svg {
+            animation: checkDraw 0.5s ease-out 0.3s forwards;
+            stroke-dasharray: 30;
+            stroke-dashoffset: 30;
+        }
+
+        @keyframes checkDraw {
+            to { stroke-dashoffset: 0; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Star Field -->
+    <div class="star-field" id="starField"></div>
+    
+    <!-- Cosmic Glow -->
+    <div class="cosmic-glow glow-1"></div>
+    <div class="cosmic-glow glow-2"></div>
+
+    <!-- Constellation SVG -->
+    <svg class="constellation" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M100 200 L300 150 L450 280 L600 200 L750 350" stroke="rgba(99, 102, 241, 0.3)" stroke-width="1"/>
+        <path d="M1200 100 L1350 200 L1500 150 L1650 280 L1800 200" stroke="rgba(139, 92, 246, 0.3)" stroke-width="1"/>
+        <path d="M200 600 L350 700 L500 650 L650 750 L800 680" stroke="rgba(6, 182, 212, 0.3)" stroke-width="1"/>
+        <circle cx="100" cy="200" r="3" fill="rgba(99, 102, 241, 0.6)"/>
+        <circle cx="300" cy="150" r="2" fill="rgba(99, 102, 241, 0.5)"/>
+        <circle cx="450" cy="280" r="3" fill="rgba(99, 102, 241, 0.6)"/>
+        <circle cx="1200" cy="100" r="2" fill="rgba(139, 92, 246, 0.5)"/>
+        <circle cx="1500" cy="150" r="3" fill="rgba(139, 92, 246, 0.6)"/>
+    </svg>
+
+    <div class="onboarding-container">
+        <!-- Step 1: Welcome -->
+        <div class="step active" id="step1">
+            <div class="logo-container">
+                <div class="logo-symbol">
+                    <div class="logo-ring ring-1"></div>
+                    <div class="logo-ring ring-2"></div>
+                    <div class="logo-ring ring-3"></div>
+                    <div class="logo-center"></div>
+                </div>
+                <div class="logo-title">KĀLA-DRISHTI</div>
+                <div class="logo-sanskrit">कालदृष्टि</div>
+            </div>
+
+            <div class="step-content">
+                <h2>Vision Through Time</h2>
+                <p>Welcome to a new way of understanding market risk — not through predictions, but through the ancient wisdom of time cycles.</p>
+                
+                <div class="philosophy-quote">
+                    "Markets move by planetary cycles, not by news or events. The wise trader reads time, not prices."
+                    <span class="philosophy-author">— The DC Method Philosophy</span>
+                </div>
+                
+                <p>Kāla-Drishti helps you understand when markets are favourable, risky, or deceptive — before the day begins.</p>
+            </div>
+
+            <div class="button-row">
+                <button class="btn btn-primary" onclick="nextStep(2)">
+                    Begin Journey
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 2: Trading Style -->
+        <div class="step" id="step2">
+            <div class="step-content">
+                <h2>How do you trade?</h2>
+                <p>This helps us tailor the risk intelligence to your trading horizon.</p>
+            </div>
+
+            <div class="selection-grid">
+                <div class="selection-card" onclick="selectStyle(this, 'intraday')">
+                    <div class="selection-icon">⚡</div>
+                    <div class="selection-title">Intraday</div>
+                    <div class="selection-desc">Same-day positions</div>
+                    <div class="selection-check">
+                        <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="selection-card" onclick="selectStyle(this, 'swing')">
+                    <div class="selection-icon">📊</div>
+                    <div class="selection-title">Positional</div>
+                    <div class="selection-desc">Days to weeks</div>
+                    <div class="selection-check">
+                        <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="selection-card" onclick="selectStyle(this, 'investor')">
+                    <div class="selection-icon">🏦</div>
+                    <div class="selection-title">Investor</div>
+                    <div class="selection-desc">Months to years</div>
+                    <div class="selection-check">
+                        <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button class="btn btn-ghost" onclick="nextStep(1)">Back</button>
+                <button class="btn btn-primary" id="step2Next" onclick="nextStep(3)" disabled>
+                    Continue
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 3: Risk Appetite -->
+        <div class="step" id="step3">
+            <div class="step-content">
+                <h2>What's your risk appetite?</h2>
+                <p>We'll calibrate alerts and recommendations based on your comfort level.</p>
+            </div>
+
+            <div class="risk-grid">
+                <div class="risk-card low" onclick="selectRisk(this, 'low')">
+                    <div class="risk-indicator"></div>
+                    <div class="selection-title">Conservative</div>
+                    <div class="selection-desc">Capital protection first</div>
+                    <div class="selection-check">
+                        <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="risk-card moderate" onclick="selectRisk(this, 'moderate')">
+                    <div class="risk-indicator"></div>
+                    <div class="selection-title">Balanced</div>
+                    <div class="selection-desc">Risk-reward balance</div>
+                    <div class="selection-check">
+                        <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="risk-card high" onclick="selectRisk(this, 'high')">
+                    <div class="risk-indicator"></div>
+                    <div class="selection-title">Aggressive</div>
+                    <div class="selection-desc">Higher risk tolerance</div>
+                    <div class="selection-check">
+                        <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button class="btn btn-ghost" onclick="nextStep(2)">Back</button>
+                <button class="btn btn-primary" id="step3Next" onclick="nextStep(4)" disabled>
+                    Continue
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 4: Markets -->
+        <div class="step" id="step4">
+            <div class="step-content">
+                <h2>Which markets interest you?</h2>
+                <p>Select the indices you'd like to track.</p>
+            </div>
+
+            <div class="market-toggles">
+                <div class="market-toggle active" onclick="toggleMarket(this, 'nifty')">
+                    <div class="toggle-switch">
+                        <div class="toggle-knob"></div>
+                    </div>
+                    <div class="market-info">
+                        <div class="market-name">NIFTY 50</div>
+                        <div class="market-desc">Benchmark index</div>
+                    </div>
+                </div>
+
+                <div class="market-toggle active" onclick="toggleMarket(this, 'banknifty')">
+                    <div class="toggle-switch">
+                        <div class="toggle-knob"></div>
+                    </div>
+                    <div class="market-info">
+                        <div class="market-name">BANK NIFTY</div>
+                        <div class="market-desc">Banking sector</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button class="btn btn-ghost" onclick="nextStep(3)">Back</button>
+                <button class="btn btn-primary" onclick="nextStep(5)">
+                    Continue
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 5: Disclaimer -->
+        <div class="step" id="step5">
+            <div class="step-content">
+                <h2>Important Disclaimer</h2>
+                <p>Please read and acknowledge our terms before proceeding.</p>
+            </div>
+
+            <div class="disclaimer-box">
+                <div class="disclaimer-title">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"/>
+                    </svg>
+                    Risk Disclosure
+                </div>
+                <div class="disclaimer-text">
+                    <p><strong>This platform provides time-based market risk insights for educational and informational purposes only.</strong></p>
+                    <br>
+                    <p>• Kāla-Drishti is <strong>NOT</strong> a registered investment advisor under SEBI regulations.</p>
+                    <p>• We do <strong>NOT</strong> provide buy/sell recommendations, price targets, or personalized investment advice.</p>
+                    <p>• Past patterns and historical correlations do <strong>NOT</strong> guarantee future results.</p>
+                    <p>• The risk scores and regime classifications are based on alternative temporal data models and should be used as one of many inputs in your decision-making process.</p>
+                    <br>
+                    <p><strong>Trading in financial markets involves substantial risk of loss.</strong> You should consult with a qualified financial advisor before making any investment decisions.</p>
+                    <br>
+                    <p>By using this platform, you acknowledge that you understand these risks and agree that Kāla-Drishti shall not be held liable for any trading losses.</p>
+                </div>
+            </div>
+
+            <div class="checkbox-container" onclick="toggleDisclaimer()">
+                <div class="checkbox" id="disclaimerCheckbox">
+                    <svg width="14" height="14" fill="none" stroke="white" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+                <span class="checkbox-label">I have read and understood the disclaimer. I acknowledge that this is not investment advice.</span>
+            </div>
+
+            <div class="button-row">
+                <button class="btn btn-ghost" onclick="nextStep(4)">Back</button>
+                <button class="btn btn-primary" id="step5Next" onclick="nextStep(6)" disabled>
+                    Accept & Continue
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 6: Complete -->
+        <div class="step" id="step6">
+            <div class="success-icon">
+                <svg width="48" height="48" fill="none" stroke="white" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+            </div>
+
+            <div class="step-content">
+                <h2>You're all set!</h2>
+                <p>Your personalized time-cycle dashboard is ready. Begin your journey into understanding market rhythms.</p>
+            </div>
+
+            <div class="button-row">
+                <a href="dashboard.html" class="btn btn-primary" style="text-decoration: none;">
+                    Enter Dashboard
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Dots -->
+    <div class="progress-dots">
+        <div class="progress-dot active" data-step="1"></div>
+        <div class="progress-dot" data-step="2"></div>
+        <div class="progress-dot" data-step="3"></div>
+        <div class="progress-dot" data-step="4"></div>
+        <div class="progress-dot" data-step="5"></div>
+        <div class="progress-dot" data-step="6"></div>
+    </div>
+
+    <script>
+        // Generate stars
+        const starField = document.getElementById('starField');
+        for (let i = 0; i < 150; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.setProperty('--duration', (3 + Math.random() * 4) + 's');
+            star.style.setProperty('--delay', Math.random() * 5 + 's');
+            star.style.setProperty('--opacity', 0.3 + Math.random() * 0.7);
+            starField.appendChild(star);
+        }
+
+        // User selections
+        let userPrefs = {
+            style: null,
+            risk: null,
+            markets: ['nifty', 'banknifty'],
+            disclaimerAccepted: false
+        };
+
+        function nextStep(step) {
+            // Hide all steps
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+            
+            // Show target step
+            document.getElementById('step' + step).classList.add('active');
+            
+            // Update progress dots
+            document.querySelectorAll('.progress-dot').forEach((dot, index) => {
+                dot.classList.remove('active');
+                if (index < step - 1) {
+                    dot.classList.add('completed');
+                } else {
+                    dot.classList.remove('completed');
+                }
+                if (index === step - 1) {
+                    dot.classList.add('active');
+                }
+            });
+        }
+
+        function selectStyle(element, style) {
+            document.querySelectorAll('.selection-card').forEach(card => card.classList.remove('selected'));
+            element.classList.add('selected');
+            userPrefs.style = style;
+            document.getElementById('step2Next').disabled = false;
+        }
+
+        function selectRisk(element, risk) {
+            document.querySelectorAll('.risk-card').forEach(card => card.classList.remove('selected'));
+            element.classList.add('selected');
+            userPrefs.risk = risk;
+            document.getElementById('step3Next').disabled = false;
+        }
+
+        function toggleMarket(element, market) {
+            element.classList.toggle('active');
+            if (element.classList.contains('active')) {
+                if (!userPrefs.markets.includes(market)) {
+                    userPrefs.markets.push(market);
+                }
+            } else {
+                userPrefs.markets = userPrefs.markets.filter(m => m !== market);
+            }
+        }
+
+        function toggleDisclaimer() {
+            const checkbox = document.getElementById('disclaimerCheckbox');
+            checkbox.classList.toggle('checked');
+            userPrefs.disclaimerAccepted = checkbox.classList.contains('checked');
+            document.getElementById('step5Next').disabled = !userPrefs.disclaimerAccepted;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Transmission | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-elevated: rgba(30, 41, 59, 0.5);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-active: rgba(99, 102, 241, 0.4);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.1), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(139, 92, 246, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 72px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 32px;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-item {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            color: var(--accent-indigo);
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 72px;
+            padding: 32px 40px;
+            max-width: 1400px;
+        }
+
+        /* Header */
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        /* Index Selector */
+        .index-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 32px;
+        }
+
+        .index-tab {
+            padding: 12px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .index-tab:hover {
+            border-color: var(--border-active);
+            color: var(--text-primary);
+        }
+
+        .index-tab.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+            border-color: var(--accent-indigo);
+            color: var(--text-primary);
+        }
+
+        .index-tab-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .index-tab-score.high { background: rgba(239, 68, 68, 0.2); color: var(--risk-red); }
+        .index-tab-score.medium { background: rgba(245, 158, 11, 0.2); color: var(--risk-amber); }
+        .index-tab-score.low { background: rgba(16, 185, 129, 0.2); color: var(--risk-green); }
+
+        /* Summary Card */
+        .summary-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+
+        .summary-gauge {
+            width: 120px;
+            height: 120px;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .summary-gauge svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .gauge-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 10;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 10;
+            stroke-linecap: round;
+            stroke: var(--risk-amber);
+            filter: drop-shadow(0 0 8px var(--risk-amber));
+        }
+
+        .gauge-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .gauge-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--risk-amber);
+        }
+
+        .gauge-label {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .summary-content {
+            flex: 1;
+        }
+
+        .summary-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .summary-title .regime-tag {
+            font-size: 12px;
+            padding: 4px 12px;
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 20px;
+            color: var(--risk-amber);
+        }
+
+        .summary-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .summary-factors {
+            display: flex;
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .factor-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            font-size: 12px;
+        }
+
+        .factor-chip.active { border-left: 3px solid var(--risk-red); }
+        .factor-chip.moderate { border-left: 3px solid var(--risk-amber); }
+        .factor-chip.low { border-left: 3px solid var(--risk-green); }
+
+        /* Transmission Flow */
+        .transmission-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-title .info-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+            background: var(--bg-elevated);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* Flow Visualization */
+        .transmission-flow {
+            display: grid;
+            grid-template-columns: 280px 60px 1fr 60px 180px;
+            gap: 0;
+            align-items: stretch;
+        }
+
+        .flow-column {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .flow-arrow-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            padding: 20px 0;
+        }
+
+        .flow-arrow {
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+
+        .column-header {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        /* Factor Cards */
+        .factor-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .factor-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+        }
+
+        .factor-card.high::before { background: var(--risk-red); }
+        .factor-card.medium::before { background: var(--risk-amber); }
+        .factor-card.low::before { background: var(--risk-green); }
+
+        .factor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .factor-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .factor-status {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .factor-status.active { background: rgba(239, 68, 68, 0.15); color: var(--risk-red); }
+        .factor-status.applying { background: rgba(245, 158, 11, 0.15); color: var(--risk-amber); }
+        .factor-status.separating { background: rgba(16, 185, 129, 0.15); color: var(--risk-green); }
+
+        .factor-correlation {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .factor-correlation strong {
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .factor-chart {
+            height: 40px;
+            background: var(--bg-elevated);
+            border-radius: 6px;
+            display: flex;
+            align-items: flex-end;
+            padding: 4px;
+            gap: 2px;
+        }
+
+        .chart-bar {
+            flex: 1;
+            border-radius: 2px;
+            min-height: 4px;
+        }
+
+        .chart-bar.down { background: var(--risk-red); }
+        .chart-bar.up { background: var(--risk-green); }
+
+        /* Sector Impact Cards */
+        .sector-impact-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 12px 16px;
+        }
+
+        .sector-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .sector-row:last-child {
+            border-bottom: none;
+        }
+
+        .sector-name {
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sector-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .sector-dot.high { background: var(--risk-red); }
+        .sector-dot.medium { background: var(--risk-amber); }
+        .sector-dot.low { background: var(--risk-green); }
+
+        .sector-sensitivity {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sensitivity-bar {
+            width: 60px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .sensitivity-fill {
+            height: 100%;
+            border-radius: 3px;
+        }
+
+        .sensitivity-fill.high { background: var(--risk-red); }
+        .sensitivity-fill.medium { background: var(--risk-amber); }
+        .sensitivity-fill.low { background: var(--risk-green); }
+
+        .sensitivity-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            width: 35px;
+        }
+
+        /* Index Contribution */
+        .contribution-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .contribution-header {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .contribution-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .contribution-value.high { color: var(--risk-red); }
+        .contribution-value.medium { color: var(--risk-amber); }
+        .contribution-value.low { color: var(--risk-green); }
+
+        .contribution-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .contribution-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .breakdown-sector {
+            color: var(--text-secondary);
+        }
+
+        .breakdown-pts {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        .breakdown-pts.positive { color: var(--risk-red); }
+        .breakdown-pts.negative { color: var(--risk-green); }
+
+        /* Bottom Grid */
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .insight-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .insight-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .insight-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .insight-icon.warning { background: rgba(245, 158, 11, 0.15); }
+        .insight-icon.info { background: rgba(99, 102, 241, 0.15); }
+
+        .insight-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .insight-content {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        .insight-list {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .insight-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .insight-item-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        .insight-item-icon.red { background: rgba(239, 68, 68, 0.15); color: var(--risk-red); }
+        .insight-item-icon.amber { background: rgba(245, 158, 11, 0.15); color: var(--risk-amber); }
+        .insight-item-icon.green { background: rgba(16, 185, 129, 0.15); color: var(--risk-green); }
+
+        /* Historical Proof Section */
+        .proof-section {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.04));
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 16px;
+        }
+
+        .proof-header {
+            font-size: 12px;
+            color: var(--accent-indigo);
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .proof-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .proof-stat {
+            text-align: center;
+        }
+
+        .proof-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .proof-stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Weight Explanation */
+        .weight-explanation {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 12px;
+        }
+
+        .weight-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .weight-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .weight-sector {
+            width: 80px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .weight-bar-container {
+            flex: 1;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .weight-bar {
+            height: 100%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .weight-bar.banking { background: linear-gradient(90deg, rgba(99, 102, 241, 0.3), var(--accent-indigo)); }
+        .weight-bar.it { background: linear-gradient(90deg, rgba(239, 68, 68, 0.3), var(--risk-red)); }
+        .weight-bar.energy { background: linear-gradient(90deg, rgba(245, 158, 11, 0.3), var(--risk-amber)); }
+        .weight-bar.fmcg { background: linear-gradient(90deg, rgba(16, 185, 129, 0.3), var(--risk-green)); }
+        .weight-bar.auto { background: linear-gradient(90deg, rgba(139, 92, 246, 0.3), var(--accent-violet)); }
+
+        .weight-impact {
+            width: 60px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .weight-impact.high { color: var(--risk-red); }
+        .weight-impact.medium { color: var(--risk-amber); }
+        .weight-impact.low { color: var(--risk-green); }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">⟡</div>
+            <div class="nav-items">
+                <a href="dashboard.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </a>
+                <a href="calendar.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </a>
+                <a href="risk-transmission.html" class="nav-item active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                </a>
+                <a href="history.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </a>
+                <a href="settings.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">Risk Transmission</h1>
+                <p class="page-subtitle">How planetary factors flow through sectors to affect the index</p>
+            </header>
+
+            <!-- Index Selector -->
+            <div class="index-tabs">
+                <div class="index-tab active">
+                    NIFTY 50
+                    <span class="index-tab-score medium">68</span>
+                </div>
+                <div class="index-tab">
+                    BANKNIFTY
+                    <span class="index-tab-score high">76</span>
+                </div>
+                <div class="index-tab">
+                    NIFTY IT
+                    <span class="index-tab-score high">82</span>
+                </div>
+                <div class="index-tab">
+                    NIFTY FMCG
+                    <span class="index-tab-score low">35</span>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="summary-card">
+                <div class="summary-gauge">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="gauge-track" cx="50" cy="50" r="40"/>
+                        <circle class="gauge-fill" cx="50" cy="50" r="40"
+                            stroke-dasharray="251.33"
+                            stroke-dashoffset="80.4"
+                            transform="rotate(-90 50 50)"/>
+                    </svg>
+                    <div class="gauge-center">
+                        <div class="gauge-value">68</div>
+                        <div class="gauge-label">NIFTY Risk</div>
+                    </div>
+                </div>
+                <div class="summary-content">
+                    <div class="summary-title">
+                        NIFTY 50 Risk Score
+                        <span class="regime-tag">Distribution Regime</span>
+                    </div>
+                    <p class="summary-desc">
+                        Today's risk is driven primarily by <strong>Mercury Retrograde</strong> affecting IT sector (14% weight) 
+                        and <strong>Mars-Saturn square</strong> impacting Banking (21% weight). FMCG sector (9% weight) is providing 
+                        some cushion due to low sensitivity to current factors.
+                    </p>
+                    <div class="summary-factors">
+                        <div class="factor-chip active">☿ Mercury Rx</div>
+                        <div class="factor-chip active">♂□♄ Mars-Saturn</div>
+                        <div class="factor-chip moderate">☽ Moon Ardra</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transmission Flow -->
+            <div class="transmission-section">
+                <h2 class="section-title">
+                    Risk Transmission Path
+                    <span class="info-badge">Factor → Sector Sensitivity → Index Weightage → Net Contribution</span>
+                </h2>
+
+                <div class="transmission-flow">
+                    <!-- Column 1: Planetary Factors -->
+                    <div class="flow-column">
+                        <div class="column-header">Planetary Factors</div>
+                        
+                        <div class="factor-card high">
+                            <div class="factor-header">
+                                <span class="factor-name">☿ Mercury Retrograde</span>
+                                <span class="factor-status active">ACTIVE</span>
+                            </div>
+                            <div class="factor-correlation">
+                                Historical: <strong>73%</strong> down days during Rx
+                            </div>
+                            <div class="factor-chart">
+                                <div class="chart-bar down" style="height: 80%;"></div>
+                                <div class="chart-bar down" style="height: 65%;"></div>
+                                <div class="chart-bar up" style="height: 30%;"></div>
+                                <div class="chart-bar down" style="height: 75%;"></div>
+                                <div class="chart-bar down" style="height: 85%;"></div>
+                                <div class="chart-bar down" style="height: 70%;"></div>
+                                <div class="chart-bar up" style="height: 25%;"></div>
+                                <div class="chart-bar down" style="height: 60%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="factor-card high">
+                            <div class="factor-header">
+                                <span class="factor-name">♂□♄ Mars-Saturn Square</span>
+                                <span class="factor-status applying">APPLYING</span>
+                            </div>
+                            <div class="factor-correlation">
+                                Historical: <strong>2.1x</strong> avg volatility
+                            </div>
+                            <div class="factor-chart">
+                                <div class="chart-bar down" style="height: 90%;"></div>
+                                <div class="chart-bar down" style="height: 100%;"></div>
+                                <div class="chart-bar down" style="height: 70%;"></div>
+                                <div class="chart-bar up" style="height: 40%;"></div>
+                                <div class="chart-bar down" style="height: 85%;"></div>
+                                <div class="chart-bar down" style="height: 95%;"></div>
+                                <div class="chart-bar down" style="height: 75%;"></div>
+                                <div class="chart-bar down" style="height: 80%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="factor-card medium">
+                            <div class="factor-header">
+                                <span class="factor-name">☽ Moon in Ardra</span>
+                                <span class="factor-status active">TODAY</span>
+                            </div>
+                            <div class="factor-correlation">
+                                Historical: <strong>62%</strong> volatile days
+                            </div>
+                            <div class="factor-chart">
+                                <div class="chart-bar down" style="height: 60%;"></div>
+                                <div class="chart-bar up" style="height: 45%;"></div>
+                                <div class="chart-bar down" style="height: 70%;"></div>
+                                <div class="chart-bar down" style="height: 55%;"></div>
+                                <div class="chart-bar up" style="height: 35%;"></div>
+                                <div class="chart-bar down" style="height: 65%;"></div>
+                                <div class="chart-bar down" style="height: 50%;"></div>
+                                <div class="chart-bar up" style="height: 40%;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Arrow Column -->
+                    <div class="flow-arrow-col">
+                        <svg class="flow-arrow" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                        <svg class="flow-arrow" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                        <svg class="flow-arrow" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                    </div>
+
+                    <!-- Column 2: Sector Sensitivity -->
+                    <div class="flow-column">
+                        <div class="column-header">Sector Sensitivity + Index Weight</div>
+                        
+                        <!-- Mercury Rx Impacts -->
+                        <div class="sector-impact-card">
+                            <div class="sector-row">
+                                <span class="sector-name"><span class="sector-dot high"></span> IT Services</span>
+                                <div class="sector-sensitivity">
+                                    <div class="sensitivity-bar"><div class="sensitivity-fill high" style="width: 85%;"></div></div>
+                                    <span class="sensitivity-value">85%</span>
+                                </div>
+                            </div>
+                            <div class="sector-row">
+                                <span class="sector-name"><span class="sector-dot medium"></span> Banking</span>
+                                <div class="sector-sensitivity">
+                                    <div class="sensitivity-bar"><div class="sensitivity-fill medium" style="width: 45%;"></div></div>
+                                    <span class="sensitivity-value">45%</span>
+                                </div>
+                            </div>
+                            <div class="sector-row">
+                                <span class="sector-name"><span class="sector-dot low"></span> FMCG</span>
+                                <div class="sector-sensitivity">
+                                    <div class="sensitivity-bar"><div class="sensitivity-fill low" style="width: 20%;"></div></div>
+                                    <span class="sensitivity-value">20%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Mars-Saturn Impacts -->
+                        <div class="sector-impact-card">
+                            <div class="sector-row">
+                                <span class="sector-name"><span class="sector-dot high"></span> Banking</span>
+                                <div class="sector-sensitivity">
+                                    <div class="sensitivity-bar"><div class="sensitivity-fill high" style="width: 78%;"></div></div>
+                                    <span class="sensitivity-value">78%</span>
+                                </div>
+                            </div>
+                            <div class="sector-row">
+                                <span class="sector-name"><span class="sector-dot medium"></span> Auto</span>
+                                <div class="sector-sensitivity">
+                                    <div class="sensitivity-bar"><div class="sensitivity-fill medium" style="width: 65%;"></div></div>
+                                    <span class="sensitivity-value">65%</span>
+                                </div>
+                            </div>
+                            <div class="sector-row">
+                                <span class="sector-name"><span class="sector-dot low"></span> IT Services</span>
+                                <div class="sector-sensitivity">
+                                    <div class="sensitivity-bar"><div class="sensitivity-fill low" style="width: 30%;"></div></div>
+                                    <span class="sensitivity-value">30%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Moon Ardra Impacts -->
+                        <div class="sector-impact-card">
+                            <div class="sector-row">
+                                <span class="sector-name"><span class="sector-dot medium"></span> All Sectors</span>
+                                <div class="sector-sensitivity">
+                                    <div class="sensitivity-bar"><div class="sensitivity-fill medium" style="width: 50%;"></div></div>
+                                    <span class="sensitivity-value">~50%</span>
+                                </div>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-muted); padding: 8px 0;">
+                                General market sentiment factor
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Arrow Column -->
+                    <div class="flow-arrow-col">
+                        <svg class="flow-arrow" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                        <svg class="flow-arrow" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                        <svg class="flow-arrow" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                    </div>
+
+                    <!-- Column 3: Index Contribution -->
+                    <div class="flow-column">
+                        <div class="column-header">NIFTY Contribution</div>
+                        
+                        <div class="contribution-card">
+                            <div class="contribution-header">
+                                <div class="contribution-value high">+28</div>
+                                <div class="contribution-label">Points from Mercury Rx</div>
+                            </div>
+                            <div class="contribution-breakdown">
+                                <div class="breakdown-row">
+                                    <span class="breakdown-sector">IT (14.2% wt × 85%)</span>
+                                    <span class="breakdown-pts positive">+12.1</span>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span class="breakdown-sector">Banking (21.5% × 45%)</span>
+                                    <span class="breakdown-pts positive">+9.7</span>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span class="breakdown-sector">Others</span>
+                                    <span class="breakdown-pts positive">+6.2</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="contribution-card">
+                            <div class="contribution-header">
+                                <div class="contribution-value high">+24</div>
+                                <div class="contribution-label">Points from Mars-Saturn</div>
+                            </div>
+                            <div class="contribution-breakdown">
+                                <div class="breakdown-row">
+                                    <span class="breakdown-sector">Banking (21.5% × 78%)</span>
+                                    <span class="breakdown-pts positive">+16.8</span>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span class="breakdown-sector">Auto (8.4% × 65%)</span>
+                                    <span class="breakdown-pts positive">+5.5</span>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span class="breakdown-sector">Others</span>
+                                    <span class="breakdown-pts positive">+1.7</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="contribution-card">
+                            <div class="contribution-header">
+                                <div class="contribution-value medium">+16</div>
+                                <div class="contribution-label">Points from Moon Ardra</div>
+                            </div>
+                            <div class="contribution-breakdown">
+                                <div class="breakdown-row">
+                                    <span class="breakdown-sector">All sectors (~50%)</span>
+                                    <span class="breakdown-pts positive">+16.0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Grid -->
+            <div class="bottom-grid">
+                <div class="insight-card">
+                    <div class="insight-header">
+                        <div class="insight-icon warning">💡</div>
+                        <span class="insight-title">Key Insight: Index Composition Matters</span>
+                    </div>
+                    <div class="insight-content">
+                        <p>
+                            <strong>NIFTY IT index (82 risk)</strong> is hit much harder than <strong>NIFTY 50 (68 risk)</strong> 
+                            by Mercury Retrograde because IT stocks have ~50% weight in NIFTY IT vs only 14% in NIFTY 50.
+                        </p>
+                        <p style="margin-top: 12px;">
+                            Similarly, <strong>BANKNIFTY (76 risk)</strong> is more affected by Mars-Saturn because 
+                            banking stocks dominate that index.
+                        </p>
+                    </div>
+                    
+                    <div class="weight-explanation">
+                        <div class="weight-row">
+                            <span class="weight-sector">Banking</span>
+                            <div class="weight-bar-container">
+                                <div class="weight-bar banking" style="width: 86%;">21.5%</div>
+                            </div>
+                            <span class="weight-impact high">+16.8 pts</span>
+                        </div>
+                        <div class="weight-row">
+                            <span class="weight-sector">IT</span>
+                            <div class="weight-bar-container">
+                                <div class="weight-bar it" style="width: 57%;">14.2%</div>
+                            </div>
+                            <span class="weight-impact high">+12.1 pts</span>
+                        </div>
+                        <div class="weight-row">
+                            <span class="weight-sector">Energy</span>
+                            <div class="weight-bar-container">
+                                <div class="weight-bar energy" style="width: 51%;">12.8%</div>
+                            </div>
+                            <span class="weight-impact medium">+6.4 pts</span>
+                        </div>
+                        <div class="weight-row">
+                            <span class="weight-sector">FMCG</span>
+                            <div class="weight-bar-container">
+                                <div class="weight-bar fmcg" style="width: 37%;">9.2%</div>
+                            </div>
+                            <span class="weight-impact low">+1.8 pts</span>
+                        </div>
+                        <div class="weight-row">
+                            <span class="weight-sector">Auto</span>
+                            <div class="weight-bar-container">
+                                <div class="weight-bar auto" style="width: 34%;">8.4%</div>
+                            </div>
+                            <span class="weight-impact medium">+5.5 pts</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="insight-card">
+                    <div class="insight-header">
+                        <div class="insight-icon info">📊</div>
+                        <span class="insight-title">Historical Proof</span>
+                    </div>
+                    <div class="insight-content">
+                        When Mercury Retrograde and Mars-Saturn aspect occur together (like today), 
+                        here's what happened historically:
+                    </div>
+                    
+                    <div class="proof-section">
+                        <div class="proof-header">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                                <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z"/>
+                            </svg>
+                            Based on 12 similar occurrences (2019-2024)
+                        </div>
+                        <div class="proof-stats">
+                            <div class="proof-stat">
+                                <div class="proof-stat-value">83%</div>
+                                <div class="proof-stat-label">Down Days</div>
+                            </div>
+                            <div class="proof-stat">
+                                <div class="proof-stat-value">-1.4%</div>
+                                <div class="proof-stat-label">Avg Return</div>
+                            </div>
+                            <div class="proof-stat">
+                                <div class="proof-stat-value">2.3x</div>
+                                <div class="proof-stat-label">Volatility</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="insight-list">
+                        <div class="insight-item">
+                            <div class="insight-item-icon red">!</div>
+                            <span>IT-heavy portfolios most vulnerable today</span>
+                        </div>
+                        <div class="insight-item">
+                            <div class="insight-item-icon amber">!</div>
+                            <span>Banking stocks showing stress signals</span>
+                        </div>
+                        <div class="insight-item">
+                            <div class="insight-item-icon green">✓</div>
+                            <span>FMCG stocks relatively insulated</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

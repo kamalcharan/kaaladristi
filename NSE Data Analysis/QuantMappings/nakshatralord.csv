@@ -1,0 +1,28 @@
+﻿NakshatraRefID,Nakshatra,PlanetRefID,Planet
+1,Ashvini,8,Ketu
+2,Bharani,2,Venus
+3,Krithika,6,Sun
+4,Rohini,9,Moon
+5,Mrigasira,1,Mars
+6,Arudra,7,Rahu
+7,Punarvasu,5,Jupiter
+8,Pushya,4,Saturn
+9,Ashlesha,3,Mercury
+10,Magha,8,Ketu
+11,Purva Phalguni,2,Venus
+12,Uttara Phalguni,6,Sun
+13,Hastha,9,Moon
+14,Chitra,1,Mars
+15,Swathi,7,Rahu
+16,Vishakha,5,Jupiter
+17,Anuradha,4,Saturn
+18,Jyestha,3,Mercury
+27,Moola,8,Ketu
+19,Purva Ashada,2,Venus
+20,Uttara Ashada,6,Sun
+21,Shravana,9,Moon
+22,Dhanistha,1,Mars
+23,Shatabhisha,7,Rahu
+24,Purva Bhadra,5,Jupiter
+25,Uttara Bhadra,4,Saturn
+26,Revathi,3,Mercury

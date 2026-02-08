@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Risk Analysis | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #0f1629;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-elevated: rgba(30, 41, 59, 0.5);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-active: rgba(99, 102, 241, 0.4);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+            --glow-indigo: rgba(99, 102, 241, 0.15);
+            --glow-green: rgba(16, 185, 129, 0.15);
+            --glow-amber: rgba(245, 158, 11, 0.15);
+            --glow-red: rgba(239, 68, 68, 0.15);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(245, 158, 11, 0.1), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(239, 68, 68, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar - Compact */
+        .sidebar {
+            width: 72px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 32px;
+            cursor: pointer;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-item {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            color: var(--accent-indigo);
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 72px;
+            padding: 32px 40px;
+            max-width: 1400px;
+        }
+
+        /* Back Button */
+        .back-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 24px;
+            transition: color 0.2s ease;
+        }
+
+        .back-nav:hover {
+            color: var(--text-primary);
+        }
+
+        /* Page Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 32px;
+        }
+
+        .page-title-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .date-badge {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 12px 20px;
+            text-align: center;
+        }
+
+        .date-day {
+            font-size: 32px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            line-height: 1;
+        }
+
+        .date-month {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        .index-selector {
+            display: flex;
+            gap: 8px;
+        }
+
+        .index-btn {
+            padding: 10px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .index-btn:hover {
+            border-color: var(--border-active);
+            color: var(--text-primary);
+        }
+
+        .index-btn.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+            border-color: var(--accent-indigo);
+            color: var(--text-primary);
+        }
+
+        /* Main Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            gap: 24px;
+        }
+
+        /* Score Panel */
+        .score-panel {
+            position: sticky;
+            top: 32px;
+            height: fit-content;
+        }
+
+        .score-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 24px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .score-gauge {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 24px;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .gauge-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 20;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 20;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 15px var(--risk-amber));
+        }
+
+        .gauge-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .score-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 56px;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--risk-amber);
+        }
+
+        .score-max {
+            font-size: 16px;
+            color: var(--text-muted);
+        }
+
+        .regime-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 24px;
+            background: var(--glow-amber);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 30px;
+            margin-bottom: 24px;
+        }
+
+        .regime-icon {
+            font-size: 20px;
+        }
+
+        .regime-label {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--risk-amber);
+        }
+
+        .score-interpretation {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+        }
+
+        /* Dimension Cards */
+        .dimension-summary {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .dimension-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .dim-mini-card {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .dim-mini-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .dim-mini-icon.structural { background: rgba(99, 102, 241, 0.15); }
+        .dim-mini-icon.momentum { background: rgba(239, 68, 68, 0.15); }
+        .dim-mini-icon.volatility { background: rgba(245, 158, 11, 0.15); }
+        .dim-mini-icon.deception { background: rgba(139, 92, 246, 0.15); }
+
+        .dim-mini-info {
+            flex: 1;
+        }
+
+        .dim-mini-name {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .dim-mini-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .dim-mini-score.structural { color: var(--accent-indigo); }
+        .dim-mini-score.momentum { color: var(--risk-red); }
+        .dim-mini-score.volatility { color: var(--risk-amber); }
+        .dim-mini-score.deception { color: var(--accent-violet); }
+
+        /* Detail Sections */
+        .detail-sections {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .detail-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .detail-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .detail-icon.structural { background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(99, 102, 241, 0.05)); }
+        .detail-icon.momentum { background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.05)); }
+        .detail-icon.volatility { background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.05)); }
+        .detail-icon.deception { background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.05)); }
+
+        .detail-title-section {
+            flex: 1;
+        }
+
+        .detail-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .detail-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .detail-score {
+            text-align: right;
+        }
+
+        .detail-score-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .detail-score-value.structural { color: var(--accent-indigo); }
+        .detail-score-value.momentum { color: var(--risk-red); }
+        .detail-score-value.volatility { color: var(--risk-amber); }
+        .detail-score-value.deception { color: var(--accent-violet); }
+
+        .detail-score-max {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .detail-body {
+            padding: 24px;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-bottom: 24px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.8s ease-out;
+        }
+
+        .progress-fill.structural { background: linear-gradient(90deg, var(--accent-indigo), rgba(99, 102, 241, 0.5)); }
+        .progress-fill.momentum { background: linear-gradient(90deg, var(--risk-red), rgba(239, 68, 68, 0.5)); }
+        .progress-fill.volatility { background: linear-gradient(90deg, var(--risk-amber), rgba(245, 158, 11, 0.5)); }
+        .progress-fill.deception { background: linear-gradient(90deg, var(--accent-violet), rgba(139, 92, 246, 0.5)); }
+
+        .progress-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Factor List */
+        .factor-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .factor-item {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .factor-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .factor-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 16px;
+            flex-shrink: 0;
+        }
+
+        .factor-status.active { background: var(--risk-red); box-shadow: 0 0 10px var(--risk-red); }
+        .factor-status.warning { background: var(--risk-amber); box-shadow: 0 0 10px var(--risk-amber); }
+        .factor-status.inactive { background: var(--risk-green); }
+
+        .factor-info {
+            flex: 1;
+        }
+
+        .factor-name {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .factor-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .factor-points {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 600;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+        }
+
+        .factor-points.active { color: var(--risk-red); }
+        .factor-points.warning { color: var(--risk-amber); }
+        .factor-points.inactive { color: var(--text-muted); }
+
+        /* Explanation Box */
+        .explanation-box {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.04));
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .explanation-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-indigo);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .explanation-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        /* Planetary Context */
+        .planet-context {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .context-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .planet-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .planet-card {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .planet-symbol {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .planet-name {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .planet-status {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+
+        .planet-status.retrograde {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--risk-red);
+        }
+
+        .planet-status.direct {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--risk-green);
+        }
+
+        .planet-sign {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        /* Disclaimer */
+        .disclaimer-bar {
+            background: rgba(255, 255, 255, 0.03);
+            border-top: 1px solid var(--border-subtle);
+            padding: 16px 24px;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: center;
+            position: fixed;
+            bottom: 0;
+            left: 72px;
+            right: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">⟡</div>
+            
+            <div class="nav-items">
+                <a href="dashboard.html" class="nav-item active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </a>
+                <a href="calendar.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </a>
+                <a href="history.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </a>
+                <a href="settings.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <a href="dashboard.html" class="back-nav">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back to Dashboard
+            </a>
+
+            <header class="page-header">
+                <div class="page-title-section">
+                    <div class="date-badge">
+                        <div class="date-day">16</div>
+                        <div class="date-month">Dec 2024</div>
+                    </div>
+                    <div>
+                        <h1 class="page-title">Risk Analysis</h1>
+                        <p class="page-subtitle">Complete breakdown of today's time-cycle assessment</p>
+                    </div>
+                </div>
+                <div class="index-selector">
+                    <button class="index-btn active">NIFTY 50</button>
+                    <button class="index-btn">BANK NIFTY</button>
+                </div>
+            </header>
+
+            <div class="content-grid">
+                <!-- Score Panel (Sticky) -->
+                <div class="score-panel">
+                    <div class="score-card">
+                        <div class="score-gauge">
+                            <svg class="gauge-svg" viewBox="0 0 100 100">
+                                <circle class="gauge-track" cx="50" cy="50" r="40"/>
+                                <circle class="gauge-fill" cx="50" cy="50" r="40" 
+                                    stroke="url(#riskGrad)"
+                                    stroke-dasharray="251.33"
+                                    stroke-dashoffset="80.4"/>
+                                <defs>
+                                    <linearGradient id="riskGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" style="stop-color:#f59e0b"/>
+                                        <stop offset="100%" style="stop-color:#ef4444"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <div class="gauge-center">
+                                <div class="score-value">68</div>
+                                <div class="score-max">of 100</div>
+                            </div>
+                        </div>
+
+                        <div class="regime-badge">
+                            <span class="regime-icon">⚠️</span>
+                            <span class="regime-label">Distribution Regime</span>
+                        </div>
+
+                        <div class="score-interpretation">
+                            Risk is elevated. Multiple momentum and deception factors are active. 
+                            False breakouts likely. Consider reduced position sizes and tighter stops.
+                        </div>
+                    </div>
+
+                    <div class="dimension-summary">
+                        <div class="dimension-grid">
+                            <div class="dim-mini-card">
+                                <div class="dim-mini-icon structural">🏛️</div>
+                                <div class="dim-mini-info">
+                                    <div class="dim-mini-name">Structural</div>
+                                    <div class="dim-mini-score structural">65</div>
+                                </div>
+                            </div>
+                            <div class="dim-mini-card">
+                                <div class="dim-mini-icon momentum">⚡</div>
+                                <div class="dim-mini-info">
+                                    <div class="dim-mini-name">Momentum</div>
+                                    <div class="dim-mini-score momentum">78</div>
+                                </div>
+                            </div>
+                            <div class="dim-mini-card">
+                                <div class="dim-mini-icon volatility">🌊</div>
+                                <div class="dim-mini-info">
+                                    <div class="dim-mini-name">Volatility</div>
+                                    <div class="dim-mini-score volatility">52</div>
+                                </div>
+                            </div>
+                            <div class="dim-mini-card">
+                                <div class="dim-mini-icon deception">🎭</div>
+                                <div class="dim-mini-info">
+                                    <div class="dim-mini-name">Deception</div>
+                                    <div class="dim-mini-score deception">71</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detail Sections -->
+                <div class="detail-sections">
+                    <!-- Structural Risk -->
+                    <div class="detail-card">
+                        <div class="detail-header">
+                            <div class="detail-icon structural">🏛️</div>
+                            <div class="detail-title-section">
+                                <h3 class="detail-title">Structural Risk</h3>
+                                <p class="detail-subtitle">Long-cycle stability & trend validity</p>
+                            </div>
+                            <div class="detail-score">
+                                <div class="detail-score-value structural">65</div>
+                                <div class="detail-score-max">of 100</div>
+                            </div>
+                        </div>
+                        <div class="detail-body">
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill structural" style="width: 65%"></div>
+                                </div>
+                                <div class="progress-labels">
+                                    <span>Low Risk</span>
+                                    <span>High Risk</span>
+                                </div>
+                            </div>
+
+                            <div class="factor-list">
+                                <div class="factor-item">
+                                    <div class="factor-status active"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Saturn Retrograde</div>
+                                        <div class="factor-desc">Structural instability, trend reversals possible</div>
+                                    </div>
+                                    <div class="factor-points active">+8</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status warning"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Jupiter Retrograde</div>
+                                        <div class="factor-desc">Expansion energy turned inward</div>
+                                    </div>
+                                    <div class="factor-points warning">+5</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status inactive"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Saturn-Rahu Aspect</div>
+                                        <div class="factor-desc">No significant aspect currently</div>
+                                    </div>
+                                    <div class="factor-points inactive">+0</div>
+                                </div>
+                            </div>
+
+                            <div class="explanation-box">
+                                <div class="explanation-title">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+                                    </svg>
+                                    What This Means
+                                </div>
+                                <p class="explanation-text">
+                                    With Saturn retrograde active, larger market structures may be under review. 
+                                    Existing trends could face challenges. This doesn't mean reversal is certain, 
+                                    but structural support/resistance levels may not hold as expected.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Momentum Risk -->
+                    <div class="detail-card">
+                        <div class="detail-header">
+                            <div class="detail-icon momentum">⚡</div>
+                            <div class="detail-title-section">
+                                <h3 class="detail-title">Momentum Risk</h3>
+                                <p class="detail-subtitle">Intraday aggression & leverage risk</p>
+                            </div>
+                            <div class="detail-score">
+                                <div class="detail-score-value momentum">78</div>
+                                <div class="detail-score-max">of 100</div>
+                            </div>
+                        </div>
+                        <div class="detail-body">
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill momentum" style="width: 78%"></div>
+                                </div>
+                                <div class="progress-labels">
+                                    <span>Low Risk</span>
+                                    <span>High Risk</span>
+                                </div>
+                            </div>
+
+                            <div class="factor-list">
+                                <div class="factor-item">
+                                    <div class="factor-status active"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Mars Retrograde</div>
+                                        <div class="factor-desc">Aggressive moves backfire, momentum unreliable</div>
+                                    </div>
+                                    <div class="factor-points active">+10</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status active"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Mars-Saturn Square (Applying)</div>
+                                        <div class="factor-desc">Friction between action and restriction</div>
+                                    </div>
+                                    <div class="factor-points active">+10</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status warning"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Mars-Rahu Aspect</div>
+                                        <div class="factor-desc">Within 8° orb, building intensity</div>
+                                    </div>
+                                    <div class="factor-points warning">+5</div>
+                                </div>
+                            </div>
+
+                            <div class="explanation-box">
+                                <div class="explanation-title">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+                                    </svg>
+                                    What This Means
+                                </div>
+                                <p class="explanation-text">
+                                    This is the highest risk dimension today. Mars retrograde combined with Saturn square 
+                                    creates a "stop-start" energy. Breakouts may fail quickly. BANKNIFTY is especially 
+                                    vulnerable. Avoid aggressive momentum trades and be cautious with leveraged positions.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Volatility Risk -->
+                    <div class="detail-card">
+                        <div class="detail-header">
+                            <div class="detail-icon volatility">🌊</div>
+                            <div class="detail-title-section">
+                                <h3 class="detail-title">Volatility Risk</h3>
+                                <p class="detail-subtitle">Range expansion & option premium risk</p>
+                            </div>
+                            <div class="detail-score">
+                                <div class="detail-score-value volatility">52</div>
+                                <div class="detail-score-max">of 100</div>
+                            </div>
+                        </div>
+                        <div class="detail-body">
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill volatility" style="width: 52%"></div>
+                                </div>
+                                <div class="progress-labels">
+                                    <span>Low Risk</span>
+                                    <span>High Risk</span>
+                                </div>
+                            </div>
+
+                            <div class="factor-list">
+                                <div class="factor-item">
+                                    <div class="factor-status active"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Moon in Ardra</div>
+                                        <div class="factor-desc">High-risk nakshatra — emotional storms</div>
+                                    </div>
+                                    <div class="factor-points active">+10</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status inactive"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Moon Gandanta</div>
+                                        <div class="factor-desc">Not in gandanta zone today</div>
+                                    </div>
+                                    <div class="factor-points inactive">+0</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status inactive"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Multi-Malefic Aspects</div>
+                                        <div class="factor-desc">No extreme clustering today</div>
+                                    </div>
+                                    <div class="factor-points inactive">+0</div>
+                                </div>
+                            </div>
+
+                            <div class="explanation-box">
+                                <div class="explanation-title">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+                                    </svg>
+                                    What This Means
+                                </div>
+                                <p class="explanation-text">
+                                    Moderate volatility risk. Moon in Ardra can bring sudden sentiment shifts, 
+                                    but without gandanta or multiple malefic aspects, extreme range expansion 
+                                    is less likely. Option sellers can proceed with normal caution.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Deception Risk -->
+                    <div class="detail-card">
+                        <div class="detail-header">
+                            <div class="detail-icon deception">🎭</div>
+                            <div class="detail-title-section">
+                                <h3 class="detail-title">Deception Risk</h3>
+                                <p class="detail-subtitle">False breakouts & trap probability</p>
+                            </div>
+                            <div class="detail-score">
+                                <div class="detail-score-value deception">71</div>
+                                <div class="detail-score-max">of 100</div>
+                            </div>
+                        </div>
+                        <div class="detail-body">
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill deception" style="width: 71%"></div>
+                                </div>
+                                <div class="progress-labels">
+                                    <span>Low Risk</span>
+                                    <span>High Risk</span>
+                                </div>
+                            </div>
+
+                            <div class="factor-list">
+                                <div class="factor-item">
+                                    <div class="factor-status active"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Mercury Retrograde</div>
+                                        <div class="factor-desc">Communication errors, false signals, reversals</div>
+                                    </div>
+                                    <div class="factor-points active">+12</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status warning"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Mercury-Rahu Aspect</div>
+                                        <div class="factor-desc">Deceptive narratives, manipulation risk</div>
+                                    </div>
+                                    <div class="factor-points warning">+7</div>
+                                </div>
+                                <div class="factor-item">
+                                    <div class="factor-status inactive"></div>
+                                    <div class="factor-info">
+                                        <div class="factor-name">Venus Retrograde</div>
+                                        <div class="factor-desc">Venus is direct currently</div>
+                                    </div>
+                                    <div class="factor-points inactive">+0</div>
+                                </div>
+                            </div>
+
+                            <div class="explanation-box">
+                                <div class="explanation-title">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/>
+                                    </svg>
+                                    What This Means
+                                </div>
+                                <p class="explanation-text">
+                                    High deception risk. Mercury retrograde is the primary driver — expect technical 
+                                    patterns to fail, news to be misinterpreted, and breakouts to reverse quickly. 
+                                    Wait for confirmation before acting on any signal. Mercury goes direct on Dec 20.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Planetary Context -->
+                    <div class="planet-context">
+                        <h3 class="context-title">
+                            🪐 Planetary Context
+                        </h3>
+                        <div class="planet-grid">
+                            <div class="planet-card">
+                                <div class="planet-symbol">☉</div>
+                                <div class="planet-name">Sun</div>
+                                <div class="planet-status direct">Direct</div>
+                                <div class="planet-sign">Sagittarius • Moola</div>
+                            </div>
+                            <div class="planet-card">
+                                <div class="planet-symbol">☽</div>
+                                <div class="planet-name">Moon</div>
+                                <div class="planet-status direct">Direct</div>
+                                <div class="planet-sign">Gemini • Ardra</div>
+                            </div>
+                            <div class="planet-card">
+                                <div class="planet-symbol">♂</div>
+                                <div class="planet-name">Mars</div>
+                                <div class="planet-status retrograde">Retrograde</div>
+                                <div class="planet-sign">Leo • Magha</div>
+                            </div>
+                            <div class="planet-card">
+                                <div class="planet-symbol">☿</div>
+                                <div class="planet-name">Mercury</div>
+                                <div class="planet-status retrograde">Retrograde</div>
+                                <div class="planet-sign">Sagittarius • Moola</div>
+                            </div>
+                            <div class="planet-card">
+                                <div class="planet-symbol">♃</div>
+                                <div class="planet-name">Jupiter</div>
+                                <div class="planet-status retrograde">Retrograde</div>
+                                <div class="planet-sign">Taurus • Rohini</div>
+                            </div>
+                            <div class="planet-card">
+                                <div class="planet-symbol">♄</div>
+                                <div class="planet-name">Saturn</div>
+                                <div class="planet-status direct">Direct</div>
+                                <div class="planet-sign">Aquarius • Shatabhisha</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="disclaimer-bar">
+        ⚠️ This is time-based risk intelligence for educational purposes only. Not investment advice. Past patterns do not guarantee future results.
+    </div>
+</body>
+</html>

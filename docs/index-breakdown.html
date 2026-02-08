@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIFTY 50 Breakdown | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-elevated: rgba(30, 41, 59, 0.5);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-active: rgba(99, 102, 241, 0.4);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.1), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(6, 182, 212, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 72px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 32px;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-item {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            color: var(--accent-indigo);
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 72px;
+            padding: 32px 40px;
+        }
+
+        /* Back Nav */
+        .back-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 24px;
+            transition: color 0.2s ease;
+        }
+
+        .back-nav:hover {
+            color: var(--text-primary);
+        }
+
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 32px;
+        }
+
+        .index-badge {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .index-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(99, 102, 241, 0.05));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            color: var(--accent-indigo);
+        }
+
+        .index-info h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .index-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .index-price {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .index-change {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .index-change.positive { color: var(--risk-green); }
+        .index-change.negative { color: var(--risk-red); }
+
+        .header-right {
+            display: flex;
+            gap: 12px;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 4px;
+        }
+
+        .view-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .view-btn:hover { color: var(--text-primary); }
+        .view-btn.active {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        /* Summary Cards */
+        .summary-row {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .index-risk-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .risk-gauge {
+            width: 140px;
+            height: 140px;
+            margin: 0 auto 16px;
+            position: relative;
+        }
+
+        .risk-gauge svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .gauge-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 12;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 12;
+            stroke-linecap: round;
+            stroke: var(--risk-amber);
+            filter: drop-shadow(0 0 10px var(--risk-amber));
+        }
+
+        .gauge-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .gauge-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--risk-amber);
+        }
+
+        .gauge-label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .regime-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--risk-amber);
+        }
+
+        /* Attribution Summary */
+        .attribution-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .attribution-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .attribution-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .attribution-insight {
+            font-size: 12px;
+            color: var(--text-muted);
+            background: var(--bg-elevated);
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+
+        /* Top Contributors */
+        .top-contributors {
+            display: flex;
+            gap: 16px;
+        }
+
+        .contributor-card {
+            flex: 1;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .contributor-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .contributor-card.high-risk::before { background: var(--risk-red); }
+        .contributor-card.medium-risk::before { background: var(--risk-amber); }
+        .contributor-card.low-risk::before { background: var(--risk-green); }
+
+        .contributor-rank {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            font-size: 10px;
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.05);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .contributor-symbol {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .contributor-name {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .contributor-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .contrib-stat {
+            text-align: center;
+        }
+
+        .contrib-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .contrib-stat-value.risk-high { color: var(--risk-red); }
+        .contrib-stat-value.risk-medium { color: var(--risk-amber); }
+        .contrib-stat-value.risk-low { color: var(--risk-green); }
+
+        .contrib-stat-label {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* Sector Breakdown */
+        .sector-breakdown {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .sector-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+        }
+
+        .sector-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .sector-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .sector-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sector-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .sector-name {
+            font-size: 13px;
+            width: 100px;
+            flex-shrink: 0;
+        }
+
+        .sector-bar-container {
+            flex: 1;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sector-bar-fill {
+            height: 100%;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            transition: width 0.5s ease;
+        }
+
+        .sector-bar-fill.high { background: linear-gradient(90deg, rgba(239, 68, 68, 0.3), var(--risk-red)); }
+        .sector-bar-fill.medium { background: linear-gradient(90deg, rgba(245, 158, 11, 0.3), var(--risk-amber)); }
+        .sector-bar-fill.low { background: linear-gradient(90deg, rgba(16, 185, 129, 0.3), var(--risk-green)); }
+
+        .sector-weight {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            width: 50px;
+            text-align: right;
+        }
+
+        /* Treemap Visualization */
+        .treemap-container {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .treemap-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .treemap-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .treemap-legend {
+            display: flex;
+            gap: 16px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        .legend-dot.high { background: var(--risk-red); }
+        .legend-dot.medium { background: var(--risk-amber); }
+        .legend-dot.low { background: var(--risk-green); }
+
+        /* Treemap Grid */
+        .treemap-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(5, 60px);
+            gap: 4px;
+        }
+
+        .treemap-cell {
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .treemap-cell:hover {
+            transform: scale(1.05);
+            z-index: 10;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+
+        .treemap-cell.high { background: rgba(239, 68, 68, 0.4); border: 1px solid rgba(239, 68, 68, 0.5); }
+        .treemap-cell.medium { background: rgba(245, 158, 11, 0.3); border: 1px solid rgba(245, 158, 11, 0.4); }
+        .treemap-cell.low { background: rgba(16, 185, 129, 0.3); border: 1px solid rgba(16, 185, 129, 0.4); }
+
+        /* Size variations based on weightage */
+        .treemap-cell.xlarge { grid-column: span 2; grid-row: span 2; }
+        .treemap-cell.large { grid-column: span 2; }
+        .treemap-cell.medium-size { grid-column: span 1; }
+
+        .cell-symbol {
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .cell-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .treemap-cell.xlarge .cell-symbol { font-size: 14px; }
+        .treemap-cell.xlarge .cell-score { font-size: 20px; }
+        .treemap-cell.large .cell-symbol { font-size: 12px; }
+        .treemap-cell.large .cell-score { font-size: 16px; }
+
+        /* Full Constituents Table */
+        .constituents-table {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .table-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .table-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .table-search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+        }
+
+        .table-search input {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            width: 200px;
+            font-family: inherit;
+        }
+
+        .table-search input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 50px 140px 80px 80px 100px 100px 100px 1fr;
+            align-items: center;
+            padding: 14px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            transition: background 0.2s ease;
+        }
+
+        .table-row:hover {
+            background: var(--bg-elevated);
+        }
+
+        .table-row.header {
+            background: var(--bg-elevated);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .table-row.header:hover {
+            background: var(--bg-elevated);
+        }
+
+        .cell {
+            font-size: 13px;
+        }
+
+        .cell.rank {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+        }
+
+        .cell.stock {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stock-symbol {
+            font-weight: 600;
+        }
+
+        .stock-name {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .cell.weight {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .cell.risk-score {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .risk-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .risk-indicator.high { background: var(--risk-red); box-shadow: 0 0 8px var(--risk-red); }
+        .risk-indicator.medium { background: var(--risk-amber); box-shadow: 0 0 8px var(--risk-amber); }
+        .risk-indicator.low { background: var(--risk-green); box-shadow: 0 0 8px var(--risk-green); }
+
+        .cell.correlation {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .correlation-bar {
+            width: 60px;
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .correlation-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--accent-cyan);
+        }
+
+        .cell.contribution {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .contrib-positive { color: var(--risk-red); }
+        .contrib-negative { color: var(--risk-green); }
+        .contrib-neutral { color: var(--text-muted); }
+
+        .cell.sector-tag {
+            font-size: 11px;
+            padding: 4px 10px;
+            background: var(--bg-elevated);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            display: inline-block;
+            width: fit-content;
+        }
+
+        .cell.mini-chart {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sparkline {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 24px;
+        }
+
+        .spark-bar {
+            width: 4px;
+            border-radius: 2px;
+        }
+
+        .spark-bar.up { background: var(--risk-green); }
+        .spark-bar.down { background: var(--risk-red); }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">⟡</div>
+            <div class="nav-items">
+                <a href="dashboard.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </a>
+                <a href="calendar.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </a>
+                <a href="index-breakdown.html" class="nav-item active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                </a>
+                <a href="history.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </a>
+                <a href="settings.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <a href="dashboard.html" class="back-nav">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back to Dashboard
+            </a>
+
+            <header class="page-header">
+                <div class="index-badge">
+                    <div class="index-icon">N50</div>
+                    <div class="index-info">
+                        <h1>NIFTY 50 Breakdown</h1>
+                        <div class="index-meta">
+                            <span class="index-price">24,680.50</span>
+                            <span class="index-change negative">-0.24% (-59.30)</span>
+                            <span>•</span>
+                            <span>50 Constituents</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="view-toggle">
+                        <button class="view-btn active">NIFTY 50</button>
+                        <button class="view-btn">BANKNIFTY</button>
+                        <button class="view-btn">NIFTY IT</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Summary Row -->
+            <div class="summary-row">
+                <div class="index-risk-card">
+                    <div class="risk-gauge">
+                        <svg viewBox="0 0 100 100">
+                            <circle class="gauge-track" cx="50" cy="50" r="40"/>
+                            <circle class="gauge-fill" cx="50" cy="50" r="40"
+                                stroke-dasharray="251.33"
+                                stroke-dashoffset="80.4"
+                                transform="rotate(-90 50 50)"/>
+                        </svg>
+                        <div class="gauge-center">
+                            <div class="gauge-value">68</div>
+                            <div class="gauge-label">Index Risk</div>
+                        </div>
+                    </div>
+                    <div class="regime-tag">
+                        ⚠️ Distribution Regime
+                    </div>
+                </div>
+
+                <div class="attribution-card">
+                    <div class="attribution-header">
+                        <span class="attribution-title">Top Risk Contributors</span>
+                        <span class="attribution-insight">Top 5 stocks = 58% of index risk</span>
+                    </div>
+                    <div class="top-contributors">
+                        <div class="contributor-card high-risk">
+                            <span class="contributor-rank">#1</span>
+                            <div class="contributor-symbol">RELIANCE</div>
+                            <div class="contributor-name">Reliance Industries</div>
+                            <div class="contributor-stats">
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value">10.2%</div>
+                                    <div class="contrib-stat-label">Weight</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-high">72</div>
+                                    <div class="contrib-stat-label">Risk</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-high">+7.3</div>
+                                    <div class="contrib-stat-label">Contrib</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="contributor-card high-risk">
+                            <span class="contributor-rank">#2</span>
+                            <div class="contributor-symbol">INFY</div>
+                            <div class="contributor-name">Infosys Ltd</div>
+                            <div class="contributor-stats">
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value">6.8%</div>
+                                    <div class="contrib-stat-label">Weight</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-high">75</div>
+                                    <div class="contrib-stat-label">Risk</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-high">+5.1</div>
+                                    <div class="contrib-stat-label">Contrib</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="contributor-card medium-risk">
+                            <span class="contributor-rank">#3</span>
+                            <div class="contributor-symbol">HDFCBANK</div>
+                            <div class="contributor-name">HDFC Bank</div>
+                            <div class="contributor-stats">
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value">8.1%</div>
+                                    <div class="contrib-stat-label">Weight</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-medium">58</div>
+                                    <div class="contrib-stat-label">Risk</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-medium">+4.7</div>
+                                    <div class="contrib-stat-label">Contrib</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="contributor-card high-risk">
+                            <span class="contributor-rank">#4</span>
+                            <div class="contributor-symbol">TCS</div>
+                            <div class="contributor-name">Tata Consultancy</div>
+                            <div class="contributor-stats">
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value">4.2%</div>
+                                    <div class="contrib-stat-label">Weight</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-high">78</div>
+                                    <div class="contrib-stat-label">Risk</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-high">+3.3</div>
+                                    <div class="contrib-stat-label">Contrib</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="contributor-card low-risk">
+                            <span class="contributor-rank">#5</span>
+                            <div class="contributor-symbol">HINDUNILVR</div>
+                            <div class="contributor-name">Hindustan Unilever</div>
+                            <div class="contributor-stats">
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value">3.1%</div>
+                                    <div class="contrib-stat-label">Weight</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-low">32</div>
+                                    <div class="contrib-stat-label">Risk</div>
+                                </div>
+                                <div class="contrib-stat">
+                                    <div class="contrib-stat-value risk-low">-1.0</div>
+                                    <div class="contrib-stat-label">Contrib</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sector Breakdown -->
+            <div class="sector-breakdown">
+                <div class="sector-card">
+                    <div class="sector-header">
+                        <span class="sector-title">Risk by Sector</span>
+                    </div>
+                    <div class="sector-bars">
+                        <div class="sector-bar-row">
+                            <span class="sector-name">IT Services</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill high" style="width: 78%;">78</div>
+                            </div>
+                            <span class="sector-weight">14.2%</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">Energy</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill high" style="width: 72%;">72</div>
+                            </div>
+                            <span class="sector-weight">12.8%</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">Banking</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill medium" style="width: 58%;">58</div>
+                            </div>
+                            <span class="sector-weight">21.5%</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">Auto</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill medium" style="width: 52%;">52</div>
+                            </div>
+                            <span class="sector-weight">8.4%</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">FMCG</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill low" style="width: 35%;">35</div>
+                            </div>
+                            <span class="sector-weight">9.2%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sector-card">
+                    <div class="sector-header">
+                        <span class="sector-title">Weight by Sector</span>
+                    </div>
+                    <div class="sector-bars">
+                        <div class="sector-bar-row">
+                            <span class="sector-name">Banking</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill medium" style="width: 86%;">21.5%</div>
+                            </div>
+                            <span class="sector-weight">Risk: 58</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">IT Services</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill high" style="width: 57%;">14.2%</div>
+                            </div>
+                            <span class="sector-weight">Risk: 78</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">Energy</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill high" style="width: 51%;">12.8%</div>
+                            </div>
+                            <span class="sector-weight">Risk: 72</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">FMCG</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill low" style="width: 37%;">9.2%</div>
+                            </div>
+                            <span class="sector-weight">Risk: 35</span>
+                        </div>
+                        <div class="sector-bar-row">
+                            <span class="sector-name">Auto</span>
+                            <div class="sector-bar-container">
+                                <div class="sector-bar-fill medium" style="width: 34%;">8.4%</div>
+                            </div>
+                            <span class="sector-weight">Risk: 52</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Treemap -->
+            <div class="treemap-container">
+                <div class="treemap-header">
+                    <span class="treemap-title">Risk Heatmap (Size = Weight, Color = Risk)</span>
+                    <div class="treemap-legend">
+                        <div class="legend-item"><div class="legend-dot high"></div> High Risk (>70)</div>
+                        <div class="legend-item"><div class="legend-dot medium"></div> Medium (40-70)</div>
+                        <div class="legend-item"><div class="legend-dot low"></div> Low (<40)</div>
+                    </div>
+                </div>
+                <div class="treemap-grid">
+                    <!-- Row 1 - Heavy weights -->
+                    <div class="treemap-cell xlarge high" title="RELIANCE - 10.2% - Risk: 72">
+                        <span class="cell-symbol">RELIANCE</span>
+                        <span class="cell-score">72</span>
+                    </div>
+                    <div class="treemap-cell xlarge medium" title="HDFCBANK - 8.1% - Risk: 58">
+                        <span class="cell-symbol">HDFC BANK</span>
+                        <span class="cell-score">58</span>
+                    </div>
+                    <div class="treemap-cell large high" title="INFY - 6.8% - Risk: 75">
+                        <span class="cell-symbol">INFY</span>
+                        <span class="cell-score">75</span>
+                    </div>
+                    <div class="treemap-cell large medium" title="ICICIBANK - 5.5% - Risk: 55">
+                        <span class="cell-symbol">ICICI</span>
+                        <span class="cell-score">55</span>
+                    </div>
+                    <div class="treemap-cell high" title="TCS - 4.2% - Risk: 78">
+                        <span class="cell-symbol">TCS</span>
+                        <span class="cell-score">78</span>
+                    </div>
+                    <div class="treemap-cell low" title="HINDUNILVR - 3.1% - Risk: 32">
+                        <span class="cell-symbol">HUL</span>
+                        <span class="cell-score">32</span>
+                    </div>
+                    <!-- Row 2 -->
+                    <div class="treemap-cell medium" title="BHARTIARTL - 2.8%">
+                        <span class="cell-symbol">BHARTI</span>
+                        <span class="cell-score">62</span>
+                    </div>
+                    <div class="treemap-cell high" title="LT - 2.5%">
+                        <span class="cell-symbol">L&T</span>
+                        <span class="cell-score">71</span>
+                    </div>
+                    <div class="treemap-cell medium" title="SBIN - 2.4%">
+                        <span class="cell-symbol">SBIN</span>
+                        <span class="cell-score">54</span>
+                    </div>
+                    <div class="treemap-cell low" title="ITC - 2.3%">
+                        <span class="cell-symbol">ITC</span>
+                        <span class="cell-score">28</span>
+                    </div>
+                    <div class="treemap-cell medium" title="KOTAKBANK - 2.2%">
+                        <span class="cell-symbol">KOTAK</span>
+                        <span class="cell-score">52</span>
+                    </div>
+                    <div class="treemap-cell high" title="AXISBANK - 2.1%">
+                        <span class="cell-symbol">AXIS</span>
+                        <span class="cell-score">74</span>
+                    </div>
+                    <div class="treemap-cell low" title="BAJFINANCE - 2.0%">
+                        <span class="cell-symbol">BAJFIN</span>
+                        <span class="cell-score">38</span>
+                    </div>
+                    <div class="treemap-cell medium" title="MARUTI - 1.9%">
+                        <span class="cell-symbol">MARUTI</span>
+                        <span class="cell-score">48</span>
+                    </div>
+                    <!-- Row 3 - Smaller weights -->
+                    <div class="treemap-cell high"><span class="cell-symbol">WIPRO</span><span class="cell-score">76</span></div>
+                    <div class="treemap-cell medium"><span class="cell-symbol">TITAN</span><span class="cell-score">45</span></div>
+                    <div class="treemap-cell low"><span class="cell-symbol">NESTLEIND</span><span class="cell-score">30</span></div>
+                    <div class="treemap-cell high"><span class="cell-symbol">HCLTECH</span><span class="cell-score">77</span></div>
+                    <div class="treemap-cell medium"><span class="cell-symbol">M&M</span><span class="cell-score">55</span></div>
+                    <div class="treemap-cell low"><span class="cell-symbol">ASIANPAINT</span><span class="cell-score">35</span></div>
+                    <div class="treemap-cell medium"><span class="cell-symbol">SUNPHARMA</span><span class="cell-score">48</span></div>
+                    <div class="treemap-cell high"><span class="cell-symbol">TATAMOTORS</span><span class="cell-score">70</span></div>
+                    <div class="treemap-cell low"><span class="cell-symbol">ULTRACEMCO</span><span class="cell-score">32</span></div>
+                    <div class="treemap-cell medium"><span class="cell-symbol">POWERGRID</span><span class="cell-score">50</span></div>
+                </div>
+            </div>
+
+            <!-- Full Table -->
+            <div class="constituents-table">
+                <div class="table-header-row">
+                    <span class="table-title">All 50 Constituents</span>
+                    <div class="table-search">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        <input type="text" placeholder="Search stock...">
+                    </div>
+                </div>
+                <div class="table-row header">
+                    <div class="cell">#</div>
+                    <div class="cell">Stock</div>
+                    <div class="cell">Weight</div>
+                    <div class="cell">Risk</div>
+                    <div class="cell">Correlation</div>
+                    <div class="cell">Contribution</div>
+                    <div class="cell">Sector</div>
+                    <div class="cell">7-Day Trend</div>
+                </div>
+                <div class="table-row">
+                    <div class="cell rank">1</div>
+                    <div class="cell stock"><span class="stock-symbol">RELIANCE</span><span class="stock-name">Reliance Industries</span></div>
+                    <div class="cell weight">10.23%</div>
+                    <div class="cell risk-score"><span class="risk-indicator high"></span> 72</div>
+                    <div class="cell correlation">78%<div class="correlation-bar"><div class="correlation-fill" style="width: 78%"></div></div></div>
+                    <div class="cell contribution contrib-positive">+7.3 pts</div>
+                    <div class="cell"><span class="sector-tag">Energy</span></div>
+                    <div class="cell mini-chart">
+                        <div class="sparkline">
+                            <div class="spark-bar up" style="height: 12px;"></div>
+                            <div class="spark-bar up" style="height: 16px;"></div>
+                            <div class="spark-bar down" style="height: 20px;"></div>
+                            <div class="spark-bar down" style="height: 24px;"></div>
+                            <div class="spark-bar down" style="height: 18px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-row">
+                    <div class="cell rank">2</div>
+                    <div class="cell stock"><span class="stock-symbol">HDFCBANK</span><span class="stock-name">HDFC Bank Ltd</span></div>
+                    <div class="cell weight">8.12%</div>
+                    <div class="cell risk-score"><span class="risk-indicator medium"></span> 58</div>
+                    <div class="cell correlation">65%<div class="correlation-bar"><div class="correlation-fill" style="width: 65%"></div></div></div>
+                    <div class="cell contribution contrib-positive">+4.7 pts</div>
+                    <div class="cell"><span class="sector-tag">Banking</span></div>
+                    <div class="cell mini-chart">
+                        <div class="sparkline">
+                            <div class="spark-bar down" style="height: 14px;"></div>
+                            <div class="spark-bar up" style="height: 10px;"></div>
+                            <div class="spark-bar up" style="height: 8px;"></div>
+                            <div class="spark-bar down" style="height: 12px;"></div>
+                            <div class="spark-bar down" style="height: 16px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-row">
+                    <div class="cell rank">3</div>
+                    <div class="cell stock"><span class="stock-symbol">INFY</span><span class="stock-name">Infosys Ltd</span></div>
+                    <div class="cell weight">6.85%</div>
+                    <div class="cell risk-score"><span class="risk-indicator high"></span> 75</div>
+                    <div class="cell correlation">82%<div class="correlation-bar"><div class="correlation-fill" style="width: 82%"></div></div></div>
+                    <div class="cell contribution contrib-positive">+5.1 pts</div>
+                    <div class="cell"><span class="sector-tag">IT</span></div>
+                    <div class="cell mini-chart">
+                        <div class="sparkline">
+                            <div class="spark-bar up" style="height: 8px;"></div>
+                            <div class="spark-bar down" style="height: 18px;"></div>
+                            <div class="spark-bar down" style="height: 22px;"></div>
+                            <div class="spark-bar down" style="height: 20px;"></div>
+                            <div class="spark-bar down" style="height: 24px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-row">
+                    <div class="cell rank">4</div>
+                    <div class="cell stock"><span class="stock-symbol">TCS</span><span class="stock-name">Tata Consultancy</span></div>
+                    <div class="cell weight">4.22%</div>
+                    <div class="cell risk-score"><span class="risk-indicator high"></span> 78</div>
+                    <div class="cell correlation">80%<div class="correlation-bar"><div class="correlation-fill" style="width: 80%"></div></div></div>
+                    <div class="cell contribution contrib-positive">+3.3 pts</div>
+                    <div class="cell"><span class="sector-tag">IT</span></div>
+                    <div class="cell mini-chart">
+                        <div class="sparkline">
+                            <div class="spark-bar up" style="height: 10px;"></div>
+                            <div class="spark-bar down" style="height: 16px;"></div>
+                            <div class="spark-bar down" style="height: 20px;"></div>
+                            <div class="spark-bar down" style="height: 22px;"></div>
+                            <div class="spark-bar down" style="height: 24px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-row">
+                    <div class="cell rank">5</div>
+                    <div class="cell stock"><span class="stock-symbol">HINDUNILVR</span><span class="stock-name">Hindustan Unilever</span></div>
+                    <div class="cell weight">3.14%</div>
+                    <div class="cell risk-score"><span class="risk-indicator low"></span> 32</div>
+                    <div class="cell correlation">45%<div class="correlation-bar"><div class="correlation-fill" style="width: 45%"></div></div></div>
+                    <div class="cell contribution contrib-negative">-1.0 pts</div>
+                    <div class="cell"><span class="sector-tag">FMCG</span></div>
+                    <div class="cell mini-chart">
+                        <div class="sparkline">
+                            <div class="spark-bar up" style="height: 14px;"></div>
+                            <div class="spark-bar up" style="height: 18px;"></div>
+                            <div class="spark-bar up" style="height: 16px;"></div>
+                            <div class="spark-bar up" style="height: 20px;"></div>
+                            <div class="spark-bar down" style="height: 12px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-row">
+                    <div class="cell rank">6</div>
+                    <div class="cell stock"><span class="stock-symbol">ITC</span><span class="stock-name">ITC Ltd</span></div>
+                    <div class="cell weight">2.31%</div>
+                    <div class="cell risk-score"><span class="risk-indicator low"></span> 28</div>
+                    <div class="cell correlation">38%<div class="correlation-bar"><div class="correlation-fill" style="width: 38%"></div></div></div>
+                    <div class="cell contribution contrib-negative">-0.8 pts</div>
+                    <div class="cell"><span class="sector-tag">FMCG</span></div>
+                    <div class="cell mini-chart">
+                        <div class="sparkline">
+                            <div class="spark-bar up" style="height: 16px;"></div>
+                            <div class="spark-bar up" style="height: 20px;"></div>
+                            <div class="spark-bar up" style="height: 18px;"></div>
+                            <div class="spark-bar up" style="height: 22px;"></div>
+                            <div class="spark-bar up" style="height: 24px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

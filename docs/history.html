@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historical Correlation | Kāla-Drishti</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.8);
+            --bg-elevated: rgba(30, 41, 59, 0.5);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-active: rgba(99, 102, 241, 0.4);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --risk-green: #10b981;
+            --risk-amber: #f59e0b;
+            --risk-red: #ef4444;
+            --candle-green: #22c55e;
+            --candle-red: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Background */
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.1), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(6, 182, 212, 0.08), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 72px;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-violet));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 32px;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-item {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            position: relative;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            color: var(--accent-indigo);
+        }
+
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 24px;
+            background: var(--accent-indigo);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .nav-item svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 72px;
+            padding: 32px 40px;
+        }
+
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 4px;
+        }
+
+        .control-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .control-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .control-btn.active {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .date-range-picker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* Accuracy Stats */
+        .accuracy-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .accuracy-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .accuracy-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .accuracy-card.excellent::before { background: var(--risk-green); }
+        .accuracy-card.good::before { background: var(--accent-cyan); }
+        .accuracy-card.moderate::before { background: var(--risk-amber); }
+        .accuracy-card.info::before { background: var(--accent-indigo); }
+
+        .accuracy-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .accuracy-value.excellent { color: var(--risk-green); }
+        .accuracy-value.good { color: var(--accent-cyan); }
+        .accuracy-value.moderate { color: var(--risk-amber); }
+        .accuracy-value.info { color: var(--accent-indigo); }
+
+        .accuracy-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .accuracy-detail {
+            font-size: 11px;
+            color: var(--text-muted);
+            padding-top: 8px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        /* Main Chart Area */
+        .chart-container {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 20px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .legend-line {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+        }
+
+        .legend-line.risk { background: var(--accent-indigo); }
+        .legend-line.price { background: var(--accent-cyan); }
+        .legend-line.volatility { background: var(--risk-amber); }
+
+        /* Correlation Chart */
+        .correlation-chart {
+            height: 400px;
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        /* Y-Axis Labels */
+        .y-axis {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 40px;
+            width: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .y-axis-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: right;
+            padding-right: 12px;
+        }
+
+        .y-axis-right {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 40px;
+            width: 70px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .y-axis-right .y-axis-label {
+            text-align: left;
+            padding-left: 12px;
+            padding-right: 0;
+            color: var(--accent-cyan);
+        }
+
+        /* Chart Grid */
+        .chart-grid {
+            position: absolute;
+            left: 60px;
+            right: 70px;
+            top: 0;
+            bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .grid-line {
+            height: 1px;
+            background: var(--border-subtle);
+            width: 100%;
+        }
+
+        /* Chart Area */
+        .chart-area {
+            position: absolute;
+            left: 60px;
+            right: 70px;
+            top: 10px;
+            bottom: 50px;
+        }
+
+        /* Candlesticks */
+        .candlestick-container {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            padding: 0 4px;
+        }
+
+        .candle {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            min-width: 8px;
+            max-width: 20px;
+        }
+
+        .candle-wick {
+            width: 1px;
+            position: absolute;
+        }
+
+        .candle-body {
+            width: 70%;
+            min-width: 4px;
+            border-radius: 1px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .candle.green .candle-wick { background: var(--candle-green); }
+        .candle.green .candle-body { background: var(--candle-green); }
+        .candle.red .candle-wick { background: var(--candle-red); }
+        .candle.red .candle-body { background: var(--candle-red); }
+
+        /* Risk Overlay Line */
+        .risk-line-container {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .risk-line {
+            fill: none;
+            stroke: var(--accent-indigo);
+            stroke-width: 2;
+            filter: drop-shadow(0 0 4px var(--accent-indigo));
+        }
+
+        .risk-area {
+            fill: url(#riskGradient);
+            opacity: 0.3;
+        }
+
+        /* Risk Zone Highlights */
+        .risk-zone {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            opacity: 0.1;
+        }
+
+        .risk-zone.high { background: var(--risk-red); }
+        .risk-zone.medium { background: var(--risk-amber); }
+
+        /* X-Axis */
+        .x-axis {
+            position: absolute;
+            left: 60px;
+            right: 70px;
+            bottom: 0;
+            height: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-top: 12px;
+        }
+
+        .x-axis-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        /* Tooltip */
+        .chart-tooltip {
+            position: absolute;
+            background: var(--bg-card);
+            border: 1px solid var(--border-active);
+            border-radius: 12px;
+            padding: 16px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 10;
+            min-width: 200px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .chart-tooltip.visible {
+            opacity: 1;
+        }
+
+        .tooltip-date {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .tooltip-label {
+            color: var(--text-secondary);
+        }
+
+        .tooltip-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        .tooltip-value.risk { color: var(--accent-indigo); }
+        .tooltip-value.price { color: var(--text-primary); }
+        .tooltip-value.change.positive { color: var(--candle-green); }
+        .tooltip-value.change.negative { color: var(--candle-red); }
+
+        /* Correlation Breakdown */
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .breakdown-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        .breakdown-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .breakdown-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .breakdown-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .breakdown-badge.high-risk {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--risk-red);
+        }
+
+        .breakdown-badge.low-risk {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--risk-green);
+        }
+
+        .breakdown-badge.medium-risk {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--risk-amber);
+        }
+
+        /* Correlation Bars */
+        .correlation-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .correlation-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .bar-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            width: 80px;
+            flex-shrink: 0;
+        }
+
+        .bar-container {
+            flex: 1;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .bar-fill.negative { background: var(--candle-red); }
+        .bar-fill.positive { background: var(--candle-green); }
+        .bar-fill.neutral { background: var(--text-muted); }
+
+        .bar-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            width: 50px;
+            text-align: right;
+        }
+
+        .bar-value.negative { color: var(--candle-red); }
+        .bar-value.positive { color: var(--candle-green); }
+
+        /* Historical Table */
+        .history-table-container {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 20px;
+            overflow: hidden;
+            margin-top: 24px;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .table-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .table-filter {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-btn {
+            padding: 6px 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            border-color: var(--border-active);
+            color: var(--text-primary);
+        }
+
+        .history-table {
+            width: 100%;
+        }
+
+        .table-row {
+            display: grid;
+            grid-template-columns: 100px 80px 100px 100px 100px 120px 1fr;
+            align-items: center;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            transition: background 0.2s ease;
+        }
+
+        .table-row:hover {
+            background: var(--bg-elevated);
+        }
+
+        .table-row.header {
+            background: var(--bg-elevated);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .table-row.header:hover {
+            background: var(--bg-elevated);
+        }
+
+        .cell {
+            font-size: 13px;
+        }
+
+        .cell.date {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .cell.risk-score {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .risk-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .risk-dot.low { background: var(--risk-green); }
+        .risk-dot.medium { background: var(--risk-amber); }
+        .risk-dot.high { background: var(--risk-red); }
+
+        .cell.price {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .cell.change {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+        }
+
+        .cell.change.positive { color: var(--candle-green); }
+        .cell.change.negative { color: var(--candle-red); }
+
+        .cell.volatility {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .cell.outcome {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .outcome-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .outcome-badge.correct {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--risk-green);
+        }
+
+        .outcome-badge.partial {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--risk-amber);
+        }
+
+        .outcome-badge.missed {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--risk-red);
+        }
+
+        .cell.notes {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">⟡</div>
+            
+            <div class="nav-items">
+                <a href="dashboard.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                    </svg>
+                </a>
+                <a href="calendar.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </a>
+                <a href="history.html" class="nav-item active">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                </a>
+                <a href="settings.html" class="nav-item">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <div>
+                    <h1 class="page-title">Historical Correlation</h1>
+                    <p class="page-subtitle">Backtest risk scores against actual NIFTY performance</p>
+                </div>
+                <div class="header-controls">
+                    <div class="control-group">
+                        <button class="control-btn active">NIFTY</button>
+                        <button class="control-btn">BANKNIFTY</button>
+                    </div>
+                    <div class="control-group">
+                        <button class="control-btn">1M</button>
+                        <button class="control-btn active">3M</button>
+                        <button class="control-btn">6M</button>
+                        <button class="control-btn">1Y</button>
+                    </div>
+                    <div class="date-range-picker">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        Sep 16 — Dec 16, 2024
+                    </div>
+                </div>
+            </header>
+
+            <!-- Accuracy Stats -->
+            <div class="accuracy-stats">
+                <div class="accuracy-card excellent">
+                    <div class="accuracy-value excellent">73%</div>
+                    <div class="accuracy-label">High-Risk Accuracy</div>
+                    <div class="accuracy-detail">When score > 70, market fell 73% of the time</div>
+                </div>
+                <div class="accuracy-card good">
+                    <div class="accuracy-value good">68%</div>
+                    <div class="accuracy-label">Volatility Prediction</div>
+                    <div class="accuracy-detail">High volatility days correctly identified</div>
+                </div>
+                <div class="accuracy-card moderate">
+                    <div class="accuracy-value moderate">2.1x</div>
+                    <div class="accuracy-label">Range Multiplier</div>
+                    <div class="accuracy-detail">High-risk days had 2.1x avg daily range</div>
+                </div>
+                <div class="accuracy-card info">
+                    <div class="accuracy-value info">89</div>
+                    <div class="accuracy-label">Trading Days</div>
+                    <div class="accuracy-detail">Data points in selected period</div>
+                </div>
+            </div>
+
+            <!-- Correlation Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">Risk Score vs NIFTY Price</h3>
+                    <div class="chart-legend">
+                        <div class="legend-item">
+                            <div class="legend-line risk"></div>
+                            <span>Risk Score</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line price"></div>
+                            <span>NIFTY Price</span>
+                        </div>
+                        <div class="legend-item">
+                            <svg width="12" height="12" viewBox="0 0 12 12">
+                                <rect x="2" y="2" width="8" height="8" fill="rgba(239, 68, 68, 0.2)" rx="1"/>
+                            </svg>
+                            <span>High Risk Zone</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="correlation-chart" id="correlationChart">
+                    <!-- Y-Axis Left (Risk Score) -->
+                    <div class="y-axis">
+                        <div class="y-axis-label">100</div>
+                        <div class="y-axis-label">75</div>
+                        <div class="y-axis-label">50</div>
+                        <div class="y-axis-label">25</div>
+                        <div class="y-axis-label">0</div>
+                    </div>
+
+                    <!-- Y-Axis Right (Price) -->
+                    <div class="y-axis-right">
+                        <div class="y-axis-label">24,800</div>
+                        <div class="y-axis-label">24,400</div>
+                        <div class="y-axis-label">24,000</div>
+                        <div class="y-axis-label">23,600</div>
+                        <div class="y-axis-label">23,200</div>
+                    </div>
+
+                    <!-- Grid Lines -->
+                    <div class="chart-grid">
+                        <div class="grid-line"></div>
+                        <div class="grid-line"></div>
+                        <div class="grid-line"></div>
+                        <div class="grid-line"></div>
+                        <div class="grid-line"></div>
+                    </div>
+
+                    <!-- Chart Area with Candlesticks and Risk Line -->
+                    <div class="chart-area">
+                        <!-- High Risk Zone Highlights -->
+                        <div class="risk-zone high" style="left: 15%; width: 8%;"></div>
+                        <div class="risk-zone high" style="left: 42%; width: 5%;"></div>
+                        <div class="risk-zone medium" style="left: 65%; width: 10%;"></div>
+                        <div class="risk-zone high" style="left: 85%; width: 6%;"></div>
+
+                        <!-- SVG for Risk Line -->
+                        <svg width="100%" height="100%" style="position: absolute; top: 0; left: 0;">
+                            <defs>
+                                <linearGradient id="riskGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color: rgba(99, 102, 241, 0.3)"/>
+                                    <stop offset="100%" style="stop-color: rgba(99, 102, 241, 0)"/>
+                                </linearGradient>
+                            </defs>
+                            <!-- Risk Area Fill -->
+                            <path class="risk-area" d="M0,180 L40,160 L80,140 L120,100 L160,70 L200,90 L240,120 L280,80 L320,60 L360,85 L400,110 L440,130 L480,90 L520,75 L560,100 L600,140 L640,160 L680,120 L720,80 L760,50 L800,70 L800,300 L0,300 Z"/>
+                            <!-- Risk Line -->
+                            <path class="risk-line" d="M0,180 L40,160 L80,140 L120,100 L160,70 L200,90 L240,120 L280,80 L320,60 L360,85 L400,110 L440,130 L480,90 L520,75 L560,100 L600,140 L640,160 L680,120 L720,80 L760,50 L800,70"/>
+                        </svg>
+
+                        <!-- Candlesticks Container -->
+                        <div class="candlestick-container">
+                            <!-- Sample candlesticks - in reality these would be generated dynamically -->
+                            <div class="candle green"><div class="candle-wick" style="height: 40px; bottom: 60px;"></div><div class="candle-body" style="height: 25px; margin-bottom: 70px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 35px; bottom: 65px;"></div><div class="candle-body" style="height: 20px; margin-bottom: 75px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 45px; bottom: 55px;"></div><div class="candle-body" style="height: 30px; margin-bottom: 60px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 50px; bottom: 40px;"></div><div class="candle-body" style="height: 35px; margin-bottom: 45px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 55px; bottom: 30px;"></div><div class="candle-body" style="height: 40px; margin-bottom: 35px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 30px; bottom: 45px;"></div><div class="candle-body" style="height: 20px; margin-bottom: 50px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 35px; bottom: 55px;"></div><div class="candle-body" style="height: 25px; margin-bottom: 60px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 40px; bottom: 50px;"></div><div class="candle-body" style="height: 28px; margin-bottom: 55px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 60px; bottom: 35px;"></div><div class="candle-body" style="height: 45px; margin-bottom: 40px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 25px; bottom: 50px;"></div><div class="candle-body" style="height: 18px; margin-bottom: 55px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 30px; bottom: 60px;"></div><div class="candle-body" style="height: 22px; margin-bottom: 65px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 35px; bottom: 70px;"></div><div class="candle-body" style="height: 28px; margin-bottom: 75px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 40px; bottom: 60px;"></div><div class="candle-body" style="height: 30px; margin-bottom: 65px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 55px; bottom: 45px;"></div><div class="candle-body" style="height: 40px; margin-bottom: 50px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 28px; bottom: 55px;"></div><div class="candle-body" style="height: 20px; margin-bottom: 60px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 32px; bottom: 65px;"></div><div class="candle-body" style="height: 24px; margin-bottom: 70px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 38px; bottom: 75px;"></div><div class="candle-body" style="height: 28px; margin-bottom: 80px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 42px; bottom: 65px;"></div><div class="candle-body" style="height: 32px; margin-bottom: 70px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 65px; bottom: 40px;"></div><div class="candle-body" style="height: 50px; margin-bottom: 45px;"></div></div>
+                            <div class="candle red"><div class="candle-wick" style="height: 70px; bottom: 25px;"></div><div class="candle-body" style="height: 55px; margin-bottom: 30px;"></div></div>
+                            <div class="candle green"><div class="candle-wick" style="height: 35px; bottom: 40px;"></div><div class="candle-body" style="height: 25px; margin-bottom: 45px;"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- X-Axis -->
+                    <div class="x-axis">
+                        <div class="x-axis-label">Sep 16</div>
+                        <div class="x-axis-label">Oct 1</div>
+                        <div class="x-axis-label">Oct 15</div>
+                        <div class="x-axis-label">Nov 1</div>
+                        <div class="x-axis-label">Nov 15</div>
+                        <div class="x-axis-label">Dec 1</div>
+                        <div class="x-axis-label">Dec 16</div>
+                    </div>
+
+                    <!-- Tooltip -->
+                    <div class="chart-tooltip" id="chartTooltip">
+                        <div class="tooltip-date">Tuesday, Oct 15, 2024</div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Risk Score</span>
+                            <span class="tooltip-value risk">78</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">NIFTY Close</span>
+                            <span class="tooltip-value price">24,185.00</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Daily Change</span>
+                            <span class="tooltip-value change negative">-1.82%</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Day Range</span>
+                            <span class="tooltip-value">412 pts</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Breakdown Cards -->
+            <div class="breakdown-grid">
+                <div class="breakdown-card">
+                    <div class="breakdown-header">
+                        <span class="breakdown-title">High Risk Days (>70)</span>
+                        <span class="breakdown-badge high-risk">12 Days</span>
+                    </div>
+                    <div class="correlation-bars">
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Days Down</span>
+                            <div class="bar-container">
+                                <div class="bar-fill negative" style="width: 73%;"></div>
+                            </div>
+                            <span class="bar-value negative">73%</span>
+                        </div>
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Avg Return</span>
+                            <div class="bar-container">
+                                <div class="bar-fill negative" style="width: 65%;"></div>
+                            </div>
+                            <span class="bar-value negative">-1.2%</span>
+                        </div>
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Avg Range</span>
+                            <div class="bar-container">
+                                <div class="bar-fill neutral" style="width: 85%;"></div>
+                            </div>
+                            <span class="bar-value">385 pts</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="breakdown-card">
+                    <div class="breakdown-header">
+                        <span class="breakdown-title">Medium Risk Days (40-70)</span>
+                        <span class="breakdown-badge medium-risk">45 Days</span>
+                    </div>
+                    <div class="correlation-bars">
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Days Down</span>
+                            <div class="bar-container">
+                                <div class="bar-fill negative" style="width: 48%;"></div>
+                            </div>
+                            <span class="bar-value">48%</span>
+                        </div>
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Avg Return</span>
+                            <div class="bar-container">
+                                <div class="bar-fill negative" style="width: 15%;"></div>
+                            </div>
+                            <span class="bar-value negative">-0.1%</span>
+                        </div>
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Avg Range</span>
+                            <div class="bar-container">
+                                <div class="bar-fill neutral" style="width: 55%;"></div>
+                            </div>
+                            <span class="bar-value">185 pts</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="breakdown-card">
+                    <div class="breakdown-header">
+                        <span class="breakdown-title">Low Risk Days (<40)</span>
+                        <span class="breakdown-badge low-risk">32 Days</span>
+                    </div>
+                    <div class="correlation-bars">
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Days Up</span>
+                            <div class="bar-container">
+                                <div class="bar-fill positive" style="width: 68%;"></div>
+                            </div>
+                            <span class="bar-value positive">68%</span>
+                        </div>
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Avg Return</span>
+                            <div class="bar-container">
+                                <div class="bar-fill positive" style="width: 45%;"></div>
+                            </div>
+                            <span class="bar-value positive">+0.4%</span>
+                        </div>
+                        <div class="correlation-bar-row">
+                            <span class="bar-label">Avg Range</span>
+                            <div class="bar-container">
+                                <div class="bar-fill neutral" style="width: 35%;"></div>
+                            </div>
+                            <span class="bar-value">128 pts</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historical Table -->
+            <div class="history-table-container">
+                <div class="table-header">
+                    <h3 class="table-title">Day-by-Day Analysis</h3>
+                    <div class="table-filter">
+                        <button class="filter-btn active">All Days</button>
+                        <button class="filter-btn">High Risk Only</button>
+                        <button class="filter-btn">Misses Only</button>
+                    </div>
+                </div>
+                <div class="history-table">
+                    <div class="table-row header">
+                        <div class="cell">Date</div>
+                        <div class="cell">Risk</div>
+                        <div class="cell">Open</div>
+                        <div class="cell">Close</div>
+                        <div class="cell">Change</div>
+                        <div class="cell">Day Range</div>
+                        <div class="cell">Outcome</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 16</div>
+                        <div class="cell risk-score"><span class="risk-dot medium"></span> 68</div>
+                        <div class="cell price">24,680</div>
+                        <div class="cell price">—</div>
+                        <div class="cell change">—</div>
+                        <div class="cell volatility">—</div>
+                        <div class="cell notes">Today (In Progress)</div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 13</div>
+                        <div class="cell risk-score"><span class="risk-dot high"></span> 76</div>
+                        <div class="cell price">24,720</div>
+                        <div class="cell price">24,548</div>
+                        <div class="cell change negative">-0.70%</div>
+                        <div class="cell volatility">298 pts</div>
+                        <div class="cell outcome"><span class="outcome-badge correct">✓ Correct</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 12</div>
+                        <div class="cell risk-score"><span class="risk-dot medium"></span> 52</div>
+                        <div class="cell price">24,680</div>
+                        <div class="cell price">24,720</div>
+                        <div class="cell change positive">+0.16%</div>
+                        <div class="cell volatility">145 pts</div>
+                        <div class="cell outcome"><span class="outcome-badge correct">✓ Correct</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 11</div>
+                        <div class="cell risk-score"><span class="risk-dot low"></span> 38</div>
+                        <div class="cell price">24,590</div>
+                        <div class="cell price">24,680</div>
+                        <div class="cell change positive">+0.37%</div>
+                        <div class="cell volatility">112 pts</div>
+                        <div class="cell outcome"><span class="outcome-badge correct">✓ Correct</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 10</div>
+                        <div class="cell risk-score"><span class="risk-dot high"></span> 82</div>
+                        <div class="cell price">24,850</div>
+                        <div class="cell price">24,590</div>
+                        <div class="cell change negative">-1.05%</div>
+                        <div class="cell volatility">385 pts</div>
+                        <div class="cell outcome"><span class="outcome-badge correct">✓ Correct</span><span class="cell notes" style="margin-left: 8px;">Mars-Rahu</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 9</div>
+                        <div class="cell risk-score"><span class="risk-dot medium"></span> 61</div>
+                        <div class="cell price">24,780</div>
+                        <div class="cell price">24,850</div>
+                        <div class="cell change positive">+0.28%</div>
+                        <div class="cell volatility">168 pts</div>
+                        <div class="cell outcome"><span class="outcome-badge partial">~ Partial</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 6</div>
+                        <div class="cell risk-score"><span class="risk-dot low"></span> 35</div>
+                        <div class="cell price">24,650</div>
+                        <div class="cell price">24,780</div>
+                        <div class="cell change positive">+0.53%</div>
+                        <div class="cell volatility">95 pts</div>
+                        <div class="cell outcome"><span class="outcome-badge correct">✓ Correct</span></div>
+                    </div>
+                    <div class="table-row">
+                        <div class="cell date">Dec 5</div>
+                        <div class="cell risk-score"><span class="risk-dot high"></span> 78</div>
+                        <div class="cell price">24,820</div>
+                        <div class="cell price">24,650</div>
+                        <div class="cell change negative">-0.68%</div>
+                        <div class="cell volatility">342 pts</div>
+                        <div class="cell outcome"><span class="outcome-badge correct">✓ Correct</span><span class="cell notes" style="margin-left: 8px;">Mercury Rx</span></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Interactive chart tooltip
+        const chart = document.getElementById('correlationChart');
+        const tooltip = document.getElementById('chartTooltip');
+
+        chart.addEventListener('mousemove', (e) => {
+            const rect = chart.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Position tooltip
+            tooltip.style.left = (x + 20) + 'px';
+            tooltip.style.top = (y - 60) + 'px';
+            tooltip.classList.add('visible');
+        });
+
+        chart.addEventListener('mouseleave', () => {
+            tooltip.classList.remove('visible');
+        });
+    </script>
+</body>
+</html>

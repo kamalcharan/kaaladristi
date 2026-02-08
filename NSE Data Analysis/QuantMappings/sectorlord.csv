@@ -1,0 +1,116 @@
+﻿SectorRefID,Sector,PlanetRefID,Planet
+1,Public Sector Enterprises (PSE),6,Sun
+2,Public Sector Banks,6,Sun
+3,Precisous Stones,6,Sun
+4,Gilt,6,Sun
+5,Edged Securities,6,Sun
+6,Rice,6,Sun
+7,Honey,6,Sun
+8,Aromatic Herbs,6,Sun
+9,Gold,6,Sun
+10,Silver,9,Moon
+11,Milk & Milk Products,9,Moon
+12,Petrolium,9,Moon
+13,Liquids,9,Moon
+14,Hotels,9,Moon
+15,Liqour,9,Moon
+16,Fishery,9,Moon
+17,Navigation & Shipping,9,Moon
+18,Glass,9,Moon
+19,Iron & Steel,1,Mars
+20,Healthcare,1,Mars
+21,Pharma,1,Mars
+22,Metals,1,Mars
+23,Engineering,1,Mars
+24,Machinery,1,Mars
+25,Defence,1,Mars
+26,Railways,1,Mars
+29,Grams,1,Mars
+28,Rice,1,Mars
+27,Gold,1,Mars
+30,Related to Fire,1,Mars
+31,Bricks,1,Mars
+32,"Tea, Cofee & hard Drinks",1,Mars
+33,Sentiments,3,Mercury
+34,Wheet & Grains,3,Mercury
+35,"Silk & Cotton, Textiles",3,Mercury
+36,Sugar,3,Mercury
+37,Telecommunication,3,Mercury
+38,Aviation,3,Mercury
+39,Banking & Finance,3,Mercury
+40,FMCG,3,Mercury
+41,Information Technology,3,Mercury
+42,Cotton & Jute,2,Venus
+43,Fancy Texiles,2,Venus
+44,Premium Rice & Wheat,2,Venus
+45,lesion Silk,2,Venus
+46,Confectionary,2,Venus
+47,Pearls & Gems,2,Venus
+48,Mirror  & Glass,2,Venus
+49,Floriculture,2,Venus
+50,Copper Trade,2,Venus
+51,Fancy Industry - Media,2,Venus
+52,Under Garments,2,Venus
+53,Perfumes,2,Venus
+54,Quality Fruits & Species,2,Venus
+55,Turmeric,5,Jupiter
+56,Tin,5,Jupiter
+57,Rubber,5,Jupiter
+58,Foodprocessing,5,Jupiter
+60,Zinc,5,Jupiter
+62,Jute,5,Jupiter
+59,Silver,5,Jupiter
+63,Tobacco,5,Jupiter
+64,Share Trading,5,Jupiter
+39,Banking & Finance,5,Jupiter
+65,Legal,5,Jupiter
+66,Clorth Mills,5,Jupiter
+67,Luxary highend products,5,Jupiter
+68,Coal,4,Saturn
+69,Lead,4,Saturn
+70,Copper  ,4,Saturn
+71,Cement & Cement Products,4,Saturn
+80,Real Estate,4,Saturn
+81,Metalurgical Products,4,Saturn
+82,Marbles & Granites,4,Saturn
+83,Vegetables,4,Saturn
+,Fancy Industry - Media,7,Rahu
+90,Media & Entertainment,7,Rahu
+37,Telecommunication,7,Rahu
+41,Information Technology,7,Rahu
+84,Electrical Goods,7,Rahu
+85,Crude Oil,7,Rahu
+21,Pharma,7,Rahu
+68,Coal,8,Ketu
+41,Information Technology,8,Ketu
+86,Oil & Gas,8,Ketu
+75,Leather,8,Ketu
+87,Power,8,Ketu
+88,Infrastructure,8,Ketu
+89,Automobiles,8,Ketu
+70,Copper  ,8,Ketu
+,Electrical Goods,10,Hershel
+91,Aeroplanes,10,Hershel
+92,Surgical Goods,10,Hershel
+93,Wireless  & Telegraph,10,Hershel
+17,Navigation & Shipping,10,Hershel
+94,Aerial Navigation,10,Hershel
+95,High Speed Automobiles,10,Hershel
+96,Railroads & Railway,10,Hershel
+1,Public Sector Enterprises (PSE),10,Hershel
+97,Government Papers,10,Hershel
+98,Film Industry,10,Hershel
+99,Aereted Water,10,Hershel
+100,Aluminum & Lession,10,Hershel
+,Raw Tea,11,Neptune
+,Raw Cotton,11,Neptune
+,Medicine & Drugs,11,Neptune
+92,Surgical Goods,11,Neptune
+86,Oil & Gas,11,Neptune
+16,Fishery,11,Neptune
+63,Tobacco,11,Neptune
+56,Tin,12,Pluto
+70,Copper  ,12,Pluto
+60,Zinc,12,Pluto
+57,Rubber,12,Pluto
+75,Leather,12,Pluto
