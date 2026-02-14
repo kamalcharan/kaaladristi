@@ -135,6 +135,30 @@ export interface KmProfile {
   updated_at: string;
 }
 
+// ── Index / Equity Symbol Tables (new restructured schema) ──
+
+export interface KmIndexSymbol {
+  id: number;
+  name: string;
+  category: string | null;
+  vendor_codes: Record<string, string> | null;
+  created_at: string;
+}
+
+export interface KmIndexEod {
+  id: number;
+  index_id: number;
+  trade_date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  prev_close: number | null;
+  chng: number | null;
+  pct_chng: number | null;
+  volume: number | null;
+}
+
 // ── Joined / Derived Types ──
 
 export interface NakshatraWithLord extends KmNakshatra {
@@ -148,4 +172,28 @@ export interface ZodiacWithLord extends KmZodiacSign {
 export interface IndexWithComposition extends KmIndexMaster {
   composition: KmIndexComposition[];
   sectorBreakdown: { sector: string; totalWeight: number }[];
+}
+
+// ── Chart Types ──
+
+export type TimeRange = '1M' | '3M' | '6M' | '1Y' | '5Y' | 'MAX';
+
+export interface ChartDataPoint {
+  date: string;
+  close: number;
+  open: number;
+  high: number;
+  low: number;
+  volume: number;
+}
+
+export interface IndexStats {
+  currentClose: number;
+  previousClose: number;
+  change: number;
+  changePct: number;
+  high52w: number;
+  low52w: number;
+  dayHigh: number;
+  dayLow: number;
 }
