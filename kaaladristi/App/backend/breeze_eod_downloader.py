@@ -225,6 +225,78 @@ def init_supabase():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# STOCK CODE RESOLUTION
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Cache: NSE symbol -> Breeze ISEC stock code (loaded from master file)
+_isec_map = {}
+_isec_loaded = False
+
+
+def load_isec_master(breeze):
+    """
+    Download ICICI's NSE stock master to build NSE symbol -> ISEC code mapping.
+    Breeze get_names() requires the ISEC code, not NSE symbol.
+    """
+    global _isec_map, _isec_loaded
+    if _isec_loaded:
+        return
+
+    cache_file = os.path.join(script_dir, '.breeze_isec_cache.json')
+
+    # Try loading from today's cache first
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, 'r') as f:
+                cached = json.load(f)
+            if cached.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                _isec_map = cached.get('map', {})
+                _isec_loaded = True
+                print(f'  Loaded {len(_isec_map)} ISEC mappings from cache')
+                return
+        except Exception:
+            pass
+
+    print('  Downloading ISEC stock master from Breeze...')
+    try:
+        # Breeze SDK provides get_stock_script_list for NSE equity
+        master = breeze.get_stock_script_list(exchange_code='NSE')
+        if master and master.get('Success'):
+            for row in master['Success']:
+                # Map: exchange_code_name (NSE symbol) -> short_name (ISEC code)
+                nse_sym = (row.get('exchange_code_name') or '').strip().upper()
+                isec_code = (row.get('short_name') or '').strip().upper()
+                if nse_sym and isec_code:
+                    _isec_map[nse_sym] = isec_code
+            print(f'  Loaded {len(_isec_map)} ISEC mappings from Breeze master')
+            # Cache for today
+            with open(cache_file, 'w') as f:
+                json.dump({'date': datetime.now().strftime('%Y-%m-%d'), 'map': _isec_map}, f)
+        else:
+            print('  WARNING: Could not load ISEC master, will try NSE symbols directly')
+    except Exception as e:
+        print(f'  WARNING: ISEC master download failed: {e}')
+        print('  Will try NSE symbols directly (some may fail)')
+
+    _isec_loaded = True
+
+
+def resolve_breeze_code(breeze, nse_symbol: str) -> str:
+    """
+    Resolve NSE trading symbol to Breeze ISEC stock code.
+    Falls back to NSE symbol if no mapping found.
+    """
+    # Check ISEC master mapping first
+    if _isec_map:
+        isec = _isec_map.get(nse_symbol.upper())
+        if isec:
+            return isec
+
+    # Fallback: try NSE symbol as-is (works for many stocks)
+    return nse_symbol
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # DATA FETCHERS
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -285,6 +357,10 @@ def fetch_equity_eod(breeze, stock_code: str, from_date: datetime, to_date: date
                 records.extend(resp['Success'])
             elif resp and resp.get('Error'):
                 print(f'    Breeze error for {stock_code}: {resp["Error"]}')
+                break
+            else:
+                # Empty Success array — stock code likely incorrect
+                print(f'    Empty response (stock_code "{stock_code}" may not exist in Breeze)')
                 break
         except Exception as e:
             print(f'    Exception fetching {stock_code}: {e}')
@@ -441,23 +517,29 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
         print('  No equities found in km_equity_symbols')
         return
 
+    # Load ISEC master for stock code resolution
+    load_isec_master(breeze)
+
     print(f'  Found {len(equities)} equities in database')
     total_records = 0
     failed = 0
+    failed_symbols = []
 
     for i, eq in enumerate(equities, 1):
         symbol = eq['symbol']
         eq_id = eq['id']
 
-        # For equities, the NSE symbol is typically the Breeze stock_code
-        breeze_code = symbol
+        # Resolve NSE symbol to Breeze ISEC stock code
+        breeze_code = resolve_breeze_code(breeze, symbol)
+        suffix = f' (ISEC: {breeze_code})' if breeze_code != symbol else ''
 
-        print(f'\n  [{i}/{len(equities)}] {symbol}')
+        print(f'\n  [{i}/{len(equities)}] {symbol}{suffix}')
         raw_data = fetch_equity_eod(breeze, breeze_code, from_date, to_date)
 
         if not raw_data:
             print(f'    No data returned')
             failed += 1
+            failed_symbols.append(symbol)
             continue
 
         print(f'    Fetched {len(raw_data)} candles')
@@ -471,6 +553,8 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
         print(f'    Inserted {inserted} records')
 
     print(f'\n  EQUITY SUMMARY: {total_records} records inserted, {failed} equities failed')
+    if failed_symbols and len(failed_symbols) <= 20:
+        print(f'  Failed: {", ".join(failed_symbols)}')
 
 
 # ═════════════════════════════════════════════════════════════════════════════
