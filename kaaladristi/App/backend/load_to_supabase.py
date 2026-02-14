@@ -8,22 +8,27 @@ from supabase import create_client, Client
 # CONFIGURATION
 # =============================================================================
 
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', '.env'))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+output_path = os.path.join(script_dir, 'output')
+
+# Try multiple .env locations
+for env_candidate in [
+    os.path.join(script_dir, '.env'),
+    os.path.join(script_dir, '..', 'frontend', '.env'),
+    os.path.join(script_dir, '..', '.env'),
+]:
+    if os.path.exists(env_candidate):
+        load_dotenv(env_candidate)
+        break
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-output_path = os.path.join(script_dir, 'output')
-
 # Batch size for inserts
 BATCH_SIZE = 1000
 
-# =============================================================================
-# SUPABASE CLIENT
-# =============================================================================
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Client created lazily in main()
+supabase: Client = None
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -216,9 +221,22 @@ def upload_group(group_name, table_defs):
 
 
 def main():
+    global supabase
+
     print("=" * 60)
     print("KALA-DRISHTI DATA LOADER")
     print("=" * 60)
+
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("\nERROR: SUPABASE_URL and SUPABASE_KEY not found.")
+        print("Set them via environment variables or create a .env file in:")
+        print(f"  {script_dir}/.env")
+        print(f"  {os.path.join(script_dir, '..', 'frontend', '.env')}")
+        print("\nRequired .env contents:")
+        print("  SUPABASE_URL=https://your-project.supabase.co")
+        print("  SUPABASE_KEY=your-service-role-key")
+        return
+
     print(f"\nSupabase URL: {SUPABASE_URL[:40]}...")
     print(f"Batch Size: {BATCH_SIZE}")
 
@@ -227,6 +245,9 @@ def main():
     for arg in sys.argv[1:]:
         if arg.startswith('--table='):
             target = arg.split('=', 1)[1]
+
+    # Create client
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     # Test connection
     print("\nTesting Supabase connection...")
