@@ -1,6 +1,8 @@
 import { Shield, Activity, Zap, AlertTriangle, ChevronRight, CheckCircle2 } from 'lucide-react';
 import type { DayRiskReport, HistoricalProof } from '@/types';
-import { getRiskColor, getRiskHex, getRegimeColor } from '@/lib/utils';
+import { getRiskColor } from '@/lib/utils';
+import { Card } from '@/components/ui';
+import { RiskGauge, FactorCard, RegimeBadge } from '@/components/domain';
 
 interface DashboardViewProps {
   report: DayRiskReport;
@@ -25,38 +27,13 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
       </header>
 
       {/* Hero Risk Gauge */}
-      <section className="glass-card rounded-5xl p-10 flex flex-col lg:flex-row items-center gap-16 relative overflow-hidden group shadow-2xl">
+      <Card rounded="xxl" className="p-10 flex flex-col lg:flex-row items-center gap-16 relative overflow-hidden group shadow-2xl">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-600/10 transition-colors duration-700" />
 
-        {/* Gauge */}
-        <div className="relative w-[220px] h-[220px] shrink-0">
-          <svg className="w-full h-full -rotate-90 scale-110" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" className="fill-none stroke-white/5" strokeWidth="8" />
-            <circle
-              cx="50" cy="50" r="42"
-              className="fill-none transition-all duration-1000 ease-out"
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray="263.89"
-              strokeDashoffset={263.89 - (report.riskScore / 100) * 263.89}
-              stroke={getRiskHex(report.riskScore)}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className={`text-6xl font-bold font-mono tracking-tighter ${getRiskColor(report.riskScore)}`}>
-              {report.riskScore}
-            </span>
-            <span className="text-[10px] font-bold text-muted uppercase tracking-[0.3em] mt-1">Stress idx</span>
-          </div>
-        </div>
+        <RiskGauge score={report.riskScore} size="hero" />
 
-        {/* Info */}
         <div className="flex-1 space-y-6 relative z-10">
-          <div className="flex items-center gap-4">
-            <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all duration-500 ${getRegimeColor(report.regime)}`}>
-              {report.regime} Regime Active
-            </span>
-          </div>
+          <RegimeBadge regime={report.regime} />
           <p className="text-lg text-slate-300 leading-relaxed font-medium">
             {report.explanation}
           </p>
@@ -64,38 +41,18 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
             <Activity className="w-4 h-4 text-accent-indigo" /> {report.planetarySummary}
           </div>
         </div>
-      </section>
+      </Card>
 
       {/* Factor Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-        {[
-          { label: 'Structural', value: report.factors.structural, color: 'bg-accent-indigo', icon: Shield },
-          { label: 'Momentum',   value: report.factors.momentum,   color: 'bg-risk-red',     icon: Activity },
-          { label: 'Volatility', value: report.factors.volatility, color: 'bg-risk-amber',   icon: Zap },
-          { label: 'Deception',  value: report.factors.deception,  color: 'bg-accent-violet', icon: AlertTriangle },
-        ].map((dim) => (
-          <div key={dim.label} className="glass-card p-6 rounded-3xl hover:border-white/20 transition-all hover:-translate-y-0.5 group">
-            <div className="flex justify-between items-center mb-6">
-              <div className="p-2.5 rounded-xl bg-slate-950/50 border border-kd-border group-hover:border-accent-indigo/30 transition-colors">
-                <dim.icon className="w-5 h-5 text-slate-400 group-hover:text-indigo-400" />
-              </div>
-              <span className="font-mono text-xl font-bold text-slate-100">
-                {dim.value}<span className="text-[10px] text-muted font-normal ml-1">/25</span>
-              </span>
-            </div>
-            <p className="text-[11px] font-bold text-muted uppercase tracking-widest mb-3">{dim.label} Weight</p>
-            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden border border-kd-border">
-              <div
-                className={`h-full ${dim.color} shadow-[0_0_10px_rgba(0,0,0,0.5)] transition-all duration-1000 ease-out`}
-                style={{ width: `${(dim.value / 25) * 100}%` }}
-              />
-            </div>
-          </div>
-        ))}
+        <FactorCard label="Structural" value={report.factors.structural} icon={Shield}        color="bg-accent-indigo" />
+        <FactorCard label="Momentum"   value={report.factors.momentum}   icon={Activity}      color="bg-risk-red" />
+        <FactorCard label="Volatility" value={report.factors.volatility} icon={Zap}           color="bg-risk-amber" />
+        <FactorCard label="Deception"  value={report.factors.deception}  icon={AlertTriangle} color="bg-accent-violet" />
       </div>
 
       {/* Historical Proofs */}
-      <section className="glass-card rounded-5xl p-10 shadow-xl">
+      <Card rounded="xxl" className="p-10 shadow-xl">
         <div className="flex justify-between items-center mb-10">
           <div>
             <h3 className="text-xl font-bold text-white">Historical Convergence</h3>
@@ -136,7 +93,7 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
             </div>
           ))}
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
