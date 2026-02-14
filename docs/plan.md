@@ -18,18 +18,18 @@
 | Correlation Engine | `engine/correlations.py` | Code ready, **never run** |
 | Signal Engine | `engine/signal_engine.py` | Code ready, **never run** |
 | Discovery Engine | `engine/discovery_engine.py` | Code ready, **never run** |
-| Market Data (SQLite) | `market_daily` table | NIFTY 1990-2026 loaded (~9,000 rows) |
+| Market Data (Supabase) | `km_index_eod` table | NIFTY 1990-2026 loaded via yfinance pipeline |
 | Master Tables | All reference data | Populated (planets, nakshatras, sectors, rules) |
 | Given Rules | `rules` table | 18 domain rules loaded |
 
 ### What's EMPTY (tables with no data)
 | Table | Depends On |
 |-------|-----------|
-| `planetary_positions` | generate_ephemeris.py → JSON → seed |
-| `planetary_aspects` | generate_ephemeris.py → JSON → seed |
-| `astro_events` | generate_ephemeris.py → JSON → seed |
-| `moon_intraday` | generate_ephemeris.py → JSON → seed |
-| `daily_panchang` | generate_panchang.py → JSON → seed |
+| `planetary_positions` | generate_ephemeris.py → Supabase |
+| `planetary_aspects` | generate_ephemeris.py → Supabase |
+| `astro_events` | generate_ephemeris.py → Supabase |
+| `moon_intraday` | generate_ephemeris.py → Supabase |
+| `daily_panchang` | generate_panchang.py → Supabase |
 | `risk_scores` | risk_engine.py (needs positions + aspects + moon) |
 | `factor_correlation_stats` | correlations.py (needs positions + aspects + moon + market) |
 | `rule_signals` | signal_engine.py (needs panchang + positions + aspects + rules) |
@@ -38,118 +38,110 @@
 
 ### Data Flow Dependency Chain
 ```
-Step 1: generate_ephemeris.py
-           ↓ (JSON files)
-Step 2: seed_ephemeris.py → planetary_positions, planetary_aspects, astro_events, moon_intraday
+Step 1: generate_ephemeris.py → Supabase (planetary_positions, planetary_aspects, astro_events, moon_intraday)
            ↓
-Step 3: generate_panchang.py
-           ↓ (JSON file)
-Step 4: seed_panchang.py → daily_panchang
+Step 2: generate_panchang.py → Supabase (daily_panchang)
            ↓
-Step 5: correlations.py → factor_correlation_stats     ← needs market_daily + ephemeris
-Step 6: risk_engine.py → risk_scores                   ← needs ephemeris + moon_intraday
-Step 7: signal_engine.py → rule_signals                ← needs panchang + positions + aspects + rules
-Step 8: discovery_engine.py → candidate_rules          ← needs panchang + market_daily
-Step 9: Backtest & validate everything
+Step 3: correlations.py → factor_correlation_stats     ← needs km_index_eod + ephemeris
+Step 4: risk_engine.py → risk_scores                   ← needs ephemeris + moon_intraday
+Step 5: signal_engine.py → rule_signals                ← needs panchang + positions + aspects + rules
+Step 6: discovery_engine.py → candidate_rules          ← needs panchang + km_index_eod
+Step 7: Backtest & validate everything
 ```
+
+**Database**: Supabase (PostgreSQL) is the single source of truth. No SQLite.
 
 ---
 
 ## PHASE 1: DATA GENERATION & SEEDING
 ### "Fill the tanks before starting the engine"
 
-**Goal**: Generate all astronomical data for 2000-01-01 to 2026-12-31 (27 years), load into SQLite, verify integrity.
+**Goal**: Generate all astronomical data for 1990-01-01 to 2030-12-31 (41 years), load directly into Supabase, verify integrity.
 
-#### Step 1.1 — Generate Ephemeris (Planetary Positions + Aspects)
-- **Run**: `generate_ephemeris.py` for date range 2000-01-01 to 2026-12-31
-- **Outputs** (JSON files in `backend/output/`):
-  - `planetary_positions.json` — ~9 planets × ~9,862 days = ~88,758 records
-  - `aspects.json` — 7 aspect pairs × daily = ~30,000+ records
-  - `events.json` — retrograde stations, sign changes = ~2,000+ records
-  - `moon_intraday.json` — 4 times/day × ~9,862 days = ~39,448 records
+**Database**: Supabase (PostgreSQL) — all data goes here. No intermediate SQLite.
+
+#### Step 1.1 — Generate Ephemeris & Load to Supabase
+- **Run**: `generate_ephemeris.py` for date range 1990-01-01 to 2030-12-31
+- **Generates + uploads to Supabase tables directly**:
+  - `planetary_positions` — ~9 planets × ~14,975 days = ~134,775 records
+  - `planetary_aspects` — 7 aspect pairs × daily = ~45,000+ records
+  - `astro_events` — retrograde stations, sign changes = ~3,000+ records
+  - `moon_intraday` — 4 times/day × ~14,975 days = ~59,900 records
 - **Verification**:
-  - [ ] Mercury retrograde count: expect ~80-90 periods (3-4/year × 27 years)
-  - [ ] Mars retrograde count: expect ~13-14 periods (every ~2 years)
-  - [ ] Saturn retrograde count: expect ~27 periods (1/year)
-  - [ ] Moon nakshatra changes: expect ~9,862 × 1 = daily changes
-  - [ ] Aspect counts: conjunction/opposition/square should be ~1000+ each
-  - [ ] Gandanta flags: expect ~300-500 occurrences
+  - [ ] Mercury retrograde count: expect ~120-130 periods (3-4/year × 41 years)
+  - [ ] Mars retrograde count: expect ~20 periods (every ~2 years)
+  - [ ] Saturn retrograde count: expect ~41 periods (1/year)
+  - [ ] Moon nakshatra changes: ~14,975 daily changes
+  - [ ] Aspect counts: conjunction/opposition/square should be ~1,500+ each
+  - [ ] Gandanta flags: expect ~500-700 occurrences
   - [ ] Spot-check: Pick 5 known dates, verify positions against published ephemeris
-
-#### Step 1.2 — Seed Ephemeris to SQLite
-- **Run**: `seed_ephemeris.py`
-- **Tables populated**:
-  - `planetary_positions` → ~88,000 rows
-  - `planetary_aspects` → ~30,000 rows
-  - `astro_events` → ~2,000 rows
-  - `moon_intraday` → ~39,000 rows
-- **Verification**:
-  - [ ] Row counts match JSON record counts
+- **Supabase verification**:
+  - [ ] Row counts in Supabase match generated counts
   - [ ] No NULL longitudes or signs
-  - [ ] Retrograde flags: 0 or 1 only
-  - [ ] Date range: 2000-01-01 to 2026-12-31 continuous
+  - [ ] Retrograde flags: true/false only
+  - [ ] Date range: 1990-01-01 to 2030-12-31 continuous (every calendar day)
   - [ ] Unique constraint: no duplicate (date, planet) pairs
-  - [ ] Foreign key integrity: all planet names exist in `planets` table
 
-#### Step 1.3 — Generate Panchang
-- **Run**: `generate_panchang.py` for 2000-01-01 to 2026-12-31
-- **Output**: `daily_panchang.json` — ~9,862 records
+#### Step 1.2 — Generate Panchang & Load to Supabase
+- **Run**: `generate_panchang.py` for 1990-01-01 to 2030-12-31
+- **Generates + uploads directly to Supabase**: `daily_panchang` — ~14,975 records
 - **Each record contains**: sunrise, tithi, nakshatra, yoga, karana, vara, DLNL match, sankranti, hemisphere events
 - **Verification**:
   - [ ] DLNL match ~11% of days (1/9 probability)
-  - [ ] Sankranti count: ~324 (12/year × 27 years)
-  - [ ] Purnima count: ~324 (~12/year)
-  - [ ] Amavasya count: ~324
-  - [ ] Ekadashi count: ~648 (2/month × 12 × 27)
+  - [ ] Sankranti count: ~492 (12/year × 41 years)
+  - [ ] Purnima count: ~492 (~12/year)
+  - [ ] Amavasya count: ~492
+  - [ ] Ekadashi count: ~984 (2/month × 12 × 41)
   - [ ] Vara distribution: ~14.3% each day
   - [ ] Paksha: ~50/50 Shukla/Krishna
   - [ ] Spot-check: 5 dates against published Panchang (drikpanchang.com)
-
-#### Step 1.4 — Seed Panchang to SQLite
-- **Run**: `seed_panchang.py` (daily_panchang time-series part)
-- **Table populated**: `daily_panchang` → ~9,862 rows
-- **Verification**:
-  - [ ] Row count matches JSON
+- **Supabase verification**:
+  - [ ] Row count in Supabase = ~14,975
   - [ ] No NULL tithi/nakshatra/yoga/vara fields
   - [ ] Date is PRIMARY KEY — no duplicates
   - [ ] Tithi num range: 1-30
   - [ ] Nakshatra num range: 1-27
   - [ ] Yoga num range: 1-27
 
-#### Step 1.5 — Verify Market Data Completeness
-- **Check**: `market_daily` table has clean NIFTY data
+#### Step 1.3 — Verify Market Data in Supabase
+- **Check**: `km_index_eod` table has clean NIFTY data
+- **Source**: yfinance pipeline (already built) or Breeze API
+- **Required coverage**: 1990 to present (trading days only)
 - **Verification**:
-  - [ ] Date range: 2000-01-01 to 2026-02-14 (trading days only)
+  - [ ] NIFTY 50: data from ~1996 onwards (earliest available)
+  - [ ] BANKNIFTY: data from ~2007 onwards
   - [ ] No NULL close prices
   - [ ] `daily_return` computed for all rows (except first)
   - [ ] `daily_range_pct` computed: (high-low)/close × 100
   - [ ] No weekend/holiday dates (sanity check)
-  - [ ] Count: expect ~6,000-6,500 trading days for 2000-2026
+  - [ ] Count: expect ~7,000-7,500 trading days for NIFTY (1996-2026)
   - [ ] Spot-check: 5 known crash dates (2008 Lehman, 2020 COVID, etc.)
+- **If gaps exist**: Re-run yfinance pipeline to backfill
 
-#### Step 1.6 — Cross-Validation: Panchang ↔ Ephemeris
-- **Purpose**: Ensure panchang and ephemeris agree
+#### Step 1.4 — Cross-Validation: Panchang ↔ Ephemeris (in Supabase)
+- **Purpose**: Ensure panchang and ephemeris agree — query Supabase directly
 - **Checks**:
   - [ ] Moon nakshatra in `daily_panchang` matches Moon nakshatra in `planetary_positions` (at sunrise)
   - [ ] Sun sign in `daily_panchang` matches Sun sign in `planetary_positions`
   - [ ] Sankranti dates in panchang match sign-change events in `astro_events`
   - [ ] DLNL: vara_lord matches nakshatra_lord on DLNL=1 days
+- **Method**: SQL queries joining panchang ↔ ephemeris tables in Supabase
 
 **Phase 1 Exit Criteria**:
-- All 5 ephemeris/panchang tables populated with 27 years of data
+- All 5 ephemeris/panchang tables populated in Supabase with 41 years of data (1990-2030)
+- Market data (km_index_eod) verified and complete
 - All verification checks pass
-- Cross-validation confirms consistency
-- Market data clean and complete for correlation period
+- Cross-validation confirms consistency across Supabase tables
 
 ---
 
 ## PHASE 2: CORRELATION ENGINE
 ### "Prove or disprove every factor with data"
 
-**Goal**: Run every factor against 20+ years of NIFTY returns. Measure statistical significance. Separate signal from noise.
+**Goal**: Run every factor against 35+ years of NIFTY returns. Measure statistical significance. Separate signal from noise.
 
 #### Step 2.1 — Compute Baseline Statistics
-- **Date range**: 2000-01-01 to 2025-12-31 (keep 2026 as out-of-sample)
+- **Date range**: 1990-01-01 to 2029-12-31 (keep 2026-2029 as out-of-sample for forward testing)
 - **Metrics**:
   - Total trading days
   - % down days (close < prev close)
@@ -159,7 +151,7 @@ Step 9: Backtest & validate everything
 - **Output**: Baseline numbers for comparison
 
 #### Step 2.2 — Run Correlation Engine (All 40+ Factors)
-- **Run**: `correlations.py` for NIFTY, date range 2000-2025
+- **Run**: `correlations.py` for NIFTY, date range 1990-2029
 - **Factors tested** (5 categories):
 
   **Retrogrades (5)**:
@@ -252,12 +244,12 @@ Step 9: Backtest & validate everything
 ---
 
 ## PHASE 3: RISK ENGINE EXECUTION
-### "Score every trading day for 25 years"
+### "Score every trading day for 40 years"
 
-**Goal**: Compute risk scores for every NIFTY trading day (2000-2025). Validate against actual market outcomes.
+**Goal**: Compute risk scores for every NIFTY trading day (1990-2029). Validate against actual market outcomes.
 
 #### Step 3.1 — Run Risk Engine (Full Historical)
-- **Run**: `risk_engine.py` for NIFTY, 2000-01-01 to 2025-12-31
+- **Run**: `risk_engine.py` for NIFTY, 1990-01-01 to 2029-12-31
 - **For each trading day, compute**:
   - Structural Risk (0-25)
   - Momentum Risk (0-25)
@@ -265,7 +257,7 @@ Step 9: Backtest & validate everything
   - Deception Risk (0-25)
   - Composite Score (0-100)
   - Regime: Accumulation / Expansion / Distribution / Capital Protection
-- **Output**: `risk_scores` table → ~6,000+ rows
+- **Output**: `risk_scores` table → ~7,500+ rows
 - **Verification**:
   - [ ] Score range: 0-100 for composite, 0-25 for each dimension
   - [ ] Regime distribution: expect most days in Accumulation/Expansion (market is mostly up)
@@ -331,13 +323,13 @@ Step 9: Backtest & validate everything
 ## PHASE 4: SIGNAL ENGINE & RULES EVALUATION
 ### "Test every rule against every trading day"
 
-**Goal**: Fire all 18 given rules across 25 years of data. Measure each rule's predictive accuracy. Aggregate daily signals.
+**Goal**: Fire all 18 given rules across 40 years of data. Measure each rule's predictive accuracy. Aggregate daily signals.
 
 #### Step 4.1 — Build Day Context for Full History
-- **For each trading day (2000-2025)**:
+- **For each trading day (1990-2029)**:
   - Merge `daily_panchang` + `planetary_positions` + `planetary_aspects`
   - Build the evaluation context dict (tithi, vara, nakshatra, planet_signs, retrogrades, aspects, etc.)
-- **Output**: Context objects for ~6,000 trading days
+- **Output**: Context objects for ~7,500 trading days
 - **Verification**:
   - [ ] Every trading day has a context (no gaps)
   - [ ] Context contains all required fields
@@ -395,7 +387,7 @@ Step 9: Backtest & validate everything
 - **Update `rules` table with tuned strengths**
 
 **Phase 4 Exit Criteria**:
-- All 18 rules evaluated across 25 years
+- All 18 rules evaluated across 40 years
 - `rule_signals` table populated
 - Per-rule accuracy known and documented
 - Aggregated daily signal shows predictive power
@@ -407,7 +399,7 @@ Step 9: Backtest & validate everything
 ## PHASE 5: DISCOVERY ENGINE
 ### "Let the data reveal what domain knowledge missed"
 
-**Goal**: Scan 25 years of Panchang × Market data for new patterns. Generate candidate rules. Validate statistically.
+**Goal**: Scan 40 years of Panchang × Market data for new patterns. Generate candidate rules. Validate statistically.
 
 #### Step 5.1 — Run All 6 Pattern Scanners
 - **Scanner 1: TithiScanner**
@@ -431,7 +423,7 @@ Step 9: Backtest & validate everything
 - **Scanner 4: DLNLScanner**
   - Validate the DLNL theory with statistical rigor
   - Compare DLNL=1 days vs DLNL=0 days
-  - Expected: ~680 DLNL days in 25 years
+  - Expected: ~1,000+ DLNL days in 40 years
   - This is the core domain hypothesis — does it actually work?
 
 - **Scanner 5: SankrantiScanner**
@@ -515,16 +507,16 @@ Step 9: Backtest & validate everything
   ```
 - **Success**: Clear gradient in both directions (higher risk + bearish signal = more down days)
 
-#### Step 6.3 — Out-of-Sample Test (2026 Data)
-- **Purpose**: We trained on 2000-2025. Test on 2026 (Jan-Feb).
-- **Run risk engine + signal engine on 2026 dates**
+#### Step 6.3 — Out-of-Sample Test (2026+ Data)
+- **Purpose**: We trained on 1990-2025. Test on 2026 onwards (out-of-sample window).
+- **Run risk engine + signal engine on 2026+ dates**
 - **Compare predictions vs actual NIFTY performance**
 - **This is the acid test** — does it generalize?
 
 #### Step 6.4 — Rolling Window Stability Test
 - **Test if correlations are stable across time**:
-  - Run correlation engine on 2000-2010 only
-  - Run again on 2010-2020 only
+  - Run correlation engine on 1996-2005 only
+  - Run again on 2005-2015 only
   - Run again on 2015-2025
   - **Check**: Are the same factors significant across all windows?
   - **If yes**: Robust pattern (keep)
@@ -623,7 +615,9 @@ Every phase has explicit verification criteria because:
 |------|----------|-----------|
 | 2026-02-15 | Use Lahiri ayanamsa | Standard for Indian Vedic astrology |
 | 2026-02-15 | Ujjain as base location | Traditional Hindu astronomical meridian |
-| 2026-02-15 | 2000-2025 training, 2026 test | Sufficient history + out-of-sample validation |
+| 2026-02-15 | 1990-2025 training, 2026+ out-of-sample | Max history (NIFTY from ~1996) + forward validation |
+| 2026-02-15 | Ephemeris/Panchang range: 1990-2030 | Covers all market data + 4 years forward |
+| 2026-02-15 | Supabase is the single database | No SQLite — all engines read/write Supabase directly |
 | 2026-02-15 | Z ≥ 1.96 for significance | Standard statistical threshold (p < 0.05) |
 | 2026-02-15 | Min 20 samples per factor | Below 20, statistics are unreliable |
 | | | |
