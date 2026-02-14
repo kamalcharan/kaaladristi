@@ -21,8 +21,10 @@ for env_candidate in [
         load_dotenv(env_candidate)
         break
 
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+SUPABASE_URL = os.getenv('SUPABASE_URL') or os.getenv('VITE_SUPABASE_URL')
+SUPABASE_KEY = (os.getenv('SUPABASE_KEY')
+                or os.getenv('VITE_SUPABASE_SERVICE_KEY')
+                or os.getenv('VITE_SUPABASE_ANON_KEY'))
 
 # Batch size for inserts
 BATCH_SIZE = 1000
