@@ -264,6 +264,153 @@ def create_schema(conn):
         UNIQUE(factor_type, sector)
     )""")
 
+    # =========================================================================
+    # PANCHANG MASTER TABLES
+    # =========================================================================
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS tithis (
+        id          INTEGER PRIMARY KEY,
+        num         INTEGER NOT NULL,
+        name        TEXT NOT NULL,
+        base_name   TEXT NOT NULL,
+        paksha      TEXT NOT NULL CHECK(paksha IN ('Shukla','Krishna')),
+        tattva_group TEXT,
+        group_lord  TEXT
+    )""")
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS yogas (
+        id          INTEGER PRIMARY KEY,
+        name        TEXT NOT NULL UNIQUE,
+        nature      TEXT CHECK(nature IN ('auspicious','inauspicious','neutral'))
+    )""")
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS karanas (
+        id          INTEGER PRIMARY KEY,
+        name        TEXT NOT NULL UNIQUE,
+        type        TEXT CHECK(type IN ('recurring','fixed'))
+    )""")
+
+    # =========================================================================
+    # DAILY PANCHANG (Ujjain-based, time-series)
+    # =========================================================================
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS daily_panchang (
+        date                TEXT PRIMARY KEY,
+        -- Sunrise / Sunset (Ujjain)
+        sunrise_jd          REAL,
+        sunrise_ist         TEXT,
+        sunset_jd           REAL,
+        sunset_ist          TEXT,
+        -- Tithi
+        tithi_num           INTEGER,
+        tithi_name          TEXT,
+        tithi_base_name     TEXT,
+        paksha              TEXT,
+        tithi_group         TEXT,
+        tithi_lord          TEXT,
+        -- Nakshatra (Moon at sunrise)
+        nakshatra_num       INTEGER,
+        nakshatra_name      TEXT,
+        nakshatra_lord      TEXT,
+        nakshatra_pada      INTEGER,
+        -- Yoga
+        yoga_num            INTEGER,
+        yoga_name           TEXT,
+        -- Karana
+        karana_num          INTEGER,
+        karana_name         TEXT,
+        -- Vara (weekday)
+        vara                TEXT,
+        vara_lord           TEXT,
+        -- DLNL match
+        dlnl_match          INTEGER DEFAULT 0,
+        -- Sun position
+        sun_sign            INTEGER,
+        sun_sign_name       TEXT,
+        sun_longitude       REAL,
+        sun_tropical_longitude REAL,
+        -- Moon position
+        moon_sign           INTEGER,
+        moon_sign_name      TEXT,
+        moon_longitude      REAL,
+        -- Sankranti
+        is_sankranti        INTEGER DEFAULT 0,
+        sankranti_from      TEXT,
+        sankranti_to        TEXT,
+        -- Hemisphere events
+        hemisphere_event    TEXT,
+        -- Special flags
+        is_purnima          INTEGER DEFAULT 0,
+        is_amavasya         INTEGER DEFAULT 0,
+        is_ekadashi         INTEGER DEFAULT 0
+    )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_panchang_tithi ON daily_panchang(tithi_base_name)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_panchang_nakshatra ON daily_panchang(nakshatra_name)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_panchang_vara ON daily_panchang(vara)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_panchang_dlnl ON daily_panchang(dlnl_match) WHERE dlnl_match=1")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_panchang_sankranti ON daily_panchang(is_sankranti) WHERE is_sankranti=1")
+
+    # =========================================================================
+    # RULE ENGINE TABLES
+    # =========================================================================
+
+    # Rules: both given (domain knowledge) and discovered (data-driven)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS rules (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        code            TEXT NOT NULL UNIQUE,
+        category        TEXT NOT NULL,
+        name            TEXT NOT NULL,
+        description     TEXT,
+        conditions      TEXT NOT NULL,
+        signal          TEXT NOT NULL CHECK(signal IN ('Super Bullish','Bullish','Neutral','Bearish','Super Bearish')),
+        strength        INTEGER DEFAULT 1,
+        source          TEXT DEFAULT 'given' CHECK(source IN ('given','discovered')),
+        active          INTEGER DEFAULT 1,
+        historical_note TEXT,
+        created_at      TEXT DEFAULT (datetime('now')),
+        updated_at      TEXT DEFAULT (datetime('now'))
+    )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_rules_category ON rules(category)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_rules_active ON rules(active) WHERE active=1")
+
+    # Rule signals: which rules fired on which dates
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS rule_signals (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        date            TEXT NOT NULL,
+        rule_id         INTEGER NOT NULL REFERENCES rules(id),
+        signal          TEXT NOT NULL,
+        strength        INTEGER DEFAULT 1,
+        details         TEXT,
+        UNIQUE(date, rule_id)
+    )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_signals_date ON rule_signals(date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_signals_rule ON rule_signals(rule_id, date)")
+
+    # Candidate rules: discovered by the pattern agent, pending human review
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS candidate_rules (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        pattern_description TEXT NOT NULL,
+        conditions          TEXT NOT NULL,
+        signal              TEXT NOT NULL,
+        statistical_confidence REAL,
+        sample_count        INTEGER,
+        pct_correct         REAL,
+        avg_return          REAL,
+        volatility_impact   REAL,
+        discovered_date     TEXT,
+        reviewed            INTEGER DEFAULT 0,
+        approved            INTEGER DEFAULT 0,
+        promoted_to_rule_id INTEGER REFERENCES rules(id),
+        notes               TEXT
+    )""")
+
     conn.commit()
     print("Schema created successfully.")
 
