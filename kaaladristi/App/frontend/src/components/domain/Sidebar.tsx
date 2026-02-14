@@ -33,16 +33,12 @@ export default function Sidebar() {
   const { profile, isAdmin, clear } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      clear();
-      navigate('/', { replace: true });
-    } catch {
-      // Force clear even if sign-out API fails
-      clear();
-      navigate('/', { replace: true });
-    }
+  const handleSignOut = () => {
+    // Clear local state and navigate first, then sign out from Supabase
+    // (avoids race where onAuthStateChange unmounts component before navigate runs)
+    clear();
+    navigate('/', { replace: true });
+    signOut().catch(() => {});
   };
 
   return (
