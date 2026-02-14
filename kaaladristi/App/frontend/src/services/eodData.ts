@@ -24,18 +24,23 @@ function getStartDate(range: TimeRange): string | null {
 
 export async function fetchIndexSymbol(symbol: MarketSymbol): Promise<KmIndexSymbol | null> {
   const name = SYMBOL_TO_INDEX_NAME[symbol];
+
+  // Try exact match first, then ilike fallback
   const { data, error } = await supabase
     .from('km_index_symbols')
     .select('*')
-    .ilike('name', name)
+    .eq('name', name)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    console.warn(`[fetchIndexSymbol] ${name}: ${error.message}`);
+    console.error(`[fetchIndexSymbol] ${name}:`, error.message);
     return null;
   }
-  return data as KmIndexSymbol;
+  if (!data) {
+    console.warn(`[fetchIndexSymbol] No index found for "${name}". Is km_seed_masters.sql loaded?`);
+  }
+  return data as KmIndexSymbol | null;
 }
 
 export async function fetchIndexEod(
@@ -44,18 +49,24 @@ export async function fetchIndexEod(
 ): Promise<KmIndexEod[]> {
   const startDate = getStartDate(range);
 
+  // Supabase default limit is 1000. Use .range() to get up to 10,000 rows.
   let query = supabase
     .from('km_index_eod')
     .select('id,index_id,trade_date,open,high,low,close,prev_close,chng,pct_chng,volume')
     .eq('index_id', indexId)
-    .order('trade_date', { ascending: true });
+    .order('trade_date', { ascending: true })
+    .range(0, 9999);
 
   if (startDate) {
     query = query.gte('trade_date', startDate);
   }
 
   const { data, error } = await query;
-  if (error) throw new Error(`[km_index_eod] ${error.message}`);
+  if (error) {
+    console.error(`[fetchIndexEod] index_id=${indexId}:`, error.message);
+    throw new Error(`[km_index_eod] ${error.message}`);
+  }
+  console.log(`[fetchIndexEod] index_id=${indexId}, range=${range}: ${data?.length ?? 0} rows`);
   return (data ?? []) as KmIndexEod[];
 }
 
