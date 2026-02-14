@@ -204,6 +204,15 @@ class SupabaseREST:
         resp = requests.post(url, headers=headers, json=record)
         return resp.status_code in (200, 201)
 
+    def patch(self, table: str, filters: dict, data: dict) -> bool:
+        """UPDATE rows matching filters. Returns True on success."""
+        url = f'{self.base}/{table}'
+        for k, v in filters.items():
+            url += f'?{k}=eq.{v}' if '?' not in url else f'&{k}=eq.{v}'
+        headers = {**self.headers, 'Prefer': 'return=minimal'}
+        resp = requests.patch(url, headers=headers, json=data)
+        return resp.status_code in (200, 204)
+
 
 def init_supabase():
     """Initialize Supabase REST client."""
@@ -228,15 +237,20 @@ def init_supabase():
 # STOCK CODE RESOLUTION
 # ═════════════════════════════════════════════════════════════════════════════
 
-# Cache: NSE symbol -> Breeze ISEC stock code (loaded from master file)
+# ICICI Direct publishes NSE script master CSV at this URL
+ISEC_MASTER_URL = 'https://directlink.icicidirect.com/NewSecMaster/NSEScripMaster.csv'
+
+# Cache: NSE symbol -> Breeze ISEC stock code
 _isec_map = {}
 _isec_loaded = False
 
 
-def load_isec_master(breeze):
+def load_isec_master():
     """
-    Download ICICI's NSE stock master to build NSE symbol -> ISEC code mapping.
-    Breeze get_names() requires the ISEC code, not NSE symbol.
+    Download ICICI's NSE script master CSV to build NSE symbol -> ISEC code mapping.
+    The CSV has columns like: Token, ShortName, Series, CompanyName, ExchangeCode, etc.
+    ShortName = ISEC code (what Breeze API expects)
+    ExchangeCode = NSE trading symbol (what we store in km_equity_symbols)
     """
     global _isec_map, _isec_loaded
     if _isec_loaded:
@@ -257,23 +271,65 @@ def load_isec_master(breeze):
         except Exception:
             pass
 
-    print('  Downloading ISEC stock master from Breeze...')
+    print('  Downloading ISEC stock master from ICICI Direct...')
     try:
-        # Breeze SDK provides get_stock_script_list for NSE equity
-        master = breeze.get_stock_script_list(exchange_code='NSE')
-        if master and master.get('Success'):
-            for row in master['Success']:
-                # Map: exchange_code_name (NSE symbol) -> short_name (ISEC code)
-                nse_sym = (row.get('exchange_code_name') or '').strip().upper()
-                isec_code = (row.get('short_name') or '').strip().upper()
-                if nse_sym and isec_code:
-                    _isec_map[nse_sym] = isec_code
-            print(f'  Loaded {len(_isec_map)} ISEC mappings from Breeze master')
-            # Cache for today
-            with open(cache_file, 'w') as f:
-                json.dump({'date': datetime.now().strftime('%Y-%m-%d'), 'map': _isec_map}, f)
-        else:
-            print('  WARNING: Could not load ISEC master, will try NSE symbols directly')
+        resp = requests.get(ISEC_MASTER_URL, timeout=30)
+        resp.raise_for_status()
+        lines = resp.text.strip().split('\n')
+
+        if len(lines) < 2:
+            print('  WARNING: ISEC master CSV is empty')
+            _isec_loaded = True
+            return
+
+        # Parse header to find column indices
+        header = [h.strip().lower() for h in lines[0].split(',')]
+
+        # Try common column name patterns
+        short_name_idx = None
+        exchange_code_idx = None
+        series_idx = None
+
+        for i, h in enumerate(header):
+            if h in ('shortname', 'short_name', 'isec_code'):
+                short_name_idx = i
+            elif h in ('exchangecode', 'exchange_code', 'nse_code', 'symbol'):
+                exchange_code_idx = i
+            elif h in ('series',):
+                series_idx = i
+
+        if short_name_idx is None or exchange_code_idx is None:
+            # Fallback: dump header for debugging
+            print(f'  WARNING: Could not find expected columns in ISEC master')
+            print(f'  Header columns: {header}')
+            print('  Trying positional fallback (col 1=ShortName, col 4=ExchangeCode)...')
+            short_name_idx = 1
+            exchange_code_idx = 4
+            series_idx = 2 if len(header) > 2 else None
+
+        for line in lines[1:]:
+            cols = line.split(',')
+            if len(cols) <= max(short_name_idx, exchange_code_idx):
+                continue
+
+            isec_code = cols[short_name_idx].strip().upper()
+            nse_sym = cols[exchange_code_idx].strip().upper()
+
+            # Only map EQ series (skip futures, options, etc.)
+            if series_idx is not None and len(cols) > series_idx:
+                series = cols[series_idx].strip().upper()
+                if series and series != 'EQ':
+                    continue
+
+            if nse_sym and isec_code:
+                _isec_map[nse_sym] = isec_code
+
+        print(f'  Loaded {len(_isec_map)} ISEC mappings')
+
+        # Cache for today
+        with open(cache_file, 'w') as f:
+            json.dump({'date': datetime.now().strftime('%Y-%m-%d'), 'map': _isec_map}, f)
+
     except Exception as e:
         print(f'  WARNING: ISEC master download failed: {e}')
         print('  Will try NSE symbols directly (some may fail)')
@@ -281,12 +337,11 @@ def load_isec_master(breeze):
     _isec_loaded = True
 
 
-def resolve_breeze_code(breeze, nse_symbol: str) -> str:
+def resolve_breeze_code(nse_symbol: str) -> str:
     """
     Resolve NSE trading symbol to Breeze ISEC stock code.
     Falls back to NSE symbol if no mapping found.
     """
-    # Check ISEC master mapping first
     if _isec_map:
         isec = _isec_map.get(nse_symbol.upper())
         if isec:
@@ -507,18 +562,18 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
 
     # Fetch equity masters from Supabase
     if single_symbol:
-        equities = sb.select('km_equity_symbols', 'id,symbol',
+        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes',
                              filters={'symbol': single_symbol.upper()},
                              order='symbol')
     else:
-        equities = sb.select('km_equity_symbols', 'id,symbol', order='symbol')
+        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes', order='symbol')
 
     if not equities:
         print('  No equities found in km_equity_symbols')
         return
 
     # Load ISEC master for stock code resolution
-    load_isec_master(breeze)
+    load_isec_master()
 
     print(f'  Found {len(equities)} equities in database')
     total_records = 0
@@ -529,8 +584,12 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
         symbol = eq['symbol']
         eq_id = eq['id']
 
+        # Check if vendor_codes already has a breeze code saved
+        existing_vc = eq.get('vendor_codes') or {}
+        saved_breeze = existing_vc.get('breeze', '')
+
         # Resolve NSE symbol to Breeze ISEC stock code
-        breeze_code = resolve_breeze_code(breeze, symbol)
+        breeze_code = saved_breeze or resolve_breeze_code(symbol)
         suffix = f' (ISEC: {breeze_code})' if breeze_code != symbol else ''
 
         print(f'\n  [{i}/{len(equities)}] {symbol}{suffix}')
@@ -543,6 +602,11 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
             continue
 
         print(f'    Fetched {len(raw_data)} candles')
+
+        # Save resolved breeze code to vendor_codes if not already there
+        if breeze_code != symbol and not saved_breeze:
+            vc = {**existing_vc, 'breeze': breeze_code, 'nse': symbol}
+            sb.patch('km_equity_symbols', {'id': eq_id}, {'vendor_codes': json.dumps(vc)})
 
         # Transform
         eod_records = [transform_breeze_record(r, 'equity_id', eq_id) for r in raw_data]
