@@ -36,8 +36,8 @@ os.makedirs(output_path, exist_ok=True)
 swe.set_ephe_path(ephe_path)
 
 # Date range (same as ephemeris)
-START_DATE = datetime(2000, 1, 1)
-END_DATE = datetime(2040, 12, 31)
+START_DATE = datetime(1990, 1, 1)
+END_DATE = datetime(2030, 12, 31)
 
 # Ayanamsa (Lahiri - standard for Jyotish)
 AYANAMSA = swe.SIDM_LAHIRI
