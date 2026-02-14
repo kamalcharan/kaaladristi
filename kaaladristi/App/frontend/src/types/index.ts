@@ -120,6 +120,21 @@ export interface KmIndexComposition {
   snapshot_date: string | null;
 }
 
+// ── Auth / Profile Types ──
+
+export interface KmProfile {
+  id: string;           // UUID, matches auth.users.id
+  full_name: string | null;
+  display_name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  role: 'user' | 'admin';
+  onboarded: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Joined / Derived Types ──
 
 export interface NakshatraWithLord extends KmNakshatra {

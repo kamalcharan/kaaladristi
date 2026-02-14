@@ -6,3 +6,4 @@ export { default as MiniBarChart } from './MiniBarChart';
 export { default as Sidebar } from './Sidebar';
 export { default as Layout } from './Layout';
 export { default as SymbolSwitcher } from './SymbolSwitcher';
+export { default as ProtectedRoute } from './ProtectedRoute';
