@@ -149,25 +149,35 @@ def init_supabase():
 # YAHOO FINANCE FETCHER
 # ═════════════════════════════════════════════════════════════════════════════
 
-def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 3) -> list:
+def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4) -> list:
     """
     Fetch OHLC history from Yahoo Finance with retry + backoff.
+    Uses yf.download() which handles sessions/cookies better than Ticker.history().
     Returns list of dicts with trade_date, open, high, low, close, volume.
     """
     for attempt in range(max_retries):
         try:
-            stock = yf.Ticker(ticker)
-            # Use period="max" for full history when start is very old
+            # yf.download() is more reliable than Ticker.history() for rate limits
             if start <= '2000-01-01':
-                df = stock.history(period='max', auto_adjust=False)
-                # Filter to requested date range
+                df = yf.download(ticker, period='max', auto_adjust=False,
+                                 progress=False, timeout=30)
                 if df is not None and not df.empty:
                     df = df[(df.index >= start) & (df.index <= end)]
             else:
-                df = stock.history(start=start, end=end, auto_adjust=False)
+                df = yf.download(ticker, start=start, end=end, auto_adjust=False,
+                                 progress=False, timeout=30)
 
             if df is None or df.empty:
+                if attempt < max_retries - 1:
+                    wait = (attempt + 1) * 10
+                    print(f' [empty, retry in {wait}s]', end='', flush=True)
+                    time.sleep(wait)
+                    continue
                 return []
+
+            # Handle both single and multi-level column headers
+            if isinstance(df.columns, __import__('pandas').MultiIndex):
+                df.columns = df.columns.get_level_values(0)
 
             records = []
             for dt, row in df.iterrows():
@@ -184,7 +194,7 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 3)
         except Exception as e:
             err_msg = str(e)
             if 'Rate' in err_msg or 'Too Many' in err_msg or '429' in err_msg:
-                wait = (attempt + 1) * 5  # 5s, 10s, 15s
+                wait = (attempt + 1) * 15  # 15s, 30s, 45s, 60s
                 print(f' [rate limited, waiting {wait}s]', end='', flush=True)
                 time.sleep(wait)
                 continue
