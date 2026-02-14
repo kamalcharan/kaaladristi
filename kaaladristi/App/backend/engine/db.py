@@ -138,7 +138,7 @@ def get_market_returns(symbol: str, start_date: str, end_date: str):
 
     while True:
         resp = (sb.table('km_index_eod')
-                .select('trade_date, pct_chng, high, low, close')
+                .select('trade_date, pct_chng, prev_close, high, low, close')
                 .eq('index_id', idx)
                 .gte('trade_date', start_date)
                 .lte('trade_date', end_date)
@@ -155,12 +155,30 @@ def get_market_returns(symbol: str, start_date: str, end_date: str):
     print(f"  [db] km_index_eod: fetched {len(all_rows)} rows for index_id={idx}, "
           f"{start_date} to {end_date}")
 
+    # Compute daily returns - use pct_chng if available, otherwise compute
+    # from consecutive close prices (yfinance data only has OHLC, no pct_chng)
     results = []
+    prev_close_val = None
     for r in all_rows:
-        daily_return = float(r['pct_chng']) if r['pct_chng'] is not None else None
+        close = float(r['close']) if r['close'] is not None else None
+
+        # Try pct_chng first
+        if r['pct_chng'] is not None:
+            daily_return = float(r['pct_chng'])
+        # Try prev_close column (NSE/Breeze data may have it)
+        elif r.get('prev_close') is not None and float(r['prev_close']) > 0 and close is not None:
+            daily_return = round((close - float(r['prev_close'])) / float(r['prev_close']) * 100, 4)
+        # Compute from consecutive close prices (yfinance data)
+        elif prev_close_val is not None and prev_close_val > 0 and close is not None:
+            daily_return = round((close - prev_close_val) / prev_close_val * 100, 4)
+        else:
+            daily_return = None
+
+        prev_close_val = close
+
         # Compute range % from high/low/close
-        if r['high'] and r['low'] and r['close'] and float(r['close']) > 0:
-            daily_range_pct = (float(r['high']) - float(r['low'])) / float(r['close']) * 100
+        if r['high'] and r['low'] and close and close > 0:
+            daily_range_pct = (float(r['high']) - float(r['low'])) / close * 100
         else:
             daily_range_pct = None
         results.append({
@@ -168,6 +186,10 @@ def get_market_returns(symbol: str, start_date: str, end_date: str):
             'daily_return': daily_return,
             'daily_range_pct': round(daily_range_pct, 4) if daily_range_pct else None,
         })
+
+    # Count how many rows have computed returns
+    with_returns = sum(1 for r in results if r['daily_return'] is not None)
+    print(f"  [db] {with_returns}/{len(results)} rows have daily_return values")
 
     return results
 
@@ -201,17 +223,31 @@ def get_trading_dates(symbol: str, start_date: str, end_date: str):
 
 
 def get_return_for_date(symbol: str, date_str: str):
-    """Get single day return for a symbol."""
+    """Get single day return for a symbol.
+
+    Falls back to computing from close/prev_close or consecutive closes
+    when pct_chng is not available (yfinance data).
+    """
     sb = get_supabase()
     idx = resolve_index_id(symbol)
     resp = (sb.table('km_index_eod')
-            .select('pct_chng')
+            .select('pct_chng, prev_close, close')
             .eq('index_id', idx)
             .eq('trade_date', date_str)
             .limit(1)
             .execute())
-    if resp.data and resp.data[0]['pct_chng'] is not None:
-        return float(resp.data[0]['pct_chng'])
+    if not resp.data:
+        return None
+
+    row = resp.data[0]
+    # Try pct_chng first
+    if row['pct_chng'] is not None:
+        return float(row['pct_chng'])
+    # Try computing from prev_close
+    if (row.get('prev_close') is not None and row['close'] is not None
+            and float(row['prev_close']) > 0):
+        return round((float(row['close']) - float(row['prev_close']))
+                     / float(row['prev_close']) * 100, 4)
     return None
 
 
