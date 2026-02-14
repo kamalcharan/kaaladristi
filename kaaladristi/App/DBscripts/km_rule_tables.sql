@@ -77,9 +77,26 @@ ALTER TABLE km_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE km_rule_signals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE km_candidate_rules ENABLE ROW LEVEL SECURITY;
 
+-- SELECT policies (public read)
 CREATE POLICY "Public read km_rules"
     ON km_rules FOR SELECT USING (true);
 CREATE POLICY "Public read km_rule_signals"
     ON km_rule_signals FOR SELECT USING (true);
 CREATE POLICY "Public read km_candidate_rules"
     ON km_candidate_rules FOR SELECT USING (true);
+
+-- INSERT policies (allow inserts from authenticated users and service role)
+CREATE POLICY "Allow insert km_rules"
+    ON km_rules FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow insert km_rule_signals"
+    ON km_rule_signals FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow insert km_candidate_rules"
+    ON km_candidate_rules FOR INSERT WITH CHECK (true);
+
+-- UPDATE policies (allow updates)
+CREATE POLICY "Allow update km_rules"
+    ON km_rules FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow update km_rule_signals"
+    ON km_rule_signals FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow update km_candidate_rules"
+    ON km_candidate_rules FOR UPDATE USING (true) WITH CHECK (true);
