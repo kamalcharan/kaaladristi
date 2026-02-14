@@ -11,11 +11,15 @@ Composite score = sum of 4 dimensions (0-100).
 Regime classification based on composite score.
 """
 
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'DBscripts'))
-
-from schema import get_connection
+from db import (
+    get_positions_for_date,
+    get_aspects_for_date,
+    get_moon_intraday_for_date,
+    get_trading_dates,
+    get_return_for_date,
+    get_market_returns,
+    upsert_risk_scores,
+)
 
 # =========================================================================
 # FACTOR DEFINITIONS (from PRD)
@@ -29,7 +33,7 @@ HIGH_RISK_NAKSHATRAS = {'Ardra', 'Arudra', 'Moola', 'Jyeshtha', 'Jyestha', 'Ashl
 MALEFICS = {'Mars', 'Saturn', 'Rahu', 'Ketu'}
 
 
-def get_day_factors(conn, date):
+def get_day_factors(date):
     """
     Gather all planetary factors active on a given date.
     Returns a dict with raw factor data for scoring.
@@ -43,26 +47,18 @@ def get_day_factors(conn, date):
     }
 
     # 1. Planetary positions (retrogrades, combustion)
-    rows = conn.execute("""
-        SELECT planet, retrograde, nakshatra_name, sign_name, combust
-        FROM planetary_positions
-        WHERE date = ?
-    """, (date,)).fetchall()
+    positions = get_positions_for_date(date)
 
-    for row in rows:
+    for row in positions:
         factors['retrogrades'][row['planet']] = bool(row['retrograde'])
         if row['planet'] == 'Moon':
             factors['moon_nakshatra'] = row['nakshatra_name']
             factors['moon_sign'] = row['sign_name']
 
     # 2. Aspects active on this date
-    rows = conn.execute("""
-        SELECT planet_1, planet_2, aspect_type, orb, exact
-        FROM planetary_aspects
-        WHERE date = ?
-    """, (date,)).fetchall()
+    aspects = get_aspects_for_date(date)
 
-    for row in rows:
+    for row in aspects:
         factors['aspects'].append({
             'p1': row['planet_1'], 'p2': row['planet_2'],
             'type': row['aspect_type'], 'orb': row['orb'],
@@ -70,17 +66,13 @@ def get_day_factors(conn, date):
         })
 
     # 3. Moon gandanta (check intraday table, market open time)
-    row = conn.execute("""
-        SELECT gandanta, nakshatra_name
-        FROM moon_intraday
-        WHERE date = ? AND time_ist = '09:15'
-    """, (date,)).fetchone()
+    moon_row = get_moon_intraday_for_date(date, time_ist='09:15')
 
-    if row:
-        factors['moon_gandanta'] = bool(row['gandanta'])
+    if moon_row:
+        factors['moon_gandanta'] = bool(moon_row['gandanta'])
         # Prefer intraday nakshatra (more precise for market hours)
-        if row['nakshatra_name']:
-            factors['moon_nakshatra'] = row['nakshatra_name']
+        if moon_row['nakshatra_name']:
+            factors['moon_nakshatra'] = moon_row['nakshatra_name']
 
     return factors
 
@@ -251,12 +243,12 @@ def classify_regime(composite):
         return 'Capital Protection'
 
 
-def compute_risk_score(conn, date, symbol='NIFTY'):
+def compute_risk_score(date, symbol='NIFTY'):
     """
     Compute full risk score for a given date and symbol.
     Returns (score_dict, all_factor_details).
     """
-    factors = get_day_factors(conn, date)
+    factors = get_day_factors(date)
 
     structural, struct_details = score_structural(factors)
     momentum, mom_details = score_momentum(factors)
@@ -296,39 +288,26 @@ def compute_risk_score(conn, date, symbol='NIFTY'):
 # BATCH COMPUTATION
 # =========================================================================
 
-def compute_all_scores(conn, symbol='NIFTY', start_date='2000-01-01', end_date='2020-12-31'):
+def compute_all_scores(symbol='NIFTY', start_date='2000-01-01', end_date='2020-12-31'):
     """
     Compute risk scores for all trading days in the given range.
     Only computes for dates that have market data.
     """
     # Get all trading dates for this symbol
-    dates = conn.execute("""
-        SELECT DISTINCT date FROM market_daily
-        WHERE symbol = ? AND date >= ? AND date <= ?
-        ORDER BY date
-    """, (symbol, start_date, end_date)).fetchall()
+    dates = get_trading_dates(symbol, start_date, end_date)
 
     print(f"Computing risk scores for {len(dates)} trading days ({symbol})...")
 
     scores = []
-    for i, row in enumerate(dates):
-        date = row['date']
-        score, _ = compute_risk_score(conn, date, symbol)
+    for i, date in enumerate(dates):
+        score, _ = compute_risk_score(date, symbol)
         scores.append(score)
 
         if (i + 1) % 500 == 0:
             print(f"  {i+1}/{len(dates)} dates processed...")
 
-    # Batch insert
-    conn.executemany(
-        """INSERT OR REPLACE INTO risk_scores
-           (date, symbol, composite_score, structural, momentum,
-            volatility, deception, regime, explanation)
-           VALUES (:date, :symbol, :composite_score, :structural,
-                   :momentum, :volatility, :deception, :regime, :explanation)""",
-        scores
-    )
-    conn.commit()
+    # Batch upsert to Supabase
+    upsert_risk_scores(scores)
     print(f"  {len(scores)} risk scores saved.")
     return scores
 
@@ -342,10 +321,8 @@ def main():
     print("KĀLA-DRISHTI RISK ENGINE")
     print("=" * 60)
 
-    conn = get_connection()
-
     # Compute for NIFTY (2000-2020 overlap period)
-    scores = compute_all_scores(conn, 'NIFTY', '2000-01-01', '2020-12-31')
+    scores = compute_all_scores('NIFTY', '2000-01-01', '2020-12-31')
 
     # Verification
     print("\n" + "=" * 60)
@@ -382,46 +359,36 @@ def main():
     high_risk = sorted(scores, key=lambda s: s['composite_score'], reverse=True)[:10]
     for s in high_risk:
         # Get actual market return for that day
-        ret = conn.execute(
-            "SELECT daily_return FROM market_daily WHERE date=? AND symbol=?",
-            (s['date'], s['symbol'])
-        ).fetchone()
-        ret_str = f"{ret['daily_return']:+.2f}%" if ret and ret['daily_return'] else "N/A"
+        ret = get_return_for_date(s['symbol'], s['date'])
+        ret_str = f"{ret:+.2f}%" if ret is not None else "N/A"
         print(f"    {s['date']}  Score: {s['composite_score']:>3}  "
               f"Regime: {s['regime']:20s}  NIFTY: {ret_str}")
 
     # Quick correlation check: high risk vs actual returns
     print("\n  Quick correlation check:")
+    all_market = get_market_returns('NIFTY', '2000-01-01', '2020-12-31')
+    returns_by_date = {r['date']: r['daily_return'] for r in all_market
+                       if r['daily_return'] is not None}
+
     for threshold in [50, 60, 70]:
         high_dates = [s['date'] for s in scores if s['composite_score'] >= threshold]
         if not high_dates:
             continue
-        placeholders = ','.join(['?'] * len(high_dates))
-        returns = conn.execute(f"""
-            SELECT daily_return FROM market_daily
-            WHERE date IN ({placeholders}) AND symbol='NIFTY' AND daily_return IS NOT NULL
-        """, high_dates).fetchall()
-        if returns:
-            rets = [r['daily_return'] for r in returns]
+        rets = [returns_by_date[d] for d in high_dates if d in returns_by_date]
+        if rets:
             down_days = len([r for r in rets if r < 0])
             avg_ret = sum(rets) / len(rets)
             print(f"    Score >= {threshold}: {len(rets)} days, "
                   f"{down_days/len(rets)*100:.1f}% down, avg return {avg_ret:+.3f}%")
 
     # Baseline for comparison
-    all_returns = conn.execute("""
-        SELECT daily_return FROM market_daily
-        WHERE symbol='NIFTY' AND daily_return IS NOT NULL
-        AND date >= '2000-01-01' AND date <= '2020-12-31'
-    """).fetchall()
-    if all_returns:
-        all_rets = [r['daily_return'] for r in all_returns]
+    if returns_by_date:
+        all_rets = list(returns_by_date.values())
         baseline_down = len([r for r in all_rets if r < 0]) / len(all_rets) * 100
         baseline_avg = sum(all_rets) / len(all_rets)
         print(f"    Baseline:    {len(all_rets)} days, "
               f"{baseline_down:.1f}% down, avg return {baseline_avg:+.3f}%")
 
-    conn.close()
     print("\nRisk engine complete.")
 
 

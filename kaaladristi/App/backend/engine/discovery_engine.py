@@ -28,14 +28,17 @@ Pattern templates scanned:
   - Hemisphere event effects (returns around equinox/solstice)
 """
 
-import sys
-import os
 import json
 import math
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'DBscripts'))
-from schema import get_connection
+from db import (
+    get_market_returns as _db_get_market_returns,
+    get_panchang_range,
+    get_active_rules,
+    get_supabase,
+    insert_candidate_rules,
+)
 
 
 # =============================================================================
@@ -105,19 +108,17 @@ def significance_test(sample_returns, baseline_returns, min_samples=20):
 class PatternScanner:
     """Base class for pattern scanners."""
 
-    def __init__(self, conn, index_symbol='NIFTY'):
-        self.conn = conn
+    def __init__(self, index_symbol='NIFTY'):
         self.index_symbol = index_symbol
 
     def get_market_returns(self, start_date, end_date):
         """Get daily returns for the index in the date range."""
-        rows = self.conn.execute(
-            "SELECT date, daily_return FROM market_daily "
-            "WHERE symbol = ? AND date >= ? AND date <= ? AND daily_return IS NOT NULL "
-            "ORDER BY date",
-            (self.index_symbol, start_date, end_date)
-        ).fetchall()
-        return {row['date']: row['daily_return'] for row in rows}
+        rows = _db_get_market_returns(self.index_symbol, start_date, end_date)
+        return {
+            row['date']: row['daily_return']
+            for row in rows
+            if row['daily_return'] is not None
+        }
 
     def scan(self, start_date, end_date):
         """Override in subclasses. Returns list of discovered patterns."""
@@ -132,11 +133,7 @@ class TithiScanner(PatternScanner):
         baseline_rets = list(returns.values())
 
         # Group returns by tithi base name
-        panchang_rows = self.conn.execute(
-            "SELECT date, tithi_base_name, paksha FROM daily_panchang "
-            "WHERE date >= ? AND date <= ?",
-            (start_date, end_date)
-        ).fetchall()
+        panchang_rows = get_panchang_range(start_date, end_date, 'date, tithi_base_name, paksha')
 
         tithi_returns = {}
         for row in panchang_rows:
@@ -181,11 +178,7 @@ class NakshatraScanner(PatternScanner):
         returns = self.get_market_returns(start_date, end_date)
         baseline_rets = list(returns.values())
 
-        panchang_rows = self.conn.execute(
-            "SELECT date, nakshatra_name FROM daily_panchang "
-            "WHERE date >= ? AND date <= ?",
-            (start_date, end_date)
-        ).fetchall()
+        panchang_rows = get_panchang_range(start_date, end_date, 'date, nakshatra_name')
 
         nak_returns = {}
         for row in panchang_rows:
@@ -225,11 +218,7 @@ class VaraTithiScanner(PatternScanner):
         returns = self.get_market_returns(start_date, end_date)
         baseline_rets = list(returns.values())
 
-        panchang_rows = self.conn.execute(
-            "SELECT date, vara, tithi_base_name FROM daily_panchang "
-            "WHERE date >= ? AND date <= ?",
-            (start_date, end_date)
-        ).fetchall()
+        panchang_rows = get_panchang_range(start_date, end_date, 'date, vara, tithi_base_name')
 
         combo_returns = {}
         for row in panchang_rows:
@@ -277,11 +266,8 @@ class DLNLScanner(PatternScanner):
         returns = self.get_market_returns(start_date, end_date)
         baseline_rets = list(returns.values())
 
-        dlnl_rows = self.conn.execute(
-            "SELECT date FROM daily_panchang "
-            "WHERE date >= ? AND date <= ? AND dlnl_match = 1",
-            (start_date, end_date)
-        ).fetchall()
+        dlnl_rows = get_panchang_range(start_date, end_date, 'date, dlnl_match')
+        dlnl_rows = [row for row in dlnl_rows if row.get('dlnl_match')]
 
         dlnl_rets = [returns[row['date']] for row in dlnl_rows if row['date'] in returns]
 
@@ -313,11 +299,8 @@ class SankrantiScanner(PatternScanner):
         returns = self.get_market_returns(start_date, end_date)
         baseline_rets = list(returns.values())
 
-        sankranti_rows = self.conn.execute(
-            "SELECT date, sankranti_to FROM daily_panchang "
-            "WHERE date >= ? AND date <= ? AND is_sankranti = 1",
-            (start_date, end_date)
-        ).fetchall()
+        sankranti_rows = get_panchang_range(start_date, end_date, 'date, sankranti_to, is_sankranti')
+        sankranti_rows = [row for row in sankranti_rows if row.get('is_sankranti')]
 
         # Overall sankranti effect
         sankranti_rets = [returns[row['date']] for row in sankranti_rows if row['date'] in returns]
@@ -375,11 +358,7 @@ class YogaScanner(PatternScanner):
         returns = self.get_market_returns(start_date, end_date)
         baseline_rets = list(returns.values())
 
-        panchang_rows = self.conn.execute(
-            "SELECT date, yoga_name FROM daily_panchang "
-            "WHERE date >= ? AND date <= ?",
-            (start_date, end_date)
-        ).fetchall()
+        panchang_rows = get_panchang_range(start_date, end_date, 'date, yoga_name')
 
         yoga_returns = {}
         for row in panchang_rows:
@@ -425,16 +404,15 @@ class DiscoveryEngine:
       - discover(): Find new patterns
     """
 
-    def __init__(self, conn, index_symbol='NIFTY'):
-        self.conn = conn
+    def __init__(self, index_symbol='NIFTY'):
         self.index_symbol = index_symbol
         self.scanners = [
-            TithiScanner(conn, index_symbol),
-            NakshatraScanner(conn, index_symbol),
-            VaraTithiScanner(conn, index_symbol),
-            DLNLScanner(conn, index_symbol),
-            SankrantiScanner(conn, index_symbol),
-            YogaScanner(conn, index_symbol),
+            TithiScanner(index_symbol),
+            NakshatraScanner(index_symbol),
+            VaraTithiScanner(index_symbol),
+            DLNLScanner(index_symbol),
+            SankrantiScanner(index_symbol),
+            YogaScanner(index_symbol),
         ]
 
     def discover(self, start_date, end_date):
@@ -457,9 +435,7 @@ class DiscoveryEngine:
                 print(f"  {scanner_name}: ERROR - {e}")
 
         # Load existing rules to check for matches
-        existing_rules = self.conn.execute(
-            "SELECT code, conditions FROM rules WHERE active = 1"
-        ).fetchall()
+        existing_rules = get_active_rules()
         existing_conditions = set()
         for rule in existing_rules:
             existing_conditions.add(rule['conditions'])
@@ -488,61 +464,66 @@ class DiscoveryEngine:
         if discovered_date is None:
             discovered_date = datetime.now().strftime('%Y-%m-%d')
 
-        saved = 0
+        candidates = []
         for pattern in discoveries:
-            self.conn.execute(
-                "INSERT INTO candidate_rules "
-                "(pattern_description, conditions, signal, statistical_confidence, "
-                " sample_count, pct_correct, avg_return, discovered_date) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    pattern['description'],
-                    pattern['conditions'],
-                    pattern['signal'],
-                    pattern.get('z_score'),
-                    pattern.get('sample_count'),
-                    pattern.get('pct_correct'),
-                    pattern.get('avg_return'),
-                    discovered_date,
-                )
-            )
-            saved += 1
+            candidates.append({
+                'pattern_description': pattern['description'],
+                'conditions': pattern['conditions'],
+                'signal': pattern['signal'],
+                'statistical_confidence': pattern.get('z_score'),
+                'sample_count': pattern.get('sample_count'),
+                'pct_correct': pattern.get('pct_correct'),
+                'avg_return': pattern.get('avg_return'),
+                'discovered_date': discovered_date,
+            })
 
-        self.conn.commit()
-        print(f"  Saved {saved} candidate rules for review.")
-        return saved
+        if candidates:
+            insert_candidate_rules(candidates)
+
+        print(f"  Saved {len(candidates)} candidate rules for review.")
+        return len(candidates)
 
     def validate_rules(self, start_date, end_date):
         """
         Validate all existing given rules against market data.
         Returns validation report for each rule.
         """
-        from signal_engine import SignalEngine, build_day_context
+        from signal_engine import build_day_context, evaluate_condition
 
-        engine = SignalEngine(self.conn)
+        active_rules = get_active_rules()
+        rules = []
+        for rule in active_rules:
+            try:
+                conditions = json.loads(rule['conditions'])
+            except (json.JSONDecodeError, TypeError):
+                print(f"  WARNING: Invalid conditions JSON for rule {rule['code']}, skipping")
+                continue
+            rules.append({
+                'code': rule['code'],
+                'conditions': conditions,
+                'signal': rule['signal'],
+            })
+
         returns = self.scanners[0].get_market_returns(start_date, end_date)
         baseline_rets = list(returns.values())
         baseline_stats = compute_stats(baseline_rets)
 
-        print(f"\nValidating {len(engine.rules)} rules against {len(returns)} trading days...")
+        print(f"\nValidating {len(rules)} rules against {len(returns)} trading days...")
         print(f"  Baseline: avg return {baseline_stats['mean_return']:+.4f}%, "
               f"{baseline_stats['pct_down']:.0f}% down days")
 
         report = []
-        for rule in engine.rules:
+        panchang_dates = get_panchang_range(start_date, end_date, 'date')
+
+        for rule in rules:
             # Find all dates where this rule fires
             fired_dates = []
-            panchang_dates = self.conn.execute(
-                "SELECT date FROM daily_panchang WHERE date >= ? AND date <= ? ORDER BY date",
-                (start_date, end_date)
-            ).fetchall()
 
             for row in panchang_dates:
                 date_str = row['date']
                 if date_str not in returns:
                     continue
-                context = build_day_context(self.conn, date_str)
-                from signal_engine import evaluate_condition
+                context = build_day_context(date_str)
                 try:
                     if evaluate_condition(rule['conditions'], context):
                         fired_dates.append(date_str)
@@ -579,30 +560,28 @@ def main():
     print("KĀLA-DRISHTI DISCOVERY ENGINE")
     print("=" * 60)
 
-    conn = get_connection()
-    engine = DiscoveryEngine(conn, 'NIFTY')
+    engine = DiscoveryEngine('NIFTY')
 
     # Run discovery on available data range
     # Check what data we have
-    date_range = conn.execute(
-        "SELECT MIN(date) as min_d, MAX(date) as max_d FROM market_daily "
-        "WHERE symbol = 'NIFTY' AND daily_return IS NOT NULL"
-    ).fetchone()
+    market_rows = _db_get_market_returns('NIFTY', '1990-01-01', '2030-12-31')
+    market_rows_with_return = [r for r in market_rows if r['daily_return'] is not None]
 
-    if not date_range or not date_range['min_d']:
+    if not market_rows_with_return:
         print("\n  No market data available. Load market data first.")
-        conn.close()
         return
 
-    start = date_range['min_d']
-    end = date_range['max_d']
+    dates = [r['date'] for r in market_rows_with_return]
+    start = min(dates)
+    end = max(dates)
     print(f"\n  Market data available: {start} to {end}")
 
     # Check if panchang data exists
-    panchang_count = conn.execute("SELECT COUNT(*) FROM daily_panchang").fetchone()[0]
+    sb = get_supabase()
+    panchang_resp = sb.table('km_daily_panchang').select('date', count='exact').execute()
+    panchang_count = panchang_resp.count if panchang_resp.count is not None else len(panchang_resp.data)
     if panchang_count == 0:
         print("  No panchang data. Run generate_panchang.py + seed_panchang.py first.")
-        conn.close()
         return
 
     print(f"  Panchang records: {panchang_count}")
@@ -633,7 +612,6 @@ def main():
     if not results['all_patterns']:
         print("\n  No statistically significant patterns found in this date range.")
 
-    conn.close()
     print("\nDiscovery engine complete.")
 
 

@@ -22,13 +22,17 @@ Each rule has:
 The engine evaluates all active rules for a given date and returns fired signals.
 """
 
-import sys
-import os
 import json
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'DBscripts'))
-from schema import get_connection
+from db import (
+    get_panchang_for_date,
+    get_positions_for_date,
+    get_aspects_for_date,
+    get_active_rules,
+    get_panchang_range,
+    upsert_rule_signals,
+)
 
 
 # =============================================================================
@@ -48,7 +52,7 @@ SIGNAL_VALUES = {
 # CONTEXT BUILDER
 # =============================================================================
 
-def build_day_context(conn, date_str):
+def build_day_context(date_str):
     """
     Build a complete evaluation context for a given date.
     Merges data from daily_panchang + planetary_positions + planetary_aspects.
@@ -58,22 +62,17 @@ def build_day_context(conn, date_str):
     context = {'date': date_str}
 
     # 1. Panchang data
-    panchang = conn.execute(
-        "SELECT * FROM daily_panchang WHERE date = ?", (date_str,)
-    ).fetchone()
+    panchang = get_panchang_for_date(date_str)
 
     if panchang:
-        for key in panchang.keys():
+        for key in panchang:
             context[key] = panchang[key]
     else:
         # No panchang data — partial context
         context['_panchang_missing'] = True
 
     # 2. Planetary positions (sign, nakshatra, retrograde for all 9+1 planets)
-    positions = conn.execute(
-        "SELECT planet, longitude, sign_name, nakshatra_name, retrograde, combust "
-        "FROM planetary_positions WHERE date = ?", (date_str,)
-    ).fetchall()
+    positions = get_positions_for_date(date_str)
 
     planet_signs = {}
     planet_longitudes = {}
@@ -96,10 +95,7 @@ def build_day_context(conn, date_str):
     context['planet_combust'] = planet_combust
 
     # 3. Active aspects
-    aspects = conn.execute(
-        "SELECT planet_1, planet_2, aspect_type, orb, exact "
-        "FROM planetary_aspects WHERE date = ?", (date_str,)
-    ).fetchall()
+    aspects = get_aspects_for_date(date_str)
 
     context['aspects'] = [
         {
@@ -363,22 +359,17 @@ class SignalEngine:
     Returns fired signals with rule details.
     """
 
-    def __init__(self, conn):
-        self.conn = conn
+    def __init__(self):
         self.rules = self._load_active_rules()
 
     def _load_active_rules(self):
         """Load all active rules from the database."""
-        rows = self.conn.execute(
-            "SELECT id, code, category, name, description, conditions, "
-            "signal, strength, source, historical_note "
-            "FROM rules WHERE active = 1"
-        ).fetchall()
+        rows = get_active_rules()
 
         rules = []
         for row in rows:
             try:
-                conditions = json.loads(row['conditions'])
+                conditions = json.loads(row['conditions']) if isinstance(row['conditions'], str) else row['conditions']
             except (json.JSONDecodeError, TypeError):
                 print(f"  WARNING: Invalid conditions JSON for rule {row['code']}, skipping")
                 continue
@@ -411,7 +402,7 @@ class SignalEngine:
             [{'rule_id', 'rule_code', 'category', 'signal', 'strength', 'name', 'description'}, ...]
         """
         if context is None:
-            context = build_day_context(self.conn, date_str)
+            context = build_day_context(date_str)
 
         fired = []
         for rule in self.rules:
@@ -494,36 +485,36 @@ class SignalEngine:
         }
 
     def save_signals(self, date_str, fired_signals):
-        """Save fired signals to rule_signals table."""
+        """Save fired signals to km_rule_signals via Supabase upsert."""
+        signals_list = []
         for sig in fired_signals:
-            self.conn.execute(
-                "INSERT OR REPLACE INTO rule_signals (date, rule_id, signal, strength, details) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (date_str, sig['rule_id'], sig['signal'], sig['strength'],
-                 json.dumps({'name': sig['name'], 'category': sig['category']}))
-            )
-        self.conn.commit()
+            signals_list.append({
+                'date': date_str,
+                'rule_id': sig['rule_id'],
+                'signal': sig['signal'],
+                'strength': sig['strength'],
+                'details': json.dumps({'name': sig['name'], 'category': sig['category']}),
+            })
+        if signals_list:
+            upsert_rule_signals(signals_list)
 
 
 # =============================================================================
 # BATCH EVALUATION
 # =============================================================================
 
-def evaluate_date_range(conn, start_date, end_date):
+def evaluate_date_range(start_date, end_date):
     """Evaluate all rules for a date range."""
-    engine = SignalEngine(conn)
+    engine = SignalEngine()
 
     print(f"Evaluating {len(engine.rules)} rules from {start_date} to {end_date}...")
 
-    dates = conn.execute(
-        "SELECT DISTINCT date FROM daily_panchang WHERE date >= ? AND date <= ? ORDER BY date",
-        (start_date, end_date)
-    ).fetchall()
+    panchang_rows = get_panchang_range(start_date, end_date, columns='date')
 
     results = []
-    for i, row in enumerate(dates):
+    for i, row in enumerate(panchang_rows):
         date_str = row['date']
-        context = build_day_context(conn, date_str)
+        context = build_day_context(date_str)
         fired = engine.evaluate_date(date_str, context)
 
         if fired:
@@ -538,10 +529,10 @@ def evaluate_date_range(conn, start_date, end_date):
             })
 
         if (i + 1) % 500 == 0:
-            print(f"  {i + 1}/{len(dates)} dates evaluated, "
+            print(f"  {i + 1}/{len(panchang_rows)} dates evaluated, "
                   f"{len(results)} dates with fired rules...")
 
-    print(f"\nEvaluation complete: {len(results)} dates with fired rules out of {len(dates)} total")
+    print(f"\nEvaluation complete: {len(results)} dates with fired rules out of {len(panchang_rows)} total")
     return results
 
 
@@ -554,8 +545,7 @@ def main():
     print("KĀLA-DRISHTI SIGNAL ENGINE")
     print("=" * 60)
 
-    conn = get_connection()
-    engine = SignalEngine(conn)
+    engine = SignalEngine()
 
     print(f"\nLoaded {len(engine.rules)} active rules:")
     for rule in engine.rules:
@@ -567,7 +557,7 @@ def main():
         print("\n--- Evaluating sample dates ---")
         sample_dates = ['2024-01-15', '2024-03-20', '2024-06-20', '2024-09-22', '2025-02-23']
         for date_str in sample_dates:
-            context = build_day_context(conn, date_str)
+            context = build_day_context(date_str)
             fired = engine.evaluate_date(date_str, context)
             agg = engine.aggregate_signals(fired)
             print(f"\n  {date_str}: {len(fired)} rules fired → {agg['net_signal']} (score={agg['net_score']})")
@@ -576,7 +566,6 @@ def main():
     else:
         print("\n  No rules loaded. Seed rules first (see seed_rules.py).")
 
-    conn.close()
     print("\nSignal engine complete.")
 
 

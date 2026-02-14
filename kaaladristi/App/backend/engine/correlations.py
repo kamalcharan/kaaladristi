@@ -1,5 +1,5 @@
 """
-Kāla-Drishti Factor Correlation Analysis
+Kala-Drishti Factor Correlation Analysis
 
 For each planetary factor, empirically measure its historical impact on NIFTY:
   - % down days when factor is active vs baseline
@@ -8,25 +8,20 @@ For each planetary factor, empirically measure its historical impact on NIFTY:
   - Sample count and statistical significance
 
 This is the intelligence layer -- it proves (or disproves) each factor's market impact.
+
+Data source: Supabase (km_ tables)
 """
 
-import sys
-import os
-import math
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'DBscripts'))
+from db import (
+    get_market_returns, get_retrograde_dates, get_aspect_dates,
+    get_moon_nakshatra_dates, get_gandanta_dates, get_nakshatra_change_dates,
+    upsert_correlation_stats,
+)
 
-from schema import get_connection
 
-
-def get_baseline_stats(conn, symbol, start_date, end_date):
-    """Compute baseline market stats for comparison."""
-    rows = conn.execute("""
-        SELECT daily_return, daily_range_pct
-        FROM market_daily
-        WHERE symbol = ? AND date >= ? AND date <= ?
-          AND daily_return IS NOT NULL
-    """, (symbol, start_date, end_date)).fetchall()
-
+def get_baseline_stats(market_data):
+    """Compute baseline market stats from pre-fetched market data."""
+    rows = [r for r in market_data if r['daily_return'] is not None]
     if not rows:
         return {}
 
@@ -41,23 +36,18 @@ def get_baseline_stats(conn, symbol, start_date, end_date):
     }
 
 
-def analyze_factor_dates(conn, factor_name, active_dates, symbol, start_date, end_date, baseline):
+def analyze_factor_dates(factor_name, active_dates, market_data_by_date, symbol, baseline):
     """
     Given a set of dates when a factor is active, compute correlation stats.
     """
     if not active_dates:
         return None
 
-    # Get market data for active dates that fall within our trading range
-    placeholders = ','.join(['?'] * len(active_dates))
-    rows = conn.execute(f"""
-        SELECT date, daily_return, daily_range_pct
-        FROM market_daily
-        WHERE symbol = ? AND date IN ({placeholders})
-          AND daily_return IS NOT NULL
-    """, [symbol] + list(active_dates)).fetchall()
+    # Get market data for active dates
+    rows = [market_data_by_date[d] for d in active_dates
+            if d in market_data_by_date and market_data_by_date[d]['daily_return'] is not None]
 
-    if len(rows) < 5:  # Need minimum sample size
+    if len(rows) < 5:
         return None
 
     returns = [r['daily_return'] for r in rows]
@@ -83,74 +73,17 @@ def analyze_factor_dates(conn, factor_name, active_dates, symbol, start_date, en
 
 
 # =========================================================================
-# FACTOR EXTRACTORS
-# Each returns a set of dates when the factor is active.
-# =========================================================================
-
-def get_retrograde_dates(conn, planet, start_date, end_date):
-    """Dates when a planet is retrograde."""
-    rows = conn.execute("""
-        SELECT DISTINCT date FROM planetary_positions
-        WHERE planet = ? AND retrograde = 1
-          AND date >= ? AND date <= ?
-    """, (planet, start_date, end_date)).fetchall()
-    return {r['date'] for r in rows}
-
-
-def get_aspect_dates(conn, planet_1, planet_2, aspect_types, start_date, end_date):
-    """Dates when two planets are in specific aspects."""
-    placeholders = ','.join(['?'] * len(aspect_types))
-    rows = conn.execute(f"""
-        SELECT DISTINCT date FROM planetary_aspects
-        WHERE ((planet_1 = ? AND planet_2 = ?) OR (planet_1 = ? AND planet_2 = ?))
-          AND aspect_type IN ({placeholders})
-          AND date >= ? AND date <= ?
-    """, [planet_1, planet_2, planet_2, planet_1] + list(aspect_types) +
-       [start_date, end_date]).fetchall()
-    return {r['date'] for r in rows}
-
-
-def get_moon_nakshatra_dates(conn, nakshatras, start_date, end_date):
-    """Dates when Moon is in specified nakshatras."""
-    placeholders = ','.join(['?'] * len(nakshatras))
-    # Use intraday (market open) for precision
-    rows = conn.execute(f"""
-        SELECT DISTINCT date FROM moon_intraday
-        WHERE nakshatra_name IN ({placeholders})
-          AND time_ist = '09:15'
-          AND date >= ? AND date <= ?
-    """, list(nakshatras) + [start_date, end_date]).fetchall()
-    return {r['date'] for r in rows}
-
-
-def get_gandanta_dates(conn, start_date, end_date):
-    """Dates when Moon is in gandanta zone."""
-    rows = conn.execute("""
-        SELECT DISTINCT date FROM moon_intraday
-        WHERE gandanta = 1
-          AND date >= ? AND date <= ?
-    """, (start_date, end_date)).fetchall()
-    return {r['date'] for r in rows}
-
-
-def get_nakshatra_change_dates(conn, start_date, end_date):
-    """Dates when Moon changes nakshatra (transition days)."""
-    rows = conn.execute("""
-        SELECT DISTINCT event_date FROM astro_events
-        WHERE event_type = 'nakshatra_change' AND planet = 'Moon'
-          AND event_date >= ? AND event_date <= ?
-    """, (start_date, end_date)).fetchall()
-    return {r['event_date'] for r in rows}
-
-
-# =========================================================================
 # MAIN ANALYSIS
 # =========================================================================
 
-def run_all_correlations(conn, symbol='NIFTY', start_date='2000-01-01', end_date='2020-12-31'):
+def run_all_correlations(symbol='NIFTY', start_date='2000-01-01', end_date='2020-12-31'):
     """Run correlation analysis for all defined factors."""
 
-    baseline = get_baseline_stats(conn, symbol, start_date, end_date)
+    # Fetch all market data once
+    market_data = get_market_returns(symbol, start_date, end_date)
+    market_data_by_date = {r['date']: r for r in market_data}
+
+    baseline = get_baseline_stats(market_data)
     if not baseline:
         print("No baseline data found!")
         return []
@@ -165,109 +98,97 @@ def run_all_correlations(conn, symbol='NIFTY', start_date='2000-01-01', end_date
     # Define all factors to analyze
     FACTORS = [
         # Retrogrades
-        ('Mercury Retrograde', lambda: get_retrograde_dates(conn, 'Mercury', start_date, end_date)),
-        ('Mars Retrograde', lambda: get_retrograde_dates(conn, 'Mars', start_date, end_date)),
-        ('Saturn Retrograde', lambda: get_retrograde_dates(conn, 'Saturn', start_date, end_date)),
-        ('Jupiter Retrograde', lambda: get_retrograde_dates(conn, 'Jupiter', start_date, end_date)),
-        ('Venus Retrograde', lambda: get_retrograde_dates(conn, 'Venus', start_date, end_date)),
+        ('Mercury Retrograde', lambda: get_retrograde_dates('Mercury', start_date, end_date)),
+        ('Mars Retrograde', lambda: get_retrograde_dates('Mars', start_date, end_date)),
+        ('Saturn Retrograde', lambda: get_retrograde_dates('Saturn', start_date, end_date)),
+        ('Jupiter Retrograde', lambda: get_retrograde_dates('Jupiter', start_date, end_date)),
+        ('Venus Retrograde', lambda: get_retrograde_dates('Venus', start_date, end_date)),
 
-        # Key aspect pairs (hard aspects: conjunction, opposition, square)
+        # Key aspect pairs (hard aspects)
         ('Mars-Saturn Hard Aspect',
-         lambda: get_aspect_dates(conn, 'Mars', 'Saturn',
+         lambda: get_aspect_dates('Mars', 'Saturn',
                                   ['conjunction', 'opposition', 'square'], start_date, end_date)),
         ('Mars-Rahu Hard Aspect',
-         lambda: get_aspect_dates(conn, 'Mars', 'Rahu',
+         lambda: get_aspect_dates('Mars', 'Rahu',
                                   ['conjunction', 'opposition', 'square'], start_date, end_date)),
         ('Mercury-Rahu Hard Aspect',
-         lambda: get_aspect_dates(conn, 'Mercury', 'Rahu',
+         lambda: get_aspect_dates('Mercury', 'Rahu',
                                   ['conjunction', 'opposition', 'square'], start_date, end_date)),
         ('Saturn-Rahu Hard Aspect',
-         lambda: get_aspect_dates(conn, 'Saturn', 'Rahu',
+         lambda: get_aspect_dates('Saturn', 'Rahu',
                                   ['conjunction', 'opposition', 'square'], start_date, end_date)),
         ('Jupiter-Saturn Hard Aspect',
-         lambda: get_aspect_dates(conn, 'Jupiter', 'Saturn',
+         lambda: get_aspect_dates('Jupiter', 'Saturn',
                                   ['conjunction', 'opposition', 'square'], start_date, end_date)),
         ('Sun-Saturn Hard Aspect',
-         lambda: get_aspect_dates(conn, 'Sun', 'Saturn',
+         lambda: get_aspect_dates('Sun', 'Saturn',
                                   ['conjunction', 'opposition', 'square'], start_date, end_date)),
         ('Sun-Mercury Hard Aspect',
-         lambda: get_aspect_dates(conn, 'Sun', 'Mercury',
+         lambda: get_aspect_dates('Sun', 'Mercury',
                                   ['conjunction', 'opposition', 'square'], start_date, end_date)),
 
         # Moon factors
         ('Moon in Ardra/Arudra',
-         lambda: get_moon_nakshatra_dates(conn, ['Ardra', 'Arudra'], start_date, end_date)),
+         lambda: get_moon_nakshatra_dates(['Ardra', 'Arudra'], start_date, end_date)),
         ('Moon in Moola',
-         lambda: get_moon_nakshatra_dates(conn, ['Moola'], start_date, end_date)),
+         lambda: get_moon_nakshatra_dates(['Moola'], start_date, end_date)),
         ('Moon in Jyeshtha/Jyestha',
-         lambda: get_moon_nakshatra_dates(conn, ['Jyeshtha', 'Jyestha'], start_date, end_date)),
+         lambda: get_moon_nakshatra_dates(['Jyeshtha', 'Jyestha'], start_date, end_date)),
         ('Moon in Ashlesha',
-         lambda: get_moon_nakshatra_dates(conn, ['Ashlesha'], start_date, end_date)),
+         lambda: get_moon_nakshatra_dates(['Ashlesha'], start_date, end_date)),
         ('Moon Gandanta',
-         lambda: get_gandanta_dates(conn, start_date, end_date)),
+         lambda: get_gandanta_dates(start_date, end_date)),
 
         # All 27 nakshatras (individual analysis)
-        ('Moon in Ashvini', lambda: get_moon_nakshatra_dates(conn, ['Ashvini'], start_date, end_date)),
-        ('Moon in Bharani', lambda: get_moon_nakshatra_dates(conn, ['Bharani'], start_date, end_date)),
-        ('Moon in Krithika', lambda: get_moon_nakshatra_dates(conn, ['Krithika'], start_date, end_date)),
-        ('Moon in Rohini', lambda: get_moon_nakshatra_dates(conn, ['Rohini'], start_date, end_date)),
-        ('Moon in Mrigasira', lambda: get_moon_nakshatra_dates(conn, ['Mrigasira'], start_date, end_date)),
-        ('Moon in Punarvasu', lambda: get_moon_nakshatra_dates(conn, ['Punarvasu'], start_date, end_date)),
-        ('Moon in Pushya', lambda: get_moon_nakshatra_dates(conn, ['Pushya'], start_date, end_date)),
-        ('Moon in Magha', lambda: get_moon_nakshatra_dates(conn, ['Magha'], start_date, end_date)),
-        ('Moon in Purva Phalguni', lambda: get_moon_nakshatra_dates(conn, ['Purva Phalguni'], start_date, end_date)),
-        ('Moon in Uttara Phalguni', lambda: get_moon_nakshatra_dates(conn, ['Uttara Phalguni'], start_date, end_date)),
-        ('Moon in Hastha', lambda: get_moon_nakshatra_dates(conn, ['Hastha'], start_date, end_date)),
-        ('Moon in Chitra', lambda: get_moon_nakshatra_dates(conn, ['Chitra'], start_date, end_date)),
-        ('Moon in Swathi', lambda: get_moon_nakshatra_dates(conn, ['Swathi'], start_date, end_date)),
-        ('Moon in Vishakha', lambda: get_moon_nakshatra_dates(conn, ['Vishakha'], start_date, end_date)),
-        ('Moon in Anuradha', lambda: get_moon_nakshatra_dates(conn, ['Anuradha'], start_date, end_date)),
-        ('Moon in Purva Ashada', lambda: get_moon_nakshatra_dates(conn, ['Purva Ashada'], start_date, end_date)),
-        ('Moon in Uttara Ashada', lambda: get_moon_nakshatra_dates(conn, ['Uttara Ashada'], start_date, end_date)),
-        ('Moon in Shravana', lambda: get_moon_nakshatra_dates(conn, ['Shravana'], start_date, end_date)),
-        ('Moon in Dhanistha', lambda: get_moon_nakshatra_dates(conn, ['Dhanistha'], start_date, end_date)),
-        ('Moon in Shatabhisha', lambda: get_moon_nakshatra_dates(conn, ['Shatabhisha'], start_date, end_date)),
-        ('Moon in Purva Bhadra', lambda: get_moon_nakshatra_dates(conn, ['Purva Bhadra'], start_date, end_date)),
-        ('Moon in Uttara Bhadra', lambda: get_moon_nakshatra_dates(conn, ['Uttara Bhadra'], start_date, end_date)),
-        ('Moon in Revathi', lambda: get_moon_nakshatra_dates(conn, ['Revathi'], start_date, end_date)),
+        ('Moon in Ashvini', lambda: get_moon_nakshatra_dates(['Ashvini'], start_date, end_date)),
+        ('Moon in Bharani', lambda: get_moon_nakshatra_dates(['Bharani'], start_date, end_date)),
+        ('Moon in Krithika', lambda: get_moon_nakshatra_dates(['Krithika'], start_date, end_date)),
+        ('Moon in Rohini', lambda: get_moon_nakshatra_dates(['Rohini'], start_date, end_date)),
+        ('Moon in Mrigasira', lambda: get_moon_nakshatra_dates(['Mrigasira'], start_date, end_date)),
+        ('Moon in Punarvasu', lambda: get_moon_nakshatra_dates(['Punarvasu'], start_date, end_date)),
+        ('Moon in Pushya', lambda: get_moon_nakshatra_dates(['Pushya'], start_date, end_date)),
+        ('Moon in Magha', lambda: get_moon_nakshatra_dates(['Magha'], start_date, end_date)),
+        ('Moon in Purva Phalguni', lambda: get_moon_nakshatra_dates(['Purva Phalguni'], start_date, end_date)),
+        ('Moon in Uttara Phalguni', lambda: get_moon_nakshatra_dates(['Uttara Phalguni'], start_date, end_date)),
+        ('Moon in Hastha', lambda: get_moon_nakshatra_dates(['Hastha'], start_date, end_date)),
+        ('Moon in Chitra', lambda: get_moon_nakshatra_dates(['Chitra'], start_date, end_date)),
+        ('Moon in Swathi', lambda: get_moon_nakshatra_dates(['Swathi'], start_date, end_date)),
+        ('Moon in Vishakha', lambda: get_moon_nakshatra_dates(['Vishakha'], start_date, end_date)),
+        ('Moon in Anuradha', lambda: get_moon_nakshatra_dates(['Anuradha'], start_date, end_date)),
+        ('Moon in Purva Ashada', lambda: get_moon_nakshatra_dates(['Purva Ashada'], start_date, end_date)),
+        ('Moon in Uttara Ashada', lambda: get_moon_nakshatra_dates(['Uttara Ashada'], start_date, end_date)),
+        ('Moon in Shravana', lambda: get_moon_nakshatra_dates(['Shravana'], start_date, end_date)),
+        ('Moon in Dhanistha', lambda: get_moon_nakshatra_dates(['Dhanistha'], start_date, end_date)),
+        ('Moon in Shatabhisha', lambda: get_moon_nakshatra_dates(['Shatabhisha'], start_date, end_date)),
+        ('Moon in Purva Bhadra', lambda: get_moon_nakshatra_dates(['Purva Bhadra'], start_date, end_date)),
+        ('Moon in Uttara Bhadra', lambda: get_moon_nakshatra_dates(['Uttara Bhadra'], start_date, end_date)),
+        ('Moon in Revathi', lambda: get_moon_nakshatra_dates(['Revathi'], start_date, end_date)),
     ]
 
     results = []
     for factor_name, get_dates_fn in FACTORS:
         active_dates = get_dates_fn()
-        stats = analyze_factor_dates(conn, factor_name, active_dates,
-                                     symbol, start_date, end_date, baseline)
+        stats = analyze_factor_dates(factor_name, active_dates,
+                                     market_data_by_date, symbol, baseline)
         if stats:
             results.append(stats)
 
     return results, baseline
 
 
-def save_correlations(conn, results):
-    """Save correlation results to database."""
-    conn.executemany(
-        """INSERT OR REPLACE INTO factor_correlation_stats
-           (factor_type, index_symbol, pct_down_days, avg_return, avg_range_pct,
-            volatility_multiplier, sample_count, baseline_down_pct, baseline_avg_return)
-           VALUES (:factor_type, :index_symbol, :pct_down_days, :avg_return,
-                   :avg_range_pct, :volatility_multiplier, :sample_count,
-                   :baseline_down_pct, :baseline_avg_return)""",
-        results
-    )
-    conn.commit()
+def save_correlations(results):
+    """Save correlation results to Supabase."""
+    upsert_correlation_stats(results)
 
 
 def print_results(results, baseline):
     """Pretty-print correlation results."""
-
-    # Sort by bearish signal strength (highest % down days first)
     sorted_results = sorted(results, key=lambda r: r['pct_down_days'], reverse=True)
 
     print(f"\n{'Factor':<32} {'N':>5} {'Down%':>6} {'AvgRet':>8} {'VolMul':>7} {'Signal':>8}")
     print("-" * 75)
 
     for r in sorted_results:
-        # Signal strength: how much worse than baseline
         delta_down = r['pct_down_days'] - baseline['down_pct']
         if delta_down > 3:
             signal = 'BEARISH'
@@ -286,18 +207,15 @@ def print_results(results, baseline):
 
 def main():
     print("=" * 60)
-    print("KĀLA-DRISHTI FACTOR CORRELATION ANALYSIS")
+    print("KALA-DRISHTI FACTOR CORRELATION ANALYSIS")
     print("=" * 60)
 
-    conn = get_connection()
-
-    results, baseline = run_all_correlations(conn, 'NIFTY', '2000-01-01', '2020-12-31')
+    results, baseline = run_all_correlations('NIFTY', '2000-01-01', '2020-12-31')
 
     if results:
-        save_correlations(conn, results)
+        save_correlations(results)
         print_results(results, baseline)
 
-        # Highlight top bearish and bullish factors
         bearish = [r for r in results if r['pct_down_days'] - baseline['down_pct'] > 3]
         bullish = [r for r in results if r['pct_down_days'] - baseline['down_pct'] < -3]
 
@@ -315,7 +233,6 @@ def main():
                       f"({r['pct_down_days']-baseline['down_pct']:.1f}pp vs baseline), "
                       f"N={r['sample_count']}")
 
-    conn.close()
     print("\nCorrelation analysis complete.")
 
 
