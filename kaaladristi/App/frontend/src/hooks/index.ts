@@ -16,3 +16,5 @@ export {
   useWeekRisk,
   useHistoricalProofs,
 } from './useRiskData';
+
+export { useIndexChart } from './useEodData';
