@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Background ── */
+    --kd-bg:            #030712;
+    --kd-card:          rgba(15, 23, 42, 0.8);
+    --kd-elevated:      rgba(30, 41, 59, 0.5);
+    --kd-border:        rgba(255, 255, 255, 0.06);
+    --kd-border-active: rgba(99, 102, 241, 0.4);
+
+    /* ── Text ── */
+    --text-primary:   #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted:     #64748b;
+
+    /* ── Accents ── */
+    --accent-indigo:  #6366f1;
+    --accent-violet:  #8b5cf6;
+    --accent-cyan:    #06b6d4;
+    --accent-gold:    #fbbf24;
+
+    /* ── Risk ── */
+    --risk-green:     #10b981;
+    --risk-amber:     #f59e0b;
+    --risk-red:       #ef4444;
+
+    /* ── Sidebar ── */
+    --sidebar-width:  72px;
+  }
+
+  body {
+    @apply bg-kd-bg text-[var(--text-primary)] font-sans antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #0f172a; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+}
+
+@layer utilities {
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .glass-card {
+    @apply bg-kd-card border border-kd-border backdrop-blur-xl;
+  }
+
+  .glass-elevated {
+    @apply bg-kd-elevated border border-kd-border backdrop-blur-sm;
+  }
+}
+
+/* ── Landing Page Keyframes ── */
+@keyframes twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50%      { opacity: var(--tw-opacity, 0.5); transform: scale(1); }
+}
+
+@keyframes orbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes orbit1 {
+  0%   { transform: translateX(-50%) rotate(0deg) translateY(20px) rotate(0deg); }
+  100% { transform: translateX(-50%) rotate(360deg) translateY(20px) rotate(-360deg); }
+}
+
+@keyframes orbit2 {
+  0%   { transform: rotate(0deg) translateX(30px) rotate(0deg); }
+  100% { transform: rotate(-360deg) translateX(30px) rotate(360deg); }
+}
+
+@keyframes orbit3 {
+  0%   { transform: rotate(0deg) translateY(20px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateY(20px) rotate(-360deg); }
+}
