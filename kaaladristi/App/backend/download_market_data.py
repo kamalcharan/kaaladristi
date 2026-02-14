@@ -10,7 +10,7 @@ import time
 # CONFIGURATION
 # =============================================================================
 
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env'))
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', '.env'))
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_KEY')
