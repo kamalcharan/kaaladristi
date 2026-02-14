@@ -66,3 +66,29 @@
     @apply bg-kd-elevated border border-kd-border backdrop-blur-sm;
   }
 }
+
+/* ── Landing Page Keyframes ── */
+@keyframes twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50%      { opacity: var(--tw-opacity, 0.5); transform: scale(1); }
+}
+
+@keyframes orbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes orbit1 {
+  0%   { transform: translateX(-50%) rotate(0deg) translateY(20px) rotate(0deg); }
+  100% { transform: translateX(-50%) rotate(360deg) translateY(20px) rotate(-360deg); }
+}
+
+@keyframes orbit2 {
+  0%   { transform: rotate(0deg) translateX(30px) rotate(0deg); }
+  100% { transform: rotate(-360deg) translateX(30px) rotate(360deg); }
+}
+
+@keyframes orbit3 {
+  0%   { transform: rotate(0deg) translateY(20px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateY(20px) rotate(-360deg); }
+}
