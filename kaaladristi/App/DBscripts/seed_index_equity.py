@@ -1,6 +1,14 @@
 """
-Seed km_index_symbols and km_equity_symbols from SeedData CSVs.
-Generates SQL files for Supabase SQL Editor.
+Seed script for the restructured schema:
+  km_index_symbols  (master: name, category)
+  km_equity_symbols (master: symbol, index_names[])
+  km_index_eod      (time-series: index_id FK, trade_date, OHLC)
+  km_equity_eod     (time-series: equity_id FK, trade_date, OHLC)
+
+Generates 3 SQL files:
+  1. km_seed_masters.sql         — index + equity master inserts
+  2. km_seed_index_eod.sql       — index EOD data (uses subquery for FK)
+  3. km_seed_equity_eod_partN.sql — equity EOD data in chunks
 """
 import csv
 import os
@@ -57,8 +65,8 @@ def row_to_eod(row: dict) -> dict:
         "open": parse_number(row.get("OPEN", "")),
         "high": parse_number(row.get("HIGH", "")),
         "low": parse_number(row.get("LOW", "")),
+        "close": parse_number(row.get("LTP", "")),
         "prev_close": parse_number(row.get("PREV. CLOSE", "")),
-        "ltp": parse_number(row.get("LTP", "")),
         "chng": parse_number(row.get("CHNG", "")),
         "pct_chng": parse_number(row.get("%CHNG", "")),
         "volume": parse_number(row.get("VOLUME \n(shares)", row.get("VOLUME (shares)", ""))),
@@ -76,7 +84,6 @@ def sql_val(v):
         return "NULL"
     if isinstance(v, (int, float)):
         return str(v)
-    # Escape single quotes
     return "'" + str(v).replace("'", "''") + "'"
 
 
@@ -86,10 +93,24 @@ def sql_array(items: list) -> str:
     return "'{" + inner + "}'"
 
 
+EOD_COLS = "open,high,low,close,prev_close,chng,pct_chng,volume,value_cr,w52_high,w52_low,d30_pct_chng,d365_pct_chng"
+
+
+def eod_vals(eod: dict) -> str:
+    return ", ".join([
+        sql_val(eod["open"]), sql_val(eod["high"]), sql_val(eod["low"]),
+        sql_val(eod["close"]), sql_val(eod["prev_close"]),
+        sql_val(eod["chng"]), sql_val(eod["pct_chng"]),
+        sql_val(eod["volume"]), sql_val(eod["value_cr"]),
+        sql_val(eod["w52_high"]), sql_val(eod["w52_low"]),
+        sql_val(eod["d30_pct_chng"]), sql_val(eod["d365_pct_chng"]),
+    ])
+
+
 def main():
     # ── Phase 1: Parse all CSVs ──
-    index_records = []
-    equity_map = {}  # symbol -> {eod, index_names: set}
+    index_records = []  # {name, category, eod}
+    equity_map = {}     # symbol -> {eod, index_names: set}
 
     for category in CATEGORIES:
         folder = os.path.join(SEED_DIR, category)
@@ -119,8 +140,7 @@ def main():
             index_records.append({
                 "name": index_name,
                 "category": category,
-                "trade_date": TRADE_DATE,
-                **row_to_eod(index_row),
+                "eod": row_to_eod(index_row),
             })
 
             for eq_row in equity_rows:
@@ -133,69 +153,71 @@ def main():
 
     print(f"\n=== Parsed: {len(index_records)} indices, {len(equity_map)} equities ===")
 
-    # ── Phase 2: Generate index SQL ──
-    idx_cols = "name,category,trade_date,open,high,low,prev_close,ltp,chng,pct_chng,volume,value_cr,w52_high,w52_low,d30_pct_chng,d365_pct_chng"
-    idx_file = os.path.join(OUTPUT_DIR, "km_seed_index_symbols.sql")
+    # ── Phase 2: Generate MASTER inserts ──
+    master_file = os.path.join(OUTPUT_DIR, "km_seed_masters.sql")
+    with open(master_file, "w") as f:
+        f.write("-- Auto-generated: master data for indices and equities\n")
+        f.write("-- Run AFTER km_restructure_eod.sql\n\n")
 
-    with open(idx_file, "w") as f:
-        f.write("-- Auto-generated: 93 index symbols EOD data (14-Feb-2026)\n")
-        f.write(f"INSERT INTO km_index_symbols ({idx_cols}) VALUES\n")
-        rows = []
+        # Index masters
+        f.write("-- ── Index Masters (93) ──\n")
+        f.write("INSERT INTO km_index_symbols (name, category) VALUES\n")
+        idx_rows = []
         for r in index_records:
-            vals = ", ".join([
-                sql_val(r["name"]), sql_val(r["category"]), sql_val(r["trade_date"]),
-                sql_val(r["open"]), sql_val(r["high"]), sql_val(r["low"]),
-                sql_val(r["prev_close"]), sql_val(r["ltp"]), sql_val(r["chng"]),
-                sql_val(r["pct_chng"]), sql_val(r["volume"]), sql_val(r["value_cr"]),
-                sql_val(r["w52_high"]), sql_val(r["w52_low"]),
-                sql_val(r["d30_pct_chng"]), sql_val(r["d365_pct_chng"]),
-            ])
-            rows.append(f"({vals})")
-        f.write(",\n".join(rows))
-        f.write("\nON CONFLICT (name, trade_date) DO NOTHING;\n")
+            idx_rows.append(f"({sql_val(r['name'])}, {sql_val(r['category'])})")
+        f.write(",\n".join(idx_rows))
+        f.write("\nON CONFLICT (name) DO NOTHING;\n\n")
 
-    print(f"\nWrote {len(index_records)} indices -> {idx_file}")
+        # Equity masters
+        f.write("-- ── Equity Masters (1380) ──\n")
+        f.write("INSERT INTO km_equity_symbols (symbol, index_names) VALUES\n")
+        eq_rows = []
+        for sym in sorted(equity_map.keys()):
+            data = equity_map[sym]
+            eq_rows.append(f"({sql_val(sym)}, {sql_array(sorted(data['index_names']))})")
+        f.write(",\n".join(eq_rows))
+        f.write("\nON CONFLICT (symbol) DO NOTHING;\n")
 
-    # ── Phase 3: Generate equity SQL (split into chunks for SQL Editor) ──
-    eq_cols = "symbol,trade_date,index_names,open,high,low,prev_close,ltp,chng,pct_chng,volume,value_cr,w52_high,w52_low,d30_pct_chng,d365_pct_chng"
+    print(f"\nWrote masters -> {master_file}")
 
-    equity_records = []
-    for sym, data in sorted(equity_map.items()):
-        equity_records.append({
-            "symbol": sym,
-            "trade_date": TRADE_DATE,
-            "index_names": sorted(data["index_names"]),
-            **data["eod"],
-        })
+    # ── Phase 3: Generate INDEX EOD inserts ──
+    idx_eod_file = os.path.join(OUTPUT_DIR, "km_seed_index_eod.sql")
+    with open(idx_eod_file, "w") as f:
+        f.write("-- Auto-generated: index EOD data (14-Feb-2026)\n")
+        f.write("-- Uses subquery to resolve index_id from name\n\n")
+        for r in index_records:
+            f.write(
+                f"INSERT INTO km_index_eod (index_id, trade_date, {EOD_COLS})\n"
+                f"SELECT id, {sql_val(TRADE_DATE)}, {eod_vals(r['eod'])}\n"
+                f"FROM km_index_symbols WHERE name = {sql_val(r['name'])}\n"
+                f"ON CONFLICT (index_id, trade_date) DO NOTHING;\n\n"
+            )
 
-    # Split into files of 500 rows each (Supabase SQL Editor has size limits)
+    print(f"Wrote index EOD -> {idx_eod_file}")
+
+    # ── Phase 4: Generate EQUITY EOD inserts (chunked) ──
+    equity_list = sorted(equity_map.items())
     chunk_size = 500
-    for ci in range(0, len(equity_records), chunk_size):
-        chunk = equity_records[ci : ci + chunk_size]
+
+    for ci in range(0, len(equity_list), chunk_size):
+        chunk = equity_list[ci : ci + chunk_size]
         part = ci // chunk_size + 1
-        eq_file = os.path.join(OUTPUT_DIR, f"km_seed_equity_symbols_part{part}.sql")
+        eq_eod_file = os.path.join(OUTPUT_DIR, f"km_seed_equity_eod_part{part}.sql")
 
-        with open(eq_file, "w") as f:
-            f.write(f"-- Auto-generated: equity symbols EOD part {part} ({len(chunk)} rows)\n")
-            f.write(f"INSERT INTO km_equity_symbols ({eq_cols}) VALUES\n")
-            rows = []
-            for r in chunk:
-                vals = ", ".join([
-                    sql_val(r["symbol"]), sql_val(r["trade_date"]),
-                    sql_array(r["index_names"]),
-                    sql_val(r["open"]), sql_val(r["high"]), sql_val(r["low"]),
-                    sql_val(r["prev_close"]), sql_val(r["ltp"]), sql_val(r["chng"]),
-                    sql_val(r["pct_chng"]), sql_val(r["volume"]), sql_val(r["value_cr"]),
-                    sql_val(r["w52_high"]), sql_val(r["w52_low"]),
-                    sql_val(r["d30_pct_chng"]), sql_val(r["d365_pct_chng"]),
-                ])
-                rows.append(f"({vals})")
-            f.write(",\n".join(rows))
-            f.write("\nON CONFLICT (symbol, trade_date) DO NOTHING;\n")
+        with open(eq_eod_file, "w") as f:
+            f.write(f"-- Auto-generated: equity EOD part {part} ({len(chunk)} rows)\n")
+            f.write("-- Uses subquery to resolve equity_id from symbol\n\n")
+            for sym, data in chunk:
+                f.write(
+                    f"INSERT INTO km_equity_eod (equity_id, trade_date, {EOD_COLS})\n"
+                    f"SELECT id, {sql_val(TRADE_DATE)}, {eod_vals(data['eod'])}\n"
+                    f"FROM km_equity_symbols WHERE symbol = {sql_val(sym)}\n"
+                    f"ON CONFLICT (equity_id, trade_date) DO NOTHING;\n\n"
+                )
 
-        print(f"  Wrote part {part}: {len(chunk)} equities -> {eq_file}")
+        print(f"  Wrote equity EOD part {part}: {len(chunk)} rows -> {eq_eod_file}")
 
-    print(f"\nTotal: {len(equity_records)} equities across {(len(equity_records) - 1) // chunk_size + 1} files")
+    print(f"\nTotal: {len(equity_list)} equities across {(len(equity_list) - 1) // chunk_size + 1} EOD files")
     print("Done!")
 
 
