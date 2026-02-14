@@ -75,7 +75,7 @@ INDEX_YAHOO_MAP = {
     'NIFTY PSU BANK': '^CNXPSUBANK',
     'NIFTY 100': '^CNX100',
     'NIFTY 200': '^CNX200',
-    'NIFTY 500': '^CNX500',
+    'NIFTY 500': '^CRSLDX',
     'NIFTY MIDCAP 50': '^CNXMIDCAP',
     'NIFTY MIDCAP 100': '^CNXMIDCAP100',
     'NIFTY SMLCAP 100': '^CNXSMLCAP100',
@@ -255,6 +255,8 @@ def download_index_history(sb, from_date, to_date, single_name=None):
         name = idx['name']
         idx_id = idx['id']
         vc = idx.get('vendor_codes') or {}
+        if isinstance(vc, str):
+            vc = json.loads(vc)
 
         # Get Yahoo ticker: from vendor_codes or hardcoded map
         yahoo_ticker = vc.get('yahoo') or INDEX_YAHOO_MAP.get(name.upper())
@@ -309,6 +311,8 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None):
         symbol = eq['symbol']
         eq_id = eq['id']
         vc = eq.get('vendor_codes') or {}
+        if isinstance(vc, str):
+            vc = json.loads(vc)
 
         # Yahoo ticker: vendor_codes.yahoo or symbol + ".NS"
         yahoo_ticker = vc.get('yahoo') or f'{symbol}.NS'
