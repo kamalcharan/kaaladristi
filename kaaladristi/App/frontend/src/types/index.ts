@@ -1,3 +1,5 @@
+// ── App Types ──
+
 export type MarketSymbol = 'NIFTY' | 'BANKNIFTY' | 'NIFTYIT' | 'NIFTYFMCG';
 
 export type ViewType = 'dashboard' | 'markets' | 'calendar' | 'transmission' | 'history' | 'settings';
@@ -40,53 +42,95 @@ export interface FactorStats {
   currentlyActive: boolean;
 }
 
-// ── Master Data Types (from Supabase km_ tables) ──
+export interface WeekDay {
+  date: string;
+  dayName: string;
+  riskScore: number;
+  regime: string;
+}
 
-export interface Planet {
+// ── Master Data Types (matching Supabase km_ tables exactly) ──
+
+export interface KmPlanet {
   id: number;
   name: string;
-  vedic_name: string;
+  vedic_name: string | null;
+  category: 'classical' | 'node' | 'outer';
+}
+
+export interface KmNakshatra {
+  id: number;
+  name: string;
+  start_deg: number | null;
+  end_deg: number | null;
+}
+
+export interface KmNakshatraLord {
+  nakshatra_id: number;
+  planet_id: number;
+}
+
+export interface KmZodiacSign {
+  id: number;
+  name: string;
+  element: string | null;
+  start_deg: number | null;
+  end_deg: number | null;
+}
+
+export interface KmZodiacLord {
+  zodiac_id: number;
+  planet_id: number;
+}
+
+export interface KmDayOfWeek {
+  id: number;
+  name: string;
+}
+
+export interface KmDayLord {
+  day_id: number;
+  planet_id: number;
+  is_primary: boolean;
+}
+
+export interface KmSector {
+  id: number;
+  name: string;
+}
+
+export interface KmSectorLord {
+  sector_id: number;
+  planet_id: number;
+}
+
+export interface KmIndexMaster {
+  id: number;
   symbol: string;
-  type: string;
-}
-
-export interface Nakshatra {
-  id: number;
   name: string;
-  start_degree: number;
-  end_degree: number;
-  ruling_planet: string;
-  deity: string;
-  symbol: string;
+  yahoo_ticker: string | null;
 }
 
-export interface ZodiacSign {
-  id: number;
-  name: string;
-  vedic_name: string;
-  start_degree: number;
-  end_degree: number;
-  element: string;
-  ruling_planet: string;
-}
-
-export interface Sector {
-  id: number;
-  name: string;
-  nse_code: string;
-}
-
-export interface IndexMaster {
-  id: number;
-  name: string;
-  symbol: string;
-  exchange: string;
-  index_type: string;
-}
-
-export interface IndexComposition {
+export interface KmIndexComposition {
   id: number;
   index_id: number;
-  sector_id: number;
-  weight_pct: number;
+  stock_symbol: string;
+  sector: string | null;
+  weight_pct: number | null;
+  snapshot_date: string | null;
+}
+
+// ── Joined / Derived Types ──
+
+export interface NakshatraWithLord extends KmNakshatra {
+  lord: KmPlanet | null;
+}
+
+export interface ZodiacWithLord extends KmZodiacSign {
+  lord: KmPlanet | null;
+}
+
+export interface IndexWithComposition extends KmIndexMaster {
+  composition: KmIndexComposition[];
+  sectorBreakdown: { sector: string; totalWeight: number }[];
 }

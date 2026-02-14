@@ -1,15 +1,16 @@
-import { Shield, Activity, Zap, AlertTriangle, ChevronRight, CheckCircle2 } from 'lucide-react';
-import type { DayRiskReport, HistoricalProof } from '@/types';
-import { getRiskColor } from '@/lib/utils';
+import { Shield, Activity, Zap, AlertTriangle, ChevronRight, CheckCircle2, CalendarDays } from 'lucide-react';
+import type { DayRiskReport, HistoricalProof, WeekDay } from '@/types';
+import { cn, getRiskColor, getRiskHex } from '@/lib/utils';
 import { Card } from '@/components/ui';
-import { RiskGauge, FactorCard, RegimeBadge } from '@/components/domain';
+import { RiskGauge, FactorCard, RegimeBadge, MiniBarChart } from '@/components/domain';
 
 interface DashboardViewProps {
   report: DayRiskReport;
   proofs: HistoricalProof[];
+  weekData: WeekDay[];
 }
 
-export default function DashboardView({ report, proofs }: DashboardViewProps) {
+export default function DashboardView({ report, proofs, weekData }: DashboardViewProps) {
   return (
     <div className="space-y-10 animate-fade-in">
       {/* Header */}
@@ -26,22 +27,69 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
         </div>
       </header>
 
-      {/* Hero Risk Gauge */}
-      <Card rounded="xxl" className="p-10 flex flex-col lg:flex-row items-center gap-16 relative overflow-hidden group shadow-2xl">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-600/10 transition-colors duration-700" />
+      {/* ── Main Grid: Hero Gauge + Weekly Preview ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        {/* Hero Risk Gauge */}
+        <Card rounded="xxl" className="p-10 flex flex-col lg:flex-row items-center gap-16 relative overflow-hidden group shadow-2xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-600/10 transition-colors duration-700" />
 
-        <RiskGauge score={report.riskScore} size="hero" />
+          <RiskGauge score={report.riskScore} size="hero" />
 
-        <div className="flex-1 space-y-6 relative z-10">
-          <RegimeBadge regime={report.regime} />
-          <p className="text-lg text-slate-300 leading-relaxed font-medium">
-            {report.explanation}
-          </p>
-          <div className="flex items-center gap-2 text-sm font-bold text-muted bg-black/20 w-fit px-4 py-2 rounded-xl border border-kd-border">
-            <Activity className="w-4 h-4 text-accent-indigo" /> {report.planetarySummary}
+          <div className="flex-1 space-y-6 relative z-10">
+            <RegimeBadge regime={report.regime} />
+            <p className="text-lg text-slate-300 leading-relaxed font-medium">
+              {report.explanation}
+            </p>
+            <div className="flex items-center gap-2 text-sm font-bold text-muted bg-black/20 w-fit px-4 py-2 rounded-xl border border-kd-border">
+              <Activity className="w-4 h-4 text-accent-indigo" /> {report.planetarySummary}
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+
+        {/* 7-Day Preview Sidebar */}
+        <Card rounded="xxl" className="p-6 flex flex-col">
+          <div className="flex items-center gap-2 mb-6">
+            <CalendarDays className="w-4 h-4 text-accent-indigo" />
+            <h3 className="text-sm font-bold text-white">7-Day Outlook</h3>
+          </div>
+
+          {weekData.length > 0 ? (
+            <>
+              <MiniBarChart
+                data={weekData.map(d => d.riskScore)}
+                labels={weekData.map(d => d.dayName)}
+                height={80}
+                className="mb-5"
+              />
+              <div className="space-y-2 flex-1">
+                {weekData.map((day) => (
+                  <div key={day.date} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[10px] font-mono text-muted w-7">{day.dayName}</span>
+                      <span className="text-[10px] font-mono text-secondary">{day.date.slice(5)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-xs font-bold font-mono', getRiskColor(day.riskScore))}>
+                        {day.riskScore}
+                      </span>
+                      <div className="w-8 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${day.riskScore}%`, background: getRiskHex(day.riskScore) }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-xs text-muted">Loading week data...</p>
+            </div>
+          )}
+        </Card>
+      </div>
 
       {/* Factor Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -50,6 +98,30 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
         <FactorCard label="Volatility" value={report.factors.volatility} icon={Zap}           color="bg-risk-amber" />
         <FactorCard label="Deception"  value={report.factors.deception}  icon={AlertTriangle} color="bg-accent-violet" />
       </div>
+
+      {/* Sector Impact Summary */}
+      {report.sectorImpacts.length > 0 && (
+        <Card rounded="xxl" className="p-8">
+          <h3 className="text-sm font-bold text-white mb-6">Sector Sensitivity</h3>
+          <div className="space-y-4">
+            {report.sectorImpacts.map((s) => (
+              <div key={s.sector} className="flex items-center gap-4">
+                <span className="text-xs text-secondary w-24 shrink-0">{s.sector}</span>
+                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden border border-kd-border">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${s.sensitivity}%`, background: getRiskHex(s.sensitivity) }}
+                  />
+                </div>
+                <span className={cn('text-xs font-mono font-bold w-8 text-right', getRiskColor(s.sensitivity))}>
+                  {s.sensitivity}
+                </span>
+                <span className="text-[10px] text-muted font-mono w-12 text-right">{s.weight}%</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Historical Proofs */}
       <Card rounded="xxl" className="p-10 shadow-xl">
@@ -66,11 +138,12 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
           {proofs.map((p, i) => (
             <div
               key={i}
-              className={`min-w-[200px] snap-center p-6 rounded-4xl border transition-all duration-300 hover:scale-[1.02] cursor-pointer ${
+              className={cn(
+                'min-w-[200px] snap-center p-6 rounded-4xl border transition-all duration-300 hover:scale-[1.02] cursor-pointer',
                 i === 0
                   ? 'bg-indigo-500/10 border-indigo-500/40 ring-1 ring-indigo-500/20'
                   : 'bg-slate-950/40 border-kd-border hover:border-white/10'
-              }`}
+              )}
             >
               <div className="flex justify-between items-start mb-6">
                 <span className="text-[10px] font-bold text-muted uppercase font-mono tracking-tighter">{p.date}</span>
@@ -81,11 +154,11 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
                 )}
               </div>
               <div className="mb-6">
-                <p className={`text-4xl font-bold font-mono tracking-tighter ${getRiskColor(p.score)}`}>{p.score}</p>
+                <p className={cn('text-4xl font-bold font-mono tracking-tighter', getRiskColor(p.score))}>{p.score}</p>
                 <p className="text-[9px] font-bold text-muted uppercase mt-1 tracking-widest">Risk Index</p>
               </div>
               <div className="pt-4 border-t border-kd-border">
-                <p className={`text-lg font-bold font-mono ${p.actualReturn < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                <p className={cn('text-lg font-bold font-mono', p.actualReturn < 0 ? 'text-red-400' : 'text-emerald-400')}>
                   {p.actualReturn > 0 ? '+' : ''}{p.actualReturn}%
                 </p>
                 <p className="text-[9px] font-bold text-muted uppercase mt-1 tracking-widest">Price Action</p>
