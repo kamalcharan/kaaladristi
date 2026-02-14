@@ -6,7 +6,7 @@ and inserts into Supabase km_index_eod / km_equity_eod tables.
 
 Prerequisites
 -------------
-1. pip install breeze-connect supabase python-dotenv
+1. pip install breeze-connect requests python-dotenv
 2. Create an app at https://api.icicidirect.com
 3. Set env vars in App/frontend/.env:
      BREEZE_API_KEY=your_api_key
@@ -33,11 +33,13 @@ Usage
 
 import os
 import sys
+import json
 import time
 import argparse
 import urllib.parse
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import requests
 
 # ─── Load environment ────────────────────────────────────────────────────────
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -152,25 +154,73 @@ def init_breeze(session_token: str):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SUPABASE CLIENT
+# SUPABASE REST CLIENT (lightweight, no supabase-py dependency)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def init_supabase():
-    """Initialize Supabase client."""
-    try:
-        from supabase import create_client
-    except ImportError:
-        print('ERROR: supabase not installed. Run: pip install supabase')
-        sys.exit(1)
+class SupabaseREST:
+    """Minimal Supabase PostgREST wrapper using requests."""
 
+    def __init__(self, url: str, key: str):
+        self.base = f'{url.rstrip("/")}/rest/v1'
+        self.headers = {
+            'apikey': key,
+            'Authorization': f'Bearer {key}',
+            'Content-Type': 'application/json',
+        }
+
+    def select(self, table: str, columns: str = '*', filters: dict = None,
+               order: str = None, ilike: tuple = None) -> list:
+        """SELECT rows. Returns list of dicts."""
+        url = f'{self.base}/{table}?select={columns}'
+        if filters:
+            for k, v in filters.items():
+                url += f'&{k}=eq.{v}'
+        if ilike:
+            col, val = ilike
+            url += f'&{col}=ilike.{val}'
+        if order:
+            url += f'&order={order}'
+        resp = requests.get(url, headers=self.headers)
+        resp.raise_for_status()
+        return resp.json()
+
+    def upsert(self, table: str, records: list, on_conflict: str) -> int:
+        """UPSERT rows (insert or update on conflict). Returns count."""
+        url = f'{self.base}/{table}'
+        headers = {
+            **self.headers,
+            'Prefer': f'resolution=merge-duplicates,return=minimal',
+        }
+        # PostgREST uses on_conflict as query param
+        url += f'?on_conflict={on_conflict}'
+        resp = requests.post(url, headers=headers, json=records)
+        resp.raise_for_status()
+        return len(records)
+
+    def insert(self, table: str, record: dict) -> bool:
+        """INSERT single row. Returns True on success."""
+        url = f'{self.base}/{table}'
+        headers = {**self.headers, 'Prefer': 'return=minimal'}
+        resp = requests.post(url, headers=headers, json=record)
+        return resp.status_code in (200, 201)
+
+
+def init_supabase():
+    """Initialize Supabase REST client."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         print('ERROR: VITE_SUPABASE_URL and VITE_SUPABASE_SERVICE_KEY must be set')
         print(f'  .env path: {env_path}')
         sys.exit(1)
 
     print('Connecting to Supabase...')
-    sb = create_client(SUPABASE_URL, SUPABASE_KEY)
-    print('  Connected successfully')
+    sb = SupabaseREST(SUPABASE_URL, SUPABASE_KEY)
+    # Quick connectivity test
+    try:
+        sb.select('km_index_symbols', columns='id', filters=None)
+        print('  Connected successfully')
+    except Exception as e:
+        print(f'  Connection failed: {e}')
+        sys.exit(1)
     return sb
 
 
@@ -294,32 +344,27 @@ def transform_breeze_record(raw: dict, fk_field: str, fk_id: int) -> dict:
     }
 
 
-def upsert_eod_batch(sb, table: str, records: list) -> int:
+def upsert_eod_batch(sb: SupabaseREST, table: str, records: list) -> int:
     """
-    Insert EOD records into Supabase, skipping duplicates.
-    Uses upsert with on_conflict to handle existing trade dates.
+    Upsert EOD records into Supabase, merging on conflict.
     Returns number of successfully inserted records.
     """
     if not records:
         return 0
 
+    on_conflict = 'index_id,trade_date' if 'index_id' in records[0] else 'equity_id,trade_date'
     inserted = 0
+
     for i in range(0, len(records), BATCH_SIZE):
         batch = records[i:i + BATCH_SIZE]
         try:
-            sb.table(table).upsert(
-                batch,
-                on_conflict='index_id,trade_date' if 'index_id' in batch[0] else 'equity_id,trade_date'
-            ).execute()
-            inserted += len(batch)
+            inserted += sb.upsert(table, batch, on_conflict)
         except Exception as e:
-            # If upsert fails, try individual inserts to skip duplicates
+            print(f'    Batch upsert error: {e}')
+            # Fallback: individual inserts to skip duplicates
             for rec in batch:
-                try:
-                    sb.table(table).insert(rec).execute()
+                if sb.insert(table, rec):
                     inserted += 1
-                except Exception:
-                    pass  # duplicate or other error, skip
     return inserted
 
 
@@ -334,11 +379,11 @@ def download_index_eod(breeze, sb, from_date: datetime, to_date: datetime, singl
     print('=' * 60)
 
     # Fetch index masters from Supabase
-    query = sb.table('km_index_symbols').select('id, name, category')
     if single_name:
-        query = query.ilike('name', f'%{single_name}%')
-    result = query.execute()
-    indices = result.data or []
+        indices = sb.select('km_index_symbols', 'id,name,category',
+                            ilike=('name', f'%{single_name}%'))
+    else:
+        indices = sb.select('km_index_symbols', 'id,name,category')
 
     if not indices:
         print('  No indices found in km_index_symbols')
@@ -385,11 +430,12 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
     print('=' * 60)
 
     # Fetch equity masters from Supabase
-    query = sb.table('km_equity_symbols').select('id, symbol')
     if single_symbol:
-        query = query.eq('symbol', single_symbol.upper())
-    result = query.order('symbol').execute()
-    equities = result.data or []
+        equities = sb.select('km_equity_symbols', 'id,symbol',
+                             filters={'symbol': single_symbol.upper()},
+                             order='symbol')
+    else:
+        equities = sb.select('km_equity_symbols', 'id,symbol', order='symbol')
 
     if not equities:
         print('  No equities found in km_equity_symbols')
@@ -493,15 +539,15 @@ def main():
     if args.dry_run:
         print('\n[DRY RUN] Would download the following:\n')
         if args.mode in ('index', 'both'):
-            result = sb.table('km_index_symbols').select('name').execute()
-            names = [r['name'] for r in (result.data or [])]
+            rows = sb.select('km_index_symbols', 'name')
+            names = [r['name'] for r in rows]
             mapped = [n for n in names if n.upper() in INDEX_BREEZE_MAP]
             print(f'  Indices: {len(mapped)} with Breeze mapping out of {len(names)} total')
             for n in mapped:
                 print(f'    {n} -> {INDEX_BREEZE_MAP[n.upper()]}')
         if args.mode in ('equity', 'both'):
-            result = sb.table('km_equity_symbols').select('symbol', count='exact').execute()
-            print(f'  Equities: {result.count} symbols')
+            rows = sb.select('km_equity_symbols', 'symbol')
+            print(f'  Equities: {len(rows)} symbols')
         return
 
     # Download
