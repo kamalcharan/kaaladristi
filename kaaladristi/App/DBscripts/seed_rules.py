@@ -1,5 +1,5 @@
 """
-Seed initial GIVEN rules into the rules table.
+Seed initial GIVEN rules into the Supabase km_rules table.
 These are domain-knowledge rules from traditional market astrology.
 
 Rule categories:
@@ -11,7 +11,35 @@ Rule categories:
 """
 
 import json
-from schema import get_connection, create_schema
+import os
+from dotenv import load_dotenv
+from supabase import create_client
+
+# Load .env (search multiple locations)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+for _env in [
+    os.path.join(_script_dir, '.env'),
+    os.path.join(_script_dir, '..', 'backend', 'engine', '.env'),
+    os.path.join(_script_dir, '..', 'frontend', '.env'),
+]:
+    if os.path.exists(_env):
+        load_dotenv(_env)
+        break
+
+_SUPABASE_URL = os.getenv('SUPABASE_URL') or os.getenv('VITE_SUPABASE_URL')
+_SUPABASE_KEY = (os.getenv('SUPABASE_KEY')
+                 or os.getenv('VITE_SUPABASE_SERVICE_KEY')
+                 or os.getenv('VITE_SUPABASE_ANON_KEY'))
+
+
+def get_supabase():
+    if not _SUPABASE_URL or not _SUPABASE_KEY:
+        raise RuntimeError(
+            "SUPABASE_URL / SUPABASE_KEY not found. "
+            "Set env vars or create .env in DBscripts/, engine/, or frontend/."
+        )
+    return create_client(_SUPABASE_URL, _SUPABASE_KEY)
+
 
 # =============================================================================
 # GIVEN RULES
@@ -342,21 +370,25 @@ GIVEN_RULES = [
 ]
 
 
-def seed_rules(conn):
-    """Seed all given rules."""
+def seed_rules(sb):
+    """Seed all given rules into Supabase km_rules table."""
     loaded = 0
     for rule in GIVEN_RULES:
-        conn.execute(
-            "INSERT OR REPLACE INTO rules "
-            "(code, category, name, description, conditions, signal, strength, "
-            " source, active, historical_note) "
-            "VALUES (:code, :category, :name, :description, :conditions, :signal, "
-            " :strength, 'given', 1, :historical_note)",
-            rule
-        )
+        row = {
+            'code': rule['code'],
+            'category': rule['category'],
+            'name': rule['name'],
+            'description': rule['description'],
+            'conditions': rule['conditions'],
+            'signal': rule['signal'],
+            'strength': rule['strength'],
+            'source': 'given',
+            'active': True,
+            'historical_note': rule['historical_note'],
+        }
+        sb.table('km_rules').upsert(row, on_conflict='code').execute()
         loaded += 1
 
-    conn.commit()
     return loaded
 
 
@@ -365,18 +397,20 @@ def main():
     print("KĀLA-DRISHTI RULES SEED")
     print("=" * 60)
 
-    conn = get_connection()
-    create_schema(conn)
+    sb = get_supabase()
 
     print(f"\nSeeding {len(GIVEN_RULES)} given rules...")
-    loaded = seed_rules(conn)
+    loaded = seed_rules(sb)
     print(f"  {loaded} rules loaded.")
 
     # Verification
     print("\n--- Active Rules ---")
-    rows = conn.execute(
-        "SELECT code, category, signal, strength, name FROM rules WHERE active=1 ORDER BY id"
-    ).fetchall()
+    resp = (sb.table('km_rules')
+            .select('code, category, signal, strength, name')
+            .eq('active', True)
+            .order('id')
+            .execute())
+    rows = resp.data or []
 
     for row in rows:
         print(f"  [{row['code']:35s}] {row['category']:12s} → {row['signal']:15s} "
@@ -384,13 +418,12 @@ def main():
 
     # Category breakdown
     print("\n--- Rules by Category ---")
-    cats = conn.execute(
-        "SELECT category, COUNT(*) as cnt FROM rules WHERE active=1 GROUP BY category ORDER BY cnt DESC"
-    ).fetchall()
-    for cat in cats:
-        print(f"  {cat['category']:15s}: {cat['cnt']} rules")
+    cats = {}
+    for row in rows:
+        cats[row['category']] = cats.get(row['category'], 0) + 1
+    for cat, cnt in sorted(cats.items(), key=lambda x: -x[1]):
+        print(f"  {cat:15s}: {cnt} rules")
 
-    conn.close()
     print("\nRules seed complete.")
 
 
