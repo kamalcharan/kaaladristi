@@ -60,20 +60,57 @@ def get_supabase() -> Client:
 
 _index_id_cache: dict = {}
 
+# Short symbols used by engine scripts → full names in km_index_symbols
+_SYMBOL_TO_NAME = {
+    'NIFTY': 'NIFTY 50',
+    'BANKNIFTY': 'NIFTY BANK',
+    'NIFTYIT': 'NIFTY IT',
+    'NIFTYFMCG': 'NIFTY FMCG',
+    'NIFTYPHARMA': 'NIFTY PHARMA',
+    'NIFTYMETAL': 'NIFTY METAL',
+    'NIFTYREALTY': 'NIFTY REALTY',
+    'NIFTYAUTO': 'NIFTY AUTO',
+    'NIFTYENERGY': 'NIFTY ENERGY',
+    'NIFTYPSU': 'NIFTY PSU BANK',
+    'NIFTYINFRA': 'NIFTY INFRASTRUCTURE',
+    'NIFTYMEDIA': 'NIFTY MEDIA',
+    'NIFTYFINSERV': 'NIFTY FINANCIAL SERVICES',
+}
+
 
 def resolve_index_id(symbol: str) -> int:
-    """Resolve index symbol (e.g. 'NIFTY') to km_index_master.id."""
+    """
+    Resolve index symbol (e.g. 'NIFTY') to km_index_symbols.id.
+
+    km_index_eod.index_id references km_index_symbols(id), which uses
+    full names like 'NIFTY 50'. This maps short engine symbols to those names.
+    """
     if symbol not in _index_id_cache:
         sb = get_supabase()
-        row = (sb.table('km_index_master')
+        full_name = _SYMBOL_TO_NAME.get(symbol, symbol)
+
+        # Try km_index_symbols (the table that km_index_eod references)
+        row = (sb.table('km_index_symbols')
                .select('id')
-               .eq('symbol', symbol)
+               .eq('name', full_name)
                .limit(1)
                .execute())
         if row.data:
             _index_id_cache[symbol] = row.data[0]['id']
         else:
-            raise ValueError(f"Index symbol '{symbol}' not found in km_index_master")
+            # Fallback: try matching the symbol directly as a name
+            row2 = (sb.table('km_index_symbols')
+                    .select('id')
+                    .eq('name', symbol)
+                    .limit(1)
+                    .execute())
+            if row2.data:
+                _index_id_cache[symbol] = row2.data[0]['id']
+            else:
+                raise ValueError(
+                    f"Index '{symbol}' (name='{full_name}') not found in km_index_symbols. "
+                    f"Check that km_index_symbols has this index."
+                )
     return _index_id_cache[symbol]
 
 
@@ -92,6 +129,7 @@ def get_market_returns(symbol: str, start_date: str, end_date: str):
     """
     sb = get_supabase()
     idx = resolve_index_id(symbol)
+    print(f"  [db] Resolved '{symbol}' → index_id={idx}")
 
     # Fetch in pages (Supabase default limit is 1000)
     all_rows = []
@@ -113,6 +151,9 @@ def get_market_returns(symbol: str, start_date: str, end_date: str):
         if len(resp.data) < page_size:
             break
         offset += page_size
+
+    print(f"  [db] km_index_eod: fetched {len(all_rows)} rows for index_id={idx}, "
+          f"{start_date} to {end_date}")
 
     results = []
     for r in all_rows:

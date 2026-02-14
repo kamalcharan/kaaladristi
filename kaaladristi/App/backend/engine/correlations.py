@@ -86,7 +86,13 @@ def run_all_correlations(symbol='NIFTY', start_date='2000-01-01', end_date='2020
     baseline = get_baseline_stats(market_data)
     if not baseline:
         print("No baseline data found!")
-        return []
+        print(f"  get_market_returns('{symbol}', '{start_date}', '{end_date}') returned {len(market_data)} rows")
+        if not market_data:
+            print("  Possible causes:")
+            print("    1. km_index_eod has no data for this date range")
+            print("    2. yfinance_historical.py hasn't been run yet")
+            print("    3. Index symbol not found in km_index_symbols")
+        return [], {}
 
     print(f"Baseline ({symbol}, {start_date} to {end_date}):")
     print(f"  {baseline['total_days']} trading days")
@@ -211,6 +217,10 @@ def main():
     print("=" * 60)
 
     results, baseline = run_all_correlations('NIFTY', '2000-01-01', '2020-12-31')
+
+    if not results:
+        print("\nNo factor results computed. Check the diagnostic messages above.")
+        return
 
     if results:
         save_correlations(results)
