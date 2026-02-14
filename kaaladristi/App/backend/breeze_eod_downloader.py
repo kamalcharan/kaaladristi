@@ -245,12 +245,12 @@ _isec_map = {}
 _isec_loaded = False
 
 
-def load_isec_master():
+def load_isec_master(breeze=None):
     """
-    Download ICICI's NSE script master CSV to build NSE symbol -> ISEC code mapping.
-    The CSV has columns like: Token, ShortName, Series, CompanyName, ExchangeCode, etc.
-    ShortName = ISEC code (what Breeze API expects)
-    ExchangeCode = NSE trading symbol (what we store in km_equity_symbols)
+    Build NSE symbol -> ISEC code mapping. Tries in order:
+    1. Today's local cache
+    2. Breeze SDK's internal stock_script_dict_list (populated by generate_session)
+    3. Download ICICI's public NSE script master CSV
     """
     global _isec_map, _isec_loaded
     if _isec_loaded:
@@ -271,9 +271,55 @@ def load_isec_master():
         except Exception:
             pass
 
+    # Method 1: Try extracting from Breeze SDK internal data
+    if breeze:
+        try:
+            # After generate_session(), SDK stores stock master data internally
+            # Try known attribute names across SDK versions
+            for attr_name in ['stock_script_dict_list', 'nse_stock_script_list',
+                              'token_script_dict', 'tux_to_user_value']:
+                data = getattr(breeze, attr_name, None)
+                if data and isinstance(data, (dict, list)):
+                    print(f'  Found Breeze SDK attribute: {attr_name} ({len(data)} entries)')
+                    if isinstance(data, dict):
+                        # Dict mapping - extract NSE symbol -> ISEC code pairs
+                        for key, val in data.items():
+                            if isinstance(val, dict):
+                                nse_sym = (val.get('exchange_code') or val.get('exchange_code_name')
+                                           or val.get('symbol') or '').strip().upper()
+                                isec = (val.get('short_name') or val.get('isec_code')
+                                        or val.get('stock_code') or '').strip().upper()
+                                if nse_sym and isec:
+                                    _isec_map[nse_sym] = isec
+                            elif isinstance(val, str):
+                                # Could be token -> symbol mapping
+                                pass
+                    elif isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict):
+                                nse_sym = (item.get('exchange_code') or item.get('exchange_code_name')
+                                           or item.get('symbol') or '').strip().upper()
+                                isec = (item.get('short_name') or item.get('isec_code')
+                                        or item.get('stock_code') or '').strip().upper()
+                                series = (item.get('series') or '').strip().upper()
+                                if series and series != 'EQ':
+                                    continue
+                                if nse_sym and isec:
+                                    _isec_map[nse_sym] = isec
+                    if _isec_map:
+                        print(f'  Extracted {len(_isec_map)} ISEC mappings from SDK')
+                        with open(cache_file, 'w') as f:
+                            json.dump({'date': datetime.now().strftime('%Y-%m-%d'), 'map': _isec_map}, f)
+                        _isec_loaded = True
+                        return
+        except Exception as e:
+            print(f'  SDK extraction failed: {e}')
+
+    # Method 2: Download ICICI's public NSE script master CSV
     print('  Downloading ISEC stock master from ICICI Direct...')
     try:
-        resp = requests.get(ISEC_MASTER_URL, timeout=30)
+        hdrs = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        resp = requests.get(ISEC_MASTER_URL, timeout=30, headers=hdrs)
         resp.raise_for_status()
         lines = resp.text.strip().split('\n')
 
@@ -554,7 +600,8 @@ def download_index_eod(breeze, sb, from_date: datetime, to_date: datetime, singl
     print(f'\n  INDEX SUMMARY: {total_records} records inserted, {skipped} indices skipped (no mapping)')
 
 
-def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, single_symbol: str = None):
+def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime,
+                        single_symbol: str = None, breeze_code_override: str = ''):
     """Download EOD data for equities and insert into km_equity_eod."""
     print('\n' + '=' * 60)
     print('DOWNLOADING EQUITY EOD DATA')
@@ -573,7 +620,7 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
         return
 
     # Load ISEC master for stock code resolution
-    load_isec_master()
+    load_isec_master(breeze)
 
     print(f'  Found {len(equities)} equities in database')
     total_records = 0
@@ -589,7 +636,7 @@ def download_equity_eod(breeze, sb, from_date: datetime, to_date: datetime, sing
         saved_breeze = existing_vc.get('breeze', '')
 
         # Resolve NSE symbol to Breeze ISEC stock code
-        breeze_code = saved_breeze or resolve_breeze_code(symbol)
+        breeze_code = breeze_code_override or saved_breeze or resolve_breeze_code(symbol)
         suffix = f' (ISEC: {breeze_code})' if breeze_code != symbol else ''
 
         print(f'\n  [{i}/{len(equities)}] {symbol}{suffix}')
@@ -654,8 +701,16 @@ def main():
         help='Breeze session token (or set BREEZE_SESSION_TOKEN in .env)'
     )
     parser.add_argument(
+        '--breeze-code', type=str, default='',
+        help='Override Breeze stock code (e.g. RELIND for RELIANCE). Use with --symbol'
+    )
+    parser.add_argument(
         '--dry-run', action='store_true',
         help='Connect and list what would be downloaded, but do not fetch data'
+    )
+    parser.add_argument(
+        '--diagnose', action='store_true',
+        help='Print Breeze SDK internal attributes for debugging stock code resolution'
     )
 
     args = parser.parse_args()
@@ -684,6 +739,31 @@ def main():
     breeze = init_breeze(session_token)
     sb = init_supabase()
 
+    # Diagnose mode: print SDK internals for debugging
+    if args.diagnose:
+        print('\n[DIAGNOSE] Breeze SDK internal attributes:\n')
+        for attr in sorted(dir(breeze)):
+            if attr.startswith('_'):
+                continue
+            val = getattr(breeze, attr, None)
+            if callable(val):
+                continue
+            type_name = type(val).__name__
+            if isinstance(val, (dict, list)):
+                print(f'  {attr}: {type_name} ({len(val)} entries)')
+                # Show first 3 entries as sample
+                if isinstance(val, dict):
+                    for k in list(val.keys())[:3]:
+                        print(f'    [{k}] = {val[k]}')
+                elif isinstance(val, list) and val:
+                    for item in val[:3]:
+                        print(f'    {item}')
+            elif isinstance(val, str) and len(val) < 200:
+                print(f'  {attr}: {type_name} = {val}')
+            else:
+                print(f'  {attr}: {type_name}')
+        return
+
     if args.dry_run:
         print('\n[DRY RUN] Would download the following:\n')
         if args.mode in ('index', 'both'):
@@ -703,7 +783,8 @@ def main():
         download_index_eod(breeze, sb, from_dt, to_dt, single_name=args.symbol)
 
     if args.mode in ('equity', 'both'):
-        download_equity_eod(breeze, sb, from_dt, to_dt, single_symbol=args.symbol)
+        download_equity_eod(breeze, sb, from_dt, to_dt, single_symbol=args.symbol,
+                            breeze_code_override=args.breeze_code)
 
     print('\n' + '=' * 60)
     print('DOWNLOAD COMPLETE')
