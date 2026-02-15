@@ -2037,3 +2037,91 @@ WEEK 4+:   Engine Phase 3-7             ║ UI Phase 2-9
 ---
 
 *This UI/UX plan extends the Engine Build Plan. Both are living documents — update the Decision Logs as choices are made during execution.*
+
+---
+
+## SESSION BOOKMARK — 15 Feb 2026
+
+### Status: READY TO MERGE TO MAIN
+
+**Branch**: `claude/init-project-code-QyjXu`
+**Last commit**: `a7692a6` — Restore original dashboard layout with mock data fallback
+**Merge conflicts**: Resolved locally (useEodData.ts, useRiskData.ts, DashboardView.tsx)
+
+---
+
+### What Was Completed This Session
+
+#### Engine (Backend)
+| Item | Commits | Status |
+|------|---------|--------|
+| Ephemeris generator (1990–2030) | `23458f0`, `c7c1927` | Code ready, output generated |
+| Panchang generator (1990–2030) | `157882f`, `a3853c4` | Code ready, output generated |
+| All 4 engines migrated to Supabase | `31fff56` | SQLite fully removed |
+| Risk engine: all symbols | `363724f` | Fixed (was NIFTY-only) |
+| Rule seeder (km_rules) | `85cd5cf` | Working |
+| RLS policies for rule tables | `bd259f2` | Applied |
+| DB scripts: ephemeris tables | `faac3ca` | SQL ready |
+| DB scripts: computed tables | `b21462e` | SQL ready |
+
+#### UI/UX Phase 0: Scale Infrastructure
+| Item | Commits | Status |
+|------|---------|--------|
+| Snapshot table + generator | `3f0f094`, `77fc387`, `1a062cb` | SQL-based generator in Supabase |
+| Snapshot seed data (4 symbols) | `8555361` | Seeded |
+| Edge Functions (snapshot, calendar, eod-chart, proofs) | `3f0f094`, `da6bfd8` | Self-contained, deployable |
+| Edge function env fix | `8855250`, `2f45baf` | Fixed SUPABASE_ prefix + URL fallback |
+| .env.example added | `2f45baf` | No secrets in frontend |
+
+#### UI/UX Phase 1–2: Dashboard
+| Item | Commits | Status |
+|------|---------|--------|
+| Dual-mode hooks (snapshot + mock fallback) | `3f0f094`, `a7692a6` | useEodData, useRiskData, useSnapshot |
+| Date picker + last trading day default | `58e2e80`, `49b0d8c` | Working |
+| Panchang strip | `58e2e80` | Working (visible to all users) |
+| Events banner + aspects (admin-only) | `58e2e80` | Working |
+| Signal panel (admin-only) | `58e2e80` | Working |
+| 2-column layout | `58e2e80` | Working |
+| Risk gauge redesign (posture-first) | `99e204b` | Institutional tone |
+| AI chat widget (Gemini) | `a0d322a` | Working |
+| Index Overview + CalendarStrip | `661a3d8` | 5 instruments, admin/user gates |
+| Detail page with chart + tech confluence | `63faacf` | Built then reverted to mock fallback |
+| Mock data fallback restored | `a7692a6` | Dashboard works without live snapshots |
+
+---
+
+### What's NOT Done Yet (Engine — tables still empty in Supabase)
+
+These generators have **code written** but have **never been run** against Supabase:
+
+1. **`generate_ephemeris.py`** — needs to run for 1990–2030, populates: `planetary_positions`, `planetary_aspects`, `astro_events`, `moon_intraday`
+2. **`generate_panchang.py`** — needs to run for 1990–2030, populates: `daily_panchang`
+3. **`correlations.py`** — needs ephemeris + market data → `factor_correlation_stats`
+4. **`risk_engine.py`** — needs ephemeris + moon → `risk_scores`
+5. **`signal_engine.py`** — needs panchang + positions + aspects + rules → `rule_signals`
+6. **`discovery_engine.py`** — needs panchang + market → `candidate_rules`
+
+**Dependency chain**: Run in order 1 → 2 → 3 → 4 → 5 → 6
+
+Until these run, the frontend uses **mock/seeded data**. The snapshot architecture is ready to serve real data once the engine pipeline populates the tables.
+
+---
+
+### Next Session — Pick Up Here
+
+1. **Merge `claude/init-project-code-QyjXu` → `main`** (conflicts resolved, ready to merge)
+2. **Engine Phase 1**: Run `generate_ephemeris.py` against Supabase (1990–2030) — this is the critical path blocker
+3. **Engine Phase 1**: Run `generate_panchang.py` against Supabase (1990–2030)
+4. **Engine Phase 2–4**: Run correlation → risk → signal engines in sequence
+5. **Run snapshot generator**: `bulk_generate_snapshots()` to backfill `km_daily_snapshots` with real data
+6. **Flip `VITE_DATA_MODE=snapshot`**: Frontend automatically switches from mock to real data
+7. Continue with **UI/UX Phase 3** (Calendar View) and **Phase 4** (Transmission View)
+
+---
+
+### Key Architecture Decisions Locked In
+- **Snapshot-first**: One pre-computed JSONB blob per (date, symbol) — no per-user queries
+- **Dual-mode hooks**: `VITE_DATA_MODE` env var toggles between `snapshot` (Edge Functions) and `mock` (seeded random)
+- **Edge Functions**: 4 functions deployed (snapshot, calendar, eod-chart, proofs) — thin caching layer over Supabase
+- **Admin/User gates**: Planetary events, aspects, signals visible to admin only; panchang + risk visible to all
+- **Mock fallback**: Dashboard always works even without live data — critical for development
