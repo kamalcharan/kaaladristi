@@ -2090,32 +2090,38 @@ WEEK 4+:   Engine Phase 3-7             ║ UI Phase 2-9
 
 ---
 
-### What's NOT Done Yet (Engine — tables still empty in Supabase)
+### Supabase Table Status (verified 15 Feb 2026)
 
-These generators have **code written** but have **never been run** against Supabase:
+| Table | Rows | Status |
+|-------|------|--------|
+| `km_planetary_positions` | 134,775 | **Full** — 1990–2030 loaded |
+| `km_planetary_aspects` | 31,938 | **Full** |
+| `km_astro_events` | 56,242 | **Full** |
+| `km_moon_intraday` | 59,900 | **Full** |
+| `km_daily_panchang` | 14,975 | **Full** — 1990–2030 loaded |
+| `km_risk_scores` | 13,004 | **Populated** |
+| `km_factor_correlation_stats` | 29 | **Populated** |
+| `km_daily_snapshots` | 13,152 | **Populated** |
+| `km_index_eod` | 73,259 | **Populated** — market data loaded |
+| `km_rules` | 18 | **Seeded** — domain rules |
+| `km_candidate_rules` | 12 | **Populated** |
+| `km_rule_signals` | 0 | **EMPTY** — signal engine not yet run |
+| `km_sector_sensitivity` | 0 | **EMPTY** — sector mapping not yet run |
 
-1. **`generate_ephemeris.py`** — needs to run for 1990–2030, populates: `planetary_positions`, `planetary_aspects`, `astro_events`, `moon_intraday`
-2. **`generate_panchang.py`** — needs to run for 1990–2030, populates: `daily_panchang`
-3. **`correlations.py`** — needs ephemeris + market data → `factor_correlation_stats`
-4. **`risk_engine.py`** — needs ephemeris + moon → `risk_scores`
-5. **`signal_engine.py`** — needs panchang + positions + aspects + rules → `rule_signals`
-6. **`discovery_engine.py`** — needs panchang + market → `candidate_rules`
-
-**Dependency chain**: Run in order 1 → 2 → 3 → 4 → 5 → 6
-
-Until these run, the frontend uses **mock/seeded data**. The snapshot architecture is ready to serve real data once the engine pipeline populates the tables.
+**Summary**: Engine Phases 1–3 and 5 (discovery) have been run. Only **2 tables remain empty**:
+- `km_rule_signals` — needs `signal_engine.py` (Phase 4)
+- `km_sector_sensitivity` — needs sector mapping pipeline
 
 ---
 
 ### Next Session — Pick Up Here
 
 1. **Merge `claude/init-project-code-QyjXu` → `main`** (conflicts resolved, ready to merge)
-2. **Engine Phase 1**: Run `generate_ephemeris.py` against Supabase (1990–2030) — this is the critical path blocker
-3. **Engine Phase 1**: Run `generate_panchang.py` against Supabase (1990–2030)
-4. **Engine Phase 2–4**: Run correlation → risk → signal engines in sequence
-5. **Run snapshot generator**: `bulk_generate_snapshots()` to backfill `km_daily_snapshots` with real data
-6. **Flip `VITE_DATA_MODE=snapshot`**: Frontend automatically switches from mock to real data
-7. Continue with **UI/UX Phase 3** (Calendar View) and **Phase 4** (Transmission View)
+2. **Engine Phase 4**: Run `signal_engine.py` → populate `km_rule_signals`
+3. **Sector sensitivity**: Run sector mapping pipeline → populate `km_sector_sensitivity`
+4. **Flip `VITE_DATA_MODE=snapshot`**: Frontend switches from mock to real snapshot data (13,152 snapshots already exist)
+5. **Validate snapshot quality**: Spot-check that snapshot JSON contains real risk scores, panchang, planets (not seed/mock data)
+6. Continue with **UI/UX Phase 3** (Calendar View) and **Phase 4** (Transmission View)
 
 ---
 
