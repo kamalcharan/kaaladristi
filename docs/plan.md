@@ -633,8 +633,61 @@ Every phase has explicit verification criteria because:
 ## "Build the Face" — From Raw Intelligence to Actionable Insight
 
 **Created**: 15 Feb 2026
+**Updated**: 15 Feb 2026 — Added Scale Infrastructure (Edge Layer + Snapshots) for 2000+ users
 **Focus**: Frontend experience — dashboards, visualizations, interactions, and real-time data presentation
 **Philosophy**: Data → Insight → Context → Action — every pixel earns its place
+**Scale Target**: 2000+ concurrent users, all hitting the same daily data
+
+---
+
+## SCALE ARCHITECTURE OVERVIEW
+
+### The Problem
+```
+TODAY (breaks at ~200 users):
+  2000 browsers ──→ Supabase REST API ──→ PostgreSQL
+                    (no caching, no edge layer)
+                    (every user = identical query hitting DB)
+```
+
+### The Solution: Edge Layer + Daily Snapshots
+```
+AFTER (handles 2000+ users):
+
+  Python Pipeline (runs daily 7:30 AM IST)
+      ↓
+  Generates Snapshots (pre-computed JSON per date/symbol)
+      ↓
+  Upserts to km_daily_snapshots table in Supabase
+      ↓
+  Supabase Edge Function "/api/snapshot" (Deno)
+      ├── In-memory cache (Map with 5-min TTL)
+      ├── Reads snapshot from km_daily_snapshots
+      └── Returns JSON to ALL 2000 users from cache
+      ↓
+  React App (React Query, 5-min stale time)
+      ├── Single fetch per (date, symbol) → cached for 5 min
+      ├── Master data → cached forever (Infinity gcTime)
+      └── EOD charts → paginated by date range (not .range(0,9999))
+```
+
+### Why Snapshots?
+- **Dashboard data is identical for all users** — risk score, panchang, signals, factors for "NIFTY on 15-Feb-2026" is the same JSON for everyone
+- **One pre-computed blob** replaces 6+ separate table queries
+- **Edge Function cache** means 2000 users = 1 DB read (cache hit for the rest)
+- **CDN-friendly** — snapshots are immutable once computed (yesterday's score never changes)
+
+### Query Reduction Math
+| Without Snapshots (per user) | With Snapshots (per user) |
+|-----|------|
+| 1. `risk_scores WHERE date/symbol` | 1. `GET /api/snapshot?date=X&symbol=Y` |
+| 2. `daily_panchang WHERE date` | (everything in one blob) |
+| 3. `planetary_positions WHERE date` | |
+| 4. `planetary_aspects WHERE date` | |
+| 5. `astro_events WHERE date range` | |
+| 6. `rule_signals JOIN rules WHERE date` | |
+| 7. `sector_sensitivity WHERE date/symbol` | |
+| **= 7 queries × 2000 users = 14,000 DB queries** | **= 1 cached edge response × 2000 users = ~1 DB query** |
 
 ---
 
@@ -654,7 +707,7 @@ Every phase has explicit verification criteria because:
 | Animations | Framer Motion | 12.x |
 | UI Primitives | Radix UI | Latest |
 | Icons | Lucide React | 0.562 |
-| Backend | Supabase (Auth + DB) | 2.95 |
+| Backend | Supabase (Auth + DB + Edge Functions) | 2.95 |
 | AI | Google Gemini | 1.34 |
 
 ### What's BUILT (frontend code exists)
@@ -682,25 +735,25 @@ Every phase has explicit verification criteria because:
 ### What's MOCK (needs real data connection)
 | Data Layer | Current Source | Target Source |
 |-----------|---------------|--------------|
-| Daily Risk Score | `services/riskData.ts` (seeded random) | `risk_scores` table (Phase 3 output) |
-| Factor Breakdown | `services/riskData.ts` (seeded random) | `risk_scores` table (structural/momentum/volatility/deception) |
-| 7-Day Outlook | `services/riskData.ts` (seeded random) | `risk_scores` table (7-day window) |
-| Historical Proofs | `services/riskData.ts` (seeded random) | `risk_scores` + `km_index_eod` (joined) |
-| Sector Impacts | Hardcoded in DashboardView | `sector_sensitivity` table (Phase 2+ output) |
-| AI Explanation | Not connected | Gemini API via `geminiService.ts` |
-| Rule Signals | Not shown yet | `rule_signals` table (Phase 4 output) |
-| Panchang Display | Not shown yet | `daily_panchang` table (Phase 1 output) |
-| Planetary Positions | Not shown yet | `planetary_positions` table (Phase 1 output) |
+| Daily Risk Score | `services/riskData.ts` (seeded random) | **Snapshot** → `km_daily_snapshots.risk` |
+| Factor Breakdown | `services/riskData.ts` (seeded random) | **Snapshot** → `km_daily_snapshots.risk.factors` |
+| 7-Day Outlook | `services/riskData.ts` (seeded random) | **Snapshot** → `km_daily_snapshots.outlook` |
+| Historical Proofs | `services/riskData.ts` (seeded random) | **Edge Function** → `/api/proofs?symbol=X` |
+| Sector Impacts | Hardcoded in DashboardView | **Snapshot** → `km_daily_snapshots.sectors` |
+| AI Explanation | Not connected | **Snapshot** → `km_daily_snapshots.explanation` (pre-generated) |
+| Rule Signals | Not shown yet | **Snapshot** → `km_daily_snapshots.signals` |
+| Panchang Display | Not shown yet | **Snapshot** → `km_daily_snapshots.panchang` |
+| Planetary Positions | Not shown yet | **Snapshot** → `km_daily_snapshots.planets` |
 
 ### What's MISSING (views not built)
 | View | Priority | Depends On |
 |------|----------|-----------|
-| Calendar (Panchang + Risk) | High | Phase 1 data |
-| Transmission (Factor Flow) | Medium | Phase 2 + 3 data |
-| Backtest (Accuracy Reports) | Medium | Phase 6 data |
-| Rule Explorer (Admin) | Low | Phase 4 data |
-| Discovery Dashboard (Admin) | Low | Phase 5 data |
-| Notifications / Alerts | Low | Phase 7 daily pipeline |
+| Calendar (Panchang + Risk) | High | Phase 0 (Edge) + Engine Phase 1 data |
+| Transmission (Factor Flow) | Medium | Engine Phase 2 + 3 data |
+| Backtest (Accuracy Reports) | Medium | Engine Phase 6 data |
+| Rule Explorer (Admin) | Low | Engine Phase 4 data |
+| Discovery Dashboard (Admin) | Low | Engine Phase 5 data |
+| Notifications / Alerts | Low | Engine Phase 7 daily pipeline |
 
 ---
 
@@ -746,75 +799,463 @@ Text Muted:     rgba(255,255,255,0.40)
 
 ---
 
+## UI/UX PHASE 0: SCALE INFRASTRUCTURE
+### "Build the highway before the traffic arrives"
+
+**Goal**: Create the Edge Function layer, daily snapshot system, DB optimizations, and security hardening — so every subsequent phase is scale-ready from day one.
+
+**Depends On**: Engine Phase 1 (tables exist) — but infrastructure can be built in parallel
+
+**Scale Target**: 2000+ concurrent users, <2s Dashboard load, <1 DB query per user per page load
+
+---
+
+#### Step 0.1 — Daily Snapshot Table
+
+Create `km_daily_snapshots` — the **single pre-computed JSON blob** that powers the entire Dashboard for a given (date, symbol).
+
+**SQL**: `App/DBscripts/km_daily_snapshots.sql`
+```sql
+CREATE TABLE km_daily_snapshots (
+  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  date        DATE NOT NULL,
+  symbol      TEXT NOT NULL,
+  version     INT NOT NULL DEFAULT 1,
+  snapshot    JSONB NOT NULL,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(date, symbol)
+);
+
+CREATE INDEX idx_snapshots_date_symbol ON km_daily_snapshots (date, symbol);
+CREATE INDEX idx_snapshots_date ON km_daily_snapshots (date);
+
+ALTER TABLE km_daily_snapshots ENABLE ROW LEVEL SECURITY;
+-- Public read (same data for all users)
+CREATE POLICY "snapshots_read" ON km_daily_snapshots FOR SELECT USING (true);
+-- Only service role can write (pipeline only)
+CREATE POLICY "snapshots_write" ON km_daily_snapshots FOR INSERT WITH CHECK (false);
+CREATE POLICY "snapshots_update" ON km_daily_snapshots FOR UPDATE WITH CHECK (false);
+```
+
+**Snapshot JSON structure** (one blob per date/symbol):
+```json
+{
+  "date": "2026-02-15",
+  "symbol": "NIFTY",
+  "version": 1,
+  "risk": {
+    "composite_score": 67,
+    "regime": "distribution",
+    "structural": 18,
+    "momentum": 15,
+    "volatility": 20,
+    "deception": 14,
+    "explanation": "Elevated risk due to Mars-Saturn square..."
+  },
+  "panchang": {
+    "tithi_num": 10, "tithi_name": "Dashami", "paksha": "Shukla",
+    "nakshatra_name": "Rohini", "nakshatra_pada": 3,
+    "yoga_name": "Siddha", "vara": "Guru",
+    "dlnl_match": true, "is_sankranti": false,
+    "sunrise": "06:42"
+  },
+  "planets": [
+    {"planet": "Sun", "longitude": 326.42, "sign": "Aquarius", "nakshatra": "Shatabhisha", "retrograde": false},
+    {"planet": "Mercury", "longitude": 318.11, "sign": "Aquarius", "nakshatra": "Dhanishtha", "retrograde": true},
+    ...
+  ],
+  "aspects": [
+    {"planet_1": "Mars", "planet_2": "Saturn", "aspect_type": "square", "orb": 0.8, "exact": true}
+  ],
+  "events": [
+    {"event_type": "retrograde_start", "planet": "Mercury", "severity": "high", "day_number": 12, "total_days": 21}
+  ],
+  "signals": {
+    "net_score": 2.4,
+    "classification": "mildly_bullish",
+    "fired_count": 5,
+    "total_rules": 18,
+    "rules": [
+      {"code": "DLNL_001", "name": "Day Lord = Nakshatra Lord", "signal": "bullish", "strength": 3},
+      {"code": "ASP_001", "name": "Mars-Saturn Square", "signal": "bearish", "strength": 4}
+    ]
+  },
+  "sectors": [
+    {"sector": "Banking", "volatility_multiplier": 1.3, "direction": "bearish"},
+    {"sector": "IT", "volatility_multiplier": 1.5, "direction": "bearish"}
+  ],
+  "outlook": [
+    {"date": "2026-02-15", "score": 67, "regime": "distribution"},
+    {"date": "2026-02-16", "score": 58, "regime": "expansion"},
+    ...
+  ],
+  "market": {
+    "close": 22456.80, "prev_close": 22521.35,
+    "change": -64.55, "pct_change": -0.29,
+    "high": 22589.10, "low": 22401.50,
+    "w52_high": 24150.00, "w52_low": 19500.00
+  }
+}
+```
+
+**Why JSONB?**: One row, one read, one response. No joins. Postgres JSONB is indexed and fast. The snapshot is pre-computed — no runtime aggregation needed.
+
+---
+
+#### Step 0.2 — Snapshot Generator (Python)
+
+**File**: `App/backend/snapshot_generator.py`
+
+**Purpose**: Run after the daily pipeline completes — reads from all computed tables, builds the JSON blob, upserts to `km_daily_snapshots`.
+
+**Logic**:
+```
+for each symbol in [NIFTY, BANKNIFTY, NIFTYIT, NIFTYFMCG]:
+  for each date in [today, today+1, ..., today+6]:  # 7-day outlook window
+    risk   = SELECT * FROM km_risk_scores WHERE date=D AND symbol=S
+    panch  = SELECT * FROM km_daily_panchang WHERE date=D
+    planets = SELECT * FROM km_planetary_positions WHERE date=D
+    aspects = SELECT * FROM km_planetary_aspects WHERE date=D
+    events = SELECT * FROM km_astro_events WHERE event_date=D
+    signals = SELECT rs.*, r.* FROM km_rule_signals rs JOIN km_rules r ON ...
+    sectors = SELECT * FROM km_sector_sensitivity WHERE ...
+    market = SELECT * FROM km_index_eod WHERE trade_date=D AND index_id=...
+    explanation = generate_explanation(risk, panch, events)  # template-based or Gemini
+
+    snapshot = build_snapshot_json(risk, panch, planets, aspects, events, signals, sectors, market)
+    UPSERT INTO km_daily_snapshots (date, symbol, snapshot) VALUES (D, S, snapshot)
+```
+
+**Runs**: Daily at 7:30 AM IST (after ephemeris + risk engine pipeline completes)
+**For 4 symbols × 7 days = 28 snapshots generated per run** (takes ~30 seconds)
+**Backfill**: Can run historically to pre-generate snapshots for all past dates
+
+**Explanation Generation** (embedded in snapshot, not runtime Gemini call):
+- **Template-based first**: "Elevated risk ({score}) driven primarily by {top_factor}. {regime_description}. {notable_event_if_any}."
+- **Gemini enhancement (optional)**: For today's snapshot only, call Gemini to polish the explanation
+- **Stored in snapshot**: The explanation is cached — no per-user Gemini API calls
+
+---
+
+#### Step 0.3 — Supabase Edge Functions (API Layer)
+
+**Directory**: `App/supabase/functions/`
+
+**Purpose**: Thin Deno-based edge functions that serve snapshots with in-memory caching. These are the ONLY endpoints the frontend calls for Dashboard data.
+
+**Edge Function 1: `api/snapshot`**
+```typescript
+// supabase/functions/snapshot/index.ts
+// GET /api/snapshot?date=2026-02-15&symbol=NIFTY
+
+const cache = new Map<string, { data: any; expires: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  const date = url.searchParams.get('date');
+  const symbol = url.searchParams.get('symbol') || 'NIFTY';
+
+  const cacheKey = `${date}:${symbol}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() < cached.expires) {
+    return new Response(JSON.stringify(cached.data), {
+      headers: { 'Content-Type': 'application/json', 'X-Cache': 'HIT' }
+    });
+  }
+
+  // One DB query — returns the pre-computed snapshot
+  const { data, error } = await supabase
+    .from('km_daily_snapshots')
+    .select('snapshot')
+    .eq('date', date)
+    .eq('symbol', symbol)
+    .single();
+
+  if (data) {
+    cache.set(cacheKey, { data: data.snapshot, expires: Date.now() + CACHE_TTL });
+  }
+
+  return new Response(JSON.stringify(data?.snapshot || null), {
+    headers: { 'Content-Type': 'application/json', 'X-Cache': 'MISS' }
+  });
+});
+```
+
+**Edge Function 2: `api/calendar`**
+```typescript
+// GET /api/calendar?year=2026&month=2&symbol=NIFTY
+// Returns 28-31 mini-snapshots for the entire month (for CalendarView)
+// Cached per month — month data is immutable for past months
+
+const { data } = await supabase
+  .from('km_daily_snapshots')
+  .select('date, snapshot->risk->composite_score, snapshot->risk->regime, snapshot->panchang')
+  .eq('symbol', symbol)
+  .gte('date', monthStart)
+  .lte('date', monthEnd);
+```
+
+**Edge Function 3: `api/eod-chart`**
+```typescript
+// GET /api/eod-chart?symbol=NIFTY&from=2025-01-01&to=2026-02-15
+// Returns paginated EOD data for charts (replaces .range(0, 9999))
+// Downsamples to max 500 points server-side for chart performance
+
+const { data } = await supabase
+  .from('km_index_eod')
+  .select('trade_date, open, high, low, close, volume')
+  .eq('index_id', indexId)
+  .gte('trade_date', from)
+  .lte('trade_date', to)
+  .order('trade_date', { ascending: true });
+
+// Downsample if > 500 rows (LTTB algorithm or simple every-nth)
+return downsample(data, 500);
+```
+
+**Edge Function 4: `api/proofs`**
+```typescript
+// GET /api/proofs?symbol=NIFTY&regime=capital_protection&limit=20
+// Returns historical accuracy proofs (pre-computed, cached 1hr)
+// Joins risk_scores + km_index_eod — expensive but cached
+
+// Cache for 1 hour — proofs don't change until new data comes in
+```
+
+**Deployment**: `supabase functions deploy snapshot calendar eod-chart proofs`
+
+---
+
+#### Step 0.4 — Database Index Optimizations
+
+**File**: `App/DBscripts/km_scale_indexes.sql`
+
+Add missing compound indexes identified during the scale audit:
+
+```sql
+-- CRITICAL: km_index_eod queries almost always filter by (index_id, trade_date)
+-- Current: separate indexes on each column → sequential scan for combined queries
+-- Fix: compound index for the most common access pattern
+CREATE INDEX IF NOT EXISTS idx_index_eod_compound
+  ON km_index_eod (index_id, trade_date DESC);
+
+-- Same for equities
+CREATE INDEX IF NOT EXISTS idx_equity_eod_compound
+  ON km_equity_eod (equity_id, trade_date DESC);
+
+-- Snapshot lookups (primary access path for frontend)
+-- Already covered by UNIQUE(date, symbol), but add explicit for clarity
+-- The UNIQUE constraint creates an implicit index
+
+-- Calendar view: month-range queries on snapshots
+CREATE INDEX IF NOT EXISTS idx_snapshots_month
+  ON km_daily_snapshots (symbol, date);
+```
+
+**Drop redundant indexes** (the compound index subsumes the single-column index):
+```sql
+-- After verifying compound index is used by query planner:
+-- DROP INDEX IF EXISTS idx_index_eod_index;  -- subsumed by compound
+-- DROP INDEX IF EXISTS idx_equity_eod_equity; -- subsumed by compound
+```
+
+---
+
+#### Step 0.5 — Security Hardening
+
+**Critical fixes before any user sees the app**:
+
+1. **Remove service key from frontend `.env`**:
+   ```
+   # App/frontend/.env
+   VITE_SUPABASE_URL=https://xxx.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJ...
+   # DELETE: VITE_SUPABASE_SERVICE_KEY (MUST NOT be in frontend code)
+   ```
+   - Service key lives ONLY in backend `.env` and Supabase Edge Function secrets
+   - Run `git log --all -p -- '*.env'` to check if it was ever committed — if so, rotate the key
+
+2. **Lock down rule tables** (currently any authenticated user can INSERT/UPDATE/DELETE):
+   ```sql
+   -- App/DBscripts/km_rule_security.sql
+   DROP POLICY IF EXISTS "allow_insert_rules" ON km_rules;
+   DROP POLICY IF EXISTS "allow_update_rules" ON km_rules;
+   DROP POLICY IF EXISTS "allow_delete_rules" ON km_rules;
+
+   CREATE POLICY "admin_write_rules" ON km_rules
+     FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+   -- Same for km_rule_signals and km_candidate_rules
+   ```
+
+3. **Rate limiting on Edge Functions**:
+   ```typescript
+   // Simple per-IP rate limiter in edge functions
+   const RATE_LIMIT = 60; // requests per minute per IP
+   const rateLimiter = new Map<string, { count: number; resetAt: number }>();
+   ```
+
+4. **CORS configuration**:
+   ```typescript
+   // Edge functions only accept requests from our domain
+   const ALLOWED_ORIGINS = ['https://kaaladristi.com', 'http://localhost:5173'];
+   ```
+
+---
+
+#### Step 0.6 — Frontend Caching Strategy (React Query Tuning)
+
+Update all hooks to work with Edge Functions and optimize cache times for scale:
+
+| Data Type | Source | staleTime | gcTime | Refetch |
+|-----------|--------|-----------|--------|---------|
+| **Daily Snapshot** | Edge: `/api/snapshot` | 5 min | 30 min | On window focus |
+| **Calendar Month** | Edge: `/api/calendar` | 30 min | 2 hours | Never (immutable past) |
+| **EOD Chart** | Edge: `/api/eod-chart` | 10 min | 30 min | On range change |
+| **Master Data** | Direct Supabase | 1 hour | Infinity | Once per session |
+| **Historical Proofs** | Edge: `/api/proofs` | 1 hour | 2 hours | Never |
+| **User Profile** | Direct Supabase | 5 min | 30 min | On auth change |
+
+**Key changes from current**:
+- EOD: Replace `.range(0, 9999)` with Edge Function that paginates by date range
+- Risk/Panchang/Signals: All from snapshot (1 fetch, not 6)
+- Calendar: Batch fetch for entire month (not per-day queries)
+- Debounce symbol/date changes: 300ms debounce before fetching
+
+---
+
+#### Step 0.7 — Supabase Connection Pooler (Supavisor)
+
+Enable Supabase's built-in connection pooler for burst traffic:
+
+- **Supabase Dashboard** → Settings → Database → Connection Pooling → Enable
+- **Mode**: Transaction mode (recommended for serverless/edge functions)
+- **Pool size**: Default (Supabase manages based on plan)
+- **Edge functions**: Use the pooler connection string (port 6543) instead of direct (port 5432)
+- **Frontend (REST API)**: Already pooled by Supabase's PostgREST — no change needed
+
+---
+
+**Phase 0 Exit Criteria**:
+- [ ] `km_daily_snapshots` table created with RLS
+- [ ] `snapshot_generator.py` generates snapshots for all 4 symbols × 7 days
+- [ ] Edge Function `/api/snapshot` serves cached snapshots with <100ms response
+- [ ] Edge Function `/api/calendar` serves month data
+- [ ] Edge Function `/api/eod-chart` serves paginated + downsampled EOD data
+- [ ] Edge Function `/api/proofs` serves cached historical accuracy
+- [ ] Compound indexes added to `km_index_eod` and `km_equity_eod`
+- [ ] Service key removed from frontend `.env`
+- [ ] Rule tables locked to admin-only writes
+- [ ] Rate limiting active on edge functions
+- [ ] React Query hooks updated for edge function endpoints
+- [ ] Load test: 100 concurrent requests to `/api/snapshot` → all return <200ms
+
+---
+
 ## UI/UX PHASE 1: DATA CONNECTION LAYER
 ### "Swap mock for real — make the dashboard breathe real data"
 
-**Goal**: Replace all mock/seeded data services with real Supabase queries. The frontend already renders beautifully — it just needs real numbers.
+**Goal**: Replace all mock/seeded data services with real data from Edge Functions + snapshots. The frontend already renders beautifully — it just needs real numbers from the pre-computed snapshot.
 
-**Depends On**: Engine Phase 1 (ephemeris/panchang tables populated) + Phase 3 (risk_scores populated)
+**Depends On**: Phase 0 (Edge Functions deployed) + Engine Phase 1 (ephemeris/panchang populated) + Engine Phase 3 (risk_scores populated) + Snapshot generator running
 
-#### Step 1.1 — Connect Risk Data Service to Supabase
+**Key Principle**: The frontend makes ONE fetch to `/api/snapshot` and gets EVERYTHING the Dashboard needs. No multiple Supabase queries. No direct table access for Dashboard data.
+
+#### Step 1.1 — Snapshot Service + Hook
+
+**New file**: `services/snapshotService.ts`
+```typescript
+// Single fetch that powers the entire Dashboard
+export async function fetchDailySnapshot(date: string, symbol: string): Promise<DailySnapshot> {
+  const res = await fetch(`${EDGE_URL}/api/snapshot?date=${date}&symbol=${symbol}`);
+  return res.json();
+}
+```
+
+**New file**: `hooks/useSnapshot.ts`
+```typescript
+export function useSnapshot(date: string, symbol: string) {
+  return useQuery({
+    queryKey: ['snapshot', date, symbol],
+    queryFn: () => fetchDailySnapshot(date, symbol),
+    staleTime: 5 * 60 * 1000,  // 5 min
+    gcTime: 30 * 60 * 1000,     // 30 min
+  });
+}
+```
+
+**Derived hooks** (zero additional fetches — all extract from the snapshot):
+```typescript
+export function useRiskFromSnapshot(date: string, symbol: string) {
+  const { data } = useSnapshot(date, symbol);
+  return data?.risk;  // { composite_score, regime, structural, momentum, volatility, deception, explanation }
+}
+
+export function usePanchangFromSnapshot(date: string, symbol: string) {
+  const { data } = useSnapshot(date, symbol);
+  return data?.panchang;
+}
+
+export function useSignalsFromSnapshot(date: string, symbol: string) {
+  const { data } = useSnapshot(date, symbol);
+  return data?.signals;
+}
+
+// etc. for planets, aspects, events, sectors, outlook, market
+```
+
+#### Step 1.2 — Replace Mock Risk Data
 - **File**: `services/riskData.ts`
 - **Current**: Returns seeded random data via `seededRandom()`
-- **Target**: Query `risk_scores` table from Supabase
-- **Changes**:
-  - `fetchDayRisk(date, symbol)` → `SELECT * FROM risk_scores WHERE date = $1 AND symbol = $2`
-  - `fetchWeekRisk(startDate, symbol)` → `SELECT * FROM risk_scores WHERE date BETWEEN $1 AND $2 AND symbol = $3 ORDER BY date`
-  - `fetchHistoricalProofs(symbol)` → Join `risk_scores` + `km_index_eod` to get score + actual return pairs
-  - Map DB columns to `DayRiskReport` type: composite_score → riskScore, structural/momentum/volatility/deception → factors
-  - Keep mock service as `riskData.mock.ts` for offline development
+- **Replace**: `fetchDayRisk()` → `useRiskFromSnapshot()` (from snapshot)
+- **Replace**: `fetchWeekRisk()` → `data.outlook` (7-day array already in snapshot)
+- **Replace**: `fetchHistoricalProofs()` → `fetch('/api/proofs?symbol=X')` (edge function)
+- **Keep**: `riskData.mock.ts` for offline/dev mode
 - **Verification**:
   - [ ] Dashboard loads with real risk score for today's date
-  - [ ] Factor breakdown (4 dimensions) matches Supabase values
-  - [ ] 7-day outlook shows next 7 days' scores
-  - [ ] Historical proofs show real accuracy data
+  - [ ] Factor breakdown (4 dimensions) matches engine-computed values
+  - [ ] 7-day outlook shows next 7 days from snapshot
   - [ ] Loading states (Skeleton) display during fetch
   - [ ] Error states display on fetch failure
 
-#### Step 1.2 — Connect Panchang Data
-- **New file**: `services/panchangData.ts`
-- **Query**: `SELECT * FROM daily_panchang WHERE date = $1`
-- **New hook**: `usePanchangData(date)` in `hooks/usePanchangData.ts`
-- **Returns**: tithi, nakshatra, yoga, karana, vara, DLNL flag, sunrise, sankranti
-- **Cache**: 1 hour stale time (panchang doesn't change once computed)
+#### Step 1.3 — Replace Mock Panchang/Planetary/Signal Data
+- All data comes from the SAME snapshot blob — no new services needed
+- **DashboardView**: Extract `snapshot.panchang`, `snapshot.planets`, `snapshot.signals`, `snapshot.sectors` from the single `useSnapshot()` hook
+- **Zero additional network requests** — this is the power of pre-computed snapshots
 
-#### Step 1.3 — Connect Planetary Positions
-- **New file**: `services/planetaryData.ts`
-- **Queries**:
-  - `fetchPlanetaryPositions(date)` → `SELECT * FROM planetary_positions WHERE date = $1`
-  - `fetchAspects(date)` → `SELECT * FROM planetary_aspects WHERE date = $1`
-  - `fetchActiveEvents(date)` → `SELECT * FROM astro_events WHERE start_date <= $1 AND (end_date >= $1 OR end_date IS NULL)`
-- **New hook**: `usePlanetaryData(date)` in `hooks/usePlanetaryData.ts`
+#### Step 1.4 — Connect EOD Chart to Edge Function
+- **File**: `services/eodData.ts`
+- **Current**: `supabase.from('km_index_eod').select('*').range(0, 9999)`
+- **Replace**: `fetch('/api/eod-chart?symbol=X&from=Y&to=Z')`
+- **Benefits**:
+  - Server-side downsampling (max 500 points) → faster chart rendering
+  - Date-range pagination instead of row-count pagination
+  - Cached at edge for repeated queries
+- **Debounce**: 300ms debounce on time range / symbol changes
 
-#### Step 1.4 — Connect Sector Sensitivity
-- **File**: `services/sectorData.ts`
-- **Query**: `SELECT * FROM sector_sensitivity WHERE date = $1 AND symbol = $2 ORDER BY impact_score DESC`
-- **Currently**: Hardcoded sector impacts in DashboardView
-- **Target**: Real data from `sector_sensitivity` table
-- **Hook**: `useSectorSensitivity(date, symbol)`
+#### Step 1.5 — Connect Explanation (Pre-generated, not Runtime)
+- **Current plan was**: Call Gemini API per user per render
+- **New plan**: Explanation is **pre-generated** in the snapshot by `snapshot_generator.py`
+- **Template**: "Today's risk score is {score} ({regime}). {top_factor_explanation}. {notable_event}."
+- **Gemini polish**: Optional — run once during snapshot generation, not per-user
+- **Result**: `snapshot.risk.explanation` — already a string, zero API calls at render time
+- **Scale impact**: 0 Gemini API calls vs 2000 calls/day (massive cost saving)
 
-#### Step 1.5 — Connect Signal Data
-- **New file**: `services/signalData.ts`
-- **Queries**:
-  - `fetchDailySignals(date)` → `SELECT rs.*, r.name, r.description FROM rule_signals rs JOIN rules r ON rs.rule_id = r.id WHERE rs.date = $1`
-  - `fetchSignalSummary(date)` → Aggregate net signal score + fired rule count
-- **Hook**: `useSignalData(date)`
-
-#### Step 1.6 — Activate Gemini AI Explainer
-- **File**: `services/geminiService.ts` (exists, scaffolded)
-- **Integration**:
-  - Pass today's risk score + factors + fired signals + panchang as context
-  - Prompt: "Explain today's Kāla-Drishti risk assessment in 2-3 sentences for an Indian equity trader"
-  - Display in Dashboard as the `explanation` field in DayRiskReport
-- **Fallback**: If Gemini fails, show a template-based explanation using risk regime + top factor
-- **Cache**: Cache the explanation per (date, symbol) — don't re-call Gemini on re-renders
+#### Step 1.6 — Dev Mode Toggle (Mock vs Real)
+- **Config**: `VITE_DATA_MODE=snapshot|mock` in `.env`
+- **When `mock`**: Use existing seeded random data (for frontend dev without backend)
+- **When `snapshot`**: Use edge functions (production mode)
+- **Implementation**: Service factory pattern — `getDataService()` returns mock or real based on config
 
 **Phase 1 Exit Criteria**:
-- All mock data replaced with real Supabase queries
-- Dashboard shows live data from engine pipeline
-- Loading and error states work correctly
-- Gemini provides natural-language explanations
+- All mock data replaced with snapshot-powered data
+- Dashboard loads from ONE edge function call (< 200ms)
+- EOD chart uses edge function with server-side downsampling
+- Explanation is pre-generated (no per-user Gemini calls)
+- Dev mode toggle works for offline development
 - No regressions — existing UI renders identically with real data
+- **Load verified**: 100 simulated users → all get <2s Dashboard load
 
 ---
 
@@ -1038,14 +1479,22 @@ Text Muted:     rgba(255,255,255,0.40)
 - **Legend**: Color bar at bottom (0 green → 50 amber → 100 red)
 - **Purpose**: Quickly spot high-risk clusters (e.g., "next week looks rough")
 
-#### Step 3.6 — Calendar Data Fetching
-- **Query**: Fetch entire month's risk scores + panchang in one batch
-- **Hooks**:
-  - `useMonthRiskScores(year, month, symbol)` → `risk_scores WHERE date BETWEEN month_start AND month_end`
-  - `useMonthPanchang(year, month)` → `daily_panchang WHERE date BETWEEN month_start AND month_end`
-  - `useMonthEvents(year, month)` → `astro_events` active in month
-- **Caching**: Month data cached for 10 minutes (unlikely to change)
+#### Step 3.6 — Calendar Data Fetching (via Edge Function)
+- **Source**: Edge Function `/api/calendar?year=2026&month=2&symbol=NIFTY`
+- **Returns**: Array of mini-snapshots (score, regime, panchang summary) for all days in the month
+- **Scale benefit**: One edge function call per month, cached for 30 min — 2000 users = 1 DB query
+- **Hook**: `useCalendarMonth(year, month, symbol)` — single hook for all calendar data
+  ```typescript
+  useQuery({
+    queryKey: ['calendar', year, month, symbol],
+    queryFn: () => fetchCalendarMonth(year, month, symbol),
+    staleTime: 30 * 60 * 1000,   // 30 min (past months never change)
+    gcTime: 2 * 60 * 60 * 1000,  // 2 hours
+  })
+  ```
 - **Prefetch**: When user navigates to a month, prefetch prev + next month in background
+- **Past months**: Cache indefinitely (immutable — yesterday's panchang never changes)
+- **Current month**: Cache 30 min (today's snapshot may update)
 
 **Phase 3 Exit Criteria**:
 - Monthly calendar grid renders with risk scores and panchang data
@@ -1054,6 +1503,7 @@ Text Muted:     rgba(255,255,255,0.40)
 - Week view toggle works
 - Risk heatmap overlay shows score intensity
 - Smooth month navigation with data prefetching
+- **Scale verified**: Month load from cache in <100ms
 
 ---
 
@@ -1102,7 +1552,7 @@ Text Muted:     rgba(255,255,255,0.40)
   ```
 
 #### Step 4.2 — Factor Nodes (Left Column)
-- **Data source**: `risk_scores` (factor breakdown) + `astro_events` + `planetary_aspects`
+- **Data source**: `snapshot.risk` (factor breakdown) + `snapshot.events` + `snapshot.aspects` — ALL from the same snapshot, zero extra queries
 - **Each node shows**:
   - Planet icon/glyph
   - Factor name (e.g., "Mercury Retrograde")
@@ -1112,7 +1562,7 @@ Text Muted:     rgba(255,255,255,0.40)
 - **Only show active factors**: Don't show factors contributing 0 points
 
 #### Step 4.3 — Sector Nodes (Middle Column)
-- **Data source**: `sector_sensitivity` table + `km_sector_lords` (planet → sector mapping)
+- **Data source**: `snapshot.sectors` + `km_sector_lords` (master data, cached forever)
 - **Each node shows**:
   - Sector name
   - Volatility multiplier (e.g., "1.3x")
@@ -1123,7 +1573,7 @@ Text Muted:     rgba(255,255,255,0.40)
 - **Sort**: By impact magnitude (most affected sectors first)
 
 #### Step 4.4 — Index Impact (Right Column)
-- **Data source**: `risk_scores` composite
+- **Data source**: `snapshot.risk` composite + `snapshot.market`
 - **Shows**: Summary risk gauge + regime badge + score breakdown
 - **Connection lines**: From all sectors → index (weighted by sector weight in index)
 - **NIFTY composition**: Use `km_index_composition` to weight sector contributions
@@ -1478,30 +1928,58 @@ Text Muted:     rgba(255,255,255,0.40)
 
 ## EXECUTION TIMELINE (UI/UX)
 
-| Phase | Description | Depends On | Priority |
-|-------|------------|-----------|----------|
-| **UI Phase 1** | Data Connection Layer | Engine Phase 1 + 3 | **Critical** |
-| **UI Phase 2** | Dashboard Enhancements | UI Phase 1 | **High** |
-| **UI Phase 3** | Calendar View | UI Phase 1 | **High** |
-| **UI Phase 4** | Transmission View | Engine Phase 2 + 3 + 4 | **Medium** |
-| **UI Phase 5** | Backtest View | Engine Phase 6 | **Medium** |
-| **UI Phase 6** | Markets Enhancements | UI Phase 1 | **Medium** |
-| **UI Phase 7** | Admin & Settings | Engine Phase 4 + 5 | **Low** |
-| **UI Phase 8** | Notifications & Realtime | Engine Phase 7 | **Low** |
-| **UI Phase 9** | Polish & Performance | All UI Phases | **Ongoing** |
+| Phase | Description | Depends On | Priority | Scale Impact |
+|-------|------------|-----------|----------|-------------|
+| **UI Phase 0** | Scale Infrastructure (Edge + Snapshots) | Engine Phase 1 (tables exist) | **CRITICAL — DO FIRST** | Enables all other phases to handle 2000+ users |
+| **UI Phase 1** | Data Connection Layer | Phase 0 + Engine Phase 3 | **Critical** | 1 fetch per Dashboard load (not 7) |
+| **UI Phase 2** | Dashboard Enhancements | UI Phase 1 | **High** | All data from snapshot — zero extra queries |
+| **UI Phase 3** | Calendar View | UI Phase 1 | **High** | Edge `/api/calendar` — 1 query per month |
+| **UI Phase 4** | Transmission View | Engine Phase 2 + 3 + 4 | **Medium** | Data from snapshot — zero extra queries |
+| **UI Phase 5** | Backtest View | Engine Phase 6 | **Medium** | Edge `/api/proofs` — cached 1hr |
+| **UI Phase 6** | Markets Enhancements | UI Phase 1 | **Medium** | Edge `/api/eod-chart` — server-side downsampling |
+| **UI Phase 7** | Admin & Settings | Engine Phase 4 + 5 | **Low** | Admin-only — low traffic, direct Supabase OK |
+| **UI Phase 8** | Notifications & Realtime | Engine Phase 7 | **Low** | Supabase Realtime — connection-pooled |
+| **UI Phase 9** | Polish & Performance | All UI Phases | **Ongoing** | Bundle splitting, virtualization |
 
 ```
-Engine Phase 1 ──→ Engine Phase 3 ──→ UI Phase 1 (Data Connection)
+                                    ┌──────────────────────────────────┐
+                                    │  UI PHASE 0: INFRASTRUCTURE      │
+                                    │  (Edge Functions + Snapshots +   │
+                                    │   DB Indexes + Security)         │
+                                    │  CAN START IN PARALLEL WITH      │
+                                    │  ENGINE PHASE 1                  │
+                                    └──────────────┬───────────────────┘
+                                                   │
+Engine Phase 1 ──→ Engine Phase 3 ──→ UI Phase 1 (Data Connection via Snapshots)
                                           │
-                                          ├──→ UI Phase 2 (Dashboard)
-                                          ├──→ UI Phase 3 (Calendar)
-                                          ├──→ UI Phase 6 (Markets)
+                                          ├──→ UI Phase 2 (Dashboard — snapshot-powered)
+                                          ├──→ UI Phase 3 (Calendar — edge /api/calendar)
+                                          ├──→ UI Phase 6 (Markets — edge /api/eod-chart)
                                           │
-Engine Phase 2+4 ─────────────────────────┴──→ UI Phase 4 (Transmission)
-Engine Phase 6 ──────────────────────────────→ UI Phase 5 (Backtest)
-Engine Phase 4+5 ────────────────────────────→ UI Phase 7 (Admin)
+Engine Phase 2+4 ─────────────────────────┴──→ UI Phase 4 (Transmission — snapshot-powered)
+Engine Phase 6 ──────────────────────────────→ UI Phase 5 (Backtest — edge /api/proofs)
+Engine Phase 4+5 ────────────────────────────→ UI Phase 7 (Admin — direct Supabase OK)
 Engine Phase 7 ──────────────────────────────→ UI Phase 8 (Notifications)
                                               UI Phase 9 (Polish — continuous)
+```
+
+### Parallel Work Streams
+```
+WEEK 1-2:  Engine Phase 1 (Data Gen)  ║  UI Phase 0 (Infrastructure)
+           ─────────────────────────  ║  ────────────────────────────
+           Run ephemeris + panchang   ║  Build Edge Functions
+           Verify data                ║  Build snapshot table + generator
+                                      ║  Add DB indexes
+                                      ║  Security hardening
+                                      ║
+WEEK 3:    Engine Phase 2 (Correlations) ║ UI Phase 1 (Connect to Snapshots)
+           ──────────────────────────── ║ ──────────────────────────────────
+           Run all 40+ factors          ║ Replace mock with snapshot service
+                                        ║ Connect EOD chart to edge function
+                                        ║
+WEEK 4+:   Engine Phase 3-7             ║ UI Phase 2-9
+           ────────────────             ║ ──────────────
+           Risk engine, signals, etc.   ║ Dashboard, Calendar, etc.
 ```
 
 ---
@@ -1513,9 +1991,26 @@ Engine Phase 7 ─────────────────────�
 3. **Color is meaning** — Green/amber/red are exclusively for risk levels. Never use them decoratively.
 4. **Transparency builds trust** — Show accuracy stats, backtest results, and factor contributions. Don't hide the model's limitations.
 5. **Speed is a feature** — Dashboard must load in < 2 seconds. Use skeletons, caching, and prefetching aggressively.
-6. **Mobile is secondary** — Primary users are desktop traders checking before market open. Mobile is "quick glance" only.
-7. **Animations with purpose** — Risk gauge fill animation shows score "computing". Regime transitions show state change. No gratuitous motion.
-8. **Indian context** — Vara names in Hindi/Sanskrit, Nakshatra names transliterated, IST timezone default, Indian number formatting (lakhs/crores).
+6. **Scale by default** — Every feature is designed for 2000+ concurrent users. No direct DB queries from browser for high-traffic data. Edge cache everything.
+7. **Snapshot-first architecture** — Pre-compute once, serve to all. The daily pipeline pays the compute cost; users pay zero.
+8. **Mobile is secondary** — Primary users are desktop traders checking before market open. Mobile is "quick glance" only.
+9. **Animations with purpose** — Risk gauge fill animation shows score "computing". Regime transitions show state change. No gratuitous motion.
+10. **Indian context** — Vara names in Hindi/Sanskrit, Nakshatra names transliterated, IST timezone default, Indian number formatting (lakhs/crores).
+
+---
+
+## SCALE BUDGET (per page load at 2000 users)
+
+| Page | Edge Calls | DB Queries (with cache) | Response Size | Target Load Time |
+|------|-----------|------------------------|---------------|-----------------|
+| **Dashboard** | 1 (`/api/snapshot`) | 0-1 (cache hit) | ~5 KB JSON | < 1s |
+| **Calendar** | 1 (`/api/calendar`) | 0-1 (cache hit) | ~15 KB JSON | < 1.5s |
+| **Markets** | 1 (`/api/eod-chart`) | 0-1 (cache hit) | ~25 KB JSON | < 2s |
+| **Backtest** | 1 (`/api/proofs`) | 0-1 (cache hit) | ~10 KB JSON | < 2s |
+| **Transmission** | 0 (uses snapshot from Dashboard) | 0 | 0 (already loaded) | < 0.5s |
+| **Settings** | 1 (direct Supabase, master data) | 1 | ~3 KB | < 1s |
+
+**Total for 2000 users opening Dashboard simultaneously**: ~1-5 DB queries (rest are cache hits)
 
 ---
 
@@ -1531,6 +2026,12 @@ Engine Phase 7 ─────────────────────�
 | 2026-02-15 | Calendar as monthly grid (not list) | Financial calendars are always grid — traders think in weeks |
 | 2026-02-15 | Three-column flow for Transmission | More intuitive than Sankey for non-technical users; evaluate Sankey later |
 | 2026-02-15 | Desktop-first responsive | Primary use case is pre-market analysis on desktop; mobile is secondary |
+| 2026-02-15 | **Snapshot architecture for scale** | 2000+ users hitting identical daily data = pre-compute once, serve from cache. Reduces 14,000 DB queries to ~1 per cache window |
+| 2026-02-15 | **Supabase Edge Functions as API layer** | Deno-based edge functions provide in-memory caching, rate limiting, CORS, and server-side downsampling without a separate API server |
+| 2026-02-15 | **Pre-generated explanations (not per-user Gemini)** | At 2000 users, per-user Gemini calls = $$$. Template explanation in snapshot + optional Gemini polish once/day |
+| 2026-02-15 | **Edge over CDN** | Edge Functions allow dynamic cache invalidation (when today's snapshot updates) vs static CDN which requires cache purging |
+| 2026-02-15 | **Date-range pagination for EOD (not .range(0,9999))** | Row-count pagination sends 10K rows over wire. Date-range + server-side downsampling sends max 500 points |
+| 2026-02-15 | **Service key removed from frontend** | CRITICAL security — service key bypasses all RLS. Must live only in backend/.env and Edge Function secrets |
 | | | |
 
 ---
