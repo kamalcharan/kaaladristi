@@ -1,0 +1,18 @@
+# Supabase project configuration for Kāla-Drishti
+# See: https://supabase.com/docs/guides/cli/config
+
+[project]
+id = "xvluvacyyugdehyqdubu"
+
+[api]
+enabled = true
+
+# Edge Functions configuration
+# Deploy: supabase functions deploy --project-ref xvluvacyyugdehyqdubu
+# Test locally: supabase functions serve
+#
+# Functions:
+#   /api/snapshot  — Daily dashboard snapshot (cached 5min)
+#   /api/calendar  — Monthly calendar data (cached 30min)
+#   /api/eod-chart — EOD price chart with downsampling (cached 10min)
+#   /api/proofs    — Historical accuracy proofs (cached 1hr)
