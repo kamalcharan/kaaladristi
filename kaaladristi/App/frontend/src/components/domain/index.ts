@@ -15,3 +15,5 @@ export { default as SignalPanel } from './SignalPanel';
 export { default as PostureHero } from './PostureHero';
 export { default as RegimeContext } from './RegimeContext';
 export { default as ExpandableSection } from './ExpandableSection';
+export { default as RiskInterpretation } from './RiskInterpretation';
+export { default as AIChatWidget } from './AIChatWidget';
