@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, Navigate } from 'react-router-dom';
 import { useAppStore } from '@/stores/appStore';
 import { useDayRisk, useWeekRisk, useHistoricalProofs, useSnapshot } from '@/hooks';
 import DashboardView from './DashboardView';
@@ -7,29 +7,34 @@ import { SkeletonGauge, SkeletonCard } from '@/components/ui';
 import { AlertTriangle } from 'lucide-react';
 import type { MarketSymbol } from '@/types';
 
-const VALID_SYMBOLS: MarketSymbol[] = ['NIFTY', 'BANKNIFTY', 'NIFTYIT', 'NIFTYFMCG'];
+const VALID_SYMBOLS: MarketSymbol[] = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
 
 export default function DashboardPage() {
-  const { selectedSymbol, selectedDate, setDate, setSymbol } = useAppStore();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { symbol: urlSymbol } = useParams<{ symbol: string }>();
+  const { selectedDate, setDate, setSymbol } = useAppStore();
+  const [searchParams] = useSearchParams();
 
-  // Sync URL → store on mount
+  // Resolve symbol from URL path param (primary) or redirect to overview
+  const symbol = VALID_SYMBOLS.includes(urlSymbol as MarketSymbol)
+    ? (urlSymbol as MarketSymbol)
+    : null;
+
+  // Sync URL date query param → store on mount
   useEffect(() => {
     const urlDate = searchParams.get('date');
-    const urlSymbol = searchParams.get('symbol') as MarketSymbol | null;
     if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) setDate(urlDate);
-    if (urlSymbol && VALID_SYMBOLS.includes(urlSymbol)) setSymbol(urlSymbol);
+    if (symbol) setSymbol(symbol);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync store → URL when date/symbol changes
-  useEffect(() => {
-    setSearchParams({ date: selectedDate, symbol: selectedSymbol }, { replace: true });
-  }, [selectedDate, selectedSymbol, setSearchParams]);
+  // Invalid symbol → redirect to overview
+  if (!symbol) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
-  const dayRisk  = useDayRisk(selectedDate, selectedSymbol);
-  const weekRisk = useWeekRisk(selectedDate, selectedSymbol);
-  const proofs   = useHistoricalProofs(selectedSymbol);
-  const snapshot = useSnapshot(selectedDate, selectedSymbol);
+  const dayRisk  = useDayRisk(selectedDate, symbol);
+  const weekRisk = useWeekRisk(selectedDate, symbol);
+  const proofs   = useHistoricalProofs(symbol);
+  const snapshot = useSnapshot(selectedDate, symbol);
 
   // ── Loading ──
   if (dayRisk.isLoading) {
@@ -79,7 +84,7 @@ export default function DashboardPage() {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center text-center">
         <p className="text-lg text-slate-400">No data available</p>
-        <p className="text-sm text-muted mt-2">No risk report for {selectedSymbol} on {selectedDate}</p>
+        <p className="text-sm text-muted mt-2">No risk report for {symbol} on {selectedDate}</p>
       </div>
     );
   }

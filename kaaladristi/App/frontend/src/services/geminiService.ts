@@ -34,25 +34,42 @@ const MOCK_REPORTS: Record<MarketSymbol, DayRiskReport> = {
       { sector: 'PSU Banks', sensitivity: 75, weight: 35.0 }
     ]
   },
-  'NIFTYIT': {
+  'FINNIFTY': {
     date: '2025-05-20',
-    symbol: 'NIFTYIT',
+    symbol: 'FINNIFTY',
+    riskScore: 71,
+    regime: 'Distribution',
+    explanation: 'Financial services sector under pressure from Mercury-Rahu aspect. Insurance and NBFC names showing elevated deception risk.',
+    factors: { structural: 16, momentum: 20, volatility: 18, deception: 17 },
+    planetarySummary: 'Mercury-Rahu Conjunction (85% intensity)',
+    sectorImpacts: [
+      { sector: 'Insurance', sensitivity: 78, weight: 22.0 },
+      { sector: 'NBFC', sensitivity: 82, weight: 28.0 },
+      { sector: 'Housing Finance', sensitivity: 65, weight: 15.0 }
+    ]
+  },
+  'MIDCPNIFTY': {
+    date: '2025-05-20',
+    symbol: 'MIDCPNIFTY',
     riskScore: 45,
     regime: 'Expansion',
-    explanation: 'IT sector showing resilience as the current cycle favors high-precision structural assets.',
+    explanation: 'Midcap space showing resilience as Jupiter trine supports broader market participation. Selective opportunities emerging.',
     factors: { structural: 10, momentum: 12, volatility: 8, deception: 15 },
     planetarySummary: 'Jupiter Trine Uranus',
     sectorImpacts: []
   },
-  'NIFTYFMCG': {
+  'SENSEX': {
     date: '2025-05-20',
-    symbol: 'NIFTYFMCG',
-    riskScore: 25,
-    regime: 'Accumulation',
-    explanation: 'Defensive names are favored in the current planetary alignment. Low risk score suggests a safe haven regime.',
-    factors: { structural: 5, momentum: 8, volatility: 4, deception: 8 },
-    planetarySummary: 'Venus Ascendant',
-    sectorImpacts: []
+    symbol: 'SENSEX',
+    riskScore: 62,
+    regime: 'Distribution',
+    explanation: 'Broad market under distribution pressure. Heavyweight names driving index lower. Saturn aspect creating structural ceiling.',
+    factors: { structural: 15, momentum: 18, volatility: 14, deception: 15 },
+    planetarySummary: 'Saturn Square Sun',
+    sectorImpacts: [
+      { sector: 'Reliance', sensitivity: 70, weight: 12.0 },
+      { sector: 'TCS', sensitivity: 55, weight: 8.5 }
+    ]
   }
 };
 

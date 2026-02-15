@@ -113,15 +113,16 @@ export default function AIChatWidget({ regime, riskScore, symbol, externalOpen, 
         )}
       </button>
 
-      {/* Chat panel */}
+      {/* Chat panel — solid opaque background for readability */}
       <div className={cn(
         'fixed bottom-24 right-6 z-50 w-[380px] max-h-[520px] rounded-3xl overflow-hidden',
-        'bg-[var(--bg-secondary)] border border-kd-border shadow-2xl shadow-black/40',
+        'bg-[#0c1222] border border-white/[0.08] shadow-2xl shadow-black/60',
+        'ring-1 ring-indigo-500/10',
         'flex flex-col transition-all duration-300 origin-bottom-right',
         open ? 'scale-100 opacity-100' : 'scale-90 opacity-0 pointer-events-none'
       )}>
         {/* Header */}
-        <div className="px-5 py-4 border-b border-kd-border bg-[var(--bg-card)]">
+        <div className="px-5 py-4 border-b border-white/[0.06] bg-[#0f1729]">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
@@ -190,7 +191,7 @@ export default function AIChatWidget({ regime, riskScore, symbol, externalOpen, 
         </div>
 
         {/* Input */}
-        <div className="px-4 py-3 border-t border-kd-border bg-[var(--bg-card)]">
+        <div className="px-4 py-3 border-t border-white/[0.06] bg-[#0f1729]">
           <div className="flex items-center gap-2">
             <input
               ref={inputRef}

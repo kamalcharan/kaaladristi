@@ -7,6 +7,7 @@ import Layout from '@/components/domain/Layout';
 import ProtectedRoute from '@/components/domain/ProtectedRoute';
 import LandingPage from '@/views/LandingPage';
 import ProfileSetup from '@/views/ProfileSetup';
+import IndexOverview from '@/views/IndexOverview';
 import DashboardPage from '@/views/DashboardPage';
 import MarketsView from '@/views/MarketsView';
 import CalendarView from '@/views/CalendarView';
@@ -51,7 +52,8 @@ function AppRoutes() {
       {/* Authenticated + onboarded: App shell */}
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<IndexOverview />} />
+          <Route path="/dashboard/:symbol" element={<DashboardPage />} />
           <Route path="/markets" element={<MarketsView />} />
           <Route path="/calendar" element={<CalendarView />} />
           <Route path="/transmission" element={<TransmissionView />} />

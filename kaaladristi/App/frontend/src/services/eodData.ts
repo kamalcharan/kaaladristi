@@ -6,8 +6,9 @@ import { subMonths, subYears, format } from 'date-fns';
 const SYMBOL_TO_INDEX_NAME: Record<MarketSymbol, string> = {
   NIFTY: 'NIFTY 50',
   BANKNIFTY: 'NIFTY BANK',
-  NIFTYIT: 'NIFTY IT',
-  NIFTYFMCG: 'NIFTY FMCG',
+  FINNIFTY: 'NIFTY FIN SERVICE',
+  MIDCPNIFTY: 'NIFTY MIDCAP 50',
+  SENSEX: 'S&P BSE SENSEX',
 };
 
 function getStartDate(range: TimeRange): string | null {

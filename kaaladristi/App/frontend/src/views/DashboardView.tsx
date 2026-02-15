@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Shield, Activity, Zap, AlertTriangle, ChevronRight, CheckCircle2, CalendarDays } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Shield, Activity, Zap, AlertTriangle, ChevronRight, CheckCircle2, ChevronLeft, CalendarDays } from 'lucide-react';
 import type { DayRiskReport, HistoricalProof, WeekDay, SnapshotPanchang, SnapshotEvent, SnapshotAspect, SnapshotSignals } from '@/types';
 import { cn, getRiskColor, getRiskHex } from '@/lib/utils';
+import { useAuthStore } from '@/stores/authStore';
 import { Card } from '@/components/ui';
-import { RiskGauge, FactorCard, MiniBarChart, PanchangStrip, EventsBanner, SignalPanel, RiskInterpretation, AIChatWidget } from '@/components/domain';
+import { RiskGauge, FactorCard, PanchangStrip, EventsBanner, SignalPanel, RiskInterpretation, AIChatWidget, CalendarStrip } from '@/components/domain';
 
 interface DashboardViewProps {
   report: DayRiskReport;
@@ -18,15 +20,24 @@ interface DashboardViewProps {
 export default function DashboardView({ report, proofs, weekData, panchang, events, aspects, signals }: DashboardViewProps) {
   const sortedSectors = [...report.sectorImpacts].sort((a, b) => b.sensitivity - a.sensitivity);
   const [chatOpen, setChatOpen] = useState(false);
+  const navigate = useNavigate();
+  const { isAdmin } = useAuthStore();
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Header */}
+      {/* Header with back navigation */}
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Cycle Intelligence</h1>
-          <p className="text-secondary font-medium">
-            Deterministic risk assessment for <span className="text-accent-indigo font-bold">{report.symbol}</span>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-slate-300 mb-3 transition-colors group"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+            Back to Overview
+          </button>
+          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Cycle Intelligence</h1>
+          <p className="text-secondary text-sm font-medium">
+            Risk assessment for <span className="text-accent-indigo font-bold">{report.symbol}</span>
           </p>
         </div>
         <div className="text-right hidden sm:block">
@@ -35,13 +46,13 @@ export default function DashboardView({ report, proofs, weekData, panchang, even
         </div>
       </header>
 
-      {/* ── Panchang Strip ── */}
+      {/* ── Panchang Strip — visible to all users ── */}
       {panchang && <PanchangStrip panchang={panchang} />}
 
-      {/* ── Planetary Events Banner ── */}
-      <EventsBanner events={events} aspects={aspects} />
+      {/* ── Planetary Events Banner — admin only ── */}
+      {isAdmin && <EventsBanner events={events} aspects={aspects} />}
 
-      {/* ── Two-Column Layout: Left (Gauge + Factors) | Right (Explanation + Signals) ── */}
+      {/* ── Two-Column Layout: Left (Gauge + Factors) | Right (7-Day + Signals) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
         {/* Left Column */}
         <div className="space-y-6">
@@ -69,7 +80,7 @@ export default function DashboardView({ report, proofs, weekData, panchang, even
 
         {/* Right Column */}
         <div className="space-y-6">
-          {/* 7-Day Outlook */}
+          {/* 7-Day Outlook — Clickable Calendar Strip */}
           <Card rounded="xxl" className="p-6 flex flex-col">
             <div className="flex items-center gap-2 mb-5">
               <CalendarDays className="w-4 h-4 text-accent-indigo" />
@@ -77,35 +88,7 @@ export default function DashboardView({ report, proofs, weekData, panchang, even
             </div>
 
             {weekData.length > 0 ? (
-              <>
-                <MiniBarChart
-                  data={weekData.map(d => d.riskScore)}
-                  labels={weekData.map(d => d.dayName)}
-                  height={72}
-                  className="mb-4"
-                />
-                <div className="space-y-1.5">
-                  {weekData.map((day) => (
-                    <div key={day.date} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5 transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-[10px] font-mono text-muted w-7">{day.dayName}</span>
-                        <span className="text-[10px] font-mono text-secondary">{day.date.slice(5)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={cn('text-xs font-bold font-mono', getRiskColor(day.riskScore))}>
-                          {day.riskScore}
-                        </span>
-                        <div className="w-8 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ width: `${day.riskScore}%`, background: getRiskHex(day.riskScore) }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
+              <CalendarStrip weekData={weekData} />
             ) : (
               <div className="flex-1 flex items-center justify-center py-8">
                 <p className="text-xs text-muted">Loading week data...</p>
@@ -113,8 +96,8 @@ export default function DashboardView({ report, proofs, weekData, panchang, even
             )}
           </Card>
 
-          {/* Signal Intelligence Panel */}
-          {signals && <SignalPanel signals={signals} />}
+          {/* Signal Intelligence Panel — admin only */}
+          {isAdmin && signals && <SignalPanel signals={signals} />}
         </div>
       </div>
 

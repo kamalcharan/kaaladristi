@@ -10,8 +10,9 @@ import type { MarketSymbol, TimeRange } from '@/types';
 const INDEX_LABELS: Record<MarketSymbol, string> = {
   NIFTY: 'NIFTY 50',
   BANKNIFTY: 'NIFTY BANK',
-  NIFTYIT: 'NIFTY IT',
-  NIFTYFMCG: 'NIFTY FMCG',
+  FINNIFTY: 'NIFTY FIN SERVICE',
+  MIDCPNIFTY: 'NIFTY MIDCAP 50',
+  SENSEX: 'S&P BSE SENSEX',
 };
 
 export default function MarketsView() {

@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/appStore';
 import type { MarketSymbol } from '@/types';
 
-const symbols: MarketSymbol[] = ['NIFTY', 'BANKNIFTY', 'NIFTYIT', 'NIFTYFMCG'];
+const symbols: MarketSymbol[] = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
 
 export default function SymbolSwitcher() {
   const { selectedSymbol, setSymbol } = useAppStore();

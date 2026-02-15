@@ -17,3 +17,4 @@ export { default as RegimeContext } from './RegimeContext';
 export { default as ExpandableSection } from './ExpandableSection';
 export { default as RiskInterpretation } from './RiskInterpretation';
 export { default as AIChatWidget } from './AIChatWidget';
+export { default as CalendarStrip } from './CalendarStrip';
