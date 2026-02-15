@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, Navigate } from 'react-router-dom';
 import { useAppStore } from '@/stores/appStore';
-import { useDayRisk, useWeekRisk, useHistoricalProofs, useSnapshot } from '@/hooks';
+import { useDayRisk, useWeekRisk, useHistoricalProofs, useSnapshot, useIndexChart } from '@/hooks';
 import DashboardView from './DashboardView';
 import { SkeletonGauge, SkeletonCard } from '@/components/ui';
 import { AlertTriangle } from 'lucide-react';
-import type { MarketSymbol } from '@/types';
+import type { MarketSymbol, TimeRange } from '@/types';
 
 const VALID_SYMBOLS: MarketSymbol[] = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY', 'SENSEX'];
 
@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const { symbol: urlSymbol } = useParams<{ symbol: string }>();
   const { selectedDate, setDate, setSymbol } = useAppStore();
   const [searchParams] = useSearchParams();
+  const [chartRange, setChartRange] = useState<TimeRange>('6M');
 
   // Resolve symbol from URL path param (primary) or redirect to overview
   const symbol = VALID_SYMBOLS.includes(urlSymbol as MarketSymbol)
@@ -35,27 +36,27 @@ export default function DashboardPage() {
   const weekRisk = useWeekRisk(selectedDate, symbol);
   const proofs   = useHistoricalProofs(symbol);
   const snapshot = useSnapshot(selectedDate, symbol);
+  const chart    = useIndexChart(symbol, chartRange);
 
   // ── Loading ──
   if (dayRisk.isLoading) {
     return (
-      <div className="space-y-10 animate-fade-in">
+      <div className="space-y-8 animate-fade-in">
         <header className="flex justify-between items-end">
           <div>
-            <div className="h-10 w-72 bg-slate-800/60 rounded-xl animate-pulse" />
-            <div className="h-5 w-48 bg-slate-800/40 rounded-lg animate-pulse mt-3" />
+            <div className="h-8 w-60 bg-slate-800/60 rounded-xl animate-pulse" />
+            <div className="h-5 w-40 bg-slate-800/40 rounded-lg animate-pulse mt-3" />
           </div>
         </header>
-        <div className="glass-card rounded-5xl p-10 flex flex-col lg:flex-row items-center gap-16">
-          <SkeletonGauge />
-          <div className="flex-1 space-y-4 w-full">
-            <div className="h-6 w-40 bg-slate-800/60 rounded-full animate-pulse" />
-            <div className="h-5 w-full bg-slate-800/40 rounded-lg animate-pulse" />
-            <div className="h-5 w-3/4 bg-slate-800/40 rounded-lg animate-pulse" />
-            <div className="h-8 w-64 bg-slate-800/40 rounded-xl animate-pulse" />
+        <div className="h-12 w-full bg-slate-800/30 rounded-2xl animate-pulse" />
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+          <div className="h-[400px] bg-slate-800/30 rounded-3xl animate-pulse" />
+          <div className="space-y-4">
+            <SkeletonGauge />
+            <SkeletonCard />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
         </div>
       </div>
@@ -98,6 +99,13 @@ export default function DashboardPage() {
       events={snapshot.data?.events ?? []}
       aspects={snapshot.data?.aspects ?? []}
       signals={snapshot.data?.signals ?? null}
+      market={snapshot.data?.market ?? null}
+      chartData={chart.data?.chartData ?? []}
+      chartStats={chart.data?.stats ?? null}
+      chartRange={chartRange}
+      onChartRangeChange={setChartRange}
+      chartLoading={chart.isLoading}
+      chartError={chart.isError ? chart.error?.message : null}
     />
   );
 }

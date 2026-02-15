@@ -18,3 +18,7 @@ export { default as ExpandableSection } from './ExpandableSection';
 export { default as RiskInterpretation } from './RiskInterpretation';
 export { default as AIChatWidget } from './AIChatWidget';
 export { default as CalendarStrip } from './CalendarStrip';
+export { default as MarketHeader } from './MarketHeader';
+export { default as TechnicalStrip } from './TechnicalStrip';
+export { default as RecommendationPanel } from './RecommendationPanel';
+export { default as TechnicalCards } from './TechnicalCards';
