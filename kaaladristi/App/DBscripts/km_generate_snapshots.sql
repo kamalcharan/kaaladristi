@@ -282,17 +282,20 @@ $$;
 
 
 -- ============================================================================
--- QUICK RUN: Generate snapshots for the last 30 days + 7 days ahead
--- Uncomment and run:
+-- DAILY RUN: Generate snapshots for today + 7-day outlook (use with pg_cron)
 -- ============================================================================
--- SELECT * FROM generate_daily_snapshots(
---   CURRENT_DATE - INTERVAL '30 days',
---   CURRENT_DATE + INTERVAL '6 days'
--- );
+-- SELECT * FROM generate_daily_snapshots();   -- today + 6 days, all 4 symbols
+
+-- ============================================================================
+-- HISTORICAL BACKFILL: Use bulk_generate_snapshots() from
+-- km_backfill_snapshots.sql — set-based, orders of magnitude faster.
+-- ============================================================================
+-- SELECT * FROM bulk_generate_snapshots();                           -- full 1990–2029
+-- SELECT * FROM bulk_generate_snapshots('2020-01-01','2025-12-31');  -- specific range
 
 -- ============================================================================
 -- VERIFICATION: Check generated snapshots
 -- ============================================================================
--- SELECT symbol, count(*), min(date), max(date)
+-- SELECT symbol, COUNT(*) AS snapshots, MIN(date) AS earliest, MAX(date) AS latest
 -- FROM km_daily_snapshots
 -- GROUP BY symbol ORDER BY symbol;
