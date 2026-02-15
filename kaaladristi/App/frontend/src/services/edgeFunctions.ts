@@ -16,8 +16,20 @@ import type {
 } from '@/types';
 import { subMonths, subYears, format } from 'date-fns';
 
-const EDGE_URL = import.meta.env.VITE_EDGE_FUNCTIONS_URL || '';
+// Derive edge URL from Supabase URL if VITE_EDGE_FUNCTIONS_URL is not set
+// (e.g. after .env was removed from git tracking)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const EDGE_URL =
+  import.meta.env.VITE_EDGE_FUNCTIONS_URL ||
+  (SUPABASE_URL ? `${SUPABASE_URL}/functions/v1` : '');
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+if (!EDGE_URL) {
+  console.error('[Kala-Drishti] Edge Functions URL not configured. Set VITE_EDGE_FUNCTIONS_URL or VITE_SUPABASE_URL in .env');
+}
+if (!ANON_KEY) {
+  console.error('[Kala-Drishti] Supabase anon key not configured. Set VITE_SUPABASE_ANON_KEY in .env');
+}
 
 /**
  * Shared fetch wrapper for edge functions.
