@@ -302,22 +302,42 @@ $$;
 -- Each year takes ~10–30 seconds depending on data density.
 -- ============================================================================
 
--- Step 0: Increase timeout for bulk operations
+-- ============================================================================
+-- PREREQUISITE: Replicate risk scores to all symbols
+-- ============================================================================
+-- Risk scores are purely astronomical (retrogrades, aspects, moon nakshatra)
+-- and identical for all NSE indices on the same date. NIFTY has full coverage;
+-- copy to BANKNIFTY, NIFTYIT, NIFTYFMCG before generating snapshots.
+-- ============================================================================
+
+-- Step 0: Replicate NIFTY risk scores to other symbols
+-- INSERT INTO km_risk_scores (date, symbol, composite_score, structural, momentum,
+--                             volatility, deception, regime, explanation)
+-- SELECT date, target.sym, composite_score, structural, momentum,
+--        volatility, deception, regime, explanation
+-- FROM km_risk_scores r
+-- CROSS JOIN (VALUES ('BANKNIFTY'), ('NIFTYIT'), ('NIFTYFMCG')) AS target(sym)
+-- WHERE r.symbol = 'NIFTY'
+-- ON CONFLICT (date, symbol) DO NOTHING;
+
+-- Step 1: Increase timeout for bulk operations
 -- SET statement_timeout = '600s';
 
--- Step 1: Try full backfill first (fastest if it completes)
+-- Step 2: Generate snapshots for all symbols
 -- SELECT * FROM bulk_generate_snapshots();
 
--- Step 2: If timeout, run by decade:
+-- Step 3: If timeout, run by decade:
 -- SELECT * FROM bulk_generate_snapshots('1990-01-01', '1999-12-31');
 -- SELECT * FROM bulk_generate_snapshots('2000-01-01', '2009-12-31');
 -- SELECT * FROM bulk_generate_snapshots('2010-01-01', '2019-12-31');
 -- SELECT * FROM bulk_generate_snapshots('2020-01-01', '2029-12-31');
 
--- Step 3: If still timing out, run by year:
--- SELECT * FROM bulk_generate_snapshots('2025-01-01', '2025-12-31');
-
 -- Step 4: Verify coverage
 -- SELECT symbol, COUNT(*) AS snapshots, MIN(date) AS earliest, MAX(date) AS latest
 -- FROM km_daily_snapshots
+-- GROUP BY symbol ORDER BY symbol;
+
+-- Verify risk score coverage
+-- SELECT symbol, COUNT(*) AS scores, MIN(date) AS earliest, MAX(date) AS latest
+-- FROM km_risk_scores
 -- GROUP BY symbol ORDER BY symbol;

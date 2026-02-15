@@ -11,6 +11,8 @@ Composite score = sum of 4 dimensions (0-100).
 Regime classification based on composite score.
 """
 
+import argparse
+
 from db import (
     get_positions_for_date,
     get_aspects_for_date,
@@ -20,6 +22,8 @@ from db import (
     get_market_returns,
     upsert_risk_scores,
 )
+
+ALL_SYMBOLS = ['NIFTY', 'BANKNIFTY', 'NIFTYIT', 'NIFTYFMCG']
 
 # =========================================================================
 # FACTOR DEFINITIONS (from PRD)
@@ -288,7 +292,7 @@ def compute_risk_score(date, symbol='NIFTY'):
 # BATCH COMPUTATION
 # =========================================================================
 
-def compute_all_scores(symbol='NIFTY', start_date='2000-01-01', end_date='2020-12-31'):
+def compute_all_scores(symbol='NIFTY', start_date='2000-01-01', end_date='2026-12-31'):
     """
     Compute risk scores for all trading days in the given range.
     Only computes for dates that have market data.
@@ -312,19 +316,113 @@ def compute_all_scores(symbol='NIFTY', start_date='2000-01-01', end_date='2020-1
     return scores
 
 
+def replicate_scores(source_symbol='NIFTY', target_symbols=None,
+                     start_date='1990-01-01', end_date='2029-12-31'):
+    """
+    Copy risk scores from a source symbol to target symbols.
+
+    Risk scores are purely astronomical (retrogrades, aspects, moon nakshatra)
+    and identical for all NSE indices on the same date. This avoids recomputing
+    the same planetary factors for each symbol.
+    """
+    from db import get_supabase
+
+    if target_symbols is None:
+        target_symbols = [s for s in ALL_SYMBOLS if s != source_symbol]
+
+    sb = get_supabase()
+    print(f"\nReplicating {source_symbol} risk scores to {target_symbols}...")
+
+    # Fetch all source scores in paginated batches
+    source_scores = []
+    page_size = 1000
+    offset = 0
+    while True:
+        resp = (sb.table('km_risk_scores')
+                .select('date, composite_score, structural, momentum, volatility, '
+                        'deception, regime, explanation')
+                .eq('symbol', source_symbol)
+                .gte('date', start_date)
+                .lte('date', end_date)
+                .order('date')
+                .range(offset, offset + page_size - 1)
+                .execute())
+        if not resp.data:
+            break
+        source_scores.extend(resp.data)
+        if len(resp.data) < page_size:
+            break
+        offset += page_size
+
+    print(f"  Found {len(source_scores)} {source_symbol} scores to replicate")
+
+    for target in target_symbols:
+        rows = []
+        for s in source_scores:
+            rows.append({
+                'date': s['date'],
+                'symbol': target,
+                'composite_score': s['composite_score'],
+                'structural': s['structural'],
+                'momentum': s['momentum'],
+                'volatility': s['volatility'],
+                'deception': s['deception'],
+                'regime': s['regime'],
+                'explanation': s['explanation'],
+            })
+
+        # Batch upsert
+        upsert_risk_scores(rows)
+        print(f"  {target}: {len(rows)} scores replicated")
+
+    print("Replication complete.")
+    return len(source_scores) * len(target_symbols)
+
+
 # =========================================================================
 # MAIN
 # =========================================================================
 
 def main():
+    parser = argparse.ArgumentParser(description='Kāla-Drishti Risk Score Engine')
+    parser.add_argument('--symbol', type=str, default=None,
+                        help='Single symbol to compute. Default: all symbols')
+    parser.add_argument('--start', type=str, default='2000-01-01',
+                        help='Start date (YYYY-MM-DD). Default: 2000-01-01')
+    parser.add_argument('--end', type=str, default='2026-12-31',
+                        help='End date (YYYY-MM-DD). Default: 2026-12-31')
+    parser.add_argument('--replicate', action='store_true',
+                        help='Copy NIFTY risk scores to other symbols '
+                             '(risk is purely astronomical, same for all NSE indices)')
+    parser.add_argument('--skip-verify', action='store_true',
+                        help='Skip the verification step')
+    args = parser.parse_args()
+
     print("=" * 60)
     print("KĀLA-DRISHTI RISK ENGINE")
     print("=" * 60)
 
-    # Compute for NIFTY (2000-2020 overlap period)
-    scores = compute_all_scores('NIFTY', '2000-01-01', '2020-12-31')
+    # If replication mode, just copy existing scores
+    if args.replicate:
+        target = [args.symbol] if args.symbol else None
+        replicate_scores('NIFTY', target, args.start, args.end)
+        return
 
-    # Verification
+    # Determine symbols to compute
+    symbols = [args.symbol] if args.symbol else ALL_SYMBOLS
+
+    all_scores = []
+    for symbol in symbols:
+        print(f"\n--- {symbol} ---")
+        scores = compute_all_scores(symbol, args.start, args.end)
+        all_scores.extend(scores)
+
+    if args.skip_verify or not all_scores:
+        print(f"\nRisk engine complete. {len(all_scores)} total scores.")
+        return
+
+    # Verification (use NIFTY scores for stats)
+    scores = [s for s in all_scores if s['symbol'] == 'NIFTY'] or all_scores
     print("\n" + "=" * 60)
     print("VERIFICATION")
     print("=" * 60)
@@ -355,18 +453,18 @@ def main():
         print(f"    {lo:>3}-{hi:>3}: {count:>5} {bar}")
 
     # Sample high-risk days
-    print("\n  Top 10 highest-risk days:")
+    verify_symbol = scores[0]['symbol']
+    print(f"\n  Top 10 highest-risk days ({verify_symbol}):")
     high_risk = sorted(scores, key=lambda s: s['composite_score'], reverse=True)[:10]
     for s in high_risk:
-        # Get actual market return for that day
         ret = get_return_for_date(s['symbol'], s['date'])
         ret_str = f"{ret:+.2f}%" if ret is not None else "N/A"
         print(f"    {s['date']}  Score: {s['composite_score']:>3}  "
-              f"Regime: {s['regime']:20s}  NIFTY: {ret_str}")
+              f"Regime: {s['regime']:20s}  Return: {ret_str}")
 
-    # Quick correlation check: high risk vs actual returns
+    # Quick correlation check
     print("\n  Quick correlation check:")
-    all_market = get_market_returns('NIFTY', '2000-01-01', '2020-12-31')
+    all_market = get_market_returns(verify_symbol, args.start, args.end)
     returns_by_date = {r['date']: r['daily_return'] for r in all_market
                        if r['daily_return'] is not None}
 
@@ -381,7 +479,6 @@ def main():
             print(f"    Score >= {threshold}: {len(rets)} days, "
                   f"{down_days/len(rets)*100:.1f}% down, avg return {avg_ret:+.3f}%")
 
-    # Baseline for comparison
     if returns_by_date:
         all_rets = list(returns_by_date.values())
         baseline_down = len([r for r in all_rets if r < 0]) / len(all_rets) * 100
