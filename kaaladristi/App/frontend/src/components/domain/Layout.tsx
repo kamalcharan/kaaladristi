@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import SymbolSwitcher from './SymbolSwitcher';
+import DatePicker from './DatePicker';
 
 export default function Layout() {
   return (
@@ -16,6 +17,7 @@ export default function Layout() {
             </div>
 
             <div className="flex items-center gap-4">
+              <DatePicker />
               <div className="hidden md:flex items-center gap-3 px-5 py-2.5 bg-slate-900/40 border border-kd-border rounded-2xl text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                 <div className="w-2 h-2 rounded-full bg-accent-indigo animate-pulse-live" />
                 Temporal Feed Active

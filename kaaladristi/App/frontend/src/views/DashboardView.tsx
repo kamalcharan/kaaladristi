@@ -1,18 +1,24 @@
 import { Shield, Activity, Zap, AlertTriangle, ChevronRight, CheckCircle2, CalendarDays } from 'lucide-react';
-import type { DayRiskReport, HistoricalProof, WeekDay } from '@/types';
+import type { DayRiskReport, HistoricalProof, WeekDay, SnapshotPanchang, SnapshotEvent, SnapshotAspect, SnapshotSignals } from '@/types';
 import { cn, getRiskColor, getRiskHex } from '@/lib/utils';
 import { Card } from '@/components/ui';
-import { RiskGauge, FactorCard, RegimeBadge, MiniBarChart } from '@/components/domain';
+import { RiskGauge, FactorCard, RegimeBadge, MiniBarChart, PanchangStrip, EventsBanner, SignalPanel } from '@/components/domain';
 
 interface DashboardViewProps {
   report: DayRiskReport;
   proofs: HistoricalProof[];
   weekData: WeekDay[];
+  panchang: SnapshotPanchang | null;
+  events: SnapshotEvent[];
+  aspects: SnapshotAspect[];
+  signals: SnapshotSignals | null;
 }
 
-export default function DashboardView({ report, proofs, weekData }: DashboardViewProps) {
+export default function DashboardView({ report, proofs, weekData, panchang, events, aspects, signals }: DashboardViewProps) {
+  const sortedSectors = [...report.sectorImpacts].sort((a, b) => b.sensitivity - a.sensitivity);
+
   return (
-    <div className="space-y-10 animate-fade-in">
+    <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <header className="flex justify-between items-end">
         <div>
@@ -27,96 +33,112 @@ export default function DashboardView({ report, proofs, weekData }: DashboardVie
         </div>
       </header>
 
-      {/* ── Main Grid: Hero Gauge + Weekly Preview ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-        {/* Hero Risk Gauge */}
-        <Card rounded="xxl" className="p-10 flex flex-col lg:flex-row items-center gap-16 relative overflow-hidden group shadow-2xl">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-600/10 transition-colors duration-700" />
+      {/* ── Panchang Strip ── */}
+      {panchang && <PanchangStrip panchang={panchang} />}
 
-          <RiskGauge score={report.riskScore} size="hero" />
+      {/* ── Planetary Events Banner ── */}
+      <EventsBanner events={events} aspects={aspects} />
 
-          <div className="flex-1 space-y-6 relative z-10">
-            <RegimeBadge regime={report.regime} />
-            <p className="text-lg text-slate-300 leading-relaxed font-medium">
-              {report.explanation}
-            </p>
-            <div className="flex items-center gap-2 text-sm font-bold text-muted bg-black/20 w-fit px-4 py-2 rounded-xl border border-kd-border">
-              <Activity className="w-4 h-4 text-accent-indigo" /> {report.planetarySummary}
+      {/* ── Two-Column Layout: Left (Gauge + Factors) | Right (Explanation + Signals) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+        {/* Left Column */}
+        <div className="space-y-6">
+          {/* Hero Risk Gauge */}
+          <Card rounded="xxl" className="p-10 flex flex-col md:flex-row items-center gap-12 relative overflow-hidden group shadow-2xl">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-600/10 transition-colors duration-700" />
+            <RiskGauge score={report.riskScore} size="hero" />
+            <div className="flex-1 space-y-5 relative z-10">
+              <RegimeBadge regime={report.regime} />
+              <p className="text-lg text-slate-300 leading-relaxed font-medium">
+                {report.explanation}
+              </p>
+              <div className="flex items-center gap-2 text-sm font-bold text-muted bg-black/20 w-fit px-4 py-2 rounded-xl border border-kd-border">
+                <Activity className="w-4 h-4 text-accent-indigo" /> {report.planetarySummary}
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
 
-        {/* 7-Day Preview Sidebar */}
-        <Card rounded="xxl" className="p-6 flex flex-col">
-          <div className="flex items-center gap-2 mb-6">
-            <CalendarDays className="w-4 h-4 text-accent-indigo" />
-            <h3 className="text-sm font-bold text-white">7-Day Outlook</h3>
+          {/* Factor Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <FactorCard label="Structural" value={report.factors.structural} icon={Shield}        color="bg-accent-indigo" />
+            <FactorCard label="Momentum"   value={report.factors.momentum}   icon={Activity}      color="bg-risk-red" />
+            <FactorCard label="Volatility" value={report.factors.volatility} icon={Zap}           color="bg-risk-amber" />
+            <FactorCard label="Deception"  value={report.factors.deception}  icon={AlertTriangle} color="bg-accent-violet" />
           </div>
+        </div>
 
-          {weekData.length > 0 ? (
-            <>
-              <MiniBarChart
-                data={weekData.map(d => d.riskScore)}
-                labels={weekData.map(d => d.dayName)}
-                height={80}
-                className="mb-5"
-              />
-              <div className="space-y-2 flex-1">
-                {weekData.map((day) => (
-                  <div key={day.date} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5 transition-colors">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[10px] font-mono text-muted w-7">{day.dayName}</span>
-                      <span className="text-[10px] font-mono text-secondary">{day.date.slice(5)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn('text-xs font-bold font-mono', getRiskColor(day.riskScore))}>
-                        {day.riskScore}
-                      </span>
-                      <div className="w-8 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${day.riskScore}%`, background: getRiskHex(day.riskScore) }}
-                        />
+        {/* Right Column */}
+        <div className="space-y-6">
+          {/* 7-Day Outlook */}
+          <Card rounded="xxl" className="p-6 flex flex-col">
+            <div className="flex items-center gap-2 mb-5">
+              <CalendarDays className="w-4 h-4 text-accent-indigo" />
+              <h3 className="text-sm font-bold text-white">7-Day Outlook</h3>
+            </div>
+
+            {weekData.length > 0 ? (
+              <>
+                <MiniBarChart
+                  data={weekData.map(d => d.riskScore)}
+                  labels={weekData.map(d => d.dayName)}
+                  height={72}
+                  className="mb-4"
+                />
+                <div className="space-y-1.5">
+                  {weekData.map((day) => (
+                    <div key={day.date} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5 transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[10px] font-mono text-muted w-7">{day.dayName}</span>
+                        <span className="text-[10px] font-mono text-secondary">{day.date.slice(5)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={cn('text-xs font-bold font-mono', getRiskColor(day.riskScore))}>
+                          {day.riskScore}
+                        </span>
+                        <div className="w-8 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${day.riskScore}%`, background: getRiskHex(day.riskScore) }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center py-8">
+                <p className="text-xs text-muted">Loading week data...</p>
               </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-xs text-muted">Loading week data...</p>
-            </div>
-          )}
-        </Card>
+            )}
+          </Card>
+
+          {/* Signal Intelligence Panel */}
+          {signals && <SignalPanel signals={signals} />}
+        </div>
       </div>
 
-      {/* Factor Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-        <FactorCard label="Structural" value={report.factors.structural} icon={Shield}        color="bg-accent-indigo" />
-        <FactorCard label="Momentum"   value={report.factors.momentum}   icon={Activity}      color="bg-risk-red" />
-        <FactorCard label="Volatility" value={report.factors.volatility} icon={Zap}           color="bg-risk-amber" />
-        <FactorCard label="Deception"  value={report.factors.deception}  icon={AlertTriangle} color="bg-accent-violet" />
-      </div>
+      {/* ── Bottom Row: Sector Sensitivity + Historical Proofs ── */}
 
-      {/* Sector Impact Summary */}
-      {report.sectorImpacts.length > 0 && (
+      {/* Sector Impact - Grid Layout */}
+      {sortedSectors.length > 0 && (
         <Card rounded="xxl" className="p-8">
           <h3 className="text-sm font-bold text-white mb-6">Sector Sensitivity</h3>
-          <div className="space-y-4">
-            {report.sectorImpacts.map((s) => (
-              <div key={s.sector} className="flex items-center gap-4">
-                <span className="text-xs text-secondary w-24 shrink-0">{s.sector}</span>
-                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden border border-kd-border">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${s.sensitivity}%`, background: getRiskHex(s.sensitivity) }}
-                  />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {sortedSectors.map((s) => (
+              <div key={s.sector} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-kd-border hover:border-white/10 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-slate-300 font-medium block truncate">{s.sector}</span>
+                  <div className="mt-2 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${Math.min(s.sensitivity, 100)}%`, background: getRiskHex(s.sensitivity) }}
+                    />
+                  </div>
                 </div>
-                <span className={cn('text-xs font-mono font-bold w-8 text-right', getRiskColor(s.sensitivity))}>
+                <span className={cn('text-sm font-bold font-mono', getRiskColor(s.sensitivity))}>
                   {s.sensitivity}
                 </span>
-                <span className="text-[10px] text-muted font-mono w-12 text-right">{s.weight}%</span>
               </div>
             ))}
           </div>

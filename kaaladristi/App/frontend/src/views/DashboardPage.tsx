@@ -1,15 +1,35 @@
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '@/stores/appStore';
-import { useDayRisk, useWeekRisk, useHistoricalProofs } from '@/hooks';
+import { useDayRisk, useWeekRisk, useHistoricalProofs, useSnapshot } from '@/hooks';
 import DashboardView from './DashboardView';
 import { SkeletonGauge, SkeletonCard } from '@/components/ui';
 import { AlertTriangle } from 'lucide-react';
+import type { MarketSymbol } from '@/types';
+
+const VALID_SYMBOLS: MarketSymbol[] = ['NIFTY', 'BANKNIFTY', 'NIFTYIT', 'NIFTYFMCG'];
 
 export default function DashboardPage() {
-  const { selectedSymbol, selectedDate } = useAppStore();
+  const { selectedSymbol, selectedDate, setDate, setSymbol } = useAppStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Sync URL → store on mount
+  useEffect(() => {
+    const urlDate = searchParams.get('date');
+    const urlSymbol = searchParams.get('symbol') as MarketSymbol | null;
+    if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) setDate(urlDate);
+    if (urlSymbol && VALID_SYMBOLS.includes(urlSymbol)) setSymbol(urlSymbol);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync store → URL when date/symbol changes
+  useEffect(() => {
+    setSearchParams({ date: selectedDate, symbol: selectedSymbol }, { replace: true });
+  }, [selectedDate, selectedSymbol, setSearchParams]);
 
   const dayRisk  = useDayRisk(selectedDate, selectedSymbol);
   const weekRisk = useWeekRisk(selectedDate, selectedSymbol);
   const proofs   = useHistoricalProofs(selectedSymbol);
+  const snapshot = useSnapshot(selectedDate, selectedSymbol);
 
   // ── Loading ──
   if (dayRisk.isLoading) {
@@ -69,6 +89,10 @@ export default function DashboardPage() {
       report={dayRisk.data}
       proofs={proofs.data ?? []}
       weekData={weekRisk.data ?? []}
+      panchang={snapshot.data?.panchang ?? null}
+      events={snapshot.data?.events ?? []}
+      aspects={snapshot.data?.aspects ?? []}
+      signals={snapshot.data?.signals ?? null}
     />
   );
 }
