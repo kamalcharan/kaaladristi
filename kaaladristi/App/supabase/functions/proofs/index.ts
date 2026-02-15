@@ -5,14 +5,79 @@
  *
  * Returns historical accuracy proofs: dates where the engine predicted
  * high risk and actual market movement validated (or didn't validate) it.
- * Cached for 1 hour — proofs don't change until new data comes in.
+ * Cached for 1 hour.
+ *
+ * Self-contained: shared code inlined for Supabase Dashboard deployment.
  */
-import { handleCors, corsHeaders, checkRateLimit } from '../_shared/cors.ts';
-import { supabase } from '../_shared/supabase.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
+
+// ── Shared: Supabase client ──
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('KD_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// ── Shared: CORS ──
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://kaaladristi.com',
+  'https://www.kaaladristi.com',
+];
+
+const corsHeaders = (origin: string | null) => {
+  const allowed = origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o));
+  return {
+    'Access-Control-Allow-Origin': allowed ? origin! : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
+    'Access-Control-Max-Age': '86400',
+  };
+};
+
+function handleCors(req: Request): Response | null {
+  const origin = req.headers.get('Origin');
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+  }
+  return null;
+}
+
+// ── Shared: Rate limiter ──
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 60;
+const RATE_WINDOW = 60_000;
+
+function checkRateLimit(req: Request): Response | null {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || req.headers.get('cf-connecting-ip')
+    || 'unknown';
+  const now = Date.now();
+  const bucket = rateBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return null;
+  }
+  bucket.count++;
+  if (bucket.count > RATE_LIMIT) {
+    const origin = req.headers.get('Origin');
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+      { status: 429, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json', 'Retry-After': '60' } }
+    );
+  }
+  return null;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, bucket] of rateBuckets) {
+    if (now > bucket.resetAt) rateBuckets.delete(ip);
+  }
+}, 5 * 60_000);
 
 // ── Cache ──
 const cache = new Map<string, { data: unknown; expires: number }>();
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL = 60 * 60 * 1000;
 
 setInterval(() => {
   const now = Date.now();
@@ -21,7 +86,7 @@ setInterval(() => {
   }
 }, 10 * 60_000);
 
-// ── Symbol → index name mapping ──
+// ── Symbol mapping ──
 const SYMBOL_MAP: Record<string, string> = {
   NIFTY: 'NIFTY 50',
   BANKNIFTY: 'NIFTY BANK',
@@ -29,6 +94,7 @@ const SYMBOL_MAP: Record<string, string> = {
   NIFTYFMCG: 'NIFTY FMCG',
 };
 
+// ── Handler ──
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -42,10 +108,9 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const symbol = url.searchParams.get('symbol') || 'NIFTY';
-    const regime = url.searchParams.get('regime'); // optional filter
+    const regime = url.searchParams.get('regime');
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 100);
 
-    // Check cache
     const cacheKey = `proofs:${symbol}:${regime || 'all'}:${limit}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() < cached.expires) {
@@ -54,13 +119,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Step 1: Get recent risk scores (ordered by date desc, most recent first)
     let riskQuery = supabase
       .from('km_risk_scores')
       .select('date, composite_score, regime')
       .eq('symbol', symbol)
       .order('date', { ascending: false })
-      .limit(limit * 3); // Fetch more to account for non-trading days
+      .limit(limit * 3);
 
     if (regime) {
       riskQuery = riskQuery.eq('regime', regime);
@@ -82,7 +146,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify(result), { headers });
     }
 
-    // Step 2: Resolve index_id for market data lookup
     const indexName = SYMBOL_MAP[symbol] || symbol;
     const { data: indexRow } = await supabase
       .from('km_index_symbols')
@@ -98,7 +161,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 3: Fetch market data for those dates
     const dates = riskRows.map(r => r.date);
     const { data: marketRows, error: marketError } = await supabase
       .from('km_index_eod')
@@ -110,17 +172,15 @@ Deno.serve(async (req) => {
       console.error('[proofs] Market query error:', marketError.message);
     }
 
-    // Build market lookup
     const marketMap = new Map<string, Record<string, unknown>>();
     for (const m of (marketRows || [])) {
       marketMap.set(m.trade_date, m);
     }
 
-    // Step 4: Build proof entries
     const proofs = [];
     for (const risk of riskRows) {
       const market = marketMap.get(risk.date);
-      if (!market) continue; // Skip non-trading days
+      if (!market) continue;
 
       const close = market.close as number;
       const prevClose = (market.prev_close as number) || close;
@@ -139,9 +199,6 @@ Deno.serve(async (req) => {
         ? ((market.high as number) - (market.low as number)) / close * 100
         : 0;
 
-      // Determine if prediction was "correct":
-      // High risk (>50) + negative return = correct bearish call
-      // Low risk (<=50) + positive return = correct bullish call
       const isCorrect = (score > 50 && actualReturn < 0) || (score <= 50 && actualReturn >= 0);
 
       proofs.push({
@@ -157,7 +214,6 @@ Deno.serve(async (req) => {
       if (proofs.length >= limit) break;
     }
 
-    // Compute summary stats
     const correctCount = proofs.filter(p => p.isCorrect).length;
     const result = {
       symbol,

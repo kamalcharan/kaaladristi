@@ -5,15 +5,79 @@
  *
  * Returns the pre-computed daily snapshot for one (date, symbol).
  * In-memory cache with 5-minute TTL — 2000 users = ~1 DB query.
+ *
+ * Self-contained: shared code inlined for Supabase Dashboard deployment.
  */
-import { handleCors, corsHeaders, checkRateLimit } from '../_shared/cors.ts';
-import { supabase } from '../_shared/supabase.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
+
+// ── Shared: Supabase client ──
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('KD_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// ── Shared: CORS ──
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://kaaladristi.com',
+  'https://www.kaaladristi.com',
+];
+
+const corsHeaders = (origin: string | null) => {
+  const allowed = origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o));
+  return {
+    'Access-Control-Allow-Origin': allowed ? origin! : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
+    'Access-Control-Max-Age': '86400',
+  };
+};
+
+function handleCors(req: Request): Response | null {
+  const origin = req.headers.get('Origin');
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+  }
+  return null;
+}
+
+// ── Shared: Rate limiter ──
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 60;
+const RATE_WINDOW = 60_000;
+
+function checkRateLimit(req: Request): Response | null {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || req.headers.get('cf-connecting-ip')
+    || 'unknown';
+  const now = Date.now();
+  const bucket = rateBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return null;
+  }
+  bucket.count++;
+  if (bucket.count > RATE_LIMIT) {
+    const origin = req.headers.get('Origin');
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+      { status: 429, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json', 'Retry-After': '60' } }
+    );
+  }
+  return null;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, bucket] of rateBuckets) {
+    if (now > bucket.resetAt) rateBuckets.delete(ip);
+  }
+}, 5 * 60_000);
 
 // ── In-memory cache ──
 const cache = new Map<string, { data: unknown; expires: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
-// Clean expired entries every 10 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of cache) {
@@ -21,12 +85,11 @@ setInterval(() => {
   }
 }, 10 * 60_000);
 
+// ── Handler ──
 Deno.serve(async (req) => {
-  // CORS preflight
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
-  // Rate limiting
   const rateLimited = checkRateLimit(req);
   if (rateLimited) return rateLimited;
 
@@ -45,7 +108,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
       return new Response(
         JSON.stringify({ error: 'Invalid date format. Use YYYY-MM-DD.' }),
@@ -53,7 +115,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check cache
     const cacheKey = `${dateParam}:${symbol}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() < cached.expires) {
@@ -62,7 +123,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Query km_daily_snapshots — ONE read
     const { data, error } = await supabase
       .from('km_daily_snapshots')
       .select('snapshot')
@@ -86,7 +146,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Store in cache
     const snapshot = data.snapshot;
     cache.set(cacheKey, { data: snapshot, expires: Date.now() + CACHE_TTL });
 

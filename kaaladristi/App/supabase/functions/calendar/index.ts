@@ -6,14 +6,79 @@
  * Returns an array of mini-snapshots for every day in a month.
  * Each entry has: date, risk score, regime, and panchang summary.
  * Cached for 30 minutes (past months are immutable).
+ *
+ * Self-contained: shared code inlined for Supabase Dashboard deployment.
  */
-import { handleCors, corsHeaders, checkRateLimit } from '../_shared/cors.ts';
-import { supabase } from '../_shared/supabase.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
+
+// ── Shared: Supabase client ──
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('KD_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// ── Shared: CORS ──
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://kaaladristi.com',
+  'https://www.kaaladristi.com',
+];
+
+const corsHeaders = (origin: string | null) => {
+  const allowed = origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o));
+  return {
+    'Access-Control-Allow-Origin': allowed ? origin! : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
+    'Access-Control-Max-Age': '86400',
+  };
+};
+
+function handleCors(req: Request): Response | null {
+  const origin = req.headers.get('Origin');
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+  }
+  return null;
+}
+
+// ── Shared: Rate limiter ──
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 60;
+const RATE_WINDOW = 60_000;
+
+function checkRateLimit(req: Request): Response | null {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || req.headers.get('cf-connecting-ip')
+    || 'unknown';
+  const now = Date.now();
+  const bucket = rateBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return null;
+  }
+  bucket.count++;
+  if (bucket.count > RATE_LIMIT) {
+    const origin = req.headers.get('Origin');
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+      { status: 429, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json', 'Retry-After': '60' } }
+    );
+  }
+  return null;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, bucket] of rateBuckets) {
+    if (now > bucket.resetAt) rateBuckets.delete(ip);
+  }
+}, 5 * 60_000);
 
 // ── In-memory cache ──
 const cache = new Map<string, { data: unknown; expires: number }>();
-const CACHE_TTL_CURRENT = 30 * 60 * 1000; // 30 min for current month
-const CACHE_TTL_PAST = 24 * 60 * 60 * 1000; // 24 hours for past months
+const CACHE_TTL_CURRENT = 30 * 60 * 1000;
+const CACHE_TTL_PAST = 24 * 60 * 60 * 1000;
 
 setInterval(() => {
   const now = Date.now();
@@ -22,6 +87,7 @@ setInterval(() => {
   }
 }, 10 * 60_000);
 
+// ── Handler ──
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -45,7 +111,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check cache
     const cacheKey = `cal:${year}-${month}:${symbol}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() < cached.expires) {
@@ -54,12 +119,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Compute month boundaries
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-    // Fetch all snapshots for this month
     const { data, error } = await supabase
       .from('km_daily_snapshots')
       .select('date, snapshot')
@@ -76,7 +139,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Extract mini-snapshots (just what the calendar needs)
     const calendarDays = (data || []).map((row: { date: string; snapshot: Record<string, unknown> }) => {
       const s = row.snapshot as Record<string, unknown>;
       const risk = s.risk as Record<string, unknown> | null;
@@ -100,7 +162,6 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Determine cache TTL (past months get longer cache)
     const now = new Date();
     const isPastMonth = year < now.getFullYear() ||
       (year === now.getFullYear() && month < now.getMonth() + 1);

@@ -4,15 +4,79 @@
  * GET /api/eod-chart?symbol=NIFTY&from=2025-01-01&to=2026-02-15
  *
  * Returns EOD OHLCV data for chart rendering.
- * Server-side downsamples to max 500 points using LTTB-style every-nth.
- * Replaces the frontend's .range(0, 9999) direct Supabase query.
+ * Server-side downsamples to max 500 points using every-nth.
+ *
+ * Self-contained: shared code inlined for Supabase Dashboard deployment.
  */
-import { handleCors, corsHeaders, checkRateLimit } from '../_shared/cors.ts';
-import { supabase } from '../_shared/supabase.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
+
+// ── Shared: Supabase client ──
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('KD_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// ── Shared: CORS ──
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://kaaladristi.com',
+  'https://www.kaaladristi.com',
+];
+
+const corsHeaders = (origin: string | null) => {
+  const allowed = origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o));
+  return {
+    'Access-Control-Allow-Origin': allowed ? origin! : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
+    'Access-Control-Max-Age': '86400',
+  };
+};
+
+function handleCors(req: Request): Response | null {
+  const origin = req.headers.get('Origin');
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+  }
+  return null;
+}
+
+// ── Shared: Rate limiter ──
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 60;
+const RATE_WINDOW = 60_000;
+
+function checkRateLimit(req: Request): Response | null {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || req.headers.get('cf-connecting-ip')
+    || 'unknown';
+  const now = Date.now();
+  const bucket = rateBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    rateBuckets.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return null;
+  }
+  bucket.count++;
+  if (bucket.count > RATE_LIMIT) {
+    const origin = req.headers.get('Origin');
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded. Try again in 1 minute.' }),
+      { status: 429, headers: { ...corsHeaders(origin), 'Content-Type': 'application/json', 'Retry-After': '60' } }
+    );
+  }
+  return null;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, bucket] of rateBuckets) {
+    if (now > bucket.resetAt) rateBuckets.delete(ip);
+  }
+}, 5 * 60_000);
 
 // ── Cache ──
 const cache = new Map<string, { data: unknown; expires: number }>();
-const CACHE_TTL = 10 * 60 * 1000; // 10 min
+const CACHE_TTL = 10 * 60 * 1000;
 
 setInterval(() => {
   const now = Date.now();
@@ -21,7 +85,7 @@ setInterval(() => {
   }
 }, 10 * 60_000);
 
-// ── Symbol → index name mapping ──
+// ── Symbol mapping ──
 const SYMBOL_MAP: Record<string, string> = {
   NIFTY: 'NIFTY 50',
   BANKNIFTY: 'NIFTY BANK',
@@ -37,11 +101,11 @@ function downsample<T>(data: T[], maxPoints: number): T[] {
   for (let i = 0; i < maxPoints - 1; i++) {
     result.push(data[Math.floor(i * step)]);
   }
-  // Always include the last point
   result.push(data[data.length - 1]);
   return result;
 }
 
+// ── Handler ──
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -67,7 +131,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check cache
     const cacheKey = `eod:${symbol}:${from || 'MAX'}:${to}:${maxPoints}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() < cached.expires) {
@@ -76,7 +139,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Resolve symbol → index_id
     const indexName = SYMBOL_MAP[symbol] || symbol;
     const { data: indexRow, error: indexError } = await supabase
       .from('km_index_symbols')
@@ -92,7 +154,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch EOD data with date range
     let query = supabase
       .from('km_index_eod')
       .select('trade_date, open, high, low, close, prev_close, volume, pct_chng')
@@ -104,7 +165,6 @@ Deno.serve(async (req) => {
       query = query.gte('trade_date', from);
     }
 
-    // Fetch up to 10000 rows (paginated)
     const allRows: Record<string, unknown>[] = [];
     let offset = 0;
     const pageSize = 1000;
@@ -124,7 +184,6 @@ Deno.serve(async (req) => {
       offset += pageSize;
     }
 
-    // Map to chart-friendly format
     const chartData = allRows.map((r: Record<string, unknown>) => ({
       date: r.trade_date as string,
       open: r.open as number | null,
@@ -134,10 +193,8 @@ Deno.serve(async (req) => {
       volume: r.volume as number | null,
     }));
 
-    // Downsample for chart performance
     const downsampled = downsample(chartData, maxPoints);
 
-    // Compute stats from the full dataset (before downsampling)
     let stats = null;
     if (allRows.length > 0) {
       const latest = allRows[allRows.length - 1] as Record<string, unknown>;
@@ -146,7 +203,6 @@ Deno.serve(async (req) => {
       const change = currentClose - prevClose;
       const changePct = prevClose ? (change / prevClose) * 100 : 0;
 
-      // 52-week high/low from last ~252 trading days
       const last252 = allRows.slice(-252);
       const highs = last252.map(r => (r as Record<string, unknown>).high as number).filter(Boolean);
       const lows = last252.map(r => (r as Record<string, unknown>).low as number).filter(v => v && v > 0);
