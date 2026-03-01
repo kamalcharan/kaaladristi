@@ -18,3 +18,4 @@ export {
 } from './useRiskData';
 
 export { useIndexChart, useIndexEodFull } from './useEodData';
+export { useComputedIndicators } from './useComputedIndicators';

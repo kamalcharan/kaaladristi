@@ -490,11 +490,10 @@ function InfoPanel({ bar, hasIndicators }: { bar: KmIndexEod; hasIndicators: boo
         </>
       )}
 
-      {/* No indicators message */}
+      {/* Fallback when indicators not available (shouldn't happen with useComputedIndicators) */}
       {!hasIndicators && (
         <div className="bg-slate-900/60 border border-white/5 rounded-lg p-3 text-center text-slate-500">
-          <p className="text-[10px]">Indicators not yet computed.</p>
-          <p className="text-[10px] mt-1">Run the compute pipeline to populate.</p>
+          <p className="text-[10px]">Indicators loading...</p>
         </div>
       )}
     </div>

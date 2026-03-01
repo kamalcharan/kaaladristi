@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, BarChart3, AlertCircle, Database, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, BarChart3, AlertCircle, Database, RefreshCw, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
-import { useIndexChart, useIndexEodFull } from '@/hooks';
+import { useIndexChart, useIndexEodFull, useComputedIndicators } from '@/hooks';
 import { LuckyPopChart } from '@/components/domain';
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -21,10 +21,13 @@ export default function MarketsView() {
   const { data: eodRows, isLoading: eodLoading, isError, error, refetch } = useIndexEodFull(selectedSymbol, range);
 
   const isLoading = statsLoading || eodLoading;
-  const chartData = eodRows ?? [];
   const stats = statsData?.stats ?? null;
   const isPositive = (stats?.change ?? 0) >= 0;
   const indexName = INDEX_LABELS[selectedSymbol];
+
+  // Compute indicators on-the-fly if DB columns are null (reusable hook)
+  const { data: computedRows, isComputing } = useComputedIndicators(eodRows);
+  const chartData = computedRows;
 
   // Detect specific error types for better messaging
   const errorMsg = error?.message || '';
@@ -91,6 +94,15 @@ export default function MarketsView() {
                 ))}
               </div>
               <Skeleton className="h-[400px] w-full rounded-2xl" />
+            </div>
+          ) : isComputing ? (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <Loader2 className="w-10 h-10 text-accent-indigo animate-spin mb-6" />
+              <p className="text-lg font-semibold text-white mb-2">Computing Indicators</p>
+              <p className="text-sm text-secondary max-w-md leading-relaxed">
+                Calculating SMAs, SuperTrend, RSI, MFI, volume metrics, and signal dots
+                for <span className="text-white font-medium">{eodRows?.length ?? 0}</span> trading days...
+              </p>
             </div>
           ) : isError ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
