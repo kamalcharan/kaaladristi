@@ -17,4 +17,4 @@ export {
   useHistoricalProofs,
 } from './useRiskData';
 
-export { useIndexChart } from './useEodData';
+export { useIndexChart, useIndexEodFull } from './useEodData';

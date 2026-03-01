@@ -7,4 +7,5 @@ export { default as Sidebar } from './Sidebar';
 export { default as Layout } from './Layout';
 export { default as SymbolSwitcher } from './SymbolSwitcher';
 export { default as IndexPriceChart } from './IndexPriceChart';
+export { default as LuckyPopChart } from './LuckyPopChart';
 export { default as ProtectedRoute } from './ProtectedRoute';

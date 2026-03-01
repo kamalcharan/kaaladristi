@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, Database, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
-import { useIndexChart } from '@/hooks';
-import { IndexPriceChart } from '@/components/domain';
+import { useIndexChart, useIndexEodFull } from '@/hooks';
+import { LuckyPopChart } from '@/components/domain';
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { MarketSymbol, TimeRange } from '@/types';
@@ -17,10 +17,12 @@ const INDEX_LABELS: Record<MarketSymbol, string> = {
 export default function MarketsView() {
   const { selectedSymbol } = useAppStore();
   const [range, setRange] = useState<TimeRange>('1Y');
-  const { data, isLoading, isError, error, refetch } = useIndexChart(selectedSymbol, range);
+  const { data: statsData, isLoading: statsLoading } = useIndexChart(selectedSymbol, range);
+  const { data: eodRows, isLoading: eodLoading, isError, error, refetch } = useIndexEodFull(selectedSymbol, range);
 
-  const chartData = data?.chartData ?? [];
-  const stats = data?.stats ?? null;
+  const isLoading = statsLoading || eodLoading;
+  const chartData = eodRows ?? [];
+  const stats = statsData?.stats ?? null;
   const isPositive = (stats?.change ?? 0) >= 0;
   const indexName = INDEX_LABELS[selectedSymbol];
 
@@ -171,11 +173,10 @@ export default function MarketsView() {
               </div>
             </div>
           ) : (
-            <IndexPriceChart
+            <LuckyPopChart
               data={chartData}
               range={range}
               onRangeChange={setRange}
-              isPositive={isPositive}
             />
           )}
         </div>
@@ -183,7 +184,7 @@ export default function MarketsView() {
         {/* Data summary */}
         {chartData.length > 0 && (
           <p className="text-[10px] text-muted mt-3 text-right mono">
-            {chartData.length} trading days &middot; {chartData[0].date} to {chartData[chartData.length - 1].date}
+            {chartData.length} trading days &middot; {chartData[0].trade_date} to {chartData[chartData.length - 1].trade_date}
           </p>
         )}
       </div>
