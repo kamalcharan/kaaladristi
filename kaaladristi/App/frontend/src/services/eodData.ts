@@ -25,22 +25,29 @@ function getStartDate(range: TimeRange): string | null {
 export async function fetchIndexSymbol(symbol: MarketSymbol): Promise<KmIndexSymbol | null> {
   const name = SYMBOL_TO_INDEX_NAME[symbol];
 
-  // Try exact match first, then ilike fallback
-  const { data, error } = await supabase
-    .from('km_index_symbols')
-    .select('*')
-    .eq('name', name)
-    .limit(1)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('km_index_symbols')
+      .select('*')
+      .eq('name', name)
+      .limit(1)
+      .maybeSingle();
 
-  if (error) {
-    console.error(`[fetchIndexSymbol] ${name}:`, error.message);
-    return null;
+    if (error) {
+      console.error(`[fetchIndexSymbol] ${name}:`, error.message, error);
+      throw new Error(`Index lookup failed: ${error.message}`);
+    }
+    if (!data) {
+      console.warn(`[fetchIndexSymbol] No index found for "${name}".`);
+      throw new Error(`Index "${name}" not found in database. Run km_seed_masters.sql to load index symbols.`);
+    }
+    console.log(`[fetchIndexSymbol] Found: ${name} (id=${data.id})`);
+    return data as KmIndexSymbol;
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Index')) throw err;
+    console.error(`[fetchIndexSymbol] Network/auth error for "${name}":`, err);
+    throw new Error(`Could not connect to database. Check Supabase URL and auth credentials.`);
   }
-  if (!data) {
-    console.warn(`[fetchIndexSymbol] No index found for "${name}". Is km_seed_masters.sql loaded?`);
-  }
-  return data as KmIndexSymbol | null;
 }
 
 export async function fetchIndexEod(
@@ -63,8 +70,8 @@ export async function fetchIndexEod(
 
   const { data, error } = await query;
   if (error) {
-    console.error(`[fetchIndexEod] index_id=${indexId}:`, error.message);
-    throw new Error(`[km_index_eod] ${error.message}`);
+    console.error(`[fetchIndexEod] index_id=${indexId}:`, error.message, error);
+    throw new Error(`EOD data query failed: ${error.message}`);
   }
   console.log(`[fetchIndexEod] index_id=${indexId}, range=${range}: ${data?.length ?? 0} rows`);
   return (data ?? []) as KmIndexEod[];
@@ -74,11 +81,15 @@ export async function fetchIndexChartData(
   symbol: MarketSymbol,
   range: TimeRange,
 ): Promise<{ chartData: ChartDataPoint[]; stats: IndexStats | null }> {
+  console.log(`[fetchIndexChartData] Fetching ${symbol} (${range})...`);
+
   const index = await fetchIndexSymbol(symbol);
   if (!index) return { chartData: [], stats: null };
 
   const eod = await fetchIndexEod(index.id, range);
   if (eod.length === 0) return { chartData: [], stats: null };
+
+  console.log(`[fetchIndexChartData] ${eod.length} rows for ${symbol}`);
 
   const chartData: ChartDataPoint[] = eod.map((r) => ({
     date: r.trade_date,
