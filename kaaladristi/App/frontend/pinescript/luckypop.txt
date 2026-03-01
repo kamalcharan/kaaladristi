@@ -1,0 +1,2023 @@
+//@version=6
+indicator("LuckyPop Enhanced v3.1", overlay=true, max_boxes_count=500, max_lines_count=500)
+
+// ============= INPUT GROUPS =============
+g_sma = "SMA Settings"
+g_supertrend = "SuperTrend Settings"
+g_dot = "Dot Settings"
+g_table = "Table Settings"
+g_swing = "Swing High/Low Settings"
+g_ib30 = "IB30/IS30 Settings"
+g_chartink = "Chartink Rules Settings"
+g_orderflow = "Order Flow Settings"
+g_magicrs = "MagicRS Strength Settings"
+g_rss = "RSS Settings"
+g_table_rows = "Table Row Selection"
+g_tooltips = "Display Options"
+g_table_settings = "Table Settings"
+g_style = "Style Settings"
+g_recommend = "Recommendation Settings"
+
+// ============= RECOMMENDATION SETTINGS =============
+enableRecommendation = input.bool(true, "Enable Recommendation Display", group=g_recommend)
+rec_table_position = input.string("Top Right", "Recommendation Position", options=["Top Right", "Top Center", "Top Left", "Bottom Right", "Bottom Left"], group=g_recommend)
+rec_dot_lookback = input.int(5, "Dot Signal Lookback (bars)", minval=1, maxval=20, group=g_recommend)
+rec_font_size = input.string("Normal", "Recommendation Table Font Size", options=["Compact", "Normal", "Large"], group=g_recommend)
+
+// Long Thresholds
+rec_rvol_min_long = input.float(1.1, "RVOL Min (Long)", minval=0.5, maxval=3.0, step=0.1, group=g_recommend)
+rec_rvol_strong_long = input.float(1.3, "RVOL Strong (Long)", minval=1.0, maxval=5.0, step=0.1, group=g_recommend)
+rec_tvol_min_long = input.float(0.8, "TVOL Min (Long)", minval=0.3, maxval=2.0, step=0.1, group=g_recommend)
+rec_tvol_hold_long = input.float(1.0, "TVOL Hold (Long)", minval=0.5, maxval=3.0, step=0.1, group=g_recommend)
+
+// Short Thresholds
+rec_rvol_min_short = input.float(1.3, "RVOL Min (Short)", minval=0.5, maxval=3.0, step=0.1, group=g_recommend)
+rec_rvol_strong_short = input.float(1.5, "RVOL Strong (Short)", minval=1.0, maxval=5.0, step=0.1, group=g_recommend)
+rec_tvol_min_short = input.float(1.0, "TVOL Min (Short)", minval=0.5, maxval=3.0, step=0.1, group=g_recommend)
+
+// Momentum Thresholds
+rec_rsi_bull = input.int(50, "RSI Bullish Threshold", minval=30, maxval=70, group=g_recommend)
+rec_mfi_bull = input.int(50, "MFI Bullish Threshold", minval=30, maxval=70, group=g_recommend)
+rec_rsi_bear = input.int(50, "RSI Bearish Threshold", minval=30, maxval=70, group=g_recommend)
+rec_mfi_bear = input.int(50, "MFI Bearish Threshold", minval=30, maxval=70, group=g_recommend)
+rec_squeeze_rsi = input.int(30, "Squeeze Risk RSI Level", minval=15, maxval=40, group=g_recommend)
+rec_squeeze_lookback = input.int(10, "Squeeze Risk Lookback", minval=5, maxval=30, group=g_recommend)
+
+// ============= POSITION MANAGEMENT SETTINGS =============
+g_position = "Position Management Settings"
+pos_confirm_bars = input.int(2, "Bars to Confirm Entry", minval=1, maxval=5, group=g_position)
+pos_exit_candle_lookback = input.int(2, "Exit: Break Below N Candles", minval=1, maxval=5, group=g_position)
+pos_tvol_squeeze = input.float(0.5, "Exit: TVOL Squeeze Threshold", minval=0.1, maxval=1.0, step=0.1, group=g_position)
+pos_rsi_overbought = input.int(70, "Book Partial: RSI Overbought", minval=60, maxval=85, group=g_position)
+pos_rsi_oversold = input.int(30, "Book Partial: RSI Oversold", minval=15, maxval=40, group=g_position)
+pos_rsi_midline = input.int(50, "Exit: RSI/MFI Midline", minval=40, maxval=60, group=g_position)
+
+// ============= ORDER FLOW ENHANCEMENT SETTINGS =============
+g_flow_enhance = "Order Flow Enhancement"
+enable_flow_classification = input.bool(true, "Enable Flow Classification", group=g_flow_enhance)
+enable_vacuum_detection = input.bool(true, "Enable Vacuum Move Detection", group=g_flow_enhance)
+enable_accumulation_detection = input.bool(true, "Enable Accumulation/Distribution", group=g_flow_enhance)
+enable_breakout_quality = input.bool(true, "Enable Breakout Quality Score", group=g_flow_enhance)
+vacuum_rvol_threshold = input.float(0.5, "Vacuum RVOL Threshold", minval=0.1, maxval=1.0, step=0.1, group=g_flow_enhance)
+vacuum_price_change = input.float(1.0, "Vacuum Price Change %", minval=0.5, maxval=3.0, step=0.1, group=g_flow_enhance)
+vacuum_lookback = input.int(5, "Vacuum Lookback Bars", minval=3, maxval=10, group=g_flow_enhance)
+accum_rvol_threshold = input.float(3.0, "Accumulation RVOL Threshold", minval=1.5, maxval=10.0, step=0.5, group=g_flow_enhance)
+flow_magicrs_bullish = input.int(4, "MagicRS Bullish Threshold (x/6)", minval=3, maxval=6, group=g_flow_enhance)
+flow_magicrs_bearish = input.int(2, "MagicRS Bearish Threshold (x/6)", minval=0, maxval=3, group=g_flow_enhance)
+
+// ============= SIGNAL LOOKBACK SETTINGS =============
+g_signal_lookback = "Signal Lookback Settings"
+signal_lookback_bars = input.int(5, "Signal Lookback Bars", minval=2, maxval=10, group=g_signal_lookback, tooltip="Number of bars to look back for best signal")
+show_best_signal = input.bool(true, "Show Best Signal in Lookback", group=g_signal_lookback)
+
+// ============= PIVOT / FIBO / GANN SETTINGS =============
+g_levels = "Pivot / Fibo / Gann Levels"
+show_pivot_levels = input.bool(true, "Show Pivot Levels", group=g_levels)
+show_fibo_levels = input.bool(true, "Show Fibonacci Levels", group=g_levels)
+show_gann_levels = input.bool(false, "Show Gann 1/8 Levels", group=g_levels)
+show_level_prices = input.bool(true, "Show Prices on Labels", group=g_levels)
+pivot_line_width = input.int(1, "Line Width", minval=1, maxval=3, group=g_levels)
+pivot_line_style = input.string("Dashed", "Line Style", options=["Solid", "Dashed", "Dotted"], group=g_levels)
+
+// ============= RSI DIVERGENCE SETTINGS =============
+g_divergence = "RSI Divergence"
+show_rsi_divergence = input.bool(true, "Show RSI Divergence", group=g_divergence)
+show_regular_divergence = input.bool(true, "Regular Divergence (Reversal)", group=g_divergence)
+show_hidden_divergence = input.bool(true, "Hidden Divergence (Continuation)", group=g_divergence)
+div_pivot_lookback = input.int(3, "Pivot Lookback", minval=2, maxval=10, group=g_divergence, tooltip="Bars to confirm swing pivot (lower = more signals)")
+div_max_lookback = input.int(50, "Divergence Lookback", minval=10, maxval=100, group=g_divergence, tooltip="Max bars between pivots for valid divergence")
+div_signal_lookback = input.int(15, "RSI Signal Lookback", minval=5, maxval=50, group=g_divergence, tooltip="Bars to show divergence status in table")
+show_double_divergence = input.bool(true, "Double Divergence (Stronger Signal)", group=g_divergence)
+div_double_fresh = input.int(20, "Double Div Fresh Window (bars)", minval=5, maxval=50, group=g_divergence, tooltip="Bars to consider double divergence as fresh/hot signal")
+
+// ============= MAGICRS SETTINGS =============
+enableMagicRSStrength = input.bool(true, "Enable MagicRS Strength", group=g_magicrs)
+magicrs_source = input.symbol("NSE:CNX500", "Comparison Symbol", group=g_magicrs)
+magicrs_length = input.int(144, "MagicRS Length", minval=1, group=g_magicrs)
+magicma_length = input.int(60, "MagicMA Length", minval=1, group=g_magicrs)
+
+// ============= IB30/IS30 SETTINGS =============
+enableIB30 = input.bool(true, "Enable IB30/IS30", group=g_ib30)
+ib30_minutes = input.int(30, "Initial Balance Minutes", minval=15, maxval=120, step=15, group=g_ib30)
+market_open_time = input.session("0915-1530", "Market Session", group=g_ib30)
+show_ib30_lines = input.bool(true, "Show IB30 Lines", group=g_ib30)
+show_is30_signals = input.bool(true, "Show IS30 Breakout Signals", group=g_ib30)
+ib30_line_width = input.int(2, "IB30 Line Width", minval=1, maxval=5, group=g_ib30)
+
+// ============= CHARTINK RULES SETTINGS =============
+enableChartinkRules = input.bool(true, "Enable Chartink Rules", group=g_chartink)
+rule1_weeks = input.int(8, "Rule 1: Explosive Move Weeks", minval=4, maxval=20, group=g_chartink)
+rule1_threshold = input.float(100.0, "Rule 1: Move Threshold %", minval=50.0, maxval=500.0, group=g_chartink)
+rule2_correction_max = input.float(20.0, "Rule 2: Max Correction %", minval=10.0, maxval=50.0, group=g_chartink)
+rule2_time_min = input.int(2, "Rule 2: Min Correction Weeks", minval=1, maxval=8, group=g_chartink)
+rule2_time_max = input.int(6, "Rule 2: Max Correction Weeks", minval=2, maxval=12, group=g_chartink)
+rule3_volume_threshold = input.float(1.5, "Rule 3: Volume Surge Multiplier", minval=1.0, maxval=5.0, group=g_chartink)
+rule3_ma_proximity = input.float(3.0, "Rule 3: MA Proximity %", minval=1.0, maxval=10.0, group=g_chartink)
+
+// ============= ORDER FLOW SETTINGS =============
+enableOrderFlow = input.bool(true, "Enable Order Flow", group=g_orderflow)
+delta_smoothing = input.int(5, "Delta Smoothing Period", minval=1, maxval=20, group=g_orderflow)
+volume_profile_bars = input.int(50, "Volume Profile Lookback", minval=20, maxval=200, group=g_orderflow)
+absorption_threshold = input.float(2.0, "Absorption Threshold", minval=1.0, maxval=5.0, group=g_orderflow)
+
+// ============= SMA SETTINGS =============
+sma1Period = input.int(8, title="First SMA Period", minval=1, group=g_sma)
+sma1Source = input.source(close, title="First SMA Source", group=g_sma)
+sma1Visible = input.bool(true, title="Show First SMA", group=g_sma)
+
+sma2Period = input.int(21, title="Second SMA Period", minval=1, group=g_sma)
+sma2Source = input.source(close, title="Second SMA Source", group=g_sma)
+sma2Visible = input.bool(true, title="Show Second SMA", group=g_sma)
+
+sma3Period = input.int(55, title="Third SMA Period", minval=1, group=g_sma)
+sma3Source = input.source(close, title="Third SMA Source", group=g_sma)
+sma3Visible = input.bool(true, title="Show Third SMA", group=g_sma)
+
+sma4Period = input.int(89, title="Fourth SMA Period", minval=1, group=g_sma)
+sma4Source = input.source(close, title="Fourth SMA Source", group=g_sma)
+sma4Visible = input.bool(true, title="Show Fourth SMA", group=g_sma)
+
+sma5Period = input.int(233, title="Fifth SMA Period", minval=1, group=g_sma)
+sma5Source = input.source(close, title="Fifth SMA Source", group=g_sma)
+sma5Visible = input.bool(true, title="Show Fifth SMA", group=g_sma)
+
+goldenLinePeriod = input.int(150, title="Golden Line Period", minval=1, group=g_sma)
+goldenLineSource = input.source(close, title="Golden Line Source", group=g_sma)
+goldenLineVisible = input.bool(true, title="Show Golden Line", group=g_sma)
+
+// ============= SUPERTREND SETTINGS =============
+atrPeriod = input.int(10, "ATR Period", minval=1, group=g_supertrend)
+factor = input.float(3.0, "Factor", step=0.01, group=g_supertrend)
+changeATR = input.bool(true, "Change ATR Calculation Method", group=g_supertrend)
+showSignals = input.bool(true, "Show Buy/Sell Signals", group=g_supertrend)
+// highlighting input removed (fill removed to save plot count)
+
+// ============= DOT SETTINGS =============
+dotLookback = input.int(52, title="Dot Lookback Period", minval=1, group=g_dot)
+bodyTotalRatio = input.float(0.5, title="Body/Total Candle Ratio", minval=0, maxval=1, step=0.1, group=g_dot)
+volMultiplierSVD = input.float(10, "SVD Volume Multiplier", minval=1, step=0.1, group=g_dot)
+volMultiplierSBD = input.float(3, "SBD Volume Multiplier", minval=1, step=0.1, group=g_dot)
+volMultiplierSYD = input.float(2, "SYD Volume Multiplier", minval=1, step=0.1, group=g_dot)
+priceRangeFactor = input.float(3, "Price Range Factor", minval=1, step=0.1, group=g_dot)
+minVolume = input.float(1000, "Minimum Volume", minval=0, group=g_dot)
+
+// ============= TABLE SETTINGS =============
+showTable = input.bool(true, "Show Technical Table", group=g_table)
+tablePosition = input.string("Top", "Table Position", options=["Top", "Middle", "Bottom"], group=g_table)
+tableAlignment = input.string("Left", "Table Alignment", options=["Left", "Center", "Right"], group=g_table)
+relativeVolumePeriod = input.int(55, "Relative Volume Period", minval=1, group=g_table)
+averageRangePeriod = input.int(233, "Average Range Period", minval=1, group=g_table)
+rsiLength = input.int(14, "RSI Length", minval=1, group=g_table)
+rsiSource = input.source(close, "RSI Source", group=g_table)
+
+// ============= TABLE ROW SELECTION =============
+i_showSMADistances = input.bool(true, "Show SMA Distances Row", group=g_table_rows)
+i_showGoldenLine = input.bool(true, "Show Golden Line Row", group=g_table_rows)
+i_showVolume = input.bool(true, "Show Volume Row", group=g_table_rows)
+i_showRSI_MFI = input.bool(true, "Show RSI/MFI Row", group=g_table_rows)
+i_showOBV = input.bool(true, "Show OBV Row", group=g_table_rows)
+i_showMagicRS = input.bool(true, "Show MagicRS Row", group=g_table_rows)
+i_showRSS = input.bool(true, "Show RSS Row", group=g_table_rows)
+i_showSBD_SVD = input.bool(true, "Show SBD/SVD at Golden Line", group=g_table_rows)
+i_showDailySBD_SVD = input.bool(true, "Show Daily SBD/SVD at Golden Line", group=g_table_rows)
+i_showSMACross = input.bool(true, "Show SMA2/3 Crossover", group=g_table_rows)
+i_showRVol = input.bool(true, "Show Relative Volume (RVol)", group=g_table_rows)
+i_showTVol = input.bool(true, "Show Total Volume (TVol)", group=g_table_rows)
+i_showIB30Status = input.bool(true, "Show IB30 Status", group=g_table_rows)
+i_showIS30Signals = input.bool(true, "Show IS30 Breakout Status", group=g_table_rows)
+i_showChartinkR1 = input.bool(true, "Show R1 - EMD (Explosive Move Detection)", group=g_table_rows)
+i_showChartinkR2 = input.bool(true, "Show R2 - CA (Correction Analysis)", group=g_table_rows)
+i_showChartinkR3 = input.bool(true, "Show R3 - VMAC (Volume @ SMA)", group=g_table_rows)
+i_showChartinkSummary = input.bool(true, "Show Chartink Rules Summary", group=g_table_rows)
+i_showOrderFlowDelta = input.bool(true, "Show Order Flow Delta", group=g_table_rows)
+i_showVolumeProfile = input.bool(true, "Show Volume Profile POC", group=g_table_rows)
+i_showAbsorption = input.bool(true, "Show Absorption Analysis", group=g_table_rows)
+i_showConfluence = input.bool(true, "Show Confluence Score", group=g_table_rows)
+
+// ============= TOOLTIP SETTINGS =============
+enable_tooltips = input.bool(false, "Enable Table Tooltips (Limited Support)", group=g_tooltips)
+show_thresholds = input.bool(true, "Show Rule Thresholds in Values", group=g_tooltips)
+tooltip_text_size = input.string("small", "Tooltip Text Size", options=["tiny", "small", "normal", "large"], group=g_tooltips)
+
+// ============= RSS SETTINGS =============
+rssE1Period = input.int(10, "E1 Period", minval=1, group=g_rss)
+rssE2Period = input.int(40, "E2 Period", minval=1, group=g_rss)
+rssRSPeriod = input.int(5, "RS Period", minval=1, group=g_rss)
+
+// ============= ADDITIONAL TABLE SETTINGS =============
+i_goldenLineThreshold = input.float(5.0, "Golden Line Distance Threshold (%)", minval=0.1, group=g_table_settings)
+i_rvolPeriod = input.int(50, "RVol Calculation Period", minval=1, group=g_table_settings)
+i_tvolPeriod = input.int(20, "TVol Calculation Period", minval=1, group=g_table_settings)
+
+// ============= SWING HIGH/LOW SETTINGS =============
+swingSizeR = input.int(10, "Swing Right Lookback", minval=1, group=g_swing)
+swingSizeL = input.int(15, "Swing Left Lookback", minval=1, group=g_swing)
+swingVolThreshold = input.float(1.5, "Swing Volume Threshold", minval=0, step=0.1, group=g_swing)
+
+lookbackYears = input.int(5, "Lookback period for ATH/ATL (years)", minval=1, maxval=10)
+allowRealtime = input.bool(false, "Allow Realtime Signals")
+
+// ============= STYLE SETTINGS =============
+
+sbdColor = input.color(color.blue, title="Solid Blue Dot Color", group=g_style)
+sydColor = input.color(color.yellow, title="Solid Yellow Dot Color", group=g_style)
+svdColor = input.color(color.purple, title="Solid Violet Dot Color", group=g_style)
+
+ib30_bull_color = input.color(color.green, "IB30 Bullish Color", group=g_style)
+ib30_bear_color = input.color(color.red, "IB30 Bearish Color", group=g_style)
+ib30_neutral_color = input.color(color.gray, "IB30 Neutral Color", group=g_style)
+is30_bull_color = input.color(color.lime, "IS30 Bull Signal Color", group=g_style)
+is30_bear_color = input.color(color.orange, "IS30 Bear Signal Color", group=g_style)
+
+
+
+// ============= FONT SIZE MAPPING =============
+rec_main_size = rec_font_size == "Compact" ? size.normal : rec_font_size == "Normal" ? size.large : size.huge
+rec_header_size = rec_font_size == "Compact" ? size.small : rec_font_size == "Normal" ? size.normal : size.large
+rec_reason_size = rec_font_size == "Compact" ? size.small : rec_font_size == "Normal" ? size.normal : size.large
+rec_detail_size = rec_font_size == "Compact" ? size.tiny : rec_font_size == "Normal" ? size.small : size.normal
+
+// ============= SMA CALCULATIONS =============
+calcSMA(source, period) =>
+    ta.sma(source, period)
+
+sma1 = calcSMA(sma1Source, sma1Period)
+sma2 = calcSMA(sma2Source, sma2Period)
+sma3 = calcSMA(sma3Source, sma3Period)
+sma4 = calcSMA(sma4Source, sma4Period)
+sma5 = calcSMA(sma5Source, sma5Period)
+goldenLine = calcSMA(goldenLineSource, goldenLinePeriod)
+
+// ============= IB30/IS30 CALCULATIONS =============
+in_session = not na(time(timeframe.period, market_open_time))
+is_new_session = ta.change(time("1D")) != 0
+
+var float ib30_high = na
+var float ib30_low = na
+var bool ib30_established = false
+var int session_start_time = na
+
+if is_new_session
+    ib30_high := na
+    ib30_low := na
+    ib30_established := false
+    session_start_time := na
+
+if in_session and na(session_start_time)
+    session_start_time := time
+
+ib30_period_active = in_session and not ib30_established and not na(session_start_time) and (time - session_start_time) <= (ib30_minutes * 60 * 1000)
+
+if ib30_period_active
+    if na(ib30_high) or high > ib30_high
+        ib30_high := high
+    if na(ib30_low) or low < ib30_low
+        ib30_low := low
+
+if ib30_period_active and (time - session_start_time) >= (ib30_minutes * 60 * 1000)
+    ib30_established := true
+
+is30_bull_breakout = ib30_established and close > ib30_high and close[1] <= ib30_high
+is30_bear_breakout = ib30_established and close < ib30_low and close[1] >= ib30_low
+
+ib30_range = ib30_established ? ib30_high - ib30_low : na
+ib30_mid = ib30_established ? (ib30_high + ib30_low) / 2 : na
+price_in_ib30 = ib30_established and close <= ib30_high and close >= ib30_low
+
+// ============= CHARTINK RULES CALCULATIONS =============
+weeks_ago_price = close[rule1_weeks * 5]
+rule1_move_pct = weeks_ago_price > 0 ? ((close - weeks_ago_price) / weeks_ago_price) * 100 : 0
+rule1_satisfied = rule1_move_pct >= rule1_threshold
+
+correction_period_min = rule2_time_min * 5
+correction_period_max = rule2_time_max * 5
+recent_high = ta.highest(high, correction_period_max)
+correction_pct = recent_high > 0 ? ((recent_high - close) / recent_high) * 100 : 0
+rule2_satisfied = correction_pct <= rule2_correction_max and correction_pct >= 0
+
+avg_volume = ta.sma(volume, 20)
+volume_surge = volume >= avg_volume * rule3_volume_threshold
+price_near_ma1 = math.abs((close - sma1) / sma1) * 100 <= rule3_ma_proximity
+price_near_ma2 = math.abs((close - sma2) / sma2) * 100 <= rule3_ma_proximity
+price_near_golden = math.abs((close - goldenLine) / goldenLine) * 100 <= rule3_ma_proximity
+ma_proximity = price_near_ma1 or price_near_ma2 or price_near_golden
+rule3_satisfied = volume_surge and ma_proximity
+
+chartink_score = (rule1_satisfied ? 1 : 0) + (rule2_satisfied ? 1 : 0) + (rule3_satisfied ? 1 : 0)
+chartink_status = chartink_score == 3 ? "Perfect" : chartink_score == 2 ? "Strong" : chartink_score == 1 ? "Partial" : "Weak"
+
+// ============= ORDER FLOW CALCULATIONS =============
+up_volume = close > close[1] ? volume : 0
+down_volume = close < close[1] ? volume : 0
+delta = up_volume - down_volume
+smoothed_delta = ta.sma(delta, delta_smoothing)
+abs_delta_sma = ta.sma(math.abs(smoothed_delta), 20)
+
+price_levels = 10
+current_range = high - low
+level_size = current_range / price_levels
+volume_at_levels = array.new<float>(price_levels, 0.0)
+
+large_volume_threshold = ta.sma(volume, 20) * absorption_threshold
+absorption_detected = volume > large_volume_threshold and math.abs(close - open) < (high - low) * 0.3
+
+// ============= DOT CONDITIONS =============
+volAvg = ta.sma(volume, dotLookback)
+bodyRatio = math.abs(close - open) / (high - low)
+volAvg50 = ta.sma(volume, 50)
+
+svdCondition = volume > minVolume and volume >= volMultiplierSVD * volAvg and close > (high + low) / 2 and close > open and bodyRatio >= bodyTotalRatio and close > close[1] * 1.03
+
+isSBD() =>
+    volumeCondition = volume > minVolume and volume >= volMultiplierSBD * volAvg and volume < volMultiplierSVD * volAvg
+    priceCondition = close > close[1] and close > high - (high - low) / priceRangeFactor
+    ratioCondition = bodyRatio >= bodyTotalRatio
+    volumeCondition and priceCondition and ratioCondition
+
+sbdCondition = isSBD()
+
+sydCondition = close < close[1] and volume >= 2 * volAvg50 and close < low + (high - low) / 3 and volume > volume[1]
+
+// ============= PRE-SYD WARNING (NEW) =============
+preSYD_warning = volume >= 1.5 * volAvg50 and close < (high + low) / 2 and close < close[1] and not sydCondition
+
+// ============= RSI AND MFI CALCULATIONS =============
+mfiLength = 14
+mfi = ta.mfi(hlc3, mfiLength)
+rsi = ta.rsi(rsiSource, rsiLength)
+mfiRsiCross = ta.cross(mfi, rsi)
+
+// ============= OBV CALCULATION =============
+obv = ta.obv
+obvSma = ta.sma(obv, 20)
+obvTrend = obv > obvSma ? "Bullish" : obv < obvSma ? "Bearish" : "Neutral"
+
+// ============= TVOL AND RVOL CALCULATIONS =============
+// TVOL: Current bar vs short-term average (recent activity)
+// RVOL: Current bar vs longer-term average (unusual activity detection)
+getTVolRVol(tvolPeriod, rvolPeriod) =>
+    avgVolShort = ta.sma(volume, tvolPeriod)   // Short-term average for TVOL
+    avgVolLong = ta.sma(volume, rvolPeriod)    // Longer-term average for RVOL
+    tvol = avgVolShort > 0 ? volume / avgVolShort : 0
+    rvol = avgVolLong > 0 ? volume / avgVolLong : 0
+    [tvol, rvol]
+
+[current_tvol, current_rvol] = getTVolRVol(i_tvolPeriod, i_rvolPeriod)
+
+// ============= SQUEEZE RISK CALCULATION (NEW) =============
+lowestLow = ta.lowest(low, rec_squeeze_lookback)
+squeeze_risk = close < goldenLine and rsi < rec_squeeze_rsi and close <= lowestLow * 1.01
+
+// ============= DOT LOOKBACK DETECTION (NEW) =============
+// Check for dots within lookback period
+hasSVD_recent() =>
+    result = false
+    for i = 0 to rec_dot_lookback - 1
+        if svdCondition[i]
+            result := true
+            break
+    result
+
+hasSBD_recent() =>
+    result = false
+    for i = 0 to rec_dot_lookback - 1
+        if sbdCondition[i]
+            result := true
+            break
+    result
+
+hasSYD_recent() =>
+    result = false
+    for i = 0 to rec_dot_lookback - 1
+        if sydCondition[i]
+            result := true
+            break
+    result
+
+svd_present = hasSVD_recent()
+sbd_present = hasSBD_recent()
+syd_present = hasSYD_recent()
+
+// ============= DOT PRIORITY LOGIC (NEW) =============
+// Priority: SYD (highest) > SVD > SBD > None
+getDotSignal() =>
+    if syd_present
+        "SYD"
+    else if svd_present
+        "SVD"
+    else if sbd_present
+        "SBD"
+    else
+        "NONE"
+
+dotSignal = getDotSignal()
+
+// ============= KEY LEVEL DETECTION (NEW) =============
+isNearGoldenLine = math.abs(close - goldenLine) / goldenLine * 100 <= i_goldenLineThreshold
+isNearSMA3 = math.abs(close - sma3) / sma3 * 100 <= 3.0
+isAtIB30Breakout = ib30_established and (close > ib30_high or close < ib30_low)
+dotAtKeyLevel = (svd_present or sbd_present) and (isNearGoldenLine or isNearSMA3 or isAtIB30Breakout)
+
+// ============= BIAS CHECK =============
+bias_bullish = close > goldenLine
+bias_bearish = close < goldenLine
+bias_neutral = math.abs(close - goldenLine) / goldenLine * 100 < 0.5
+
+getBiasStatus() =>
+    if bias_neutral
+        "NEUTRAL"
+    else if bias_bullish
+        "LONG"
+    else
+        "SHORT"
+
+biasStatus = getBiasStatus()
+
+// ============= IB30 STATUS CHECK =============
+getIB30Status() =>
+    if not ib30_established
+        "FORMING"
+    else if close > ib30_high
+        "BREAK UP"
+    else if close < ib30_low
+        "BREAK DOWN"
+    else
+        "INSIDE"
+
+ib30Status = getIB30Status()
+
+// ============= MOMENTUM CHECK =============
+momentum_bullish = rsi > rec_rsi_bull and mfi > rec_mfi_bull
+momentum_bearish = rsi < rec_rsi_bear and mfi < rec_mfi_bear
+momentum_mixed = not momentum_bullish and not momentum_bearish
+
+getMomentumStatus() =>
+    if momentum_bullish
+        "ALIGNED UP"
+    else if momentum_bearish
+        "ALIGNED DOWN"
+    else
+        "MIXED"
+
+momentumStatus = getMomentumStatus()
+
+// ============= RVOL STATUS =============
+getRvolStatusLong() =>
+    if current_rvol >= rec_rvol_strong_long
+        "STRONG"
+    else if current_rvol >= rec_rvol_min_long
+        "OK"
+    else
+        "LOW"
+
+getRvolStatusShort() =>
+    if current_rvol >= rec_rvol_strong_short
+        "STRONG"
+    else if current_rvol >= rec_rvol_min_short
+        "OK"
+    else
+        "LOW"
+
+// ============= TVOL STATUS =============
+getTvolStatusLong() =>
+    if current_tvol >= rec_tvol_hold_long
+        "HOLD"
+    else if current_tvol >= rec_tvol_min_long
+        "BOOK FAST"
+    else
+        "AVOID"
+
+getTvolStatusShort() =>
+    if current_tvol >= rec_tvol_min_short
+        "OK"
+    else
+        "AVOID"
+
+// ============= MAGICRS FUNCTIONS (needed for Order Flow Classification) =============
+getMagicRSStatus(tf) =>
+    price1 = request.security(syminfo.tickerid, tf, close)
+    price2 = request.security(magicrs_source, tf, close)
+    rs = price1 / price2
+    rs_ma = ta.sma(rs, magicrs_length)
+    magicrs_value = 100 * ((rs / rs_ma) - 1)
+    magicma_value = ta.sma(magicrs_value, magicma_length)
+    magicrs_value > magicma_value
+
+calculateStrengthPoints() =>
+    points = 0
+    tf = timeframe.period
+    tfminutes = timeframe.in_seconds(tf) / 60.0
+    
+    if tfminutes <= 60
+        min15_green = getMagicRSStatus("15")
+        hour_green = getMagicRSStatus("60")
+        day_green = getMagicRSStatus("D")
+        if min15_green and hour_green and day_green
+            points := 6
+        else if (hour_green and day_green) or (min15_green and day_green) or (min15_green and hour_green)
+            points := 3
+        else if min15_green or hour_green or day_green
+            points := 1
+    else if tfminutes <= 1440
+        hour_green = getMagicRSStatus("60")
+        day_green = getMagicRSStatus("D")
+        week_green = getMagicRSStatus("W")
+        if hour_green and day_green and week_green
+            points := 6
+        else if (hour_green and day_green) or (day_green and week_green) or (hour_green and week_green)
+            points := 3
+        else if hour_green or day_green or week_green
+            points := 1
+    else
+        day_green = getMagicRSStatus("D")
+        week_green = getMagicRSStatus("W")
+        month_green = getMagicRSStatus("M")
+        if day_green and week_green and month_green
+            points := 6
+        else if (day_green and week_green) or (week_green and month_green) or (day_green and month_green)
+            points := 3
+        else if day_green or week_green or month_green
+            points := 1
+    points
+
+// ============= ORDER FLOW CLASSIFICATION (MagicRS as OI Proxy) =============
+// Get MagicRS strength for flow classification
+flowStrengthPoints = enableMagicRSStrength ? calculateStrengthPoints() : 0
+
+// Price direction
+priceUp = close > close[1]
+priceDown = close < close[1]
+priceChange5 = ((close - close[vacuum_lookback]) / close[vacuum_lookback]) * 100
+
+// High volume threshold
+isHighVolume = current_rvol >= 1.1
+
+// Flow Classification using MagicRS as OI proxy
+var string flowType = "GREY"
+var color flowColor = color.gray
+var string flowMeaning = "Noise"
+
+if enable_flow_classification
+    if not isHighVolume
+        flowType := "GREY"
+        flowColor := color.gray
+        flowMeaning := "Low Volume"
+    else if priceUp and flowStrengthPoints >= flow_magicrs_bullish
+        flowType := "SOLID GREEN"
+        flowColor := color.green
+        flowMeaning := "Fresh Longs"
+    else if priceUp and flowStrengthPoints <= flow_magicrs_bearish
+        flowType := "HOLLOW GREEN"
+        flowColor := color.new(color.green, 50)
+        flowMeaning := "Short Covering"
+    else if priceDown and flowStrengthPoints <= flow_magicrs_bearish
+        flowType := "SOLID RED"
+        flowColor := color.red
+        flowMeaning := "Fresh Shorts"
+    else if priceDown and flowStrengthPoints >= flow_magicrs_bullish
+        flowType := "HOLLOW RED"
+        flowColor := color.new(color.red, 50)
+        flowMeaning := "Long Liquidation"
+    else
+        flowType := "MIXED"
+        flowColor := color.yellow
+        flowMeaning := "Mixed Flow"
+
+// ============= VACUUM MOVE DETECTION =============
+// Detect price moves on low volume (unsustainable)
+avgRvolLookback = ta.sma(current_rvol, vacuum_lookback)
+vacuumUp = enable_vacuum_detection and priceChange5 > vacuum_price_change and avgRvolLookback < vacuum_rvol_threshold
+vacuumDown = enable_vacuum_detection and priceChange5 < -vacuum_price_change and avgRvolLookback < vacuum_rvol_threshold
+isVacuumMove = vacuumUp or vacuumDown
+
+var string vacuumStatus = "NONE"
+if vacuumUp
+    vacuumStatus := "VACUUM UP"
+else if vacuumDown
+    vacuumStatus := "VACUUM DOWN"
+else
+    vacuumStatus := "NONE"
+
+// ============= ACCUMULATION / DISTRIBUTION DETECTION =============
+// Accumulation: Below GL + High RVOL + Bullish momentum/flow
+// Distribution: Above GL + High RVOL + Bearish momentum/flow
+isAccumulation = enable_accumulation_detection and bias_bearish and current_rvol >= accum_rvol_threshold and (momentum_bullish or flowStrengthPoints >= flow_magicrs_bullish)
+isDistribution = enable_accumulation_detection and bias_bullish and current_rvol >= accum_rvol_threshold and (momentum_bearish or flowStrengthPoints <= flow_magicrs_bearish)
+
+var string accumDistStatus = "NONE"
+if isAccumulation
+    accumDistStatus := "ACCUMULATION"
+else if isDistribution
+    accumDistStatus := "DISTRIBUTION"
+else
+    accumDistStatus := "NONE"
+
+// ============= BREAKOUT QUALITY SCORE (0-6) =============
+// Factors: Close outside, Body outside, Next bar hold, High volume, Absorption, Momentum aligned
+var int breakoutQualityUp = 0
+var int breakoutQualityDown = 0
+
+if enable_breakout_quality and ib30_established
+    // Reset scores
+    breakoutQualityUp := 0
+    breakoutQualityDown := 0
+    
+    // UPSIDE BREAKOUT QUALITY
+    if close > ib30_high
+        breakoutQualityUp := breakoutQualityUp + 1  // Close above
+        if open > ib30_high
+            breakoutQualityUp := breakoutQualityUp + 1  // Body fully above
+        if close[1] > ib30_high
+            breakoutQualityUp := breakoutQualityUp + 1  // Previous bar also above (hold)
+        if current_rvol >= 1.5
+            breakoutQualityUp := breakoutQualityUp + 1  // High volume
+        if absorption_detected
+            breakoutQualityUp := breakoutQualityUp + 1  // Absorption present
+        if momentum_bullish
+            breakoutQualityUp := breakoutQualityUp + 1  // Momentum aligned
+    
+    // DOWNSIDE BREAKOUT QUALITY
+    if close < ib30_low
+        breakoutQualityDown := breakoutQualityDown + 1  // Close below
+        if open < ib30_low
+            breakoutQualityDown := breakoutQualityDown + 1  // Body fully below
+        if close[1] < ib30_low
+            breakoutQualityDown := breakoutQualityDown + 1  // Previous bar also below (hold)
+        if current_rvol >= 1.5
+            breakoutQualityDown := breakoutQualityDown + 1  // High volume
+        if absorption_detected
+            breakoutQualityDown := breakoutQualityDown + 1  // Absorption present
+        if momentum_bearish
+            breakoutQualityDown := breakoutQualityDown + 1  // Momentum aligned
+
+// Breakout quality label
+var string breakoutQualityLabel = "NO BREAK"
+var int activeBreakoutQuality = 0
+
+if close > ib30_high
+    activeBreakoutQuality := breakoutQualityUp
+else if close < ib30_low
+    activeBreakoutQuality := breakoutQualityDown
+else
+    activeBreakoutQuality := 0
+
+if activeBreakoutQuality == 0
+    breakoutQualityLabel := "NO BREAK"
+else if activeBreakoutQuality <= 2
+    breakoutQualityLabel := "WEAK"
+else if activeBreakoutQuality == 3
+    breakoutQualityLabel := "MODERATE"
+else if activeBreakoutQuality == 4
+    breakoutQualityLabel := "CONFIRMED"
+else
+    breakoutQualityLabel := "STRONG"
+
+// ============= MAIN RECOMMENDATION ENGINE (NEW) =============
+getRecommendation() =>
+    recommendation = ""
+    reason = ""
+    
+    // Check for dead day first (both must be very low)
+    if current_rvol < 0.7 and current_tvol < 0.5
+        recommendation := "AVOID"
+        reason := "Dead Day"
+    // Check for Accumulation (below GL but smart money buying)
+    else if isAccumulation
+        recommendation := "ACCUMULATION"
+        reason := "Smart $ @ Support"
+    // Check for Distribution (above GL but smart money selling)
+    else if isDistribution
+        recommendation := "DISTRIBUTION"
+        reason := "Smart $ Selling"
+    // Check for neutral bias
+    else if bias_neutral
+        recommendation := "NO TRADE"
+        reason := "Unclear Bias"
+    // LONG SETUPS
+    else if bias_bullish
+        if ib30Status == "INSIDE"
+            recommendation := "NO TRADE"
+            reason := "Inside IB30"
+        else if ib30Status == "BREAK DOWN"
+            recommendation := "AVOID"
+            reason := "Counter-trend"
+        else if ib30Status == "FORMING"
+            recommendation := "WAIT"
+            reason := "IB30 Forming"
+        else if ib30Status == "BREAK UP"
+            // Check breakout quality first
+            if activeBreakoutQuality <= 2 and enable_breakout_quality
+                recommendation := "CAUTION"
+                reason := "Weak Break (" + str.tostring(activeBreakoutQuality) + "/6)"
+            else if not momentum_bullish
+                recommendation := "CAUTION"
+                reason := "Momentum Not Aligned"
+            else if syd_present
+                recommendation := "CAUTION"
+                reason := "SYD Conflict"
+            else if current_rvol < rec_rvol_min_long
+                recommendation := "AVOID"
+                reason := "Low RVOL"
+            else if current_tvol < rec_tvol_min_long
+                recommendation := "SCALP ONLY"
+                reason := "Low TVOL"
+            // Check for POWER BUY (Strong break + Solid Green flow)
+            else if activeBreakoutQuality >= 5 and flowType == "SOLID GREEN"
+                recommendation := "POWER BUY"
+                reason := "Strong Break + Fresh Longs"
+            // Check for flow type warnings
+            else if flowType == "HOLLOW GREEN" and enable_flow_classification
+                recommendation := "CAUTION"
+                reason := "Short Covering Only"
+            else if svd_present and dotAtKeyLevel and current_rvol >= rec_rvol_strong_long and current_tvol >= rec_tvol_hold_long
+                recommendation := "STRONG BUY"
+                reason := "SVD @ Key Level"
+            else if sbd_present and dotAtKeyLevel and current_rvol >= rec_rvol_strong_long
+                recommendation := "BUY CONFIRMED"
+                reason := "SBD @ Key Level"
+            else if svd_present and current_rvol >= rec_rvol_strong_long
+                recommendation := "STRONG BUY"
+                reason := "SVD Present"
+            else if sbd_present and current_rvol >= rec_rvol_min_long
+                recommendation := "BUY CONFIRMED"
+                reason := "SBD Present"
+            else if current_rvol >= rec_rvol_strong_long and current_tvol >= rec_tvol_hold_long
+                recommendation := "BUY"
+                reason := "Full Conviction"
+            else if current_rvol >= rec_rvol_min_long and current_tvol >= rec_tvol_min_long
+                if current_tvol < rec_tvol_hold_long
+                    recommendation := "BUY BOOK FAST"
+                    reason := "Low TVOL"
+                else
+                    recommendation := "BUY"
+                    reason := "Standard Setup"
+            else
+                recommendation := "SCALP ONLY"
+                reason := "Weak Volume"
+        else
+            recommendation := "WAIT"
+            reason := "Setup Incomplete"
+    // SHORT SETUPS
+    else if bias_bearish
+        if ib30Status == "INSIDE"
+            recommendation := "NO TRADE"
+            reason := "Inside IB30"
+        else if ib30Status == "BREAK UP"
+            recommendation := "AVOID"
+            reason := "Counter-trend"
+        else if ib30Status == "FORMING"
+            recommendation := "WAIT"
+            reason := "IB30 Forming"
+        else if ib30Status == "BREAK DOWN"
+            // Check breakout quality first
+            if activeBreakoutQuality <= 2 and enable_breakout_quality
+                recommendation := "CAUTION"
+                reason := "Weak Break (" + str.tostring(activeBreakoutQuality) + "/6)"
+            // Check for squeeze risk
+            else if squeeze_risk
+                recommendation := "SQUEEZE RISK"
+                reason := "Extended Low"
+            else if not momentum_bearish
+                recommendation := "CAUTION"
+                reason := "Momentum Not Aligned"
+            else if svd_present or sbd_present
+                recommendation := "AVOID"
+                reason := "Buyers Active"
+            else if current_rvol < rec_rvol_min_short
+                recommendation := "AVOID"
+                reason := "Low RVOL"
+            else if current_tvol < rec_tvol_min_short
+                recommendation := "SCALP SHORT"
+                reason := "Low TVOL"
+            // Check for POWER SELL (Strong break + Solid Red flow)
+            else if activeBreakoutQuality >= 5 and flowType == "SOLID RED"
+                recommendation := "POWER SELL"
+                reason := "Strong Break + Fresh Shorts"
+            // Check for flow type warnings
+            else if flowType == "HOLLOW RED" and enable_flow_classification
+                recommendation := "CAUTION"
+                reason := "Long Liquidation Only"
+            else if syd_present and dotAtKeyLevel and current_rvol >= rec_rvol_strong_short
+                recommendation := "STRONG SELL"
+                reason := "SYD @ Key Level"
+            else if syd_present and current_rvol >= rec_rvol_strong_short
+                recommendation := "STRONG SELL"
+                reason := "SYD Present"
+            else if syd_present and current_rvol >= rec_rvol_min_short
+                recommendation := "SELL"
+                reason := "SYD Confirmed"
+            else if current_rvol >= rec_rvol_strong_short and current_tvol >= rec_tvol_min_short
+                recommendation := "SELL"
+                reason := "Full Conviction"
+            else if current_rvol >= rec_rvol_min_short
+                recommendation := "SELL BOOK FAST"
+                reason := "Moderate Setup"
+            else
+                recommendation := "SCALP SHORT"
+                reason := "Weak Volume"
+        else
+            recommendation := "WAIT"
+            reason := "Setup Incomplete"
+    else
+        recommendation := "NO TRADE"
+        reason := "Invalid Setup"
+    
+    [recommendation, reason]
+
+[finalRecommendation, finalReason] = getRecommendation()
+
+// ============= RECOMMENDATION COLOR FUNCTION =============
+getRecommendationColor(rec) =>
+    switch rec
+        "POWER BUY" => color.new(color.green, 0)
+        "STRONG BUY" => color.new(color.green, 0)
+        "BUY CONFIRMED" => color.new(color.green, 20)
+        "BUY" => color.new(color.lime, 30)
+        "BUY BOOK FAST" => color.new(color.yellow, 30)
+        "POWER SELL" => color.new(color.red, 0)
+        "STRONG SELL" => color.new(color.red, 0)
+        "SELL" => color.new(color.red, 20)
+        "SELL BOOK FAST" => color.new(color.orange, 20)
+        "SCALP SHORT" => color.new(color.orange, 40)
+        "SCALP ONLY" => color.new(color.yellow, 40)
+        "CAUTION" => color.new(color.yellow, 20)
+        "SQUEEZE RISK" => color.new(color.purple, 20)
+        "ACCUMULATION" => color.new(color.teal, 20)
+        "DISTRIBUTION" => color.new(color.orange, 20)
+        "NO TRADE" => color.new(color.gray, 40)
+        "WAIT" => color.new(color.gray, 60)
+        "AVOID" => color.new(color.gray, 30)
+        => color.new(color.gray, 50)
+
+recColor = getRecommendationColor(finalRecommendation)
+
+// ============= SIGNAL SCORE FUNCTION =============
+getSignalScore(rec) =>
+    switch rec
+        "POWER BUY" => 10
+        "STRONG BUY" => 9
+        "BUY CONFIRMED" => 8
+        "BUY" => 7
+        "BUY BOOK FAST" => 6
+        "ACCUMULATION" => 5
+        "SCALP ONLY" => 4
+        "CAUTION" => 3
+        "WAIT" => 2
+        "AVOID" => 1
+        "NO TRADE" => 0
+        "POWER SELL" => -10
+        "STRONG SELL" => -9
+        "SELL" => -8
+        "SELL BOOK FAST" => -7
+        "SCALP SHORT" => -6
+        "DISTRIBUTION" => -5
+        "SQUEEZE RISK" => -4
+        => 0
+
+// Get score from signal name
+getSignalFromScore(score) =>
+    switch score
+        10 => "POWER BUY"
+        9 => "STRONG BUY"
+        8 => "BUY CONFIRMED"
+        7 => "BUY"
+        6 => "BUY BOOK FAST"
+        5 => "ACCUMULATION"
+        4 => "SCALP ONLY"
+        3 => "CAUTION"
+        2 => "WAIT"
+        1 => "AVOID"
+        0 => "NO TRADE"
+        -10 => "POWER SELL"
+        -9 => "STRONG SELL"
+        -8 => "SELL"
+        -7 => "SELL BOOK FAST"
+        -6 => "SCALP SHORT"
+        -5 => "DISTRIBUTION"
+        -4 => "SQUEEZE RISK"
+        => "NO TRADE"
+
+// Current signal score
+currentSignalScore = getSignalScore(finalRecommendation)
+
+// ============= BEST SIGNAL IN LOOKBACK =============
+// Find best LONG signal in lookback (highest positive score)
+// Find best SHORT signal in lookback (lowest negative score)
+var int bestLongScore = 0
+var int bestLongAge = 0
+var int bestShortScore = 0
+var int bestShortAge = 0
+
+if show_best_signal
+    // Reset for fresh calculation
+    bestLongScore := currentSignalScore > 0 ? currentSignalScore : 0
+    bestLongAge := currentSignalScore > 0 ? 0 : 99
+    bestShortScore := currentSignalScore < 0 ? currentSignalScore : 0
+    bestShortAge := currentSignalScore < 0 ? 0 : 99
+    
+    // Check previous bars
+    for i = 1 to signal_lookback_bars
+        prevScore = getSignalScore(finalRecommendation[i])
+        // Track best LONG signal
+        if prevScore > 0 and prevScore > bestLongScore
+            bestLongScore := prevScore
+            bestLongAge := i
+        // Track best SHORT signal
+        if prevScore < 0 and prevScore < bestShortScore
+            bestShortScore := prevScore
+            bestShortAge := i
+
+// Determine which best signal to show based on current bias
+bestSignalScore = bias_bullish ? bestLongScore : bias_bearish ? bestShortScore : (math.abs(bestLongScore) > math.abs(bestShortScore) ? bestLongScore : bestShortScore)
+bestSignalAge = bias_bullish ? bestLongAge : bias_bearish ? bestShortAge : (math.abs(bestLongScore) > math.abs(bestShortScore) ? bestLongAge : bestShortAge)
+bestSignal = getSignalFromScore(bestSignalScore)
+bestSignalColor = getRecommendationColor(bestSignal)
+
+// Freshness label
+bestSignalFreshness = bestSignalAge <= 2 ? "🔥" : bestSignalAge <= 5 ? "✅" : "⚠️"
+
+// ============= POSITION MANAGEMENT SYSTEM =============
+// Track signal age and position state
+var string lastEntrySignal = ""
+var int signalAge = 0
+var float entryPrice = na
+var bool inLongPosition = false
+var bool inShortPosition = false
+
+// Check if current recommendation is an entry signal
+isLongEntrySignal = finalRecommendation == "STRONG BUY" or finalRecommendation == "BUY CONFIRMED" or finalRecommendation == "BUY" or finalRecommendation == "BUY BOOK FAST"
+isShortEntrySignal = finalRecommendation == "STRONG SELL" or finalRecommendation == "SELL" or finalRecommendation == "SELL BOOK FAST"
+isNeutralSignal = finalRecommendation == "NO TRADE" or finalRecommendation == "AVOID" or finalRecommendation == "WAIT" or finalRecommendation == "CAUTION"
+
+// Signal age tracking
+if isLongEntrySignal
+    if lastEntrySignal == "LONG"
+        signalAge := signalAge + 1
+    else
+        lastEntrySignal := "LONG"
+        signalAge := 0
+        entryPrice := close
+else if isShortEntrySignal
+    if lastEntrySignal == "SHORT"
+        signalAge := signalAge + 1
+    else
+        lastEntrySignal := "SHORT"
+        signalAge := 0
+        entryPrice := close
+else
+    // Reset on neutral signals
+    if isNeutralSignal and signalAge < pos_confirm_bars
+        lastEntrySignal := ""
+        signalAge := 0
+        entryPrice := na
+
+// Position state detection (after confirmation bars)
+if signalAge >= pos_confirm_bars
+    if lastEntrySignal == "LONG"
+        inLongPosition := true
+        inShortPosition := false
+    else if lastEntrySignal == "SHORT"
+        inShortPosition := true
+        inLongPosition := false
+
+// ============= EXIT TRIGGERS (LONG) =============
+// Structure break: Close below lowest low of N candles
+lowestLowN = ta.lowest(low, pos_exit_candle_lookback)
+longStructureBreak = close < lowestLowN[1]
+
+// TVOL Squeeze
+tvolSqueeze = current_tvol < pos_tvol_squeeze
+
+// RSI crossed below midline
+rsiCrossedBelowMid = ta.crossunder(rsi, pos_rsi_midline)
+
+// MFI crossed below midline  
+mfiCrossedBelowMid = ta.crossunder(mfi, pos_rsi_midline)
+
+// Count exit triggers for Long (excluding TVOL squeeze which is standalone)
+longExitTriggerCount = (longStructureBreak ? 1 : 0) + (rsiCrossedBelowMid ? 1 : 0) + (mfiCrossedBelowMid ? 1 : 0)
+longExitTriggered = tvolSqueeze or longExitTriggerCount >= 2
+
+// ============= EXIT TRIGGERS (SHORT) =============
+// Structure break: Close above highest high of N candles
+highestHighN = ta.highest(high, pos_exit_candle_lookback)
+shortStructureBreak = close > highestHighN[1]
+
+// RSI crossed above midline
+rsiCrossedAboveMid = ta.crossover(rsi, pos_rsi_midline)
+
+// MFI crossed above midline
+mfiCrossedAboveMid = ta.crossover(mfi, pos_rsi_midline)
+
+// Count exit triggers for Short (excluding TVOL squeeze which is standalone)
+shortExitTriggerCount = (shortStructureBreak ? 1 : 0) + (rsiCrossedAboveMid ? 1 : 0) + (mfiCrossedAboveMid ? 1 : 0)
+shortExitTriggered = tvolSqueeze or shortExitTriggerCount >= 2
+
+// ============= CALCULATE P&L (needed for Book Partial) =============
+pnlPercent = entryPrice > 0 ? ((close - entryPrice) / entryPrice) * 100 : 0.0
+pnlPercentShort = entryPrice > 0 ? ((entryPrice - close) / entryPrice) * 100 : 0.0
+
+// ============= BOOK PARTIAL TRIGGERS =============
+// Long: Close < Low[1] AND RSI > overbought AND RSI dropping
+rsiWasOverbought = rsi[1] > pos_rsi_overbought or rsi[2] > pos_rsi_overbought
+rsiDropping = rsi < rsi[1]
+longBookPartialRSI = close < low[1] and rsiWasOverbought and rsiDropping
+
+// Vacuum Move Book Partial (in profit + vacuum up detected)
+longBookPartialVacuum = vacuumUp and pnlPercent > 0.5
+
+// Combined Book Partial for Long
+longBookPartial = longBookPartialRSI or longBookPartialVacuum
+
+// Short: Close > High[1] AND RSI < oversold AND RSI rising
+rsiWasOversold = rsi[1] < pos_rsi_oversold or rsi[2] < pos_rsi_oversold
+rsiRising = rsi > rsi[1]
+shortBookPartialRSI = close > high[1] and rsiWasOversold and rsiRising
+
+// Vacuum Move Book Partial (in profit + vacuum down detected)
+shortBookPartialVacuum = vacuumDown and pnlPercentShort > 0.5
+
+// Combined Book Partial for Short
+shortBookPartial = shortBookPartialRSI or shortBookPartialVacuum
+
+// ============= POSITION MODE RECOMMENDATION =============
+var string positionRecommendation = ""
+var string positionReason = ""
+var color positionColor = color.gray
+
+// Determine position mode recommendation
+if inLongPosition
+    if longExitTriggered
+        positionRecommendation := "EXIT"
+        if tvolSqueeze
+            positionReason := "TVOL Squeeze"
+        else if longStructureBreak
+            positionReason := "Structure Break"
+        else
+            positionReason := "Momentum Lost"
+        positionColor := color.new(color.red, 0)
+        // Reset position
+        inLongPosition := false
+        lastEntrySignal := ""
+        signalAge := 0
+    else if longBookPartial
+        positionRecommendation := "BOOK PARTIAL"
+        if longBookPartialVacuum
+            positionReason := "⚠️ Vacuum Move"
+        else
+            positionReason := "RSI Overbought"
+        positionColor := color.new(color.yellow, 20)
+    else if vacuumUp and pnlPercent > 0
+        positionRecommendation := "HOLD"
+        positionReason := "⚠️ Vacuum (Tighten SL)"
+        positionColor := color.new(color.yellow, 40)
+    else
+        positionRecommendation := "HOLD"
+        positionReason := "Trend Intact"
+        positionColor := color.new(color.green, 30)
+else if inShortPosition
+    if shortExitTriggered
+        positionRecommendation := "EXIT"
+        if tvolSqueeze
+            positionReason := "TVOL Squeeze"
+        else if shortStructureBreak
+            positionReason := "Structure Break"
+        else
+            positionReason := "Momentum Shift"
+        positionColor := color.new(color.red, 0)
+        // Reset position
+        inShortPosition := false
+        lastEntrySignal := ""
+        signalAge := 0
+    else if shortBookPartial
+        positionRecommendation := "BOOK PARTIAL"
+        if shortBookPartialVacuum
+            positionReason := "⚠️ Vacuum Move"
+        else
+            positionReason := "RSI Oversold"
+        positionColor := color.new(color.yellow, 20)
+    else if vacuumDown and pnlPercentShort > 0
+        positionRecommendation := "HOLD"
+        positionReason := "⚠️ Vacuum (Tighten SL)"
+        positionColor := color.new(color.yellow, 40)
+    else
+        positionRecommendation := "HOLD"
+        positionReason := "Trend Intact"
+        positionColor := color.new(color.green, 30)
+else
+    positionRecommendation := ""
+    positionReason := ""
+    positionColor := color.gray
+
+// ============= FINAL DISPLAY DECISION =============
+// Determine what to show based on position state
+var string displayRecommendation = ""
+var string displayReason = ""
+var color displayColor = color.gray
+var string displayMode = ""
+
+if inLongPosition or inShortPosition
+    displayMode := inLongPosition ? "IN LONG" : "IN SHORT"
+    displayRecommendation := positionRecommendation
+    displayReason := positionReason
+    displayColor := positionColor
+else if signalAge >= 1 and signalAge < pos_confirm_bars
+    displayMode := "CONFIRMING"
+    displayRecommendation := finalRecommendation
+    displayReason := "(" + str.tostring(signalAge) + "/" + str.tostring(pos_confirm_bars) + " bars)"
+    displayColor := color.new(color.blue, 30)
+else
+    displayMode := "SCANNING"
+    displayRecommendation := finalRecommendation
+    displayReason := finalReason
+    displayColor := getRecommendationColor(finalRecommendation)
+
+// ============= RSS CALCULATION =============
+getRSS() =>
+    E1 = ta.sma(close, rssE1Period)
+    E2 = ta.sma(close, rssE2Period)
+    Spread = E1 - E2
+    RS = ta.rsi(Spread, rssRSPeriod)
+    Smooth = ta.sma(RS, 3)
+    rssDirection = E1 > E2
+    [Smooth, Spread, rssDirection]
+
+// ============= SMA CROSSOVER CHECK =============
+checkSMACrossover() =>
+    crossUp = ta.crossover(sma2, sma3)
+    crossDown = ta.crossunder(sma2, sma3)
+    distance = 100 * (sma2 - sma3) / sma3
+    [crossUp, crossDown, distance]
+
+// ============= CHECK SIGNALS AT GOLDEN LINE =============
+checkSignalsAtGoldenLine(tf) =>
+    distanceToGolden = math.abs(100 * (close - goldenLine) / goldenLine)
+    isNearGL = distanceToGolden <= i_goldenLineThreshold
+    hasSBD = isNearGL and sbdCondition
+    hasSVD = isNearGL and svdCondition
+    [hasSBD, hasSVD]
+
+// ============= CONFLUENCE SCORE =============
+calculateConfluenceScore() =>
+    score = 0
+    
+    if enableMagicRSStrength
+        strengthPoints = calculateStrengthPoints()
+        score := score + (strengthPoints >= 3 ? 2 : strengthPoints > 0 ? 1 : 0)
+    
+    if enableChartinkRules
+        score := score + chartink_score
+    
+    if enableIB30
+        if is30_bull_breakout or is30_bear_breakout
+            score := score + 2
+        else if ib30_established and price_in_ib30
+            score := score + 1
+    
+    if enableOrderFlow
+        if math.abs(smoothed_delta) > abs_delta_sma * 1.5
+            score := score + 2
+        else if smoothed_delta > 0
+            score := score + 1
+    
+    if svdCondition or sbdCondition
+        score := score + 1
+    
+    score
+
+// ============= FORMAT NUMBER =============
+formatNumber(num) =>
+    if num >= 1000000000000
+        str.tostring(num / 1000000000000, "#.##") + " T"
+    else if num >= 1000000000
+        str.tostring(num / 1000000000, "#.##") + " B"
+    else if num >= 1000000
+        str.tostring(num / 1000000, "#.##") + " M"
+    else if num >= 1000
+        str.tostring(num / 1000, "#.##") + " K"
+    else
+        str.tostring(num, "#.##")
+
+// ============= PLOTTING SMAs =============
+plot(sma1Visible ? sma1 : na, title="SMA1", color=color.blue, linewidth=1)
+plot(sma2Visible ? sma2 : na, title="SMA2", color=color.red, linewidth=1)
+plot(sma3Visible ? sma3 : na, title="SMA3", color=color.green, linewidth=1)
+plot(sma4Visible ? sma4 : na, title="SMA4", color=color.purple, linewidth=1)
+plot(sma5Visible ? sma5 : na, title="SMA5", color=color.orange, linewidth=1)
+plot(goldenLineVisible ? goldenLine : na, title="Golden Line", color=color.yellow, linewidth=2)
+
+// ============= PLOT IB30 LEVELS =============
+ib30_color = ib30_established ? (smoothed_delta > 0 ? ib30_bull_color : smoothed_delta < 0 ? ib30_bear_color : ib30_neutral_color) : na
+plot(show_ib30_lines and ib30_established ? ib30_high : na, title="IB30 High", color=ib30_color, linewidth=ib30_line_width, style=plot.style_line)
+plot(show_ib30_lines and ib30_established ? ib30_low : na, title="IB30 Low", color=ib30_color, linewidth=ib30_line_width, style=plot.style_line)
+
+// ============= SUPERTREND CALCULATION =============
+atr2 = ta.sma(ta.tr, atrPeriod)
+atr_standard = ta.atr(atrPeriod)
+atr = changeATR ? atr_standard : atr2
+up = hl2 - (factor * atr)
+up1 = nz(up[1], up)
+up := close[1] > up1 ? math.max(up, up1) : up
+dn = hl2 + (factor * atr)
+dn1 = nz(dn[1], dn)
+dn := close[1] < dn1 ? math.min(dn, dn1) : dn
+trend = 1
+trend := nz(trend[1], trend)
+trend := trend == -1 and close > dn1 ? 1 : trend == 1 and close < up1 ? -1 : trend
+
+// ============= SUPERTREND PLOTTING =============
+upColor = color.new(color.green, 0)
+dnColor = color.new(color.red, 0)
+upTrend = trend == 1 ? up : na
+dnTrend = trend == -1 ? dn : na
+plot(upTrend, "UpTrend", color=upColor, linewidth=2, style=plot.style_linebr)
+plot(dnTrend, "DownTrend", color=dnColor, linewidth=2, style=plot.style_linebr)
+
+// SuperTrend fill removed to save plot count
+
+// ============= SUPERTREND SIGNALS =============
+buySignal = trend == 1 and trend[1] == -1
+sellSignal = trend == -1 and trend[1] == 1
+plotshape(buySignal and showSignals ? up : na, title="Buy Signal", location=location.absolute, style=shape.triangleup, size=size.small, color=color.new(color.green, 0))
+plotshape(sellSignal and showSignals ? dn : na, title="Sell Signal", location=location.absolute, style=shape.triangledown, size=size.small, color=color.new(color.red, 0))
+// Buy/Sell text labels removed (triangles sufficient) to save plot count
+
+// ============= DOT PLOTTING =============
+plotshape(svdCondition, style=shape.circle, location=location.belowbar, color=svdColor, size=size.tiny, title="SVD")
+plotSBD = allowRealtime ? sbdCondition : (not barstate.isrealtime and sbdCondition[1])
+plotshape(plotSBD ? low : na, style=shape.circle, location=location.belowbar, color=sbdColor, size=size.tiny, title="SBD")
+plotshape(sydCondition, style=shape.circle, location=location.belowbar, color=sydColor, size=size.tiny, title="SYD")
+
+// ============= IS30 BREAKOUT SIGNALS =============
+plotshape(show_is30_signals and is30_bull_breakout, title="IS30 Bull", style=shape.triangleup, location=location.belowbar, color=is30_bull_color, size=size.small, text="IS30↑")
+plotshape(show_is30_signals and is30_bear_breakout, title="IS30 Bear", style=shape.triangledown, location=location.abovebar, color=is30_bear_color, size=size.small, text="IS30↓")
+
+// ============= ADDITIONAL FEATURES =============
+
+
+pivotHigh = ta.pivothigh(high, swingSizeL, swingSizeR)
+pivotLow = ta.pivotlow(low, swingSizeL, swingSizeR)
+swingVolAvg = ta.sma(volume, swingSizeL + swingSizeR)
+isSwingHigh = not na(pivotHigh) and volume > swingVolAvg * swingVolThreshold
+isSwingLow = not na(pivotLow) and volume > swingVolAvg * swingVolThreshold
+
+// 52-week High/Low plotshapes removed to save plot count
+// ATH/ATL plotshapes removed to save plot count
+// Momentum Candle plotshape removed to save plot count
+
+plotshape(isSwingHigh, title="Swing High", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.tiny)
+plotshape(isSwingLow, title="Swing Low", style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.tiny)
+
+// ============= TECH TABLE CALCULATIONS =============
+distSMA1 = 100 * (close - sma1) / sma1
+distSMA2 = 100 * (close - sma2) / sma2
+distSMA3 = 100 * (close - sma3) / sma3
+distGoldenLine = 100 * (close - goldenLine) / goldenLine
+relVolume = volume / ta.sma(volume, relativeVolumePeriod)
+avgRange = ta.sma(high - low, averageRangePeriod)
+
+// ============= TOOLTIP TEXT FUNCTION =============
+getTooltipText(metric) =>
+    switch metric
+        "SMA_DISTANCES" => "Distance from key SMAs. Positive = price above SMA (bullish), Negative = price below SMA (bearish)"
+        "GOLDEN_LINE" => "Distance from Golden Line SMA. Above = bullish bias, Below = bearish bias"
+        "IB30_STATUS" => "Initial Balance 30min range. In Range = consolidation, Above/Below = breakout direction"
+        "IS30_SIGNALS" => "Initial Strength breakout signals. Bull/Bear breakout from IB30 range with delta confirmation"
+        "EMD_R1" => "Explosive Move Detection: Checks if stock moved >100% in specified weeks. Higher % = stronger momentum"
+        "CA_R2" => "Correction Analysis: Ensures correction is <20% within timeframe. Healthy correction = better entry"
+        "VMAC_R3" => "Volume @ SMA: Volume surge + price near moving averages. Confirms setup readiness"
+        "CHARTINK_SUMMARY" => "Combined score of all 3 Chartink rules. 3/3 = Perfect setup, 2/3 = Strong, 1/3 = Partial"
+        "ORDER_FLOW" => "Net buying/selling pressure. Positive = institutional buying, Negative = selling pressure"
+        "ABSORPTION" => "Large volume with small price movement. High = potential support/resistance level"
+        "CONFLUENCE" => "Master score combining all systems (0-10). Higher score = more factors aligning"
+        "VOLUME" => "Relative volume vs average. High = unusual activity, Low = below normal interest"
+        "RSI_MFI" => "RSI vs MFI momentum indicators. Crossover = potential momentum shift"
+        "OBV" => "On Balance Volume trend. Bullish = accumulation, Bearish = distribution"
+        "RSS" => "Relative Strength Smoothed. >80 = overbought, <20 = oversold"
+        "GOLDEN_SIGNALS" => "SBD/SVD volume dots near Golden Line. Signals = institutional activity at key level"
+        "SMA_CROSS" => "SMA2 vs SMA3 crossover. Bullish Cross = uptrend signal, Bearish = downtrend"
+        "MAGICRS" => "Multi-timeframe relative strength vs index. Higher points = stronger across timeframes"
+        "DAILY_SIGNALS" => "Daily timeframe SBD/SVD signals at Golden Line. Stronger than intraday signals"
+        "TVOL" => "Today's volume vs average. >1.5 = high activity, <0.5 = low activity"
+        "RVOL" => "Relative volume vs previous day. >1.5 = unusual activity"
+        => "No description available"
+
+// ============= RSI DIVERGENCE DETECTION (Visual Only) =============
+// Pivot High/Low detection for divergence - FIXED VERSION
+// We find PRICE pivots and get RSI value AT those price pivots
+
+// Detect price pivots
+pivotHighPrice = ta.pivothigh(high, div_pivot_lookback, div_pivot_lookback)
+pivotLowPrice = ta.pivotlow(low, div_pivot_lookback, div_pivot_lookback)
+
+// Get RSI value at the pivot bar (not RSI's own pivot!)
+// When pivot is detected, it occurred div_pivot_lookback bars ago
+rsiAtPivotHigh = rsi[div_pivot_lookback]
+rsiAtPivotLow = rsi[div_pivot_lookback]
+
+// Track pivot positions and RSI values
+var int lastPivotHighBar = na
+var float lastPivotHighPrice = na
+var float lastPivotHighRSI = na
+var int lastPivotLowBar = na
+var float lastPivotLowPrice = na
+var float lastPivotLowRSI = na
+
+// Track previous pivots for comparison
+var int prevPivotHighBar = na
+var float prevPivotHighPrice = na
+var float prevPivotHighRSI = na
+var int prevPivotLowBar = na
+var float prevPivotLowPrice = na
+var float prevPivotLowRSI = na
+
+// Track oldest pivots for double divergence (3-pivot comparison)
+var int prevPrevPivotHighBar = na
+var float prevPrevPivotHighPrice = na
+var float prevPrevPivotHighRSI = na
+var int prevPrevPivotLowBar = na
+var float prevPrevPivotLowPrice = na
+var float prevPrevPivotLowRSI = na
+
+// Update pivot tracking when new HIGH pivot found
+if not na(pivotHighPrice)
+    // Cascade: prev -> prevPrev (for double divergence)
+    prevPrevPivotHighBar := prevPivotHighBar
+    prevPrevPivotHighPrice := prevPivotHighPrice
+    prevPrevPivotHighRSI := prevPivotHighRSI
+    // Store current as previous before updating
+    prevPivotHighBar := lastPivotHighBar
+    prevPivotHighPrice := lastPivotHighPrice
+    prevPivotHighRSI := lastPivotHighRSI
+    // Update current
+    lastPivotHighBar := bar_index - div_pivot_lookback
+    lastPivotHighPrice := pivotHighPrice
+    lastPivotHighRSI := rsiAtPivotHigh
+
+// Update pivot tracking when new LOW pivot found
+if not na(pivotLowPrice)
+    // Cascade: prev -> prevPrev (for double divergence)
+    prevPrevPivotLowBar := prevPivotLowBar
+    prevPrevPivotLowPrice := prevPivotLowPrice
+    prevPrevPivotLowRSI := prevPivotLowRSI
+    // Store current as previous before updating
+    prevPivotLowBar := lastPivotLowBar
+    prevPivotLowPrice := lastPivotLowPrice
+    prevPivotLowRSI := lastPivotLowRSI
+    // Update current
+    lastPivotLowBar := bar_index - div_pivot_lookback
+    lastPivotLowPrice := pivotLowPrice
+    lastPivotLowRSI := rsiAtPivotLow
+
+// Divergence detection conditions
+barsBackHigh = bar_index - nz(prevPivotHighBar, bar_index)
+barsBackLow = bar_index - nz(prevPivotLowBar, bar_index)
+withinLookbackHigh = barsBackHigh <= div_max_lookback and barsBackHigh > 0
+withinLookbackLow = barsBackLow <= div_max_lookback and barsBackLow > 0
+
+// Check if we have valid data for comparison
+validHighComparison = not na(pivotHighPrice) and not na(prevPivotHighPrice) and not na(lastPivotHighRSI) and not na(prevPivotHighRSI) and withinLookbackHigh
+validLowComparison = not na(pivotLowPrice) and not na(prevPivotLowPrice) and not na(lastPivotLowRSI) and not na(prevPivotLowRSI) and withinLookbackLow
+
+// Regular Bullish Divergence: Price Lower Low + RSI Higher Low (Reversal UP)
+regularBullishDiv = show_rsi_divergence and show_regular_divergence and validLowComparison and lastPivotLowPrice < prevPivotLowPrice and lastPivotLowRSI > prevPivotLowRSI
+
+// Regular Bearish Divergence: Price Higher High + RSI Lower High (Reversal DOWN)
+regularBearishDiv = show_rsi_divergence and show_regular_divergence and validHighComparison and lastPivotHighPrice > prevPivotHighPrice and lastPivotHighRSI < prevPivotHighRSI
+
+// Hidden Bullish Divergence: Price Higher Low + RSI Lower Low (Continuation UP)
+hiddenBullishDiv = show_rsi_divergence and show_hidden_divergence and validLowComparison and lastPivotLowPrice > prevPivotLowPrice and lastPivotLowRSI < prevPivotLowRSI
+
+// Hidden Bearish Divergence: Price Lower High + RSI Higher High (Continuation DOWN)
+hiddenBearishDiv = show_rsi_divergence and show_hidden_divergence and validHighComparison and lastPivotHighPrice < prevPivotHighPrice and lastPivotHighRSI > prevPivotHighRSI
+
+// ============= DOUBLE DIVERGENCE DETECTION (3-Pivot) =============
+// Validity checks for triple-pivot comparison
+barsBackHighPP = bar_index - nz(prevPrevPivotHighBar, bar_index)
+barsBackLowPP = bar_index - nz(prevPrevPivotLowBar, bar_index)
+validTripleHighComparison = validHighComparison and not na(prevPrevPivotHighPrice) and not na(prevPrevPivotHighRSI) and barsBackHighPP <= div_max_lookback * 2 and barsBackHighPP > 0
+validTripleLowComparison = validLowComparison and not na(prevPrevPivotLowPrice) and not na(prevPrevPivotLowRSI) and barsBackLowPP <= div_max_lookback * 2 and barsBackLowPP > 0
+
+// Double Regular Bullish: A->B div AND B->C div (Price: Lower->Lower, RSI: Higher->Higher)
+doubleBullishDiv = show_rsi_divergence and show_regular_divergence and show_double_divergence and validTripleLowComparison and lastPivotLowPrice < prevPivotLowPrice and lastPivotLowRSI > prevPivotLowRSI and prevPivotLowPrice < prevPrevPivotLowPrice and prevPivotLowRSI > prevPrevPivotLowRSI
+
+// Double Regular Bearish: A->B div AND B->C div (Price: Higher->Higher, RSI: Lower->Lower)
+doubleBearishDiv = show_rsi_divergence and show_regular_divergence and show_double_divergence and validTripleHighComparison and lastPivotHighPrice > prevPivotHighPrice and lastPivotHighRSI < prevPivotHighRSI and prevPivotHighPrice > prevPrevPivotHighPrice and prevPivotHighRSI < prevPrevPivotHighRSI
+
+// Double Hidden Bullish: A->B hidden div AND B->C hidden div (Price: Higher->Higher, RSI: Lower->Lower)
+doubleHiddenBullishDiv = show_rsi_divergence and show_hidden_divergence and show_double_divergence and validTripleLowComparison and lastPivotLowPrice > prevPivotLowPrice and lastPivotLowRSI < prevPivotLowRSI and prevPivotLowPrice > prevPrevPivotLowPrice and prevPivotLowRSI < prevPrevPivotLowRSI
+
+// Double Hidden Bearish: A->B hidden div AND B->C hidden div (Price: Lower->Lower, RSI: Higher->Higher)
+doubleHiddenBearishDiv = show_rsi_divergence and show_hidden_divergence and show_double_divergence and validTripleHighComparison and lastPivotHighPrice < prevPivotHighPrice and lastPivotHighRSI > prevPivotHighRSI and prevPivotHighPrice < prevPrevPivotHighPrice and prevPivotHighRSI > prevPrevPivotHighRSI
+
+// Any double divergence flag
+anyDoubleDivDetected = doubleBullishDiv or doubleBearishDiv or doubleHiddenBullishDiv or doubleHiddenBearishDiv
+
+// Track divergence for table display
+var int lastBullDivBar = na
+var int lastBearDivBar = na
+var int lastHiddenBullBar = na
+var int lastHiddenBearBar = na
+var string lastDivType = "None"
+var int lastAnyDivBar = na
+
+// Double divergence tracking
+var int lastDblBullDivBar = na
+var int lastDblBearDivBar = na
+var int lastDblHiddenBullBar = na
+var int lastDblHiddenBearBar = na
+var string lastDblDivType = "None"
+var int lastAnyDblDivBar = na
+var bool isLastDivDouble = false
+
+// Update tracking: Double takes priority over single
+if doubleBullishDiv
+    lastDblBullDivBar := bar_index
+    lastDblDivType := "💚💚 Dbl Bull"
+    lastAnyDblDivBar := bar_index
+    lastBullDivBar := bar_index
+    lastDivType := "💚💚 Dbl Bull"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := true
+else if regularBullishDiv
+    lastBullDivBar := bar_index
+    lastDivType := "💚 Bull"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := false
+
+if doubleBearishDiv
+    lastDblBearDivBar := bar_index
+    lastDblDivType := "❤️❤️ Dbl Bear"
+    lastAnyDblDivBar := bar_index
+    lastBearDivBar := bar_index
+    lastDivType := "❤️❤️ Dbl Bear"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := true
+else if regularBearishDiv
+    lastBearDivBar := bar_index
+    lastDivType := "❤️ Bear"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := false
+
+if doubleHiddenBullishDiv
+    lastDblHiddenBullBar := bar_index
+    lastDblDivType := "🩵🩵 Dbl H.Bull"
+    lastAnyDblDivBar := bar_index
+    lastHiddenBullBar := bar_index
+    lastDivType := "🩵🩵 Dbl H.Bull"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := true
+else if hiddenBullishDiv
+    lastHiddenBullBar := bar_index
+    lastDivType := "🩵 H.Bull"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := false
+
+if doubleHiddenBearishDiv
+    lastDblHiddenBearBar := bar_index
+    lastDblDivType := "🧡🧡 Dbl H.Bear"
+    lastAnyDblDivBar := bar_index
+    lastHiddenBearBar := bar_index
+    lastDivType := "🧡🧡 Dbl H.Bear"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := true
+else if hiddenBearishDiv
+    lastHiddenBearBar := bar_index
+    lastDivType := "🧡 H.Bear"
+    lastAnyDivBar := bar_index
+    isLastDivDouble := false
+
+// Calculate bars since last divergence (ANY type)
+barsSinceLastDiv = not na(lastAnyDivBar) ? (bar_index - lastAnyDivBar) : na
+
+// Check if recent (within signal lookback)
+bullDivRecent = not na(lastBullDivBar) and (bar_index - lastBullDivBar) <= div_signal_lookback
+bearDivRecent = not na(lastBearDivBar) and (bar_index - lastBearDivBar) <= div_signal_lookback
+hiddenBullRecent = not na(lastHiddenBullBar) and (bar_index - lastHiddenBullBar) <= div_signal_lookback
+hiddenBearRecent = not na(lastHiddenBearBar) and (bar_index - lastHiddenBearBar) <= div_signal_lookback
+anyDivRecent = bullDivRecent or bearDivRecent or hiddenBullRecent or hiddenBearRecent
+
+// Double divergence recency checks (wider freshness window)
+dblBullDivRecent = not na(lastDblBullDivBar) and (bar_index - lastDblBullDivBar) <= div_double_fresh
+dblBearDivRecent = not na(lastDblBearDivBar) and (bar_index - lastDblBearDivBar) <= div_double_fresh
+dblHiddenBullRecent = not na(lastDblHiddenBullBar) and (bar_index - lastDblHiddenBullBar) <= div_double_fresh
+dblHiddenBearRecent = not na(lastDblHiddenBearBar) and (bar_index - lastDblHiddenBearBar) <= div_double_fresh
+anyDblDivRecent = dblBullDivRecent or dblBearDivRecent or dblHiddenBullRecent or dblHiddenBearRecent
+
+// Divergence status text and color for table
+// Double divergence takes priority with stronger colors (0 transparency = fully opaque)
+divStatusText = not na(barsSinceLastDiv) ? lastDivType + " (" + str.tostring(barsSinceLastDiv) + ")" : "None"
+divStatusColor = dblBullDivRecent ? color.new(color.green, 0) : dblBearDivRecent ? color.new(color.red, 0) : dblHiddenBullRecent ? color.new(color.teal, 0) : dblHiddenBearRecent ? color.new(color.orange, 0) : bullDivRecent ? color.new(color.green, 30) : bearDivRecent ? color.new(color.red, 30) : hiddenBullRecent ? color.new(color.teal, 30) : hiddenBearRecent ? color.new(color.orange, 30) : anyDivRecent ? color.new(color.gray, 40) : not na(barsSinceLastDiv) ? color.new(color.gray, 60) : color.new(color.gray, 80)
+
+// Freshness indicator - double divergence uses wider windows
+divFreshness = not na(barsSinceLastDiv) ? (isLastDivDouble ? (barsSinceLastDiv <= div_double_fresh ? "🔥🔥" : barsSinceLastDiv <= 30 ? "✅" : barsSinceLastDiv <= 50 ? "⚠️" : "💤") : (barsSinceLastDiv <= 5 ? "🔥" : barsSinceLastDiv <= 15 ? "✅" : barsSinceLastDiv <= 30 ? "⚠️" : "💤")) : ""
+
+// ============= RECOMMENDATION TABLE (NEW) =============
+updateRecommendationTable() =>
+    var recPos = switch rec_table_position
+        "Top Right" => position.top_right
+        "Top Center" => position.top_center
+        "Top Left" => position.top_left
+        "Bottom Right" => position.bottom_right
+        "Bottom Left" => position.bottom_left
+        => position.top_right
+    
+    // 2 columns, 10 rows (added RSI Divergence row)
+    var table recTable = table.new(position=recPos, columns=2, rows=10, bgcolor=color.new(color.black, 80), border_width=1, border_color=color.gray)
+    
+    if enableRecommendation
+        // Row 0: Mode & Main Signal
+        headerText = displayMode == "IN LONG" ? "📈 IN LONG" : displayMode == "IN SHORT" ? "📉 IN SHORT" : displayMode == "CONFIRMING" ? "⏳ CONFIRM" : "🔍 SCAN"
+        headerColor = displayMode == "IN LONG" ? color.new(color.green, 30) : displayMode == "IN SHORT" ? color.new(color.red, 30) : displayMode == "CONFIRMING" ? color.new(color.blue, 30) : color.new(color.blue, 40)
+        table.cell(table_id=recTable, column=0, row=0, text=headerText, text_color=color.white, bgcolor=headerColor, text_size=rec_header_size)
+        
+        if inLongPosition or inShortPosition
+            // Position Mode Display
+            table.cell(table_id=recTable, column=1, row=0, text=positionRecommendation, text_color=color.white, bgcolor=positionColor, text_size=rec_main_size)
+            
+            // Row 1: Reason & P&L
+            table.cell(table_id=recTable, column=0, row=1, text=positionReason, text_color=color.white, bgcolor=color.new(color.gray, 40), text_size=rec_header_size)
+            pnlDisplay = inLongPosition ? pnlPercent : pnlPercentShort
+            pnlSign = pnlDisplay >= 0 ? "+" : ""
+            pnlText = pnlSign + str.tostring(pnlDisplay, "#.##") + "%"
+            pnlColor = pnlDisplay >= 0 ? color.new(color.green, 30) : color.new(color.red, 30)
+            table.cell(table_id=recTable, column=1, row=1, text=pnlText, text_color=color.white, bgcolor=pnlColor, text_size=rec_main_size)
+            
+            // Row 2: Entry Info
+            table.cell(table_id=recTable, column=0, row=2, text="Entry:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=2, text=str.tostring(entryPrice, "#.##") + " (" + str.tostring(signalAge) + " bars)", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+            
+            // Row 3: Best Signal in Lookback
+            if show_best_signal
+                bestText = bestSignal + " (" + str.tostring(bestSignalAge) + " bars) " + bestSignalFreshness
+                table.cell(table_id=recTable, column=0, row=3, text="Best(" + str.tostring(signal_lookback_bars) + "):", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+                table.cell(table_id=recTable, column=1, row=3, text=bestText, text_color=color.white, bgcolor=bestSignalColor, text_size=rec_detail_size)
+            else
+                table.cell(table_id=recTable, column=0, row=3, text="Flow:", text_color=color.white, bgcolor=color.new(color.black, 40), text_size=rec_detail_size)
+                table.cell(table_id=recTable, column=1, row=3, text=flowType, text_color=color.white, bgcolor=flowColor, text_size=rec_detail_size)
+            
+            // Row 4: Scanner
+            table.cell(table_id=recTable, column=0, row=4, text="SCANNER:", text_color=color.white, bgcolor=color.new(color.black, 40), text_size=rec_detail_size)
+            entryColor = getRecommendationColor(finalRecommendation)
+            table.cell(table_id=recTable, column=1, row=4, text=finalRecommendation, text_color=color.white, bgcolor=entryColor, text_size=rec_header_size)
+        else
+            // Scanning Mode Display
+            table.cell(table_id=recTable, column=1, row=0, text=displayRecommendation, text_color=color.white, bgcolor=displayColor, text_size=rec_main_size)
+            
+            // Row 1: Reason
+            table.cell(table_id=recTable, column=0, row=1, text="Reason:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=1, text=displayReason, text_color=color.white, bgcolor=color.new(color.gray, 40), text_size=rec_header_size)
+            
+            // Row 2: Best Signal in Lookback
+            if show_best_signal
+                bestText = bestSignal + " (" + str.tostring(bestSignalAge) + " bars) " + bestSignalFreshness
+                table.cell(table_id=recTable, column=0, row=2, text="⭐Best(" + str.tostring(signal_lookback_bars) + "):", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+                table.cell(table_id=recTable, column=1, row=2, text=bestText, text_color=color.white, bgcolor=bestSignalColor, text_size=rec_detail_size)
+            else
+                table.cell(table_id=recTable, column=0, row=2, text="Flow:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+                table.cell(table_id=recTable, column=1, row=2, text=flowType + " (" + flowMeaning + ")", text_color=color.white, bgcolor=flowColor, text_size=rec_detail_size)
+            
+            // Row 3: Flow Type
+            table.cell(table_id=recTable, column=0, row=3, text="Flow:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=3, text=flowType + " (" + flowMeaning + ")", text_color=color.white, bgcolor=flowColor, text_size=rec_detail_size)
+            
+            // Row 4: Breakout Quality (if applicable)
+            breakQualityText = ib30Status == "BREAK UP" or ib30Status == "BREAK DOWN" ? breakoutQualityLabel + " (" + str.tostring(activeBreakoutQuality) + "/6)" : "N/A"
+            breakQualityColor = activeBreakoutQuality >= 5 ? color.new(color.green, 30) : activeBreakoutQuality >= 4 ? color.new(color.lime, 40) : activeBreakoutQuality >= 3 ? color.new(color.yellow, 40) : color.new(color.gray, 50)
+            table.cell(table_id=recTable, column=0, row=4, text="IB Break:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=4, text=breakQualityText, text_color=color.white, bgcolor=breakQualityColor, text_size=rec_detail_size)
+        
+        // Row 5: RVOL & TVOL (always shown)
+        rvolColor = current_rvol >= 1.5 ? color.new(color.green, 40) : current_rvol < 0.5 ? color.new(color.red, 40) : color.new(color.teal, 50)
+        tvolColor = current_tvol >= 1.0 ? color.new(color.green, 40) : current_tvol < 0.5 ? color.new(color.red, 40) : color.new(color.teal, 50)
+        table.cell(table_id=recTable, column=0, row=5, text="RVOL: " + str.tostring(current_rvol, "#.##"), text_color=color.white, bgcolor=rvolColor, text_size=rec_detail_size)
+        table.cell(table_id=recTable, column=1, row=5, text="TVOL: " + str.tostring(current_tvol, "#.##"), text_color=color.white, bgcolor=tvolColor, text_size=rec_detail_size)
+        
+        // Row 6: RSI & MFI (always shown)
+        rsiBg = rsi > pos_rsi_overbought ? color.new(color.red, 30) : rsi < pos_rsi_oversold ? color.new(color.green, 30) : color.new(color.gray, 40)
+        mfiBg = mfi > pos_rsi_overbought ? color.new(color.red, 30) : mfi < pos_rsi_oversold ? color.new(color.green, 30) : color.new(color.gray, 40)
+        table.cell(table_id=recTable, column=0, row=6, text="RSI: " + str.tostring(rsi, "#"), text_color=color.white, bgcolor=rsiBg, text_size=rec_detail_size)
+        table.cell(table_id=recTable, column=1, row=6, text="MFI: " + str.tostring(mfi, "#"), text_color=color.white, bgcolor=mfiBg, text_size=rec_detail_size)
+        
+        // Row 7: MagicRS Strength
+        table.cell(table_id=recTable, column=0, row=7, text="MagicRS:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+        magicRSColor = flowStrengthPoints >= 5 ? color.new(color.green, 30) : flowStrengthPoints >= 4 ? color.new(color.lime, 40) : flowStrengthPoints <= 2 ? color.new(color.red, 40) : color.new(color.gray, 50)
+        table.cell(table_id=recTable, column=1, row=7, text=str.tostring(flowStrengthPoints) + "/6", text_color=color.white, bgcolor=magicRSColor, text_size=rec_detail_size)
+        
+        // Row 8: RSI Divergence Status - Shows type + bars since last + freshness
+        if show_rsi_divergence
+            table.cell(table_id=recTable, column=0, row=8, text="RSI Div:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=8, text=divStatusText + " " + divFreshness, text_color=color.white, bgcolor=divStatusColor, text_size=rec_detail_size)
+        else
+            table.cell(table_id=recTable, column=0, row=8, text="", bgcolor=color.new(color.black, 80), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=8, text="", bgcolor=color.new(color.black, 80), text_size=rec_detail_size)
+        
+        // Row 9: Special Status (Vacuum/Accumulation/Distribution)
+        specialStatus = isVacuumMove ? "⚠️ VACUUM" : isAccumulation ? "📊 ACCUM" : isDistribution ? "📊 DISTRIB" : ""
+        specialColor = isVacuumMove ? color.new(color.orange, 30) : isAccumulation ? color.new(color.teal, 30) : isDistribution ? color.new(color.purple, 30) : color.new(color.black, 80)
+        if specialStatus != ""
+            table.cell(table_id=recTable, column=0, row=9, text="Status:", text_color=color.white, bgcolor=color.new(color.gray, 50), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=9, text=specialStatus, text_color=color.white, bgcolor=specialColor, text_size=rec_detail_size)
+        else
+            table.cell(table_id=recTable, column=0, row=9, text="", bgcolor=color.new(color.black, 80), text_size=rec_detail_size)
+            table.cell(table_id=recTable, column=1, row=9, text="", bgcolor=color.new(color.black, 80), text_size=rec_detail_size)
+
+updateRecommendationTable()
+
+// ============= MAIN TECHNICAL TABLE =============
+updateTable() =>
+    var pos = tablePosition == "Top" ? (tableAlignment == "Left" ? position.top_left : tableAlignment == "Center" ? position.top_center : position.top_right) : tablePosition == "Middle" ? (tableAlignment == "Left" ? position.middle_left : tableAlignment == "Center" ? position.middle_center : position.middle_right) : (tableAlignment == "Left" ? position.bottom_left : tableAlignment == "Center" ? position.bottom_center : position.bottom_right)
+    var table techTable = table.new(position=pos, columns=3, rows=25, bgcolor=color.new(color.black, 70))
+    
+    if showTable
+        table.cell(table_id=techTable, column=0, row=0, text="Metric", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(table_id=techTable, column=1, row=0, text="Value", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(table_id=techTable, column=2, row=0, text="Inference", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        
+        currentRow = 1
+        
+        if i_showSMADistances
+            table.cell(table_id=techTable, column=0, row=currentRow, text="SMA Distances", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text="1: " + str.tostring(distSMA1, "#.##") + "% | 2: " + str.tostring(distSMA2, "#.##") + "% | 3: " + str.tostring(distSMA3, "#.##") + "%", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=distSMA1 > 0 and distSMA2 > 0 and distSMA3 > 0 ? "Bullish" : distSMA1 < 0 and distSMA2 < 0 and distSMA3 < 0 ? "Bearish" : "Mixed", bgcolor=distSMA1 > 0 ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showGoldenLine
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Golden Line", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(distGoldenLine, "#.##") + "%", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=distGoldenLine > 0 ? "Above" : "Below", bgcolor=distGoldenLine > 0 ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showIB30Status and enableIB30
+            ib30_status_text = ib30_established ? (price_in_ib30 ? "In Range" : close > ib30_high ? "Above" : "Below") : "Forming"
+            ib30_value = ib30_established ? "H:" + str.tostring(ib30_high, "#.##") + " L:" + str.tostring(ib30_low, "#.##") + " R:" + str.tostring(ib30_range, "#.##") : "Pending"
+            table.cell(table_id=techTable, column=0, row=currentRow, text="IB30 Status", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=ib30_value, text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=ib30_status_text, bgcolor=ib30_established ? (price_in_ib30 ? color.new(color.yellow, 70) : close > ib30_high ? color.new(color.green, 70) : color.new(color.red, 70)) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showIS30Signals and enableIB30
+            is30_signal = is30_bull_breakout ? "Bull Breakout" : is30_bear_breakout ? "Bear Breakout" : ib30_established ? "No Breakout" : "Waiting"
+            delta_info = enableOrderFlow ? str.tostring(smoothed_delta, "#") : "N/A"
+            table.cell(table_id=techTable, column=0, row=currentRow, text="IS30 Signals", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text="Delta: " + delta_info, text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=is30_signal, bgcolor=is30_bull_breakout ? color.new(color.green, 70) : is30_bear_breakout ? color.new(color.red, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showChartinkR1 and enableChartinkRules
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Chartink R1", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(rule1_move_pct, "#.##") + "% (" + str.tostring(rule1_weeks) + "W)", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=rule1_satisfied ? "✓ Explosive" : "✗ Below Target", bgcolor=rule1_satisfied ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showChartinkR2 and enableChartinkRules
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Chartink R2", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(correction_pct, "#.##") + "% Correction", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=rule2_satisfied ? "✓ Healthy" : "✗ Over Corrected", bgcolor=rule2_satisfied ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showChartinkR3 and enableChartinkRules
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Chartink R3", text_size=size.small)
+            vol_surge_text = volume_surge ? "✓" : "✗"
+            ma_prox_text = ma_proximity ? "✓" : "✗"
+            table.cell(table_id=techTable, column=1, row=currentRow, text="Vol:" + vol_surge_text + " MA:" + ma_prox_text, text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=rule3_satisfied ? "✓ Ready" : "✗ Not Ready", bgcolor=rule3_satisfied ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showChartinkSummary and enableChartinkRules
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Chartink Score", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(chartink_score) + "/3 Rules", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=chartink_status, bgcolor=chartink_score >= 3 ? color.new(color.green, 70) : chartink_score >= 2 ? color.new(color.yellow, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showOrderFlowDelta and enableOrderFlow
+            delta_status = smoothed_delta > 0 ? "Bullish" : smoothed_delta < 0 ? "Bearish" : "Neutral"
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Order Flow", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text="Delta: " + str.tostring(smoothed_delta, "#"), text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=delta_status, bgcolor=smoothed_delta > 0 ? color.new(color.green, 70) : smoothed_delta < 0 ? color.new(color.red, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showAbsorption and enableOrderFlow
+            absorption_status = absorption_detected ? "High Absorption" : "Normal"
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Absorption", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=formatNumber(volume), text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=absorption_status, bgcolor=absorption_detected ? color.new(color.orange, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showConfluence
+            confluence_score = calculateConfluenceScore()
+            confluence_max = 10
+            confluence_pct = (confluence_score * 100) / confluence_max
+            confluence_status = confluence_score >= 8 ? "Excellent" : confluence_score >= 6 ? "Strong" : confluence_score >= 4 ? "Moderate" : "Weak"
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Confluence", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(confluence_score) + "/10 (" + str.tostring(confluence_pct, "#") + "%)", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=confluence_status, bgcolor=confluence_score >= 8 ? color.new(color.green, 70) : confluence_score >= 6 ? color.new(color.lime, 70) : confluence_score >= 4 ? color.new(color.yellow, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showVolume
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Volume", text_size=size.small)
+            table.cell(table_id=techTable, column=1, row=currentRow, text="Rel: " + str.tostring(relVolume, "#.##") + " | Abs: " + formatNumber(volume), text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=relVolume > 1 ? "High" : "Low", bgcolor=relVolume > 1 ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showRSI_MFI
+            tooltip_text = enable_tooltips ? getTooltipText("RSI_MFI") : ""
+            table.cell(table_id=techTable, column=0, row=currentRow, text="RSI/MFI", text_size=size.small, tooltip=tooltip_text)
+            table.cell(table_id=techTable, column=1, row=currentRow, text="RSI: " + str.tostring(rsi, "#.##") + " | MFI: " + str.tostring(mfi, "#.##"), text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=mfiRsiCross ? "Crossover" : "No Crossover", bgcolor=mfiRsiCross ? color.new(color.yellow, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showOBV
+            tooltip_text = enable_tooltips ? getTooltipText("OBV") : ""
+            table.cell(table_id=techTable, column=0, row=currentRow, text="OBV Trend", text_size=size.small, tooltip=tooltip_text)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=obvTrend, text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=obvTrend, bgcolor=obvTrend == "Bullish" ? color.new(color.green, 70) : obvTrend == "Bearish" ? color.new(color.red, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showRSS
+            [rssValue, rssSpread, rssDirection] = getRSS()
+            tooltip_text = enable_tooltips ? getTooltipText("RSS") : ""
+            table.cell(table_id=techTable, column=0, row=currentRow, text="RSS Status", text_size=size.small, tooltip=tooltip_text)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(rssValue, "#.##"), text_size=size.small)
+            rssStatus = rssValue > 80 ? "Overbought" : rssValue < 20 ? "Oversold" : "Neutral"
+            table.cell(table_id=techTable, column=2, row=currentRow, text=rssStatus, bgcolor=rssValue > 80 ? color.new(color.red, 70) : rssValue < 20 ? color.new(color.green, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showSBD_SVD
+            [hasSBD_gl, hasSVD_gl] = checkSignalsAtGoldenLine(timeframe.period)
+            tooltip_text = enable_tooltips ? getTooltipText("GOLDEN_SIGNALS") : ""
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Golden Line Signals", text_size=size.small, tooltip=tooltip_text)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=hasSBD_gl ? "SBD Present" : hasSVD_gl ? "SVD Present" : "No Signals", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=str.tostring(math.abs(100 * (close - goldenLine) / goldenLine), "#.##") + "% from GL", bgcolor=hasSBD_gl or hasSVD_gl ? color.new(color.green, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showSMACross
+            [crossUp, crossDown, smaDistance] = checkSMACrossover()
+            tooltip_text = enable_tooltips ? getTooltipText("SMA_CROSS") : ""
+            table.cell(table_id=techTable, column=0, row=currentRow, text="SMA2/3 Cross", text_size=size.small, tooltip=tooltip_text)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(smaDistance, "#.##") + "%", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text=crossUp ? "Bullish Cross" : crossDown ? "Bearish Cross" : "No Cross", bgcolor=crossUp ? color.new(color.green, 70) : crossDown ? color.new(color.red, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showMagicRS and enableMagicRSStrength
+            strengthPoints = calculateStrengthPoints()
+            strengthColor = strengthPoints >= 6 ? color.new(color.green, 70) : strengthPoints >= 3 ? color.new(color.orange, 70) : strengthPoints > 0 ? color.new(color.yellow, 70) : color.new(color.red, 70)
+            tooltip_text = enable_tooltips ? getTooltipText("MAGICRS") : ""
+            table.cell(table_id=techTable, column=0, row=currentRow, text="MagicRS Strength", text_size=size.small, tooltip=tooltip_text)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(strengthPoints) + "/6", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text="", bgcolor=strengthColor, text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showDailySBD_SVD
+            [hasSBD_D, hasSVD_D] = checkSignalsAtGoldenLine("D")
+            tooltip_text = enable_tooltips ? getTooltipText("DAILY_SIGNALS") : ""
+            table.cell(table_id=techTable, column=0, row=currentRow, text="Daily GL Signals", text_size=size.small, tooltip=tooltip_text)
+            table.cell(table_id=techTable, column=1, row=currentRow, text=hasSBD_D ? "Daily SBD" : hasSVD_D ? "Daily SVD" : "No Signals", text_size=size.small)
+            table.cell(table_id=techTable, column=2, row=currentRow, text="Daily TF", bgcolor=hasSBD_D or hasSVD_D ? color.new(color.green, 70) : color.new(color.gray, 70), text_size=size.small)
+            currentRow := currentRow + 1
+        
+        if i_showRVol or i_showTVol
+            if i_showTVol
+                tooltip_text = enable_tooltips ? getTooltipText("TVOL") : ""
+                tvol_status = current_tvol >= rec_tvol_hold_long ? "Hold" : current_tvol >= rec_tvol_min_long ? "Book Fast" : "Avoid"
+                table.cell(table_id=techTable, column=0, row=currentRow, text="TVol", text_size=size.small, tooltip=tooltip_text)
+                table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(current_tvol, "#.##"), text_size=size.small)
+                table.cell(table_id=techTable, column=2, row=currentRow, text=tvol_status, bgcolor=current_tvol >= rec_tvol_hold_long ? color.new(color.green, 70) : current_tvol >= rec_tvol_min_long ? color.new(color.yellow, 70) : color.new(color.red, 70), text_size=size.small)
+                currentRow := currentRow + 1
+            
+            if i_showRVol
+                tooltip_text = enable_tooltips ? getTooltipText("RVOL") : ""
+                rvol_status = current_rvol >= rec_rvol_strong_long ? "Full Conviction" : current_rvol >= rec_rvol_min_long ? "Trade Allowed" : "Avoid"
+                table.cell(table_id=techTable, column=0, row=currentRow, text="RVol", text_size=size.small, tooltip=tooltip_text)
+                table.cell(table_id=techTable, column=1, row=currentRow, text=str.tostring(current_rvol, "#.##"), text_size=size.small)
+                table.cell(table_id=techTable, column=2, row=currentRow, text=rvol_status, bgcolor=current_rvol >= rec_rvol_strong_long ? color.new(color.green, 70) : current_rvol >= rec_rvol_min_long ? color.new(color.yellow, 70) : color.new(color.red, 70), text_size=size.small)
+                currentRow := currentRow + 1
+
+updateTable()
+
+// ============= PIVOT / FIBO / GANN LEVELS (Visual Only) =============
+// Get previous day's OHLC for calculations
+[prevDayHigh, prevDayLow, prevDayClose] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
+
+// Line style
+levelLineStyle = pivot_line_style == "Solid" ? line.style_solid : pivot_line_style == "Dashed" ? line.style_dashed : line.style_dotted
+
+// ============= PIVOT POINTS (Standard/Floor) =============
+// PP = (H + L + C) / 3
+pivotPP = (prevDayHigh + prevDayLow + prevDayClose) / 3
+pivotR1 = (2 * pivotPP) - prevDayLow
+pivotR2 = pivotPP + (prevDayHigh - prevDayLow)
+pivotS1 = (2 * pivotPP) - prevDayHigh
+pivotS2 = pivotPP - (prevDayHigh - prevDayLow)
+
+// Pivot lines and labels
+var line linePP = na
+var line lineR1 = na
+var line lineR2 = na
+var line lineS1 = na
+var line lineS2 = na
+var label labelPP = na
+var label labelR1 = na
+var label labelR2 = na
+var label labelS1 = na
+var label labelS2 = na
+
+if show_pivot_levels and barstate.islast
+    // Delete old lines
+    line.delete(linePP)
+    line.delete(lineR1)
+    line.delete(lineR2)
+    line.delete(lineS1)
+    line.delete(lineS2)
+    label.delete(labelPP)
+    label.delete(labelR1)
+    label.delete(labelR2)
+    label.delete(labelS1)
+    label.delete(labelS2)
+    
+    // Draw new lines
+    linePP := line.new(bar_index - 50, pivotPP, bar_index + 10, pivotPP, color=color.new(color.yellow, 30), width=pivot_line_width, style=levelLineStyle)
+    lineR1 := line.new(bar_index - 50, pivotR1, bar_index + 10, pivotR1, color=color.new(color.red, 40), width=pivot_line_width, style=levelLineStyle)
+    lineR2 := line.new(bar_index - 50, pivotR2, bar_index + 10, pivotR2, color=color.new(color.red, 20), width=pivot_line_width, style=levelLineStyle)
+    lineS1 := line.new(bar_index - 50, pivotS1, bar_index + 10, pivotS1, color=color.new(color.green, 40), width=pivot_line_width, style=levelLineStyle)
+    lineS2 := line.new(bar_index - 50, pivotS2, bar_index + 10, pivotS2, color=color.new(color.green, 20), width=pivot_line_width, style=levelLineStyle)
+    
+    // Labels
+    ppText = show_level_prices ? "PP " + str.tostring(pivotPP, "#.##") : "PP"
+    r1Text = show_level_prices ? "R1 " + str.tostring(pivotR1, "#.##") : "R1"
+    r2Text = show_level_prices ? "R2 " + str.tostring(pivotR2, "#.##") : "R2"
+    s1Text = show_level_prices ? "S1 " + str.tostring(pivotS1, "#.##") : "S1"
+    s2Text = show_level_prices ? "S2 " + str.tostring(pivotS2, "#.##") : "S2"
+    
+    labelPP := label.new(bar_index + 12, pivotPP, ppText, color=color.new(color.yellow, 70), textcolor=color.yellow, style=label.style_label_left, size=size.tiny)
+    labelR1 := label.new(bar_index + 12, pivotR1, r1Text, color=color.new(color.red, 70), textcolor=color.red, style=label.style_label_left, size=size.tiny)
+    labelR2 := label.new(bar_index + 12, pivotR2, r2Text, color=color.new(color.red, 70), textcolor=color.red, style=label.style_label_left, size=size.tiny)
+    labelS1 := label.new(bar_index + 12, pivotS1, s1Text, color=color.new(color.green, 70), textcolor=color.green, style=label.style_label_left, size=size.tiny)
+    labelS2 := label.new(bar_index + 12, pivotS2, s2Text, color=color.new(color.green, 70), textcolor=color.green, style=label.style_label_left, size=size.tiny)
+
+// ============= FIBONACCI LEVELS =============
+// Based on previous day's range
+fiboRange = prevDayHigh - prevDayLow
+fibo236 = prevDayLow + (fiboRange * 0.236)
+fibo382 = prevDayLow + (fiboRange * 0.382)
+fibo500 = prevDayLow + (fiboRange * 0.500)
+fibo618 = prevDayLow + (fiboRange * 0.618)
+fibo786 = prevDayLow + (fiboRange * 0.786)
+
+// Fibo lines and labels
+var line lineFibo382 = na
+var line lineFibo500 = na
+var line lineFibo618 = na
+var label labelFibo382 = na
+var label labelFibo500 = na
+var label labelFibo618 = na
+
+if show_fibo_levels and barstate.islast
+    // Delete old lines
+    line.delete(lineFibo382)
+    line.delete(lineFibo500)
+    line.delete(lineFibo618)
+    label.delete(labelFibo382)
+    label.delete(labelFibo500)
+    label.delete(labelFibo618)
+    
+    // Draw new lines
+    lineFibo382 := line.new(bar_index - 50, fibo382, bar_index + 10, fibo382, color=color.new(color.purple, 40), width=pivot_line_width, style=levelLineStyle)
+    lineFibo500 := line.new(bar_index - 50, fibo500, bar_index + 10, fibo500, color=color.new(color.purple, 20), width=pivot_line_width, style=levelLineStyle)
+    lineFibo618 := line.new(bar_index - 50, fibo618, bar_index + 10, fibo618, color=color.new(color.purple, 40), width=pivot_line_width, style=levelLineStyle)
+    
+    // Labels
+    f382Text = show_level_prices ? "F38.2 " + str.tostring(fibo382, "#.##") : "F38.2"
+    f500Text = show_level_prices ? "F50 " + str.tostring(fibo500, "#.##") : "F50"
+    f618Text = show_level_prices ? "F61.8 " + str.tostring(fibo618, "#.##") : "F61.8"
+    
+    labelFibo382 := label.new(bar_index + 12, fibo382, f382Text, color=color.new(color.purple, 70), textcolor=color.purple, style=label.style_label_left, size=size.tiny)
+    labelFibo500 := label.new(bar_index + 12, fibo500, f500Text, color=color.new(color.purple, 70), textcolor=color.purple, style=label.style_label_left, size=size.tiny)
+    labelFibo618 := label.new(bar_index + 12, fibo618, f618Text, color=color.new(color.purple, 70), textcolor=color.purple, style=label.style_label_left, size=size.tiny)
+
+// ============= GANN 1/8 LEVELS =============
+// Divide previous day's range into 8 parts
+gannRange = prevDayHigh - prevDayLow
+gann125 = prevDayLow + (gannRange * 0.125)   // 1/8
+gann250 = prevDayLow + (gannRange * 0.250)   // 2/8
+gann375 = prevDayLow + (gannRange * 0.375)   // 3/8
+gann500 = prevDayLow + (gannRange * 0.500)   // 4/8
+gann625 = prevDayLow + (gannRange * 0.625)   // 5/8
+gann750 = prevDayLow + (gannRange * 0.750)   // 6/8
+gann875 = prevDayLow + (gannRange * 0.875)   // 7/8
+
+// Gann lines and labels (key levels: 2/8, 4/8, 6/8)
+var line lineGann250 = na
+var line lineGann500 = na
+var line lineGann750 = na
+var label labelGann250 = na
+var label labelGann500 = na
+var label labelGann750 = na
+
+if show_gann_levels and barstate.islast
+    // Delete old lines
+    line.delete(lineGann250)
+    line.delete(lineGann500)
+    line.delete(lineGann750)
+    label.delete(labelGann250)
+    label.delete(labelGann500)
+    label.delete(labelGann750)
+    
+    // Draw new lines
+    lineGann250 := line.new(bar_index - 50, gann250, bar_index + 10, gann250, color=color.new(color.orange, 40), width=pivot_line_width, style=levelLineStyle)
+    lineGann500 := line.new(bar_index - 50, gann500, bar_index + 10, gann500, color=color.new(color.orange, 20), width=pivot_line_width, style=levelLineStyle)
+    lineGann750 := line.new(bar_index - 50, gann750, bar_index + 10, gann750, color=color.new(color.orange, 40), width=pivot_line_width, style=levelLineStyle)
+    
+    // Labels
+    g250Text = show_level_prices ? "G2/8 " + str.tostring(gann250, "#.##") : "G2/8"
+    g500Text = show_level_prices ? "G4/8 " + str.tostring(gann500, "#.##") : "G4/8"
+    g750Text = show_level_prices ? "G6/8 " + str.tostring(gann750, "#.##") : "G6/8"
+    
+    labelGann250 := label.new(bar_index + 12, gann250, g250Text, color=color.new(color.orange, 70), textcolor=color.orange, style=label.style_label_left, size=size.tiny)
+    labelGann500 := label.new(bar_index + 12, gann500, g500Text, color=color.new(color.orange, 70), textcolor=color.orange, style=label.style_label_left, size=size.tiny)
+    labelGann750 := label.new(bar_index + 12, gann750, g750Text, color=color.new(color.orange, 70), textcolor=color.orange, style=label.style_label_left, size=size.tiny)
+
+// ============= RSI DIVERGENCE DRAWING =============
+// Draw divergence lines and labels on chart
+// Double divergence: 2 connected segments (A->B + B->C), thicker lines, brighter colors
+// Single divergence: 1 segment (B->C), normal lines
+// Double takes visual priority over single
+
+// --- BULLISH DIVERGENCE ---
+if doubleBullishDiv
+    // Segment A->B
+    line.new(prevPrevPivotLowBar, prevPrevPivotLowPrice, prevPivotLowBar, prevPivotLowPrice, color=color.new(color.green, 0), width=3, style=line.style_solid)
+    // Segment B->C
+    line.new(prevPivotLowBar, prevPivotLowPrice, lastPivotLowBar, lastPivotLowPrice, color=color.new(color.green, 0), width=3, style=line.style_solid)
+    label.new(lastPivotLowBar, lastPivotLowPrice, "💚💚 Dbl Bull Div", color=color.new(color.green, 0), textcolor=color.white, style=label.style_label_up, size=size.small)
+else if regularBullishDiv
+    line.new(prevPivotLowBar, prevPivotLowPrice, lastPivotLowBar, lastPivotLowPrice, color=color.new(color.green, 20), width=2, style=line.style_solid)
+    label.new(lastPivotLowBar, lastPivotLowPrice, "💚 Bull Div", color=color.new(color.green, 20), textcolor=color.white, style=label.style_label_up, size=size.small)
+
+// --- BEARISH DIVERGENCE ---
+if doubleBearishDiv
+    // Segment A->B
+    line.new(prevPrevPivotHighBar, prevPrevPivotHighPrice, prevPivotHighBar, prevPivotHighPrice, color=color.new(color.red, 0), width=3, style=line.style_solid)
+    // Segment B->C
+    line.new(prevPivotHighBar, prevPivotHighPrice, lastPivotHighBar, lastPivotHighPrice, color=color.new(color.red, 0), width=3, style=line.style_solid)
+    label.new(lastPivotHighBar, lastPivotHighPrice, "❤️❤️ Dbl Bear Div", color=color.new(color.red, 0), textcolor=color.white, style=label.style_label_down, size=size.small)
+else if regularBearishDiv
+    line.new(prevPivotHighBar, prevPivotHighPrice, lastPivotHighBar, lastPivotHighPrice, color=color.new(color.red, 20), width=2, style=line.style_solid)
+    label.new(lastPivotHighBar, lastPivotHighPrice, "❤️ Bear Div", color=color.new(color.red, 20), textcolor=color.white, style=label.style_label_down, size=size.small)
+
+// --- HIDDEN BULLISH DIVERGENCE ---
+if doubleHiddenBullishDiv
+    // Segment A->B
+    line.new(prevPrevPivotLowBar, prevPrevPivotLowPrice, prevPivotLowBar, prevPivotLowPrice, color=color.new(color.teal, 0), width=3, style=line.style_dashed)
+    // Segment B->C
+    line.new(prevPivotLowBar, prevPivotLowPrice, lastPivotLowBar, lastPivotLowPrice, color=color.new(color.teal, 0), width=3, style=line.style_dashed)
+    label.new(lastPivotLowBar, lastPivotLowPrice, "🩵🩵 Dbl Hidden Bull", color=color.new(color.teal, 0), textcolor=color.white, style=label.style_label_up, size=size.small)
+else if hiddenBullishDiv
+    line.new(prevPivotLowBar, prevPivotLowPrice, lastPivotLowBar, lastPivotLowPrice, color=color.new(color.teal, 30), width=2, style=line.style_dashed)
+    label.new(lastPivotLowBar, lastPivotLowPrice, "🩵 Hidden Bull", color=color.new(color.teal, 30), textcolor=color.white, style=label.style_label_up, size=size.small)
+
+// --- HIDDEN BEARISH DIVERGENCE ---
+if doubleHiddenBearishDiv
+    // Segment A->B
+    line.new(prevPrevPivotHighBar, prevPrevPivotHighPrice, prevPivotHighBar, prevPivotHighPrice, color=color.new(color.orange, 0), width=3, style=line.style_dashed)
+    // Segment B->C
+    line.new(prevPivotHighBar, prevPivotHighPrice, lastPivotHighBar, lastPivotHighPrice, color=color.new(color.orange, 0), width=3, style=line.style_dashed)
+    label.new(lastPivotHighBar, lastPivotHighPrice, "🧡🧡 Dbl Hidden Bear", color=color.new(color.orange, 0), textcolor=color.white, style=label.style_label_down, size=size.small)
+else if hiddenBearishDiv
+    line.new(prevPivotHighBar, prevPivotHighPrice, lastPivotHighBar, lastPivotHighPrice, color=color.new(color.orange, 30), width=2, style=line.style_dashed)
+    label.new(lastPivotHighBar, lastPivotHighPrice, "🧡 Hidden Bear", color=color.new(color.orange, 30), textcolor=color.white, style=label.style_label_down, size=size.small)
+
+// ============= ALERTS =============
+alertcondition(finalRecommendation == "STRONG BUY", title="Strong Buy Signal", message="LuckyPop: STRONG BUY - {{ticker}} at {{close}}")
+alertcondition(finalRecommendation == "BUY" or finalRecommendation == "BUY CONFIRMED", title="Buy Signal", message="LuckyPop: BUY - {{ticker}} at {{close}}")
+alertcondition(finalRecommendation == "STRONG SELL", title="Strong Sell Signal", message="LuckyPop: STRONG SELL - {{ticker}} at {{close}}")
+alertcondition(finalRecommendation == "SELL" or finalRecommendation == "SELL BOOK FAST", title="Sell Signal", message="LuckyPop: SELL - {{ticker}} at {{close}}")
+alertcondition(finalRecommendation == "SQUEEZE RISK", title="Squeeze Risk Warning", message="LuckyPop: SQUEEZE RISK on {{ticker}} - Consider covering shorts")
+alertcondition(svdCondition, title="SVD Detected", message="LuckyPop: Solid Violet Dot (SVD) on {{ticker}} - Institutional Buying")
+alertcondition(sbdCondition, title="SBD Detected", message="LuckyPop: Solid Blue Dot (SBD) on {{ticker}} - Accumulation")
+alertcondition(sydCondition, title="SYD Detected", message="LuckyPop: Solid Yellow Dot (SYD) on {{ticker}} - Distribution")
+alertcondition(preSYD_warning, title="Pre-SYD Warning", message="LuckyPop: Pre-SYD Warning on {{ticker}} - Potential distribution forming")
+
+// Position Management Alerts
+alertcondition(positionRecommendation == "EXIT" and inLongPosition[1], title="Exit Long Position", message="LuckyPop: EXIT LONG - {{ticker}} at {{close}}")
+alertcondition(positionRecommendation == "EXIT" and inShortPosition[1], title="Exit Short Position", message="LuckyPop: EXIT SHORT - {{ticker}} at {{close}}")
+alertcondition(positionRecommendation == "BOOK PARTIAL" and inLongPosition, title="Book Partial Long", message="LuckyPop: BOOK PARTIAL LONG - {{ticker}} at {{close}}")
+alertcondition(positionRecommendation == "BOOK PARTIAL" and inShortPosition, title="Book Partial Short", message="LuckyPop: BOOK PARTIAL SHORT - {{ticker}} at {{close}}")
+alertcondition(tvolSqueeze and (inLongPosition or inShortPosition), title="TVOL Squeeze Exit", message="LuckyPop: TVOL SQUEEZE - {{ticker}} - Exit immediately!")
+
+// Order Flow Enhancement Alerts
+alertcondition(finalRecommendation == "POWER BUY", title="Power Buy Signal", message="LuckyPop: POWER BUY - {{ticker}} - Strong Break + Fresh Longs!")
+alertcondition(finalRecommendation == "POWER SELL", title="Power Sell Signal", message="LuckyPop: POWER SELL - {{ticker}} - Strong Break + Fresh Shorts!")
+alertcondition(isAccumulation, title="Accumulation Detected", message="LuckyPop: ACCUMULATION - {{ticker}} - Smart money buying at support!")
+alertcondition(isDistribution, title="Distribution Detected", message="LuckyPop: DISTRIBUTION - {{ticker}} - Smart money selling at resistance!")
+alertcondition(vacuumUp and inLongPosition and pnlPercent > 0.5, title="Vacuum Move (Long)", message="LuckyPop: VACUUM MOVE - {{ticker}} - Consider booking partial profits!")
+alertcondition(vacuumDown and inShortPosition and pnlPercentShort > 0.5, title="Vacuum Move (Short)", message="LuckyPop: VACUUM MOVE - {{ticker}} - Consider booking partial profits!")
+alertcondition(flowType == "HOLLOW GREEN" and finalRecommendation == "BUY", title="Short Covering Warning", message="LuckyPop: SHORT COVERING ONLY - {{ticker}} - Not fresh buying!")
+alertcondition(flowType == "HOLLOW RED" and finalRecommendation == "SELL", title="Long Liquidation Warning", message="LuckyPop: LONG LIQUIDATION ONLY - {{ticker}} - Not fresh shorting!")
+alertcondition(activeBreakoutQuality >= 5 and (ib30Status == "BREAK UP" or ib30Status == "BREAK DOWN"), title="Strong Breakout", message="LuckyPop: STRONG BREAKOUT - {{ticker}} - Quality 5+/6")
+
+// Double Divergence Alerts
+alertcondition(doubleBullishDiv, title="Double Bullish Divergence", message="LuckyPop: DOUBLE BULLISH DIVERGENCE on {{ticker}} - Strong reversal signal UP!")
+alertcondition(doubleBearishDiv, title="Double Bearish Divergence", message="LuckyPop: DOUBLE BEARISH DIVERGENCE on {{ticker}} - Strong reversal signal DOWN!")
+alertcondition(doubleHiddenBullishDiv, title="Double Hidden Bullish Divergence", message="LuckyPop: DOUBLE HIDDEN BULLISH DIVERGENCE on {{ticker}} - Strong continuation UP!")
+alertcondition(doubleHiddenBearishDiv, title="Double Hidden Bearish Divergence", message="LuckyPop: DOUBLE HIDDEN BEARISH DIVERGENCE on {{ticker}} - Strong continuation DOWN!")

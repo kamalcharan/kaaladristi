@@ -1,0 +1,318 @@
+//@version=6
+indicator("LuckyPop SuperMagic Enhanced", overlay=false)
+
+// Original Input parameters
+comparison_symbol = input.symbol("NSE:CNX500", "Comparison Symbol")
+
+// Table Settings
+g_table = "Table Settings"
+show_table = input.bool(true, "Show Table", group=g_table)
+table_position = input.string("Left", "Table Position", options=["Left", "Right"], group=g_table)
+bg_opacity = input.int(70, "Background Opacity", minval=0, maxval=100, group=g_table)
+
+// Chartink Integration Settings
+g_chartink = "Chartink Rules Integration"
+enable_chartink_analysis = input.bool(true, "Enable Chartink Analysis", group=g_chartink)
+chartink_rule1_weeks = input.int(8, "EMD: Weeks Lookback", minval=4, maxval=20, group=g_chartink)
+chartink_rule1_threshold = input.float(100.0, "EMD: Move Threshold %", minval=50.0, maxval=500.0, group=g_chartink)
+chartink_rule2_correction = input.float(20.0, "CA: Max Correction %", minval=10.0, maxval=50.0, group=g_chartink)
+chartink_rule3_vol_mult = input.float(1.5, "VMAC: Volume Multiplier", minval=1.0, maxval=5.0, group=g_chartink)
+
+// Table Row Selection
+g_table_rows = "Table Row Selection"
+show_magicrs_basic = input.bool(true, "Show MagicRS Basic Info", group=g_table_rows)
+show_magicrs_zones = input.bool(true, "Show MagicRS Zones & Stability", group=g_table_rows)
+show_chartink_rules = input.bool(true, "Show Chartink Rules Analysis", group=g_table_rows)
+show_chartink_summary = input.bool(true, "Show Chartink Summary", group=g_table_rows)
+show_correlation = input.bool(true, "Show MagicRS ↔ Chartink Correlation", group=g_table_rows)
+show_trend_analysis = input.bool(true, "Show Trend Analysis", group=g_table_rows)
+show_alerts_summary = input.bool(true, "Show Trading Alerts", group=g_table_rows)
+
+// Line Color Settings
+g_colors = "Line Colors"
+magicrs_bull_color = input.color(#00FF00, "MagicRS Bull Color", group=g_colors)
+magicrs_bear_color = input.color(#FF0000, "MagicRS Bear Color", group=g_colors)
+magicma_color = input.color(#0000FF, "MagicMA Line Color", group=g_colors)
+
+// Enhanced Color Mode Settings
+g_mode = "Color Mode Settings"
+color_mode = input.string("Simple", "Color Mode", options=["Simple", "Three Color", "Gradient"], group=g_mode)
+base_threshold = input.float(6.0, "Base Color Threshold %", minval=1.0, maxval=20.0, step=0.5, group=g_mode)
+show_adaptive_threshold = input.bool(true, "Use Adaptive Threshold", group=g_mode)
+atr_period = input.int(14, "ATR Period for Adaptive Threshold", group=g_mode)
+
+// Gradient Color Settings
+g_gradient = "Gradient Colors"
+strong_bull_color = input.color(color.new(#006400, 0), "Strong Bullish Color", group=g_gradient)
+mild_bull_color = input.color(color.new(#90EE90, 0), "Mild Bullish Color", group=g_gradient)
+neutral_color = input.color(color.new(#4169E1, 40), "Neutral Color", group=g_gradient)
+mild_bear_color = input.color(color.new(#FFA07A, 0), "Mild Bearish Color", group=g_gradient)
+strong_bear_color = input.color(color.new(#8B0000, 0), "Strong Bearish Color", group=g_gradient)
+
+// Visualization Settings
+g_visual = "Visualization"
+show_histogram = input.bool(true, "Show Strength Histogram", group=g_visual)
+show_zones = input.bool(true, "Show Strength Zones", group=g_visual)
+
+// Time interval inputs for highs and lows
+g_intervals = "Time Intervals"
+interval_60 = input.bool(true, "60 min High/Low", group=g_intervals)
+interval_120 = input.bool(true, "120 min High/Low", group=g_intervals)
+interval_240 = input.bool(true, "240 min High/Low", group=g_intervals)
+
+// Function to calculate relative strength
+f_relative_strength(symbol1, symbol2, length) =>
+    price1 = request.security(symbol1, timeframe.period, close)
+    price2 = request.security(symbol2, timeframe.period, close)
+    rs = price1 / price2
+    ((rs / ta.sma(rs, length)) - 1) * 100
+
+// Calculate MagicRS
+magicrs_value = f_relative_strength(syminfo.tickerid, comparison_symbol, 144)
+
+// Calculate MagicMA
+magicma_value = ta.sma(magicrs_value, 60)
+
+// Calculate percentage change and difference
+pct_change_needed = magicma_value - magicrs_value
+pct_diff = math.abs(pct_change_needed)
+
+// Calculate adaptive threshold
+vol_factor = show_adaptive_threshold ? ta.atr(atr_period) / ta.sma(ta.atr(atr_period), 100) : 1.0
+current_threshold = base_threshold * vol_factor
+
+// ============= CHARTINK RULES CALCULATIONS =============
+
+// Rule 1: Explosive Move Detection (EMD)
+weeks_ago_price = close[chartink_rule1_weeks * 5]  // Approximate weekly bars
+emd_move_pct = weeks_ago_price > 0 ? ((close - weeks_ago_price) / weeks_ago_price) * 100 : 0
+emd_satisfied = emd_move_pct >= chartink_rule1_threshold
+
+// Rule 2: Correction Analysis (CA)
+recent_high = ta.highest(high, chartink_rule1_weeks * 5)
+ca_correction_pct = recent_high > 0 ? ((recent_high - close) / recent_high) * 100 : 0
+ca_satisfied = ca_correction_pct <= chartink_rule2_correction and ca_correction_pct >= 0
+
+// Rule 3: Volume + MA Confluence (VMAC)
+avg_volume = ta.sma(volume, 20)
+vmac_volume_surge = volume >= avg_volume * chartink_rule3_vol_mult
+sma_21 = ta.sma(close, 21)
+sma_50 = ta.sma(close, 50)
+sma_200 = ta.sma(close, 200)
+vmac_ma_proximity = (math.abs((close - sma_21) / sma_21) * 100 <= 3.0) or (math.abs((close - sma_50) / sma_50) * 100 <= 3.0) or (math.abs((close - sma_200) / sma_200) * 100 <= 3.0)
+vmac_satisfied = vmac_volume_surge and vmac_ma_proximity
+
+// Chartink Summary
+chartink_score = (emd_satisfied ? 1 : 0) + (ca_satisfied ? 1 : 0) + (vmac_satisfied ? 1 : 0)
+chartink_status = chartink_score == 3 ? "Perfect" : chartink_score == 2 ? "Strong" : chartink_score == 1 ? "Partial" : "Weak"
+
+// MagicRS ↔ Chartink Correlation Analysis
+magicrs_bullish = magicrs_value > magicma_value
+correlation_score = 0
+correlation_score := correlation_score + (magicrs_bullish and emd_satisfied ? 2 : 0)  // Momentum alignment
+correlation_score := correlation_score + (magicrs_bullish and ca_satisfied ? 1 : 0)   // Healthy correction in uptrend
+correlation_score := correlation_score + (vmac_satisfied ? 1 : 0)                     // Volume confirmation
+correlation_max = 4
+correlation_status = correlation_score >= 4 ? "Excellent" : correlation_score >= 3 ? "Strong" : correlation_score >= 2 ? "Moderate" : "Weak"
+
+// ============= EXISTING CALCULATIONS =============
+
+// Determine colors based on mode and thresholds
+getColor(threshold) =>
+    if color_mode == "Simple"
+        magicrs_value > magicma_value ? magicrs_bull_color : magicrs_bear_color
+    else if color_mode == "Three Color"
+        magicrs_value > magicma_value ? (pct_diff > threshold ? magicrs_bull_color : neutral_color) : (pct_diff > threshold ? magicrs_bear_color : neutral_color)
+    else
+        magicrs_value > magicma_value ? (pct_diff > threshold * 1.5 ? strong_bull_color : pct_diff > threshold ? mild_bull_color : neutral_color) : (pct_diff > threshold * 1.5 ? strong_bear_color : pct_diff > threshold ? mild_bear_color : neutral_color)
+
+// Determine zone
+getZone(threshold) =>
+    if magicrs_value > magicma_value
+        pct_diff > threshold * 1.5 ? "Strong Bull" : pct_diff > threshold ? "Mild Bull" : "Neutral"
+    else
+        pct_diff > threshold * 1.5 ? "Strong Bear" : pct_diff > threshold ? "Mild Bear" : "Neutral"
+
+// Line color for MagicRS
+line_color = magicrs_value > magicma_value ? (pct_diff > current_threshold * 1.5 ? color.new(magicrs_bull_color, 0) : pct_diff > current_threshold ? color.new(magicrs_bull_color, 20) : color.new(neutral_color, 0)) : (pct_diff > current_threshold * 1.5 ? color.new(magicrs_bear_color, 0) : pct_diff > current_threshold ? color.new(magicrs_bear_color, 20) : color.new(neutral_color, 0))
+
+// Plot the MagicRS line with dynamic color
+magicrs_line = plot(magicrs_value, title="MagicRS", color=line_color, linewidth=2)
+
+// Plot the MagicMA line
+magicma_line = plot(magicma_value, title="MagicMA", color=magicma_color, linewidth=1)
+
+// Fill background based on trend
+bgcolor(show_zones ? color.new(getColor(current_threshold), 70) : na)
+
+// Plot histogram
+var histogram_height = 0.5
+hist_color = getColor(current_threshold)
+hist_plot = plot(show_histogram ? pct_diff * histogram_height : na, style=plot.style_columns, color=hist_color, title="Strength Histogram")
+
+// Function to detect new high or low on higher timeframe
+detectNewExtreme(tf) =>
+    tf_high = ta.highest(magicrs_value, tf == "60" ? 60 : tf == "120" ? 120 : 240)
+    tf_low = ta.lowest(magicrs_value, tf == "60" ? 60 : tf == "120" ? 120 : 240)
+    isNewHigh = magicrs_value == tf_high
+    isNewLow = magicrs_value == tf_low
+    [isNewHigh, isNewLow]
+
+// Detect new extremes for different timeframes
+[newHigh60, newLow60] = detectNewExtreme("60")
+[newHigh120, newLow120] = detectNewExtreme("120")
+[newHigh240, newLow240] = detectNewExtreme("240")
+
+// Function to check if we're at the end of the specified interval
+isIntervalEnd(tf) =>
+    t = time(tf)
+    t != t[1]
+
+// Plot dots for new highs and lows
+plotshape(interval_60 and isIntervalEnd("60") and newHigh60 ? magicrs_value : na, title="60min High", location=location.absolute, color=magicrs_bull_color, style=shape.circle, size=size.tiny)
+plotshape(interval_60 and isIntervalEnd("60") and newLow60 ? magicrs_value : na, title="60min Low", location=location.absolute, color=magicrs_bear_color, style=shape.circle, size=size.tiny)
+plotshape(interval_120 and isIntervalEnd("120") and newHigh120 ? magicrs_value : na, title="120min High", location=location.absolute, color=magicrs_bull_color, style=shape.circle, size=size.tiny)
+plotshape(interval_120 and isIntervalEnd("120") and newLow120 ? magicrs_value : na, title="120min Low", location=location.absolute, color=magicrs_bear_color, style=shape.circle, size=size.tiny)
+plotshape(interval_240 and isIntervalEnd("240") and newHigh240 ? magicrs_value : na, title="240min High", location=location.absolute, color=magicrs_bull_color, style=shape.circle, size=size.tiny)
+plotshape(interval_240 and isIntervalEnd("240") and newLow240 ? magicrs_value : na, title="240min Low", location=location.absolute, color=magicrs_bear_color, style=shape.circle, size=size.tiny)
+
+// ============= ENHANCED INFORMATION TABLE =============
+
+var table info_table = table.new(position = show_table ? (table_position == "Left" ? position.top_left : position.top_right) : position.top_right, columns = 3, rows = 15, border_width = 1)
+
+if barstate.islast and show_table
+    // Header
+    table.cell(info_table, 0, 0, "Metric", bgcolor=color.new(color.blue, 90), text_size=size.small)
+    table.cell(info_table, 1, 0, "Value", bgcolor=color.new(color.blue, 90), text_size=size.small)
+    table.cell(info_table, 2, 0, "Status", bgcolor=color.new(color.blue, 90), text_size=size.small)
+    
+    currentRow = 1
+    
+    // MagicRS Basic Info
+    if show_magicrs_basic
+        table.cell(info_table, 0, currentRow, "MagicRS", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(magicrs_value, "#.##") + "%", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, getZone(current_threshold), bgcolor=getColor(current_threshold), text_size=size.small)
+        currentRow := currentRow + 1
+        
+        table.cell(info_table, 0, currentRow, "MagicMA", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(magicma_value, "#.##") + "%", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, magicrs_value > magicma_value ? "Above" : "Below", bgcolor=magicrs_value > magicma_value ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+        currentRow := currentRow + 1
+        
+        table.cell(info_table, 0, currentRow, "RS Difference", bgcolor=color.new(color.purple, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(pct_diff, "#.##") + "%", bgcolor=color.new(color.purple, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, pct_diff > current_threshold ? "Significant" : "Normal", bgcolor=pct_diff > current_threshold ? color.new(color.yellow, 70) : color.new(color.gray, 70), text_size=size.small)
+        currentRow := currentRow + 1
+
+    // MagicRS Zones & Stability
+    if show_magicrs_zones
+        // Trend Duration
+        var int trendduration = 0
+        trendduration := magicrs_value > magicma_value ? (magicrs_value[1] > magicma_value[1] ? trendduration + 1 : 1) : magicrs_value < magicma_value ? (magicrs_value[1] < magicma_value[1] ? trendduration + 1 : 1) : 0
+        
+        table.cell(info_table, 0, currentRow, "Trend Duration", bgcolor=color.new(color.gray, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(trendduration, "#") + " bars", bgcolor=color.new(color.gray, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, trendduration > 20 ? "Strong" : trendduration > 10 ? "Moderate" : "New", bgcolor=trendduration > 20 ? color.new(color.green, 70) : trendduration > 10 ? color.new(color.yellow, 70) : color.new(color.gray, 70), text_size=size.small)
+        currentRow := currentRow + 1
+        
+        // Zone Transitions
+        var string lastZone = na
+        var int zoneStability = 0
+        currentZone = getZone(current_threshold)
+        zoneStability := currentZone == lastZone ? zoneStability + 1 : 0
+        lastZone := currentZone
+        
+        table.cell(info_table, 0, currentRow, "Zone Stability", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(zoneStability, "#") + " bars", bgcolor=color.new(color.blue, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, zoneStability > 15 ? "Stable" : "Transitioning", bgcolor=zoneStability > 15 ? color.new(color.green, 70) : color.new(color.yellow, 70), text_size=size.small)
+        currentRow := currentRow + 1
+
+    // Chartink Rules Analysis
+    if show_chartink_rules and enable_chartink_analysis
+        table.cell(info_table, 0, currentRow, "EMD (" + str.tostring(chartink_rule1_weeks) + "W)", bgcolor=color.new(color.maroon, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(emd_move_pct, "#.##") + "% vs " + str.tostring(chartink_rule1_threshold, "#") + "%", bgcolor=color.new(color.maroon, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, emd_satisfied ? "✓ Explosive" : "✗ Below Target", bgcolor=emd_satisfied ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+        currentRow := currentRow + 1
+        
+        table.cell(info_table, 0, currentRow, "CA (Correction)", bgcolor=color.new(color.maroon, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(ca_correction_pct, "#.##") + "% vs " + str.tostring(chartink_rule2_correction, "#") + "%", bgcolor=color.new(color.maroon, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, ca_satisfied ? "✓ Healthy" : "✗ Over Corrected", bgcolor=ca_satisfied ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+        currentRow := currentRow + 1
+        
+        vol_text = vmac_volume_surge ? "✓" : "✗"
+        ma_text = vmac_ma_proximity ? "✓" : "✗"
+        table.cell(info_table, 0, currentRow, "VMAC (Vol+MA)", bgcolor=color.new(color.maroon, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, "V:" + vol_text + " MA:" + ma_text, bgcolor=color.new(color.maroon, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, vmac_satisfied ? "✓ Ready" : "✗ Not Ready", bgcolor=vmac_satisfied ? color.new(color.green, 70) : color.new(color.red, 70), text_size=size.small)
+        currentRow := currentRow + 1
+
+    // Chartink Summary
+    if show_chartink_summary and enable_chartink_analysis
+        table.cell(info_table, 0, currentRow, "Rules Score", bgcolor=color.new(color.olive, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(chartink_score) + "/3 (" + chartink_status + ")", bgcolor=color.new(color.olive, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, chartink_status, bgcolor=chartink_score >= 3 ? color.new(color.green, 70) : chartink_score >= 2 ? color.new(color.yellow, 70) : color.new(color.red, 70), text_size=size.small)
+        currentRow := currentRow + 1
+
+    // MagicRS ↔ Chartink Correlation
+    if show_correlation and enable_chartink_analysis
+        table.cell(info_table, 0, currentRow, "RS ↔ Rules", bgcolor=color.new(color.teal, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, str.tostring(correlation_score) + "/4 (" + correlation_status + ")", bgcolor=color.new(color.teal, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, correlation_status, bgcolor=correlation_score >= 4 ? color.new(color.green, 70) : correlation_score >= 3 ? color.new(color.lime, 70) : correlation_score >= 2 ? color.new(color.yellow, 70) : color.new(color.red, 70), text_size=size.small)
+        currentRow := currentRow + 1
+
+    // Trend Analysis
+    if show_trend_analysis
+        momentum_direction = magicrs_value > magicrs_value[5] ? "Up" : magicrs_value < magicrs_value[5] ? "Down" : "Flat"
+        momentum_strength = math.abs(magicrs_value - magicrs_value[5])
+        
+        table.cell(info_table, 0, currentRow, "5-Bar Momentum", bgcolor=color.new(color.navy, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, momentum_direction + " (" + str.tostring(momentum_strength, "#.##") + "%)", bgcolor=color.new(color.navy, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, momentum_strength > 2 ? "Strong" : momentum_strength > 1 ? "Moderate" : "Weak", bgcolor=momentum_strength > 2 ? color.new(color.green, 70) : momentum_strength > 1 ? color.new(color.yellow, 70) : color.new(color.gray, 70), text_size=size.small)
+        currentRow := currentRow + 1
+
+    // Trading Alerts Summary
+    if show_alerts_summary
+        // Generate trading signals
+        perfect_setup = magicrs_bullish and chartink_score >= 3 and pct_diff > current_threshold
+        strong_setup = magicrs_bullish and chartink_score >= 2 and pct_diff > current_threshold * 0.5
+        caution_signal = not magicrs_bullish and chartink_score <= 1
+        
+        signal_text = perfect_setup ? "Perfect Entry" : strong_setup ? "Strong Entry" : caution_signal ? "Caution/Exit" : "Wait"
+        signal_color = perfect_setup ? color.new(color.green, 70) : strong_setup ? color.new(color.lime, 70) : caution_signal ? color.new(color.red, 70) : color.new(color.gray, 70)
+        
+        table.cell(info_table, 0, currentRow, "Trading Signal", bgcolor=color.new(color.purple, 90), text_size=size.small)
+        table.cell(info_table, 1, currentRow, signal_text, bgcolor=color.new(color.purple, 90), text_size=size.small)
+        table.cell(info_table, 2, currentRow, signal_text, bgcolor=signal_color, text_size=size.small)
+        currentRow := currentRow + 1
+
+// Alert conditions
+alertcondition(ta.cross(magicrs_value, magicma_value), title="MagicRS Crossover", message="MagicRS crossed MagicMA")
+alertcondition(pct_diff > current_threshold and pct_diff[1] <= current_threshold, title="Significant Move", message="Significant strength move detected")
+alertcondition(getZone(current_threshold) != getZone(current_threshold)[1], title="Zone Change", message="MagicRS Zone Changed")
+
+// New Chartink-based alerts
+alertcondition(chartink_score >= 3 and chartink_score[1] < 3, title="Perfect Chartink Setup", message="All 3 Chartink rules satisfied")
+alertcondition(magicrs_bullish and chartink_score >= 3 and pct_diff > current_threshold, title="Ultimate Setup", message="MagicRS bullish + Perfect Chartink + Significant move")
+
+// Export variables for strategy use
+plot(current_threshold, "Current Threshold", display=display.none)
+plot(float(getZone(current_threshold) == "Strong Bull" ? 2 : getZone(current_threshold) == "Mild Bull" ? 1 : getZone(current_threshold) == "Strong Bear" ? -2 : getZone(current_threshold) == "Mild Bear" ? -1 : 0), "Zone Value", display=display.none)
+
+// Strength Analysis outputs for strategy access
+is_strong_bull = getZone(current_threshold) == "Strong Bull"
+is_mild_bull = getZone(current_threshold) == "Mild Bull"
+is_strong_bear = getZone(current_threshold) == "Strong Bear"
+is_mild_bear = getZone(current_threshold) == "Mild Bear"
+is_neutral = getZone(current_threshold) == "Neutral"
+
+// Export condition plots for strategy access
+plot(is_strong_bull ? 1 : 0, "Strong Bull", display=display.none)
+plot(is_mild_bull ? 1 : 0, "Mild Bull", display=display.none)
+plot(is_strong_bear ? 1 : 0, "Strong Bear", display=display.none)
+plot(is_mild_bear ? 1 : 0, "Mild Bear", display=display.none)
+plot(is_neutral ? 1 : 0, "Neutral", display=display.none)
+
+// Export Chartink analysis
+plot(chartink_score, "Chartink Score", display=display.none)
+plot(correlation_score, "Correlation Score", display=display.none)

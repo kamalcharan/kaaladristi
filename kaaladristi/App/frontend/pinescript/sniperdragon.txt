@@ -1,0 +1,42 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © bids_sniper
+
+//@version=4
+study("Sniper Scope Dragon", "Sniper Dragon")
+
+RSIBaseBanker = 61
+RSIPeriodBanker =9
+RSIBaseHotMoney= 15
+RSIPeriodHotMoney = 4
+SensitivityBanker = 1.5
+SensitivityHotMoney = 1.0
+
+rsi_function(sensitivity, rsiPeriod, rsiBase) =>
+    rsi = sensitivity * (rsi(close, rsiPeriod) - rsiBase)
+    if rsi > 50
+        rsi := 50
+    else if rsi < 0
+        rsi := 0
+    rsi
+
+rsi_Banker   = rsi_function(SensitivityBanker,   RSIPeriodBanker,   RSIBaseBanker)
+rsi_HotMoney = rsi_function(SensitivityHotMoney, RSIPeriodHotMoney, RSIBaseHotMoney)
+
+
+plot(50,           "Retailer",  #048c0b,6, plot.style_histogram)
+plot(rsi_HotMoney, "Hot Money", #ffeb3b, 6, plot.style_histogram)
+plot(rsi_Banker,   "Institution",#ff0000, 6, plot.style_histogram)
+
+plot( 0, "0" , color.black,  2, editable = false)
+plot( 5, "5" , color.green,  1, editable = false)
+plot(15, "15", color.green, 1, editable = false)
+plot(25, "25", color.silver,  1, editable = false)
+plot(35, "35", color.silver,  1, editable = false)
+plot(40, "40", color.red,  1, editable = false)
+plot(50, "50", color.black,  2, editable = false)
+
+srcRSI = close, lenRSI = 9
+up = rma(max(change(srcRSI), 0), lenRSI)
+down = rma(-min(change(srcRSI), 0), lenRSI)
+rsiLine = down == 0 ? 50 : up == 0 ? 0 : 50 - (50 / (1 + up / down))
+plot(rsiLine, "RSI", color=#000000,linewidth=2, editable=false)

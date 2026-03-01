@@ -1,0 +1,71 @@
+//@version=5
+indicator("LuckyPop RSSI", overlay=false)
+
+// Inputs
+E1Period = input.int(10, "E1 Period", minval=1)
+E2Period = input.int(40, "E2 Period", minval=1)
+RSPeriod = input.int(5, "RS Period", minval=1)
+lookbackPeriod = input.int(40, "New High Lookback Period", minval=1)
+showNewHigh = input.bool(true, "Show New High Dot")
+rssColor = input.color(color.red, "RSS Line Color")
+newHighColor = input.color(color.blue, "New High Dot Color")
+newHighMethod = input.string("RSS New High", "New High Method", options=["RSS New High", "Historical RSS New High", "RSS New High before Price", "Historical RSS New High before Price"])
+
+// RSI Inputs
+rsiPeriod = input.int(14, "RSI Period", minval=1)
+rsiColor = input.color(color.purple, "RSI Line Color")
+divergenceLookback = input.int(14, "Divergence Lookback", minval=1)
+
+// RSS Calculation
+cl = close
+E1 = ta.sma(cl, E1Period)
+E2 = ta.sma(cl, E2Period)
+Spread = E1 - E2
+RS = ta.rsi(Spread, RSPeriod)
+Smooth = ta.sma(RS, 3)
+
+// RSI Calculation
+rsi = ta.rsi(close, rsiPeriod)
+
+// Global variable to track highest RSS for proper new high detection
+var float globalHighestRSS = 0.0
+newHigh = Smooth > globalHighestRSS
+if newHigh
+    globalHighestRSS := Smooth
+
+// New High Detection based on selected method
+isNewHigh = switch newHighMethod
+    "RSS New High" => newHigh
+    "Historical RSS New High" => Smooth > ta.highest(Smooth[1], lookbackPeriod)
+    "RSS New High before Price" => newHigh and close < ta.highest(close, lookbackPeriod)
+    "Historical RSS New High before Price" => Smooth > ta.highest(Smooth[1], lookbackPeriod) and close < ta.highest(close, lookbackPeriod)
+
+// Divergence Detection
+highestHigh = ta.highest(high, divergenceLookback)
+lowestLow = ta.lowest(low, divergenceLookback)
+
+bearishDivergence = highestHigh == high and rsi < ta.highest(rsi, divergenceLookback)
+bullishDivergence = lowestLow == low and rsi > ta.lowest(rsi, divergenceLookback)
+
+// Plotting
+plot(Smooth, title="RSS", color=rssColor, linewidth=2)
+plot(rsi, title="RSI", color=rsiColor, linewidth=1)
+
+// Plot new high dot
+plotshape(showNewHigh and isNewHigh ? Smooth : na, title="RSS New High", location=location.absolute, style=shape.circle, size=size.tiny, color=newHighColor)
+
+// Display RSS value at new highs
+if showNewHigh and isNewHigh
+    label.new(bar_index, Smooth, text=str.tostring(Smooth, "#.##"), color=color.new(newHighColor, 0), textcolor=color.white, size=size.tiny, style=label.style_none)
+
+// Plot divergences
+plotshape(bearishDivergence, title="Bearish Divergence", location=location.top, color=color.red, style=shape.triangledown, size=size.tiny)
+plotshape(bullishDivergence, title="Bullish Divergence", location=location.bottom, color=color.green, style=shape.triangleup, size=size.tiny)
+
+// Overbought and Oversold levels
+hline(80, "RSS Overbought", color=color.new(color.red, 50))
+hline(20, "RSS Oversold", color=color.new(color.green, 50))
+
+// RSI levels
+hline(70, "RSI Overbought", color=color.new(rsiColor, 70), linestyle=hline.style_dotted)
+hline(30, "RSI Oversold", color=color.new(rsiColor, 70), linestyle=hline.style_dotted)
