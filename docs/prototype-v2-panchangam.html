@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KaalaDristi — v2 Panchangam Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ═══════════════════════════════════════════════════════════
+   KAALADRISTI v2 — PANCHANGAM COMMAND CENTER
+   "The Weather Station That Sees Through Time"
+
+   Philosophy:
+   - Panchangam is the weather data (the atmosphere)
+   - Weather Orb is the interpretation (the forecast)
+   - Astro vs Technical is the validation (barometer confirms)
+   - SniperDragon is the seismograph (earth tremors)
+   - NO buy/sell anywhere — only weather language
+   - Chart is optional satellite imagery
+   ═══════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #030712;
+  --bg-deep:      #010409;
+  --card:         rgba(15, 23, 42, 0.75);
+  --card-warm:    rgba(20, 16, 12, 0.6);
+  --elevated:     rgba(30, 41, 59, 0.5);
+  --border:       rgba(255, 255, 255, 0.06);
+  --border-warm:  rgba(251, 191, 36, 0.08);
+  --border-active:rgba(99, 102, 241, 0.4);
+  --text-primary: #f8fafc;
+  --text-secondary:#94a3b8;
+  --text-muted:   #475569;
+  --indigo:       #6366f1;
+  --violet:       #8b5cf6;
+  --cyan:         #06b6d4;
+  --gold:         #fbbf24;
+  --gold-dim:     #b8941a;
+  --gold-glow:    rgba(251, 191, 36, 0.08);
+  --green:        #10b981;
+  --amber:        #f59e0b;
+  --red:          #ef4444;
+  --emerald:      #34d399;
+  --rose:         #f43f5e;
+  --sky:          #38bdf8;
+  --mono:         'JetBrains Mono', monospace;
+  --sans:         'Inter', -apple-system, sans-serif;
+  --deva:         'Noto Sans Devanagari', sans-serif;
+}
+
+html { font-size: 14px; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Cosmic background ── */
+body::before {
+  content: '';
+  position: fixed;
+  top: -20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120%;
+  height: 50%;
+  background: radial-gradient(ellipse at center, rgba(251,191,36,0.02) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Layout ── */
+.shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px 28px 40px;
+}
+
+/* ── Top Bar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.logo {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, var(--gold), #e2a20c, var(--amber));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.logo-sub {
+  font-size: 0.55rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: -2px;
+}
+.symbol-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--indigo);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.symbol-pill:hover { background: rgba(99,102,241,0.18); }
+.symbol-pill .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.topbar-right .val { color: var(--text-secondary); font-weight: 600; }
+
+/* ── Price Strip (compact) ── */
+.price-strip {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 0 2px;
+}
+.price-main {
+  font-family: var(--mono);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.price-change {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.price-change.up { color: var(--emerald); }
+.price-change.down { color: var(--rose); }
+.price-meta {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PANCHANGAM — The Sacred Instrument Panel
+   ═══════════════════════════════════════════════════════════ */
+.panchangam {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr 1fr 1fr 1fr;
+  gap: 0;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(20,16,10,0.8), rgba(15,23,42,0.6));
+  border: 1px solid var(--border-warm);
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+}
+/* Subtle gold top line */
+.panchangam::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(251,191,36,0.2), transparent);
+}
+
+/* Moon Phase — Left anchor */
+.panch-moon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 24px;
+  border-right: 1px solid var(--border-warm);
+  background: rgba(0,0,0,0.2);
+  min-width: 100px;
+}
+.moon-svg {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 0 12px rgba(251,191,36,0.15));
+}
+.moon-phase-name {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gold-dim);
+}
+.moon-tithi-num {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Panchangam Anga Cell */
+.panch-anga {
+  padding: 16px 18px;
+  border-right: 1px solid rgba(255,255,255,0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.panch-anga:last-child { border-right: none; }
+.panch-anga:hover { background: rgba(251,191,36,0.03); }
+
+.anga-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--gold-dim);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.anga-label .glyph {
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+.anga-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  letter-spacing: -0.01em;
+}
+.anga-name-deva {
+  font-family: var(--deva);
+  font-size: 0.7rem;
+  color: var(--gold-dim);
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+.anga-quality {
+  font-size: 0.6rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+.anga-quality.favorable {
+  background: rgba(16,185,129,0.1);
+  color: var(--emerald);
+  border: 1px solid rgba(16,185,129,0.15);
+}
+.anga-quality.caution {
+  background: rgba(245,158,11,0.1);
+  color: var(--amber);
+  border: 1px solid rgba(245,158,11,0.15);
+}
+.anga-quality.adverse {
+  background: rgba(239,68,68,0.08);
+  color: var(--rose);
+  border: 1px solid rgba(239,68,68,0.12);
+}
+.anga-quality.neutral {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.anga-detail {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.anga-ruler {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.anga-ruler .planet-glyph {
+  font-size: 0.7rem;
+  color: var(--gold-dim);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN GRID — 3 Column Layout
+   ═══════════════════════════════════════════════════════════ */
+.command-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+/* ── Card Base ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px;
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+.card:hover { border-color: rgba(255,255,255,0.08); }
+.card-label {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 1: WEATHER ORB + PLANETARY CONDITIONS
+   Spans both rows — The Hero
+   ═══════════════════════════════════════════════════════════ */
+.weather-card {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 22px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(15,23,42,0.8) 0%, rgba(10,15,30,0.9) 100%);
+}
+
+/* The Orb */
+.weather-orb-wrap {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin: 8px 0 20px;
+}
+.weather-orb {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+/* Rotating planetary ring */
+.weather-orb::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(251,191,36,0.12),
+    rgba(16,185,129,0.1),
+    rgba(6,182,212,0.1),
+    rgba(99,102,241,0.1),
+    rgba(139,92,246,0.08),
+    rgba(245,158,11,0.1),
+    rgba(251,191,36,0.12)
+  );
+  filter: blur(16px);
+  animation: orb-rotate 20s linear infinite;
+}
+@keyframes orb-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+/* Glass sphere */
+.weather-orb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(251,191,36,0.1);
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.03), transparent 60%);
+}
+
+/* Orbital dots (tiny planets) */
+.orbital-ring {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  border: 1px solid rgba(251,191,36,0.04);
+  animation: orb-rotate 30s linear infinite reverse;
+}
+.orbital-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+.orbital-dot:nth-child(1) { top: 0; left: 50%; transform: translate(-50%, -50%); color: var(--gold); background: var(--gold); }
+.orbital-dot:nth-child(2) { bottom: 15%; right: 0; transform: translate(50%, 0); color: var(--cyan); background: var(--cyan); }
+.orbital-dot:nth-child(3) { bottom: 0; left: 30%; transform: translate(0, 50%); color: var(--rose); background: var(--rose); }
+
+.orb-score {
+  font-family: var(--mono);
+  font-size: 3.6rem;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  z-index: 1;
+  position: relative;
+}
+.orb-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+  z-index: 1;
+  position: relative;
+  margin-top: 4px;
+}
+
+/* Weather Condition */
+.weather-condition {
+  margin-bottom: 10px;
+}
+.weather-icon-text {
+  font-size: 1.8rem;
+  margin-bottom: 4px;
+}
+.weather-name {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 2px;
+}
+.weather-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 260px;
+  margin: 0 auto;
+}
+
+/* Regime Badge */
+.regime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 14px;
+  border-radius: 100px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 10px 0 16px;
+}
+.regime-badge.expansion {
+  background: rgba(6,182,212,0.1);
+  border: 1px solid rgba(6,182,212,0.25);
+  color: var(--cyan);
+}
+
+/* Planetary Factor Stack — inside weather card */
+.planet-factors {
+  width: 100%;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.planet-factor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.planet-factor:last-child { border-bottom: none; }
+.pf-glyph {
+  font-size: 1rem;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.pf-body {
+  flex: 1;
+  text-align: left;
+}
+.pf-name {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.pf-detail {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.pf-tag {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.pf-tag.low { background: rgba(16,185,129,0.1); color: var(--emerald); }
+.pf-tag.mid { background: rgba(245,158,11,0.1); color: var(--amber); }
+.pf-tag.high { background: rgba(239,68,68,0.08); color: var(--rose); }
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 2: PLANETARY vs TECHNICAL — The Convergence
+   ═══════════════════════════════════════════════════════════ */
+.convergence-card {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.convergence-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.convergence-score-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.convergence-count {
+  font-family: var(--mono);
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.convergence-of {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.convergence-label-text {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Convergence Rows */
+.conv-table {
+  width: 100%;
+}
+.conv-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 14px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.conv-row:last-child { border-bottom: none; }
+.conv-row-head {
+  padding: 0 0 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.conv-col-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.conv-glyph {
+  font-size: 0.85rem;
+  text-align: center;
+  opacity: 0.6;
+}
+.conv-astro, .conv-tech {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.conv-factor-name {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.conv-factor-val {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.conv-match {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.conv-match-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  font-weight: 700;
+}
+.conv-match-icon.yes {
+  background: rgba(16,185,129,0.12);
+  color: var(--emerald);
+  box-shadow: 0 0 8px rgba(16,185,129,0.15);
+}
+.conv-match-icon.partial {
+  background: rgba(245,158,11,0.1);
+  color: var(--amber);
+}
+.conv-match-icon.no {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+}
+
+/* Convergence summary bar */
+.conv-summary {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.conv-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 100px;
+  overflow: hidden;
+}
+.conv-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 1s ease;
+}
+.conv-summary-text {
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  min-width: 160px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 3: SNIPER DRAGON — Seismograph
+   ═══════════════════════════════════════════════════════════ */
+.sniper-card {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.signal-tower {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  height: 80px;
+  margin: 4px 0 14px;
+}
+.signal-bar {
+  width: 16px;
+  border-radius: 3px 3px 0 0;
+  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.signal-bar.active {
+  box-shadow: 0 0 14px rgba(var(--bar-rgb), 0.25);
+}
+.signal-bar.inactive {
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+.sniper-status {
+  text-align: center;
+  margin-bottom: 14px;
+}
+.sniper-reading {
+  font-family: var(--mono);
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+.sniper-verdict {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+.sniper-desc {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  font-style: italic;
+}
+
+.sm-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: auto;
+}
+.sm-metric {
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.sm-metric-label {
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.sm-metric-val {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 4: WEATHER FACTORS — Risk Dimensions
+   ═══════════════════════════════════════════════════════════ */
+.factors-card {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.factor-rows { display: flex; flex-direction: column; gap: 8px; }
+.factor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0,0,0,0.15);
+  border: 1px solid rgba(255,255,255,0.02);
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+.factor-row:hover { background: rgba(0,0,0,0.25); }
+.factor-icon {
+  font-size: 0.85rem;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.factor-info { flex: 1; }
+.factor-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.factor-sub {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+.factor-bar-bg {
+  width: 60px;
+  height: 5px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 100px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.factor-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+}
+.factor-val {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 5: MagicRS — Terrain Map
+   ═══════════════════════════════════════════════════════════ */
+.terrain-card {
+  grid-column: 3;
+  grid-row: 2;
+}
+.rs-table { width: 100%; font-size: 0.65rem; }
+.rs-table th {
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding: 0 0 8px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.rs-table th:last-child { text-align: right; }
+.rs-table td {
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.rs-table td:last-child { text-align: right; }
+.rs-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rs-heat {
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.rs-terrain {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.6rem;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+.rs-terrain.highland {
+  background: rgba(16,185,129,0.1);
+  color: var(--emerald);
+}
+.rs-terrain.lowland {
+  background: rgba(239,68,68,0.08);
+  color: var(--rose);
+}
+.rs-terrain.plains {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+}
+.rs-pts {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   7-DAY WEATHER FORECAST — Strip
+   ═══════════════════════════════════════════════════════════ */
+.forecast-strip {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.forecast-day {
+  flex: 1;
+  padding: 10px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.forecast-day:hover {
+  border-color: rgba(255,255,255,0.1);
+  transform: translateY(-1px);
+}
+.forecast-day.today {
+  border-color: rgba(251,191,36,0.2);
+  background: rgba(251,191,36,0.03);
+}
+.forecast-day.today::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--amber));
+}
+.fd-name {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.fd-weather-icon {
+  font-size: 1.1rem;
+  margin-bottom: 2px;
+}
+.fd-score {
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.fd-condition {
+  font-size: 0.45rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+  opacity: 0.6;
+}
+.fd-nakshatra {
+  font-size: 0.45rem;
+  color: var(--gold-dim);
+  margin-top: 3px;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHART DRAWER
+   ═══════════════════════════════════════════════════════════ */
+.chart-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  margin-bottom: 12px;
+}
+.chart-toggle:hover { border-color: rgba(255,255,255,0.08); }
+.chart-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.chart-toggle-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+.chart-toggle-text { font-size: 0.75rem; font-weight: 600; }
+.chart-toggle-sub { font-size: 0.55rem; color: var(--text-muted); margin-top: 1px; }
+.chart-toggle-arrow {
+  font-size: 1rem;
+  color: var(--text-muted);
+  transition: transform 0.3s;
+}
+.chart-toggle.open .chart-toggle-arrow { transform: rotate(180deg); }
+.chart-drawer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.chart-drawer.open { max-height: 500px; }
+.chart-placeholder {
+  height: 380px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.chart-placeholder::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.008) 0px, rgba(255,255,255,0.008) 1px, transparent 1px, transparent 60px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.008) 0px, rgba(255,255,255,0.008) 1px, transparent 1px, transparent 40px);
+}
+.fake-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 260px;
+  padding: 30px 20px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+.fake-candle {
+  flex: 1;
+  border-radius: 1.5px;
+  min-height: 6px;
+  opacity: 0.5;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HISTORICAL CONVERGENCE — Proof Strip
+   ═══════════════════════════════════════════════════════════ */
+.proof-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.proof-strip::-webkit-scrollbar { display: none; }
+.proof-chip {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.65rem;
+}
+.proof-chip:hover { border-color: rgba(255,255,255,0.08); }
+.proof-date {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+}
+.proof-weather { font-size: 0.8rem; }
+.proof-score {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.proof-return {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+.proof-match {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.45rem;
+}
+.proof-match.yes { background: rgba(16,185,129,0.12); color: var(--emerald); }
+.proof-match.no { background: rgba(255,255,255,0.04); color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════════════════ */
+.c-green { color: var(--emerald); }
+.c-red { color: var(--rose); }
+.c-amber { color: var(--amber); }
+.c-cyan { color: var(--cyan); }
+.c-gold { color: var(--gold); }
+.c-indigo { color: var(--indigo); }
+.c-muted { color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 1200px) {
+  .command-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .weather-card {
+    grid-column: 1 / 3;
+    grid-row: 1;
+    flex-direction: row;
+    gap: 24px;
+    text-align: left;
+    align-items: flex-start;
+    padding: 24px;
+  }
+  .weather-orb-wrap { width: 140px; height: 140px; margin: 0; flex-shrink: 0; }
+  .weather-orb { width: 140px; height: 140px; }
+  .orb-score { font-size: 2.6rem; }
+  .planet-factors { border-top: none; padding-top: 0; border-left: 1px solid var(--border); padding-left: 20px; }
+  .convergence-card { grid-column: 1; grid-row: 2; }
+  .sniper-card { grid-column: 2; grid-row: 2; }
+  .factors-card { grid-column: 1; grid-row: 3; }
+  .terrain-card { grid-column: 2; grid-row: 3; }
+  .panchangam { grid-template-columns: auto 1fr 1fr 1fr; }
+  .panch-anga:nth-child(6) { border-top: 1px solid rgba(255,255,255,0.03); }
+}
+
+@media (max-width: 768px) {
+  .shell { padding: 12px; }
+  .panchangam {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+  }
+  .panch-moon { grid-column: 1 / 3; flex-direction: row; gap: 12px; padding: 14px; }
+  .moon-svg { width: 40px; height: 40px; margin-bottom: 0; }
+  .command-grid { grid-template-columns: 1fr; }
+  .weather-card {
+    grid-column: 1;
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+  .planet-factors { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 12px; }
+  .convergence-card { grid-column: 1; grid-row: auto; }
+  .sniper-card { grid-column: 1; grid-row: auto; }
+  .factors-card { grid-column: 1; grid-row: auto; }
+  .terrain-card { grid-column: 1; grid-row: auto; }
+  .forecast-strip { flex-wrap: wrap; }
+  .forecast-day { flex: 0 0 calc(33.33% - 4px); }
+  .price-main { font-size: 1.6rem; }
+}
+
+/* ── Animations ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim { animation: fade-up 0.45s ease both; }
+.d1 { animation-delay: 0.03s; }
+.d2 { animation-delay: 0.06s; }
+.d3 { animation-delay: 0.09s; }
+.d4 { animation-delay: 0.12s; }
+.d5 { animation-delay: 0.15s; }
+.d6 { animation-delay: 0.18s; }
+.d7 { animation-delay: 0.21s; }
+.d8 { animation-delay: 0.24s; }
+
+/* ── Subtle starfield (tiny dots) ── */
+.stars {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.star {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 50%;
+  animation: twinkle var(--dur) ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0; }
+  50% { opacity: var(--o, 0.3); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Starfield ── -->
+<div class="stars" id="stars"></div>
+
+<div class="shell">
+
+  <!-- ── TOP BAR ── -->
+  <div class="topbar anim">
+    <div class="topbar-left">
+      <div>
+        <div class="logo">KaalaDristi</div>
+        <div class="logo-sub">Vedic Market Weather Station</div>
+      </div>
+      <div class="symbol-pill">
+        <span class="dot"></span>
+        NIFTY 50
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span>MKT <span class="val c-green">OPEN</span></span>
+      <span>·</span>
+      <span>Phalguna, Shukla Paksha</span>
+      <span>·</span>
+      <span>28 Feb 2026 <span class="val">15:30</span></span>
+    </div>
+  </div>
+
+  <!-- ── PRICE STRIP ── -->
+  <div class="price-strip anim d1">
+    <span class="price-main">22,147.00</span>
+    <span class="price-change up">+168.65 (+0.77%)</span>
+    <span class="price-meta">H/L: 22,198 / 21,943 · 52W: 26,277 / 21,137 · Prev: 21,978</span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       PANCHANGAM — The Sacred Instrument Panel
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="panchangam anim d2">
+
+    <!-- Moon Phase -->
+    <div class="panch-moon">
+      <svg class="moon-svg" viewBox="0 0 100 100">
+        <defs>
+          <radialGradient id="moonGlow" cx="50%" cy="50%">
+            <stop offset="0%" stop-color="rgba(251,191,36,0.15)" />
+            <stop offset="100%" stop-color="transparent" />
+          </radialGradient>
+        </defs>
+        <circle cx="50" cy="50" r="45" fill="url(#moonGlow)" />
+        <!-- Waxing Gibbous: mostly lit -->
+        <circle cx="50" cy="50" r="32" fill="#1a1610" stroke="rgba(251,191,36,0.2)" stroke-width="0.5" />
+        <ellipse cx="50" cy="50" rx="32" ry="32" fill="rgba(251,191,36,0.12)" />
+        <!-- Shadow for waxing gibbous (small shadow on left) -->
+        <path d="M50 18 A32 32 0 0 0 50 82 A12 32 0 0 1 50 18" fill="#0a0908" opacity="0.85" />
+      </svg>
+      <div>
+        <div class="moon-phase-name">Waxing Gibbous</div>
+        <div class="moon-tithi-num">Shukla Dashami · Day 10/15</div>
+      </div>
+    </div>
+
+    <!-- TITHI -->
+    <div class="panch-anga">
+      <div class="anga-label"><span class="glyph">☽</span> Tithi</div>
+      <div class="anga-name">Dashami</div>
+      <div class="anga-name-deva">दशमी</div>
+      <div class="anga-quality favorable">Favorable</div>
+      <div class="anga-detail">Waxing energy, Day 10 — Rising tide, growing momentum</div>
+    </div>
+
+    <!-- VARA -->
+    <div class="panch-anga">
+      <div class="anga-label"><span class="glyph">☿</span> Vara</div>
+      <div class="anga-name">Budhavar</div>
+      <div class="anga-name-deva">बुधवार</div>
+      <div class="anga-quality caution">Volatile</div>
+      <div class="anga-detail">Mercury-ruled — Communication, swift shifts, volatility</div>
+      <div class="anga-ruler"><span class="planet-glyph">☿</span> Mercury · Gemini</div>
+    </div>
+
+    <!-- NAKSHATRA -->
+    <div class="panch-anga">
+      <div class="anga-label"><span class="glyph">✦</span> Nakshatra</div>
+      <div class="anga-name">Pushya</div>
+      <div class="anga-name-deva">पुष्य</div>
+      <div class="anga-quality favorable">Nourishing</div>
+      <div class="anga-detail">Most auspicious nakshatra — Growth, nourishment, stability</div>
+      <div class="anga-ruler"><span class="planet-glyph">♄</span> Saturn · 8 of 27</div>
+    </div>
+
+    <!-- YOGA -->
+    <div class="panch-anga">
+      <div class="anga-label"><span class="glyph">◈</span> Yoga</div>
+      <div class="anga-name">Siddha</div>
+      <div class="anga-name-deva">सिद्ध</div>
+      <div class="anga-quality favorable">Auspicious</div>
+      <div class="anga-detail">Accomplishment yoga — Ventures likely to succeed</div>
+    </div>
+
+    <!-- KARANA -->
+    <div class="panch-anga">
+      <div class="anga-label"><span class="glyph">◇</span> Karana</div>
+      <div class="anga-name">Bava</div>
+      <div class="anga-name-deva">बव</div>
+      <div class="anga-quality favorable">Productive</div>
+      <div class="anga-detail">Fixed karana — Good for stable, productive activities</div>
+    </div>
+
+  </div>
+  <!-- end .panchangam -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       COMMAND CENTER GRID
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="command-grid">
+
+    <!-- ── CARD 1: WEATHER ORB + PLANETARY POSITIONS ── -->
+    <div class="card weather-card anim d3">
+      <div style="display: flex; flex-direction: column; align-items: center;">
+        <div class="card-label"><span style="color: var(--gold-dim);">◉</span> Market Weather</div>
+
+        <div class="weather-orb-wrap">
+          <div class="weather-orb" id="weatherOrb">
+            <div class="orbital-ring">
+              <div class="orbital-dot"></div>
+              <div class="orbital-dot"></div>
+              <div class="orbital-dot"></div>
+            </div>
+            <span class="orb-score c-cyan" id="orbScore">32</span>
+            <span class="orb-label">Risk Index</span>
+          </div>
+        </div>
+
+        <div class="weather-condition">
+          <div class="weather-icon-text">☀️</div>
+          <div class="weather-name c-cyan">Clear Skies</div>
+        </div>
+
+        <div class="regime-badge expansion">Expansion Phase</div>
+
+        <p class="weather-desc">
+          Planetary conditions are calm. Low structural pressure with favorable nakshatra energy.
+          Winds are steady with mild Mercury volatility.
+        </p>
+      </div>
+
+      <!-- Planetary Positions — THE CORE DATA -->
+      <div class="planet-factors">
+        <div class="card-label" style="margin-bottom: 8px;"><span style="color: var(--gold-dim);">☊</span> Planetary Positions</div>
+
+        <div class="planet-factor">
+          <div class="pf-glyph">♄</div>
+          <div class="pf-body">
+            <div class="pf-name">Saturn in Aquarius</div>
+            <div class="pf-detail">Direct motion · Structural pressure low</div>
+          </div>
+          <div class="pf-tag low">Calm</div>
+        </div>
+
+        <div class="planet-factor">
+          <div class="pf-glyph">♃</div>
+          <div class="pf-body">
+            <div class="pf-name">Jupiter in Taurus</div>
+            <div class="pf-detail">Direct · Expansive energy, growth support</div>
+          </div>
+          <div class="pf-tag low">Steady</div>
+        </div>
+
+        <div class="planet-factor">
+          <div class="pf-glyph">♂</div>
+          <div class="pf-body">
+            <div class="pf-name">Mars in Capricorn</div>
+            <div class="pf-detail">Exalted · Strong directional energy</div>
+          </div>
+          <div class="pf-tag low">Strong</div>
+        </div>
+
+        <div class="planet-factor">
+          <div class="pf-glyph">☿</div>
+          <div class="pf-body">
+            <div class="pf-name">Mercury in Pisces</div>
+            <div class="pf-detail">Debilitated · Fog risk, communication unclear</div>
+          </div>
+          <div class="pf-tag mid">Hazy</div>
+        </div>
+
+        <div class="planet-factor">
+          <div class="pf-glyph">☊</div>
+          <div class="pf-body">
+            <div class="pf-name">Rahu in Pisces</div>
+            <div class="pf-detail">North Node · Illusion energy present</div>
+          </div>
+          <div class="pf-tag mid">Watch</div>
+        </div>
+
+        <div class="planet-factor">
+          <div class="pf-glyph">♀</div>
+          <div class="pf-body">
+            <div class="pf-name">Venus in Aries</div>
+            <div class="pf-detail">Direct · Impulse energy in financial matters</div>
+          </div>
+          <div class="pf-tag low">Active</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 2: PLANETARY vs TECHNICAL CONVERGENCE ── -->
+    <div class="card convergence-card anim d4">
+      <div class="card-label">
+        <span style="color: var(--gold-dim);">⚖</span> Planetary vs Technical Convergence
+      </div>
+
+      <div class="convergence-header">
+        <div class="convergence-score-wrap">
+          <span class="convergence-count c-green">3</span>
+          <span class="convergence-of">/ 4 confirming</span>
+        </div>
+        <div class="convergence-label-text">Ground supports forecast</div>
+      </div>
+
+      <!-- Column Headers -->
+      <div class="conv-table">
+        <div class="conv-row conv-row-head">
+          <div></div>
+          <div class="conv-col-label" style="color: var(--gold-dim);">Planetary Forecast</div>
+          <div></div>
+          <div class="conv-col-label" style="color: var(--indigo);">Technical Ground</div>
+        </div>
+
+        <!-- Structural -->
+        <div class="conv-row">
+          <div class="conv-glyph">♄</div>
+          <div class="conv-astro">
+            <div class="conv-factor-name">Low pressure</div>
+            <div class="conv-factor-val">Saturn direct, no stress aspects</div>
+          </div>
+          <div class="conv-match">
+            <div class="conv-match-icon yes">✓</div>
+          </div>
+          <div class="conv-tech">
+            <div class="conv-factor-name">Trend intact</div>
+            <div class="conv-factor-val">SuperTrend UP · Above SMA 55</div>
+          </div>
+        </div>
+
+        <!-- Momentum -->
+        <div class="conv-row">
+          <div class="conv-glyph">♂</div>
+          <div class="conv-astro">
+            <div class="conv-factor-name">Strong winds</div>
+            <div class="conv-factor-val">Mars exalted, no retrograde</div>
+          </div>
+          <div class="conv-match">
+            <div class="conv-match-icon yes">✓</div>
+          </div>
+          <div class="conv-tech">
+            <div class="conv-factor-name">Momentum aligned</div>
+            <div class="conv-factor-val">RSI 58 · MFI 62 · Both rising</div>
+          </div>
+        </div>
+
+        <!-- Volatility -->
+        <div class="conv-row">
+          <div class="conv-glyph">☽</div>
+          <div class="conv-astro">
+            <div class="conv-factor-name">Mild chop</div>
+            <div class="conv-factor-val">Pushya nakshatra, but Mercury debilitated</div>
+          </div>
+          <div class="conv-match">
+            <div class="conv-match-icon partial">~</div>
+          </div>
+          <div class="conv-tech">
+            <div class="conv-factor-name">Volume moderate</div>
+            <div class="conv-factor-val">Rel Vol 1.3x · ATR normal</div>
+          </div>
+        </div>
+
+        <!-- Deception -->
+        <div class="conv-row">
+          <div class="conv-glyph">☊</div>
+          <div class="conv-astro">
+            <div class="conv-factor-name">Haze present</div>
+            <div class="conv-factor-val">Mercury-Rahu in Pisces, fog risk</div>
+          </div>
+          <div class="conv-match">
+            <div class="conv-match-icon yes">✓</div>
+          </div>
+          <div class="conv-tech">
+            <div class="conv-factor-name">No divergence</div>
+            <div class="conv-factor-val">No hidden signals · OBV confirms</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="conv-summary">
+        <div class="conv-bar-bg">
+          <div class="conv-bar-fill" style="width: 75%; background: linear-gradient(90deg, var(--green), var(--cyan));"></div>
+        </div>
+        <div class="conv-summary-text">
+          "Skies are clearing. Ground conditions agree."
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 3: SNIPER DRAGON — Seismograph ── -->
+    <div class="card sniper-card anim d5">
+      <div class="card-label">
+        <span style="color: var(--gold-dim);">龍</span> Smart Money Seismograph
+      </div>
+
+      <div class="signal-tower">
+        <div class="signal-bar active" style="height:20%; background: var(--green); --bar-rgb: 16,185,129;"></div>
+        <div class="signal-bar active" style="height:40%; background: var(--green); --bar-rgb: 16,185,129;"></div>
+        <div class="signal-bar active" style="height:60%; background: var(--green); --bar-rgb: 16,185,129;"></div>
+        <div class="signal-bar active" style="height:80%; background: var(--cyan); --bar-rgb: 6,182,212;"></div>
+        <div class="signal-bar inactive" style="height:100%;"></div>
+      </div>
+
+      <div class="sniper-status">
+        <div class="sniper-reading c-green">4<span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 500;">/5</span></div>
+        <div class="sniper-verdict c-green">Stirring</div>
+      </div>
+
+      <p class="sniper-desc">
+        Smart money is moving. Institutional flow detected above average levels. Ground tremors are noticeable.
+      </p>
+
+      <div class="sm-metrics">
+        <div class="sm-metric">
+          <div class="sm-metric-label">Banker Level</div>
+          <div class="sm-metric-val c-green">72.4</div>
+        </div>
+        <div class="sm-metric">
+          <div class="sm-metric-label">Hot Money</div>
+          <div class="sm-metric-val c-amber">48.1</div>
+        </div>
+        <div class="sm-metric">
+          <div class="sm-metric-label">Flow</div>
+          <div class="sm-metric-val c-green" style="font-size: 0.75rem;">Fresh Longs</div>
+        </div>
+        <div class="sm-metric">
+          <div class="sm-metric-label">Absorption</div>
+          <div class="sm-metric-val c-muted" style="font-size: 0.75rem;">None</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 4: WEATHER FACTORS ── -->
+    <div class="card factors-card anim d6">
+      <div class="card-label">
+        <span style="color: var(--gold-dim);">☁</span> Weather Dimensions
+      </div>
+
+      <div class="factor-rows">
+        <div class="factor-row">
+          <div class="factor-icon">🏔️</div>
+          <div class="factor-info">
+            <div class="factor-name">Structural Pressure</div>
+            <div class="factor-sub">Saturn · Jupiter influence</div>
+          </div>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 32%; background: var(--green);"></div>
+          </div>
+          <div class="factor-val c-green">8</div>
+        </div>
+
+        <div class="factor-row">
+          <div class="factor-icon">💨</div>
+          <div class="factor-info">
+            <div class="factor-name">Wind Strength</div>
+            <div class="factor-sub">Mars energy · Directional force</div>
+          </div>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 24%; background: var(--green);"></div>
+          </div>
+          <div class="factor-val c-green">6</div>
+        </div>
+
+        <div class="factor-row">
+          <div class="factor-icon">⚡</div>
+          <div class="factor-info">
+            <div class="factor-name">Storm Potential</div>
+            <div class="factor-sub">Moon · Nakshatra volatility</div>
+          </div>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 44%; background: var(--amber);"></div>
+          </div>
+          <div class="factor-val c-amber">11</div>
+        </div>
+
+        <div class="factor-row">
+          <div class="factor-icon">🌫️</div>
+          <div class="factor-info">
+            <div class="factor-name">Fog / Deception</div>
+            <div class="factor-sub">Mercury · Rahu illusion layer</div>
+          </div>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 28%; background: var(--amber);"></div>
+          </div>
+          <div class="factor-val c-amber">7</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 5: TERRAIN MAP (MagicRS) ── -->
+    <div class="card terrain-card anim d6">
+      <div class="card-label">
+        <span style="color: var(--gold-dim);">⛰</span> Terrain Map · Relative Strength
+      </div>
+
+      <table class="rs-table">
+        <thead>
+          <tr>
+            <th>Sector</th>
+            <th>RS</th>
+            <th>Terrain</th>
+            <th>Str</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--emerald);"></div>NIFTY BANK</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">1.12</td>
+            <td><span class="rs-terrain highland">HIGHLAND</span></td>
+            <td class="rs-pts c-green">5/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--emerald);"></div>NIFTY IT</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">1.05</td>
+            <td><span class="rs-terrain highland">HIGHLAND</span></td>
+            <td class="rs-pts c-green">4/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--text-muted);"></div>NIFTY FMCG</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">0.98</td>
+            <td><span class="rs-terrain plains">PLAINS</span></td>
+            <td class="rs-pts c-muted">3/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--rose);"></div>NIFTY PHARMA</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">0.87</td>
+            <td><span class="rs-terrain lowland">LOWLAND</span></td>
+            <td class="rs-pts c-red">1/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--rose);"></div>NIFTY METAL</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">0.82</td>
+            <td><span class="rs-terrain lowland">LOWLAND</span></td>
+            <td class="rs-pts c-red">1/6</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+  <!-- end .command-grid -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       7-DAY WEATHER FORECAST
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="forecast-strip anim d7">
+    <div class="forecast-day">
+      <div class="fd-name">Mon</div>
+      <div class="fd-weather-icon">⛅</div>
+      <div class="fd-score c-amber">48</div>
+      <div class="fd-condition c-amber">Cloudy</div>
+      <div class="fd-nakshatra">Ashlesha</div>
+    </div>
+    <div class="forecast-day">
+      <div class="fd-name">Tue</div>
+      <div class="fd-weather-icon">☀️</div>
+      <div class="fd-score c-green">28</div>
+      <div class="fd-condition c-green">Clear</div>
+      <div class="fd-nakshatra">Magha</div>
+    </div>
+    <div class="forecast-day today">
+      <div class="fd-name">Wed · Today</div>
+      <div class="fd-weather-icon">☀️</div>
+      <div class="fd-score c-cyan">32</div>
+      <div class="fd-condition c-cyan">Clear</div>
+      <div class="fd-nakshatra">Pushya ✦</div>
+    </div>
+    <div class="forecast-day">
+      <div class="fd-name">Thu</div>
+      <div class="fd-weather-icon">⛈️</div>
+      <div class="fd-score c-red">67</div>
+      <div class="fd-condition c-red">Stormy</div>
+      <div class="fd-nakshatra">P. Phalguni</div>
+    </div>
+    <div class="forecast-day">
+      <div class="fd-name">Fri</div>
+      <div class="fd-weather-icon">🌥️</div>
+      <div class="fd-score c-amber">55</div>
+      <div class="fd-condition c-amber">Overcast</div>
+      <div class="fd-nakshatra">U. Phalguni</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHART DRAWER — Satellite Imagery (Optional)
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="anim d8">
+    <div class="chart-toggle" id="chartToggle" onclick="toggleChart()">
+      <div class="chart-toggle-left">
+        <div class="chart-toggle-icon">🛰️</div>
+        <div>
+          <div class="chart-toggle-text">Satellite Imagery · LuckyPop Chart</div>
+          <div class="chart-toggle-sub">Candlestick with overlays, volume dots, and indicators</div>
+        </div>
+      </div>
+      <span class="chart-toggle-arrow">▾</span>
+    </div>
+    <div class="chart-drawer" id="chartDrawer">
+      <div class="chart-placeholder">
+        <div class="fake-chart" id="fakeChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       HISTORICAL CONVERGENCE — Proof
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="proof-strip anim d8">
+    <div class="proof-chip">
+      <div class="proof-date">27 Feb</div>
+      <div class="proof-weather">⛅</div>
+      <div class="proof-score c-amber">45</div>
+      <div class="proof-return c-red">-0.82%</div>
+      <div class="proof-match yes">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div class="proof-date">26 Feb</div>
+      <div class="proof-weather">☀️</div>
+      <div class="proof-score c-green">22</div>
+      <div class="proof-return c-green">+1.14%</div>
+      <div class="proof-match yes">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div class="proof-date">25 Feb</div>
+      <div class="proof-weather">⛈️</div>
+      <div class="proof-score c-red">71</div>
+      <div class="proof-return c-red">-2.31%</div>
+      <div class="proof-match yes">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div class="proof-date">24 Feb</div>
+      <div class="proof-weather">🌥️</div>
+      <div class="proof-score c-amber">58</div>
+      <div class="proof-return c-green">+0.45%</div>
+      <div class="proof-match no">○</div>
+    </div>
+    <div class="proof-chip">
+      <div class="proof-date">21 Feb</div>
+      <div class="proof-weather">☀️</div>
+      <div class="proof-score c-green">35</div>
+      <div class="proof-return c-green">+0.67%</div>
+      <div class="proof-match yes">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div class="proof-date">20 Feb</div>
+      <div class="proof-weather">🌪️</div>
+      <div class="proof-score c-red">78</div>
+      <div class="proof-return c-red">-1.55%</div>
+      <div class="proof-match yes">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div class="proof-date">19 Feb</div>
+      <div class="proof-weather">☀️</div>
+      <div class="proof-score c-cyan">31</div>
+      <div class="proof-return c-green">+0.92%</div>
+      <div class="proof-match yes">✓</div>
+    </div>
+  </div>
+
+</div>
+<!-- end .shell -->
+
+<script>
+// ── Starfield ──
+(function() {
+  const stars = document.getElementById('stars');
+  for (let i = 0; i < 60; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.top = Math.random() * 100 + '%';
+    s.style.setProperty('--dur', (3 + Math.random() * 6) + 's');
+    s.style.setProperty('--o', (0.1 + Math.random() * 0.25).toFixed(2));
+    s.style.animationDelay = (Math.random() * 5) + 's';
+    stars.appendChild(s);
+  }
+})();
+
+// ── Chart Toggle ──
+function toggleChart() {
+  document.getElementById('chartDrawer').classList.toggle('open');
+  document.getElementById('chartToggle').classList.toggle('open');
+}
+
+// ── Fake candles ──
+(function() {
+  const chart = document.getElementById('fakeChart');
+  let p = 150;
+  for (let i = 0; i < 100; i++) {
+    const c = (Math.random() - 0.48) * 8;
+    p = Math.max(40, Math.min(250, p + c));
+    const bar = document.createElement('div');
+    bar.className = 'fake-candle';
+    bar.style.height = (p / 260 * 100) + '%';
+    bar.style.background = c >= 0 ? 'var(--green)' : 'var(--red)';
+    chart.appendChild(bar);
+  }
+})();
+
+// ── Orb glow ──
+(function() {
+  const orb = document.getElementById('weatherOrb');
+  orb.style.background = 'radial-gradient(circle, rgba(6,182,212,0.1), transparent 70%)';
+})();
+</script>
+
+</body>
+</html>
