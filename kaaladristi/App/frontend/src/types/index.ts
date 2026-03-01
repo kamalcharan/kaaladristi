@@ -157,6 +157,151 @@ export interface KmIndexEod {
   chng: number | null;
   pct_chng: number | null;
   volume: number | null;
+
+  // ── LuckyPop Indicator columns (all nullable — null when not yet computed) ──
+
+  // SMA Lines
+  sma_8?: number | null;
+  sma_21?: number | null;
+  sma_55?: number | null;
+  sma_89?: number | null;
+  sma_233?: number | null;
+  golden_line?: number | null;
+
+  // SMA Distances
+  dist_sma_8?: number | null;
+  dist_sma_21?: number | null;
+  dist_sma_55?: number | null;
+  dist_golden?: number | null;
+
+  // SuperTrend
+  supertrend_val?: number | null;
+  supertrend_dir?: number | null;
+  st_buy_signal?: boolean;
+  st_sell_signal?: boolean;
+
+  // Dot Signals
+  svd_condition?: boolean;
+  sbd_condition?: boolean;
+  syd_condition?: boolean;
+  pre_syd_warning?: boolean;
+
+  // RSI / MFI / OBV
+  rsi?: number | null;
+  mfi?: number | null;
+  mfi_rsi_cross?: boolean;
+  obv_trend?: string | null;
+
+  // Volume Metrics
+  rel_volume?: number | null;
+  rvol?: number | null;
+  tvol?: number | null;
+  avg_range?: number | null;
+
+  // RSS
+  rss_smooth?: number | null;
+  rss_spread?: number | null;
+  rss_direction?: boolean | null;
+
+  // IB30/IS30
+  ib30_high?: number | null;
+  ib30_low?: number | null;
+  ib30_established?: boolean;
+  ib30_status?: string | null;
+  is30_bull_break?: boolean;
+  is30_bear_break?: boolean;
+
+  // Chartink Rules
+  rule1_move_pct?: number | null;
+  rule1_satisfied?: boolean;
+  correction_pct?: number | null;
+  rule2_satisfied?: boolean;
+  volume_surge?: boolean;
+  ma_proximity?: boolean;
+  rule3_satisfied?: boolean;
+  chartink_score?: number | null;
+  chartink_status?: string | null;
+
+  // Order Flow
+  delta?: number | null;
+  smoothed_delta?: number | null;
+  absorption?: boolean;
+
+  // Flow Classification
+  flow_type?: string | null;
+  flow_meaning?: string | null;
+
+  // Vacuum / Accumulation / Distribution
+  vacuum_status?: string | null;
+  accum_dist?: string | null;
+
+  // MagicRS
+  magicrs_pts?: number | null;
+  magicrs_value?: number | null;
+  magicma_value?: number | null;
+
+  // SMA Crossover
+  sma_cross_up?: boolean;
+  sma_cross_down?: boolean;
+  sma_cross_dist?: number | null;
+
+  // Confluence
+  confluence?: number | null;
+
+  // Bias & Momentum
+  bias_status?: string | null;
+  momentum_status?: string | null;
+
+  // Breakout Quality
+  breakout_quality?: number | null;
+  breakout_label?: string | null;
+
+  // Recommendation
+  recommendation?: string | null;
+  rec_reason?: string | null;
+  signal_score?: number | null;
+  display_mode?: string | null;
+
+  // Position Management
+  position_rec?: string | null;
+  position_reason?: string | null;
+
+  // RSI Divergence
+  div_type?: string | null;
+  div_bars_ago?: number | null;
+  div_freshness?: string | null;
+
+  // Pivot / Fibo / Gann
+  pivot_pp?: number | null;
+  pivot_r1?: number | null;
+  pivot_r2?: number | null;
+  pivot_s1?: number | null;
+  pivot_s2?: number | null;
+  fibo_382?: number | null;
+  fibo_500?: number | null;
+  fibo_618?: number | null;
+  gann_250?: number | null;
+  gann_500?: number | null;
+  gann_750?: number | null;
+
+  // Swing High/Low
+  is_swing_high?: boolean;
+  is_swing_low?: boolean;
+
+  // Sniper Dragon
+  sniper_banker?: number | null;
+  sniper_hotmoney?: number | null;
+  sniper_rsi_line?: number | null;
+
+  // RSSI
+  rssi_rss?: number | null;
+  rssi_rsi?: number | null;
+  rssi_new_high?: boolean;
+  rssi_bull_div?: boolean;
+  rssi_bear_div?: boolean;
+
+  // Metadata
+  indicators_computed_at?: string | null;
 }
 
 // ── Joined / Derived Types ──
@@ -198,159 +343,3 @@ export interface IndexStats {
   dayLow: number;
 }
 
-// ── LuckyPop Indicator Types (matching km_luckypop_indicators table) ──
-
-export interface LuckyPopIndicator {
-  id: number;
-  symbol_type: 'index' | 'equity';
-  symbol_id: number;
-  trade_date: string;
-
-  // OHLCV
-  open: number | null;
-  high: number | null;
-  low: number | null;
-  close: number | null;
-  prev_close: number | null;
-  volume: number | null;
-
-  // SMA Lines
-  sma_8: number | null;
-  sma_21: number | null;
-  sma_55: number | null;
-  sma_89: number | null;
-  sma_233: number | null;
-  golden_line: number | null;
-
-  // SMA Distances
-  dist_sma_8: number | null;
-  dist_sma_21: number | null;
-  dist_sma_55: number | null;
-  dist_golden: number | null;
-
-  // SuperTrend
-  supertrend_val: number | null;
-  supertrend_dir: number | null;
-  st_buy_signal: boolean;
-  st_sell_signal: boolean;
-
-  // Dot Signals
-  svd_condition: boolean;
-  sbd_condition: boolean;
-  syd_condition: boolean;
-  pre_syd_warning: boolean;
-
-  // RSI / MFI / OBV
-  rsi: number | null;
-  mfi: number | null;
-  mfi_rsi_cross: boolean;
-  obv_trend: string | null;
-
-  // Volume Metrics
-  rel_volume: number | null;
-  rvol: number | null;
-  tvol: number | null;
-  avg_range: number | null;
-
-  // RSS
-  rss_smooth: number | null;
-  rss_spread: number | null;
-  rss_direction: boolean | null;
-
-  // IB30/IS30
-  ib30_high: number | null;
-  ib30_low: number | null;
-  ib30_established: boolean;
-  ib30_status: string | null;
-  is30_bull_break: boolean;
-  is30_bear_break: boolean;
-
-  // Chartink Rules
-  rule1_move_pct: number | null;
-  rule1_satisfied: boolean;
-  correction_pct: number | null;
-  rule2_satisfied: boolean;
-  volume_surge: boolean;
-  ma_proximity: boolean;
-  rule3_satisfied: boolean;
-  chartink_score: number | null;
-  chartink_status: string | null;
-
-  // Order Flow
-  delta: number | null;
-  smoothed_delta: number | null;
-  absorption: boolean;
-
-  // Flow Classification
-  flow_type: string | null;
-  flow_meaning: string | null;
-
-  // Vacuum / Accumulation / Distribution
-  vacuum_status: string | null;
-  accum_dist: string | null;
-
-  // MagicRS
-  magicrs_pts: number | null;
-  magicrs_value: number | null;
-  magicma_value: number | null;
-
-  // SMA Crossover
-  sma_cross_up: boolean;
-  sma_cross_down: boolean;
-  sma_cross_dist: number | null;
-
-  // Confluence
-  confluence: number | null;
-
-  // Bias & Momentum
-  bias_status: string | null;
-  momentum_status: string | null;
-
-  // Breakout Quality
-  breakout_quality: number | null;
-  breakout_label: string | null;
-
-  // Recommendation
-  recommendation: string | null;
-  rec_reason: string | null;
-  signal_score: number | null;
-  display_mode: string | null;
-
-  // Position Management
-  position_rec: string | null;
-  position_reason: string | null;
-
-  // RSI Divergence
-  div_type: string | null;
-  div_bars_ago: number | null;
-  div_freshness: string | null;
-
-  // Pivot / Fibo / Gann
-  pivot_pp: number | null;
-  pivot_r1: number | null;
-  pivot_r2: number | null;
-  pivot_s1: number | null;
-  pivot_s2: number | null;
-  fibo_382: number | null;
-  fibo_500: number | null;
-  fibo_618: number | null;
-  gann_250: number | null;
-  gann_500: number | null;
-  gann_750: number | null;
-
-  // Swing High/Low
-  is_swing_high: boolean;
-  is_swing_low: boolean;
-
-  // Sniper Dragon
-  sniper_banker: number | null;
-  sniper_hotmoney: number | null;
-  sniper_rsi_line: number | null;
-
-  // RSSI
-  rssi_rss: number | null;
-  rssi_rsi: number | null;
-  rssi_new_high: boolean;
-  rssi_bull_div: boolean;
-  rssi_bear_div: boolean;
-}

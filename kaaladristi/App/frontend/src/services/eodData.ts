@@ -57,9 +57,10 @@ export async function fetchIndexEod(
   const startDate = getStartDate(range);
 
   // Supabase default limit is 1000. Use .range() to get up to 10,000 rows.
+  // Select all columns — includes OHLCV + indicator columns when computed
   let query = supabase
     .from('km_index_eod')
-    .select('id,index_id,trade_date,open,high,low,close,prev_close,chng,pct_chng,volume')
+    .select('*')
     .eq('index_id', indexId)
     .order('trade_date', { ascending: true })
     .range(0, 9999);
