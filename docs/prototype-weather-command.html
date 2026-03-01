@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KaalaDristi — Command Center Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ═══════════════════════════════════════════════════════════
+   KAALADRISTI — HEDGE FUND COMMAND CENTER
+   "Weather Map" Prototype — v1
+   ═══════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #030712;
+  --card:         rgba(15, 23, 42, 0.8);
+  --elevated:     rgba(30, 41, 59, 0.5);
+  --border:       rgba(255, 255, 255, 0.06);
+  --border-active:rgba(99, 102, 241, 0.4);
+  --text-primary: #f8fafc;
+  --text-secondary:#94a3b8;
+  --text-muted:   #475569;
+  --indigo:       #6366f1;
+  --violet:       #8b5cf6;
+  --cyan:         #06b6d4;
+  --gold:         #fbbf24;
+  --green:        #10b981;
+  --amber:        #f59e0b;
+  --red:          #ef4444;
+  --emerald:      #34d399;
+  --rose:         #f43f5e;
+  --mono:         'JetBrains Mono', monospace;
+  --sans:         'Inter', -apple-system, sans-serif;
+}
+
+html { font-size: 14px; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Background ambient glow ── */
+body::before {
+  content: '';
+  position: fixed;
+  top: -30%;
+  left: -10%;
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(ellipse, rgba(99,102,241,0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -20%;
+  right: -10%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(ellipse, rgba(6,182,212,0.03) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Layout ── */
+.shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+
+/* ── Top Bar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.logo {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, var(--indigo), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.logo span { opacity: 0.5; font-weight: 400; }
+.symbol-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--indigo);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.symbol-pill:hover {
+  background: rgba(99,102,241,0.2);
+  border-color: rgba(99,102,241,0.4);
+}
+.symbol-pill .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.topbar-stat {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.topbar-stat .val {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ── Price Strip ── */
+.price-strip {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 0 4px;
+}
+.price-main {
+  font-family: var(--mono);
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+.price-change {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.price-change.up { color: var(--emerald); }
+.price-change.down { color: var(--rose); }
+.price-meta {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COMMAND CENTER — 3-Column Grid
+   ═══════════════════════════════════════════════════════════ */
+.command-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* ── Card Base ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s, transform 0.2s;
+}
+.card:hover {
+  border-color: rgba(255,255,255,0.1);
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+}
+.card-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-label .icon {
+  width: 14px; height: 14px;
+  opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 1: WEATHER ORB — The Hero
+   ═══════════════════════════════════════════════════════════ */
+.weather-card {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+  min-height: 380px;
+}
+
+/* The Orb */
+.weather-orb-wrap {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin-bottom: 24px;
+}
+.weather-orb {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+/* Ambient glow ring */
+.weather-orb::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(16,185,129,0.15),
+    rgba(6,182,212,0.15),
+    rgba(99,102,241,0.15),
+    rgba(245,158,11,0.1),
+    rgba(239,68,68,0.08),
+    rgba(16,185,129,0.15)
+  );
+  filter: blur(20px);
+  animation: orb-rotate 12s linear infinite;
+}
+@keyframes orb-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+/* Inner glass */
+.weather-orb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.04), transparent 60%);
+}
+.orb-score {
+  font-family: var(--mono);
+  font-size: 4rem;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  z-index: 1;
+  position: relative;
+}
+.orb-label {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+  z-index: 1;
+  position: relative;
+  margin-top: 4px;
+}
+
+/* Regime Badge */
+.regime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 100px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+.regime-badge.expansion {
+  background: rgba(6,182,212,0.12);
+  border: 1px solid rgba(6,182,212,0.3);
+  color: var(--cyan);
+}
+.regime-badge.accumulation {
+  background: rgba(16,185,129,0.12);
+  border: 1px solid rgba(16,185,129,0.3);
+  color: var(--green);
+}
+.regime-badge.distribution {
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.3);
+  color: var(--amber);
+}
+.regime-badge.protection {
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: var(--red);
+}
+
+/* Weather description */
+.weather-verdict {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 240px;
+}
+.weather-astro {
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 2: SNIPER DRAGON — Signal Tower
+   ═══════════════════════════════════════════════════════════ */
+.sniper-card {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Signal Tower */
+.signal-tower {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  height: 100px;
+  margin: 8px 0 20px 0;
+}
+.signal-bar {
+  width: 18px;
+  border-radius: 4px 4px 0 0;
+  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+.signal-bar.active {
+  box-shadow: 0 0 20px rgba(var(--bar-rgb), 0.3);
+}
+.signal-bar.inactive {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+/* Smart Money Metrics */
+.sm-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: auto;
+}
+.sm-metric {
+  padding: 10px 12px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.sm-metric-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.sm-metric-val {
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 3: VERDICT PANEL — Action Box
+   ═══════════════════════════════════════════════════════════ */
+.verdict-card {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.verdict-box {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  margin-bottom: 16px;
+}
+.verdict-box.buy {
+  background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(6,182,212,0.08));
+  border: 1px solid rgba(16,185,129,0.25);
+}
+.verdict-box.sell {
+  background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(244,63,94,0.08));
+  border: 1px solid rgba(239,68,68,0.25);
+}
+.verdict-box.caution {
+  background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.08));
+  border: 1px solid rgba(245,158,11,0.25);
+}
+.verdict-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+.verdict-icon.buy { background: rgba(16,185,129,0.15); }
+.verdict-icon.caution { background: rgba(245,158,11,0.15); }
+.verdict-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.verdict-sub {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+/* Confluence Meter */
+.confluence-wrap {
+  margin-bottom: 16px;
+}
+.confluence-bar-bg {
+  height: 8px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 100px;
+  overflow: hidden;
+  margin-top: 8px;
+  position: relative;
+}
+.confluence-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  background: linear-gradient(90deg, var(--red), var(--amber), var(--green), var(--cyan));
+  transition: width 1s ease;
+  position: relative;
+}
+.confluence-bar-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 10px rgba(255,255,255,0.4);
+}
+.confluence-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.55rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+
+/* Indicator Pills */
+.indicator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.ind-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.65rem;
+}
+.ind-pill-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.ind-pill-val {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 4: FACTOR HEATMAP — Bottom Left
+   ═══════════════════════════════════════════════════════════ */
+.factors-card {
+  grid-column: 2;
+  grid-row: 2;
+}
+.factor-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.factor-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.factor-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  width: 72px;
+  color: var(--text-secondary);
+}
+.factor-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 100px;
+  overflow: hidden;
+}
+.factor-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 0.8s ease;
+}
+.factor-val {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  width: 28px;
+  text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARD 5: MagicRS Decision Table — Bottom Right
+   ═══════════════════════════════════════════════════════════ */
+.magicrs-card {
+  grid-column: 3;
+  grid-row: 2;
+}
+.rs-table {
+  width: 100%;
+  font-size: 0.7rem;
+}
+.rs-table th {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding: 0 0 10px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.rs-table th:last-child { text-align: right; }
+.rs-table td {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.rs-table td:last-child { text-align: right; }
+.rs-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rs-heat {
+  width: 4px;
+  height: 20px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.rs-status {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.65rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.rs-status.strong {
+  background: rgba(16,185,129,0.12);
+  color: var(--emerald);
+}
+.rs-status.weak {
+  background: rgba(239,68,68,0.1);
+  color: var(--rose);
+}
+.rs-status.neutral {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-muted);
+}
+.rs-pts {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WEEK OUTLOOK — Horizontal Strip
+   ═══════════════════════════════════════════════════════════ */
+.week-strip {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.week-day {
+  flex: 1;
+  padding: 12px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: center;
+  transition: all 0.2s;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.week-day:hover {
+  border-color: rgba(255,255,255,0.12);
+  transform: translateY(-2px);
+}
+.week-day.today {
+  border-color: var(--border-active);
+  background: rgba(99,102,241,0.06);
+}
+.week-day.today::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--indigo);
+}
+.week-day-name {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.week-day-score {
+  font-family: var(--mono);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.week-day-regime {
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+  opacity: 0.7;
+}
+.week-day-bar {
+  height: 3px;
+  border-radius: 100px;
+  margin-top: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHART DRAWER — Expandable Section
+   ═══════════════════════════════════════════════════════════ */
+.chart-section {
+  margin-top: 0;
+}
+.chart-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.chart-toggle:hover {
+  border-color: rgba(255,255,255,0.1);
+  background: rgba(15, 23, 42, 0.95);
+}
+.chart-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.chart-toggle-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+.chart-toggle-text {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.chart-toggle-sub {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.chart-toggle-arrow {
+  font-size: 1.2rem;
+  color: var(--text-muted);
+  transition: transform 0.3s;
+}
+.chart-toggle.open .chart-toggle-arrow {
+  transform: rotate(180deg);
+}
+
+.chart-drawer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.chart-drawer.open {
+  max-height: 600px;
+}
+.chart-placeholder {
+  margin-top: 12px;
+  height: 420px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  position: relative;
+  overflow: hidden;
+}
+.chart-placeholder::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.01) 0px, rgba(255,255,255,0.01) 1px, transparent 1px, transparent 60px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.01) 0px, rgba(255,255,255,0.01) 1px, transparent 1px, transparent 40px);
+}
+/* Simulated candle pattern */
+.fake-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 280px;
+  padding: 40px 30px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+.fake-candle {
+  flex: 1;
+  border-radius: 2px;
+  min-height: 8px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.fake-candle:hover { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   HISTORICAL PROOF — Minimal strip
+   ═══════════════════════════════════════════════════════════ */
+.proof-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-top: 20px;
+}
+.proof-strip::-webkit-scrollbar { display: none; }
+.proof-chip {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.proof-chip:hover {
+  border-color: rgba(255,255,255,0.1);
+}
+.proof-date {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.proof-score {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.proof-return {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.proof-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+}
+.proof-check.correct {
+  background: rgba(16,185,129,0.15);
+  color: var(--emerald);
+}
+.proof-check.wrong {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UTILITY / COLOR HELPERS
+   ═══════════════════════════════════════════════════════════ */
+.c-green { color: var(--emerald); }
+.c-red { color: var(--rose); }
+.c-amber { color: var(--amber); }
+.c-cyan { color: var(--cyan); }
+.c-indigo { color: var(--indigo); }
+.c-muted { color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .command-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  .weather-card {
+    grid-column: 1 / 3;
+    grid-row: 1;
+    min-height: auto;
+    flex-direction: row;
+    gap: 32px;
+    padding: 24px;
+  }
+  .weather-orb-wrap {
+    width: 140px;
+    height: 140px;
+    margin-bottom: 0;
+  }
+  .weather-orb {
+    width: 140px;
+    height: 140px;
+  }
+  .orb-score { font-size: 2.8rem; }
+  .sniper-card { grid-column: 1; grid-row: 2; }
+  .verdict-card { grid-column: 2; grid-row: 2; }
+  .factors-card { grid-column: 1; grid-row: 3; }
+  .magicrs-card { grid-column: 2; grid-row: 3; }
+}
+
+@media (max-width: 640px) {
+  .shell { padding: 16px; }
+  .command-grid {
+    grid-template-columns: 1fr;
+  }
+  .weather-card {
+    grid-column: 1;
+    flex-direction: column;
+  }
+  .weather-orb-wrap {
+    width: 160px;
+    height: 160px;
+  }
+  .weather-orb {
+    width: 160px;
+    height: 160px;
+  }
+  .orb-score { font-size: 3rem; }
+  .sniper-card { grid-column: 1; grid-row: 2; }
+  .verdict-card { grid-column: 1; grid-row: 3; }
+  .factors-card { grid-column: 1; grid-row: 4; }
+  .magicrs-card { grid-column: 1; grid-row: 5; }
+  .week-strip {
+    flex-wrap: wrap;
+  }
+  .week-day {
+    flex: 0 0 calc(33.33% - 6px);
+  }
+  .price-strip {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .price-main { font-size: 1.8rem; }
+}
+
+/* ── Animations ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: fade-up 0.5s ease both;
+}
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.1s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.2s; }
+.delay-5 { animation-delay: 0.25s; }
+.delay-6 { animation-delay: 0.3s; }
+.delay-7 { animation-delay: 0.35s; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── TOP BAR ── -->
+  <div class="topbar animate-in">
+    <div class="topbar-left">
+      <div class="logo">KaalaDristi <span>v2</span></div>
+      <div class="symbol-pill">
+        <span class="dot"></span>
+        NIFTY 50
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-stat">MKT <span class="val c-green">OPEN</span></div>
+      <div class="topbar-stat">|</div>
+      <div class="topbar-stat">28 Feb 2026 <span class="val">15:30</span></div>
+    </div>
+  </div>
+
+  <!-- ── PRICE STRIP ── -->
+  <div class="price-strip animate-in delay-1">
+    <span class="price-main">22,147.00</span>
+    <span class="price-change up">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 11V3M7 3L3 7M7 3L11 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      +168.65 (+0.77%)
+    </span>
+    <span class="price-meta">Day H/L: 22,198 / 21,943 &nbsp;·&nbsp; 52W: 26,277 / 21,137 &nbsp;·&nbsp; Prev: 21,978.35</span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       COMMAND CENTER — 3 Column Grid
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="command-grid">
+
+    <!-- ── CARD 1: WEATHER ORB ── -->
+    <div class="card weather-card animate-in delay-2">
+      <div class="card-label">
+        <svg class="icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Market Weather
+      </div>
+      <div class="weather-orb-wrap">
+        <div class="weather-orb" id="weatherOrb">
+          <span class="orb-score c-cyan" id="orbScore">32</span>
+          <span class="orb-label">Risk Score</span>
+        </div>
+      </div>
+      <div class="regime-badge expansion" id="regimeBadge">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="3" fill="currentColor" opacity="0.5"/></svg>
+        Expansion
+      </div>
+      <p class="weather-verdict" id="weatherVerdict">
+        Clear skies. Low planetary stress with favorable momentum alignment. Conditions support directional trades.
+      </p>
+      <div class="weather-astro">
+        ♄ Saturn in Aquarius · ♃ Jupiter direct · ☿ Mercury clear
+      </div>
+    </div>
+
+    <!-- ── CARD 2: SNIPER DRAGON (Smart Money Signal Tower) ── -->
+    <div class="card sniper-card animate-in delay-3">
+      <div class="card-label">
+        <svg class="icon" viewBox="0 0 16 16" fill="none"><path d="M2 14V8M6 14V5M10 14V2M14 14V6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Smart Money · SniperDragon
+      </div>
+
+      <!-- Signal Tower -->
+      <div class="signal-tower" id="signalTower">
+        <div class="signal-bar active" style="height:20%; background: var(--green); --bar-rgb: 16,185,129;"></div>
+        <div class="signal-bar active" style="height:40%; background: var(--green); --bar-rgb: 16,185,129;"></div>
+        <div class="signal-bar active" style="height:60%; background: var(--green); --bar-rgb: 16,185,129;"></div>
+        <div class="signal-bar active" style="height:80%; background: var(--cyan); --bar-rgb: 6,182,212;"></div>
+        <div class="signal-bar inactive" style="height:100%;"></div>
+      </div>
+
+      <div style="text-align:center; margin-bottom: 16px;">
+        <span style="font-family: var(--mono); font-size: 1.6rem; font-weight: 800; color: var(--emerald);">4</span>
+        <span style="font-family: var(--mono); font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">/5</span>
+        <div style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--emerald); margin-top: 2px;">
+          Accumulating
+        </div>
+      </div>
+
+      <div class="sm-metrics">
+        <div class="sm-metric">
+          <div class="sm-metric-label">Banker</div>
+          <div class="sm-metric-val c-green">72.4</div>
+        </div>
+        <div class="sm-metric">
+          <div class="sm-metric-label">Hot Money</div>
+          <div class="sm-metric-val c-amber">48.1</div>
+        </div>
+        <div class="sm-metric">
+          <div class="sm-metric-label">Flow</div>
+          <div class="sm-metric-val c-green">Fresh Longs</div>
+        </div>
+        <div class="sm-metric">
+          <div class="sm-metric-label">Absorption</div>
+          <div class="sm-metric-val c-muted">None</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 3: VERDICT + INDICATORS ── -->
+    <div class="card verdict-card animate-in delay-4">
+      <div class="card-label">
+        <svg class="icon" viewBox="0 0 16 16" fill="none"><path d="M8 1L10.5 6H14L11 9L12.5 14L8 11L3.5 14L5 9L2 6H5.5L8 1Z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+        Verdict
+      </div>
+
+      <div class="verdict-box buy">
+        <div class="verdict-icon buy">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <div class="verdict-text c-green">BUY CONFIRMED</div>
+          <div class="verdict-sub">SVD Present · Momentum Aligned · SuperTrend UP</div>
+        </div>
+      </div>
+
+      <!-- Confluence Meter -->
+      <div class="confluence-wrap">
+        <div class="card-label" style="margin-bottom: 4px;">Confluence</div>
+        <div class="confluence-bar-bg">
+          <div class="confluence-bar-fill" style="width: 70%;"></div>
+        </div>
+        <div class="confluence-labels">
+          <span>0</span>
+          <span style="font-weight: 700; color: var(--emerald);">7/10</span>
+          <span>10</span>
+        </div>
+      </div>
+
+      <!-- Key Indicators Grid -->
+      <div class="indicator-grid">
+        <div class="ind-pill">
+          <span class="ind-pill-label">RSI</span>
+          <span class="ind-pill-val c-green">58.2</span>
+        </div>
+        <div class="ind-pill">
+          <span class="ind-pill-label">MFI</span>
+          <span class="ind-pill-val c-green">62.1</span>
+        </div>
+        <div class="ind-pill">
+          <span class="ind-pill-label">Bias</span>
+          <span class="ind-pill-val c-green">LONG</span>
+        </div>
+        <div class="ind-pill">
+          <span class="ind-pill-label">Momentum</span>
+          <span class="ind-pill-val c-green">ALIGNED↑</span>
+        </div>
+        <div class="ind-pill">
+          <span class="ind-pill-label">Rel Vol</span>
+          <span class="ind-pill-val c-amber">1.3x</span>
+        </div>
+        <div class="ind-pill">
+          <span class="ind-pill-label">Signal</span>
+          <span class="ind-pill-val c-green">+7</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 4: FACTOR HEATMAP ── -->
+    <div class="card factors-card animate-in delay-5">
+      <div class="card-label">
+        <svg class="icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
+        Risk Factors
+      </div>
+      <div class="factor-rows">
+        <div class="factor-row">
+          <span class="factor-name">Structural</span>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 32%; background: var(--green);"></div>
+          </div>
+          <span class="factor-val c-green">8</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Momentum</span>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 24%; background: var(--green);"></div>
+          </div>
+          <span class="factor-val c-green">6</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Volatility</span>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 44%; background: var(--amber);"></div>
+          </div>
+          <span class="factor-val c-amber">11</span>
+        </div>
+        <div class="factor-row">
+          <span class="factor-name">Deception</span>
+          <div class="factor-bar-bg">
+            <div class="factor-bar-fill" style="width: 28%; background: var(--green);"></div>
+          </div>
+          <span class="factor-val c-green">7</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARD 5: MagicRS Decision Table ── -->
+    <div class="card magicrs-card animate-in delay-6">
+      <div class="card-label">
+        <svg class="icon" viewBox="0 0 16 16" fill="none"><path d="M2 2h12M2 6h12M2 10h12M2 14h12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Relative Strength · MagicRS
+      </div>
+      <table class="rs-table">
+        <thead>
+          <tr>
+            <th>Sector / Index</th>
+            <th>RS</th>
+            <th>Status</th>
+            <th>Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--emerald);"></div>NIFTY BANK</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">1.12</td>
+            <td><span class="rs-status strong">STRONG</span></td>
+            <td class="rs-pts c-green">5/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--emerald);"></div>NIFTY IT</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">1.05</td>
+            <td><span class="rs-status strong">STRONG</span></td>
+            <td class="rs-pts c-green">4/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--text-muted);"></div>NIFTY FMCG</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">0.98</td>
+            <td><span class="rs-status neutral">FLAT</span></td>
+            <td class="rs-pts c-muted">3/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--rose);"></div>NIFTY PHARMA</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">0.87</td>
+            <td><span class="rs-status weak">WEAK</span></td>
+            <td class="rs-pts c-red">1/6</td>
+          </tr>
+          <tr>
+            <td><div class="rs-name"><div class="rs-heat" style="background: var(--rose);"></div>NIFTY METAL</div></td>
+            <td style="font-family: var(--mono); font-weight: 600;">0.82</td>
+            <td><span class="rs-status weak">WEAK</span></td>
+            <td class="rs-pts c-red">1/6</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+  <!-- end .command-grid -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       7-DAY OUTLOOK STRIP
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="week-strip animate-in delay-6">
+    <div class="week-day">
+      <div class="week-day-name">Mon</div>
+      <div class="week-day-score c-amber">48</div>
+      <div class="week-day-regime c-amber">Distribution</div>
+      <div class="week-day-bar" style="background: var(--amber); opacity: 0.3;"></div>
+    </div>
+    <div class="week-day">
+      <div class="week-day-name">Tue</div>
+      <div class="week-day-score c-green">28</div>
+      <div class="week-day-regime c-green">Accumulation</div>
+      <div class="week-day-bar" style="background: var(--green); opacity: 0.3;"></div>
+    </div>
+    <div class="week-day today">
+      <div class="week-day-name">Wed · Today</div>
+      <div class="week-day-score c-cyan">32</div>
+      <div class="week-day-regime c-cyan">Expansion</div>
+      <div class="week-day-bar" style="background: var(--cyan); opacity: 0.5;"></div>
+    </div>
+    <div class="week-day">
+      <div class="week-day-name">Thu</div>
+      <div class="week-day-score c-red">67</div>
+      <div class="week-day-regime c-red">Protection</div>
+      <div class="week-day-bar" style="background: var(--red); opacity: 0.3;"></div>
+    </div>
+    <div class="week-day">
+      <div class="week-day-name">Fri</div>
+      <div class="week-day-score c-amber">55</div>
+      <div class="week-day-regime c-amber">Distribution</div>
+      <div class="week-day-bar" style="background: var(--amber); opacity: 0.3;"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       CHART — Collapsible Drawer
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="chart-section animate-in delay-7">
+    <div class="chart-toggle" id="chartToggle" onclick="toggleChart()">
+      <div class="chart-toggle-left">
+        <div class="chart-toggle-icon">📊</div>
+        <div>
+          <div class="chart-toggle-text">Advanced Chart · LuckyPop</div>
+          <div class="chart-toggle-sub">Candlestick with SMA, SuperTrend, Volume dots, Pivots</div>
+        </div>
+      </div>
+      <span class="chart-toggle-arrow">▾</span>
+    </div>
+    <div class="chart-drawer" id="chartDrawer">
+      <div class="chart-placeholder">
+        <div class="fake-chart" id="fakeChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       HISTORICAL PROOFS — Scroll Strip
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="proof-strip animate-in delay-7">
+    <div class="proof-chip">
+      <div><div class="proof-date">27 Feb</div></div>
+      <div class="proof-score c-amber">45</div>
+      <div class="proof-return c-red">-0.82%</div>
+      <div class="proof-check correct">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div><div class="proof-date">26 Feb</div></div>
+      <div class="proof-score c-green">22</div>
+      <div class="proof-return c-green">+1.14%</div>
+      <div class="proof-check correct">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div><div class="proof-date">25 Feb</div></div>
+      <div class="proof-score c-red">71</div>
+      <div class="proof-return c-red">-2.31%</div>
+      <div class="proof-check correct">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div><div class="proof-date">24 Feb</div></div>
+      <div class="proof-score c-amber">58</div>
+      <div class="proof-return c-green">+0.45%</div>
+      <div class="proof-check wrong">○</div>
+    </div>
+    <div class="proof-chip">
+      <div><div class="proof-date">21 Feb</div></div>
+      <div class="proof-score c-green">35</div>
+      <div class="proof-return c-green">+0.67%</div>
+      <div class="proof-check correct">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div><div class="proof-date">20 Feb</div></div>
+      <div class="proof-score c-red">78</div>
+      <div class="proof-return c-red">-1.55%</div>
+      <div class="proof-check correct">✓</div>
+    </div>
+    <div class="proof-chip">
+      <div><div class="proof-date">19 Feb</div></div>
+      <div class="proof-score c-cyan">31</div>
+      <div class="proof-return c-green">+0.92%</div>
+      <div class="proof-check correct">✓</div>
+    </div>
+  </div>
+
+</div>
+<!-- end .shell -->
+
+<script>
+// ── Chart Toggle ──
+function toggleChart() {
+  const drawer = document.getElementById('chartDrawer');
+  const toggle = document.getElementById('chartToggle');
+  drawer.classList.toggle('open');
+  toggle.classList.toggle('open');
+}
+
+// ── Generate fake candle chart ──
+(function() {
+  const chart = document.getElementById('fakeChart');
+  let price = 150;
+  for (let i = 0; i < 80; i++) {
+    const change = (Math.random() - 0.48) * 10;
+    price = Math.max(40, Math.min(260, price + change));
+    const bar = document.createElement('div');
+    bar.className = 'fake-candle';
+    bar.style.height = (price / 280 * 100) + '%';
+    bar.style.background = change >= 0 ? 'var(--green)' : 'var(--red)';
+    bar.style.opacity = '0.4';
+    chart.appendChild(bar);
+  }
+})();
+
+// ── Dynamic orb color based on score ──
+(function() {
+  const score = 32;
+  const orb = document.getElementById('weatherOrb');
+  let color;
+  if (score <= 30) color = 'rgba(16,185,129,0.15)';
+  else if (score <= 50) color = 'rgba(6,182,212,0.12)';
+  else if (score <= 70) color = 'rgba(245,158,11,0.12)';
+  else color = 'rgba(239,68,68,0.15)';
+  orb.style.background = `radial-gradient(circle, ${color}, transparent 70%)`;
+})();
+</script>
+
+</body>
+</html>
