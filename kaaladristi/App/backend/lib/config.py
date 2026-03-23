@@ -1,14 +1,20 @@
 """
 Shared configuration — loads .env once, exposes all settings.
+Checks both backend/.env and frontend/.env (backend takes priority).
 """
 
 import os
 from dotenv import load_dotenv
 
-# Load from frontend .env (single source of truth for all keys)
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-_env_path = os.path.join(_script_dir, '..', '..', 'frontend', '.env')
-load_dotenv(_env_path)
+
+# Load frontend .env first (Supabase keys live here)
+_frontend_env = os.path.join(_script_dir, '..', '..', 'frontend', '.env')
+load_dotenv(_frontend_env)
+
+# Load backend .env second — overrides any overlapping keys (Breeze keys live here)
+_backend_env = os.path.join(_script_dir, '..', '.env')
+load_dotenv(_backend_env, override=True)
 
 # Supabase
 SUPABASE_URL = os.getenv('VITE_SUPABASE_URL', '').strip()
