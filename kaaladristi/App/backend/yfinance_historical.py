@@ -163,6 +163,10 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4)
                                  progress=False, timeout=30)
                 if df is not None and not df.empty:
                     df = df[(df.index >= start) & (df.index <= end)]
+                elif df is None or df.empty:
+                    # Some .NS tickers don't support period='max'; fall back to date range
+                    df = yf.download(ticker, start=start, end=end, auto_adjust=False,
+                                     progress=False, timeout=30)
             else:
                 df = yf.download(ticker, start=start, end=end, auto_adjust=False,
                                  progress=False, timeout=30)
