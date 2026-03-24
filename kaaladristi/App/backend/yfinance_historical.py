@@ -149,11 +149,28 @@ def init_supabase():
 # YAHOO FINANCE FETCHER
 # ═════════════════════════════════════════════════════════════════════════════
 
+def _is_permanent_failure(ticker: str) -> bool:
+    """Check captured yfinance output for signs of permanent failure (404, delisted)."""
+    import io, contextlib
+    # Do a quick metadata check — if Yahoo doesn't know the ticker, skip retries
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info or {}
+        # If info only has an error or empty, it's likely invalid
+        if not info or info.get('regularMarketPrice') is None and info.get('previousClose') is None:
+            return True
+    except Exception:
+        return True
+    return False
+
+
 def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4) -> list:
     """
     Fetch OHLC history from Yahoo Finance with retry + backoff.
     Uses yf.download() which handles sessions/cookies better than Ticker.history().
     Returns list of dicts with trade_date, open, high, low, close, volume.
+
+    Fast-fails on permanent errors (404, delisted) without retrying.
     """
     for attempt in range(max_retries):
         try:
@@ -172,6 +189,10 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4)
                                  progress=False, timeout=30)
 
             if df is None or df.empty:
+                # On first empty result, check if this is a permanent failure
+                if attempt == 0 and _is_permanent_failure(ticker):
+                    print(f' [not found on Yahoo, skipping]', end='', flush=True)
+                    return []
                 if attempt < max_retries - 1:
                     wait = (attempt + 1) * 10
                     print(f' [empty, retry in {wait}s]', end='', flush=True)
@@ -202,6 +223,10 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4)
                 print(f' [rate limited, waiting {wait}s]', end='', flush=True)
                 time.sleep(wait)
                 continue
+            # Permanent errors — no point retrying
+            if '404' in err_msg or 'delisted' in err_msg or 'Not Found' in err_msg:
+                print(f' [not found]', end='', flush=True)
+                return []
             print(f'    yfinance error for {ticker}: {e}')
             return []
 
@@ -328,10 +353,24 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None, exchange
             yahoo_ticker = vc['yahoo']
         elif eq_exchange == 'BSE':
             # BSE uses .BO suffix; use bse_name (trading symbol) if available
-            bse_name = vc.get('bse_name', symbol)
+            bse_name = vc.get('bse_name', '')
+            if not bse_name:
+                # Pure BSE security codes (numeric) without bse_name are not valid Yahoo tickers
+                print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}] — skipped (no bse_name)')
+                failed += 1
+                failed_symbols.append(f'{symbol}(no_bse_name)')
+                continue
             yahoo_ticker = f'{bse_name}.BO'
         else:
             yahoo_ticker = f'{symbol}.NS'
+
+        # Skip obviously invalid tickers (empty prefix, purely numeric without letters)
+        ticker_prefix = yahoo_ticker.split('.')[0]
+        if not ticker_prefix or ticker_prefix.isdigit():
+            print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}] -> {yahoo_ticker} — skipped (invalid ticker)')
+            failed += 1
+            failed_symbols.append(f'{symbol}(bad_ticker)')
+            continue
 
         print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}] -> {yahoo_ticker}', end='', flush=True)
         records = fetch_yahoo_history(yahoo_ticker, from_date, to_date)
