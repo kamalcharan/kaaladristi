@@ -179,9 +179,9 @@ def _parse_equity_master(zf, filename: str) -> dict:
     """
     Parse an equity master file (NSEScripMaster.txt or BSEScripMaster.txt).
 
-    CSV columns (61 total):
-      [0] Token, [1] ShortName (ISEC code), [2] Series, [3] CompanyName,
-      [10] ISINCode, [17] Symbol, [60] ExchangeCode (trading symbol)
+    ExchangeCode (the trading symbol) is always the LAST column:
+      NSE (61 cols): [0]Token [1]ShortName [3]CompanyName ... [60]ExchangeCode
+      BSE (34 cols): [0]Token [1]ShortName [3]CompanyName ... [33]ExchangeCode
 
     Returns dict with:
       'symbol_to_isec': {EXCHANGE_SYMBOL: ISEC_CODE}
@@ -193,7 +193,9 @@ def _parse_equity_master(zf, filename: str) -> dict:
 
     if lines:
         first_cols = lines[0].split(',')
-        print(f'    Columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}')
+        last_col = first_cols[-1].strip().strip('"') if first_cols else '?'
+        print(f'    Columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}'
+              f' ... last={last_col}')
 
     symbol_to_isec = {}
     isec_to_token = {}
@@ -205,7 +207,7 @@ def _parse_equity_master(zf, filename: str) -> dict:
             continue
         token = columns[0].strip().strip('"')
         isec_code = columns[1].strip().strip('"')
-        company = columns[3].strip().strip('"') if len(columns) > 3 else ''
+        company = columns[3].strip().strip('"')
 
         # Skip header or empty
         if not token or not isec_code or not token[0].isdigit():
@@ -215,11 +217,10 @@ def _parse_equity_master(zf, filename: str) -> dict:
         if company:
             isec_to_company[isec_code] = company
 
-        # ExchangeCode (col 60) = trading symbol on the exchange
-        if len(columns) >= 61:
-            exchange_code = columns[60].strip().strip('"')
-            if exchange_code:
-                symbol_to_isec[exchange_code.upper()] = isec_code
+        # ExchangeCode is always the last column (trading symbol on exchange)
+        exchange_code = columns[-1].strip().strip('"')
+        if exchange_code:
+            symbol_to_isec[exchange_code.upper()] = isec_code
 
         # Also map ISEC code to itself (for direct matches)
         symbol_to_isec[isec_code.upper()] = isec_code
@@ -236,9 +237,17 @@ def _parse_derivative_master(zf, filename: str, master_key: str) -> list:
     Parse a derivative master file (FONSEScripMaster, FOBSEScripMaster,
     CDNSEScripMaster, MCXScripMaster).
 
-    Column layouts vary by exchange:
-      FON/FOB/CDNSE: [0]Token [2]Underlying [3]ProductType [4]Expiry [5]Strike [6]OptionType
-      MCX:           [0]Token [2]Underlying [3]ProductType [7]Expiry [9]Strike [8]OptionType
+    All derivative files share the same column layout:
+      [0] Token
+      [1] InstrumentName  (FUTSTK, OPTSTK, FUTIDX, OPTIDX, etc.)
+      [2] ShortName       (ISEC derivative code, e.g. "POLI")
+      [3] Series          (FUTURE, etc.)
+      [4] ExpiryDate      (28-Apr-2026)
+      [5] StrikePrice
+      [6] OptionType      (XX for futures, CE/PE for options)
+      [-1] ExchangeCode   (NSE trading symbol = underlying, e.g. "POLYCAB")
+
+    FON/FOB/CDNSE have 69 columns, MCX has 27 — but layout is the same.
 
     Returns list of contract dicts.
     """
@@ -247,10 +256,11 @@ def _parse_derivative_master(zf, filename: str, master_key: str) -> list:
 
     if lines:
         first_cols = lines[0].split(',')
-        print(f'    Columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}')
+        last_col = first_cols[-1].strip().strip('"') if first_cols else '?'
+        print(f'    Columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}'
+              f' ... last={last_col}')
 
     contracts = []
-    is_mcx = (master_key == 'mcx')
 
     for line in lines:
         columns = line.split(',')
@@ -260,25 +270,21 @@ def _parse_derivative_master(zf, filename: str, master_key: str) -> list:
         if not token or not token[0].isdigit():
             continue
 
-        underlying = columns[2].strip().strip('"') if len(columns) > 2 else ''
-        product_type = columns[3].strip().strip('"') if len(columns) > 3 else ''
-
-        if is_mcx:
-            expiry = columns[7].strip().strip('"') if len(columns) > 7 else ''
-            option_type = columns[8].strip().strip('"') if len(columns) > 8 else ''
-            strike = columns[9].strip().strip('"') if len(columns) > 9 else ''
-        else:
-            expiry = columns[4].strip().strip('"') if len(columns) > 4 else ''
-            strike = columns[5].strip().strip('"') if len(columns) > 5 else ''
-            option_type = columns[6].strip().strip('"') if len(columns) > 6 else ''
+        instrument = columns[1].strip().strip('"')   # FUTSTK, OPTSTK, etc.
+        isec_code = columns[2].strip().strip('"')     # ISEC derivative code
+        expiry = columns[4].strip().strip('"')
+        strike = columns[5].strip().strip('"')
+        option_type = columns[6].strip().strip('"')   # XX, CE, PE
+        underlying = columns[-1].strip().strip('"')   # NSE trading symbol
 
         contracts.append({
             'token': token,
-            'underlying': underlying,
-            'product_type': product_type,  # FUT or OPT
+            'instrument': instrument,
+            'isec_code': isec_code,
+            'underlying': underlying,  # NSE symbol (e.g. POLYCAB, POWERGRID)
             'expiry': expiry,
             'strike': strike,
-            'option_type': option_type,  # CE, PE, or empty for futures
+            'option_type': option_type,
         })
 
     return contracts
