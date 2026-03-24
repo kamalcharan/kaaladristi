@@ -7,11 +7,20 @@ Each vendor (ICICI Breeze, NSE, BSE, Screener, etc.) uses different stock codes.
 This script maps our NSE symbols to vendor-specific codes and saves them to the DB.
 
 Currently supported vendors:
-  - breeze: ICICI Breeze ISEC stock codes (via Breeze SDK master data)
-  - nse:    NSE trading symbols (already our primary key, saved for completeness)
+  - breeze:     ICICI Breeze ISEC stock codes for NSE (via SecurityMaster.zip)
+  - breeze_bse: ICICI Breeze ISEC stock codes for BSE
+  - nse:        NSE trading symbols (already our primary key, saved for completeness)
+  - has_fno:    Boolean flag if F&O contracts exist for this underlying
+
+SecurityMaster files parsed:
+  - NSEScripMaster.txt   — NSE equity symbol ↔ ISEC code mapping
+  - BSEScripMaster.txt   — BSE equity symbol ↔ ISEC code mapping
+  - FONSEScripMaster.txt — NSE F&O contracts (futures & options)
+  - FOBSEScripMaster.txt — BSE F&O contracts
+  - CDNSEScripMaster.txt — Currency derivatives (NSE)
+  - MCXScripMaster.txt   — Commodity derivatives (MCX)
 
 Future vendors:
-  - bse:      BSE scrip codes
   - screener: Screener.in slugs
   - yahoo:    Yahoo Finance tickers
 
@@ -146,17 +155,154 @@ def diagnose_breeze(breeze):
 
 SECURITY_MASTER_URL = 'https://directlink.icicidirect.com/MotherAppMaster/SecurityMaster.zip'
 
+# Map of master file keys to filename patterns and their type (equity vs derivative)
+MASTER_FILES = {
+    'nse':   {'pattern': lambda n: 'NSE' in n and 'FO' not in n and 'CD' not in n, 'type': 'equity'},
+    'bse':   {'pattern': lambda n: 'BSE' in n and 'FO' not in n, 'type': 'equity'},
+    'fonse': {'pattern': lambda n: 'FONSE' in n or ('FO' in n and 'NSE' in n and 'BSE' not in n), 'type': 'derivative'},
+    'fobse': {'pattern': lambda n: 'FOBSE' in n or ('FO' in n and 'BSE' in n), 'type': 'derivative'},
+    'cdnse': {'pattern': lambda n: 'CDNSE' in n or ('CD' in n and 'NSE' in n), 'type': 'derivative'},
+    'mcx':   {'pattern': lambda n: 'MCX' in n, 'type': 'derivative'},
+}
 
-def download_security_master_mapping() -> dict:
+
+def _find_file_in_zip(zf, pattern_fn) -> str | None:
+    """Find a .txt/.csv file in the ZIP matching the pattern function."""
+    for name in zf.namelist():
+        name_upper = name.upper()
+        if (name_upper.endswith('.CSV') or name_upper.endswith('.TXT')) and pattern_fn(name_upper):
+            return name
+    return None
+
+
+def _parse_equity_master(zf, filename: str) -> dict:
     """
-    Download the ICICI SecurityMaster.zip directly and parse the NSE CSV
-    to build an ISEC stock_code mapping.
+    Parse an equity master file (NSEScripMaster.txt or BSEScripMaster.txt).
 
-    The ZIP contains CSV files per exchange; the NSE file has columns:
-      Token, ShortName(ISEC), Series(?), CompanyName, ...
+    CSV columns (61 total):
+      [0] Token, [1] ShortName (ISEC code), [2] Series, [3] CompanyName,
+      [10] ISINCode, [17] Symbol, [60] ExchangeCode (trading symbol)
 
-    Returns dict: {ISEC_CODE: ISEC_CODE} — keyed by the stock_code which
-    is what the Breeze API expects for get_historical_data_v2().
+    Returns dict with:
+      'symbol_to_isec': {EXCHANGE_SYMBOL: ISEC_CODE}
+      'isec_to_token':  {ISEC_CODE: TOKEN}
+      'isec_to_company': {ISEC_CODE: COMPANY_NAME}
+    """
+    raw = zf.read(filename).decode('utf-8', errors='replace')
+    lines = raw.strip().split('\n')
+
+    if lines:
+        first_cols = lines[0].split(',')
+        print(f'    Columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}')
+
+    symbol_to_isec = {}
+    isec_to_token = {}
+    isec_to_company = {}
+
+    for line in lines:
+        columns = line.split(',')
+        if len(columns) < 4:
+            continue
+        token = columns[0].strip().strip('"')
+        isec_code = columns[1].strip().strip('"')
+        company = columns[3].strip().strip('"') if len(columns) > 3 else ''
+
+        # Skip header or empty
+        if not token or not isec_code or not token[0].isdigit():
+            continue
+
+        isec_to_token[isec_code] = token
+        if company:
+            isec_to_company[isec_code] = company
+
+        # ExchangeCode (col 60) = trading symbol on the exchange
+        if len(columns) >= 61:
+            exchange_code = columns[60].strip().strip('"')
+            if exchange_code:
+                symbol_to_isec[exchange_code.upper()] = isec_code
+
+        # Also map ISEC code to itself (for direct matches)
+        symbol_to_isec[isec_code.upper()] = isec_code
+
+    return {
+        'symbol_to_isec': symbol_to_isec,
+        'isec_to_token': isec_to_token,
+        'isec_to_company': isec_to_company,
+    }
+
+
+def _parse_derivative_master(zf, filename: str, master_key: str) -> list:
+    """
+    Parse a derivative master file (FONSEScripMaster, FOBSEScripMaster,
+    CDNSEScripMaster, MCXScripMaster).
+
+    Column layouts vary by exchange:
+      FON/FOB/CDNSE: [0]Token [2]Underlying [3]ProductType [4]Expiry [5]Strike [6]OptionType
+      MCX:           [0]Token [2]Underlying [3]ProductType [7]Expiry [9]Strike [8]OptionType
+
+    Returns list of contract dicts.
+    """
+    raw = zf.read(filename).decode('utf-8', errors='replace')
+    lines = raw.strip().split('\n')
+
+    if lines:
+        first_cols = lines[0].split(',')
+        print(f'    Columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}')
+
+    contracts = []
+    is_mcx = (master_key == 'mcx')
+
+    for line in lines:
+        columns = line.split(',')
+        if len(columns) < 7:
+            continue
+        token = columns[0].strip().strip('"')
+        if not token or not token[0].isdigit():
+            continue
+
+        underlying = columns[2].strip().strip('"') if len(columns) > 2 else ''
+        product_type = columns[3].strip().strip('"') if len(columns) > 3 else ''
+
+        if is_mcx:
+            expiry = columns[7].strip().strip('"') if len(columns) > 7 else ''
+            option_type = columns[8].strip().strip('"') if len(columns) > 8 else ''
+            strike = columns[9].strip().strip('"') if len(columns) > 9 else ''
+        else:
+            expiry = columns[4].strip().strip('"') if len(columns) > 4 else ''
+            strike = columns[5].strip().strip('"') if len(columns) > 5 else ''
+            option_type = columns[6].strip().strip('"') if len(columns) > 6 else ''
+
+        contracts.append({
+            'token': token,
+            'underlying': underlying,
+            'product_type': product_type,  # FUT or OPT
+            'expiry': expiry,
+            'strike': strike,
+            'option_type': option_type,  # CE, PE, or empty for futures
+        })
+
+    return contracts
+
+
+def download_all_security_masters() -> dict:
+    """
+    Download ICICI SecurityMaster.zip and parse all 6 master files:
+      - NSEScripMaster.txt   (NSE equities)
+      - BSEScripMaster.txt   (BSE equities)
+      - FONSEScripMaster.txt (NSE F&O)
+      - FOBSEScripMaster.txt (BSE F&O)
+      - CDNSEScripMaster.txt (Currency derivatives)
+      - MCXScripMaster.txt   (Commodity derivatives)
+
+    Returns dict:
+      {
+        'nse':   {'symbol_to_isec': {...}, 'isec_to_token': {...}, 'isec_to_company': {...}},
+        'bse':   {'symbol_to_isec': {...}, 'isec_to_token': {...}, 'isec_to_company': {...}},
+        'fonse': {'contracts': [...], 'underlyings': set(...)},
+        'fobse': {'contracts': [...], 'underlyings': set(...)},
+        'cdnse': {'contracts': [...], 'underlyings': set(...)},
+        'mcx':   {'contracts': [...], 'underlyings': set(...)},
+      }
     """
     print('  Downloading SecurityMaster.zip from ICICI...')
     try:
@@ -166,61 +312,50 @@ def download_security_master_mapping() -> dict:
         print(f'  Could not download SecurityMaster.zip: {e}')
         return {}
 
-    # Find the NSE CSV file in the ZIP
-    nse_file = None
-    for name in zf.namelist():
-        name_upper = name.upper()
-        if 'NSE' in name_upper and 'FO' not in name_upper and 'CD' not in name_upper and (name_upper.endswith('.CSV') or name_upper.endswith('.TXT')):
-            nse_file = name
-            break
+    print(f'  ZIP contents: {zf.namelist()}')
+    result = {}
 
-    if not nse_file:
-        # Fall back: list all files for debugging
-        print(f'  ZIP contents: {zf.namelist()[:10]}')
-        print('  Could not find NSE CSV in SecurityMaster.zip')
-        return {}
-
-    print(f'  Parsing {nse_file}...')
-    raw = zf.read(nse_file).decode('utf-8', errors='replace')
-    lines = raw.strip().split('\n')
-
-    # Log first line structure for diagnostics
-    if lines:
-        first_cols = lines[0].split(',')
-        print(f'  CSV columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}')
-
-
-    # CSV columns (61 total):
-    #   [0] Token, [1] ShortName (ISEC code), [2] Series, [3] CompanyName,
-    #   [10] ISINCode, [17] Symbol, [60] ExchangeCode (NSE trading symbol)
-    #
-    # ExchangeCode (col 60) is the NSE trading symbol, e.g.:
-    #   ISEC "ALFLAV" -> NSE "ALFALAVAL"
-    #   ISEC "ANDBAN" -> NSE "ANDHRABANK"
-
-    nse_to_isec = {}  # NSE trading symbol -> ISEC code
-    for line in lines:
-        columns = line.split(',')
-        if len(columns) < 61:
-            continue
-        token = columns[0].strip().strip('"')
-        isec_code = columns[1].strip().strip('"')
-        exchange_code = columns[60].strip().strip('"')
-
-        # Skip header or empty
-        if not token or not isec_code or not token[0].isdigit():
+    for key, spec in MASTER_FILES.items():
+        filename = _find_file_in_zip(zf, spec['pattern'])
+        if not filename:
+            print(f'  WARNING: Could not find {key} master file in ZIP')
             continue
 
-        if exchange_code:
-            nse_to_isec[exchange_code.upper()] = isec_code
+        print(f'  Parsing {filename} ({key})...')
 
-        # Also map ISEC code to itself (for direct matches)
-        nse_to_isec[isec_code.upper()] = isec_code
+        if spec['type'] == 'equity':
+            parsed = _parse_equity_master(zf, filename)
+            result[key] = parsed
+            print(f'    {len(parsed["symbol_to_isec"])} symbol mappings, '
+                  f'{len(parsed["isec_to_token"])} ISEC codes')
+        else:
+            contracts = _parse_derivative_master(zf, filename, key)
+            underlyings = set(c['underlying'] for c in contracts if c['underlying'])
+            result[key] = {'contracts': contracts, 'underlyings': underlyings}
+            print(f'    {len(contracts)} contracts, {len(underlyings)} unique underlyings')
 
-    if nse_to_isec:
-        print(f'  Built {len(nse_to_isec)} NSE/ISEC -> ISEC mappings')
+    return result
 
-    return nse_to_isec
+
+def download_security_master_mapping() -> tuple[dict, dict]:
+    """
+    Download and parse all security masters.
+
+    Returns:
+      (nse_to_isec, all_masters) where:
+        nse_to_isec: {NSE_SYMBOL: ISEC_CODE} — backward-compatible flat mapping
+        all_masters: full structured data from download_all_security_masters()
+    """
+    all_masters = download_all_security_masters()
+    if not all_masters:
+        return {}, {}
+
+    # Build flat NSE symbol -> ISEC code mapping (backward-compatible)
+    nse_to_isec = {}
+    if 'nse' in all_masters:
+        nse_to_isec = dict(all_masters['nse']['symbol_to_isec'])
+
+    return nse_to_isec, all_masters
 
 
 def extract_isec_mapping(breeze) -> dict:
@@ -367,11 +502,12 @@ INDEX_BREEZE_MAP = {
 # POPULATE FUNCTIONS
 # ═════════════════════════════════════════════════════════════════════════════
 
-def populate_equity_codes(sb, isec_map: dict, single_symbol: str = None):
-    """Update vendor_codes for all equities using the ISEC mapping.
+def populate_equity_codes(sb, isec_map: dict, all_masters: dict = None,
+                          single_symbol: str = None):
+    """Update vendor_codes for all equities using NSE and BSE ISEC mappings.
 
-    The isec_map maps NSE trading symbol (ExchangeCode) -> ISEC code (ShortName)
-    from the SecurityMaster CSV. Falls back to identity match (symbol == ISEC code).
+    The isec_map maps NSE trading symbol (ExchangeCode) -> ISEC code (ShortName).
+    If all_masters is provided, also populates BSE codes and derivative availability.
     """
     print('\n' + '=' * 60)
     print('POPULATING EQUITY VENDOR CODES')
@@ -383,8 +519,22 @@ def populate_equity_codes(sb, isec_map: dict, single_symbol: str = None):
     else:
         equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes', order='symbol')
 
+    # Build BSE mapping if available
+    bse_map = {}
+    if all_masters and 'bse' in all_masters:
+        bse_map = all_masters['bse']['symbol_to_isec']
+
+    # Build set of underlyings that have F&O contracts
+    fno_underlyings = set()
+    if all_masters:
+        for key in ('fonse', 'fobse'):
+            if key in all_masters:
+                fno_underlyings |= all_masters[key].get('underlyings', set())
+
     print(f'  Equities in DB: {len(equities)}')
-    print(f'  ISEC mappings available: {len(isec_map)}')
+    print(f'  NSE ISEC mappings: {len(isec_map)}')
+    print(f'  BSE ISEC mappings: {len(bse_map)}')
+    print(f'  F&O underlyings: {len(fno_underlyings)}')
 
     updated = 0
     skipped = 0
@@ -399,25 +549,34 @@ def populate_equity_codes(sb, isec_map: dict, single_symbol: str = None):
 
         sym_upper = symbol.upper()
         isec_code = isec_map.get(sym_upper)
+        bse_isec_code = bse_map.get(sym_upper)
 
-        if not isec_code and existing_vc.get('breeze'):
-            # Keep existing breeze code from prior run
+        if not isec_code and not bse_isec_code and existing_vc.get('breeze'):
+            # Keep existing codes from prior run
             continue
 
-        if not isec_code:
+        if not isec_code and not bse_isec_code:
             skipped += 1
             not_found.append(symbol)
             continue
 
         # Build vendor_codes
-        new_vc = {
-            **existing_vc,
-            'nse': symbol,
-            'breeze': isec_code,
-        }
+        new_vc = {**existing_vc, 'nse': symbol}
+
+        if isec_code:
+            new_vc['breeze'] = isec_code
+        if bse_isec_code:
+            new_vc['breeze_bse'] = bse_isec_code
+
+        # Mark if F&O contracts exist for this underlying
+        if sym_upper in fno_underlyings or (isec_code and isec_code in fno_underlyings):
+            new_vc['has_fno'] = True
 
         # Skip if nothing changed
-        if existing_vc.get('breeze') == isec_code and existing_vc.get('nse') == symbol:
+        if (existing_vc.get('breeze') == new_vc.get('breeze')
+                and existing_vc.get('breeze_bse') == new_vc.get('breeze_bse')
+                and existing_vc.get('nse') == symbol
+                and existing_vc.get('has_fno') == new_vc.get('has_fno')):
             continue
 
         sb.patch('km_equity_symbols', {'id': eq_id}, {'vendor_codes': json.dumps(new_vc)})
@@ -570,12 +729,13 @@ def main():
         if not args.skip_equity:
             print('\nExtracting ISEC stock code mapping...')
 
-            # Strategy 1: Download security master CSV directly
-            isec_map = download_security_master_mapping()
+            # Strategy 1: Download all security master CSVs directly
+            isec_map, all_masters = download_security_master_mapping()
 
             # Strategy 2: Extract from Breeze SDK internals (identity map only)
             if not isec_map:
                 isec_map = extract_isec_mapping(breeze)
+                all_masters = {}
 
             if not isec_map:
                 print('  WARNING: Could not extract ISEC mapping.')
@@ -583,12 +743,35 @@ def main():
             else:
                 print(f'  Extracted {len(isec_map)} NSE -> ISEC mappings')
 
-                # Cache for other tools
+                # Cache all master data for other tools
+                cache_data = {
+                    'date': datetime.now().strftime('%Y-%m-%d'),
+                    'map': isec_map,  # backward-compatible flat NSE map
+                }
+                # Add per-exchange data (skip large contract lists, keep summaries)
+                if all_masters:
+                    masters_summary = {}
+                    for key, data in all_masters.items():
+                        if 'symbol_to_isec' in data:
+                            # Equity master — cache full mapping
+                            masters_summary[key] = {
+                                'symbol_to_isec': data['symbol_to_isec'],
+                                'isec_to_token': data['isec_to_token'],
+                            }
+                        else:
+                            # Derivative master — cache summary only (contracts are large)
+                            masters_summary[key] = {
+                                'contract_count': len(data.get('contracts', [])),
+                                'underlyings': sorted(data.get('underlyings', set())),
+                            }
+                    cache_data['masters'] = masters_summary
+
                 with open(CACHE_FILE, 'w') as f:
-                    json.dump({'date': datetime.now().strftime('%Y-%m-%d'), 'map': isec_map}, f)
+                    json.dump(cache_data, f)
                 print(f'  Cached to {CACHE_FILE}')
 
-                populate_equity_codes(sb, isec_map, single_symbol=args.symbol)
+                populate_equity_codes(sb, isec_map, all_masters=all_masters,
+                                      single_symbol=args.symbol)
 
     print('\n' + '=' * 60)
     print('VENDOR CODE MAPPING COMPLETE')
