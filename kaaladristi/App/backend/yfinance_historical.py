@@ -82,6 +82,36 @@ INDEX_YAHOO_MAP = {
     'NIFTY MNC': '^CNXMNC',
 }
 
+# Yahoo Finance tickers for MCX commodities
+# MCX contracts don't trade directly on Yahoo — we use global futures as proxies
+COMMODITY_YAHOO_MAP = {
+    # Metals
+    'GOLD':        'GC=F',       # COMEX Gold
+    'GOLDM':       'GC=F',       # COMEX Gold (mini variant)
+    'GOLDGUINEA':  'GC=F',       # COMEX Gold (guinea variant)
+    'GOLDPETAL':   'GC=F',       # COMEX Gold (petal variant)
+    'SILVER':      'SI=F',       # COMEX Silver
+    'SILVERM':     'SI=F',       # COMEX Silver (mini variant)
+    'SILVERMIC':   'SI=F',       # COMEX Silver (micro variant)
+    'COPPER':      'HG=F',       # COMEX Copper
+    'ZINC':        'ZN=F',       # LME Zinc (via Yahoo)
+    'LEAD':        'LE=F',       # LME Lead (via Yahoo)
+    'NICKEL':      'NI=F',       # LME Nickel (via Yahoo)
+    'ALUMINIUM':   'ALI=F',      # LME Aluminium
+    'ALUMINUM':    'ALI=F',      # Alias
+
+    # Energy
+    'CRUDEOIL':    'CL=F',       # WTI Crude Oil
+    'CRUDE':       'CL=F',       # Alias
+    'NATURALGAS':  'NG=F',       # Henry Hub Natural Gas
+
+    # Agriculture
+    'MENTHAOIL':   None,          # No Yahoo equivalent
+    'COTTON':      'CT=F',       # ICE Cotton
+    'CPO':         None,          # No direct Yahoo equivalent
+    'CASTORSEED':  None,          # No Yahoo equivalent
+}
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SUPABASE REST CLIENT
@@ -411,6 +441,65 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None, exchange
         print(f'  Failed: {", ".join(failed_symbols)}')
 
 
+def download_commodity_history(sb, from_date, to_date, single_symbol=None):
+    print('\n' + '=' * 60)
+    print('DOWNLOADING COMMODITY HISTORY (Yahoo Finance) — MCX')
+    print('=' * 60)
+
+    filters = {'exchange': 'MCX'}
+    if single_symbol:
+        filters['symbol'] = single_symbol.upper()
+
+    commodities = sb.select('km_commodity_symbols', 'id,symbol,name,vendor_codes',
+                            filters=filters, order='symbol')
+
+    if not commodities:
+        print('  No commodities found')
+        return
+
+    print(f'  Found {len(commodities)} commodities')
+    total = 0
+    skipped = 0
+
+    for i, com in enumerate(commodities, 1):
+        symbol = com['symbol']
+        com_id = com['id']
+        vc = com.get('vendor_codes') or {}
+        if isinstance(vc, str):
+            vc = json.loads(vc)
+
+        # Yahoo ticker: vendor_codes.yahoo first, then COMMODITY_YAHOO_MAP
+        yahoo_ticker = vc.get('yahoo') or COMMODITY_YAHOO_MAP.get(symbol.upper())
+
+        if not yahoo_ticker:
+            print(f'  [{i}/{len(commodities)}] {symbol} — skipped (no Yahoo mapping)')
+            skipped += 1
+            continue
+
+        print(f'  [{i}/{len(commodities)}] {symbol} -> {yahoo_ticker}', end='', flush=True)
+        records = fetch_yahoo_history(yahoo_ticker, from_date, to_date)
+
+        if not records:
+            print(' — no data')
+            skipped += 1
+            time.sleep(REQUEST_DELAY)
+            continue
+
+        print(f' — {len(records)} days', end='', flush=True)
+        n = upsert_eod(sb, 'km_commodity_eod', records, 'commodity_id', com_id)
+        total += n
+        print(f' — inserted {n}')
+
+        # Save yahoo ticker to vendor_codes
+        if not vc.get('yahoo'):
+            new_vc = {**vc, 'yahoo': yahoo_ticker}
+            sb.patch('km_commodity_symbols', {'id': com_id}, {'vendor_codes': json.dumps(new_vc)})
+
+        time.sleep(REQUEST_DELAY)
+
+    print(f'\n  COMMODITY SUMMARY: {total} inserted, {skipped} skipped out of {len(commodities)}')
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI
 # ═════════════════════════════════════════════════════════════════════════════
@@ -419,7 +508,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Download historical OHLC data from Yahoo Finance into Supabase'
     )
-    parser.add_argument('--mode', choices=['index', 'equity', 'both'], default='both')
+    parser.add_argument('--mode', choices=['index', 'equity', 'commodity', 'both', 'all'], default='both')
     parser.add_argument('--exchange', type=str, default=None,
                         help='Exchange filter: NSE, BSE, or ALL (default: ALL)')
     parser.add_argument('--from', dest='from_date', type=str, default='1996-01-01',
@@ -445,11 +534,13 @@ def main():
     sb = init_supabase()
     print('  Supabase connected')
 
-    if args.mode in ('index', 'both'):
+    if args.mode in ('index', 'both', 'all'):
         download_index_history(sb, from_date, to_date, single_name=args.symbol)
-    if args.mode in ('equity', 'both'):
+    if args.mode in ('equity', 'both', 'all'):
         download_equity_history(sb, from_date, to_date, single_symbol=args.symbol,
                                 exchange=args.exchange)
+    if args.mode in ('commodity', 'all'):
+        download_commodity_history(sb, from_date, to_date, single_symbol=args.symbol)
 
     print('\n' + '=' * 60)
     print('DOWNLOAD COMPLETE')
