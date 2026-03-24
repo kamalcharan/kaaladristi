@@ -97,18 +97,30 @@ class SupabaseREST:
         }
 
     def select(self, table, columns='*', filters=None, order=None, ilike=None):
-        url = f'{self.base}/{table}?select={columns}'
-        if filters:
-            for k, v in filters.items():
-                url += f'&{k}=eq.{v}'
-        if ilike:
-            col, val = ilike
-            url += f'&{col}=ilike.{val}'
-        if order:
-            url += f'&order={order}'
-        resp = requests.get(url, headers=self.headers)
-        resp.raise_for_status()
-        return resp.json()
+        """Fetch all rows with automatic pagination (Supabase defaults to 1000 row limit)."""
+        PAGE_SIZE = 1000
+        all_rows = []
+        offset = 0
+
+        while True:
+            url = f'{self.base}/{table}?select={columns}&limit={PAGE_SIZE}&offset={offset}'
+            if filters:
+                for k, v in filters.items():
+                    url += f'&{k}=eq.{v}'
+            if ilike:
+                col, val = ilike
+                url += f'&{col}=ilike.{val}'
+            if order:
+                url += f'&order={order}'
+            resp = requests.get(url, headers=self.headers)
+            resp.raise_for_status()
+            page = resp.json()
+            all_rows.extend(page)
+            if len(page) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
+
+        return all_rows
 
     def upsert(self, table, records, on_conflict):
         url = f'{self.base}/{table}?on_conflict={on_conflict}'
@@ -321,15 +333,15 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None, exchange
     print(f'DOWNLOADING EQUITY HISTORY (Yahoo Finance) — {exchange or "ALL"}')
     print('=' * 60)
 
+    # Build filters — push exchange filter to server side
+    eq_filters = {}
     if single_symbol:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes,exchange',
-                             filters={'symbol': single_symbol.upper()}, order='symbol')
-    else:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes,exchange', order='symbol')
-
-    # Filter by exchange if specified
+        eq_filters['symbol'] = single_symbol.upper()
     if exchange and exchange != 'ALL':
-        equities = [e for e in equities if (e.get('exchange') or 'NSE') == exchange.upper()]
+        eq_filters['exchange'] = exchange.upper()
+
+    equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes,exchange',
+                         filters=eq_filters if eq_filters else None, order='symbol')
 
     if not equities:
         print('  No equities found')
