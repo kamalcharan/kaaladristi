@@ -236,16 +236,22 @@ def download_equities(breeze, sb, logger, from_dt, to_dt, args):
     else:
         print(f'  Total equities: {len(equities)}')
 
-    # Count how many have breeze codes
-    with_code = sum(1 for e in equities if (e.get('vendor_codes') or {}).get('breeze'))
+    # Count how many have breeze codes (check both breeze and breeze_bse)
+    def has_breeze_code(e):
+        vc = e.get('vendor_codes') or {}
+        ex = (e.get('exchange') or 'NSE').upper()
+        if ex == 'BSE':
+            return bool(vc.get('breeze_bse') or vc.get('breeze'))
+        return bool(vc.get('breeze'))
+
+    with_code = sum(1 for e in equities if has_breeze_code(e))
     print(f'  With Breeze codes: {with_code}')
 
     if with_code == 0:
-        print('  ERROR: No equities have vendor_codes.breeze set.')
+        print('  ERROR: No equities have Breeze codes set.')
         print('  Run: python populate_vendor_codes.py --session-token <TOKEN>')
+        print('  For BSE: python populate_bse_symbols.py')
         return
-
-    exchange_code = args.exchange.upper() if args.exchange else 'NSE'
     total_upserted = 0
     failed = 0
     skipped = 0
@@ -258,7 +264,15 @@ def download_equities(breeze, sb, logger, from_dt, to_dt, args):
         if isinstance(vc, str):
             vc = json.loads(vc)
 
-        breeze_code = vc.get('breeze')
+        # Pick the right Breeze code based on exchange
+        eq_exchange = (eq.get('exchange') or 'NSE').upper()
+        if eq_exchange == 'BSE':
+            breeze_code = vc.get('breeze_bse') or vc.get('breeze')
+            api_exchange = 'BSE'
+        else:
+            breeze_code = vc.get('breeze')
+            api_exchange = 'NSE'
+
         if not breeze_code:
             skipped += 1
             continue
@@ -273,14 +287,14 @@ def download_equities(breeze, sb, logger, from_dt, to_dt, args):
                     continue  # up to date, skip silently
 
         suffix = f' (ISEC: {breeze_code})' if breeze_code != symbol else ''
-        print(f'  [{i}/{len(equities)}] {symbol}{suffix}', end='', flush=True)
+        print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}]{suffix}', end='', flush=True)
 
         logger.start_timer()
-        raw = fetch_historical(breeze, breeze_code, exchange_code, effective_from, to_dt, '1day')
+        raw = fetch_historical(breeze, breeze_code, api_exchange, effective_from, to_dt, '1day')
 
         if not raw:
             print(f' — no data')
-            logger.log('eod_equity', symbol, exchange_code,
+            logger.log('eod_equity', symbol, api_exchange,
                         effective_from.strftime('%Y-%m-%d'), to_dt.strftime('%Y-%m-%d'),
                         0, 0, 'no_data', duration_ms=logger.elapsed_ms())
             failed += 1
@@ -296,7 +310,7 @@ def download_equities(breeze, sb, logger, from_dt, to_dt, args):
         total_upserted += n
         print(f' — upserted {n}')
 
-        logger.log('eod_equity', symbol, exchange_code,
+        logger.log('eod_equity', symbol, api_exchange,
                     effective_from.strftime('%Y-%m-%d'), to_dt.strftime('%Y-%m-%d'),
                     len(raw), n, 'success', duration_ms=logger.elapsed_ms())
 

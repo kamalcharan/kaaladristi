@@ -527,10 +527,13 @@ def populate_equity_codes(sb, isec_map: dict, all_masters: dict = None,
     print('=' * 60)
 
     if single_symbol:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes',
+        equities = sb.select('km_equity_symbols', 'id,symbol,exchange,vendor_codes',
                              filters={'symbol': single_symbol.upper()})
     else:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes', order='symbol')
+        equities = sb.select('km_equity_symbols', 'id,symbol,exchange,vendor_codes', order='symbol')
+
+    # Only process NSE equities here — BSE equities get their codes from populate_bse_symbols.py
+    equities = [e for e in equities if (e.get('exchange') or 'NSE') == 'NSE']
 
     # Build BSE mapping if available
     bse_map = {}

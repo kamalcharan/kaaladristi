@@ -176,7 +176,7 @@ def main():
             data = equity_map[sym]
             eq_rows.append(f"({sql_val(sym)}, {sql_array(sorted(data['index_names']))})")
         f.write(",\n".join(eq_rows))
-        f.write("\nON CONFLICT (symbol) DO NOTHING;\n")
+        f.write("\nON CONFLICT (symbol, exchange) DO NOTHING;\n")
 
     print(f"\nWrote masters -> {master_file}")
 
@@ -211,7 +211,7 @@ def main():
                 f.write(
                     f"INSERT INTO km_equity_eod (equity_id, trade_date, {EOD_COLS})\n"
                     f"SELECT id, {sql_val(TRADE_DATE)}, {eod_vals(data['eod'])}\n"
-                    f"FROM km_equity_symbols WHERE symbol = {sql_val(sym)}\n"
+                    f"FROM km_equity_symbols WHERE symbol = {sql_val(sym)} AND exchange = 'NSE'\n"
                     f"ON CONFLICT (equity_id, trade_date) DO NOTHING;\n\n"
                 )
 

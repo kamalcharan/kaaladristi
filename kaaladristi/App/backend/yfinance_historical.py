@@ -287,16 +287,20 @@ def download_index_history(sb, from_date, to_date, single_name=None):
     print(f'\n  INDEX SUMMARY: {total} inserted, {skipped} skipped (no Yahoo ticker)')
 
 
-def download_equity_history(sb, from_date, to_date, single_symbol=None):
+def download_equity_history(sb, from_date, to_date, single_symbol=None, exchange=None):
     print('\n' + '=' * 60)
-    print('DOWNLOADING EQUITY HISTORY (Yahoo Finance)')
+    print(f'DOWNLOADING EQUITY HISTORY (Yahoo Finance) — {exchange or "ALL"}')
     print('=' * 60)
 
     if single_symbol:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes',
+        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes,exchange',
                              filters={'symbol': single_symbol.upper()}, order='symbol')
     else:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes', order='symbol')
+        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes,exchange', order='symbol')
+
+    # Filter by exchange if specified
+    if exchange and exchange != 'ALL':
+        equities = [e for e in equities if (e.get('exchange') or 'NSE') == exchange.upper()]
 
     if not equities:
         print('  No equities found')
@@ -310,14 +314,22 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None):
     for i, eq in enumerate(equities, 1):
         symbol = eq['symbol']
         eq_id = eq['id']
+        eq_exchange = (eq.get('exchange') or 'NSE').upper()
         vc = eq.get('vendor_codes') or {}
         if isinstance(vc, str):
             vc = json.loads(vc)
 
-        # Yahoo ticker: vendor_codes.yahoo or symbol + ".NS"
-        yahoo_ticker = vc.get('yahoo') or f'{symbol}.NS'
+        # Yahoo ticker: vendor_codes.yahoo, or symbol + suffix based on exchange
+        if vc.get('yahoo'):
+            yahoo_ticker = vc['yahoo']
+        elif eq_exchange == 'BSE':
+            # BSE uses .BO suffix; use bse_name (trading symbol) if available
+            bse_name = vc.get('bse_name', symbol)
+            yahoo_ticker = f'{bse_name}.BO'
+        else:
+            yahoo_ticker = f'{symbol}.NS'
 
-        print(f'  [{i}/{len(equities)}] {symbol} -> {yahoo_ticker}', end='', flush=True)
+        print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}] -> {yahoo_ticker}', end='', flush=True)
         records = fetch_yahoo_history(yahoo_ticker, from_date, to_date)
 
         if not records:
@@ -334,7 +346,7 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None):
 
         # Save yahoo ticker to vendor_codes
         if not vc.get('yahoo'):
-            new_vc = {**vc, 'yahoo': yahoo_ticker, 'nse': symbol}
+            new_vc = {**vc, 'yahoo': yahoo_ticker}
             sb.patch('km_equity_symbols', {'id': eq_id}, {'vendor_codes': json.dumps(new_vc)})
 
         time.sleep(REQUEST_DELAY)
@@ -353,6 +365,8 @@ def main():
         description='Download historical OHLC data from Yahoo Finance into Supabase'
     )
     parser.add_argument('--mode', choices=['index', 'equity', 'both'], default='both')
+    parser.add_argument('--exchange', type=str, default=None,
+                        help='Exchange filter: NSE, BSE, or ALL (default: ALL)')
     parser.add_argument('--from', dest='from_date', type=str, default='1996-01-01',
                         help='Start date YYYY-MM-DD (default: 1996-01-01)')
     parser.add_argument('--to', dest='to_date', type=str,
@@ -367,9 +381,10 @@ def main():
     print('=' * 60)
     print('KALA-DRISHTI HISTORICAL DOWNLOADER (Yahoo Finance)')
     print('=' * 60)
-    print(f'  Mode   : {args.mode}')
-    print(f'  Period : {from_date} to {to_date}')
-    print(f'  Symbol : {args.symbol or "ALL"}')
+    print(f'  Mode     : {args.mode}')
+    print(f'  Exchange : {args.exchange or "ALL"}')
+    print(f'  Period   : {from_date} to {to_date}')
+    print(f'  Symbol   : {args.symbol or "ALL"}')
     print()
 
     sb = init_supabase()
@@ -378,7 +393,8 @@ def main():
     if args.mode in ('index', 'both'):
         download_index_history(sb, from_date, to_date, single_name=args.symbol)
     if args.mode in ('equity', 'both'):
-        download_equity_history(sb, from_date, to_date, single_symbol=args.symbol)
+        download_equity_history(sb, from_date, to_date, single_symbol=args.symbol,
+                                exchange=args.exchange)
 
     print('\n' + '=' * 60)
     print('DOWNLOAD COMPLETE')
