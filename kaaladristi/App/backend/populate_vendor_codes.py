@@ -188,46 +188,39 @@ def download_security_master_mapping() -> dict:
     if lines:
         first_cols = lines[0].split(',')
         print(f'  CSV columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}')
-        # Print all columns for debugging
-        all_cols = [c.strip().strip(chr(34))[:30] for c in first_cols]
-        for i, c in enumerate(all_cols):
-            if c:
-                print(f'    [{i}] {c}')
 
-    # Print a sample data row for debugging
-    if len(lines) > 1:
-        sample_cols = lines[1].split(',')
-        print(f'  Sample row (first 10 cols): {[c.strip().strip(chr(34))[:20] for c in sample_cols[:10]]}')
 
-    mapping = {}
-    isin_to_isec = {}
+    # CSV columns (61 total):
+    #   [0] Token, [1] ShortName (ISEC code), [2] Series, [3] CompanyName,
+    #   [10] ISINCode, [17] Symbol, [60] ExchangeCode (NSE trading symbol)
+    #
+    # ExchangeCode (col 60) is the NSE trading symbol, e.g.:
+    #   ISEC "ALFLAV" -> NSE "ALFALAVAL"
+    #   ISEC "ANDBAN" -> NSE "ANDHRABANK"
+
+    nse_to_isec = {}  # NSE trading symbol -> ISEC code
     for line in lines:
         columns = line.split(',')
-        if len(columns) < 4:
+        if len(columns) < 61:
             continue
         token = columns[0].strip().strip('"')
-        stock_code = columns[1].strip().strip('"')
+        isec_code = columns[1].strip().strip('"')
+        exchange_code = columns[60].strip().strip('"')
 
         # Skip header or empty
-        if not token or not stock_code or not token[0].isdigit():
+        if not token or not isec_code or not token[0].isdigit():
             continue
 
-        isec_upper = stock_code.upper()
-        mapping[isec_upper] = stock_code
+        if exchange_code:
+            nse_to_isec[exchange_code.upper()] = isec_code
 
-        # Look for ISIN in columns (typically 12-char code starting with INE)
-        for col in columns[2:]:
-            val = col.strip().strip('"').upper()
-            if len(val) == 12 and val.startswith('INE'):
-                isin_to_isec[val] = stock_code
-                break
+        # Also map ISEC code to itself (for direct matches)
+        nse_to_isec[isec_code.upper()] = isec_code
 
-    if mapping:
-        print(f'  Found {len(mapping)} NSE stock codes in security master')
-    if isin_to_isec:
-        print(f'  Found {len(isin_to_isec)} ISIN -> ISEC mappings')
+    if nse_to_isec:
+        print(f'  Built {len(nse_to_isec)} NSE/ISEC -> ISEC mappings')
 
-    return mapping, isin_to_isec
+    return nse_to_isec
 
 
 def extract_isec_mapping(breeze) -> dict:
@@ -374,38 +367,27 @@ INDEX_BREEZE_MAP = {
 # POPULATE FUNCTIONS
 # ═════════════════════════════════════════════════════════════════════════════
 
-def populate_equity_codes(sb, isec_map: dict, isin_to_isec: dict = None,
-                          single_symbol: str = None):
+def populate_equity_codes(sb, isec_map: dict, single_symbol: str = None):
     """Update vendor_codes for all equities using the ISEC mapping.
 
-    Matching strategies (in order):
-      1. Direct match: NSE symbol == ISEC code (common case)
-      2. ISIN-based match: use equity's ISIN to look up ISEC code
-      3. Keep existing breeze code if already populated
+    The isec_map maps NSE trading symbol (ExchangeCode) -> ISEC code (ShortName)
+    from the SecurityMaster CSV. Falls back to identity match (symbol == ISEC code).
     """
-    isin_to_isec = isin_to_isec or {}
-
     print('\n' + '=' * 60)
     print('POPULATING EQUITY VENDOR CODES')
     print('=' * 60)
 
     if single_symbol:
-        equities = sb.select('km_equity_symbols', 'id,symbol,isin,vendor_codes',
+        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes',
                              filters={'symbol': single_symbol.upper()})
     else:
-        equities = sb.select('km_equity_symbols', 'id,symbol,isin,vendor_codes', order='symbol')
+        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes', order='symbol')
 
     print(f'  Equities in DB: {len(equities)}')
-    print(f'  ISEC codes available: {len(isec_map)}')
-    if isin_to_isec:
-        print(f'  ISIN -> ISEC mappings: {len(isin_to_isec)}')
-
-    # Build a set of known ISEC codes for quick lookup
-    isec_codes = set(isec_map.keys())
+    print(f'  ISEC mappings available: {len(isec_map)}')
 
     updated = 0
     skipped = 0
-    matched_via_isin = 0
     not_found = []
 
     for eq in equities:
@@ -415,20 +397,11 @@ def populate_equity_codes(sb, isec_map: dict, isin_to_isec: dict = None,
         if isinstance(existing_vc, str):
             existing_vc = json.loads(existing_vc)
 
-        isec_code = None
         sym_upper = symbol.upper()
+        isec_code = isec_map.get(sym_upper)
 
-        # Strategy 1: Direct match — NSE symbol is the same as ISEC code
-        if sym_upper in isec_codes:
-            isec_code = sym_upper
-        # Strategy 2: ISIN-based lookup
-        elif isin_to_isec:
-            isin = (eq.get('isin') or '').strip().upper()
-            if isin and isin in isin_to_isec:
-                isec_code = isin_to_isec[isin]
-                matched_via_isin += 1
-        # Strategy 3: Keep existing breeze code from prior run
         if not isec_code and existing_vc.get('breeze'):
+            # Keep existing breeze code from prior run
             continue
 
         if not isec_code:
@@ -451,8 +424,6 @@ def populate_equity_codes(sb, isec_map: dict, isin_to_isec: dict = None,
         updated += 1
 
     print(f'\n  Updated: {updated}')
-    if matched_via_isin:
-        print(f'  Matched via ISIN: {matched_via_isin}')
     print(f'  No ISEC mapping: {skipped}')
     if not_found and len(not_found) <= 30:
         print(f'  Unmapped symbols: {", ".join(not_found[:30])}')
@@ -600,16 +571,11 @@ def main():
             print('\nExtracting ISEC stock code mapping...')
 
             # Strategy 1: Download security master CSV directly
-            result = download_security_master_mapping()
-            if isinstance(result, tuple):
-                isec_map, isin_to_isec = result
-            else:
-                isec_map, isin_to_isec = result, {}
+            isec_map = download_security_master_mapping()
 
-            # Strategy 2: Extract from Breeze SDK internals
+            # Strategy 2: Extract from Breeze SDK internals (identity map only)
             if not isec_map:
                 isec_map = extract_isec_mapping(breeze)
-                isin_to_isec = {}
 
             if not isec_map:
                 print('  WARNING: Could not extract ISEC mapping.')
@@ -622,8 +588,7 @@ def main():
                     json.dump({'date': datetime.now().strftime('%Y-%m-%d'), 'map': isec_map}, f)
                 print(f'  Cached to {CACHE_FILE}')
 
-                populate_equity_codes(sb, isec_map, isin_to_isec=isin_to_isec,
-                                      single_symbol=args.symbol)
+                populate_equity_codes(sb, isec_map, single_symbol=args.symbol)
 
     print('\n' + '=' * 60)
     print('VENDOR CODE MAPPING COMPLETE')
