@@ -592,7 +592,7 @@ def populate_equity_codes(sb, isec_map: dict, all_masters: dict = None,
                 and existing_vc.get('has_fno') == new_vc.get('has_fno')):
             continue
 
-        sb.patch('km_equity_symbols', {'id': eq_id}, {'vendor_codes': json.dumps(new_vc)})
+        sb.patch('km_equity_symbols', {'id': eq_id}, {'vendor_codes': new_vc})
         updated += 1
 
     print(f'\n  Updated: {updated}')
@@ -636,7 +636,7 @@ def populate_index_codes(sb):
             'breeze': breeze_code,
         }
 
-        sb.patch('km_index_symbols', {'id': idx_id}, {'vendor_codes': json.dumps(new_vc)})
+        sb.patch('km_index_symbols', {'id': idx_id}, {'vendor_codes': new_vc})
         updated += 1
 
     print(f'\n  Updated: {updated}')
