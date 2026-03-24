@@ -188,6 +188,16 @@ def download_security_master_mapping() -> dict:
     if lines:
         first_cols = lines[0].split(',')
         print(f'  CSV columns ({len(first_cols)}): {[c.strip().strip(chr(34))[:30] for c in first_cols[:8]]}')
+        # Print all columns for debugging
+        all_cols = [c.strip().strip(chr(34))[:30] for c in first_cols]
+        for i, c in enumerate(all_cols):
+            if c:
+                print(f'    [{i}] {c}')
+
+    # Print a sample data row for debugging
+    if len(lines) > 1:
+        sample_cols = lines[1].split(',')
+        print(f'  Sample row (first 10 cols): {[c.strip().strip(chr(34))[:20] for c in sample_cols[:10]]}')
 
     mapping = {}
     isin_to_isec = {}
