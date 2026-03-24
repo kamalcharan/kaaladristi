@@ -390,6 +390,8 @@ def populate_equity_codes(sb, isec_map: dict, single_symbol: str = None):
         symbol = eq['symbol']
         eq_id = eq['id']
         existing_vc = eq.get('vendor_codes') or {}
+        if isinstance(existing_vc, str):
+            existing_vc = json.loads(existing_vc)
 
         # Try to resolve ISEC code:
         # 1. Direct match: NSE symbol is the same as ISEC code (common case)
@@ -451,10 +453,15 @@ def populate_index_codes(sb):
         name = idx['name']
         idx_id = idx['id']
         existing_vc = idx.get('vendor_codes') or {}
+        if isinstance(existing_vc, str):
+            existing_vc = json.loads(existing_vc)
 
         breeze_code = INDEX_BREEZE_MAP.get(name.upper())
         if not breeze_code:
             skipped += 1
+            continue
+
+        if existing_vc.get('breeze') == breeze_code:
             continue
 
         new_vc = {
@@ -462,9 +469,6 @@ def populate_index_codes(sb):
             'nse_name': name,
             'breeze': breeze_code,
         }
-
-        if existing_vc.get('breeze') == breeze_code:
-            continue
 
         sb.patch('km_index_symbols', {'id': idx_id}, {'vendor_codes': json.dumps(new_vc)})
         updated += 1
