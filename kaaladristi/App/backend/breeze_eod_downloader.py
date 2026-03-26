@@ -301,7 +301,7 @@ def download_equity_eod(breeze, sb, from_date, to_date, single_symbol=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Download EOD data from ICICI Breeze into Supabase'
+        description='Download EOD data from ICICI Breeze into PostgreSQL'
     )
     parser.add_argument('--mode', choices=['index', 'equity', 'both'], default='both')
     parser.add_argument('--days', type=int, default=365)
