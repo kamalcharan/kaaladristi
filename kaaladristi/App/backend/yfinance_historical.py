@@ -216,7 +216,7 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def upsert_eod(sb, table, records, fk_field, fk_id):
-    """Add FK field to records and upsert to Supabase."""
+    """Add FK field to records and upsert to database."""
     if not records:
         return 0
     rows = [{fk_field: fk_id, **r} for r in records]
@@ -441,7 +441,7 @@ def download_commodity_history(sb, from_date, to_date, single_symbol=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Download historical OHLC data from Yahoo Finance into Supabase'
+        description='Download historical OHLC data from Yahoo Finance into PostgreSQL'
     )
     parser.add_argument('--mode', choices=['index', 'equity', 'commodity', 'both', 'all'], default='both')
     parser.add_argument('--exchange', type=str, default=None,
@@ -467,7 +467,7 @@ def main():
     print()
 
     sb = init_db()
-    print('  Supabase connected')
+    print('  Database connected')
 
     if args.mode in ('index', 'both', 'all'):
         download_index_history(sb, from_date, to_date, single_name=args.symbol)

@@ -420,7 +420,7 @@ def main():
         print('ERROR: No data parsed from SecurityMaster.zip')
         sys.exit(1)
 
-    # Connect to Supabase
+    # Connect to database
     sb = get_db()
     print('  PostgREST connected')
 

@@ -674,9 +674,9 @@ def main():
     print('KALA-DRISHTI VENDOR CODE MAPPER')
     print('=' * 60)
 
-    # Init Supabase (always needed)
+    # Init database
     sb = get_db()
-    print('Supabase connected')
+    print('Database connected')
 
     # Show mode — no Breeze needed
     if args.show:
