@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { getRiskHex } from '@/lib/utils';
-import { signIn, signUp } from '@/services/auth';
+import { signIn, signUp, forgotPassword } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';
 
 // ── Star Field ──
@@ -70,7 +70,7 @@ function MiniGauge({ score }: { score: number }) {
 // ── Auth form input style ──
 const inputClass = 'px-4 py-3.5 bg-kd-elevated border border-kd-border rounded-xl text-[15px] text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)] transition-all w-full';
 
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'forgot';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -96,22 +96,20 @@ export default function LandingPage() {
     setIsSubmitting(true);
 
     try {
-      if (authMode === 'register') {
+      if (authMode === 'forgot') {
+        const message = await forgotPassword(email);
+        setSuccess(message || 'If that email exists, a reset link has been sent.');
+        setAuthMode('login');
+      } else if (authMode === 'register') {
         if (!fullName.trim()) {
           setError('Please enter your full name');
           setIsSubmitting(false);
           return;
         }
-        const { user: newUser } = await signUp(email, password, fullName.trim());
-        if (newUser?.identities?.length === 0) {
-          setError('An account with this email already exists');
-        } else {
-          setSuccess('Account created! Check your email to confirm, then sign in.');
-          setAuthMode('login');
-        }
+        await signUp(email, password, fullName.trim());
+        navigate('/dashboard');
       } else {
         await signIn(email, password);
-        // Auth state listener in authStore will handle the rest
         navigate('/dashboard');
       }
     } catch (err: any) {
@@ -202,10 +200,10 @@ export default function LandingPage() {
           <div className="max-w-[360px] mx-auto w-full">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-semibold mb-2">
-                {authMode === 'login' ? 'Welcome Back' : 'Get Started'}
+                {authMode === 'forgot' ? 'Reset Password' : authMode === 'login' ? 'Welcome Back' : 'Get Started'}
               </h2>
               <p className="text-sm text-muted">
-                {authMode === 'login' ? 'Sign in to access your risk dashboard' : 'Create your account to begin'}
+                {authMode === 'forgot' ? 'Enter your email to receive a reset link' : authMode === 'login' ? 'Sign in to access your risk dashboard' : 'Create your account to begin'}
               </p>
             </div>
 
@@ -273,25 +271,33 @@ export default function LandingPage() {
                 />
               </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="text-[13px] font-medium text-secondary">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                  className={inputClass}
-                />
-                {authMode === 'register' && (
-                  <p className="text-[11px] text-muted">Minimum 6 characters</p>
-                )}
-              </div>
+              {authMode !== 'forgot' && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-[13px] font-medium text-secondary">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                    className={inputClass}
+                  />
+                  {authMode === 'register' && (
+                    <p className="text-[11px] text-muted">Minimum 6 characters</p>
+                  )}
+                </div>
+              )}
 
               {authMode === 'login' && (
                 <div className="flex justify-end">
-                  <a href="#" className="text-[13px] text-accent-indigo hover:opacity-80 transition-opacity">Forgot password?</a>
+                  <button type="button" onClick={() => { setAuthMode('forgot'); setError(''); setSuccess(''); }} className="text-[13px] text-accent-indigo hover:opacity-80 transition-opacity">Forgot password?</button>
+                </div>
+              )}
+
+              {authMode === 'forgot' && (
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => { setAuthMode('login'); setError(''); setSuccess(''); }} className="text-[13px] text-accent-indigo hover:opacity-80 transition-opacity">Back to Sign In</button>
                 </div>
               )}
 
@@ -301,7 +307,7 @@ export default function LandingPage() {
                 className="py-4 bg-gradient-to-r from-accent-indigo to-accent-violet rounded-xl text-[15px] font-semibold text-white shadow-[0_4px_20px_rgba(99,102,241,0.3)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(99,102,241,0.4)] transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {authMode === 'login' ? 'Sign In' : 'Create Account'}
+                {authMode === 'forgot' ? 'Send Reset Link' : authMode === 'login' ? 'Sign In' : 'Create Account'}
               </button>
             </form>
 

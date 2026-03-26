@@ -1,7 +1,7 @@
 """
 Kāla-Drishti — Unified Breeze EOD Downloader
 ==============================================
-Downloads end-of-day OHLCV data from ICICI Breeze API into Supabase.
+Downloads end-of-day OHLCV data from ICICI Breeze API into PostgreSQL.
 Handles indices (including TRI) and equities (NSE + BSE).
 
 Usage
@@ -73,7 +73,7 @@ def parse_date(s: str) -> datetime:
 
 
 def transform_eod_record(raw: dict, fk_field: str, fk_id: int) -> dict:
-    """Transform a Breeze candle dict into a Supabase EOD row."""
+    """Transform a Breeze candle dict into a database EOD row."""
     dt_str = raw.get('datetime', '') or raw.get('date', '')
     trade_date = str(dt_str)[:10] if dt_str else None
 
@@ -90,7 +90,7 @@ def transform_eod_record(raw: dict, fk_field: str, fk_id: int) -> dict:
 
 
 def batch_upsert(sb, table: str, records: list, on_conflict: str) -> int:
-    """Upsert records to Supabase in batches. Returns count of upserted rows."""
+    """Upsert records to database in batches. Returns count of upserted rows."""
     if not records:
         return 0
     total = 0
@@ -108,7 +108,7 @@ def batch_upsert(sb, table: str, records: list, on_conflict: str) -> int:
 
 
 def get_last_trade_date(sb, table: str, fk_field: str, fk_id: int) -> str:
-    """Get the most recent trade_date for a symbol from Supabase."""
+    """Get the most recent trade_date for a symbol from database."""
     try:
         rows = sb.select(table, 'trade_date',
                          filters={fk_field: fk_id},
@@ -348,7 +348,7 @@ def dry_run(sb, args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Download EOD data from ICICI Breeze into Supabase'
+        description='Download EOD data from ICICI Breeze into database'
     )
     parser.add_argument('--asset', choices=['index', 'equity', 'both'], default='both',
                         help='Asset type to download')

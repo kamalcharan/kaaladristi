@@ -29,7 +29,7 @@ Usage
   # Step 1: Diagnose — see what Breeze SDK exposes after session init
   python populate_vendor_codes.py --diagnose --session-token <TOKEN>
 
-  # Step 2: Populate — map all equities and save to Supabase
+  # Step 2: Populate — map all equities and save to database
   python populate_vendor_codes.py --session-token <TOKEN>
 
   # Only populate for a single symbol
