@@ -1,19 +1,10 @@
 /**
  * Authentication service for KaalaDristi.
- * Replaces Supabase GoTrue with custom JWT auth via PostgREST RPC.
- *
- * Auth flow:
- *   1. signIn/signUp → POST /rpc/kd_auth_login or /rpc/kd_auth_register
- *   2. Server returns { access_token, user } (JWT signed with shared secret)
- *   3. Token stored in localStorage, sent on all subsequent PostgREST requests
- *   4. PostgREST validates the JWT automatically
- *
- * Until the server-side auth RPC functions are implemented,
- * this module uses a simplified session model:
- *   - No server-side auth (single-user / dev mode)
- *   - A hardcoded anon session
+ * Calls PostgREST RPC functions: kd_auth_register, kd_auth_login,
+ * kd_auth_forgot_password, kd_auth_reset_password.
  */
 
+import { rpc } from './postgrest';
 import { from } from './postgrest';
 import type { KmProfile } from '@/types';
 
@@ -28,6 +19,7 @@ export interface KdUser {
   id: string;
   email: string;
   full_name?: string;
+  role?: string;
 }
 
 // ── Session persistence ──────────────────────────────────────────────────────
@@ -52,36 +44,74 @@ export function getStoredSession(): KdSession | null {
 
 // ── Auth operations ──────────────────────────────────────────────────────────
 
-/**
- * Sign up with email + password.
- * TODO: Call /rpc/kd_auth_register when server-side auth is implemented.
- */
-export async function signUp(email: string, password: string, fullName: string) {
-  // Placeholder — server-side auth RPC not yet implemented
-  console.warn('[auth] signUp: server-side auth not yet implemented, using dev mode');
+/** Register a new account. */
+export async function signUp(email: string, password: string, fullName: string): Promise<KdSession> {
+  const { data, error } = await rpc('kd_auth_register', {
+    p_email: email,
+    p_password: password,
+    p_full_name: fullName,
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+
   const session: KdSession = {
-    access_token: import.meta.env.VITE_ANON_KEY || '',
-    user: { id: 'dev-user', email, full_name: fullName },
+    access_token: data.access_token,
+    user: data.user,
   };
   saveSession(session);
+  notifyListeners('SIGNED_IN', session);
   return session;
 }
 
 /** Sign in with email + password. */
-export async function signIn(email: string, password: string) {
-  // Placeholder — server-side auth RPC not yet implemented
-  console.warn('[auth] signIn: server-side auth not yet implemented, using dev mode');
+export async function signIn(email: string, password: string): Promise<KdSession> {
+  const { data, error } = await rpc('kd_auth_login', {
+    p_email: email,
+    p_password: password,
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+
   const session: KdSession = {
-    access_token: import.meta.env.VITE_ANON_KEY || '',
-    user: { id: 'dev-user', email },
+    access_token: data.access_token,
+    user: data.user,
   };
   saveSession(session);
+  notifyListeners('SIGNED_IN', session);
   return session;
 }
 
 /** Sign out — clear local session. */
 export async function signOut() {
   clearSession();
+  notifyListeners('SIGNED_OUT', null);
+}
+
+/** Request a password reset email. */
+export async function forgotPassword(email: string): Promise<string> {
+  const { data, error } = await rpc('kd_auth_forgot_password', {
+    p_email: email,
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+
+  return data.message;
+}
+
+/** Reset password using a token. */
+export async function resetPassword(token: string, newPassword: string): Promise<string> {
+  const { data, error } = await rpc('kd_auth_reset_password', {
+    p_token: token,
+    p_new_password: newPassword,
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+
+  return data.message;
 }
 
 /** Get current session from localStorage. */
@@ -106,7 +136,6 @@ export async function getProfile(): Promise<KmProfile | null> {
     .execute();
 
   if (error) {
-    // Profile might not exist yet
     if (error.code === 'PGRST116') return null;
     throw new Error(error.message);
   }
@@ -122,9 +151,9 @@ export async function updateProfile(
   if (!user) throw new Error('Not authenticated');
 
   const { data, error } = await from('km_profiles')
-    .select('*')
-    .eq('id', user.id)
     .update(updates)
+    .eq('id', user.id)
+    .select('*')
     .single()
     .execute();
 
@@ -137,7 +166,6 @@ export async function updateProfile(
 type AuthCallback = (event: 'SIGNED_IN' | 'SIGNED_OUT', session: KdSession | null) => void;
 const listeners: AuthCallback[] = [];
 
-/** Register a callback for auth state changes. Returns unsubscribe function. */
 export function onAuthStateChange(callback: AuthCallback): () => void {
   listeners.push(callback);
   return () => {
@@ -146,7 +174,6 @@ export function onAuthStateChange(callback: AuthCallback): () => void {
   };
 }
 
-/** Notify all listeners of an auth state change. */
 function notifyListeners(event: 'SIGNED_IN' | 'SIGNED_OUT', session: KdSession | null) {
   for (const cb of listeners) {
     try { cb(event, session); } catch { /* ignore */ }
