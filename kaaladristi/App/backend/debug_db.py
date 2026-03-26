@@ -36,7 +36,8 @@ print('BSE equity count:', dict(cur.fetchone()))
 
 # 6. Check search_path
 cur.execute('SHOW search_path')
-print('search_path:', cur.fetchone()[0])
+row = cur.fetchone()
+print('search_path:', row.get('search_path', row))
 
 db._put(conn)
 print('\nDone.')
