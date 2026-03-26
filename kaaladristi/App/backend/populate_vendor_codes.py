@@ -56,8 +56,9 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(script_dir, '..', 'frontend', '.env')
 load_dotenv(env_path)
 
-SUPABASE_URL = os.getenv('VITE_SUPABASE_URL')
-SUPABASE_KEY = os.getenv('VITE_SUPABASE_SERVICE_KEY')
+sys.path.insert(0, script_dir)
+from lib.db_client import PostgRESTClient, get_db  # noqa: E402
+
 BREEZE_API_KEY = os.getenv('BREEZE_API_KEY', '')
 BREEZE_API_SECRET = os.getenv('BREEZE_API_SECRET', '')
 
@@ -65,39 +66,8 @@ CACHE_FILE = os.path.join(script_dir, '.breeze_isec_cache.json')
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SUPABASE REST CLIENT
+# DATABASE CLIENT (PostgREST via lib/db_client.py)
 # ═════════════════════════════════════════════════════════════════════════════
-
-class SupabaseREST:
-    """Minimal Supabase PostgREST wrapper."""
-
-    def __init__(self, url: str, key: str):
-        self.base = f'{url.rstrip("/")}/rest/v1'
-        self.headers = {
-            'apikey': key,
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-        }
-
-    def select(self, table: str, columns: str = '*', filters: dict = None,
-               order: str = None) -> list:
-        url = f'{self.base}/{table}?select={columns}'
-        if filters:
-            for k, v in filters.items():
-                url += f'&{k}=eq.{v}'
-        if order:
-            url += f'&order={order}'
-        resp = requests.get(url, headers=self.headers)
-        resp.raise_for_status()
-        return resp.json()
-
-    def patch(self, table: str, filters: dict, data: dict) -> bool:
-        url = f'{self.base}/{table}'
-        for k, v in filters.items():
-            url += f'?{k}=eq.{v}' if '?' not in url else f'&{k}=eq.{v}'
-        headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.patch(url, headers=headers, json=data)
-        return resp.status_code in (200, 204)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -705,7 +675,7 @@ def main():
     print('=' * 60)
 
     # Init Supabase (always needed)
-    sb = SupabaseREST(SUPABASE_URL, SUPABASE_KEY)
+    sb = get_db()
     print('Supabase connected')
 
     # Show mode — no Breeze needed

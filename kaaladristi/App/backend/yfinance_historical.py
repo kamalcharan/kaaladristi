@@ -2,7 +2,7 @@
 Yahoo Finance Historical Downloader for Kala-Drishti
 =====================================================
 Downloads long-term historical OHLC data (20-30 years) using yfinance
-and inserts into Supabase km_index_eod / km_equity_eod tables.
+and inserts into km_index_eod / km_equity_eod / km_commodity_eod tables via PostgREST.
 
 No API key needed. Works immediately.
 
@@ -45,8 +45,9 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(script_dir, '..', 'frontend', '.env')
 load_dotenv(env_path)
 
-SUPABASE_URL = os.getenv('VITE_SUPABASE_URL')
-SUPABASE_KEY = os.getenv('VITE_SUPABASE_SERVICE_KEY')
+# Add backend/lib to sys.path so we can import the shared client
+sys.path.insert(0, script_dir)
+from lib.db_client import PostgRESTClient, get_db  # noqa: E402
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 BATCH_SIZE = 500
@@ -114,77 +115,11 @@ COMMODITY_YAHOO_MAP = {
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SUPABASE REST CLIENT
+# DATABASE CLIENT (PostgREST via lib/db_client.py)
 # ═════════════════════════════════════════════════════════════════════════════
 
-class SupabaseREST:
-    def __init__(self, url: str, key: str):
-        self.base = f'{url.rstrip("/")}/rest/v1'
-        self.headers = {
-            'apikey': key,
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-        }
-
-    def select(self, table, columns='*', filters=None, order=None, ilike=None):
-        """Fetch all rows with automatic pagination (Supabase defaults to 1000 row limit)."""
-        PAGE_SIZE = 1000
-        all_rows = []
-        offset = 0
-
-        while True:
-            url = f'{self.base}/{table}?select={columns}&limit={PAGE_SIZE}&offset={offset}'
-            if filters:
-                for k, v in filters.items():
-                    url += f'&{k}=eq.{v}'
-            if ilike:
-                col, val = ilike
-                url += f'&{col}=ilike.{val}'
-            if order:
-                url += f'&order={order}'
-            resp = requests.get(url, headers=self.headers)
-            resp.raise_for_status()
-            page = resp.json()
-            all_rows.extend(page)
-            if len(page) < PAGE_SIZE:
-                break
-            offset += PAGE_SIZE
-
-        return all_rows
-
-    def upsert(self, table, records, on_conflict):
-        url = f'{self.base}/{table}?on_conflict={on_conflict}'
-        headers = {**self.headers, 'Prefer': 'resolution=merge-duplicates,return=minimal'}
-        resp = requests.post(url, headers=headers, json=records)
-        resp.raise_for_status()
-        return len(records)
-
-    def insert(self, table, record):
-        url = f'{self.base}/{table}'
-        headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.post(url, headers=headers, json=record)
-        return resp.status_code in (200, 201)
-
-    def patch(self, table, filters, data):
-        url = f'{self.base}/{table}'
-        for k, v in filters.items():
-            url += f'?{k}=eq.{v}' if '?' not in url else f'&{k}=eq.{v}'
-        headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.patch(url, headers=headers, json=data)
-        return resp.status_code in (200, 204)
-
-
-def init_supabase():
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print('ERROR: VITE_SUPABASE_URL and VITE_SUPABASE_SERVICE_KEY must be set')
-        sys.exit(1)
-    sb = SupabaseREST(SUPABASE_URL, SUPABASE_KEY)
-    try:
-        sb.select('km_index_symbols', columns='id', filters=None)
-    except Exception as e:
-        print(f'  Supabase connection failed: {e}')
-        sys.exit(1)
-    return sb
+def init_db():
+    return get_db()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -531,7 +466,7 @@ def main():
     print(f'  Symbol   : {args.symbol or "ALL"}')
     print()
 
-    sb = init_supabase()
+    sb = init_db()
     print('  Supabase connected')
 
     if args.mode in ('index', 'both', 'all'):

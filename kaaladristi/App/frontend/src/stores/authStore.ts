@@ -1,19 +1,18 @@
 import { create } from 'zustand';
-import type { Session, User } from '@supabase/supabase-js';
 import type { KmProfile } from '@/types';
-import { supabase } from '@/services/supabase';
-import { getProfile } from '@/services/auth';
+import type { KdSession, KdUser } from '@/services/auth';
+import { getSession, getProfile, onAuthStateChange } from '@/services/auth';
 
 interface AuthState {
-  user: User | null;
-  session: Session | null;
+  user: KdUser | null;
+  session: KdSession | null;
   profile: KmProfile | null;
   isLoading: boolean;
   isAdmin: boolean;
   authError: string | null;
 
   initialize: () => Promise<void>;
-  setSession: (session: Session | null) => void;
+  setSession: (session: KdSession | null) => void;
   setProfile: (profile: KmProfile | null) => void;
   refreshProfile: () => Promise<void>;
   clear: () => void;
@@ -31,19 +30,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, authError: null });
 
     try {
-      // Get current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        console.error('[auth] getSession error:', sessionError.message);
-        set({ isLoading: false, authError: sessionError.message });
-        return;
-      }
+      const session = await getSession();
 
       if (session?.user) {
         set({ user: session.user, session });
 
-        // Fetch profile
         try {
           const profile = await getProfile();
           set({
@@ -60,7 +51,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       // Listen for auth changes
-      supabase.auth.onAuthStateChange(async (event, session) => {
+      onAuthStateChange(async (_event, session) => {
         set({ user: session?.user ?? null, session });
 
         if (session?.user) {
@@ -73,12 +64,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       });
     } catch (err) {
-      // Critical: if getSession() itself throws (network error, invalid URL, etc.)
-      // we MUST set isLoading=false so the app doesn't hang on the spinner forever
       console.error('[auth] initialize() failed:', err);
       set({
         isLoading: false,
-        authError: err instanceof Error ? err.message : 'Failed to connect to auth service',
+        authError: err instanceof Error ? err.message : 'Failed to initialize auth',
       });
     }
   },

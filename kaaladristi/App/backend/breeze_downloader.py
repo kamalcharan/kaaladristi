@@ -41,7 +41,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lib.config import BATCH_SIZE
-from lib.supabase_client import get_supabase
+from lib.db_client import get_db
 from lib.breeze_client import init_breeze, fetch_historical
 from lib.sync_logger import SyncLogger
 
@@ -394,9 +394,9 @@ def main():
         print(f'  Batch    : {args.batch}')
     print()
 
-    # Init Supabase
-    sb = get_supabase()
-    print('  Supabase connected')
+    # Init DB
+    sb = get_db()
+    print('  PostgREST connected')
 
     # Dry run mode
     if args.dry_run:

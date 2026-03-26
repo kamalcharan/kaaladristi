@@ -36,7 +36,7 @@ from urllib.request import urlopen
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lib.config import SUPABASE_URL, SUPABASE_SERVICE_KEY
-from lib.supabase_client import SupabaseREST, get_supabase
+from lib.db_client import PostgRESTClient, get_db
 
 SECURITY_MASTER_URL = 'https://directlink.icicidirect.com/MotherAppMaster/SecurityMaster.zip'
 
@@ -421,8 +421,8 @@ def main():
         sys.exit(1)
 
     # Connect to Supabase
-    sb = get_supabase()
-    print('  Supabase connected')
+    sb = get_db()
+    print('  PostgREST connected')
 
     # Seed BSE equities
     if bse_equities:
