@@ -1,29 +1,31 @@
 """
-PostgREST client for KaalaDristi.
-Replaces the old SupabaseREST class — same PostgREST protocol, new infra.
+Database client factory for KaalaDristi backend.
 
-Works with both:
-  - Self-hosted PostgREST (POSTGREST_URL=http://postgrest:3000)
-  - Legacy Supabase (VITE_SUPABASE_URL=https://xxx.supabase.co → /rest/v1)
+Picks the best available connection method:
+  1. Direct PostgreSQL (psycopg2) — if DATABASE_URL is set  ← preferred
+  2. PostgREST HTTP — if POSTGREST_URL + key are set         ← fallback
+
+Both clients expose the same API: select, upsert, insert, patch, rpc, ping.
 """
 
 import sys
-import requests
-from .config import POSTGREST_URL, POSTGREST_SERVICE_KEY
+from .config import DATABASE_URL, POSTGREST_URL, POSTGREST_SERVICE_KEY
 
+
+# ── PostgREST HTTP client (fallback) ─────────────────────────────────────────
 
 class PostgRESTClient:
     """Lightweight PostgREST HTTP client."""
 
     def __init__(self, url: str = None, key: str = None):
+        import requests as _requests
+        self._requests = _requests
+
         url = url or POSTGREST_URL
         key = key or POSTGREST_SERVICE_KEY
         if not url or not key:
-            print('ERROR: POSTGREST_URL and POSTGREST_SERVICE_KEY must be set in .env')
-            sys.exit(1)
+            raise ValueError('POSTGREST_URL and POSTGREST_SERVICE_KEY must be set')
 
-        # Self-hosted PostgREST: URL is the base directly (http://postgrest:3000)
-        # Supabase legacy: URL is https://xxx.supabase.co → need /rest/v1
         url = url.rstrip('/')
         if 'supabase.co' in url:
             self.base = f'{url}/rest/v1'
@@ -36,12 +38,10 @@ class PostgRESTClient:
             'Authorization': f'Bearer {key}',
             'Content-Type': 'application/json',
         }
-        # Supabase also needs the apikey header
         if 'supabase.co' in url:
             self.headers['apikey'] = key
 
-    def select(self, table: str, columns: str = '*', filters: dict = None,
-               order: str = None, ilike: tuple = None, limit: int = None) -> list:
+    def select(self, table, columns='*', filters=None, order=None, ilike=None, limit=None):
         url = f'{self.base}/{table}?select={columns}'
         if filters:
             for k, v in filters.items():
@@ -53,40 +53,40 @@ class PostgRESTClient:
             url += f'&order={order}'
         if limit:
             url += f'&limit={limit}'
-        resp = requests.get(url, headers=self.headers)
+        resp = self._requests.get(url, headers=self.headers)
         resp.raise_for_status()
         return resp.json()
 
-    def upsert(self, table: str, records: list, on_conflict: str) -> int:
+    def upsert(self, table, records, on_conflict):
         if not records:
             return 0
         url = f'{self.base}/{table}?on_conflict={on_conflict}'
         headers = {**self.headers, 'Prefer': 'resolution=merge-duplicates,return=minimal'}
-        resp = requests.post(url, headers=headers, json=records)
+        resp = self._requests.post(url, headers=headers, json=records)
         resp.raise_for_status()
         return len(records)
 
-    def insert(self, table: str, record: dict) -> bool:
+    def insert(self, table, record):
         url = f'{self.base}/{table}'
         headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.post(url, headers=headers, json=record)
+        resp = self._requests.post(url, headers=headers, json=record)
         return resp.status_code in (200, 201)
 
-    def patch(self, table: str, filters: dict, data: dict) -> bool:
+    def patch(self, table, filters, data):
         url = f'{self.base}/{table}'
         for k, v in filters.items():
             url += f'?{k}=eq.{v}' if '?' not in url else f'&{k}=eq.{v}'
         headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.patch(url, headers=headers, json=data)
+        resp = self._requests.patch(url, headers=headers, json=data)
         return resp.status_code in (200, 204)
 
-    def rpc(self, fn_name: str, params: dict = None) -> any:
+    def rpc(self, fn_name, params=None):
         url = f'{self.base}/rpc/{fn_name}'
-        resp = requests.post(url, headers=self.headers, json=params or {})
+        resp = self._requests.post(url, headers=self.headers, json=params or {})
         resp.raise_for_status()
         return resp.json()
 
-    def ping(self) -> bool:
+    def ping(self):
         try:
             self.select('km_index_symbols', columns='id', limit=1)
             return True
@@ -94,17 +94,46 @@ class PostgRESTClient:
             return False
 
 
+# ── Factory ───────────────────────────────────────────────────────────────────
+
 # Backward-compatible aliases
 SupabaseREST = PostgRESTClient
 
 
-def get_db() -> PostgRESTClient:
-    """Return a connected PostgREST client, or exit on failure."""
-    db = PostgRESTClient()
-    if not db.ping():
-        print('ERROR: Cannot connect to PostgREST')
-        sys.exit(1)
-    return db
+def get_db():
+    """
+    Return a connected database client.
+    Prefers direct PG (psycopg2) when DATABASE_URL is set.
+    Falls back to PostgREST HTTP.
+    """
+    # Try direct PostgreSQL first
+    if DATABASE_URL:
+        try:
+            from .pg_client import PgClient
+            db = PgClient(DATABASE_URL)
+            if db.ping():
+                print('  [db] Connected via PostgreSQL (direct)')
+                return db
+            else:
+                print('  [db] PostgreSQL ping failed, trying PostgREST...')
+        except ImportError:
+            print('  [db] psycopg2 not installed, trying PostgREST...')
+        except Exception as e:
+            print(f'  [db] PostgreSQL connection failed: {e}, trying PostgREST...')
+
+    # Fall back to PostgREST
+    if POSTGREST_URL and POSTGREST_SERVICE_KEY:
+        try:
+            db = PostgRESTClient()
+            if db.ping():
+                print('  [db] Connected via PostgREST')
+                return db
+        except Exception as e:
+            print(f'  [db] PostgREST connection failed: {e}')
+
+    print('ERROR: No database connection available.')
+    print('  Set DATABASE_URL for direct PG, or POSTGREST_URL + POSTGREST_SERVICE_KEY for REST.')
+    sys.exit(1)
 
 
 # Legacy alias
