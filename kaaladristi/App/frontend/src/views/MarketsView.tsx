@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, Database, RefreshCw } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
-import { useIndexChart } from '@/hooks';
-import { IndexPriceChart } from '@/components/domain';
+import { useIndicatorChart } from '@/hooks';
+import TradingChart from '@/components/charts/TradingChart';
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { MarketSymbol, TimeRange } from '@/types';
+
+const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
 
 const INDEX_LABELS: Record<MarketSymbol, string> = {
   NIFTY: 'NIFTY 50',
@@ -17,14 +19,25 @@ const INDEX_LABELS: Record<MarketSymbol, string> = {
 export default function MarketsView() {
   const { selectedSymbol } = useAppStore();
   const [range, setRange] = useState<TimeRange>('1Y');
-  const { data, isLoading, isError, error, refetch } = useIndexChart(selectedSymbol, range);
+  const { data: indicatorData, isLoading, isError, error, refetch } = useIndicatorChart(selectedSymbol, range);
 
-  const chartData = data?.chartData ?? [];
-  const stats = data?.stats ?? null;
-  const isPositive = (stats?.change ?? 0) >= 0;
+  const rows = indicatorData ?? [];
   const indexName = INDEX_LABELS[selectedSymbol];
 
-  // Detect specific error types for better messaging
+  // Compute stats from latest row
+  const latest = rows.length > 0 ? rows[rows.length - 1] : null;
+  const prev = rows.length > 1 ? rows[rows.length - 2] : null;
+  const currentClose = latest?.close ?? 0;
+  const prevClose = prev?.close ?? currentClose;
+  const change = currentClose - prevClose;
+  const changePct = prevClose ? (change / prevClose) * 100 : 0;
+  const isPositive = change >= 0;
+
+  // 52-week stats
+  const last252 = rows.slice(-252);
+  const high52w = last252.length > 0 ? Math.max(...last252.map((r) => r.high)) : 0;
+  const low52w = last252.length > 0 ? Math.min(...last252.map((r) => r.low)) : 0;
+
   const errorMsg = error?.message || '';
   const isAuthError = errorMsg.includes('auth') || errorMsg.includes('connect') || errorMsg.includes('credentials');
   const isDataMissing = errorMsg.includes('not found') || errorMsg.includes('seed');
@@ -34,7 +47,7 @@ export default function MarketsView() {
       <div className="animate-fade-in">
         <header className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Markets</h1>
-          <p className="text-secondary font-medium">Historical price data for NSE indices</p>
+          <p className="text-secondary font-medium">Historical price data &amp; technical indicators</p>
         </header>
 
         {/* Stats bar */}
@@ -46,49 +59,77 @@ export default function MarketsView() {
               <Skeleton className="h-6 w-24" />
             </div>
           </div>
-        ) : stats ? (
+        ) : latest ? (
           <div className="glass-card rounded-3xl p-6 mb-6">
             <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-              {/* Price + Change */}
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{indexName}</p>
                 <div className="flex items-baseline gap-4">
                   <span className="text-3xl font-bold mono text-white">
-                    {stats.currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                   <div className={cn('flex items-center gap-1.5', isPositive ? 'text-risk-green' : 'text-risk-red')}>
                     {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                     <span className="text-sm font-bold mono">
-                      {isPositive ? '+' : ''}{stats.change.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {isPositive ? '+' : ''}{change.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                     <span className="text-sm font-bold mono">
-                      ({isPositive ? '+' : ''}{stats.changePct.toFixed(2)}%)
+                      ({isPositive ? '+' : ''}{changePct.toFixed(2)}%)
                     </span>
                   </div>
                 </div>
               </div>
-
-              {/* Key stats pills */}
               <div className="flex flex-wrap gap-4 text-xs">
-                <StatPill label="Day H/L" value={`${fmt(stats.dayHigh)} / ${fmt(stats.dayLow)}`} />
-                <StatPill label="52W High" value={fmt(stats.high52w)} />
-                <StatPill label="52W Low" value={fmt(stats.low52w)} />
-                <StatPill label="Prev Close" value={fmt(stats.previousClose)} />
+                <StatPill label="Day H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
+                <StatPill label="52W High" value={fmt(high52w)} />
+                <StatPill label="52W Low" value={fmt(low52w)} />
+                <StatPill label="Prev Close" value={fmt(prevClose)} />
+                {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
+                {latest.supertrend_dir != null && (
+                  <StatPill
+                    label="SuperTrend"
+                    value={latest.supertrend_dir === 1 ? 'Bullish' : 'Bearish'}
+                  />
+                )}
+                {latest.magic_rs_zone && <StatPill label="MagicRS" value={latest.magic_rs_zone} />}
+                {latest.chartink_score != null && <StatPill label="Chartink" value={`${latest.chartink_score}/3`} />}
               </div>
             </div>
           </div>
         ) : null}
 
         {/* Chart area */}
-        <div className="glass-card rounded-3xl p-6">
+        <div className="glass-card rounded-3xl p-4">
+          {/* Time range selector */}
+          {!isLoading && !isError && rows.length > 0 && (
+            <div className="flex items-center gap-1.5 mb-4 px-2">
+              {TIME_RANGES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={cn(
+                    'px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
+                    range === r
+                      ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          )}
+
           {isLoading ? (
-            <div className="space-y-4">
+            <div className="space-y-4 p-2">
               <div className="flex gap-2">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Skeleton key={i} className="h-8 w-12 rounded-lg" />
                 ))}
               </div>
-              <Skeleton className="h-[400px] w-full rounded-2xl" />
+              <Skeleton className="h-[500px] w-full rounded-2xl" />
+              <Skeleton className="h-[120px] w-full rounded-2xl" />
+              <Skeleton className="h-[120px] w-full rounded-2xl" />
             </div>
           ) : isError ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -99,23 +140,14 @@ export default function MarketsView() {
                   </div>
                   <p className="text-lg font-semibold text-white mb-2">Connection Issue</p>
                   <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                    Unable to connect to the database. This usually means the Supabase project
-                    is unreachable or your authentication session has expired.
+                    Unable to connect to the database. Check your PostgREST URL and auth session.
                   </p>
-                  <div className="space-y-3">
-                    <div className="text-left text-xs text-muted space-y-1.5 bg-slate-900/60 border border-white/5 rounded-xl p-4 max-w-sm">
-                      <p className="text-slate-400 font-semibold mb-2">Troubleshooting:</p>
-                      <p>1. Check that VITE_SUPABASE_URL is correct in .env</p>
-                      <p>2. Verify your Supabase project is active (not paused)</p>
-                      <p>3. Try signing out and back in</p>
-                    </div>
-                    <button
-                      onClick={() => refetch()}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" /> Retry
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => refetch()}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Retry
+                  </button>
                 </>
               ) : isDataMissing ? (
                 <>
@@ -124,15 +156,9 @@ export default function MarketsView() {
                   </div>
                   <p className="text-lg font-semibold text-white mb-2">Index Not Found</p>
                   <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                    The <span className="text-white font-medium">{indexName}</span> index was not found
-                    in the database. The master symbols need to be seeded first.
+                    The <span className="text-white font-medium">{indexName}</span> index was not found.
+                    Run km_seed_masters.sql to seed index symbols.
                   </p>
-                  <div className="text-left text-xs space-y-2 bg-slate-900/60 border border-white/5 rounded-xl p-4 max-w-md">
-                    <p className="text-slate-400 font-semibold mb-2">Run these SQL scripts in Supabase:</p>
-                    <code className="block text-accent-indigo mono">1. km_clean_rebuild.sql</code>
-                    <code className="block text-accent-indigo mono">2. km_seed_masters.sql</code>
-                    <code className="block text-accent-indigo mono">3. km_fix_rls_recursion.sql</code>
-                  </div>
                 </>
               ) : (
                 <>
@@ -140,9 +166,7 @@ export default function MarketsView() {
                     <AlertCircle className="w-8 h-8 text-risk-red" />
                   </div>
                   <p className="text-lg font-semibold text-white mb-2">Failed to Load Chart Data</p>
-                  <p className="text-sm text-secondary max-w-md mb-4 leading-relaxed">
-                    {errorMsg || 'An unexpected error occurred while fetching market data.'}
-                  </p>
+                  <p className="text-sm text-secondary max-w-md mb-4">{errorMsg || 'Unexpected error.'}</p>
                   <button
                     onClick={() => refetch()}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
@@ -152,38 +176,32 @@ export default function MarketsView() {
                 </>
               )}
             </div>
-          ) : chartData.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-16 h-16 rounded-2xl bg-slate-800/60 border border-white/5 flex items-center justify-center mb-6">
                 <BarChart3 className="w-8 h-8 text-slate-500" />
               </div>
               <p className="text-lg font-semibold text-white mb-2">No Price Data</p>
               <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                The <span className="text-white font-medium">{indexName}</span> index exists in the database
-                but has no EOD price data loaded yet. Run the historical downloader to backfill.
+                The <span className="text-white font-medium">{indexName}</span> index has no EOD data.
+                Run the historical downloader to backfill.
               </p>
               <div className="text-left text-xs space-y-2 bg-slate-900/60 border border-white/5 rounded-xl p-4 max-w-md">
                 <p className="text-slate-400 font-semibold mb-2">From App/backend/ run:</p>
                 <code className="block text-accent-indigo mono">
-                  python3 yfinance_historical.py --type index --limit 5
+                  python3 yfinance_historical.py --mode index
                 </code>
-                <p className="text-muted mt-2">This will download ~20 years of OHLCV data for the top 5 indices.</p>
               </div>
             </div>
           ) : (
-            <IndexPriceChart
-              data={chartData}
-              range={range}
-              onRangeChange={setRange}
-              isPositive={isPositive}
-            />
+            <TradingChart data={rows} />
           )}
         </div>
 
         {/* Data summary */}
-        {chartData.length > 0 && (
+        {rows.length > 0 && (
           <p className="text-[10px] text-muted mt-3 text-right mono">
-            {chartData.length} trading days &middot; {chartData[0].date} to {chartData[chartData.length - 1].date}
+            {rows.length} trading days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
           </p>
         )}
       </div>
