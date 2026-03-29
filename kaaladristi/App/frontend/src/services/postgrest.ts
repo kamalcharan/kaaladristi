@@ -53,8 +53,11 @@ function getHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
   };
+  // Only set Authorization if we have a valid token
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   // Supabase also needs apikey header
   if (postgrestUrl?.includes('supabase.co') && anonKey) {
     headers['apikey'] = anonKey;
