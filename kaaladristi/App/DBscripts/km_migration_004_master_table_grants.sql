@@ -60,5 +60,17 @@ EXCEPTION WHEN undefined_table THEN NULL;
 END $$;
 
 -- ============================================================================
--- DONE. The Sector Lords page (and all master data hooks) should now work.
+-- FIX: JWT tokens contain newlines from PG encode('base64')
+-- This causes "Invalid value" errors in browser fetch() Authorization header
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION kd_base64url_encode(data bytea)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+    SELECT replace(replace(replace(rtrim(encode(data, 'base64'), '='), E'\n', ''), '+', '-'), '/', '_');
+$$;
+
+-- ============================================================================
+-- DONE. After running this:
+--   1. Existing users must re-login to get a clean JWT (no newlines)
+--   2. The Sector Lords page (and all master data hooks) should now work.
 -- ============================================================================

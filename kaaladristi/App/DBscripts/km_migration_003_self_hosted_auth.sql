@@ -65,9 +65,10 @@ END $$;
 -- ============================================================================
 
 -- Base64url encode (URL-safe, no padding)
+-- NOTE: PG encode('base64') inserts newlines every 76 chars — must strip them
 CREATE OR REPLACE FUNCTION kd_base64url_encode(data bytea)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$
-    SELECT replace(replace(rtrim(encode(data, 'base64'), '='), '+', '-'), '/', '_');
+    SELECT replace(replace(replace(rtrim(encode(data, 'base64'), '='), E'\n', ''), '+', '-'), '/', '_');
 $$;
 
 -- Sign a JWT using HMAC-SHA256

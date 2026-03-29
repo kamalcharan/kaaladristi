@@ -42,7 +42,8 @@ function getAuthToken(): string {
   if (session) {
     try {
       const parsed = JSON.parse(session);
-      if (parsed.access_token) return parsed.access_token;
+      // Strip newlines — PG encode('base64') inserts them every 76 chars
+      if (parsed.access_token) return parsed.access_token.replace(/[\r\n]/g, '');
     } catch { /* ignore */ }
   }
   return anonKey || '';
@@ -53,8 +54,11 @@ function getHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
   };
+  // Only set Authorization if we have a valid token
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   // Supabase also needs apikey header
   if (postgrestUrl?.includes('supabase.co') && anonKey) {
     headers['apikey'] = anonKey;
