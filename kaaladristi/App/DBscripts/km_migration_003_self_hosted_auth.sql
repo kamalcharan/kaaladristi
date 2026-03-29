@@ -295,6 +295,31 @@ GRANT SELECT, INSERT, UPDATE ON kd_users TO service_role;
 GRANT SELECT, UPDATE ON km_profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON km_profiles TO service_role;
 
+-- Master/reference tables: read-only for authenticated users, full access for service_role
+GRANT SELECT ON km_planets TO anon, authenticated;
+GRANT SELECT ON km_nakshatras TO anon, authenticated;
+GRANT SELECT ON km_nakshatra_lords TO anon, authenticated;
+GRANT SELECT ON km_zodiac_signs TO anon, authenticated;
+GRANT SELECT ON km_zodiac_lords TO anon, authenticated;
+GRANT SELECT ON km_days_of_week TO anon, authenticated;
+GRANT SELECT ON km_day_lords TO anon, authenticated;
+GRANT SELECT ON km_sectors TO anon, authenticated;
+GRANT SELECT ON km_sector_lords TO anon, authenticated;
+GRANT SELECT ON km_index_master TO anon, authenticated;
+GRANT SELECT ON km_index_composition TO anon, authenticated;
+
+GRANT ALL ON km_planets TO service_role;
+GRANT ALL ON km_nakshatras TO service_role;
+GRANT ALL ON km_nakshatra_lords TO service_role;
+GRANT ALL ON km_zodiac_signs TO service_role;
+GRANT ALL ON km_zodiac_lords TO service_role;
+GRANT ALL ON km_days_of_week TO service_role;
+GRANT ALL ON km_day_lords TO service_role;
+GRANT ALL ON km_sectors TO service_role;
+GRANT ALL ON km_sector_lords TO service_role;
+GRANT ALL ON km_index_master TO service_role;
+GRANT ALL ON km_index_composition TO service_role;
+
 -- Sequences
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
 
