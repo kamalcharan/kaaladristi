@@ -128,10 +128,10 @@ DELETE FROM km_index_symbols a
 
 DELETE FROM km_equity_symbols a
     USING km_equity_symbols b
-    WHERE a.id > b.id AND a.symbol = b.symbol;
+    WHERE a.id > b.id AND a.symbol = b.symbol AND a.exchange = b.exchange;
 
 ALTER TABLE km_index_symbols ADD CONSTRAINT km_index_symbols_name_key UNIQUE(name);
-ALTER TABLE km_equity_symbols ADD CONSTRAINT km_equity_symbols_symbol_key UNIQUE(symbol);
+ALTER TABLE km_equity_symbols ADD CONSTRAINT km_equity_symbols_symbol_exchange_key UNIQUE(symbol, exchange);
 
 -- ============================================================================
 -- STEP 4: ADD FOREIGN KEYS (now that masters are clean)
@@ -174,7 +174,7 @@ CREATE POLICY "equity_eod_admin_write" ON km_equity_eod
 -- DONE. Final schema:
 --
 -- km_index_symbols:  id, name (UNIQUE), category, created_at
--- km_equity_symbols: id, symbol (UNIQUE), index_names[], created_at
+-- km_equity_symbols: id, symbol+exchange (UNIQUE), index_names[], created_at
 -- km_index_eod:      id, index_id (FK), trade_date, OHLC+volume+derived
 -- km_equity_eod:     id, equity_id (FK), trade_date, OHLC+volume+derived
 -- ============================================================================

@@ -2,7 +2,7 @@
 ICICI Breeze EOD Data Downloader for Kala-Drishti
 ===================================================
 Downloads end-of-day (1-day) OHLC data from ICICI Breeze API
-and inserts into Supabase km_index_eod / km_equity_eod tables.
+and inserts into km_index_eod / km_equity_eod tables via PostgREST.
 
 Prerequisite: Run populate_vendor_codes.py first to map NSE symbols
               to Breeze ISEC codes in the vendor_codes JSONB column.
@@ -31,8 +31,9 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(script_dir, '..', 'frontend', '.env')
 load_dotenv(env_path)
 
-SUPABASE_URL = os.getenv('VITE_SUPABASE_URL')
-SUPABASE_KEY = os.getenv('VITE_SUPABASE_SERVICE_KEY')
+sys.path.insert(0, script_dir)
+from lib.db_client import PostgRESTClient, get_db  # noqa: E402
+
 BREEZE_API_KEY = os.getenv('BREEZE_API_KEY', '')
 BREEZE_API_SECRET = os.getenv('BREEZE_API_SECRET', '')
 BREEZE_SESSION_TOKEN = os.getenv('BREEZE_SESSION_TOKEN', '')
@@ -83,60 +84,15 @@ def init_breeze(session_token: str):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SUPABASE REST CLIENT
+# DATABASE CLIENT (PostgREST via lib/db_client.py)
 # ═════════════════════════════════════════════════════════════════════════════
 
-class SupabaseREST:
-    def __init__(self, url: str, key: str):
-        self.base = f'{url.rstrip("/")}/rest/v1'
-        self.headers = {
-            'apikey': key,
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-        }
 
-    def select(self, table: str, columns: str = '*', filters: dict = None,
-               order: str = None, ilike: tuple = None) -> list:
-        url = f'{self.base}/{table}?select={columns}'
-        if filters:
-            for k, v in filters.items():
-                url += f'&{k}=eq.{v}'
-        if ilike:
-            col, val = ilike
-            url += f'&{col}=ilike.{val}'
-        if order:
-            url += f'&order={order}'
-        resp = requests.get(url, headers=self.headers)
-        resp.raise_for_status()
-        return resp.json()
-
-    def upsert(self, table: str, records: list, on_conflict: str) -> int:
-        url = f'{self.base}/{table}?on_conflict={on_conflict}'
-        headers = {**self.headers, 'Prefer': 'resolution=merge-duplicates,return=minimal'}
-        resp = requests.post(url, headers=headers, json=records)
-        resp.raise_for_status()
-        return len(records)
-
-    def insert(self, table: str, record: dict) -> bool:
-        url = f'{self.base}/{table}'
-        headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.post(url, headers=headers, json=record)
-        return resp.status_code in (200, 201)
-
-
-def init_supabase():
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print('ERROR: VITE_SUPABASE_URL and VITE_SUPABASE_SERVICE_KEY must be set')
-        sys.exit(1)
-    print('Connecting to Supabase...')
-    sb = SupabaseREST(SUPABASE_URL, SUPABASE_KEY)
-    try:
-        sb.select('km_index_symbols', columns='id', filters=None)
-        print('  Connected successfully')
-    except Exception as e:
-        print(f'  Connection failed: {e}')
-        sys.exit(1)
-    return sb
+def init_db():
+    print('Connecting to PostgREST...')
+    db = get_db()
+    print('  Connected successfully')
+    return db
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -345,7 +301,7 @@ def download_equity_eod(breeze, sb, from_date, to_date, single_symbol=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Download EOD data from ICICI Breeze into Supabase'
+        description='Download EOD data from ICICI Breeze into PostgreSQL'
     )
     parser.add_argument('--mode', choices=['index', 'equity', 'both'], default='both')
     parser.add_argument('--days', type=int, default=365)
@@ -370,7 +326,7 @@ def main():
 
     session_token = args.session_token or BREEZE_SESSION_TOKEN
     breeze = init_breeze(session_token)
-    sb = init_supabase()
+    sb = init_db()
 
     if args.dry_run:
         print('\n[DRY RUN] Would download:\n')

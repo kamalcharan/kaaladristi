@@ -35,9 +35,11 @@ CREATE POLICY "index_symbols_admin_write" ON km_index_symbols
 -- ── Equity Masters ──
 CREATE TABLE km_equity_symbols (
     id          SERIAL PRIMARY KEY,
-    symbol      TEXT NOT NULL UNIQUE,
+    symbol      TEXT NOT NULL,
+    exchange    TEXT NOT NULL DEFAULT 'NSE',
     index_names TEXT[],
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(symbol, exchange)
 );
 
 CREATE INDEX idx_equity_index_names ON km_equity_symbols USING GIN (index_names);

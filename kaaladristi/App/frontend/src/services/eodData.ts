@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { from } from './postgrest';
 import type { MarketSymbol, KmIndexSymbol, KmIndexEod, ChartDataPoint, IndexStats, TimeRange } from '@/types';
 import { subMonths, subYears, format } from 'date-fns';
 
@@ -26,12 +26,12 @@ export async function fetchIndexSymbol(symbol: MarketSymbol): Promise<KmIndexSym
   const name = SYMBOL_TO_INDEX_NAME[symbol];
 
   try {
-    const { data, error } = await supabase
-      .from('km_index_symbols')
+    const { data, error } = await from('km_index_symbols')
       .select('*')
       .eq('name', name)
       .limit(1)
-      .maybeSingle();
+      .maybeSingle()
+      .execute();
 
     if (error) {
       console.error(`[fetchIndexSymbol] ${name}:`, error.message, error);
@@ -46,7 +46,7 @@ export async function fetchIndexSymbol(symbol: MarketSymbol): Promise<KmIndexSym
   } catch (err) {
     if (err instanceof Error && err.message.startsWith('Index')) throw err;
     console.error(`[fetchIndexSymbol] Network/auth error for "${name}":`, err);
-    throw new Error(`Could not connect to database. Check Supabase URL and auth credentials.`);
+    throw new Error(`Could not connect to database. Check PostgREST URL and auth credentials.`);
   }
 }
 
@@ -56,19 +56,17 @@ export async function fetchIndexEod(
 ): Promise<KmIndexEod[]> {
   const startDate = getStartDate(range);
 
-  // Supabase default limit is 1000. Use .range() to get up to 10,000 rows.
-  let query = supabase
-    .from('km_index_eod')
+  let query = from('km_index_eod')
     .select('id,index_id,trade_date,open,high,low,close,prev_close,chng,pct_chng,volume')
     .eq('index_id', indexId)
     .order('trade_date', { ascending: true })
-    .range(0, 9999);
+    .limit(10000);
 
   if (startDate) {
     query = query.gte('trade_date', startDate);
   }
 
-  const { data, error } = await query;
+  const { data, error } = await query.execute();
   if (error) {
     console.error(`[fetchIndexEod] index_id=${indexId}:`, error.message, error);
     throw new Error(`EOD data query failed: ${error.message}`);

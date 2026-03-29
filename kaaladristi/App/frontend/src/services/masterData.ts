@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { from } from './postgrest';
 import type {
   KmPlanet, KmNakshatra, KmNakshatraLord,
   KmZodiacSign, KmZodiacLord,
@@ -9,7 +9,7 @@ import type {
 
 // ── Generic fetch helper ──
 async function fetchTable<T>(table: string): Promise<T[]> {
-  const { data, error } = await supabase.from(table).select('*');
+  const { data, error } = await from(table).select('*').execute();
   if (error) throw new Error(`[${table}] ${error.message}`);
   return (data ?? []) as T[];
 }
@@ -37,10 +37,10 @@ export const fetchSectorLords = () => fetchTable<KmSectorLord>('km_sector_lords'
 export const fetchIndices = () => fetchTable<KmIndexMaster>('km_index_master');
 
 export async function fetchIndexComposition(indexId: number): Promise<KmIndexComposition[]> {
-  const { data, error } = await supabase
-    .from('km_index_composition')
+  const { data, error } = await from('km_index_composition')
     .select('*')
-    .eq('index_id', indexId);
+    .eq('index_id', indexId)
+    .execute();
   if (error) throw new Error(`[km_index_composition] ${error.message}`);
   return (data ?? []) as KmIndexComposition[];
 }

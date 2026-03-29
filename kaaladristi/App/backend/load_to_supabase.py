@@ -1,29 +1,24 @@
 import json
 import os
+import sys
 from dotenv import load_dotenv
-from supabase import create_client, Client
 from datetime import datetime
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env'))
-
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY')
-
 script_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(script_dir, '..', 'frontend', '.env'))
+load_dotenv(os.path.join(script_dir, '..', '.env'), override=True)
+
+sys.path.insert(0, script_dir)
+from lib.db_client import get_db  # noqa: E402
+
 output_path = os.path.join(script_dir, 'output')
 
 # Batch size for inserts
 BATCH_SIZE = 1000
-
-# =============================================================================
-# SUPABASE CLIENT
-# =============================================================================
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -39,45 +34,50 @@ def load_json(filename):
     return data
 
 
-def insert_batch(table_name, records, batch_num, total_batches):
-    """Insert a batch of records into Supabase."""
+def insert_batch(db, table_name, records, batch_num, total_batches):
+    """Insert a batch of records into the database via PostgREST."""
     try:
-        supabase.table(table_name).insert(records).execute()
+        db.upsert(table_name, records, on_conflict='id')
         print(f"    Batch {batch_num}/{total_batches} inserted ({len(records)} records)")
         return True
     except Exception as e:
         print(f"    ERROR in batch {batch_num}: {str(e)[:100]}")
-        return False
+        # Fall back to single inserts
+        ok = 0
+        for rec in records:
+            if db.insert(table_name, rec):
+                ok += 1
+        print(f"    Fallback: {ok}/{len(records)} inserted individually")
+        return ok > 0
 
 
-def upload_data(table_name, data, transform_fn=None):
-    """Upload data to Supabase table in batches."""
+def upload_data(db, table_name, data, transform_fn=None):
+    """Upload data to table in batches."""
     print(f"\nUploading to {table_name}...")
-    
+
     # Transform data if needed
     if transform_fn:
         data = [transform_fn(record) for record in data]
-    
-    # Calculate batches
+
     total_records = len(data)
     total_batches = (total_records + BATCH_SIZE - 1) // BATCH_SIZE
-    
+
     success_count = 0
     fail_count = 0
-    
+
     for i in range(0, total_records, BATCH_SIZE):
         batch = data[i:i + BATCH_SIZE]
         batch_num = (i // BATCH_SIZE) + 1
-        
-        if insert_batch(table_name, batch, batch_num, total_batches):
+
+        if insert_batch(db, table_name, batch, batch_num, total_batches):
             success_count += len(batch)
         else:
             fail_count += len(batch)
-    
-    print(f"  ✓ Uploaded {success_count} records")
+
+    print(f"  Uploaded {success_count} records")
     if fail_count > 0:
-        print(f"  ✗ Failed {fail_count} records")
-    
+        print(f"  Failed {fail_count} records")
+
     return success_count, fail_count
 
 
@@ -86,7 +86,6 @@ def upload_data(table_name, data, transform_fn=None):
 # =============================================================================
 
 def transform_position(record):
-    """Transform position record for Supabase."""
     return {
         'date': record['date'],
         'planet': record['planet'],
@@ -103,7 +102,6 @@ def transform_position(record):
 
 
 def transform_aspect(record):
-    """Transform aspect record for Supabase."""
     return {
         'date': record['date'],
         'planet_1': record['planet_1'],
@@ -116,7 +114,6 @@ def transform_aspect(record):
 
 
 def transform_event(record):
-    """Transform event record for Supabase."""
     return {
         'event_date': record['event_date'],
         'event_type': record['event_type'],
@@ -128,7 +125,6 @@ def transform_event(record):
 
 
 def transform_moon(record):
-    """Transform moon intraday record for Supabase."""
     return {
         'date': record['date'],
         'time_ist': record['time_ist'],
@@ -149,78 +145,64 @@ def transform_moon(record):
 
 def main():
     print("=" * 60)
-    print("KĀLA-DRISHTI DATA LOADER")
+    print("KAALA-DRISHTI DATA LOADER")
     print("=" * 60)
-    print(f"\nSupabase URL: {SUPABASE_URL[:40]}...")
     print(f"Batch Size: {BATCH_SIZE}")
-    
-    # Test connection
-    print("\nTesting Supabase connection...")
-    try:
-        result = supabase.table('planetary_positions').select('id').limit(1).execute()
-        print("  ✓ Connected successfully")
-    except Exception as e:
-        print(f"  ✗ Connection failed: {e}")
-        print("\nPlease check your SUPABASE_URL and SUPABASE_KEY")
-        return
-    
+
+    # Connect to PostgREST
+    print("\nConnecting to PostgREST...")
+    db = get_db()
+    print("  Connected successfully")
+
     # Load JSON files
     print("\n" + "=" * 60)
     print("LOADING JSON FILES")
     print("=" * 60)
-    
+
     positions = load_json('planetary_positions.json')
     aspects = load_json('aspects.json')
     events = load_json('events.json')
     moon_data = load_json('moon_intraday.json')
-    
-    # Upload to Supabase
+
+    # Upload to database
     print("\n" + "=" * 60)
-    print("UPLOADING TO SUPABASE")
+    print("UPLOADING TO DATABASE")
     print("=" * 60)
-    
+
     results = {}
-    
-    # 1. Planetary Positions
+
     results['positions'] = upload_data(
-        'planetary_positions', 
-        positions, 
-        transform_position
+        db, 'planetary_positions',
+        positions, transform_position
     )
-    
-    # 2. Aspects
+
     results['aspects'] = upload_data(
-        'planetary_aspects', 
-        aspects, 
-        transform_aspect
+        db, 'planetary_aspects',
+        aspects, transform_aspect
     )
-    
-    # 3. Events
+
     results['events'] = upload_data(
-        'astro_events', 
-        events, 
-        transform_event
+        db, 'astro_events',
+        events, transform_event
     )
-    
-    # 4. Moon Intraday
+
     results['moon'] = upload_data(
-        'moon_intraday', 
-        moon_data, 
-        transform_moon
+        db, 'moon_intraday',
+        moon_data, transform_moon
     )
-    
+
     # Summary
     print("\n" + "=" * 60)
     print("UPLOAD COMPLETE")
     print("=" * 60)
-    
+
     total_success = sum(r[0] for r in results.values())
     total_fail = sum(r[1] for r in results.values())
-    
+
     print(f"\nTotal records uploaded: {total_success}")
     if total_fail > 0:
         print(f"Total records failed: {total_fail}")
-    
+
     print("\nTable breakdown:")
     print(f"  planetary_positions: {results['positions'][0]}")
     print(f"  planetary_aspects: {results['aspects'][0]}")

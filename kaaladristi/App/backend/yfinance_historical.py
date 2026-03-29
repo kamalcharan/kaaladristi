@@ -2,7 +2,7 @@
 Yahoo Finance Historical Downloader for Kala-Drishti
 =====================================================
 Downloads long-term historical OHLC data (20-30 years) using yfinance
-and inserts into Supabase km_index_eod / km_equity_eod tables.
+and inserts into km_index_eod / km_equity_eod / km_commodity_eod tables via PostgREST.
 
 No API key needed. Works immediately.
 
@@ -45,8 +45,9 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(script_dir, '..', 'frontend', '.env')
 load_dotenv(env_path)
 
-SUPABASE_URL = os.getenv('VITE_SUPABASE_URL')
-SUPABASE_KEY = os.getenv('VITE_SUPABASE_SERVICE_KEY')
+# Add backend/lib to sys.path so we can import the shared client
+sys.path.insert(0, script_dir)
+from lib.db_client import PostgRESTClient, get_db  # noqa: E402
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 BATCH_SIZE = 500
@@ -58,7 +59,7 @@ INDEX_YAHOO_MAP = {
     'NIFTY BANK': '^NSEBANK',
     'NIFTY IT': '^CNXIT',
     'NIFTY NEXT 50': '^NSMIDCP',
-    'NIFTY FINANCIAL SERVICES': '^CNXFIN',
+    'NIFTY FINANCIAL SERVICES': 'NIFTY_FIN_SERVICE.NS',
     'NIFTY AUTO': '^CNXAUTO',
     'NIFTY PHARMA': '^CNXPHARMA',
     'NIFTY FMCG': '^CNXFMCG',
@@ -68,92 +69,85 @@ INDEX_YAHOO_MAP = {
     'NIFTY INFRASTRUCTURE': '^CNXINFRA',
     'NIFTY PSE': '^CNXPSE',
     'NIFTY MEDIA': '^CNXMEDIA',
-    'NIFTY PRIVATE BANK': '^NIFTYPVTBANK',
-    'NIFTY COMMODITIES': '^CNXCOMMODITY',
+    'NIFTY PRIVATE BANK': 'NIFTY_PVT_BANK.NS',
+    'NIFTY COMMODITIES': '^CNXCMDT',
     'NIFTY CONSUMPTION': '^CNXCONSUMPTION',
-    'NIFTY CPSE': '^CNXCPSE',
+    'NIFTY CPSE': 'NIFTY_CPSE.NS',
     'NIFTY PSU BANK': '^CNXPSUBANK',
     'NIFTY 100': '^CNX100',
     'NIFTY 200': '^CNX200',
     'NIFTY 500': '^CRSLDX',
-    'NIFTY MIDCAP 50': '^CNXMIDCAP',
-    'NIFTY MIDCAP 100': '^CNXMIDCAP100',
-    'NIFTY SMLCAP 100': '^CNXSMLCAP100',
+    'NIFTY MIDCAP 50': '^NSEMDCP50',
+    'NIFTY MIDCAP 100': '^CRSMID',
+    'NIFTY SMLCAP 100': '^CNXSC',
     'NIFTY MNC': '^CNXMNC',
+}
+
+# Yahoo Finance tickers for MCX commodities
+# MCX contracts don't trade directly on Yahoo — we use global futures as proxies
+COMMODITY_YAHOO_MAP = {
+    # Metals
+    'GOLD':        'GC=F',       # COMEX Gold
+    'GOLDM':       'GC=F',       # COMEX Gold (mini variant)
+    'GOLDGUINEA':  'GC=F',       # COMEX Gold (guinea variant)
+    'GOLDPETAL':   'GC=F',       # COMEX Gold (petal variant)
+    'SILVER':      'SI=F',       # COMEX Silver
+    'SILVERM':     'SI=F',       # COMEX Silver (mini variant)
+    'SILVERMIC':   'SI=F',       # COMEX Silver (micro variant)
+    'COPPER':      'HG=F',       # COMEX Copper
+    'ZINC':        'ZN=F',       # LME Zinc (via Yahoo)
+    'LEAD':        'LE=F',       # LME Lead (via Yahoo)
+    'NICKEL':      'NI=F',       # LME Nickel (via Yahoo)
+    'ALUMINIUM':   'ALI=F',      # LME Aluminium
+    'ALUMINUM':    'ALI=F',      # Alias
+
+    # Energy
+    'CRUDEOIL':    'CL=F',       # WTI Crude Oil
+    'CRUDE':       'CL=F',       # Alias
+    'NATURALGAS':  'NG=F',       # Henry Hub Natural Gas
+
+    # Agriculture
+    'MENTHAOIL':   None,          # No Yahoo equivalent
+    'COTTON':      'CT=F',       # ICE Cotton
+    'CPO':         None,          # No direct Yahoo equivalent
+    'CASTORSEED':  None,          # No Yahoo equivalent
 }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SUPABASE REST CLIENT
+# DATABASE CLIENT (PostgREST via lib/db_client.py)
 # ═════════════════════════════════════════════════════════════════════════════
 
-class SupabaseREST:
-    def __init__(self, url: str, key: str):
-        self.base = f'{url.rstrip("/")}/rest/v1'
-        self.headers = {
-            'apikey': key,
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-        }
-
-    def select(self, table, columns='*', filters=None, order=None, ilike=None):
-        url = f'{self.base}/{table}?select={columns}'
-        if filters:
-            for k, v in filters.items():
-                url += f'&{k}=eq.{v}'
-        if ilike:
-            col, val = ilike
-            url += f'&{col}=ilike.{val}'
-        if order:
-            url += f'&order={order}'
-        resp = requests.get(url, headers=self.headers)
-        resp.raise_for_status()
-        return resp.json()
-
-    def upsert(self, table, records, on_conflict):
-        url = f'{self.base}/{table}?on_conflict={on_conflict}'
-        headers = {**self.headers, 'Prefer': 'resolution=merge-duplicates,return=minimal'}
-        resp = requests.post(url, headers=headers, json=records)
-        resp.raise_for_status()
-        return len(records)
-
-    def insert(self, table, record):
-        url = f'{self.base}/{table}'
-        headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.post(url, headers=headers, json=record)
-        return resp.status_code in (200, 201)
-
-    def patch(self, table, filters, data):
-        url = f'{self.base}/{table}'
-        for k, v in filters.items():
-            url += f'?{k}=eq.{v}' if '?' not in url else f'&{k}=eq.{v}'
-        headers = {**self.headers, 'Prefer': 'return=minimal'}
-        resp = requests.patch(url, headers=headers, json=data)
-        return resp.status_code in (200, 204)
-
-
-def init_supabase():
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print('ERROR: VITE_SUPABASE_URL and VITE_SUPABASE_SERVICE_KEY must be set')
-        sys.exit(1)
-    sb = SupabaseREST(SUPABASE_URL, SUPABASE_KEY)
-    try:
-        sb.select('km_index_symbols', columns='id', filters=None)
-    except Exception as e:
-        print(f'  Supabase connection failed: {e}')
-        sys.exit(1)
-    return sb
+def init_db():
+    return get_db()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # YAHOO FINANCE FETCHER
 # ═════════════════════════════════════════════════════════════════════════════
 
+def _is_permanent_failure(ticker: str) -> bool:
+    """Check captured yfinance output for signs of permanent failure (404, delisted)."""
+    import io, contextlib
+    # Do a quick metadata check — if Yahoo doesn't know the ticker, skip retries
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info or {}
+        # If info only has an error or empty, it's likely invalid
+        if not info or info.get('regularMarketPrice') is None and info.get('previousClose') is None:
+            return True
+    except Exception:
+        return True
+    return False
+
+
 def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4) -> list:
     """
     Fetch OHLC history from Yahoo Finance with retry + backoff.
     Uses yf.download() which handles sessions/cookies better than Ticker.history().
     Returns list of dicts with trade_date, open, high, low, close, volume.
+
+    Fast-fails on permanent errors (404, delisted) without retrying.
     """
     for attempt in range(max_retries):
         try:
@@ -163,11 +157,19 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4)
                                  progress=False, timeout=30)
                 if df is not None and not df.empty:
                     df = df[(df.index >= start) & (df.index <= end)]
+                elif df is None or df.empty:
+                    # Some .NS tickers don't support period='max'; fall back to date range
+                    df = yf.download(ticker, start=start, end=end, auto_adjust=False,
+                                     progress=False, timeout=30)
             else:
                 df = yf.download(ticker, start=start, end=end, auto_adjust=False,
                                  progress=False, timeout=30)
 
             if df is None or df.empty:
+                # On first empty result, check if this is a permanent failure
+                if attempt == 0 and _is_permanent_failure(ticker):
+                    print(f' [not found on Yahoo, skipping]', end='', flush=True)
+                    return []
                 if attempt < max_retries - 1:
                     wait = (attempt + 1) * 10
                     print(f' [empty, retry in {wait}s]', end='', flush=True)
@@ -198,6 +200,10 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4)
                 print(f' [rate limited, waiting {wait}s]', end='', flush=True)
                 time.sleep(wait)
                 continue
+            # Permanent errors — no point retrying
+            if '404' in err_msg or 'delisted' in err_msg or 'Not Found' in err_msg:
+                print(f' [not found]', end='', flush=True)
+                return []
             print(f'    yfinance error for {ticker}: {e}')
             return []
 
@@ -210,7 +216,7 @@ def fetch_yahoo_history(ticker: str, start: str, end: str, max_retries: int = 4)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def upsert_eod(sb, table, records, fk_field, fk_id):
-    """Add FK field to records and upsert to Supabase."""
+    """Add FK field to records and upsert to database."""
     if not records:
         return 0
     rows = [{fk_field: fk_id, **r} for r in records]
@@ -287,16 +293,20 @@ def download_index_history(sb, from_date, to_date, single_name=None):
     print(f'\n  INDEX SUMMARY: {total} inserted, {skipped} skipped (no Yahoo ticker)')
 
 
-def download_equity_history(sb, from_date, to_date, single_symbol=None):
+def download_equity_history(sb, from_date, to_date, single_symbol=None, exchange=None):
     print('\n' + '=' * 60)
-    print('DOWNLOADING EQUITY HISTORY (Yahoo Finance)')
+    print(f'DOWNLOADING EQUITY HISTORY (Yahoo Finance) — {exchange or "ALL"}')
     print('=' * 60)
 
+    # Build filters — push exchange filter to server side
+    eq_filters = {}
     if single_symbol:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes',
-                             filters={'symbol': single_symbol.upper()}, order='symbol')
-    else:
-        equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes', order='symbol')
+        eq_filters['symbol'] = single_symbol.upper()
+    if exchange and exchange != 'ALL':
+        eq_filters['exchange'] = exchange.upper()
+
+    equities = sb.select('km_equity_symbols', 'id,symbol,vendor_codes,exchange',
+                         filters=eq_filters if eq_filters else None, order='symbol')
 
     if not equities:
         print('  No equities found')
@@ -310,14 +320,36 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None):
     for i, eq in enumerate(equities, 1):
         symbol = eq['symbol']
         eq_id = eq['id']
+        eq_exchange = (eq.get('exchange') or 'NSE').upper()
         vc = eq.get('vendor_codes') or {}
         if isinstance(vc, str):
             vc = json.loads(vc)
 
-        # Yahoo ticker: vendor_codes.yahoo or symbol + ".NS"
-        yahoo_ticker = vc.get('yahoo') or f'{symbol}.NS'
+        # Yahoo ticker: vendor_codes.yahoo, or symbol + suffix based on exchange
+        if vc.get('yahoo'):
+            yahoo_ticker = vc['yahoo']
+        elif eq_exchange == 'BSE':
+            # BSE uses .BO suffix; use bse_name (trading symbol) if available
+            bse_name = vc.get('bse_name', '')
+            if not bse_name:
+                # Pure BSE security codes (numeric) without bse_name are not valid Yahoo tickers
+                print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}] — skipped (no bse_name)')
+                failed += 1
+                failed_symbols.append(f'{symbol}(no_bse_name)')
+                continue
+            yahoo_ticker = f'{bse_name}.BO'
+        else:
+            yahoo_ticker = f'{symbol}.NS'
 
-        print(f'  [{i}/{len(equities)}] {symbol} -> {yahoo_ticker}', end='', flush=True)
+        # Skip obviously invalid tickers (empty prefix, purely numeric without letters)
+        ticker_prefix = yahoo_ticker.split('.')[0]
+        if not ticker_prefix or ticker_prefix.isdigit():
+            print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}] -> {yahoo_ticker} — skipped (invalid ticker)')
+            failed += 1
+            failed_symbols.append(f'{symbol}(bad_ticker)')
+            continue
+
+        print(f'  [{i}/{len(equities)}] {symbol} [{eq_exchange}] -> {yahoo_ticker}', end='', flush=True)
         records = fetch_yahoo_history(yahoo_ticker, from_date, to_date)
 
         if not records:
@@ -334,7 +366,7 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None):
 
         # Save yahoo ticker to vendor_codes
         if not vc.get('yahoo'):
-            new_vc = {**vc, 'yahoo': yahoo_ticker, 'nse': symbol}
+            new_vc = {**vc, 'yahoo': yahoo_ticker}
             sb.patch('km_equity_symbols', {'id': eq_id}, {'vendor_codes': json.dumps(new_vc)})
 
         time.sleep(REQUEST_DELAY)
@@ -344,15 +376,76 @@ def download_equity_history(sb, from_date, to_date, single_symbol=None):
         print(f'  Failed: {", ".join(failed_symbols)}')
 
 
+def download_commodity_history(sb, from_date, to_date, single_symbol=None):
+    print('\n' + '=' * 60)
+    print('DOWNLOADING COMMODITY HISTORY (Yahoo Finance) — MCX')
+    print('=' * 60)
+
+    filters = {'exchange': 'MCX'}
+    if single_symbol:
+        filters['symbol'] = single_symbol.upper()
+
+    commodities = sb.select('km_commodity_symbols', 'id,symbol,name,vendor_codes',
+                            filters=filters, order='symbol')
+
+    if not commodities:
+        print('  No commodities found')
+        return
+
+    print(f'  Found {len(commodities)} commodities')
+    total = 0
+    skipped = 0
+
+    for i, com in enumerate(commodities, 1):
+        symbol = com['symbol']
+        com_id = com['id']
+        vc = com.get('vendor_codes') or {}
+        if isinstance(vc, str):
+            vc = json.loads(vc)
+
+        # Yahoo ticker: vendor_codes.yahoo first, then COMMODITY_YAHOO_MAP
+        yahoo_ticker = vc.get('yahoo') or COMMODITY_YAHOO_MAP.get(symbol.upper())
+
+        if not yahoo_ticker:
+            print(f'  [{i}/{len(commodities)}] {symbol} — skipped (no Yahoo mapping)')
+            skipped += 1
+            continue
+
+        print(f'  [{i}/{len(commodities)}] {symbol} -> {yahoo_ticker}', end='', flush=True)
+        records = fetch_yahoo_history(yahoo_ticker, from_date, to_date)
+
+        if not records:
+            print(' — no data')
+            skipped += 1
+            time.sleep(REQUEST_DELAY)
+            continue
+
+        print(f' — {len(records)} days', end='', flush=True)
+        n = upsert_eod(sb, 'km_commodity_eod', records, 'commodity_id', com_id)
+        total += n
+        print(f' — inserted {n}')
+
+        # Save yahoo ticker to vendor_codes
+        if not vc.get('yahoo'):
+            new_vc = {**vc, 'yahoo': yahoo_ticker}
+            sb.patch('km_commodity_symbols', {'id': com_id}, {'vendor_codes': json.dumps(new_vc)})
+
+        time.sleep(REQUEST_DELAY)
+
+    print(f'\n  COMMODITY SUMMARY: {total} inserted, {skipped} skipped out of {len(commodities)}')
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI
 # ═════════════════════════════════════════════════════════════════════════════
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Download historical OHLC data from Yahoo Finance into Supabase'
+        description='Download historical OHLC data from Yahoo Finance into PostgreSQL'
     )
-    parser.add_argument('--mode', choices=['index', 'equity', 'both'], default='both')
+    parser.add_argument('--mode', choices=['index', 'equity', 'commodity', 'both', 'all'], default='both')
+    parser.add_argument('--exchange', type=str, default=None,
+                        help='Exchange filter: NSE, BSE, or ALL (default: ALL)')
     parser.add_argument('--from', dest='from_date', type=str, default='1996-01-01',
                         help='Start date YYYY-MM-DD (default: 1996-01-01)')
     parser.add_argument('--to', dest='to_date', type=str,
@@ -367,18 +460,22 @@ def main():
     print('=' * 60)
     print('KALA-DRISHTI HISTORICAL DOWNLOADER (Yahoo Finance)')
     print('=' * 60)
-    print(f'  Mode   : {args.mode}')
-    print(f'  Period : {from_date} to {to_date}')
-    print(f'  Symbol : {args.symbol or "ALL"}')
+    print(f'  Mode     : {args.mode}')
+    print(f'  Exchange : {args.exchange or "ALL"}')
+    print(f'  Period   : {from_date} to {to_date}')
+    print(f'  Symbol   : {args.symbol or "ALL"}')
     print()
 
-    sb = init_supabase()
-    print('  Supabase connected')
+    sb = init_db()
+    print('  Database connected')
 
-    if args.mode in ('index', 'both'):
+    if args.mode in ('index', 'both', 'all'):
         download_index_history(sb, from_date, to_date, single_name=args.symbol)
-    if args.mode in ('equity', 'both'):
-        download_equity_history(sb, from_date, to_date, single_symbol=args.symbol)
+    if args.mode in ('equity', 'both', 'all'):
+        download_equity_history(sb, from_date, to_date, single_symbol=args.symbol,
+                                exchange=args.exchange)
+    if args.mode in ('commodity', 'all'):
+        download_commodity_history(sb, from_date, to_date, single_symbol=args.symbol)
 
     print('\n' + '=' * 60)
     print('DOWNLOAD COMPLETE')
