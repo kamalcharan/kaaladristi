@@ -42,7 +42,8 @@ function getAuthToken(): string {
   if (session) {
     try {
       const parsed = JSON.parse(session);
-      if (parsed.access_token) return parsed.access_token;
+      // Strip newlines — PG encode('base64') inserts them every 76 chars
+      if (parsed.access_token) return parsed.access_token.replace(/[\r\n]/g, '');
     } catch { /* ignore */ }
   }
   return anonKey || '';
