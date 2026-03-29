@@ -150,7 +150,6 @@ class QueryBuilder {
 
   single(): this {
     this.state.single = true;
-    this.state.params.set('limit', '1');
     this.state.headers = {
       ...this.state.headers,
       'Accept': 'application/vnd.pgrst.object+json',
@@ -160,7 +159,6 @@ class QueryBuilder {
 
   maybeSingle(): this {
     this.state.maybeSingle = true;
-    this.state.params.set('limit', '1');
     this.state.headers = {
       ...this.state.headers,
       'Accept': 'application/vnd.pgrst.object+json',
