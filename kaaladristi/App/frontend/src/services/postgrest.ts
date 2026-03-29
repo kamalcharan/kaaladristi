@@ -102,7 +102,11 @@ class QueryBuilder {
 
   select(columns: string = '*'): this {
     this.state.params.set('select', columns);
-    this.state.method = 'GET';
+    // Only default to GET if no write method (POST/PATCH/DELETE) has been set.
+    // Chaining .update().select() or .insert().select() should keep the write method.
+    if (this.state.method === 'GET') {
+      this.state.method = 'GET';
+    }
     return this;
   }
 
