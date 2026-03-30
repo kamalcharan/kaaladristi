@@ -369,7 +369,8 @@ class IndicatorEngine:
             pending_rows = info.get('pending_rows', 0)
             last_computed = info.get('last_computed')
 
-            print(f'  [{i + 1}/{total_symbols}] {sym_name} ({pending_rows} new)...', end=' ', flush=True)
+            label = 'full' if full else f'{pending_rows} new'
+            print(f'  [{i + 1}/{total_symbols}] {sym_name} ({label})...', end=' ', flush=True)
 
             # For incremental, only load from (last_computed - lookback)
             load_from = None
