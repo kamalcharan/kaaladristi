@@ -257,7 +257,10 @@ class IndicatorEngine:
             )
 
         elapsed = time.time() - start
-        print(f'\n  Done. {total_computed} rows computed in {elapsed:.1f}s')
+        if total_computed > 0:
+            print(f'\n  Done. Updated indicators on {total_computed} EOD rows in {elapsed:.1f}s')
+        else:
+            print(f'\n  Done. All indicators up to date, nothing to update. ({elapsed:.1f}s)')
 
         try:
             self.db.insert('km_indicator_compute_log', {
@@ -337,14 +340,13 @@ class IndicatorEngine:
 
         total_symbols = len(symbols)
         if full:
-            print(f'  Processing all {total_symbols} {asset_type} symbol(s)')
+            print(f'  Full recompute: {total_symbols} {asset_type} symbol(s)')
         else:
-            # Count total symbols for context
             with conn.cursor() as cur:
                 cur.execute(f"SELECT COUNT(*) FROM {symbol_table}")
                 all_count = cur.fetchone()[0]
             total_pending = sum(p['pending_rows'] for p in pending_map.values())
-            print(f'  {total_symbols} of {all_count} {asset_type} symbol(s) have new data ({total_pending} new rows)')
+            print(f'  {total_symbols} of {all_count} {asset_type} symbol(s) have {total_pending} pending EOD rows to update')
 
         # ── Load benchmark for MagicRS ──
 
@@ -369,8 +371,10 @@ class IndicatorEngine:
             pending_rows = info.get('pending_rows', 0)
             last_computed = info.get('last_computed')
 
-            label = 'full' if full else f'{pending_rows} new'
-            print(f'  [{i + 1}/{total_symbols}] {sym_name} ({label})...', end=' ', flush=True)
+            if full:
+                print(f'  [{i + 1}/{total_symbols}] {sym_name}...', end=' ', flush=True)
+            else:
+                print(f'  [{i + 1}/{total_symbols}] {sym_name} ({pending_rows} pending)...', end=' ', flush=True)
 
             # For incremental, only load from (last_computed - lookback)
             load_from = None
@@ -379,7 +383,7 @@ class IndicatorEngine:
 
             df = self._load_eod_range(conn, eod_table, id_col, sym_id, load_from)
             if df.empty:
-                print('no data')
+                print('no EOD data, skipped')
                 continue
 
             # Compute indicators on the full loaded range
@@ -412,9 +416,9 @@ class IndicatorEngine:
                 for j in range(0, len(records), batch_size):
                     batch = records[j:j + batch_size]
                     self.db.upsert(eod_table, batch, f'{id_col},trade_date')
-                print(f'{len(records)} rows')
+                print(f'updated {len(records)} rows')
                 total += len(records)
             else:
-                print('0 rows')
+                print('nothing to update')
 
         return total
