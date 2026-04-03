@@ -7,6 +7,7 @@ import {
   Settings as SettingsIcon,
   LogOut,
   Shield,
+  Sparkles,
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,7 @@ const navItems = [
   { to: '/markets',      icon: Globe,           label: 'Markets' },
   { to: '/calendar',     icon: CalendarIcon,    label: 'Calendar' },
   { to: '/transmission', icon: Zap,             label: 'Risk Transmission' },
+  { to: '/inference',    icon: Sparkles,        label: 'DC Inference' },
   { to: '/history',      icon: HistoryIcon,     label: 'Backtest' },
   { to: '/settings',     icon: SettingsIcon,    label: 'Settings' },
 ];

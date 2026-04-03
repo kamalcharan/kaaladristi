@@ -197,3 +197,26 @@ export interface IndexStats {
   dayHigh: number;
   dayLow: number;
 }
+
+// ── DC Inference Types ──
+
+export type MarketImpact = 'bullish' | 'bearish' | 'volatile' | 'neutral' | 'mixed';
+
+export interface DcInference {
+  id: number;
+  astro_event: string;
+  rule_definition: Record<string, unknown> | null;
+  start_date: string;
+  start_time: string | null;
+  end_date: string;
+  end_time: string | null;
+  inference: string | null;
+  market_impact: MarketImpact | null;
+  confidence: number | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type DcInferenceInput = Omit<DcInference, 'id' | 'rule_definition' | 'created_at' | 'updated_at'>;
