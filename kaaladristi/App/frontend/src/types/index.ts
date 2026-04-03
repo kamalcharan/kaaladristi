@@ -217,6 +217,8 @@ export interface DcInference {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  month: number | null;   // generated: EXTRACT(MONTH FROM start_date)
+  year: number | null;    // generated: EXTRACT(YEAR  FROM start_date)
 }
 
 export type DcInferenceInput = Omit<DcInference, 'id' | 'rule_definition' | 'created_at' | 'updated_at'>;
