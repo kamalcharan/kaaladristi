@@ -83,7 +83,7 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.astro_event.trim() || !form.start_date || !form.end_date) return;
+    if (!form.astro_event.trim() || !form.start_date) return;
     onSave({ ...form, astro_event: form.astro_event.trim() });
   };
 
