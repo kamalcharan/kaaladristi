@@ -206,7 +206,7 @@ export interface DcInference {
   rule_definition: Record<string, unknown> | null;
   start_date: string;
   start_time: string | null;
-  end_date: string;
+  end_date: string | null;
   end_time: string | null;
   inference: string | null;
   market_impact: string | null;   // value from MARKET_STATUS constants
