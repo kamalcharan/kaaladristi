@@ -20,7 +20,7 @@ const EMPTY_FORM: DcInferenceInput = {
   astro_event:   '',
   start_date:    '',
   start_time:    null,
-  end_date:      '',
+  end_date:      null,
   end_time:      null,
   inference:     null,
   market_impact: null,
@@ -59,7 +59,8 @@ function ConfidenceDots({ value }: { value: number | null }) {
 
 function formatDateRange(row: DcInference): string {
   const from = row.start_time ? `${row.start_date} ${row.start_time.slice(0, 5)}` : row.start_date;
-  const to   = row.end_time   ? `${row.end_date} ${row.end_time.slice(0, 5)}`     : row.end_date;
+  if (!row.end_date) return `${from} → ongoing`;
+  const to = row.end_time ? `${row.end_date} ${row.end_time.slice(0, 5)}` : row.end_date;
   return `${from} → ${to}`;
 }
 
@@ -86,7 +87,7 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
     onSave({ ...form, astro_event: form.astro_event.trim() });
   };
 
-  const isValid = form.astro_event.trim() && form.start_date && form.end_date;
+  const isValid = form.astro_event.trim() && form.start_date;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -153,15 +154,14 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
             </div>
             <div>
               <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-                End Date <span className="text-risk-red">*</span>
+                End Date <span className="text-slate-600">(optional)</span>
               </label>
               <input
                 type="date"
-                value={form.end_date}
-                onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))}
+                value={form.end_date ?? ''}
+                onChange={e => setForm(p => ({ ...p, end_date: e.target.value || null }))}
                 min={form.start_date || undefined}
                 className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white focus:outline-none focus:border-accent-indigo/60 transition-colors"
-                required
               />
             </div>
             <div>
@@ -475,7 +475,7 @@ export default function DCInferenceView() {
         astro_event:   editRow.astro_event,
         start_date:    editRow.start_date,
         start_time:    editRow.start_time,
-        end_date:      editRow.end_date,
+        end_date:      editRow.end_date ?? null,
         end_time:      editRow.end_time,
         inference:     editRow.inference,
         market_impact: editRow.market_impact,
