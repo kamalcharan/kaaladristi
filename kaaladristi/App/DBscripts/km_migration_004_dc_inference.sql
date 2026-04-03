@@ -69,34 +69,9 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- ── Row-Level Security ───────────────────────────────────────────────────────
+-- ── Access: no RLS needed (single-expert data, no multi-tenancy) ─────────────
 
-ALTER TABLE dc_inference ENABLE ROW LEVEL SECURITY;
-
--- All authenticated users (kd_app role) can read and write expert inference data
-CREATE POLICY "dc_inference_select" ON dc_inference
-    FOR SELECT
-    TO anon, kd_app
-    USING (true);
-
-CREATE POLICY "dc_inference_insert" ON dc_inference
-    FOR INSERT
-    TO kd_app
-    WITH CHECK (true);
-
-CREATE POLICY "dc_inference_update" ON dc_inference
-    FOR UPDATE
-    TO kd_app
-    USING (true)
-    WITH CHECK (true);
-
-CREATE POLICY "dc_inference_delete" ON dc_inference
-    FOR DELETE
-    TO kd_app
-    USING (true);
-
--- ── Grants ───────────────────────────────────────────────────────────────────
-
-GRANT SELECT                        ON dc_inference TO anon;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dc_inference TO kd_app;
-GRANT USAGE, SELECT ON SEQUENCE dc_inference_id_seq TO kd_app;
+-- Grant to all roles the JWT may resolve to (authenticated = self-hosted JWT role,
+-- kd_app = direct DB role, anon = unauthenticated fallback)
+GRANT ALL ON dc_inference TO authenticated, kd_app, anon;
+GRANT USAGE, SELECT ON SEQUENCE dc_inference_id_seq TO authenticated, kd_app, anon;

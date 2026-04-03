@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, AlertCircle, Loader2, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary } from '@/components/ui';
 import {
@@ -9,17 +9,12 @@ import {
   updateInference,
   deleteInference,
 } from '@/services/dcInference';
-import type { DcInference, DcInferenceInput, MarketImpact } from '@/types';
+import type { DcInference, DcInferenceInput } from '@/types';
+import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const IMPACT_META: Record<MarketImpact, { label: string; color: string; bg: string; border: string }> = {
-  bullish:  { label: 'Bullish',  color: 'text-risk-green',  bg: 'bg-risk-green/10',  border: 'border-risk-green/40'  },
-  bearish:  { label: 'Bearish',  color: 'text-risk-red',    bg: 'bg-risk-red/10',    border: 'border-risk-red/40'    },
-  volatile: { label: 'Volatile', color: 'text-risk-amber',  bg: 'bg-risk-amber/10',  border: 'border-risk-amber/40'  },
-  neutral:  { label: 'Neutral',  color: 'text-slate-400',   bg: 'bg-slate-800/60',   border: 'border-white/10'       },
-  mixed:    { label: 'Mixed',    color: 'text-accent-violet', bg: 'bg-accent-violet/10', border: 'border-accent-violet/40' },
-};
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const EMPTY_FORM: DcInferenceInput = {
   astro_event:   '',
@@ -36,12 +31,13 @@ const EMPTY_FORM: DcInferenceInput = {
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
-function ImpactBadge({ impact }: { impact: MarketImpact | null }) {
+function ImpactBadge({ impact }: { impact: string | null }) {
   if (!impact) return <span className="text-muted text-xs">—</span>;
-  const m = IMPACT_META[impact];
+  const s = MARKET_STATUS_MAP.get(impact);
+  const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
   return (
-    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border', m.bg, m.color, m.border)}>
-      {m.label}
+    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border', c.bg, c.text, c.border)}>
+      {s?.label ?? impact}
     </span>
   );
 }
@@ -201,22 +197,22 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
               Market Impact
             </label>
             <div className="flex flex-wrap gap-2">
-              {(Object.keys(IMPACT_META) as MarketImpact[]).map(impact => {
-                const m = IMPACT_META[impact];
-                const active = form.market_impact === impact;
+              {MARKET_STATUS.map(s => {
+                const active = form.market_impact === s.value;
+                const c = STATUS_COLOR_CLASSES[s.color];
                 return (
                   <button
-                    key={impact}
+                    key={s.value}
                     type="button"
-                    onClick={() => setForm(p => ({ ...p, market_impact: active ? null : impact }))}
+                    onClick={() => setForm(p => ({ ...p, market_impact: active ? null : s.value }))}
                     className={cn(
                       'px-4 py-2 rounded-xl text-xs font-semibold border transition-all',
                       active
-                        ? cn(m.bg, m.color, m.border)
+                        ? cn(c.bg, c.text, c.border)
                         : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
                     )}
                   >
-                    {m.label}
+                    {s.label}
                   </button>
                 );
               })}
@@ -320,6 +316,18 @@ function InferenceRow({
           )}
         </td>
 
+        {/* Month */}
+        <td className="px-5 py-4 whitespace-nowrap">
+          <span className="text-[12px] mono text-slate-300">
+            {row.month ? MONTH_NAMES[row.month - 1] : '—'}
+          </span>
+        </td>
+
+        {/* Year */}
+        <td className="px-5 py-4 whitespace-nowrap">
+          <span className="text-[12px] mono text-slate-300">{row.year ?? '—'}</span>
+        </td>
+
         {/* Period */}
         <td className="px-5 py-4 whitespace-nowrap">
           <span className="text-[12px] mono text-slate-300">{formatDateRange(row)}</span>
@@ -368,7 +376,7 @@ function InferenceRow({
       {/* Expanded inference */}
       {expanded && row.inference && (
         <tr className="border-t border-kd-border/50">
-          <td colSpan={5} className="px-5 pb-4 pt-2">
+          <td colSpan={7} className="px-5 pb-4 pt-2">
             <div className="pl-3 border-l-2 border-accent-indigo/40">
               <p className="text-[11px] uppercase tracking-widest font-bold text-muted mb-1.5">Inference</p>
               <p className="text-sm text-slate-300 leading-relaxed">{row.inference}</p>
@@ -388,6 +396,8 @@ export default function DCInferenceView() {
   const [editRow, setEditRow] = useState<DcInference | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [filterMonth, setFilterMonth] = useState<number | null>(null);
+  const [filterYear, setFilterYear] = useState<number | null>(null);
 
   const { data: rows = [], isLoading, isError, error } = useQuery({
     queryKey: ['dc_inference'],
@@ -445,8 +455,20 @@ export default function DCInferenceView() {
     }
   };
 
+  // Unique years from data for the year filter
+  const availableYears = useMemo(() =>
+    [...new Set(rows.map(r => r.year).filter(Boolean) as number[])].sort((a, b) => b - a),
+    [rows]
+  );
+
+  // Filtered rows
+  const filtered = useMemo(() => rows.filter(r =>
+    (filterMonth === null || r.month === filterMonth) &&
+    (filterYear  === null || r.year  === filterYear)
+  ), [rows, filterMonth, filterYear]);
+
   // Derive April 2026 entries count for context
-  const aprilCount = rows.filter(r => r.start_date?.startsWith('2026-04') || r.end_date?.startsWith('2026-04')).length;
+  const aprilCount = rows.filter(r => r.month === 4 && r.year === 2026).length;
 
   const formInitial: DcInferenceInput = editRow
     ? {
@@ -504,6 +526,55 @@ export default function DCInferenceView() {
           </div>
         )}
 
+        {/* Filter bar */}
+        {rows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="flex items-center gap-1.5 text-muted">
+              <Filter className="w-3.5 h-3.5" />
+              <span className="text-[11px] uppercase tracking-widest font-bold">Filter</span>
+            </div>
+
+            {/* Month filter */}
+            <select
+              value={filterMonth ?? ''}
+              onChange={e => setFilterMonth(e.target.value ? Number(e.target.value) : null)}
+              className="px-3 py-1.5 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors"
+            >
+              <option value="">All Months</option>
+              {MONTH_NAMES.map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
+              ))}
+            </select>
+
+            {/* Year filter */}
+            <select
+              value={filterYear ?? ''}
+              onChange={e => setFilterYear(e.target.value ? Number(e.target.value) : null)}
+              className="px-3 py-1.5 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors"
+            >
+              <option value="">All Years</option>
+              {availableYears.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            {(filterMonth !== null || filterYear !== null) && (
+              <button
+                onClick={() => { setFilterMonth(null); setFilterYear(null); }}
+                className="px-3 py-1.5 text-xs text-risk-amber hover:text-white border border-risk-amber/30 hover:border-white/20 rounded-xl transition-all"
+              >
+                Clear
+              </button>
+            )}
+
+            {(filterMonth !== null || filterYear !== null) && (
+              <span className="text-xs text-muted ml-1">
+                {filtered.length} of {rows.length}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         <div className="glass-card rounded-3xl overflow-hidden">
           {isLoading ? (
@@ -532,6 +603,8 @@ export default function DCInferenceView() {
                 <thead>
                   <tr className="text-[10px] uppercase tracking-widest text-muted">
                     <th className="px-5 py-4 text-left font-bold">Astro Event</th>
+                    <th className="px-5 py-4 text-left font-bold">Month</th>
+                    <th className="px-5 py-4 text-left font-bold">Year</th>
                     <th className="px-5 py-4 text-left font-bold">Period</th>
                     <th className="px-5 py-4 text-left font-bold">Impact</th>
                     <th className="px-5 py-4 text-left font-bold">Confidence</th>
@@ -539,7 +612,7 @@ export default function DCInferenceView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(row => (
+                  {filtered.map(row => (
                     <InferenceRow
                       key={row.id}
                       row={row}
