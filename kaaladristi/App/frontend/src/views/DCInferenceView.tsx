@@ -9,19 +9,12 @@ import {
   updateInference,
   deleteInference,
 } from '@/services/dcInference';
-import type { DcInference, DcInferenceInput, MarketImpact } from '@/types';
+import type { DcInference, DcInferenceInput } from '@/types';
+import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-const IMPACT_META: Record<MarketImpact, { label: string; color: string; bg: string; border: string }> = {
-  bullish:  { label: 'Bullish',  color: 'text-risk-green',  bg: 'bg-risk-green/10',  border: 'border-risk-green/40'  },
-  bearish:  { label: 'Bearish',  color: 'text-risk-red',    bg: 'bg-risk-red/10',    border: 'border-risk-red/40'    },
-  volatile: { label: 'Volatile', color: 'text-risk-amber',  bg: 'bg-risk-amber/10',  border: 'border-risk-amber/40'  },
-  neutral:  { label: 'Neutral',  color: 'text-slate-400',   bg: 'bg-slate-800/60',   border: 'border-white/10'       },
-  mixed:    { label: 'Mixed',    color: 'text-accent-violet', bg: 'bg-accent-violet/10', border: 'border-accent-violet/40' },
-};
 
 const EMPTY_FORM: DcInferenceInput = {
   astro_event:   '',
@@ -38,12 +31,13 @@ const EMPTY_FORM: DcInferenceInput = {
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
-function ImpactBadge({ impact }: { impact: MarketImpact | null }) {
+function ImpactBadge({ impact }: { impact: string | null }) {
   if (!impact) return <span className="text-muted text-xs">—</span>;
-  const m = IMPACT_META[impact];
+  const s = MARKET_STATUS_MAP.get(impact);
+  const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
   return (
-    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border', m.bg, m.color, m.border)}>
-      {m.label}
+    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border', c.bg, c.text, c.border)}>
+      {s?.label ?? impact}
     </span>
   );
 }
@@ -203,22 +197,22 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
               Market Impact
             </label>
             <div className="flex flex-wrap gap-2">
-              {(Object.keys(IMPACT_META) as MarketImpact[]).map(impact => {
-                const m = IMPACT_META[impact];
-                const active = form.market_impact === impact;
+              {MARKET_STATUS.map(s => {
+                const active = form.market_impact === s.value;
+                const c = STATUS_COLOR_CLASSES[s.color];
                 return (
                   <button
-                    key={impact}
+                    key={s.value}
                     type="button"
-                    onClick={() => setForm(p => ({ ...p, market_impact: active ? null : impact }))}
+                    onClick={() => setForm(p => ({ ...p, market_impact: active ? null : s.value }))}
                     className={cn(
                       'px-4 py-2 rounded-xl text-xs font-semibold border transition-all',
                       active
-                        ? cn(m.bg, m.color, m.border)
+                        ? cn(c.bg, c.text, c.border)
                         : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
                     )}
                   >
-                    {m.label}
+                    {s.label}
                   </button>
                 );
               })}

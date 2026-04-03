@@ -200,8 +200,6 @@ export interface IndexStats {
 
 // ── DC Inference Types ──
 
-export type MarketImpact = 'bullish' | 'bearish' | 'volatile' | 'neutral' | 'mixed';
-
 export interface DcInference {
   id: number;
   astro_event: string;
@@ -211,7 +209,7 @@ export interface DcInference {
   end_date: string;
   end_time: string | null;
   inference: string | null;
-  market_impact: MarketImpact | null;
+  market_impact: string | null;   // value from MARKET_STATUS constants
   confidence: number | null;
   notes: string | null;
   created_by: string | null;
@@ -221,4 +219,4 @@ export interface DcInference {
   year: number | null;    // generated: EXTRACT(YEAR  FROM start_date)
 }
 
-export type DcInferenceInput = Omit<DcInference, 'id' | 'rule_definition' | 'created_at' | 'updated_at'>;
+export type DcInferenceInput = Omit<DcInference, 'id' | 'rule_definition' | 'created_at' | 'updated_at' | 'month' | 'year'>;
