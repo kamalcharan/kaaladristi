@@ -67,6 +67,37 @@
   }
 }
 
+/* ── Kaaladristi Loader ── */
+@keyframes kaala-pulse {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%       { transform: scale(1.5); opacity: 0.7; }
+}
+@keyframes kaala-rotate-cw {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes kaala-rotate-ccw {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+@keyframes kaala-fade-text {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; text-shadow: 0 0 10px #f97316; }
+}
+@keyframes kaala-toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes kaala-toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(20px); }
+}
+@keyframes animate-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: animate-fade-in 0.3s ease-out; }
+
 /* ── Landing Page Keyframes ── */
 @keyframes twinkle {
   0%, 100% { opacity: 0; transform: scale(0.5); }

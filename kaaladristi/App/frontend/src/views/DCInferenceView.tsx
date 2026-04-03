@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, AlertCircle, Loader2, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ErrorBoundary } from '@/components/ui';
+import { ErrorBoundary, KaalaLoader, ToastContainer, useToast } from '@/components/ui';
 import {
   fetchInferences,
   createInference,
@@ -392,6 +392,7 @@ function InferenceRow({
 
 export default function DCInferenceView() {
   const qc = useQueryClient();
+  const { toasts, toast, dismiss } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editRow, setEditRow] = useState<DcInference | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -412,13 +413,17 @@ export default function DCInferenceView() {
       }
       return createInference(payload.data);
     },
-    onSuccess: () => {
+    onSuccess: (_data, payload) => {
       qc.invalidateQueries({ queryKey: ['dc_inference'] });
       setShowForm(false);
       setEditRow(null);
       setSaveError(null);
+      toast('success', payload.id ? 'Entry updated.' : 'Entry saved.');
     },
-    onError: (err: Error) => setSaveError(err.message),
+    onError: (err: Error) => {
+      setSaveError(err.message);
+      toast('error', `Save failed: ${err.message}`);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -426,7 +431,9 @@ export default function DCInferenceView() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dc_inference'] });
       setDeleteConfirm(null);
+      toast('success', 'Entry deleted.');
     },
+    onError: (err: Error) => toast('error', `Delete failed: ${err.message}`),
   });
 
   const handleEdit = (row: DcInference) => {
@@ -652,6 +659,17 @@ export default function DCInferenceView() {
           saveError={saveError}
         />
       )}
+
+      {/* Loader overlay — shown during save / delete */}
+      {(saveMutation.isPending || deleteMutation.isPending) && (
+        <KaalaLoader
+          message={deleteMutation.isPending ? 'Removing Entry' : editRow ? 'Updating Entry' : 'Saving Entry'}
+          subtext="writing to inference database..."
+        />
+      )}
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </ErrorBoundary>
   );
 }
