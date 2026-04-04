@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, AlertCircle, LayoutGrid, AlignLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary } from '@/components/ui';
 import { fetchInferencesForMonth } from '@/services/dcInference';
@@ -252,12 +252,230 @@ function Legend() {
   );
 }
 
+// ── Timeline View ─────────────────────────────────────────────────────────────
+
+interface TooltipState {
+  id: number;
+  x: number;
+  y: number;
+}
+
+/** Assign overlapping events to non-overlapping tracks (greedy interval packing) */
+function assignTracks(events: DcInference[]): { event: DcInference; track: number }[] {
+  const sorted = [...events].sort((a, b) => a.start_date.localeCompare(b.start_date));
+  const tracks: string[] = []; // stores end_date of last event in each track
+  return sorted.map(event => {
+    const endIso = event.end_date ?? event.start_date;
+    const slot = tracks.findIndex(t => t < event.start_date);
+    const track = slot === -1 ? tracks.length : slot;
+    tracks[track] = endIso;
+    return { event, track };
+  });
+}
+
+function TimelineView({ events, year, month }: { events: DcInference[]; year: number; month: number }) {
+  const numDays  = getDaysInMonth(year, month);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const tracked = useMemo(() => assignTracks(events), [events]);
+  const numTracks = tracked.reduce((max, t) => Math.max(max, t.track + 1), 1);
+
+  // Helper: clamp event dates to the current month
+  function clampedPositions(e: DcInference) {
+    const monthStart = toIso(year, month, 1);
+    const monthEnd   = toIso(year, month, numDays);
+    const start = e.start_date < monthStart ? monthStart : e.start_date;
+    const end   = (e.end_date ?? e.start_date) > monthEnd ? monthEnd : (e.end_date ?? e.start_date);
+    const startDay = parseInt(start.split('-')[2], 10);
+    const endDay   = parseInt(end.split('-')[2], 10);
+    return { startDay, endDay };
+  }
+
+  const todayStr = todayIso();
+  const todayDay = todayStr.startsWith(`${year}-${String(month).padStart(2,'0')}`)
+    ? parseInt(todayStr.split('-')[2], 10) : null;
+
+  const BAR_H = 28; // px per track
+  const GAP   = 6;
+  const totalH = numTracks * (BAR_H + GAP) + GAP;
+
+  // Day ticks to show: every 5 days + last
+  const ticks = [1];
+  for (let d = 5; d <= numDays; d += 5) ticks.push(d);
+  if (!ticks.includes(numDays)) ticks.push(numDays);
+
+  return (
+    <div className="glass-card rounded-3xl p-6 overflow-x-auto">
+      {/* Ruler */}
+      <div ref={containerRef} className="relative select-none" style={{ minWidth: 640 }}>
+        {/* Day number ruler */}
+        <div className="relative h-8 mb-1" style={{ minWidth: 640 }}>
+          {ticks.map(d => (
+            <span
+              key={d}
+              className="absolute text-[11px] font-mono text-muted -translate-x-1/2"
+              style={{ left: `${((d - 0.5) / numDays) * 100}%` }}
+            >
+              {d}
+            </span>
+          ))}
+        </div>
+
+        {/* Today marker */}
+        {todayDay !== null && (
+          <div
+            className="absolute top-0 bottom-0 w-px bg-accent-indigo/60 z-10 pointer-events-none"
+            style={{ left: `${((todayDay - 0.5) / numDays) * 100}%` }}
+          >
+            <span className="absolute -top-5 -translate-x-1/2 text-[10px] text-accent-indigo font-bold mono">today</span>
+          </div>
+        )}
+
+        {/* Weekend shading */}
+        {Array.from({ length: numDays }, (_, i) => {
+          const d = i + 1;
+          const dow = new Date(year, month - 1, d).getDay(); // 0=Sun,6=Sat
+          if (dow !== 0 && dow !== 6) return null;
+          return (
+            <div
+              key={d}
+              className="absolute top-0 bottom-0 bg-white/[0.015] pointer-events-none"
+              style={{ left: `${(i / numDays) * 100}%`, width: `${(1 / numDays) * 100}%` }}
+            />
+          );
+        })}
+
+        {/* Track area */}
+        <div className="relative rounded-xl overflow-hidden bg-black/20 border border-kd-border"
+          style={{ height: totalH }}>
+
+          {/* Grid lines */}
+          {ticks.map(d => (
+            <div
+              key={d}
+              className="absolute top-0 bottom-0 border-l border-white/5 pointer-events-none"
+              style={{ left: `${((d - 0.5) / numDays) * 100}%` }}
+            />
+          ))}
+
+          {/* Event bars */}
+          {tracked.map(({ event, track }) => {
+            const { startDay, endDay } = clampedPositions(event);
+            const leftPct  = ((startDay - 1) / numDays) * 100;
+            const widthPct = ((endDay - startDay + 1) / numDays) * 100;
+            const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
+            const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+            const isSingle = !event.end_date || event.end_date === event.start_date;
+
+            return (
+              <div
+                key={event.id}
+                className={cn(
+                  'absolute flex items-center px-2 rounded-md cursor-pointer transition-opacity hover:opacity-90 border text-[11px] font-medium truncate',
+                  c.bg, c.border, c.text,
+                  tooltip?.id === event.id && 'ring-1 ring-white/30',
+                )}
+                style={{
+                  left:   `${leftPct}%`,
+                  width:  `max(${widthPct}%, ${isSingle ? '10px' : '20px'})`,
+                  top:    GAP + track * (BAR_H + GAP),
+                  height: BAR_H,
+                }}
+                onMouseEnter={(ev) => {
+                  const rect = (containerRef.current ?? ev.currentTarget).getBoundingClientRect();
+                  setTooltip({
+                    id: event.id,
+                    x: ev.clientX - rect.left,
+                    y: GAP + track * (BAR_H + GAP) + 38, // below ruler
+                  });
+                }}
+                onMouseLeave={() => setTooltip(null)}
+              >
+                <span className="truncate">{isSingle ? '●' : event.astro_event}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Tooltip */}
+        {tooltip && (() => {
+          const entry = tracked.find(t => t.event.id === tooltip.id);
+          if (!entry) return null;
+          const { event } = entry;
+          const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
+          const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+          return (
+            <div
+              className={cn(
+                'absolute z-50 pointer-events-none max-w-xs rounded-xl p-3 border shadow-2xl backdrop-blur-md',
+                'bg-slate-900/95', c.border,
+              )}
+              style={{
+                left: Math.min(tooltip.x, 450),
+                top: tooltip.y + 8,
+                transform: 'translateX(-30%)',
+              }}
+            >
+              <p className={cn('text-xs font-bold mb-1', c.text)}>{event.astro_event}</p>
+              <p className="text-[11px] text-slate-300 leading-relaxed mb-2">
+                {event.inference ?? '—'}
+              </p>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-mono text-muted">
+                  {fmtDate(event.start_date)}{event.end_date && event.end_date !== event.start_date ? ` → ${fmtDate(event.end_date)}` : ''}
+                </span>
+                {s && (
+                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', c.bg, c.text, c.border)}>
+                    {s.label}
+                  </span>
+                )}
+              </div>
+              {event.confidence !== null && (
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="text-[10px] text-muted">Confidence</span>
+                  <div className="flex gap-0.5">
+                    {Array.from({ length: 10 }, (_, i) => (
+                      <div key={i} className={cn('w-2 h-1.5 rounded-sm', i < (event.confidence ?? 0) ? c.bg.replace('/10','') : 'bg-white/5')} />
+                    ))}
+                  </div>
+                  <span className={cn('text-[10px] font-mono font-bold', c.text)}>{event.confidence}/10</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Month label */}
+        <p className="text-[10px] text-muted mono mt-3 text-right">
+          {MONTH_FULL[month - 1]} {year} · {events.length} events across {numTracks} tracks
+        </p>
+      </div>
+
+      {/* Impact legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-5 pt-4 border-t border-kd-border">
+        <span className="text-[10px] uppercase tracking-widest font-bold text-muted self-center">Impact</span>
+        {Array.from(MARKET_STATUS_MAP.values()).map(s => {
+          const c = STATUS_COLOR_CLASSES[s.color];
+          return (
+            <div key={s.value} className="flex items-center gap-1.5">
+              <div className={cn('w-3 h-3 rounded-sm border', c.bg, c.border)} />
+              <span className="text-[11px] text-slate-400">{s.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main View ─────────────────────────────────────────────────────────────────
 
 export default function DCCalendarView() {
   const today = todayIso();
   const [year,  setYear]  = useState(2026);
   const [month, setMonth] = useState(4);
+  const [view,  setView]  = useState<'calendar' | 'timeline'>('calendar');
 
   const { data: events = [], isLoading, isError, error } = useQuery({
     queryKey: ['dc_inference_calendar', year, month],
@@ -302,8 +520,32 @@ export default function DCCalendarView() {
               </p>
             </div>
 
-            {/* Month navigator */}
             <div className="flex items-center gap-3">
+              {/* View toggle */}
+              <div className="flex bg-slate-900/60 border border-kd-border rounded-xl p-1 gap-1">
+                <button
+                  onClick={() => setView('calendar')}
+                  title="Calendar view"
+                  className={cn(
+                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all',
+                    view === 'calendar' ? 'bg-accent-indigo/20 text-indigo-400' : 'text-slate-500 hover:text-slate-300',
+                  )}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setView('timeline')}
+                  title="Timeline view"
+                  className={cn(
+                    'w-8 h-8 rounded-lg flex items-center justify-center transition-all',
+                    view === 'timeline' ? 'bg-accent-indigo/20 text-indigo-400' : 'text-slate-500 hover:text-slate-300',
+                  )}
+                >
+                  <AlignLeft className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Month navigator */}
               <button
                 onClick={prevMonth}
                 className="w-9 h-9 rounded-xl border border-kd-border flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
@@ -341,44 +583,50 @@ export default function DCCalendarView() {
               <MonthSummary events={events} year={year} month={month} />
             )}
 
-            {/* Calendar grid */}
-            <div className="glass-card rounded-3xl p-5">
-              {/* Day headers */}
-              <div className="grid grid-cols-7 mb-3">
-                {DAY_ABBR.map(d => (
-                  <div key={d} className="text-center text-[11px] uppercase tracking-widest font-bold text-muted py-2">
-                    {d}
+            {view === 'calendar' ? (
+              <>
+                {/* Calendar grid */}
+                <div className="glass-card rounded-3xl p-5">
+                  {/* Day headers */}
+                  <div className="grid grid-cols-7 mb-3">
+                    {DAY_ABBR.map(d => (
+                      <div key={d} className="text-center text-[11px] uppercase tracking-widest font-bold text-muted py-2">
+                        {d}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              {/* Day cells */}
-              <div className="grid grid-cols-7 gap-2">
-                {cells.map((cell, i) =>
-                  cell ? (
-                    <DayCell
-                      key={cell.iso}
-                      dayIso={cell.iso}
-                      dayNum={cell.dayNum}
-                      weekday={cell.weekday}
-                      events={cell.events}
-                      isToday={cell.isToday}
-                      isCurrentMonth
-                    />
-                  ) : (
-                    <div key={`empty-${i}`} className="min-h-[130px]" />
-                  )
-                )}
-              </div>
-            </div>
+                  {/* Day cells */}
+                  <div className="grid grid-cols-7 gap-2">
+                    {cells.map((cell, i) =>
+                      cell ? (
+                        <DayCell
+                          key={cell.iso}
+                          dayIso={cell.iso}
+                          dayNum={cell.dayNum}
+                          weekday={cell.weekday}
+                          events={cell.events}
+                          isToday={cell.isToday}
+                          isCurrentMonth
+                        />
+                      ) : (
+                        <div key={`empty-${i}`} className="min-h-[130px]" />
+                      )
+                    )}
+                  </div>
+                </div>
 
-            {/* Legend */}
-            <Legend />
+                {/* Legend */}
+                <Legend />
 
-            {/* Footer */}
-            <p className="text-[10px] text-muted text-right mt-4 mono">
-              Kāla-Drishti · {events.length} events · {MONTH_FULL[month - 1]} {year}
-            </p>
+                {/* Footer */}
+                <p className="text-[10px] text-muted text-right mt-4 mono">
+                  Kāla-Drishti · {events.length} events · {MONTH_FULL[month - 1]} {year}
+                </p>
+              </>
+            ) : (
+              <TimelineView events={events} year={year} month={month} />
+            )}
           </>
         )}
       </div>
