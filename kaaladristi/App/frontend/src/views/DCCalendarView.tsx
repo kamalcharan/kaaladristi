@@ -254,207 +254,270 @@ function Legend() {
 
 // ── Timeline View ─────────────────────────────────────────────────────────────
 
-interface TooltipState {
-  id: number;
-  x: number;
-  y: number;
+interface HoverState {
+  id:     number;
+  cx:     number; // clientX
+  cy:     number; // clientY
 }
 
-/** Assign overlapping events to non-overlapping tracks (greedy interval packing) */
-function assignTracks(events: DcInference[]): { event: DcInference; track: number }[] {
-  const sorted = [...events].sort((a, b) => a.start_date.localeCompare(b.start_date));
-  const tracks: string[] = []; // stores end_date of last event in each track
-  return sorted.map(event => {
-    const endIso = event.end_date ?? event.start_date;
-    const slot = tracks.findIndex(t => t < event.start_date);
-    const track = slot === -1 ? tracks.length : slot;
-    tracks[track] = endIso;
-    return { event, track };
+/** Clamp ISO date to the visible month; return day-of-month integer */
+function clampDay(iso: string, monthPrefix: string, numDays: number, side: 'start' | 'end'): number {
+  if (iso.slice(0, 7) < monthPrefix) return 1;
+  if (iso.slice(0, 7) > monthPrefix) return numDays;
+  return parseInt(iso.split('-')[2], 10);
+}
+
+/** Greedy track assignment for bars within a single week row */
+function assignWeekTracks(
+  items: { event: DcInference; cs: number; ce: number }[],
+): { event: DcInference; cs: number; ce: number; track: number }[] {
+  const trackEnds: number[] = [];
+  return items.map(item => {
+    let t = trackEnds.findIndex(e => e < item.cs);
+    if (t === -1) t = trackEnds.length;
+    trackEnds[t] = item.ce;
+    return { ...item, track: t };
   });
 }
 
 function TimelineView({ events, year, month }: { events: DcInference[]; year: number; month: number }) {
-  const numDays  = getDaysInMonth(year, month);
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const numDays     = getDaysInMonth(year, month);
+  const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+  const [hovered, setHovered] = useState<HoverState | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const tracked = useMemo(() => assignTracks(events), [events]);
-  const numTracks = tracked.reduce((max, t) => Math.max(max, t.track + 1), 1);
+  // Build weekly bands: [1-7], [8-14], [15-21], [22-28], [29-end]
+  const weeks = useMemo(() => {
+    const ws = [];
+    for (let d = 1; d <= numDays; d += 7) ws.push({ wStart: d, wEnd: Math.min(d + 6, numDays) });
+    return ws;
+  }, [numDays]);
 
-  // Helper: clamp event dates to the current month
-  function clampedPositions(e: DcInference) {
-    const monthStart = toIso(year, month, 1);
-    const monthEnd   = toIso(year, month, numDays);
-    const start = e.start_date < monthStart ? monthStart : e.start_date;
-    const end   = (e.end_date ?? e.start_date) > monthEnd ? monthEnd : (e.end_date ?? e.start_date);
-    const startDay = parseInt(start.split('-')[2], 10);
-    const endDay   = parseInt(end.split('-')[2], 10);
-    return { startDay, endDay };
-  }
+  // Pre-compute event day-range once
+  const eventDays = useMemo(() => new Map(
+    events.map(e => [e.id, {
+      sd: clampDay(e.start_date, monthPrefix, numDays, 'start'),
+      ed: clampDay(e.end_date ?? e.start_date, monthPrefix, numDays, 'end'),
+    }])
+  ), [events, monthPrefix, numDays]);
+
+  // Build week rows with greedy-packed tracks
+  const weekRows = useMemo(() => weeks.map(({ wStart, wEnd }) => {
+    const wDays = wEnd - wStart + 1;
+    const overlapping = events
+      .map(e => {
+        const { sd, ed } = eventDays.get(e.id)!;
+        return { event: e, cs: Math.max(wStart, sd), ce: Math.min(wEnd, ed) };
+      })
+      .filter(i => i.cs <= i.ce)
+      .sort((a, b) => a.cs - b.cs);
+    const items = assignWeekTracks(overlapping);
+    const numT = items.reduce((m, i) => Math.max(m, i.track + 1), 0);
+    return { wStart, wEnd, wDays, items, numT };
+  }), [weeks, events, eventDays]);
 
   const todayStr = todayIso();
-  const todayDay = todayStr.startsWith(`${year}-${String(month).padStart(2,'0')}`)
+  const todayDay = todayStr.startsWith(monthPrefix)
     ? parseInt(todayStr.split('-')[2], 10) : null;
 
-  const BAR_H = 28; // px per track
-  const GAP   = 6;
-  const totalH = numTracks * (BAR_H + GAP) + GAP;
+  const BAR_H = 30;
+  const PAD   = 5;
 
-  // Day ticks to show: every 5 days + last
-  const ticks = [1];
-  for (let d = 5; d <= numDays; d += 5) ticks.push(d);
-  if (!ticks.includes(numDays)) ticks.push(numDays);
+  // Find hovered event details
+  const hoveredEvent = hovered ? events.find(e => e.id === hovered.id) ?? null : null;
+
+  function onEnter(e: DcInference, ev: React.MouseEvent) {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setHovered({ id: e.id, cx: ev.clientX, cy: ev.clientY });
+  }
+  function onLeave() {
+    hideTimer.current = setTimeout(() => setHovered(null), 120);
+  }
 
   return (
-    <div className="glass-card rounded-3xl p-6 overflow-x-auto">
-      {/* Ruler */}
-      <div ref={containerRef} className="relative select-none" style={{ minWidth: 640 }}>
-        {/* Day number ruler */}
-        <div className="relative h-8 mb-1" style={{ minWidth: 640 }}>
-          {ticks.map(d => (
-            <span
-              key={d}
-              className="absolute text-[11px] font-mono text-muted -translate-x-1/2"
-              style={{ left: `${((d - 0.5) / numDays) * 100}%` }}
-            >
-              {d}
-            </span>
-          ))}
-        </div>
+    <div className="glass-card rounded-3xl p-6">
+      <p className="text-[10px] text-muted uppercase tracking-widest font-bold mb-5">
+        Market Sentiment Timeline · {MONTH_FULL[month - 1]} {year}
+      </p>
 
-        {/* Today marker */}
-        {todayDay !== null && (
-          <div
-            className="absolute top-0 bottom-0 w-px bg-accent-indigo/60 z-10 pointer-events-none"
-            style={{ left: `${((todayDay - 0.5) / numDays) * 100}%` }}
-          >
-            <span className="absolute -top-5 -translate-x-1/2 text-[10px] text-accent-indigo font-bold mono">today</span>
-          </div>
-        )}
-
-        {/* Weekend shading */}
-        {Array.from({ length: numDays }, (_, i) => {
-          const d = i + 1;
-          const dow = new Date(year, month - 1, d).getDay(); // 0=Sun,6=Sat
-          if (dow !== 0 && dow !== 6) return null;
+      <div className="space-y-3">
+        {weekRows.map(({ wStart, wEnd, wDays, items, numT }) => {
+          const rowH = numT === 0 ? BAR_H : PAD + numT * (BAR_H + PAD);
           return (
-            <div
-              key={d}
-              className="absolute top-0 bottom-0 bg-white/[0.015] pointer-events-none"
-              style={{ left: `${(i / numDays) * 100}%`, width: `${(1 / numDays) * 100}%` }}
-            />
-          );
-        })}
-
-        {/* Track area */}
-        <div className="relative rounded-xl overflow-hidden bg-black/20 border border-kd-border"
-          style={{ height: totalH }}>
-
-          {/* Grid lines */}
-          {ticks.map(d => (
-            <div
-              key={d}
-              className="absolute top-0 bottom-0 border-l border-white/5 pointer-events-none"
-              style={{ left: `${((d - 0.5) / numDays) * 100}%` }}
-            />
-          ))}
-
-          {/* Event bars */}
-          {tracked.map(({ event, track }) => {
-            const { startDay, endDay } = clampedPositions(event);
-            const leftPct  = ((startDay - 1) / numDays) * 100;
-            const widthPct = ((endDay - startDay + 1) / numDays) * 100;
-            const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
-            const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
-            const isSingle = !event.end_date || event.end_date === event.start_date;
-
-            return (
-              <div
-                key={event.id}
-                className={cn(
-                  'absolute flex items-center px-2 rounded-md cursor-pointer transition-opacity hover:opacity-90 border text-[11px] font-medium truncate',
-                  c.bg, c.border, c.text,
-                  tooltip?.id === event.id && 'ring-1 ring-white/30',
-                )}
-                style={{
-                  left:   `${leftPct}%`,
-                  width:  `max(${widthPct}%, ${isSingle ? '10px' : '20px'})`,
-                  top:    GAP + track * (BAR_H + GAP),
-                  height: BAR_H,
-                }}
-                onMouseEnter={(ev) => {
-                  const rect = (containerRef.current ?? ev.currentTarget).getBoundingClientRect();
-                  setTooltip({
-                    id: event.id,
-                    x: ev.clientX - rect.left,
-                    y: GAP + track * (BAR_H + GAP) + 38, // below ruler
-                  });
-                }}
-                onMouseLeave={() => setTooltip(null)}
-              >
-                <span className="truncate">{isSingle ? '●' : event.astro_event}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Tooltip */}
-        {tooltip && (() => {
-          const entry = tracked.find(t => t.event.id === tooltip.id);
-          if (!entry) return null;
-          const { event } = entry;
-          const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
-          const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
-          return (
-            <div
-              className={cn(
-                'absolute z-50 pointer-events-none max-w-xs rounded-xl p-3 border shadow-2xl backdrop-blur-md',
-                'bg-slate-900/95', c.border,
-              )}
-              style={{
-                left: Math.min(tooltip.x, 450),
-                top: tooltip.y + 8,
-                transform: 'translateX(-30%)',
-              }}
-            >
-              <p className={cn('text-xs font-bold mb-1', c.text)}>{event.astro_event}</p>
-              <p className="text-[11px] text-slate-300 leading-relaxed mb-2">
-                {event.inference ?? '—'}
-              </p>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[10px] font-mono text-muted">
-                  {fmtDate(event.start_date)}{event.end_date && event.end_date !== event.start_date ? ` → ${fmtDate(event.end_date)}` : ''}
+            <div key={wStart} className="flex items-stretch gap-0">
+              {/* Week label */}
+              <div className="w-[72px] shrink-0 flex flex-col items-end justify-center pr-3 border-r border-kd-border/50">
+                <span className="text-[12px] font-mono font-bold text-white/70">
+                  {wStart}–{wEnd}
                 </span>
-                {s && (
-                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', c.bg, c.text, c.border)}>
-                    {s.label}
-                  </span>
-                )}
+                <span className="text-[9px] uppercase tracking-widest text-slate-600 mt-0.5">
+                  {MONTH_ABBR[month - 1]}
+                </span>
               </div>
-              {event.confidence !== null && (
-                <div className="flex items-center gap-1.5 mt-2">
-                  <span className="text-[10px] text-muted">Confidence</span>
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 10 }, (_, i) => (
-                      <div key={i} className={cn('w-2 h-1.5 rounded-sm', i < (event.confidence ?? 0) ? c.bg.replace('/10','') : 'bg-white/5')} />
-                    ))}
-                  </div>
-                  <span className={cn('text-[10px] font-mono font-bold', c.text)}>{event.confidence}/10</span>
+
+              {/* Bar area */}
+              <div className="flex-1 pl-3 flex flex-col gap-1">
+                {/* Day number ruler */}
+                <div className="relative h-4">
+                  {Array.from({ length: wDays }, (_, i) => {
+                    const d = wStart + i;
+                    const dow = new Date(year, month - 1, d).getDay();
+                    const isWeekend = dow === 0 || dow === 6;
+                    return (
+                      <span
+                        key={d}
+                        className={cn(
+                          'absolute text-[9px] font-mono -translate-x-1/2',
+                          isWeekend ? 'text-slate-600' : 'text-slate-500',
+                        )}
+                        style={{ left: `${((i + 0.5) / wDays) * 100}%` }}
+                      >
+                        {d}
+                      </span>
+                    );
+                  })}
                 </div>
-              )}
+
+                {/* Track band */}
+                <div
+                  className="relative rounded-lg bg-black/25 border border-kd-border/40"
+                  style={{ height: rowH }}
+                >
+                  {/* Day separator lines */}
+                  {Array.from({ length: wDays - 1 }, (_, i) => (
+                    <div
+                      key={i}
+                      className="absolute top-0 bottom-0 border-l border-white/[0.04] pointer-events-none"
+                      style={{ left: `${((i + 1) / wDays) * 100}%` }}
+                    />
+                  ))}
+
+                  {/* Weekend tint */}
+                  {Array.from({ length: wDays }, (_, i) => {
+                    const dow = new Date(year, month - 1, wStart + i).getDay();
+                    if (dow !== 0 && dow !== 6) return null;
+                    return (
+                      <div
+                        key={i}
+                        className="absolute top-0 bottom-0 bg-white/[0.018] pointer-events-none"
+                        style={{ left: `${(i / wDays) * 100}%`, width: `${(1 / wDays) * 100}%` }}
+                      />
+                    );
+                  })}
+
+                  {/* Today line */}
+                  {todayDay !== null && todayDay >= wStart && todayDay <= wEnd && (
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-indigo-400/50 z-10 pointer-events-none"
+                      style={{ left: `${((todayDay - wStart + 0.5) / wDays) * 100}%` }}
+                    />
+                  )}
+
+                  {/* Event bars */}
+                  {items.map(({ event, cs, ce, track }) => {
+                    const wFrac = wDays;
+                    const leftPct  = ((cs - wStart) / wFrac) * 100;
+                    const widthPct = ((ce - cs + 1) / wFrac) * 100;
+                    const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
+                    const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+                    const isSingleDay = cs === ce;
+
+                    return (
+                      <div
+                        key={`${event.id}-w${wStart}`}
+                        className={cn(
+                          'absolute flex items-center px-2.5 rounded cursor-pointer',
+                          'border transition-all duration-150 overflow-hidden',
+                          c.bg, c.border,
+                          hovered?.id === event.id && 'brightness-125 ring-1 ring-white/30 z-20',
+                        )}
+                        style={{
+                          left:   `${leftPct}%`,
+                          width:  `max(${widthPct}%, ${isSingleDay ? '8px' : '18px'})`,
+                          top:    PAD + track * (BAR_H + PAD),
+                          height: BAR_H,
+                        }}
+                        onMouseEnter={ev => onEnter(event, ev)}
+                        onMouseLeave={onLeave}
+                      >
+                        {isSingleDay
+                          ? <span className={cn('text-xs mx-auto', c.text)}>●</span>
+                          : <span className={cn('text-[11px] font-medium truncate leading-tight', c.text)}>
+                              {event.inference ?? ''}
+                            </span>
+                        }
+                      </div>
+                    );
+                  })}
+
+                  {/* Empty state */}
+                  {numT === 0 && (
+                    <span className="absolute inset-0 flex items-center px-3 text-[11px] text-slate-700">
+                      No events
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           );
-        })()}
-
-        {/* Month label */}
-        <p className="text-[10px] text-muted mono mt-3 text-right">
-          {MONTH_FULL[month - 1]} {year} · {events.length} events across {numTracks} tracks
-        </p>
+        })}
       </div>
 
+      {/* Tooltip — fixed to viewport */}
+      {hovered && hoveredEvent && (() => {
+        const s = MARKET_STATUS_MAP.get(hoveredEvent.market_impact ?? '');
+        const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+        const tooltipW = 300;
+        const left = Math.min(hovered.cx + 14, window.innerWidth - tooltipW - 16);
+        const top  = hovered.cy - 10;
+        return (
+          <div
+            className={cn(
+              'fixed z-[9999] pointer-events-none rounded-xl border shadow-2xl',
+              'bg-slate-900/98 backdrop-blur-sm', c.border,
+            )}
+            style={{ left, top, width: tooltipW }}
+            onMouseEnter={() => { if (hideTimer.current) clearTimeout(hideTimer.current); }}
+            onMouseLeave={onLeave}
+          >
+            <div className="p-3.5">
+              {/* Impact badge */}
+              {s && (
+                <span className={cn('inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border mb-2', c.bg, c.text, c.border)}>
+                  {s.label}
+                </span>
+              )}
+              {/* Inference */}
+              <p className="text-[12px] text-white leading-relaxed mb-2.5">
+                {hoveredEvent.inference ?? '—'}
+              </p>
+              {/* Date + confidence */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                <span className="text-[10px] font-mono text-muted">
+                  {fmtDate(hoveredEvent.start_date)}
+                  {hoveredEvent.end_date && hoveredEvent.end_date !== hoveredEvent.start_date
+                    ? ` → ${fmtDate(hoveredEvent.end_date)}` : ''}
+                </span>
+                {hoveredEvent.confidence !== null && (
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: 10 }, (_, i) => (
+                      <div
+                        key={i}
+                        className={cn('w-1.5 h-2.5 rounded-sm', i < (hoveredEvent.confidence ?? 0) ? c.bg.replace('/10', '/80') : 'bg-white/5')}
+                      />
+                    ))}
+                    <span className={cn('text-[10px] font-mono ml-1', c.text)}>{hoveredEvent.confidence}/10</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Impact legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-5 pt-4 border-t border-kd-border">
-        <span className="text-[10px] uppercase tracking-widest font-bold text-muted self-center">Impact</span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-6 pt-4 border-t border-kd-border">
+        <span className="text-[10px] uppercase tracking-widest font-bold text-muted self-center">Legend</span>
         {Array.from(MARKET_STATUS_MAP.values()).map(s => {
           const c = STATUS_COLOR_CLASSES[s.color];
           return (
