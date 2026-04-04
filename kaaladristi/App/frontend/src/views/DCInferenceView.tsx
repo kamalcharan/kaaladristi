@@ -11,6 +11,7 @@ import {
 } from '@/services/dcInference';
 import type { DcInference, DcInferenceInput } from '@/types';
 import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
+import { fmtDate } from '@/lib/dateUtils';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -58,9 +59,11 @@ function ConfidenceDots({ value }: { value: number | null }) {
 }
 
 function formatDateRange(row: DcInference): string {
-  const from = row.start_time ? `${row.start_date} ${row.start_time.slice(0, 5)}` : row.start_date;
+  const startFmt = fmtDate(row.start_date);
+  const from = row.start_time ? `${startFmt} ${row.start_time.slice(0, 5)}` : startFmt;
   if (!row.end_date) return `${from} → ongoing`;
-  const to = row.end_time ? `${row.end_date} ${row.end_time.slice(0, 5)}` : row.end_date;
+  const endFmt = fmtDate(row.end_date);
+  const to = row.end_time ? `${endFmt} ${row.end_time.slice(0, 5)}` : endFmt;
   return `${from} → ${to}`;
 }
 

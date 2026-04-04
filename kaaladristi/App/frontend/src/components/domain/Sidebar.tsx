@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Globe,
   Calendar as CalendarIcon,
+  CalendarDays,
   Zap,
   History as HistoryIcon,
   Settings as SettingsIcon,
@@ -19,7 +20,8 @@ const navItems = [
   { to: '/markets',      icon: Globe,           label: 'Markets' },
   { to: '/calendar',     icon: CalendarIcon,    label: 'Calendar' },
   { to: '/transmission', icon: Zap,             label: 'Risk Transmission' },
-  { to: '/inference',    icon: Sparkles,        label: 'DC Inference' },
+  { to: '/inference',      icon: Sparkles,      label: 'DC Inference' },
+  { to: '/astro-calendar', icon: CalendarDays,  label: 'Astro Calendar' },
   { to: '/history',      icon: HistoryIcon,     label: 'Backtest' },
   { to: '/settings',     icon: SettingsIcon,    label: 'Settings' },
 ];
