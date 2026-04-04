@@ -6,7 +6,7 @@ import { ErrorBoundary } from '@/components/ui';
 import { fetchInferencesForMonth } from '@/services/dcInference';
 import { MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
 import {
-  MONTH_FULL, DAY_ABBR,
+  MONTH_ABBR, MONTH_FULL, DAY_ABBR,
   getDaysInMonth, getFirstWeekdayOffset, toIso, todayIso, fmtDate,
 } from '@/lib/dateUtils';
 import type { DcInference } from '@/types';
@@ -304,16 +304,28 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
   // Build week rows with greedy-packed tracks
   const weekRows = useMemo(() => weeks.map(({ wStart, wEnd }) => {
     const wDays = wEnd - wStart + 1;
-    const overlapping = events
+    const all = events
       .map(e => {
         const { sd, ed } = eventDays.get(e.id)!;
         return { event: e, cs: Math.max(wStart, sd), ce: Math.min(wEnd, ed) };
       })
       .filter(i => i.cs <= i.ce)
       .sort((a, b) => a.cs - b.cs);
-    const items = assignWeekTracks(overlapping);
-    const numT = items.reduce((m, i) => Math.max(m, i.track + 1), 0);
-    return { wStart, wEnd, wDays, items, numT };
+
+    // Multi-day → horizontal track bars
+    const multiItems = assignWeekTracks(all.filter(i => i.cs < i.ce));
+    const numT = Math.max(1, multiItems.reduce((m, i) => Math.max(m, i.track + 1), 0));
+
+    // Single-day → stacked column bars grouped by day
+    const singleDayMap = new Map<number, DcInference[]>();
+    for (const { event, cs, ce } of all) {
+      if (cs === ce) {
+        if (!singleDayMap.has(cs)) singleDayMap.set(cs, []);
+        singleDayMap.get(cs)!.push(event);
+      }
+    }
+
+    return { wStart, wEnd, wDays, multiItems, singleDayMap, numT, hasEvents: all.length > 0 };
   }), [weeks, events, eventDays]);
 
   const todayStr = todayIso();
@@ -341,8 +353,8 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
       </p>
 
       <div className="space-y-3">
-        {weekRows.map(({ wStart, wEnd, wDays, items, numT }) => {
-          const rowH = numT === 0 ? BAR_H : PAD + numT * (BAR_H + PAD);
+        {weekRows.map(({ wStart, wEnd, wDays, multiItems, singleDayMap, numT, hasEvents }) => {
+          const rowH = PAD + numT * (BAR_H + PAD);
           return (
             <div key={wStart} className="flex items-stretch gap-0">
               {/* Week label */}
@@ -413,15 +425,12 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                     />
                   )}
 
-                  {/* Event bars */}
-                  {items.map(({ event, cs, ce, track }) => {
-                    const wFrac = wDays;
-                    const leftPct  = ((cs - wStart) / wFrac) * 100;
-                    const widthPct = ((ce - cs + 1) / wFrac) * 100;
+                  {/* Multi-day horizontal bars (show inference text) */}
+                  {multiItems.map(({ event, cs, ce, track }) => {
+                    const leftPct  = ((cs - wStart) / wDays) * 100;
+                    const widthPct = ((ce - cs + 1) / wDays) * 100;
                     const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
                     const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
-                    const isSingleDay = cs === ce;
-
                     return (
                       <div
                         key={`${event.id}-w${wStart}`}
@@ -433,25 +442,59 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                         )}
                         style={{
                           left:   `${leftPct}%`,
-                          width:  `max(${widthPct}%, ${isSingleDay ? '8px' : '18px'})`,
+                          width:  `max(${widthPct}%, 18px)`,
                           top:    PAD + track * (BAR_H + PAD),
                           height: BAR_H,
                         }}
                         onMouseEnter={ev => onEnter(event, ev)}
                         onMouseLeave={onLeave}
                       >
-                        {isSingleDay
-                          ? <span className={cn('text-xs mx-auto', c.text)}>●</span>
-                          : <span className={cn('text-[11px] font-medium truncate leading-tight', c.text)}>
-                              {event.inference ?? ''}
-                            </span>
-                        }
+                        <span className={cn('text-[11px] font-medium truncate leading-tight', c.text)}>
+                          {event.inference ?? ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {/* Single-day stacked bar columns */}
+                  {Array.from(singleDayMap.entries()).map(([day, dayEvents]) => {
+                    const leftPct = ((day - wStart) / wDays) * 100;
+                    const colW    = (1 / wDays) * 100;
+                    return (
+                      <div
+                        key={`col-${day}`}
+                        className="absolute flex flex-col"
+                        style={{
+                          left:   `calc(${leftPct}% + 1px)`,
+                          width:  `calc(${colW}% - 2px)`,
+                          top:    PAD,
+                          bottom: PAD,
+                          gap:    1,
+                        }}
+                      >
+                        {dayEvents.map(event => {
+                          const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
+                          const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+                          return (
+                            <div
+                              key={event.id}
+                              className={cn(
+                                'flex-1 rounded-sm cursor-pointer transition-all',
+                                c.bg,
+                                hovered?.id === event.id && 'brightness-125 ring-1 ring-inset ring-white/30 z-20',
+                              )}
+                              title={s?.label}
+                              onMouseEnter={ev => onEnter(event, ev)}
+                              onMouseLeave={onLeave}
+                            />
+                          );
+                        })}
                       </div>
                     );
                   })}
 
                   {/* Empty state */}
-                  {numT === 0 && (
+                  {!hasEvents && (
                     <span className="absolute inset-0 flex items-center px-3 text-[11px] text-slate-700">
                       No events
                     </span>
