@@ -15,6 +15,7 @@ import TransmissionView from '@/views/TransmissionView';
 import BacktestView from '@/views/BacktestView';
 import SettingsView from '@/views/SettingsView';
 import DCInferenceView from '@/views/DCInferenceView';
+import DCCalendarView from '@/views/DCCalendarView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,6 +88,7 @@ function AppRoutes() {
           <Route path="/calendar" element={<CalendarView />} />
           <Route path="/transmission" element={<TransmissionView />} />
           <Route path="/inference" element={<DCInferenceView />} />
+          <Route path="/astro-calendar" element={<DCCalendarView />} />
           <Route path="/history" element={<BacktestView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Route>
