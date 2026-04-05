@@ -197,3 +197,32 @@ export interface IndexStats {
   dayHigh: number;
   dayLow: number;
 }
+
+// ── DC Inference Types ──
+
+export interface DcInference {
+  id: number;
+  astro_event: string;
+  rule_definition: Record<string, unknown> | null;
+  start_date: string;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
+  inference: string | null;
+  market_impact: string | null;   // value from MARKET_STATUS constants
+  confidence: number | null;
+  notes: string | null;
+  applicability_scope: string[] | null;
+  applicability: Record<string, unknown> | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  month: number | null;   // generated: EXTRACT(MONTH FROM start_date)
+  year: number | null;    // generated: EXTRACT(YEAR  FROM start_date)
+}
+
+export type DcInferenceInput = Omit<DcInference, 'id' | 'rule_definition' | 'created_at' | 'updated_at' | 'month' | 'year'>;
+
+// ── DC Lookup Types ──
+
+export type { DcLookupItem } from '../services/dcLookup';

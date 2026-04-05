@@ -186,7 +186,8 @@ class QueryBuilder {
   }
 
   async execute(): Promise<{ data: any; error: PostgRESTError | null; count?: number }> {
-    const url = `${BASE_URL}/${this.state.table}?${this.state.params.toString()}`;
+    const qs = this.state.params.toString();
+    const url = `${BASE_URL}/${this.state.table}${qs ? '?' + qs : ''}`;
     const headers = getHeaders(this.state.headers);
 
     try {
