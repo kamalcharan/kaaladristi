@@ -404,7 +404,7 @@ def main():
         return
 
     # Init Breeze
-    breeze = init_breeze(args.session_token or None)
+    breeze = init_breeze(session_token=args.session_token or None, db=sb)
 
     # Init sync logger
     logger = SyncLogger(sb)
