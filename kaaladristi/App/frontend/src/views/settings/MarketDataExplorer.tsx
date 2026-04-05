@@ -26,6 +26,7 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterTri, setFilterTri] = useState('');
   const [page, setPage] = useState(1);
 
   const { data: catalog = [], isLoading, isError, error } = useQuery({
@@ -54,6 +55,8 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
       if (filterCategory && c.category !== filterCategory) return false;
       if (filterStatus === 'active' && !c.is_active) return false;
       if (filterStatus === 'inactive' && c.is_active) return false;
+      if (filterTri === 'tri' && !c.is_tri) return false;
+      if (filterTri === 'price' && c.is_tri) return false;
       return true;
     });
   }, [catalog, search, filterCategory, filterStatus]);
@@ -61,7 +64,7 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const isFiltered = search || filterCategory || filterStatus;
+  const isFiltered = search || filterCategory || filterStatus || filterTri;
 
   const activeCount = catalog.filter(c => c.is_active).length;
 
@@ -112,10 +115,19 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
         >
           {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        <select
+          value={filterTri}
+          onChange={e => { setFilterTri(e.target.value); setPage(1); }}
+          className={selectCls}
+        >
+          <option value="">All Types</option>
+          <option value="price">Price Index</option>
+          <option value="tri">TRI</option>
+        </select>
         {isFiltered && (
           <>
             <button
-              onClick={() => { setSearch(''); setFilterCategory(''); setFilterStatus(''); setPage(1); }}
+              onClick={() => { setSearch(''); setFilterCategory(''); setFilterStatus(''); setFilterTri(''); setPage(1); }}
               className="px-3 py-2 text-xs text-risk-amber hover:text-white border border-risk-amber/30 hover:border-white/20 rounded-xl transition-all"
             >
               Clear
@@ -172,6 +184,13 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
                 {item.category && (
                   <span className="text-[10px] px-1.5 py-px rounded bg-slate-800/80 border border-white/5 text-slate-400 font-medium shrink-0 hidden sm:inline">
                     {item.category}
+                  </span>
+                )}
+
+                {/* TRI badge */}
+                {item.is_tri && (
+                  <span className="text-[9px] px-1.5 py-px rounded bg-accent-indigo/10 border border-accent-indigo/20 text-accent-indigo font-semibold shrink-0">
+                    TRI
                   </span>
                 )}
 

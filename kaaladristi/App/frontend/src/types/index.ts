@@ -206,6 +206,7 @@ export interface IndexCatalogItem {
   category: string | null;
   exchange: string;
   is_active: boolean;
+  is_tri: boolean;
   data_from: string | null;
   data_to: string | null;
   record_count: number;

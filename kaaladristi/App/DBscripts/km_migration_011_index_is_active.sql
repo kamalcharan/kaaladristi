@@ -16,13 +16,14 @@ SELECT
   s.category,
   COALESCE(s.exchange, 'NSE') AS exchange,
   s.is_active,
+  COALESCE(s.is_tri, FALSE)   AS is_tri,
   MIN(e.trade_date)            AS data_from,
   MAX(e.trade_date)            AS data_to,
   COUNT(e.id)::INT             AS record_count,
   (ARRAY_AGG(e.close ORDER BY e.trade_date DESC))[1] AS last_close
 FROM km_index_symbols s
 LEFT JOIN km_index_eod e ON e.index_id = s.id
-GROUP BY s.id, s.name, s.category, s.exchange, s.is_active;
+GROUP BY s.id, s.name, s.category, s.exchange, s.is_active, s.is_tri;
 
 CREATE UNIQUE INDEX idx_mv_index_catalog_id ON mv_index_catalog (id);
 
