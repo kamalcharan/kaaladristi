@@ -16,6 +16,7 @@ import BacktestView from '@/views/BacktestView';
 import SettingsView from '@/views/SettingsView';
 import DCInferenceView from '@/views/DCInferenceView';
 import DCCalendarView from '@/views/DCCalendarView';
+import ChartView from '@/views/ChartView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -90,6 +91,7 @@ function AppRoutes() {
           <Route path="/inference" element={<DCInferenceView />} />
           <Route path="/astro-calendar" element={<DCCalendarView />} />
           <Route path="/history" element={<BacktestView />} />
+          <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Route>
       </Route>

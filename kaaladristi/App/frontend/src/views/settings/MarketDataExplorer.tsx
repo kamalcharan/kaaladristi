@@ -1,123 +1,25 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight,
-  TrendingUp, TrendingDown, BarChart3, Loader2, X,
+  BarChart3, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { IndexPriceChart } from '@/components/domain';
 import { fetchIndexCatalog } from '@/services/indexCatalog';
-import { fetchIndexChartDataById } from '@/services/eodData';
 import { fmtDate } from '@/lib/dateUtils';
-import type { IndexCatalogItem, TimeRange } from '@/types';
+import type { IndexCatalogItem } from '@/types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25;
 
-function fmt(n: number): string {
-  return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// ── Inline Chart Panel (same pattern as /markets) ────────────────────────────
-
-function InlineChart({ item, onClose }: { item: IndexCatalogItem; onClose: () => void }) {
-  const [range, setRange] = useState<TimeRange>('1Y');
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['index_chart', item.id, range],
-    queryFn: () => fetchIndexChartDataById(item.id, range),
-    staleTime: 120_000,
-  });
-
-  const chartData = data?.chartData ?? [];
-  const stats = data?.stats ?? null;
-  const isPositive = (stats?.change ?? 0) >= 0;
-
-  return (
-    <div className="glass-card rounded-2xl overflow-hidden mb-4 animate-fade-in">
-      {/* Stats bar */}
-      <div className="px-5 py-4 border-b border-kd-border">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-0.5">{item.name}</p>
-              {stats ? (
-                <div className="flex items-baseline gap-3">
-                  <span className="text-2xl font-bold mono text-white">
-                    {stats.currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                  <div className={cn('flex items-center gap-1', isPositive ? 'text-risk-green' : 'text-risk-red')}>
-                    {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                    <span className="text-xs font-bold mono">
-                      {isPositive ? '+' : ''}{stats.change.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      {' '}({isPositive ? '+' : ''}{stats.changePct.toFixed(2)}%)
-                    </span>
-                  </div>
-                </div>
-              ) : isLoading ? (
-                <div className="h-8 w-40 bg-slate-800/60 rounded animate-pulse" />
-              ) : null}
-            </div>
-            {stats && (
-              <div className="flex flex-wrap gap-2 text-[11px]">
-                <span className="px-2 py-0.5 bg-slate-900/50 border border-white/5 rounded-md">
-                  <span className="text-muted">Day H/L: </span>
-                  <span className="text-slate-300 mono">{fmt(stats.dayHigh)} / {fmt(stats.dayLow)}</span>
-                </span>
-                <span className="px-2 py-0.5 bg-slate-900/50 border border-white/5 rounded-md">
-                  <span className="text-muted">52W: </span>
-                  <span className="text-slate-300 mono">{fmt(stats.low52w)} — {fmt(stats.high52w)}</span>
-                </span>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-800 hover:text-slate-200 transition-all"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Chart */}
-      <div className="p-5">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24 gap-3">
-            <Loader2 className="w-5 h-5 text-accent-indigo animate-spin" />
-            <span className="text-sm text-muted">Loading chart...</span>
-          </div>
-        ) : chartData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <BarChart3 className="w-8 h-8 text-slate-600 mb-3" />
-            <p className="text-sm text-muted">No EOD data for this index.</p>
-          </div>
-        ) : (
-          <>
-            <IndexPriceChart
-              data={chartData}
-              range={range}
-              onRangeChange={setRange}
-              isPositive={isPositive}
-            />
-            <p className="text-[10px] text-muted mt-2 text-right mono">
-              {chartData.length} trading days &middot; {chartData[0].date} to {chartData[chartData.length - 1].date}
-            </p>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Index Card ───────────────────────────────────────────────────────────────
 
 function IndexCard({
-  item, isActive, onSelect,
+  item, onSelect,
 }: {
   item: IndexCatalogItem;
-  isActive: boolean;
   onSelect: () => void;
 }) {
   const hasData = item.record_count > 0;
@@ -127,9 +29,7 @@ function IndexCard({
       onClick={hasData ? onSelect : undefined}
       className={cn(
         'w-full text-left bg-[#0f172a] border rounded-xl px-4 py-3 transition-all',
-        isActive
-          ? 'border-accent-indigo/50 ring-1 ring-accent-indigo/20'
-          : 'border-kd-border hover:border-white/15',
+        'border-kd-border hover:border-white/15',
         hasData ? 'cursor-pointer' : 'cursor-default opacity-60',
       )}
     >
@@ -174,10 +74,10 @@ function IndexCard({
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [page, setPage] = useState(1);
-  const [activeId, setActiveId] = useState<number | null>(null);
 
   const { data: catalog = [], isLoading, isError, error } = useQuery({
     queryKey: ['index_catalog'],
@@ -204,10 +104,8 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const isFiltered = search || filterCategory;
 
-  const activeItem = activeId ? catalog.find(c => c.id === activeId) ?? null : null;
-
   const handleSelect = (item: IndexCatalogItem) => {
-    setActiveId(activeId === item.id ? null : item.id);
+    navigate(`/chart/index/${item.id}?name=${encodeURIComponent(item.name)}`);
   };
 
   const selectCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors';
@@ -263,11 +161,6 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
         )}
       </div>
 
-      {/* Inline chart (expands below filter, above cards — same page) */}
-      {activeItem && (
-        <InlineChart item={activeItem} onClose={() => setActiveId(null)} />
-      )}
-
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20 gap-3">
@@ -288,7 +181,6 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
               <IndexCard
                 key={item.id}
                 item={item}
-                isActive={activeId === item.id}
                 onSelect={() => handleSelect(item)}
               />
             ))}
