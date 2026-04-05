@@ -84,10 +84,16 @@ export async function fetchIndexChartData(
   const index = await fetchIndexSymbol(symbol);
   if (!index) return { chartData: [], stats: null };
 
-  const eod = await fetchIndexEod(index.id, range);
-  if (eod.length === 0) return { chartData: [], stats: null };
+  return fetchIndexChartDataById(index.id, range);
+}
 
-  console.log(`[fetchIndexChartData] ${eod.length} rows for ${symbol}`);
+/** Generic: fetch chart data for any index by its DB id */
+export async function fetchIndexChartDataById(
+  indexId: number,
+  range: TimeRange,
+): Promise<{ chartData: ChartDataPoint[]; stats: IndexStats | null }> {
+  const eod = await fetchIndexEod(indexId, range);
+  if (eod.length === 0) return { chartData: [], stats: null };
 
   const chartData: ChartDataPoint[] = eod.map((r) => ({
     date: r.trade_date,
