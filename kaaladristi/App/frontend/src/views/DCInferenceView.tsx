@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, X, AlertCircle, Loader2, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, AlertCircle, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary, KaalaLoader, ToastContainer, useToast } from '@/components/ui';
 import { fetchInferences, createInference, updateInference, deleteInference } from '@/services/dcInference';
@@ -626,64 +626,51 @@ function InferenceCard({
 
   return (
     <div className={cn(
-      'border-l-4 rounded-2xl bg-slate-900/40 border border-kd-border p-5 transition-all hover:bg-slate-900/60',
+      'border-l-4 rounded-xl bg-[#0f172a] border border-kd-border px-4 py-3 transition-all hover:border-white/15',
       borderColorForImpact(row.market_impact),
     )}>
-      {/* Top: event + date range */}
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <p className="text-sm font-bold text-white leading-snug">{row.astro_event}</p>
-        <span className="text-[11px] mono text-slate-400 whitespace-nowrap shrink-0">
+      {/* Row 1: event + date + actions */}
+      <div className="flex items-center gap-3">
+        <p className="text-[13px] font-bold text-white leading-tight flex-1 truncate">{row.astro_event}</p>
+        <span className="text-[10px] mono text-slate-500 whitespace-nowrap shrink-0">
           {formatDateRange(row)}
         </span>
-      </div>
-
-      {/* Middle: badges row */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <ImpactBadge impact={row.market_impact} />
-        <ConfidenceDots value={row.confidence} />
-        {scopeLabels.map(lbl => (
-          <span key={lbl} className="px-2 py-0.5 rounded-md bg-slate-800/80 border border-white/5 text-[10px] text-slate-400 font-medium">
-            {lbl}
-          </span>
-        ))}
-      </div>
-
-      {/* Body: inference text */}
-      {row.inference && (
-        <p className="text-sm text-slate-300 leading-relaxed line-clamp-2 mb-3">{row.inference}</p>
-      )}
-
-      {/* Footer: scope badges + actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex flex-wrap gap-1.5">
-          {(row.applicability_scope ?? []).map(s => (
-            <span key={s} className="px-2 py-0.5 rounded-md bg-accent-indigo/10 border border-accent-indigo/20 text-[10px] text-accent-indigo font-semibold uppercase tracking-wider">
-              {s}
-            </span>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => onEdit(row)}
-            title="Edit"
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
-          >
-            <Pencil className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-0.5 shrink-0 ml-1">
+          <button onClick={() => onEdit(row)} title="Edit" className="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all">
+            <Pencil className="w-3 h-3" />
           </button>
           <button
             onClick={() => onDelete(row.id)}
             title={isConfirming ? 'Click again to confirm' : 'Delete'}
             className={cn(
-              'h-8 rounded-lg flex items-center justify-center transition-all text-xs font-medium',
+              'h-7 rounded-md flex items-center justify-center transition-all text-[11px] font-medium',
               isConfirming
-                ? 'px-3 bg-risk-red/20 text-risk-red border border-risk-red/40'
-                : 'w-8 text-slate-500 hover:text-risk-red hover:bg-risk-red/10'
+                ? 'px-2 bg-risk-red/20 text-risk-red border border-risk-red/40'
+                : 'w-7 text-slate-500 hover:text-risk-red hover:bg-risk-red/10'
             )}
           >
-            {isConfirming ? 'Confirm?' : <Trash2 className="w-3.5 h-3.5" />}
+            {isConfirming ? 'Confirm?' : <Trash2 className="w-3 h-3" />}
           </button>
         </div>
+      </div>
+
+      {/* Row 2: badges + inference + scope */}
+      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+        <ImpactBadge impact={row.market_impact} />
+        <ConfidenceDots value={row.confidence} />
+        {scopeLabels.map(lbl => (
+          <span key={lbl} className="px-1.5 py-px rounded bg-slate-800/80 border border-white/5 text-[10px] text-slate-400 font-medium">
+            {lbl}
+          </span>
+        ))}
+        {(row.applicability_scope ?? []).map(s => (
+          <span key={s} className="px-1.5 py-px rounded bg-accent-indigo/10 border border-accent-indigo/20 text-[9px] text-accent-indigo font-semibold uppercase tracking-wider">
+            {s}
+          </span>
+        ))}
+        {row.inference && (
+          <span className="text-[12px] text-slate-400 line-clamp-1 ml-1">— {row.inference}</span>
+        )}
       </div>
     </div>
   );
@@ -699,12 +686,14 @@ export default function DCInferenceView() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
-  // Filters
+  // Filters + pagination
   const [search, setSearch] = useState('');
   const [filterImpact, setFilterImpact] = useState('');
   const [filterMonth, setFilterMonth] = useState<number | null>(null);
   const [filterYear, setFilterYear] = useState<number | null>(null);
   const [filterScope, setFilterScope] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const { data: rows = [], isLoading, isError, error } = useQuery({
     queryKey: ['dc_inference'],
@@ -792,8 +781,13 @@ export default function DCInferenceView() {
 
   const isFiltered = search || filterImpact || filterMonth !== null || filterYear !== null || filterScope;
 
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   const clearFilters = () => {
-    setSearch(''); setFilterImpact(''); setFilterMonth(null); setFilterYear(null); setFilterScope('');
+    setSearch(''); setFilterImpact(''); setFilterMonth(null); setFilterYear(null); setFilterScope(''); setPage(1);
   };
 
   const formInitial: DcInferenceInput = editRow
@@ -857,14 +851,14 @@ export default function DCInferenceView() {
               <input
                 type="text"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
                 placeholder="Search events, inferences, notes..."
                 className="w-full pl-9 pr-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors"
               />
             </div>
 
             {/* Impact */}
-            <select value={filterImpact} onChange={e => setFilterImpact(e.target.value)} className={selectCls}>
+            <select value={filterImpact} onChange={e => { setFilterImpact(e.target.value); setPage(1); }} className={selectCls}>
               <option value="">All Impacts</option>
               {MARKET_STATUS.map(s => (
                 <option key={s.value} value={s.value}>{s.label}</option>
@@ -874,7 +868,7 @@ export default function DCInferenceView() {
             {/* Month — only months present in data */}
             <select
               value={filterMonth ?? ''}
-              onChange={e => setFilterMonth(e.target.value ? Number(e.target.value) : null)}
+              onChange={e => { setFilterMonth(e.target.value ? Number(e.target.value) : null); setPage(1); }}
               className={selectCls}
             >
               <option value="">All Months</option>
@@ -886,7 +880,7 @@ export default function DCInferenceView() {
             {/* Year */}
             <select
               value={filterYear ?? ''}
-              onChange={e => setFilterYear(e.target.value ? Number(e.target.value) : null)}
+              onChange={e => { setFilterYear(e.target.value ? Number(e.target.value) : null); setPage(1); }}
               className={selectCls}
             >
               <option value="">All Years</option>
@@ -896,7 +890,7 @@ export default function DCInferenceView() {
             </select>
 
             {/* Scope */}
-            <select value={filterScope} onChange={e => setFilterScope(e.target.value)} className={selectCls}>
+            <select value={filterScope} onChange={e => { setFilterScope(e.target.value); setPage(1); }} className={selectCls}>
               {SCOPE_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
@@ -940,25 +934,50 @@ export default function DCInferenceView() {
         ) : rows.length === 0 ? (
           <EmptyState onAdd={() => setShowForm(true)} />
         ) : (
-          <div className="grid gap-4">
-            {filtered.map(row => (
-              <InferenceCard
-                key={row.id}
-                row={row}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                deleteConfirmId={deleteConfirm}
-              />
-            ))}
-            {filtered.length === 0 && isFiltered && (
-              <div className="text-center py-16">
-                <p className="text-sm text-muted">No entries match your filters.</p>
-                <button onClick={clearFilters} className="text-xs text-accent-indigo hover:underline mt-2">
-                  Clear all filters
+          <>
+            <div className="grid gap-2">
+              {paged.map(row => (
+                <InferenceCard
+                  key={row.id}
+                  row={row}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  deleteConfirmId={deleteConfirm}
+                />
+              ))}
+              {filtered.length === 0 && isFiltered && (
+                <div className="text-center py-16">
+                  <p className="text-sm text-muted">No entries match your filters.</p>
+                  <button onClick={clearFilters} className="text-xs text-accent-indigo hover:underline mt-2">
+                    Clear all filters
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-slate-400 mono">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             )}
-          </div>
+          </>
         )}
 
         {/* Footer note */}
