@@ -1,88 +1,45 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight,
-  BarChart3, Loader2,
+  BarChart3, Loader2, Power,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchIndexCatalog } from '@/services/indexCatalog';
+import { fetchIndexCatalog, toggleIndexActive } from '@/services/indexCatalog';
 import { fmtDate } from '@/lib/dateUtils';
 import type { IndexCatalogItem } from '@/types';
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
 const PAGE_SIZE = 25;
 
-// ── Index Card ───────────────────────────────────────────────────────────────
-
-function IndexCard({
-  item, onSelect,
-}: {
-  item: IndexCatalogItem;
-  onSelect: () => void;
-}) {
-  const hasData = item.record_count > 0;
-
-  return (
-    <button
-      onClick={hasData ? onSelect : undefined}
-      className={cn(
-        'w-full text-left bg-[#0f172a] border rounded-xl px-4 py-3 transition-all',
-        'border-kd-border hover:border-white/15',
-        hasData ? 'cursor-pointer' : 'cursor-default opacity-60',
-      )}
-    >
-      {/* Row 1: name + last close */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-semibold text-white truncate">{item.name}</span>
-        {item.last_close ? (
-          <span className="text-[12px] mono text-slate-300 font-medium shrink-0">
-            {item.last_close.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-          </span>
-        ) : (
-          <span className="text-[10px] text-muted">No data</span>
-        )}
-      </div>
-
-      {/* Row 2: category + exchange + date range + days */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-        {item.category && (
-          <span className="text-[10px] px-1.5 py-px rounded bg-slate-800/80 border border-white/5 text-slate-400 font-medium">
-            {item.category}
-          </span>
-        )}
-        <span className="text-[10px] text-slate-500 mono">{item.exchange}</span>
-        {item.data_from && item.data_to && (
-          <span className="text-[10px] text-slate-500 mono">
-            {fmtDate(item.data_from)} → {fmtDate(item.data_to)}
-          </span>
-        )}
-        {hasData && (
-          <span className="text-[10px] text-slate-500 mono">
-            {item.record_count.toLocaleString('en-IN')} days
-          </span>
-        )}
-        {hasData && (
-          <BarChart3 className="w-3 h-3 text-accent-indigo ml-auto shrink-0" />
-        )}
-      </div>
-    </button>
-  );
-}
+const STATUS_OPTIONS = [
+  { value: '', label: 'All Status' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
 
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   const [page, setPage] = useState(1);
 
   const { data: catalog = [], isLoading, isError, error } = useQuery({
     queryKey: ['index_catalog'],
     queryFn: fetchIndexCatalog,
     staleTime: 300_000,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
+      toggleIndexActive(id, isActive),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['index_catalog'] });
+    },
   });
 
   const categories = useMemo(() =>
@@ -95,18 +52,18 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
     return catalog.filter(c => {
       if (q && !c.name.toLowerCase().includes(q)) return false;
       if (filterCategory && c.category !== filterCategory) return false;
+      if (filterStatus === 'active' && !c.is_active) return false;
+      if (filterStatus === 'inactive' && c.is_active) return false;
       return true;
     });
-  }, [catalog, search, filterCategory]);
+  }, [catalog, search, filterCategory, filterStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const isFiltered = search || filterCategory;
+  const isFiltered = search || filterCategory || filterStatus;
 
-  const handleSelect = (item: IndexCatalogItem) => {
-    navigate(`/chart/index/${item.id}?name=${encodeURIComponent(item.name)}`);
-  };
+  const activeCount = catalog.filter(c => c.is_active).length;
 
   const selectCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors';
 
@@ -124,7 +81,7 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
       <header className="mb-6">
         <h2 className="text-2xl font-bold tracking-tight text-white mb-1">Market Data — Indexes</h2>
         <p className="text-sm text-secondary">
-          {catalog.length} indexes &middot; tap any card to view its chart
+          {activeCount} active of {catalog.length} indexes
         </p>
       </header>
 
@@ -148,10 +105,17 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
           <option value="">All Categories</option>
           {categories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
+        <select
+          value={filterStatus}
+          onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
+          className={selectCls}
+        >
+          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
         {isFiltered && (
           <>
             <button
-              onClick={() => { setSearch(''); setFilterCategory(''); setPage(1); }}
+              onClick={() => { setSearch(''); setFilterCategory(''); setFilterStatus(''); setPage(1); }}
               className="px-3 py-2 text-xs text-risk-amber hover:text-white border border-risk-amber/30 hover:border-white/20 rounded-xl transition-all"
             >
               Clear
@@ -171,18 +135,81 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
         <div className="text-center py-16">
           <p className="text-sm text-risk-red mb-1">Failed to load index catalog</p>
           <p className="text-xs text-muted">{error instanceof Error ? error.message : 'Unknown error'}</p>
-          <p className="text-[10px] text-muted mt-3 mono">Run km_migration_010_index_catalog_view.sql first</p>
+          <p className="text-[10px] text-muted mt-3 mono">Run km_migration_011_index_is_active.sql first</p>
         </div>
       ) : (
         <>
-          {/* Card grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {/* Single-column card list */}
+          <div className="grid gap-1.5">
             {paged.map(item => (
-              <IndexCard
+              <div
                 key={item.id}
-                item={item}
-                onSelect={() => handleSelect(item)}
-              />
+                className={cn(
+                  'flex items-center gap-3 bg-[#0f172a] border border-kd-border rounded-xl px-4 py-2.5 transition-all',
+                  !item.is_active && 'opacity-50',
+                )}
+              >
+                {/* Toggle active */}
+                <button
+                  onClick={() => toggleMutation.mutate({ id: item.id, isActive: !item.is_active })}
+                  title={item.is_active ? 'Deactivate' : 'Activate'}
+                  className={cn(
+                    'w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-all',
+                    item.is_active
+                      ? 'text-risk-green hover:bg-risk-green/10'
+                      : 'text-slate-600 hover:bg-slate-800 hover:text-slate-400',
+                  )}
+                >
+                  <Power className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Name */}
+                <span className="text-[13px] font-semibold text-white truncate min-w-[180px] flex-1">
+                  {item.name}
+                </span>
+
+                {/* Category badge */}
+                {item.category && (
+                  <span className="text-[10px] px-1.5 py-px rounded bg-slate-800/80 border border-white/5 text-slate-400 font-medium shrink-0 hidden sm:inline">
+                    {item.category}
+                  </span>
+                )}
+
+                {/* Exchange */}
+                <span className="text-[10px] text-slate-500 mono shrink-0 w-8">{item.exchange}</span>
+
+                {/* Date range */}
+                <span className="text-[10px] text-slate-500 mono shrink-0 hidden md:inline w-[200px]">
+                  {item.data_from && item.data_to
+                    ? `${fmtDate(item.data_from)} → ${fmtDate(item.data_to)}`
+                    : '—'}
+                </span>
+
+                {/* Record count */}
+                <span className="text-[10px] text-slate-400 mono font-medium shrink-0 w-14 text-right hidden sm:inline">
+                  {item.record_count > 0 ? item.record_count.toLocaleString('en-IN') : '—'}
+                </span>
+
+                {/* Last close */}
+                <span className="text-[11px] text-slate-300 mono font-medium shrink-0 w-20 text-right">
+                  {item.last_close
+                    ? item.last_close.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                    : '—'}
+                </span>
+
+                {/* Chart link */}
+                {item.record_count > 0 ? (
+                  <button
+                    onClick={() => navigate(`/chart/index/${item.id}?name=${encodeURIComponent(item.name)}`)}
+                    title={`View ${item.name} chart`}
+                    className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <div className="w-7 shrink-0" />
+                )}
+              </div>
             ))}
           </div>
 
@@ -216,7 +243,7 @@ export default function MarketDataExplorer({ onBack }: { onBack: () => void }) {
           )}
 
           <p className="text-[10px] text-muted mt-3 text-right mono">
-            {catalog.length} indexes &middot; materialized view
+            {activeCount} active &middot; {catalog.length} total
           </p>
         </>
       )}
