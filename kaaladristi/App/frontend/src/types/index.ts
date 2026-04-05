@@ -212,6 +212,8 @@ export interface DcInference {
   market_impact: string | null;   // value from MARKET_STATUS constants
   confidence: number | null;
   notes: string | null;
+  applicability_scope: string[] | null;
+  applicability: Record<string, unknown> | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -220,3 +222,7 @@ export interface DcInference {
 }
 
 export type DcInferenceInput = Omit<DcInference, 'id' | 'rule_definition' | 'created_at' | 'updated_at' | 'month' | 'year'>;
+
+// ── DC Lookup Types ──
+
+export type { DcLookupItem } from '../services/dcLookup';
