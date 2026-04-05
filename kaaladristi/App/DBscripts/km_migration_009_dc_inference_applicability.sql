@@ -31,3 +31,8 @@ BEGIN
   GET DIAGNOSTICS v_updated = ROW_COUNT;
   RAISE NOTICE 'dc_inference: % existing rows backfilled with equity defaults', v_updated;
 END $$;
+
+-- ── Re-grant permissions so PostgREST sees new columns ──────
+GRANT ALL ON dc_inference TO authenticated, kd_app, anon;
+
+NOTIFY pgrst, 'reload schema';
