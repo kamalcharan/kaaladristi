@@ -19,10 +19,10 @@ from pipeline.utils.file_manager import extract_zip, file_exists
 
 # BSE URL patterns to try (BSE changes formats periodically)
 _BSE_URL_PATTERNS = [
-    # New UDiFF format
+    # UDiFF format — direct CSV (current working format)
+    'https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{yyyymmdd}_F_0000.CSV',
+    # UDiFF ZIP variant
     'https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{yyyymmdd}_F_0000.CSV.ZIP',
-    # ISIN format
-    'https://www.bseindia.com/download/BhavCopy/Equity/EQ_ISINCODE_{ddmmyy}.zip',
     # Classic format
     'https://www.bseindia.com/download/BhavCopy/Equity/EQ{ddmmyy}_CSV.ZIP',
 ]
@@ -87,12 +87,12 @@ def download_bse_bhav(d: date) -> str | None:
                     print(f'  [bse_bhav] Response too small ({len(resp.content)} bytes), skipping')
                     break
 
-                # Check if it's a ZIP or CSV
-                content_type = resp.headers.get('Content-Type', '').lower()
-                if 'zip' in content_type or resp.content[:4] == b'PK\x03\x04':
+                # Check if response is ZIP or direct CSV
+                is_zip = (resp.content[:4] == b'PK\x03\x04' or
+                          'zip' in resp.headers.get('Content-Type', '').lower())
+                if is_zip:
                     csv_path = extract_zip(resp.content, d, prefix='bse_cm')
                 else:
-                    # Direct CSV
                     from pipeline.utils.file_manager import save_csv
                     csv_path = save_csv(resp.content, d, prefix='bse_cm')
 
