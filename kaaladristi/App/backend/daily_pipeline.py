@@ -52,6 +52,7 @@ from pipeline.downloaders.nse_index_bhav import (
     parse_nse_index_bhav, parse_nse_tri,
     IndexMatcher, upsert_index_eod,
 )
+from pipeline.downloaders.nse_fiidii import download_nse_fiidii, upsert_fii_dii
 from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
@@ -119,7 +120,24 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     except Exception as e:
         tracker.fail('tri_download', str(e))
 
-    # ── Step 0c: Index indicators (RPC) ──
+    # ── Step 0c: FII/DII activity ──
+    tracker.start('fii_dii')
+    try:
+        fiidii_records = download_nse_fiidii(trade_date, session=nse)
+        if fiidii_records:
+            fiidii_count = upsert_fii_dii(db, fiidii_records)
+            tracker.complete('fii_dii', rows=fiidii_count, metadata={
+                'categories': [r['category'] for r in fiidii_records],
+            })
+            print(f'  [fii_dii] {fiidii_count} records upserted '
+                  f'({", ".join(r["category"] + "=" + str(r["net_value"]) for r in fiidii_records)})')
+        else:
+            tracker.skip('fii_dii', 'No FII/DII data for this date')
+    except Exception as e:
+        tracker.fail('fii_dii', str(e))
+        # Non-critical — do not abort the pipeline
+
+    # ── Step 0d: Index indicators (RPC) ──
     if not skip_indicators:
         tracker.start('index_indicators')
         try:

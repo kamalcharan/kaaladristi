@@ -399,6 +399,24 @@ def scheduler_status():
     }
 
 
+@app.get('/api/fii-dii')
+def fii_dii_data(days: int = 30):
+    """
+    Return FII/DII cash market activity for the last N trading days.
+    Each row: {trade_date, category, buy_value, sell_value, net_value}
+    """
+    since = str(date.today() - timedelta(days=days))
+    rows = db.select(
+        'km_fii_dii',
+        'trade_date,category,buy_value,sell_value,net_value',
+        order='trade_date.desc',
+        limit=days * 2,   # 2 categories (FII + DII) per day
+    )
+    # Filter client-side since PostgREST filter on date range
+    rows = [r for r in rows if r.get('trade_date', '') >= since]
+    return rows
+
+
 @app.get('/api/pipeline/downloads')
 def download_types():
     """List all download types with their status."""
