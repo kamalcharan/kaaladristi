@@ -59,7 +59,7 @@ from pipeline.processors.inserter import upsert_equity_eod, update_delivery
 
 
 def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
-                     skip_indicators: bool = False):
+                     skip_indicators: bool = False, force: bool = False):
     """Run the full NSE pipeline for a single date."""
     tracker = StepTracker(db, trade_date, exchange='NSE')
 
@@ -73,8 +73,11 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         mark_day_status(db, trade_date, 'NSE', 'weekend')
         return False
 
-    if is_already_completed(db, trade_date, 'NSE'):
-        print(f'  Already completed — skipping')
+    if force:
+        print(f'  [FORCE] Resetting completed status — re-running all steps')
+        mark_day_status(db, trade_date, 'NSE', 'pending')
+    elif is_already_completed(db, trade_date, 'NSE'):
+        print(f'  Already completed — skipping (use --force to re-run)')
         return True
 
     if dry_run:
@@ -247,7 +250,7 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
 
 
 def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
-                     skip_indicators: bool = False):
+                     skip_indicators: bool = False, force: bool = False):
     """Run the full BSE pipeline for a single date."""
     tracker = StepTracker(db, trade_date, exchange='BSE')
 
@@ -260,8 +263,11 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         mark_day_status(db, trade_date, 'BSE', 'weekend')
         return False
 
-    if is_already_completed(db, trade_date, 'BSE'):
-        print(f'  Already completed — skipping')
+    if force:
+        print(f'  [FORCE] Resetting completed status — re-running all steps')
+        mark_day_status(db, trade_date, 'BSE', 'pending')
+    elif is_already_completed(db, trade_date, 'BSE'):
+        print(f'  Already completed — skipping (use --force to re-run)')
         return True
 
     if dry_run:

@@ -66,6 +66,7 @@ IST = pytz.timezone('Asia/Kolkata')
 class RunRequest(BaseModel):
     date: Optional[str] = None       # YYYY-MM-DD, default: last trading day
     exchange: str = 'ALL'            # NSE / BSE / ALL
+    force: bool = False              # re-run even if already completed
 
 class BackfillRequest(BaseModel):
     date_from: str                   # YYYY-MM-DD
@@ -83,7 +84,7 @@ class JobResponse(BaseModel):
 # ── Pipeline Runner (background thread) ───────────────────────────────────────
 
 def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
-                        skip_indicators: bool = False):
+                        skip_indicators: bool = False, force: bool = False):
     """Run the pipeline for a list of dates. Executed in background thread."""
     global db
 
@@ -96,14 +97,14 @@ def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
     for d in dates:
         try:
             if exchange in ('NSE', 'ALL'):
-                ok = run_nse_pipeline(db, d, skip_indicators=skip_indicators)
+                ok = run_nse_pipeline(db, d, skip_indicators=skip_indicators, force=force)
                 if ok:
                     success += 1
                 else:
                     failed += 1
 
             if exchange in ('BSE', 'ALL'):
-                ok = run_bse_pipeline(db, d, skip_indicators=skip_indicators)
+                ok = run_bse_pipeline(db, d, skip_indicators=skip_indicators, force=force)
                 if ok:
                     success += 1
                 else:
@@ -284,8 +285,8 @@ def run_pipeline(req: RunRequest, background_tasks: BackgroundTasks):
         'type': 'manual',
     }
 
-    background_tasks.add_task(_run_pipeline_dates, job_id, [target], req.exchange)
-    log.info(f'Job {job_id}: queued for {target} ({req.exchange})')
+    background_tasks.add_task(_run_pipeline_dates, job_id, [target], req.exchange, force=req.force)
+    log.info(f'Job {job_id}: queued for {target} ({req.exchange}){" [FORCE]" if req.force else ""}')
 
     return JobResponse(
         job_id=job_id,

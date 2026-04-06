@@ -63,9 +63,16 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
   const { data: sched } = useQuery({ queryKey: ['scheduler_status'], queryFn: fetchSchedulerStatus, staleTime: 60_000, retry: 1 });
   const { data: downloads } = useQuery({ queryKey: ['download_types'], queryFn: fetchDownloadTypes, staleTime: 60_000, retry: 1 });
 
+  const [forceRun, setForceRun] = useState(false);
+
   const runMutation = useMutation({
-    mutationFn: ({ date, exchange }: { date?: string; exchange: string }) => triggerPipelineRun(date, exchange),
-    onSuccess: (data) => { toast('success', data.message); qc.invalidateQueries({ queryKey: ['pipeline_status'] }); },
+    mutationFn: ({ date, exchange, force }: { date?: string; exchange: string; force?: boolean }) =>
+      triggerPipelineRun(date, exchange, force ?? false),
+    onSuccess: (data) => {
+      toast('success', data.message);
+      setForceRun(false);
+      qc.invalidateQueries({ queryKey: ['pipeline_status'] });
+    },
     onError: (err: Error) => toast('error', err.message),
   });
 
@@ -238,12 +245,17 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => runMutation.mutate({ exchange: 'ALL' })}
+              onClick={() => runMutation.mutate({ exchange: 'ALL', force: forceRun })}
               disabled={isRunning || apiDown}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-xs font-semibold text-accent-indigo hover:bg-accent-indigo/30 disabled:opacity-40 transition-all"
+              className={cn(
+                'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all disabled:opacity-40',
+                forceRun
+                  ? 'bg-risk-amber/20 border border-risk-amber/40 text-risk-amber hover:bg-risk-amber/30'
+                  : 'bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/30',
+              )}
             >
               {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-              {isRunning ? 'Running...' : 'Run Now'}
+              {isRunning ? 'Running...' : forceRun ? 'Force Run' : 'Run Now'}
             </button>
             <button
               onClick={() => setShowBackfill(!showBackfill)}
@@ -261,6 +273,24 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
               </button>
             )}
           </div>
+          {/* Force re-run toggle */}
+          <label className="flex items-center gap-2 mt-2 cursor-pointer w-fit">
+            <div
+              onClick={() => setForceRun(v => !v)}
+              className={cn(
+                'w-8 h-4 rounded-full transition-colors relative',
+                forceRun ? 'bg-risk-amber/60' : 'bg-slate-700',
+              )}
+            >
+              <div className={cn(
+                'absolute top-0.5 w-3 h-3 rounded-full transition-transform bg-white',
+                forceRun ? 'translate-x-4' : 'translate-x-0.5',
+              )} />
+            </div>
+            <span className="text-[10px] text-slate-500">
+              Force re-run{forceRun && <span className="text-risk-amber ml-1">(will reset today's completed steps)</span>}
+            </span>
+          </label>
         </div>
       </div>
 
