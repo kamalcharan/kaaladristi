@@ -444,7 +444,24 @@ def download_types():
             'last_sync': last_date,
             'status': 'ok' if gap == 0 else f'gap_{gap}_days',
             'gap_days': gap,
+            'run_exchange': exchange,
         })
+
+    # FII/DII — last date in km_fii_dii
+    try:
+        fii_rows = db.select('km_fii_dii', 'trade_date', order='trade_date.desc', limit=1)
+        fii_last = fii_rows[0]['trade_date'] if fii_rows else None
+    except Exception:
+        fii_last = None
+
+    types.append({
+        'type': 'fii_dii',
+        'label': 'FII / DII Activity',
+        'last_sync': fii_last,
+        'status': 'ok' if fii_last == last_td else ('never' if not fii_last else 'gap'),
+        'gap_days': 0,
+        'run_exchange': 'NSE',   # FII/DII step runs inside NSE pipeline
+    })
 
     # Breeze status
     breeze_rows = db.select('km_api_sessions', 'status', filters={'provider': 'breeze'}, limit=1)
@@ -458,6 +475,7 @@ def download_types():
             'status': 'ok' if breeze_ok else 'breeze_expired',
             'gap_days': 0,
             'depends_on': dep,
+            'run_exchange': 'NSE',
         })
 
     return types

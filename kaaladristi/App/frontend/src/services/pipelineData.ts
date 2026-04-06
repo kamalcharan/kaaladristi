@@ -62,6 +62,7 @@ export interface DownloadType {
   status: string;
   gap_days: number;
   depends_on?: string;
+  run_exchange?: string;   // which exchange to trigger when "Run" is clicked
 }
 
 export interface JobResponse {

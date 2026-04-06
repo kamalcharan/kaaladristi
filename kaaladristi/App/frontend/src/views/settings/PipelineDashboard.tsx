@@ -64,6 +64,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
   const { data: downloads } = useQuery({ queryKey: ['download_types'], queryFn: fetchDownloadTypes, staleTime: 60_000, retry: 1 });
 
   const [forceRun, setForceRun] = useState(false);
+  const [runningSource, setRunningSource] = useState<string | null>(null);
 
   const runMutation = useMutation({
     mutationFn: ({ date, exchange, force }: { date?: string; exchange: string; force?: boolean }) =>
@@ -71,9 +72,14 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
     onSuccess: (data) => {
       toast('success', data.message);
       setForceRun(false);
+      setRunningSource(null);
       qc.invalidateQueries({ queryKey: ['pipeline_status'] });
+      qc.invalidateQueries({ queryKey: ['download_types'] });
     },
-    onError: (err: Error) => toast('error', err.message),
+    onError: (err: Error) => {
+      toast('error', err.message);
+      setRunningSource(null);
+    },
   });
 
   const [showBackfill, setShowBackfill] = useState(false);
@@ -152,24 +158,45 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
       {/* ── Health + Downloads ── */}
       <div className="glass-card rounded-2xl p-5 mb-4">
         <h3 className="text-xs font-bold uppercase tracking-widest text-muted mb-3">Data Sources</h3>
-        <div className="grid gap-2">
-          {(downloads ?? []).map(dl => (
-            <div key={dl.type} className="flex items-center gap-3 py-1.5">
-              <StatusDot status={dl.status} />
-              <span className="text-[12px] text-white font-medium flex-1">{dl.label}</span>
-              <span className="text-[10px] text-slate-500 mono">
-                {dl.last_sync ? fmtDate(dl.last_sync) : 'Never synced'}
-              </span>
-              {dl.gap_days > 0 && (
-                <span className="text-[10px] text-risk-amber">{dl.gap_days}d behind</span>
-              )}
-              {dl.status === 'breeze_expired' && (
-                <button onClick={() => setShowBreeze(true)} className="text-[10px] text-accent-indigo hover:underline">
-                  Connect
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="grid gap-1">
+          {(downloads ?? []).map(dl => {
+            const isSourceRunning = runningSource === dl.type;
+            const canRun = !!dl.run_exchange && !apiDown && dl.status !== 'breeze_expired';
+            return (
+              <div key={dl.type} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-slate-900/40 group">
+                <StatusDot status={dl.status} />
+                <span className="text-[12px] text-white font-medium flex-1">{dl.label}</span>
+                <span className="text-[10px] text-slate-500 mono">
+                  {dl.last_sync ? fmtDate(dl.last_sync) : 'Never synced'}
+                </span>
+                {dl.gap_days > 0 && (
+                  <span className="text-[10px] text-risk-amber">{dl.gap_days}d behind</span>
+                )}
+                {dl.status === 'breeze_expired' && (
+                  <button onClick={() => setShowBreeze(true)} className="text-[10px] text-accent-indigo hover:underline">
+                    Connect
+                  </button>
+                )}
+                {canRun && (
+                  <button
+                    onClick={() => {
+                      setRunningSource(dl.type);
+                      runMutation.mutate({ exchange: dl.run_exchange!, force: true });
+                    }}
+                    disabled={isRunning}
+                    title={`Force re-run ${dl.label}`}
+                    className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-1 px-2 py-0.5 bg-slate-800 border border-kd-border rounded-lg text-[10px] text-slate-400 hover:text-accent-indigo hover:border-accent-indigo/40 disabled:opacity-30 transition-all"
+                  >
+                    {isSourceRunning
+                      ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      : <Play className="w-2.5 h-2.5" />
+                    }
+                    Run
+                  </button>
+                )}
+              </div>
+            );
+          })}
           {!downloads && !apiDown && (
             <p className="text-xs text-muted py-2">Loading...</p>
           )}
