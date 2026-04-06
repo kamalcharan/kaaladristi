@@ -1,10 +1,27 @@
 """
 Batch Inserter — upserts parsed EOD records into km_equity_eod.
 Handles batching for large datasets (1000+ rows per day).
+Sanitizes pandas NA/NaT/NAType values to None before DB insert.
 """
 
+import math
 
 BATCH_SIZE = 500
+
+
+def _sanitize(val):
+    """Convert pandas NA, NaN, NaT, NAType to None for psycopg2."""
+    if val is None:
+        return None
+    try:
+        import pandas as pd
+        if pd.isna(val):
+            return None
+    except (ImportError, TypeError, ValueError):
+        pass
+    if isinstance(val, float) and math.isnan(val):
+        return None
+    return val
 
 # Columns to upsert (must match km_equity_eod schema)
 EOD_COLUMNS = [
@@ -26,10 +43,10 @@ def upsert_equity_eod(db, records: list[dict]) -> int:
     if not records:
         return 0
 
-    # Filter to only known columns
+    # Filter to known columns + sanitize values
     clean = []
     for rec in records:
-        row = {k: rec.get(k) for k in EOD_COLUMNS if k in rec}
+        row = {k: _sanitize(rec.get(k)) for k in EOD_COLUMNS if k in rec}
         if row.get('equity_id') and row.get('trade_date'):
             clean.append(row)
 

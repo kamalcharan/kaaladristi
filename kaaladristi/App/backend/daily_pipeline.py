@@ -46,7 +46,8 @@ from pipeline.utils.trading_calendar import (
 from pipeline.utils.step_tracker import StepTracker
 from pipeline.utils.nse_session import NseSession
 from pipeline.downloaders.nse_bhav import download_nse_bhav, download_nse_delivery
-from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery
+from pipeline.downloaders.bse_bhav import download_bse_bhav
+from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
 
@@ -164,6 +165,95 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     # ── Mark day complete ──
     mark_day_status(db, trade_date, 'NSE', 'completed')
     print(f'\n  ✓ NSE pipeline completed for {trade_date}')
+    return True
+
+
+def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
+                     skip_indicators: bool = False):
+    """Run the full BSE pipeline for a single date."""
+    tracker = StepTracker(db, trade_date, exchange='BSE')
+
+    print(f'\n{"=" * 60}')
+    print(f'  BSE Pipeline — {trade_date.strftime("%d-%b-%Y")} ({trade_date.strftime("%A")})')
+    print(f'{"=" * 60}')
+
+    if is_weekend(trade_date):
+        print(f'  Weekend — skipping')
+        mark_day_status(db, trade_date, 'BSE', 'weekend')
+        return False
+
+    if is_already_completed(db, trade_date, 'BSE'):
+        print(f'  Already completed — skipping')
+        return True
+
+    if dry_run:
+        matcher = SymbolMatcher(db, exchange='BSE')
+        print(f'  [DRY RUN] Would download BSE bhav copy for {trade_date}')
+        print(f'  {matcher.total_symbols} BSE symbols in master table')
+        return True
+
+    # ── Step 1: Download ──
+    tracker.start('download')
+    try:
+        csv_path = download_bse_bhav(trade_date)
+        if csv_path is None:
+            tracker.fail('download', 'No BSE bhav copy available')
+            mark_day_status(db, trade_date, 'BSE', 'no_data')
+            return False
+        tracker.complete('download', metadata={'file': csv_path})
+    except Exception as e:
+        tracker.fail('download', str(e))
+        mark_day_status(db, trade_date, 'BSE', 'failed')
+        return False
+
+    # ── Step 2: Parse ──
+    tracker.start('parse')
+    try:
+        records = parse_bse_bhav(csv_path, trade_date)
+        tracker.complete('parse', rows=len(records))
+    except Exception as e:
+        tracker.fail('parse', str(e))
+        mark_day_status(db, trade_date, 'BSE', 'failed')
+        return False
+
+    if not records:
+        print('  No equity records found in BSE bhav copy')
+        mark_day_status(db, trade_date, 'BSE', 'no_data')
+        return False
+
+    # ── Step 3: Match symbols ──
+    matcher = SymbolMatcher(db, exchange='BSE')
+    matched, unmatched = matcher.match_records(records)
+    print(f'  [match] {len(matched)} matched, {len(unmatched)} unmatched of {len(records)} parsed')
+
+    # ── Step 4: Insert ──
+    tracker.start('insert')
+    try:
+        count = upsert_equity_eod(db, matched)
+        tracker.complete('insert', rows=count, metadata={
+            'unmatched_count': len(unmatched),
+        })
+    except Exception as e:
+        tracker.fail('insert', str(e))
+        mark_day_status(db, trade_date, 'BSE', 'failed')
+        return False
+
+    # ── Step 5: Indicators (optional) ──
+    if not skip_indicators:
+        tracker.start('indicators')
+        try:
+            from indicators.compute_engine import IndicatorEngine
+            engine = IndicatorEngine(db)
+            ind_count = engine.run(mode='equity', full=False)
+            tracker.complete('indicators', rows=ind_count)
+        except ImportError:
+            tracker.skip('indicators', 'Indicator engine not available')
+        except Exception as e:
+            tracker.fail('indicators', str(e))
+
+    # ── Mark complete ──
+    mark_day_status(db, trade_date, 'BSE', 'completed')
+    print(f'\n  ✓ BSE pipeline completed for {trade_date}')
     return True
 
 
@@ -285,9 +375,13 @@ def main():
             else:
                 fail_count += 1
 
-        # BSE pipeline — placeholder for Phase 5
         if args.exchange in ('BSE', 'ALL'):
-            print(f'\n  BSE pipeline not yet implemented')
+            ok = run_bse_pipeline(db, d, dry_run=args.dry_run,
+                                  skip_indicators=args.skip_indicators)
+            if ok:
+                success_count += 1
+            else:
+                fail_count += 1
 
     # Summary
     print(f'\n{"=" * 60}')

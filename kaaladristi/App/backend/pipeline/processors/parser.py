@@ -13,6 +13,12 @@ def _safe_float(val) -> float | None:
     if val is None:
         return None
     try:
+        import pandas as pd
+        if pd.isna(val):
+            return None
+    except (ImportError, TypeError, ValueError):
+        pass
+    try:
         v = str(val).strip().replace(',', '')
         return round(float(v), 2) if v else None
     except (ValueError, TypeError):
@@ -22,6 +28,12 @@ def _safe_float(val) -> float | None:
 def _safe_int(val) -> int | None:
     if val is None:
         return None
+    try:
+        import pandas as pd
+        if pd.isna(val):
+            return None
+    except (ImportError, TypeError, ValueError):
+        pass
     try:
         v = str(val).strip().replace(',', '')
         return int(float(v)) if v else None
@@ -151,3 +163,93 @@ def parse_nse_delivery(csv_path: str) -> dict[str, dict]:
             }
 
     return result
+
+
+# ── BSE Bhav Copy Parser ──────────────────────────────────────────────────────
+
+# BSE CSV column mappings (BSE uses different headers across formats)
+_BSE_BHAV_MAP = {
+    # Scrip code (BSE uses numeric codes)
+    'SC_CODE': 'scrip_code', 'SCRIP_CD': 'scrip_code', 'ScripCode': 'scrip_code',
+    # Name
+    'SC_NAME': 'name', 'SCRIP_NAME': 'name', 'ScripName': 'name',
+    # Group
+    'SC_GROUP': 'group', 'SCRIP_GRP': 'group', 'ScripGroup': 'group',
+    # Type
+    'SC_TYPE': 'type',
+    # OHLC
+    'OPEN': 'open', 'OpnPric': 'open',
+    'HIGH': 'high', 'HghPric': 'high',
+    'LOW': 'low', 'LwPric': 'low',
+    'CLOSE': 'close', 'ClsPric': 'close',
+    'LAST': 'last', 'LastPric': 'last',
+    'PREVCLOSE': 'prev_close', 'PrvsClsgPric': 'prev_close', 'PREV_CLOSE': 'prev_close',
+    # Volume / Value
+    'NO_OF_SHRS': 'volume', 'TtlTradgVol': 'volume', 'VOLUME': 'volume', 'NO_TRADES': 'total_trades',
+    'NET_TURNOV': 'value', 'TtlTrfVal': 'value', 'TURNOVER': 'value',
+    # ISIN
+    'ISIN_CODE': 'isin', 'ISIN': 'isin',
+    # Symbol (UDiFF format)
+    'TckrSymb': 'symbol', 'TCKRSYMB': 'symbol',
+}
+
+# BSE groups to include (A=large cap, B=mid/small, T=trade-to-trade, X=illiquid)
+_BSE_VALID_GROUPS = {'A', 'B', 'T', 'X', 'XC', 'XD', 'XT', 'Z', 'P', 'IF'}
+
+
+def parse_bse_bhav(csv_path: str, trade_date: date) -> list[dict]:
+    """
+    Parse BSE bhav copy CSV.
+    Returns list of normalized dicts with: scrip_code (as symbol),
+    open, high, low, close, prev_close, volume, value_cr, trade_date.
+    """
+    records = []
+
+    with open(csv_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        for raw in reader:
+            row = _normalize_row(raw, _BSE_BHAV_MAP)
+
+            # Filter by group if available
+            group = (row.get('group') or '').strip().upper()
+            if group and group not in _BSE_VALID_GROUPS:
+                continue
+
+            # BSE uses scrip code as primary identifier
+            scrip_code = (row.get('scrip_code') or '').strip()
+            symbol = (row.get('symbol') or scrip_code).strip()
+            if not symbol:
+                continue
+
+            o = _safe_float(row.get('open'))
+            h = _safe_float(row.get('high'))
+            l = _safe_float(row.get('low'))
+            c = _safe_float(row.get('close'))
+
+            if not all([o, h, l, c]):
+                continue
+
+            volume = _safe_int(row.get('volume'))
+            value_raw = _safe_float(row.get('value'))
+            # BSE value is in rupees, convert to crores
+            value_cr = round(value_raw / 1e7, 4) if value_raw else None
+
+            records.append({
+                'symbol': symbol,
+                'trade_date': str(trade_date),
+                'open': o,
+                'high': h,
+                'low': l,
+                'close': c,
+                'prev_close': _safe_float(row.get('prev_close')),
+                'chng': round(c - (_safe_float(row.get('prev_close')) or c), 2),
+                'pct_chng': round(
+                    ((c - (_safe_float(row.get('prev_close')) or c)) /
+                     (_safe_float(row.get('prev_close')) or c)) * 100, 2
+                ) if _safe_float(row.get('prev_close')) else None,
+                'volume': volume,
+                'value_cr': value_cr,
+                'isin': (row.get('isin') or '').strip() or None,
+            })
+
+    return records
