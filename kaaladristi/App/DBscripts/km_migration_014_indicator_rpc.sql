@@ -100,7 +100,7 @@ BEGIN
             array_agg(low ORDER BY trade_date),
             array_agg(close ORDER BY trade_date),
             array_agg(COALESCE(volume,0) ORDER BY trade_date)
-     FROM %I WHERE %I = $1 ORDER BY trade_date',
+     FROM %I WHERE %I = $1',
     p_table, p_id_col
   ) INTO a_date, a_open, a_high, a_low, a_close, a_volume
   USING p_symbol_id;
