@@ -12,16 +12,18 @@ Data fields (all in crores INR):
   sell_value — gross sales
   net_value  — net flow (buy - sell), negative = net sellers
 
-The raw JSON is saved to data/bhav/YYYY/ as an audit trail.
+NOTE: No file caching — always downloads fresh because NSE publishes
+FII/DII data after market close and we need the latest version.
+Raw JSON is still saved as an audit trail.
 """
 
 import json
 import math
-from datetime import date
+from datetime import date, datetime
 
 from pipeline.config import NSE_FIIDII_URL, DOWNLOAD_MAX_RETRIES
 from pipeline.utils.nse_session import NseSession
-from pipeline.utils.file_manager import file_exists, save_file
+from pipeline.utils.file_manager import save_file
 
 import time
 
@@ -29,21 +31,22 @@ import time
 # ── Normalise category names from NSE response ───────────────────────────────
 
 _CATEGORY_MAP = {
-    'FII/FPI*': 'FII',
-    'FII/FPI': 'FII',
-    'FPI': 'FII',
-    'DII': 'DII',
+    'FII/FPI*':     'FII',
+    'FII/FPI':      'FII',
+    'FPI':          'FII',
+    'FII':          'FII',
+    'DII':          'DII',
+    'dii':          'DII',
 }
 
 
 def _normalise_category(raw: str) -> str | None:
-    """Map NSE category strings to canonical 'FII' or 'DII'."""
-    raw = raw.strip()
+    raw = (raw or '').strip()
     return _CATEGORY_MAP.get(raw) or _CATEGORY_MAP.get(raw.upper())
 
 
 def _parse_number(val) -> float | None:
-    """Parse NSE value strings ('12,345.67' or '-1234.56') to float."""
+    """Parse NSE value strings ('12,345.67', '-1234.56', '12345') to float."""
     if val is None:
         return None
     try:
@@ -51,36 +54,28 @@ def _parse_number(val) -> float | None:
         if cleaned in ('', '-', 'N/A', 'NA', '--'):
             return None
         result = float(cleaned)
-        if math.isnan(result) or math.isinf(result):
-            return None
-        return result
+        return None if (math.isnan(result) or math.isinf(result)) else result
     except (ValueError, TypeError):
         return None
+
+
+def _get_field(item: dict, *candidates) -> any:
+    """Return first matching field from a dict, trying multiple candidate keys."""
+    for key in candidates:
+        if key in item:
+            return item[key]
+    return None
 
 
 # ── Downloader ────────────────────────────────────────────────────────────────
 
 def download_nse_fiidii(d: date, session: NseSession = None) -> list[dict] | None:
     """
-    Download FII/DII activity from NSE API for the given date.
+    Download FII/DII activity from NSE API and return records for date d.
 
-    NSE returns the last ~10 trading days in one JSON response.
-    We filter the response to return only records matching the requested date.
-
-    Returns list of dicts [{trade_date, category, buy_value, sell_value, net_value}]
-    or None if data not available (holiday, weekend, not yet published).
+    Always fetches fresh data (no cache) because NSE publishes FII/DII after
+    market close — a cached response from earlier in the day would be stale.
     """
-    # Check if we already have raw JSON saved for this date
-    existing = file_exists(d, prefix='nse_fiidii', ext='.json')
-    if existing:
-        print(f'  [fii_dii] Already exists: {existing}')
-        try:
-            with open(existing, 'r') as f:
-                raw_data = json.load(f)
-            return _parse_response(raw_data, d)
-        except Exception as e:
-            print(f'  [fii_dii] Re-downloading (parse error on cached file: {e})')
-
     if session is None:
         session = NseSession()
 
@@ -91,20 +86,39 @@ def download_nse_fiidii(d: date, session: NseSession = None) -> list[dict] | Non
             resp = session.get(NSE_FIIDII_URL)
             raw_data = resp.json()
 
-            if not raw_data or not isinstance(raw_data, list):
-                print(f'  [fii_dii] Unexpected response format')
+            if not raw_data:
+                print(f'  [fii_dii] Empty response from NSE')
                 return None
 
-            # Save raw JSON as audit trail
+            # Handle both list and dict-wrapped responses
+            if isinstance(raw_data, dict):
+                # Some NSE endpoints wrap list in a key like {"data": [...]}
+                for key in ('data', 'fiidiiData', 'result', 'Data'):
+                    if key in raw_data and isinstance(raw_data[key], list):
+                        raw_data = raw_data[key]
+                        print(f'  [fii_dii] Unwrapped from dict key "{key}"')
+                        break
+
+            if not isinstance(raw_data, list):
+                print(f'  [fii_dii] Unexpected format: {type(raw_data).__name__}')
+                print(f'  [fii_dii] Preview: {str(raw_data)[:300]}')
+                return None
+
+            # Log first record's keys so we can see NSE's field names
+            if raw_data:
+                print(f'  [fii_dii] {len(raw_data)} records, keys={list(raw_data[0].keys())}')
+                print(f'  [fii_dii] Dates in response: {_date_range_in_response(raw_data)}')
+
+            # Save raw JSON as audit trail (always overwrites — fresh data)
             json_bytes = json.dumps(raw_data, indent=2).encode('utf-8')
             save_file(json_bytes, f'nse_fiidii_{d.strftime("%Y%m%d")}.json', d)
-            print(f'  [fii_dii] Saved raw JSON ({len(raw_data)} records from NSE)')
 
-            return _parse_response(raw_data, d)
+            records = _parse_response(raw_data, d)
+            return records
 
         except Exception as e:
             if attempt < DOWNLOAD_MAX_RETRIES - 1:
-                wait = (attempt + 1) * 60
+                wait = (attempt + 1) * 30
                 print(f'  [fii_dii] Attempt {attempt + 1} failed: {e}')
                 print(f'  [fii_dii] Retrying in {wait}s...')
                 time.sleep(wait)
@@ -115,65 +129,74 @@ def download_nse_fiidii(d: date, session: NseSession = None) -> list[dict] | Non
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 
+# NSE has used several different field name conventions over time
+_DATE_KEYS     = ('date', 'Date', 'DATE', 'tradeDate', 'trade_date')
+_CATEGORY_KEYS = ('category', 'Category', 'CATEGORY', 'name', 'type')
+_BUY_KEYS      = ('buyValue', 'BuyValue', 'BUY', 'buy', 'Buy', 'grossPurchase', 'purchases')
+_SELL_KEYS     = ('sellValue', 'SellValue', 'SELL', 'sell', 'Sell', 'grossSales', 'sales')
+_NET_KEYS      = ('netValue', 'NetValue', 'NET', 'net', 'Net', 'netPurchase', 'netSales')
+
+
 def _parse_response(raw_data: list, target_date: date) -> list[dict] | None:
-    """
-    Parse NSE JSON response and extract records for target_date.
-
-    NSE date format in response: '04-Apr-2026' or '2026-04-04'
-    We try both formats.
-    """
-    from datetime import datetime
-
     records = []
 
     for item in raw_data:
-        # Parse date from NSE response
-        raw_date_str = item.get('date', '')
-        parsed_date = None
-
-        for fmt in ('%d-%b-%Y', '%Y-%m-%d', '%d/%m/%Y'):
-            try:
-                parsed_date = datetime.strptime(raw_date_str.strip(), fmt).date()
-                break
-            except (ValueError, AttributeError):
-                continue
-
+        # ── Parse date ──
+        raw_date_str = str(_get_field(item, *_DATE_KEYS) or '').strip()
+        parsed_date = _parse_date(raw_date_str)
         if parsed_date is None:
             continue
-
         if parsed_date != target_date:
             continue
 
-        category_raw = item.get('category', '')
+        # ── Parse category ──
+        category_raw = str(_get_field(item, *_CATEGORY_KEYS) or '').strip()
         category = _normalise_category(category_raw)
         if not category:
             print(f'  [fii_dii] Unknown category: "{category_raw}" — skipping')
             continue
 
-        buy_value = _parse_number(item.get('buyValue'))
-        sell_value = _parse_number(item.get('sellValue'))
-        net_value = _parse_number(item.get('netValue'))
+        # ── Parse values ──
+        buy_value  = _parse_number(_get_field(item, *_BUY_KEYS))
+        sell_value = _parse_number(_get_field(item, *_SELL_KEYS))
+        net_value  = _parse_number(_get_field(item, *_NET_KEYS))
 
         records.append({
             'trade_date': str(target_date),
-            'category': category,
-            'buy_value': buy_value,
+            'category':   category,
+            'buy_value':  buy_value,
             'sell_value': sell_value,
-            'net_value': net_value,
+            'net_value':  net_value,
         })
 
     if not records:
-        print(f'  [fii_dii] No records found for {target_date} in NSE response')
-        print(f'  [fii_dii]   (Data covers: {_date_range_in_response(raw_data)})')
+        print(f'  [fii_dii] No records matched {target_date}')
+        print(f'  [fii_dii] Response covers: {_date_range_in_response(raw_data)}')
         return None
 
+    print(f'  [fii_dii] Parsed {len(records)} records for {target_date}')
     return records
 
 
+def _parse_date(raw: str) -> date | None:
+    """Try multiple date formats NSE has used."""
+    if not raw:
+        return None
+    for fmt in ('%d-%b-%Y', '%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%b %d, %Y'):
+        try:
+            return datetime.strptime(raw.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _date_range_in_response(raw_data: list) -> str:
-    """Helper to show which dates NSE returned, for debug output."""
-    dates = [item.get('date', '') for item in raw_data if item.get('date')]
-    return ', '.join(sorted(set(dates))) if dates else 'unknown'
+    dates = set()
+    for item in raw_data:
+        d = _get_field(item, *_DATE_KEYS)
+        if d:
+            dates.add(str(d))
+    return ', '.join(sorted(dates)) if dates else 'no dates found'
 
 
 # ── Inserter ──────────────────────────────────────────────────────────────────
@@ -190,13 +213,9 @@ def upsert_fii_dii(db, records: list[dict]) -> int:
     if not records:
         return 0
 
-    clean = []
-    for rec in records:
-        row = {k: rec.get(k) for k in FII_DII_COLUMNS}
-        if row.get('trade_date') and row.get('category'):
-            clean.append(row)
-
-    if not clean:
-        return 0
-
-    return db.upsert('km_fii_dii', clean, 'trade_date,category')
+    clean = [
+        {k: rec.get(k) for k in FII_DII_COLUMNS}
+        for rec in records
+        if rec.get('trade_date') and rec.get('category')
+    ]
+    return db.upsert('km_fii_dii', clean, 'trade_date,category') if clean else 0
