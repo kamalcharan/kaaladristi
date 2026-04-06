@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Globe, ChevronRight, type LucideIcon } from 'lucide-react';
+import { Globe, BarChart3, Activity, ChevronRight, type LucideIcon } from 'lucide-react';
 import SectorLordsDetail from './settings/SectorLordsDetail';
+import MarketDataExplorer from './settings/MarketDataExplorer';
+import PipelineDashboard from './settings/PipelineDashboard';
 
 // ── Card config for each settings section ──
 interface SettingsCard {
@@ -21,6 +23,22 @@ const cards: SettingsCard[] = [
     iconColor: 'text-accent-indigo bg-accent-indigo/15',
     ready: true,
   },
+  {
+    id: 'market-data',
+    title: 'Market Data',
+    description: 'Index catalog — date ranges, record counts, price charts',
+    icon: BarChart3,
+    iconColor: 'text-risk-green bg-risk-green/15',
+    ready: true,
+  },
+  {
+    id: 'pipeline',
+    title: 'Data Pipeline',
+    description: 'Daily EOD downloads, indicator computation, sync status',
+    icon: Activity,
+    iconColor: 'text-risk-amber bg-risk-amber/15',
+    ready: true,
+  },
 ];
 
 export default function SettingsView() {
@@ -36,6 +54,10 @@ export default function SettingsView() {
       {/* Detail view or card grid */}
       {activeCard === 'sector-lords' ? (
         <SectorLordsDetail onBack={() => setActiveCard(null)} />
+      ) : activeCard === 'market-data' ? (
+        <MarketDataExplorer onBack={() => setActiveCard(null)} />
+      ) : activeCard === 'pipeline' ? (
+        <PipelineDashboard onBack={() => setActiveCard(null)} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {cards.map((card) => (

@@ -1,34 +1,114 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, AlertCircle, Loader2, Filter } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, AlertCircle, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary, KaalaLoader, ToastContainer, useToast } from '@/components/ui';
-import {
-  fetchInferences,
-  createInference,
-  updateInference,
-  deleteInference,
-} from '@/services/dcInference';
-import type { DcInference, DcInferenceInput } from '@/types';
+import { fetchInferences, createInference, updateInference, deleteInference } from '@/services/dcInference';
+import { fetchLookupByCategory } from '@/services/dcLookup';
+import type { DcInference, DcInferenceInput, DcLookupItem } from '@/types';
 import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
-import { fmtDate } from '@/lib/dateUtils';
+import { MONTH_ABBR, fmtDate } from '@/lib/dateUtils';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
 const EMPTY_FORM: DcInferenceInput = {
-  astro_event:   '',
-  start_date:    '',
-  start_time:    null,
-  end_date:      null,
-  end_time:      null,
-  inference:     null,
-  market_impact: null,
-  confidence:    null,
-  notes:         null,
-  created_by:    null,
+  astro_event:        '',
+  start_date:         '',
+  start_time:         null,
+  end_date:           null,
+  end_time:           null,
+  inference:          null,
+  market_impact:      null,
+  confidence:         null,
+  notes:              null,
+  created_by:         null,
+  applicability_scope: null,
+  applicability:       null,
 };
+
+const SCOPE_OPTIONS = [
+  { value: '', label: 'All Scopes' },
+  { value: 'equity', label: 'Equity' },
+  { value: 'index', label: 'Index' },
+  { value: 'commodity', label: 'Commodity' },
+];
+
+// ── Applicability form types ─────────────────────────────────────────────────
+
+interface ApplForm {
+  stockMarket: boolean;                                     // broad equity toggle
+  sectors:     { enabled: boolean; codes: string[] };       // specific sectors
+  index:       { enabled: boolean; all: boolean; codes: string[] };
+  commodity:   { enabled: boolean; all: boolean; codes: string[] };
+}
+
+type ApplPanel = 'stockMarket' | 'sectors' | 'index' | 'commodity';
+
+const APPL_CARDS: { key: ApplPanel; label: string; sub: string }[] = [
+  { key: 'stockMarket', label: 'Stock Market',  sub: 'Broad equity' },
+  { key: 'sectors',     label: 'Sectors',        sub: 'Specific sectors' },
+  { key: 'index',       label: 'Indexes',        sub: 'NSE / BSE indexes' },
+  { key: 'commodity',   label: 'Commodities',    sub: 'MCX commodities' },
+];
+
+const DEFAULT_APPL: ApplForm = {
+  stockMarket: true,
+  sectors:     { enabled: false, codes: [] },
+  index:       { enabled: false, all: false, codes: [] },
+  commodity:   { enabled: false, all: false, codes: [] },
+};
+
+function applFromRow(row: DcInference): ApplForm {
+  const ap = (row.applicability ?? {}) as Record<string, any>;
+  const hasEquity = row.applicability_scope?.includes('equity') ?? true;
+  const allSectors = ap.equity?.all_sectors ?? true;
+  const sectorCodes = ap.equity?.sectors ?? [];
+
+  return {
+    stockMarket: hasEquity && allSectors,
+    sectors: {
+      enabled: hasEquity && !allSectors && sectorCodes.length > 0,
+      codes:   sectorCodes,
+    },
+    index: {
+      enabled: row.applicability_scope?.includes('index') ?? false,
+      all:     ap.index?.all ?? false,
+      codes:   ap.index?.list ?? [],
+    },
+    commodity: {
+      enabled: row.applicability_scope?.includes('commodity') ?? false,
+      all:     ap.commodity?.all ?? false,
+      codes:   ap.commodity?.list ?? [],
+    },
+  };
+}
+
+function applToInput(appl: ApplForm): Pick<DcInferenceInput, 'applicability_scope' | 'applicability'> {
+  const scope: string[] = [];
+  const applicability: Record<string, unknown> = {};
+
+  // Stock Market OR Sectors → equity scope
+  if (appl.stockMarket || appl.sectors.enabled) {
+    scope.push('equity');
+    applicability.equity = {
+      all_sectors: appl.stockMarket,
+      sectors: appl.sectors.enabled ? appl.sectors.codes : [],
+    };
+  }
+  if (appl.index.enabled) {
+    scope.push('index');
+    applicability.index = { all: appl.index.all, list: appl.index.codes };
+  }
+  if (appl.commodity.enabled) {
+    scope.push('commodity');
+    applicability.commodity = { all: appl.commodity.all, list: appl.commodity.codes };
+  }
+
+  return {
+    applicability_scope: scope.length ? scope : null,
+    applicability: Object.keys(applicability).length ? applicability : null,
+  };
+}
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
@@ -67,10 +147,247 @@ function formatDateRange(row: DcInference): string {
   return `${from} → ${to}`;
 }
 
-// ── Form Modal ────────────────────────────────────────────────────────────────
+function getScopeLabels(row: DcInference): string[] {
+  const ap = (row.applicability ?? {}) as Record<string, any>;
+  const out: string[] = [];
+  if (row.applicability_scope?.includes('equity')) {
+    if (ap.equity?.all_sectors) out.push('Stock Market');
+    const sectors = ap.equity?.sectors ?? [];
+    if (sectors.length) sectors.slice(0, 2).forEach((s: string) => out.push(s));
+  }
+  if (row.applicability_scope?.includes('index')) {
+    if (ap.index?.all) out.push('All Indexes');
+    else (ap.index?.list ?? []).slice(0, 2).forEach((s: string) => out.push(s));
+  }
+  if (row.applicability_scope?.includes('commodity')) {
+    if (ap.commodity?.all) out.push('All Commodities');
+    else (ap.commodity?.list ?? []).slice(0, 2).forEach((s: string) => out.push(s));
+  }
+  return out;
+}
+
+function borderColorForImpact(impact: string | null): string {
+  if (!impact) return 'border-l-slate-700';
+  const s = MARKET_STATUS_MAP.get(impact);
+  const map: Record<string, string> = {
+    green: 'border-l-risk-green', red: 'border-l-risk-red', amber: 'border-l-risk-amber',
+    violet: 'border-l-accent-violet', blue: 'border-l-accent-indigo', slate: 'border-l-slate-500',
+  };
+  return map[s?.color ?? 'slate'] ?? 'border-l-slate-700';
+}
+
+// ── Applies To — horizontal card + detail panel ─────────────────────────────
+
+function isApplCardActive(appl: ApplForm, key: ApplPanel): boolean {
+  if (key === 'stockMarket') return appl.stockMarket;
+  if (key === 'sectors')     return appl.sectors.enabled;
+  if (key === 'index')       return appl.index.enabled;
+  return appl.commodity.enabled;
+}
+
+function toggleApplCard(appl: ApplForm, key: ApplPanel): ApplForm {
+  if (key === 'stockMarket') return { ...appl, stockMarket: !appl.stockMarket };
+  if (key === 'sectors')     return { ...appl, sectors: { ...appl.sectors, enabled: !appl.sectors.enabled } };
+  if (key === 'index')       return { ...appl, index: { ...appl.index, enabled: !appl.index.enabled } };
+  return { ...appl, commodity: { ...appl.commodity, enabled: !appl.commodity.enabled } };
+}
+
+function AppliesTo({
+  appl, onChange, sectors, indexes, commodities,
+}: {
+  appl: ApplForm;
+  onChange: (a: ApplForm) => void;
+  sectors: DcLookupItem[];
+  indexes: DcLookupItem[];
+  commodities: DcLookupItem[];
+}) {
+  const [activePanel, setActivePanel] = useState<ApplPanel | null>(null);
+  const [search, setSearch] = useState('');
+
+  const handleCardClick = (key: ApplPanel) => {
+    if (key === 'stockMarket') {
+      // Stock Market has no children — just toggle
+      onChange(toggleApplCard(appl, key));
+    } else {
+      const wasEnabled = isApplCardActive(appl, key);
+      if (!wasEnabled) {
+        // Enable + open panel
+        onChange(toggleApplCard(appl, key));
+        setActivePanel(key);
+        setSearch('');
+      } else if (activePanel === key) {
+        // Already open — close panel
+        setActivePanel(null);
+      } else {
+        // Enabled but panel closed — open it
+        setActivePanel(key);
+        setSearch('');
+      }
+    }
+  };
+
+  const handleDisable = (key: ApplPanel) => {
+    onChange(toggleApplCard(appl, key));
+    if (activePanel === key) setActivePanel(null);
+  };
+
+  // Items for the active detail panel
+  const panelItems = activePanel === 'sectors' ? sectors
+    : activePanel === 'index' ? indexes
+    : activePanel === 'commodity' ? commodities : [];
+
+  const panelSection = activePanel === 'sectors' ? appl.sectors
+    : activePanel === 'index' ? appl.index
+    : activePanel === 'commodity' ? appl.commodity : null;
+
+  const filteredItems = panelItems.filter(it =>
+    it.label.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const panelLabel = APPL_CARDS.find(c => c.key === activePanel)?.label ?? '';
+
+  const updateCodes = (code: string, checked: boolean) => {
+    if (!activePanel || activePanel === 'stockMarket') return;
+    if (activePanel === 'sectors') {
+      const codes = checked ? [...appl.sectors.codes, code] : appl.sectors.codes.filter(c => c !== code);
+      onChange({ ...appl, sectors: { ...appl.sectors, codes } });
+    } else if (activePanel === 'index') {
+      const codes = checked ? [...appl.index.codes, code] : appl.index.codes.filter(c => c !== code);
+      onChange({ ...appl, index: { ...appl.index, codes } });
+    } else {
+      const codes = checked ? [...appl.commodity.codes, code] : appl.commodity.codes.filter(c => c !== code);
+      onChange({ ...appl, commodity: { ...appl.commodity, codes } });
+    }
+  };
+
+  const toggleAll = (checked: boolean) => {
+    if (!activePanel || activePanel === 'stockMarket' || activePanel === 'sectors') return;
+    if (activePanel === 'index') onChange({ ...appl, index: { ...appl.index, all: checked, codes: checked ? [] : appl.index.codes } });
+    else onChange({ ...appl, commodity: { ...appl.commodity, all: checked, codes: checked ? [] : appl.commodity.codes } });
+  };
+
+  const selectedCodes = activePanel === 'sectors' ? appl.sectors.codes
+    : activePanel === 'index' ? appl.index.codes
+    : activePanel === 'commodity' ? appl.commodity.codes : [];
+
+  const showAll = activePanel === 'index' ? appl.index.all
+    : activePanel === 'commodity' ? appl.commodity.all : false;
+
+  return (
+    <div className="flex gap-3">
+      {/* Left: toggle cards */}
+      <div className="flex flex-col gap-2 min-w-[120px]">
+        {APPL_CARDS.map(card => {
+          const active = isApplCardActive(appl, card.key);
+          const focused = activePanel === card.key;
+          return (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => handleCardClick(card.key)}
+              className={cn(
+                'text-left px-3 py-2.5 rounded-xl border transition-all',
+                active
+                  ? focused
+                    ? 'bg-accent-indigo/20 border-accent-indigo/50 ring-1 ring-accent-indigo/30'
+                    : 'bg-accent-indigo/10 border-accent-indigo/30'
+                  : 'bg-slate-900/40 border-white/5 hover:border-white/15'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className={cn('text-xs font-semibold', active ? 'text-accent-indigo' : 'text-slate-500')}>
+                  {card.label}
+                </span>
+                <div className={cn(
+                  'w-2 h-2 rounded-full',
+                  active ? 'bg-accent-indigo' : 'bg-slate-700'
+                )} />
+              </div>
+              <p className="text-[10px] text-muted mt-0.5">{card.sub}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Right: detail panel */}
+      {activePanel && activePanel !== 'stockMarket' && panelSection && (
+        <div className="flex-1 p-3 bg-slate-950/50 border border-kd-border rounded-xl">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-white">{panelLabel}</span>
+            <button
+              type="button"
+              onClick={() => handleDisable(activePanel)}
+              className="text-[10px] text-risk-red hover:text-risk-red/80 transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+
+          {/* All toggle (for indexes + commodities) */}
+          {activePanel !== 'sectors' && (
+            <label className="flex items-center gap-2 mb-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAll}
+                onChange={e => toggleAll(e.target.checked)}
+                className="accent-accent-indigo w-3 h-3"
+              />
+              <span className="text-[11px] text-slate-300">All {panelLabel}</span>
+            </label>
+          )}
+
+          {/* Search + checklist (hidden when "All" is on) */}
+          {!showAll && (
+            <>
+              <div className="relative mb-2">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder={`Search ${panelLabel.toLowerCase()}...`}
+                  className="w-full pl-7 pr-3 py-1.5 bg-slate-900/60 border border-kd-border rounded-lg text-[11px] text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60"
+                />
+              </div>
+              <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1">
+                {filteredItems.map(it => (
+                  <label key={it.code} className="flex items-center gap-2 py-0.5 cursor-pointer hover:bg-slate-800/40 rounded px-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedCodes.includes(it.code)}
+                      onChange={e => updateCodes(it.code, e.target.checked)}
+                      className="accent-accent-indigo w-3 h-3"
+                    />
+                    <span className="text-[11px] text-slate-300">{it.label}</span>
+                  </label>
+                ))}
+                {filteredItems.length === 0 && (
+                  <p className="text-[10px] text-muted py-2 text-center">No matches</p>
+                )}
+              </div>
+              {selectedCodes.length > 0 && (
+                <p className="text-[10px] text-accent-indigo mt-2">{selectedCodes.length} selected</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Stock Market selected — no children, just confirmation */}
+      {activePanel === 'stockMarket' && (
+        <div className="flex-1 flex items-center justify-center p-3 bg-slate-950/50 border border-kd-border rounded-xl">
+          <p className="text-[11px] text-muted text-center">Applies broadly to the entire stock market</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Form Modal (two-panel) ───────────────────────────────────────────────────
 
 interface FormModalProps {
   initial: DcInferenceInput;
+  initialAppl: ApplForm;
   editId: number | null;
   onClose: () => void;
   onSave: (data: DcInferenceInput) => void;
@@ -78,8 +395,20 @@ interface FormModalProps {
   saveError: string | null;
 }
 
-function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: FormModalProps) {
+function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, saveError }: FormModalProps) {
   const [form, setForm] = useState<DcInferenceInput>(initial);
+  const [appl, setAppl] = useState<ApplForm>(initialAppl);
+
+  const { data: lookups } = useQuery({
+    queryKey: ['dc_lookup_all'],
+    queryFn: () => Promise.all([
+      fetchLookupByCategory('sector'),
+      fetchLookupByCategory('index'),
+      fetchLookupByCategory('commodity'),
+    ]),
+    staleTime: 300_000,
+  });
+  const [sectors, indexes, commodities] = lookups ?? [[], [], []];
 
   const set = (field: keyof DcInferenceInput, value: unknown) =>
     setForm(prev => ({ ...prev, [field]: value || null }));
@@ -87,14 +416,17 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.astro_event.trim() || !form.start_date) return;
-    onSave({ ...form, astro_event: form.astro_event.trim() });
+    onSave({ ...form, astro_event: form.astro_event.trim(), ...applToInput(appl) });
   };
 
   const isValid = form.astro_event.trim() && form.start_date;
 
+  const inputCls = 'w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const labelCls = 'block text-[11px] uppercase tracking-widest font-bold text-muted mb-2';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-[#0f172a] border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden">
+      <div className="w-full max-w-4xl bg-[#0f172a] border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-kd-border">
@@ -112,167 +444,151 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="px-8 py-6 space-y-6 max-h-[80vh] overflow-y-auto">
+        {/* Form — two columns */}
+        <form onSubmit={handleSubmit} className="px-8 py-6 max-h-[80vh] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
-          {/* Astro Event */}
-          <div>
-            <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-              Astro Event <span className="text-risk-red">*</span>
-            </label>
-            <input
-              type="text"
-              value={form.astro_event}
-              onChange={e => setForm(p => ({ ...p, astro_event: e.target.value }))}
-              placeholder="e.g. Rahu Mars in same sign, Neptune conjuncts Mars"
-              className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors"
-              required
-            />
-          </div>
+            {/* ── Left Panel ── */}
+            <div className="space-y-5">
+              {/* Astro Event */}
+              <div>
+                <label className={labelCls}>Astro Event <span className="text-risk-red">*</span></label>
+                <input
+                  type="text"
+                  value={form.astro_event}
+                  onChange={e => setForm(p => ({ ...p, astro_event: e.target.value }))}
+                  placeholder="e.g. Rahu Mars in same sign"
+                  className={inputCls}
+                  required
+                />
+              </div>
 
-          {/* Date + Time range */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-                Start Date <span className="text-risk-red">*</span>
-              </label>
-              <input
-                type="date"
-                value={form.start_date}
-                onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))}
-                className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white focus:outline-none focus:border-accent-indigo/60 transition-colors"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-                Start Time <span className="text-slate-600">(optional)</span>
-              </label>
-              <input
-                type="time"
-                value={form.start_time ?? ''}
-                onChange={e => set('start_time', e.target.value)}
-                className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white focus:outline-none focus:border-accent-indigo/60 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-                End Date <span className="text-slate-600">(optional)</span>
-              </label>
-              <input
-                type="date"
-                value={form.end_date ?? ''}
-                onChange={e => setForm(p => ({ ...p, end_date: e.target.value || null }))}
-                min={form.start_date || undefined}
-                className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white focus:outline-none focus:border-accent-indigo/60 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-                End Time <span className="text-slate-600">(optional)</span>
-              </label>
-              <input
-                type="time"
-                value={form.end_time ?? ''}
-                onChange={e => set('end_time', e.target.value)}
-                className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white focus:outline-none focus:border-accent-indigo/60 transition-colors"
-              />
-            </div>
-          </div>
+              {/* Start date + time */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Start Date <span className="text-risk-red">*</span></label>
+                  <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className={inputCls} required />
+                </div>
+                <div>
+                  <label className={labelCls}>Start Time</label>
+                  <input type="time" value={form.start_time ?? ''} onChange={e => set('start_time', e.target.value)} className={inputCls} />
+                </div>
+              </div>
 
-          {/* Inference */}
-          <div>
-            <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-              Inference
-            </label>
-            <textarea
-              value={form.inference ?? ''}
-              onChange={e => set('inference', e.target.value)}
-              placeholder="What does this planetary event mean for markets? What did you observe or expect?"
-              rows={3}
-              className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors resize-none"
-            />
-          </div>
+              {/* End date + time */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>End Date</label>
+                  <input type="date" value={form.end_date ?? ''} onChange={e => setForm(p => ({ ...p, end_date: e.target.value || null }))} min={form.start_date || undefined} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>End Time</label>
+                  <input type="time" value={form.end_time ?? ''} onChange={e => set('end_time', e.target.value)} className={inputCls} />
+                </div>
+              </div>
 
-          {/* Market Impact */}
-          <div>
-            <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-              Market Impact
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {MARKET_STATUS.map(s => {
-                const active = form.market_impact === s.value;
-                const c = STATUS_COLOR_CLASSES[s.color];
-                return (
-                  <button
-                    key={s.value}
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, market_impact: active ? null : s.value }))}
-                    className={cn(
-                      'px-4 py-2 rounded-xl text-xs font-semibold border transition-all',
-                      active
-                        ? cn(c.bg, c.text, c.border)
-                        : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
+              {/* Inference */}
+              <div>
+                <label className={labelCls}>Inference</label>
+                <textarea
+                  value={form.inference ?? ''}
+                  onChange={e => set('inference', e.target.value)}
+                  placeholder="What does this planetary event mean for markets?"
+                  rows={4}
+                  className={cn(inputCls, 'resize-none')}
+                />
+              </div>
+
+              {/* Market Impact */}
+              <div>
+                <label className={labelCls}>Market Impact</label>
+                <div className="flex flex-wrap gap-2">
+                  {MARKET_STATUS.map(s => {
+                    const active = form.market_impact === s.value;
+                    const c = STATUS_COLOR_CLASSES[s.color];
+                    return (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => setForm(p => ({ ...p, market_impact: active ? null : s.value }))}
+                        className={cn(
+                          'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
+                          active
+                            ? cn(c.bg, c.text, c.border)
+                            : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
+                        )}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Confidence */}
-          <div>
-            <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-              Confidence
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
-                const active = form.confidence === n;
-                return (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, confidence: active ? null : n }))}
-                    className={cn(
-                      'w-9 h-9 rounded-lg text-sm font-bold border transition-all mono',
-                      active
-                        ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/50'
-                        : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
-                    )}
-                  >
-                    {n}
-                  </button>
-                );
-              })}
+            {/* ── Right Panel ── */}
+            <div className="space-y-5">
+              {/* Confidence */}
+              <div>
+                <label className={labelCls}>Confidence</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
+                    const active = form.confidence === n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setForm(p => ({ ...p, confidence: active ? null : n }))}
+                        className={cn(
+                          'w-9 h-9 rounded-lg text-sm font-bold border transition-all mono',
+                          active
+                            ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/50'
+                            : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
+                        )}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Applies To */}
+              <div>
+                <label className={labelCls}>Applies To</label>
+                <AppliesTo
+                  appl={appl}
+                  onChange={setAppl}
+                  sectors={sectors}
+                  indexes={indexes}
+                  commodities={commodities}
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className={labelCls}>Notes <span className="text-slate-600">(optional)</span></label>
+                <textarea
+                  value={form.notes ?? ''}
+                  onChange={e => set('notes', e.target.value)}
+                  placeholder="Additional context, sources, references..."
+                  rows={3}
+                  className={cn(inputCls, 'resize-none')}
+                />
+              </div>
             </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-[11px] uppercase tracking-widest font-bold text-muted mb-2">
-              Notes <span className="text-slate-600">(optional)</span>
-            </label>
-            <textarea
-              value={form.notes ?? ''}
-              onChange={e => set('notes', e.target.value)}
-              placeholder="Additional context, sources, references..."
-              rows={2}
-              className="w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors resize-none"
-            />
           </div>
 
           {/* Error */}
           {saveError && (
-            <div className="flex items-start gap-3 p-4 bg-risk-red/10 border border-risk-red/30 rounded-xl">
+            <div className="flex items-start gap-3 p-4 mt-6 bg-risk-red/10 border border-risk-red/30 rounded-xl">
               <AlertCircle className="w-4 h-4 text-risk-red mt-0.5 shrink-0" />
               <p className="text-xs text-risk-red">{saveError}</p>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-kd-border">
+          <div className="flex items-center justify-end gap-3 pt-6 mt-6 border-t border-kd-border">
             <button
               type="button"
               onClick={onClose}
@@ -295,99 +611,68 @@ function FormModal({ initial, editId, onClose, onSave, isSaving, saveError }: Fo
   );
 }
 
-// ── Row component (expandable) ────────────────────────────────────────────────
+// ── Inference Card ───────────────────────────────────────────────────────────
 
-function InferenceRow({
-  row,
-  onEdit,
-  onDelete,
+function InferenceCard({
+  row, onEdit, onDelete, deleteConfirmId,
 }: {
   row: DcInference;
   onEdit: (row: DcInference) => void;
   onDelete: (id: number) => void;
+  deleteConfirmId: number | null;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const scopeLabels = getScopeLabels(row);
+  const isConfirming = deleteConfirmId === row.id;
 
   return (
-    <>
-      <tr className="border-t border-kd-border hover:bg-slate-900/30 transition-colors group">
-        {/* Astro Event */}
-        <td className="px-5 py-4">
-          <p className="text-sm font-semibold text-white leading-snug">{row.astro_event}</p>
-          {row.notes && (
-            <p className="text-[11px] text-muted mt-0.5 line-clamp-1">{row.notes}</p>
-          )}
-        </td>
-
-        {/* Month */}
-        <td className="px-5 py-4 whitespace-nowrap">
-          <span className="text-[12px] mono text-slate-300">
-            {row.month ? MONTH_NAMES[row.month - 1] : '—'}
-          </span>
-        </td>
-
-        {/* Year */}
-        <td className="px-5 py-4 whitespace-nowrap">
-          <span className="text-[12px] mono text-slate-300">{row.year ?? '—'}</span>
-        </td>
-
-        {/* Period */}
-        <td className="px-5 py-4 whitespace-nowrap">
-          <span className="text-[12px] mono text-slate-300">{formatDateRange(row)}</span>
-        </td>
-
-        {/* Impact */}
-        <td className="px-5 py-4">
-          <ImpactBadge impact={row.market_impact} />
-        </td>
-
-        {/* Confidence */}
-        <td className="px-5 py-4">
-          <ConfidenceDots value={row.confidence} />
-        </td>
-
-        {/* Expand / Actions */}
-        <td className="px-5 py-4">
-          <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-            {row.inference && (
-              <button
-                onClick={() => setExpanded(v => !v)}
-                title="Toggle inference"
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-all"
-              >
-                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
+    <div className={cn(
+      'border-l-4 rounded-xl bg-[#0f172a] border border-kd-border px-4 py-3 transition-all hover:border-white/15',
+      borderColorForImpact(row.market_impact),
+    )}>
+      {/* Row 1: event + date + actions */}
+      <div className="flex items-center gap-3">
+        <p className="text-[13px] font-bold text-white leading-tight flex-1 truncate">{row.astro_event}</p>
+        <span className="text-[10px] mono text-slate-500 whitespace-nowrap shrink-0">
+          {formatDateRange(row)}
+        </span>
+        <div className="flex items-center gap-0.5 shrink-0 ml-1">
+          <button onClick={() => onEdit(row)} title="Edit" className="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all">
+            <Pencil className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => onDelete(row.id)}
+            title={isConfirming ? 'Click again to confirm' : 'Delete'}
+            className={cn(
+              'h-7 rounded-md flex items-center justify-center transition-all text-[11px] font-medium',
+              isConfirming
+                ? 'px-2 bg-risk-red/20 text-risk-red border border-risk-red/40'
+                : 'w-7 text-slate-500 hover:text-risk-red hover:bg-risk-red/10'
             )}
-            <button
-              onClick={() => onEdit(row)}
-              title="Edit"
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => onDelete(row.id)}
-              title="Delete"
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-risk-red hover:bg-risk-red/10 transition-all"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </td>
-      </tr>
+          >
+            {isConfirming ? 'Confirm?' : <Trash2 className="w-3 h-3" />}
+          </button>
+        </div>
+      </div>
 
-      {/* Expanded inference */}
-      {expanded && row.inference && (
-        <tr className="border-t border-kd-border/50">
-          <td colSpan={7} className="px-5 pb-4 pt-2">
-            <div className="pl-3 border-l-2 border-accent-indigo/40">
-              <p className="text-[11px] uppercase tracking-widest font-bold text-muted mb-1.5">Inference</p>
-              <p className="text-sm text-slate-300 leading-relaxed">{row.inference}</p>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+      {/* Row 2: badges + inference + scope */}
+      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+        <ImpactBadge impact={row.market_impact} />
+        <ConfidenceDots value={row.confidence} />
+        {scopeLabels.map(lbl => (
+          <span key={lbl} className="px-1.5 py-px rounded bg-slate-800/80 border border-white/5 text-[10px] text-slate-400 font-medium">
+            {lbl}
+          </span>
+        ))}
+        {(row.applicability_scope ?? []).map(s => (
+          <span key={s} className="px-1.5 py-px rounded bg-accent-indigo/10 border border-accent-indigo/20 text-[9px] text-accent-indigo font-semibold uppercase tracking-wider">
+            {s}
+          </span>
+        ))}
+        {row.inference && (
+          <span className="text-[12px] text-slate-400 line-clamp-1 ml-1">— {row.inference}</span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -400,8 +685,15 @@ export default function DCInferenceView() {
   const [editRow, setEditRow] = useState<DcInference | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  // Filters + pagination
+  const [search, setSearch] = useState('');
+  const [filterImpact, setFilterImpact] = useState('');
   const [filterMonth, setFilterMonth] = useState<number | null>(null);
   const [filterYear, setFilterYear] = useState<number | null>(null);
+  const [filterScope, setFilterScope] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const { data: rows = [], isLoading, isError, error } = useQuery({
     queryKey: ['dc_inference'],
@@ -411,9 +703,7 @@ export default function DCInferenceView() {
 
   const saveMutation = useMutation({
     mutationFn: async (payload: { id: number | null; data: DcInferenceInput }) => {
-      if (payload.id) {
-        return updateInference(payload.id, payload.data);
-      }
+      if (payload.id) return updateInference(payload.id, payload.data);
       return createInference(payload.data);
     },
     onSuccess: (_data, payload) => {
@@ -445,11 +735,7 @@ export default function DCInferenceView() {
     setSaveError(null);
   };
 
-  const handleClose = () => {
-    setShowForm(false);
-    setEditRow(null);
-    setSaveError(null);
-  };
+  const handleClose = () => { setShowForm(false); setEditRow(null); setSaveError(null); };
 
   const handleSave = (data: DcInferenceInput) => {
     setSaveError(null);
@@ -465,35 +751,65 @@ export default function DCInferenceView() {
     }
   };
 
-  // Unique years from data for the year filter
+  // Derived filter options from data
   const availableYears = useMemo(() =>
     [...new Set(rows.map(r => r.year).filter(Boolean) as number[])].sort((a, b) => b - a),
     [rows]
   );
 
-  // Filtered rows
-  const filtered = useMemo(() => rows.filter(r =>
-    (filterMonth === null || r.month === filterMonth) &&
-    (filterYear  === null || r.year  === filterYear)
-  ), [rows, filterMonth, filterYear]);
+  const availableMonths = useMemo(() =>
+    [...new Set(rows.map(r => r.month).filter(Boolean) as number[])].sort((a, b) => a - b),
+    [rows]
+  );
 
-  // Derive April 2026 entries count for context
-  const aprilCount = rows.filter(r => r.month === 4 && r.year === 2026).length;
+  // Filtered rows
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return rows.filter(r => {
+      if (q && !(
+        r.astro_event.toLowerCase().includes(q) ||
+        (r.inference ?? '').toLowerCase().includes(q) ||
+        (r.notes ?? '').toLowerCase().includes(q)
+      )) return false;
+      if (filterImpact && r.market_impact !== filterImpact) return false;
+      if (filterMonth !== null && r.month !== filterMonth) return false;
+      if (filterYear !== null && r.year !== filterYear) return false;
+      if (filterScope && !(r.applicability_scope ?? []).includes(filterScope)) return false;
+      return true;
+    });
+  }, [rows, search, filterImpact, filterMonth, filterYear, filterScope]);
+
+  const isFiltered = search || filterImpact || filterMonth !== null || filterYear !== null || filterScope;
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const clearFilters = () => {
+    setSearch(''); setFilterImpact(''); setFilterMonth(null); setFilterYear(null); setFilterScope(''); setPage(1);
+  };
 
   const formInitial: DcInferenceInput = editRow
     ? {
-        astro_event:   editRow.astro_event,
-        start_date:    editRow.start_date,
-        start_time:    editRow.start_time,
-        end_date:      editRow.end_date ?? null,
-        end_time:      editRow.end_time,
-        inference:     editRow.inference,
-        market_impact: editRow.market_impact,
-        confidence:    editRow.confidence,
-        notes:         editRow.notes,
-        created_by:    editRow.created_by,
+        astro_event:         editRow.astro_event,
+        start_date:          editRow.start_date,
+        start_time:          editRow.start_time,
+        end_date:            editRow.end_date ?? null,
+        end_time:            editRow.end_time,
+        inference:           editRow.inference,
+        market_impact:       editRow.market_impact,
+        confidence:          editRow.confidence,
+        notes:               editRow.notes,
+        created_by:          editRow.created_by,
+        applicability_scope: editRow.applicability_scope,
+        applicability:       editRow.applicability,
       }
     : { ...EMPTY_FORM };
+
+  const formAppl = editRow ? applFromRow(editRow) : { ...DEFAULT_APPL };
+
+  const selectCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors';
 
   return (
     <ErrorBoundary>
@@ -520,47 +836,52 @@ export default function DCInferenceView() {
         {rows.length > 0 && (
           <div className="flex flex-wrap gap-3 mb-6">
             <StatPill label="Total Entries" value={String(rows.length)} />
-            {aprilCount > 0 && <StatPill label="April 2026" value={String(aprilCount)} accent />}
-            <StatPill
-              label="Bearish"
-              value={String(rows.filter(r => r.market_impact === 'bearish').length)}
-            />
-            <StatPill
-              label="Bullish"
-              value={String(rows.filter(r => r.market_impact === 'bullish').length)}
-            />
-            <StatPill
-              label="Volatile"
-              value={String(rows.filter(r => r.market_impact === 'volatile').length)}
-            />
+            <StatPill label="Bearish" value={String(rows.filter(r => r.market_impact === 'bearish').length)} />
+            <StatPill label="Bullish" value={String(rows.filter(r => r.market_impact === 'bullish').length)} />
+            <StatPill label="Volatile" value={String(rows.filter(r => r.market_impact === 'volatile').length)} />
           </div>
         )}
 
         {/* Filter bar */}
         {rows.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <div className="flex items-center gap-1.5 text-muted">
-              <Filter className="w-3.5 h-3.5" />
-              <span className="text-[11px] uppercase tracking-widest font-bold">Filter</span>
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search events, inferences, notes..."
+                className="w-full pl-9 pr-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors"
+              />
             </div>
 
-            {/* Month filter */}
-            <select
-              value={filterMonth ?? ''}
-              onChange={e => setFilterMonth(e.target.value ? Number(e.target.value) : null)}
-              className="px-3 py-1.5 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors"
-            >
-              <option value="">All Months</option>
-              {MONTH_NAMES.map((name, i) => (
-                <option key={i + 1} value={i + 1}>{name}</option>
+            {/* Impact */}
+            <select value={filterImpact} onChange={e => { setFilterImpact(e.target.value); setPage(1); }} className={selectCls}>
+              <option value="">All Impacts</option>
+              {MARKET_STATUS.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
 
-            {/* Year filter */}
+            {/* Month — only months present in data */}
+            <select
+              value={filterMonth ?? ''}
+              onChange={e => { setFilterMonth(e.target.value ? Number(e.target.value) : null); setPage(1); }}
+              className={selectCls}
+            >
+              <option value="">All Months</option>
+              {availableMonths.map(m => (
+                <option key={m} value={m}>{MONTH_ABBR[m - 1]}</option>
+              ))}
+            </select>
+
+            {/* Year */}
             <select
               value={filterYear ?? ''}
-              onChange={e => setFilterYear(e.target.value ? Number(e.target.value) : null)}
-              className="px-3 py-1.5 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors"
+              onChange={e => { setFilterYear(e.target.value ? Number(e.target.value) : null); setPage(1); }}
+              className={selectCls}
             >
               <option value="">All Years</option>
               {availableYears.map(y => (
@@ -568,31 +889,38 @@ export default function DCInferenceView() {
               ))}
             </select>
 
-            {(filterMonth !== null || filterYear !== null) && (
-              <button
-                onClick={() => { setFilterMonth(null); setFilterYear(null); }}
-                className="px-3 py-1.5 text-xs text-risk-amber hover:text-white border border-risk-amber/30 hover:border-white/20 rounded-xl transition-all"
-              >
-                Clear
-              </button>
-            )}
+            {/* Scope */}
+            <select value={filterScope} onChange={e => { setFilterScope(e.target.value); setPage(1); }} className={selectCls}>
+              {SCOPE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
 
-            {(filterMonth !== null || filterYear !== null) && (
-              <span className="text-xs text-muted ml-1">
-                {filtered.length} of {rows.length}
-              </span>
+            {/* Clear + count */}
+            {isFiltered && (
+              <>
+                <button
+                  onClick={clearFilters}
+                  className="px-3 py-2 text-xs text-risk-amber hover:text-white border border-risk-amber/30 hover:border-white/20 rounded-xl transition-all"
+                >
+                  Clear
+                </button>
+                <span className="text-xs text-muted">
+                  {filtered.length} of {rows.length}
+                </span>
+              </>
             )}
           </div>
         )}
 
         {/* Content */}
-        <div className="glass-card rounded-3xl overflow-hidden">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-24 gap-3">
-              <Loader2 className="w-5 h-5 text-accent-indigo animate-spin" />
-              <span className="text-sm text-muted">Loading inference data...</span>
-            </div>
-          ) : isError ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-24 gap-3">
+            <Loader2 className="w-5 h-5 text-accent-indigo animate-spin" />
+            <span className="text-sm text-muted">Loading inference data...</span>
+          </div>
+        ) : isError ? (
+          <div className="glass-card rounded-3xl overflow-hidden">
             <div className="flex flex-col items-center justify-center py-20 text-center px-6">
               <div className="w-14 h-14 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-5">
                 <AlertCircle className="w-7 h-7 text-risk-red" />
@@ -601,46 +929,55 @@ export default function DCInferenceView() {
               <p className="text-sm text-muted max-w-sm">
                 {error instanceof Error ? error.message : 'Could not connect to database.'}
               </p>
-              <p className="text-xs text-muted mt-3 mono">
-                Run km_migration_004_dc_inference.sql on your PostgreSQL database first.
-              </p>
             </div>
-          ) : rows.length === 0 ? (
-            <EmptyState onAdd={() => setShowForm(true)} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-widest text-muted">
-                    <th className="px-5 py-4 text-left font-bold">Astro Event</th>
-                    <th className="px-5 py-4 text-left font-bold">Month</th>
-                    <th className="px-5 py-4 text-left font-bold">Year</th>
-                    <th className="px-5 py-4 text-left font-bold">Period</th>
-                    <th className="px-5 py-4 text-left font-bold">Impact</th>
-                    <th className="px-5 py-4 text-left font-bold">Confidence</th>
-                    <th className="px-5 py-4 text-right font-bold"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(row => (
-                    <InferenceRow
-                      key={row.id}
-                      row={row}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </tbody>
-              </table>
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState onAdd={() => setShowForm(true)} />
+        ) : (
+          <>
+            <div className="grid gap-2">
+              {paged.map(row => (
+                <InferenceCard
+                  key={row.id}
+                  row={row}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  deleteConfirmId={deleteConfirm}
+                />
+              ))}
+              {filtered.length === 0 && isFiltered && (
+                <div className="text-center py-16">
+                  <p className="text-sm text-muted">No entries match your filters.</p>
+                  <button onClick={clearFilters} className="text-xs text-accent-indigo hover:underline mt-2">
+                    Clear all filters
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Delete confirm hint */}
-        {deleteConfirm && (
-          <p className="text-xs text-risk-amber text-center mt-3">
-            Click delete again to confirm removal
-          </p>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-slate-400 mono">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {/* Footer note */}
@@ -655,6 +992,7 @@ export default function DCInferenceView() {
       {showForm && (
         <FormModal
           initial={formInitial}
+          initialAppl={formAppl}
           editId={editRow?.id ?? null}
           onClose={handleClose}
           onSave={handleSave}
@@ -663,7 +1001,7 @@ export default function DCInferenceView() {
         />
       )}
 
-      {/* Loader overlay — shown during save / delete */}
+      {/* Loader overlay */}
       {(saveMutation.isPending || deleteMutation.isPending) && (
         <KaalaLoader
           message={deleteMutation.isPending ? 'Removing Entry' : editRow ? 'Updating Entry' : 'Saving Entry'}
@@ -671,7 +1009,6 @@ export default function DCInferenceView() {
         />
       )}
 
-      {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </ErrorBoundary>
   );
@@ -695,26 +1032,29 @@ function StatPill({ label, value, accent }: { label: string; value: string; acce
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-center px-6">
-      <div className="w-16 h-16 rounded-2xl bg-accent-indigo/10 border border-accent-indigo/20 flex items-center justify-center mb-6 text-2xl">
-        ✦
+    <div className="glass-card rounded-3xl overflow-hidden">
+      <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+        <div className="w-16 h-16 rounded-2xl bg-accent-indigo/10 border border-accent-indigo/20 flex items-center justify-center mb-6 text-2xl">
+          ✦
+        </div>
+        <p className="text-lg font-semibold text-white mb-2">No Inference Data Yet</p>
+        <p className="text-sm text-secondary max-w-md mb-2 leading-relaxed">
+          Start by entering planetary events — what astrological conditions are active
+          and what market behavior do you expect or observe?
+        </p>
+        <p className="text-xs text-muted max-w-sm mb-8 leading-relaxed">
+          Examples: <span className="text-slate-400">"Rahu Mars in same sign"</span>,{' '}
+          <span className="text-slate-400">"Saturn retrograde"</span>,{' '}
+          <span className="text-slate-400">"Jupiter conjuncts Sun"</span>
+        </p>
+        <button
+          onClick={onAdd}
+          className="inline-flex items-center gap-2 px-6 py-3 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-semibold text-accent-indigo hover:bg-accent-indigo/30 transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          Add First Entry
+        </button>
       </div>
-      <p className="text-lg font-semibold text-white mb-2">No Inference Data Yet</p>
-      <p className="text-sm text-secondary max-w-md mb-2 leading-relaxed">
-        Start by entering planetary events for <span className="text-white font-medium">April 2026</span> — what
-        astrological conditions are active and what market behavior do you expect or observe?
-      </p>
-      <p className="text-xs text-muted max-w-sm mb-8 leading-relaxed">
-        Examples: <span className="text-slate-400">"Rahu Mars in same sign"</span>, <span className="text-slate-400">"Saturn retrograde"</span>,{' '}
-        <span className="text-slate-400">"Jupiter conjuncts Sun"</span>
-      </p>
-      <button
-        onClick={onAdd}
-        className="inline-flex items-center gap-2 px-6 py-3 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-semibold text-accent-indigo hover:bg-accent-indigo/30 transition-all"
-      >
-        <Plus className="w-4 h-4" />
-        Add First Entry
-      </button>
     </div>
   );
 }

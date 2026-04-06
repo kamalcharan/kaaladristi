@@ -1,30 +1,39 @@
 import { useState } from 'react';
-import { TrendingUp, TrendingDown, BarChart3, AlertCircle, Database, RefreshCw } from 'lucide-react';
-import { useAppStore } from '@/stores/appStore';
-import { useIndicatorChart } from '@/hooks';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { fetchIndicatorDataById } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import type { MarketSymbol, TimeRange } from '@/types';
+import type { TimeRange } from '@/types';
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
 
-const INDEX_LABELS: Record<MarketSymbol, string> = {
-  NIFTY: 'NIFTY 50',
-  BANKNIFTY: 'NIFTY BANK',
-  NIFTYIT: 'NIFTY IT',
-  NIFTYFMCG: 'NIFTY FMCG',
-};
-
-export default function MarketsView() {
-  const { selectedSymbol } = useAppStore();
+/**
+ * Generic chart page — reuses TradingChart (same as /markets).
+ * Routes:
+ *   /chart/index/:id?name=NIFTY%2050
+ *   /chart/equity/:id?name=RELIANCE  (future)
+ *   /chart/commodity/:id?name=GOLD   (future)
+ */
+export default function ChartView() {
+  const { type, id } = useParams<{ type: string; id: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [range, setRange] = useState<TimeRange>('1Y');
-  const { data: indicatorData, isLoading, isError, error, refetch } = useIndicatorChart(selectedSymbol, range);
 
-  const rows = indicatorData ?? [];
-  const indexName = INDEX_LABELS[selectedSymbol];
+  const numId = Number(id);
+  const name = searchParams.get('name') ?? `${type} #${id}`;
 
-  // Compute stats from latest row
+  const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['chart', 'indicator', type, numId, range],
+    queryFn: () => fetchIndicatorDataById(numId, range),
+    staleTime: 120_000,
+    enabled: !!numId && type === 'index',
+  });
+
+  // Stats from latest row
   const latest = rows.length > 0 ? rows[rows.length - 1] : null;
   const prev = rows.length > 1 ? rows[rows.length - 2] : null;
   const currentClose = latest?.close ?? 0;
@@ -33,20 +42,26 @@ export default function MarketsView() {
   const changePct = prevClose ? (change / prevClose) * 100 : 0;
   const isPositive = change >= 0;
 
-  // 52-week stats
   const last252 = rows.slice(-252);
-  const high52w = last252.length > 0 ? Math.max(...last252.map((r) => r.high)) : 0;
-  const low52w = last252.length > 0 ? Math.min(...last252.map((r) => r.low)) : 0;
+  const high52w = last252.length > 0 ? Math.max(...last252.map(r => r.high)) : 0;
+  const low52w = last252.length > 0 ? Math.min(...last252.map(r => r.low)) : 0;
 
-  const errorMsg = error?.message || '';
-  const isAuthError = errorMsg.includes('auth') || errorMsg.includes('connect') || errorMsg.includes('credentials');
-  const isDataMissing = errorMsg.includes('not found') || errorMsg.includes('seed');
+  const errorMsg = error instanceof Error ? error.message : '';
 
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
+        {/* Back button */}
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1.5 text-xs text-muted hover:text-white mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back
+        </button>
+
         <header className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Markets</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">{name}</h1>
           <p className="text-secondary font-medium">Historical price data &amp; technical indicators</p>
         </header>
 
@@ -63,7 +78,7 @@ export default function MarketsView() {
           <div className="glass-card rounded-3xl p-6 mb-6">
             <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{indexName}</p>
+                <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{name}</p>
                 <div className="flex items-baseline gap-4">
                   <span className="text-3xl font-bold mono text-white">
                     {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -86,10 +101,7 @@ export default function MarketsView() {
                 <StatPill label="Prev Close" value={fmt(prevClose)} />
                 {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
                 {latest.supertrend_dir != null && (
-                  <StatPill
-                    label="SuperTrend"
-                    value={latest.supertrend_dir === 1 ? 'Bullish' : 'Bearish'}
-                  />
+                  <StatPill label="SuperTrend" value={latest.supertrend_dir === 1 ? 'Bullish' : 'Bearish'} />
                 )}
                 {latest.magic_rs_zone && <StatPill label="MagicRS" value={latest.magic_rs_zone} />}
                 {latest.chartink_score != null && <StatPill label="Chartink" value={`${latest.chartink_score}/3`} />}
@@ -103,7 +115,7 @@ export default function MarketsView() {
           {/* Time range selector */}
           {!isLoading && !isError && rows.length > 0 && (
             <div className="flex items-center gap-1.5 mb-4 px-2">
-              {TIME_RANGES.map((r) => (
+              {TIME_RANGES.map(r => (
                 <button
                   key={r}
                   onClick={() => setRange(r)}
@@ -129,52 +141,20 @@ export default function MarketsView() {
               </div>
               <Skeleton className="h-[500px] w-full rounded-2xl" />
               <Skeleton className="h-[120px] w-full rounded-2xl" />
-              <Skeleton className="h-[120px] w-full rounded-2xl" />
             </div>
           ) : isError ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              {isAuthError ? (
-                <>
-                  <div className="w-16 h-16 rounded-2xl bg-risk-amber/10 border border-risk-amber/30 flex items-center justify-center mb-6">
-                    <AlertCircle className="w-8 h-8 text-risk-amber" />
-                  </div>
-                  <p className="text-lg font-semibold text-white mb-2">Connection Issue</p>
-                  <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                    Unable to connect to the database. Check your PostgREST URL and auth session.
-                  </p>
-                  <button
-                    onClick={() => refetch()}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Retry
-                  </button>
-                </>
-              ) : isDataMissing ? (
-                <>
-                  <div className="w-16 h-16 rounded-2xl bg-accent-violet/10 border border-accent-violet/30 flex items-center justify-center mb-6">
-                    <Database className="w-8 h-8 text-accent-violet" />
-                  </div>
-                  <p className="text-lg font-semibold text-white mb-2">Index Not Found</p>
-                  <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                    The <span className="text-white font-medium">{indexName}</span> index was not found.
-                    Run km_seed_masters.sql to seed index symbols.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="w-16 h-16 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-6">
-                    <AlertCircle className="w-8 h-8 text-risk-red" />
-                  </div>
-                  <p className="text-lg font-semibold text-white mb-2">Failed to Load Chart Data</p>
-                  <p className="text-sm text-secondary max-w-md mb-4">{errorMsg || 'Unexpected error.'}</p>
-                  <button
-                    onClick={() => refetch()}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Retry
-                  </button>
-                </>
-              )}
+              <div className="w-16 h-16 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-6">
+                <AlertCircle className="w-8 h-8 text-risk-red" />
+              </div>
+              <p className="text-lg font-semibold text-white mb-2">Failed to Load Chart Data</p>
+              <p className="text-sm text-secondary max-w-md mb-4">{errorMsg || 'Unexpected error.'}</p>
+              <button
+                onClick={() => refetch()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
             </div>
           ) : rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -182,23 +162,15 @@ export default function MarketsView() {
                 <BarChart3 className="w-8 h-8 text-slate-500" />
               </div>
               <p className="text-lg font-semibold text-white mb-2">No Price Data</p>
-              <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                The <span className="text-white font-medium">{indexName}</span> index has no EOD data.
-                Run the historical downloader to backfill.
+              <p className="text-sm text-secondary max-w-md leading-relaxed">
+                <span className="text-white font-medium">{name}</span> has no EOD data loaded yet.
               </p>
-              <div className="text-left text-xs space-y-2 bg-slate-900/60 border border-white/5 rounded-xl p-4 max-w-md">
-                <p className="text-slate-400 font-semibold mb-2">From App/backend/ run:</p>
-                <code className="block text-accent-indigo mono">
-                  python3 yfinance_historical.py --mode index
-                </code>
-              </div>
             </div>
           ) : (
             <TradingChart data={rows} />
           )}
         </div>
 
-        {/* Data summary */}
         {rows.length > 0 && (
           <p className="text-[10px] text-muted mt-3 text-right mono">
             {rows.length} trading days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}

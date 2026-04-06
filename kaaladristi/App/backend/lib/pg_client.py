@@ -12,6 +12,9 @@ import psycopg2.pool
 import psycopg2.extras
 from .config import DATABASE_URL
 
+# Register JSONB adapter so psycopg2 returns dicts, not strings
+psycopg2.extras.register_default_jsonb(loads=json.loads)
+
 
 class PgClient:
     """Drop-in replacement for PostgRESTClient using direct PostgreSQL."""

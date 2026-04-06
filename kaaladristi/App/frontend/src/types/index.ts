@@ -198,6 +198,21 @@ export interface IndexStats {
   dayLow: number;
 }
 
+// ── Index Catalog (from mv_index_catalog) ──
+
+export interface IndexCatalogItem {
+  id: number;
+  name: string;
+  category: string | null;
+  exchange: string;
+  is_active: boolean;
+  is_tri: boolean;
+  data_from: string | null;
+  data_to: string | null;
+  record_count: number;
+  last_close: number | null;
+}
+
 // ── DC Inference Types ──
 
 export interface DcInference {
