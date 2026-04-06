@@ -184,14 +184,14 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                       runMutation.mutate({ exchange: dl.run_exchange!, force: true });
                     }}
                     disabled={isRunning}
-                    title={`Force re-run ${dl.label}`}
-                    className="opacity-0 group-hover:opacity-100 inline-flex items-center gap-1 px-2 py-0.5 bg-slate-800 border border-kd-border rounded-lg text-[10px] text-slate-400 hover:text-accent-indigo hover:border-accent-indigo/40 disabled:opacity-30 transition-all"
+                    title={`Re-run ${dl.label}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800/80 border border-kd-border rounded-lg text-[10px] text-slate-400 hover:text-accent-indigo hover:border-accent-indigo/40 hover:bg-slate-800 disabled:opacity-30 transition-all"
                   >
                     {isSourceRunning
-                      ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      ? <Loader2 className="w-2.5 h-2.5 animate-spin text-accent-indigo" />
                       : <Play className="w-2.5 h-2.5" />
                     }
-                    Run
+                    {isSourceRunning ? 'Running...' : 'Run'}
                   </button>
                 )}
               </div>

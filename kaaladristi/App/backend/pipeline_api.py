@@ -244,15 +244,22 @@ def status():
                             filters={'trade_date': today}, order='id')
 
     # Last 14 days from trading calendar
-    since = str(date.today() - timedelta(days=14))
+    # Use date object for comparison (psycopg2 returns datetime.date, not str)
+    since_date = date.today() - timedelta(days=14)
+    since = str(since_date)
     calendar = db.select('km_trading_calendar', '*',
                          order='trade_date.desc', limit=100)
-    calendar = [c for c in calendar if c['trade_date'] >= since]
+    calendar = [c for c in calendar if c['trade_date'] >= since_date]
+    # Normalise trade_date to str for JSON serialisation
+    for c in calendar:
+        c['trade_date'] = str(c['trade_date'])
 
     # Recent pipeline runs
     recent_runs = db.select('km_pipeline_runs', '*',
                             order='trade_date.desc,id', limit=200)
-    recent_runs = [r for r in recent_runs if r['trade_date'] >= since]
+    recent_runs = [r for r in recent_runs if r['trade_date'] >= since_date]
+    for r in recent_runs:
+        r['trade_date'] = str(r['trade_date'])
 
     return {
         'today': today,
