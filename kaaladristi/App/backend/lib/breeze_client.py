@@ -1,12 +1,17 @@
 """
-ICICI Breeze client wrapper — auto-TOTP session, historical data fetch with retry.
+ICICI Breeze client wrapper — session management + historical data fetch.
 
 Session flow:
-  1. Check km_api_sessions for valid stored token
-  2. If expired/missing → generate TOTP from BREEZE_API_SECRET via pyotp
-  3. Login via BreezeConnect → get session token
-  4. Store token + expiry in km_api_sessions
-  5. Reuse until expired (~24 hours)
+  1. Check km_api_sessions for valid stored token (from Settings UI or CLI)
+  2. If expired/missing → prompt user to login via browser
+  3. Store token + expiry in km_api_sessions for 24hr reuse
+
+Note: Breeze requires browser-based login (credentials + OTP from authenticator).
+      Auto-TOTP is not possible — BREEZE_API_SECRET is not a TOTP seed.
+      Session tokens are obtained via:
+        - Settings UI → "Connect Breeze" → opens login URL → paste token
+        - CLI: --session-token <TOKEN>
+        - .env: BREEZE_SESSION_TOKEN=<TOKEN>
 """
 
 import sys
@@ -23,21 +28,10 @@ def iso_ts(dt: datetime) -> str:
     return dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
 
-# ── Auto-TOTP + Session Management ───────────────────────────────────────────
-
-def _generate_totp() -> str:
-    """Generate TOTP from BREEZE_API_SECRET using pyotp."""
-    try:
-        import pyotp
-    except ImportError:
-        print('ERROR: pip install pyotp')
-        sys.exit(1)
-
-    if not BREEZE_API_SECRET:
-        print('ERROR: BREEZE_API_SECRET must be set in .env for auto-TOTP')
-        sys.exit(1)
-
-    return pyotp.TOTP(BREEZE_API_SECRET).now()
+def get_login_url() -> str:
+    """Return the Breeze browser login URL."""
+    return ('https://api.icicidirect.com/apiuser/login?api_key='
+            + urllib.parse.quote_plus(BREEZE_API_KEY))
 
 
 def _get_stored_session(db) -> dict | None:
@@ -112,10 +106,10 @@ def init_breeze(session_token: str = None, db=None):
     Initialize and return a BreezeConnect client.
 
     Session resolution order:
-      1. Explicit session_token argument
-      2. Stored token from km_api_sessions (if not expired)
+      1. Explicit session_token argument (--session-token CLI)
+      2. Stored token from km_api_sessions (if <24hrs old)
       3. BREEZE_SESSION_TOKEN from .env
-      4. Auto-generate TOTP for fresh login
+      4. Prompt user to login via browser
 
     Args:
         session_token: Explicit token override
@@ -164,29 +158,27 @@ def init_breeze(session_token: str = None, db=None):
         except Exception as e:
             print(f'  [session] Env token failed: {e}')
 
-    # ── 4. Auto-TOTP ──
-    if BREEZE_API_SECRET:
-        print('  [session] Generating fresh TOTP...')
-        totp = _generate_totp()
-        print(f'  [session] TOTP: {totp[:2]}****')
-        try:
-            breeze = _connect_breeze(totp)
-            print('  [session] Connected via auto-TOTP')
-            if db:
-                _save_session(db, totp)
-            return breeze
-        except Exception as e:
-            err = str(e)
-            print(f'  [session] TOTP login failed: {err}')
-            if db:
-                _mark_session_error(db, err)
+    # ── 4. No valid token — guide user to browser login ──
+    login_url = get_login_url()
+    print()
+    print('=' * 60)
+    print('  BREEZE SESSION REQUIRED')
+    print('=' * 60)
+    print()
+    print('  All stored/env sessions have expired.')
+    print('  Login via browser to get a fresh session token:')
+    print()
+    print(f'  {login_url}')
+    print()
+    print('  After login, run with:')
+    print('    python breeze_downloader.py --session-token <TOKEN_FROM_URL>')
+    print()
+    print('  Or paste the token in Settings → Data Connections.')
+    print()
 
-    # ── All methods exhausted ──
-    login_url = ('https://api.icicidirect.com/apiuser/login?api_key='
-                 + urllib.parse.quote_plus(BREEZE_API_KEY))
-    print('ERROR: Could not establish Breeze session.')
-    print(f'  Manual login: {login_url}')
-    print('  Then pass --session-token <TOKEN> or set BREEZE_SESSION_TOKEN in .env')
+    if db:
+        _mark_session_error(db, 'Session expired — browser login required')
+
     sys.exit(1)
 
 
