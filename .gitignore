@@ -9,3 +9,17 @@ build/
 __pycache__/
 *.pyc
 *.db
+
+# IDE
+.vscode/
+.idea/
+
+# Local data files — not committed
+package-lock.json
+NSE Data Analysis/security-master/
+kaaladristi/App/backend/.breeze_isec_cache.json
+kaaladristi/App/backend/data/bhav/
+kaaladristi/App/backend/data/logs/
+
+# Docs — local HTML prototypes
+docs/*.html
