@@ -50,6 +50,17 @@ from lib.sync_logger import SyncLogger
 # HELPERS
 # ═════════════════════════════════════════════════════════════════════════════
 
+def parse_vc(val) -> dict:
+    """Parse vendor_codes — handles both dict (psycopg2) and string (PostgREST)."""
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    return {}
+
 def safe_float(val):
     if val is None:
         return None
@@ -154,7 +165,7 @@ def download_indices(breeze, sb, logger, from_dt, to_dt, args):
     for i, idx in enumerate(indices, 1):
         name = idx['name']
         idx_id = idx['id']
-        vc = idx.get('vendor_codes') or {}
+        vc = parse_vc(idx.get('vendor_codes'))
         if isinstance(vc, str):
             vc = json.loads(vc)
 
@@ -238,7 +249,7 @@ def download_equities(breeze, sb, logger, from_dt, to_dt, args):
 
     # Count how many have breeze codes (check both breeze and breeze_bse)
     def has_breeze_code(e):
-        vc = e.get('vendor_codes') or {}
+        vc = parse_vc(e.get('vendor_codes'))
         ex = (e.get('exchange') or 'NSE').upper()
         if ex == 'BSE':
             return bool(vc.get('breeze_bse') or vc.get('breeze'))
@@ -260,7 +271,7 @@ def download_equities(breeze, sb, logger, from_dt, to_dt, args):
     for i, eq in enumerate(equities, 1):
         symbol = eq['symbol']
         eq_id = eq['id']
-        vc = eq.get('vendor_codes') or {}
+        vc = parse_vc(eq.get('vendor_codes'))
         if isinstance(vc, str):
             vc = json.loads(vc)
 
@@ -328,7 +339,7 @@ def dry_run(sb, args):
 
     if args.asset in ('index', 'both'):
         rows = sb.select('km_index_symbols', 'name,vendor_codes,is_tri')
-        mapped = [r for r in rows if (r.get('vendor_codes') or {}).get('breeze')]
+        mapped = [r for r in rows if parse_vc(r.get('vendor_codes')).get('breeze')]
         tri = [r for r in mapped if r.get('is_tri')]
         print(f'  Indices: {len(mapped)} with breeze code out of {len(rows)} total')
         if tri:
@@ -336,7 +347,7 @@ def dry_run(sb, args):
 
     if args.asset in ('equity', 'both'):
         rows = sb.select('km_equity_symbols', 'symbol,vendor_codes,exchange')
-        mapped = [r for r in rows if (r.get('vendor_codes') or {}).get('breeze')]
+        mapped = [r for r in rows if parse_vc(r.get('vendor_codes')).get('breeze')]
         if args.exchange and args.exchange != 'ALL':
             mapped = [r for r in mapped if (r.get('exchange') or 'NSE') == args.exchange.upper()]
         print(f'  Equities ({args.exchange or "ALL"}): {len(mapped)} with breeze code out of {len(rows)} total')
