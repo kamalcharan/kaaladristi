@@ -35,6 +35,21 @@ NSE_DELIVERY_URL = (
     'sec_bhavdata_full_{date}.csv'
 )
 
+# NSE Index daily data (all indexes OHLCV + P/E + P/B + Div Yield)
+# Format: ind_close_all_DDMMYYYY.csv  (date as DDMMYYYY)
+NSE_INDEX_URL = (
+    'https://nsearchives.nseindia.com/content/indices/'
+    'ind_close_all_{date}.csv'
+)
+
+# NSE Total Return Index (TRI) daily data
+# Format: ind_close_all_TRI_DDMMYYYY.csv  (date as DDMMYYYY)
+# Fallback: ind_tri_close_all_DDMMYYYY.csv
+NSE_TRI_URL_PATTERNS = [
+    'https://nsearchives.nseindia.com/content/indices/ind_close_all_TRI_{date}.csv',
+    'https://nsearchives.nseindia.com/content/indices/ind_tri_close_all_{date}.csv',
+]
+
 # ── BSE URLs ──────────────────────────────────────────────────────────────────
 
 BSE_BASE_URL = 'https://www.bseindia.com'

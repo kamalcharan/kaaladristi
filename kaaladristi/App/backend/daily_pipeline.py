@@ -47,6 +47,11 @@ from pipeline.utils.step_tracker import StepTracker
 from pipeline.utils.nse_session import NseSession
 from pipeline.downloaders.nse_bhav import download_nse_bhav, download_nse_delivery
 from pipeline.downloaders.bse_bhav import download_bse_bhav
+from pipeline.downloaders.nse_index_bhav import (
+    download_nse_index_bhav, download_nse_tri,
+    parse_nse_index_bhav, parse_nse_tri,
+    IndexMatcher, upsert_index_eod,
+)
 from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
@@ -77,9 +82,44 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         print(f'  {matcher.total_symbols} NSE symbols in master table')
         return True
 
-    # ── Step 1: Download bhav copy ──
     nse = NseSession()
 
+    # ── Step 0: Download + insert index bhav ──
+    tracker.start('index_download')
+    try:
+        idx_csv = download_nse_index_bhav(trade_date, session=nse)
+        if idx_csv:
+            idx_records = parse_nse_index_bhav(idx_csv, trade_date)
+            idx_matcher = IndexMatcher(db)
+            idx_matched, idx_unmatched = idx_matcher.match_records(idx_records)
+            idx_count = upsert_index_eod(db, idx_matched)
+            tracker.complete('index_download', rows=idx_count, metadata={
+                'parsed': len(idx_records), 'matched': len(idx_matched),
+                'unmatched': len(idx_unmatched),
+            })
+            print(f'  [index] {idx_count} indexes upserted, {len(idx_unmatched)} unmatched')
+        else:
+            tracker.skip('index_download', 'No index data available')
+    except Exception as e:
+        tracker.fail('index_download', str(e))
+
+    # ── Step 0b: Download + insert TRI data ──
+    tracker.start('tri_download')
+    try:
+        tri_csv = download_nse_tri(trade_date, session=nse)
+        if tri_csv:
+            tri_records = parse_nse_tri(tri_csv, trade_date)
+            if not hasattr(idx_matcher, '_loaded'):
+                idx_matcher = IndexMatcher(db)
+            tri_matched, tri_unmatched = idx_matcher.match_records(tri_records, is_tri=True)
+            tri_count = upsert_index_eod(db, tri_matched)
+            tracker.complete('tri_download', rows=tri_count)
+        else:
+            tracker.skip('tri_download', 'No TRI data available (URL may have changed)')
+    except Exception as e:
+        tracker.fail('tri_download', str(e))
+
+    # ── Step 1: Download equity bhav copy ──
     tracker.start('download')
     try:
         csv_path = download_nse_bhav(trade_date, session=nse)
