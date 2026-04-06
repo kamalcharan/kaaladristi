@@ -358,38 +358,62 @@ def main():
         target = last_trading_day()
         dates = [target]
 
-    # Process each date
-    success_count = 0
-    fail_count = 0
+    # Process each date — collect detailed results
+    results = []
 
     for d in dates:
         if args.force:
-            # Clear existing status to force re-run
             mark_day_status(db, d, args.exchange, 'pending')
 
         if args.exchange in ('NSE', 'ALL'):
             ok = run_nse_pipeline(db, d, dry_run=args.dry_run,
                                   skip_indicators=args.skip_indicators)
-            if ok:
-                success_count += 1
-            else:
-                fail_count += 1
+            results.append({'date': d, 'exchange': 'NSE', 'ok': ok})
 
         if args.exchange in ('BSE', 'ALL'):
             ok = run_bse_pipeline(db, d, dry_run=args.dry_run,
                                   skip_indicators=args.skip_indicators)
-            if ok:
-                success_count += 1
-            else:
-                fail_count += 1
+            results.append({'date': d, 'exchange': 'BSE', 'ok': ok})
 
-    # Summary
+    # Detailed summary from km_pipeline_runs
     print(f'\n{"=" * 60}')
     print(f'  Pipeline Summary')
     print(f'{"=" * 60}')
     print(f'  Dates processed: {len(dates)}')
-    print(f'  Success: {success_count}')
-    print(f'  Failed:  {fail_count}')
+
+    for d in dates:
+        steps = db.select('km_pipeline_runs', '*',
+                          filters={'trade_date': str(d)}, order='id')
+        if not steps:
+            continue
+
+        for exch in (['NSE', 'BSE'] if args.exchange == 'ALL' else [args.exchange]):
+            exch_steps = [s for s in steps if s.get('exchange') == exch]
+            if not exch_steps:
+                continue
+
+            completed = sum(1 for s in exch_steps if s['status'] == 'completed')
+            failed = sum(1 for s in exch_steps if s['status'] == 'failed')
+            skipped = sum(1 for s in exch_steps if s['status'] == 'skipped')
+            total_rows = sum(s.get('rows_count', 0) for s in exch_steps)
+            total_ms = sum(s.get('duration_ms', 0) or 0 for s in exch_steps)
+
+            print(f'\n  {d} — {exch}:')
+            for s in exch_steps:
+                icon = {'completed': '✓', 'failed': '✗', 'skipped': '–',
+                        'running': '…'}.get(s['status'], '?')
+                rows = f"{s.get('rows_count', 0):,} rows" if s.get('rows_count') else ''
+                dur = f"{s.get('duration_ms', 0)}ms" if s.get('duration_ms') else ''
+                err = f" — {s.get('error_msg', '')}" if s.get('error_msg') else ''
+                print(f'    {icon} {s["step"]:12} {rows:>12}  {dur:>8}{err}')
+
+            print(f'    {"─" * 40}')
+            print(f'    Steps: {completed} done, {failed} failed, {skipped} skipped')
+            print(f'    Total: {total_rows:,} rows in {total_ms:,}ms')
+
+    success_count = sum(1 for r in results if r['ok'])
+    fail_count = sum(1 for r in results if not r['ok'])
+    print(f'\n  Overall: {success_count} succeeded, {fail_count} failed')
     if args.dry_run:
         print(f'  (DRY RUN — no data was downloaded or inserted)')
     print()
