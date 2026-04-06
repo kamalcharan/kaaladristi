@@ -49,8 +49,6 @@ CREATE OR REPLACE FUNCTION compute_indicators_batch(
 )
 RETURNS INT LANGUAGE plpgsql AS $$
 DECLARE
-  r RECORD;
-  rows_arr RECORD[];
   n INT;
   i INT;
   updated INT := 0;
