@@ -207,8 +207,6 @@ class IndicatorEngine:
                     record[col] = None
                 elif isinstance(val, float) and np.isnan(val):
                     record[col] = None
-                elif hasattr(pd, 'isna') and pd.isna(val):
-                    record[col] = None
                 elif isinstance(val, (np.bool_, bool)):
                     record[col] = bool(val)
                 elif isinstance(val, (np.integer,)):
@@ -216,6 +214,12 @@ class IndicatorEngine:
                 elif isinstance(val, (np.floating,)):
                     record[col] = round(float(val), 6)
                 else:
+                    try:
+                        if pd.isna(val):
+                            record[col] = None
+                            continue
+                    except (TypeError, ValueError):
+                        pass
                     record[col] = val
 
             record['indicators_computed_at'] = now
