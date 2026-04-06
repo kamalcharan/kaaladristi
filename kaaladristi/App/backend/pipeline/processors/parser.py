@@ -171,10 +171,11 @@ def parse_nse_delivery(csv_path: str) -> dict[str, dict]:
 _BSE_BHAV_MAP = {
     # Scrip code (BSE uses numeric codes)
     'SC_CODE': 'scrip_code', 'SCRIP_CD': 'scrip_code', 'ScripCode': 'scrip_code',
+    'FinInstrmId': 'scrip_code',  # UDiFF format
     # Name
     'SC_NAME': 'name', 'SCRIP_NAME': 'name', 'ScripName': 'name',
     # Group
-    'SC_GROUP': 'group', 'SCRIP_GRP': 'group', 'ScripGroup': 'group',
+    'SC_GROUP': 'group', 'SCRIP_GRP': 'group', 'ScripGroup': 'group', 'SctySrs': 'group',
     # Type
     'SC_TYPE': 'type',
     # OHLC
@@ -199,26 +200,41 @@ _BSE_VALID_GROUPS = {'A', 'B', 'T', 'X', 'XC', 'XD', 'XT', 'Z', 'P', 'IF'}
 
 def parse_bse_bhav(csv_path: str, trade_date: date) -> list[dict]:
     """
-    Parse BSE bhav copy CSV.
-    Returns list of normalized dicts with: scrip_code (as symbol),
-    open, high, low, close, prev_close, volume, value_cr, trade_date.
+    Parse BSE UDiFF bhav copy (tab-separated CSV).
+    BSE master table stores symbols as scrip codes (e.g., '500002') in
+    km_equity_symbols WHERE exchange='BSE'.
+    This parser outputs scrip code as 'symbol' for matching.
     """
     records = []
 
+    # Detect delimiter — BSE UDiFF uses tab, older formats use comma
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
+        first_line = f.readline()
+    delimiter = '\t' if '\t' in first_line else ','
+
+    with open(csv_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f, delimiter=delimiter)
         for raw in reader:
             row = _normalize_row(raw, _BSE_BHAV_MAP)
 
-            # Filter by group if available
+            # Only process equities (STK = stock)
+            fin_type = (raw.get('FinInstrmTp') or '').strip().upper()
+            if fin_type and fin_type != 'STK':
+                continue
+
+            # Only CM segment
+            segment = (raw.get('Sgmt') or '').strip().upper()
+            if segment and segment != 'CM':
+                continue
+
+            # Filter by group/series
             group = (row.get('group') or '').strip().upper()
             if group and group not in _BSE_VALID_GROUPS:
                 continue
 
-            # BSE uses scrip code as primary identifier
+            # BSE scrip code is the primary key in km_equity_symbols (exchange='BSE')
             scrip_code = (row.get('scrip_code') or '').strip()
-            symbol = (row.get('symbol') or scrip_code).strip()
-            if not symbol:
+            if not scrip_code:
                 continue
 
             o = _safe_float(row.get('open'))
@@ -231,22 +247,21 @@ def parse_bse_bhav(csv_path: str, trade_date: date) -> list[dict]:
 
             volume = _safe_int(row.get('volume'))
             value_raw = _safe_float(row.get('value'))
-            # BSE value is in rupees, convert to crores
+            # BSE UDiFF value is in rupees, convert to crores
             value_cr = round(value_raw / 1e7, 4) if value_raw else None
 
+            prev = _safe_float(row.get('prev_close'))
+
             records.append({
-                'symbol': symbol,
+                'symbol': scrip_code,  # Match against km_equity_symbols.symbol WHERE exchange='BSE'
                 'trade_date': str(trade_date),
                 'open': o,
                 'high': h,
                 'low': l,
                 'close': c,
-                'prev_close': _safe_float(row.get('prev_close')),
-                'chng': round(c - (_safe_float(row.get('prev_close')) or c), 2),
-                'pct_chng': round(
-                    ((c - (_safe_float(row.get('prev_close')) or c)) /
-                     (_safe_float(row.get('prev_close')) or c)) * 100, 2
-                ) if _safe_float(row.get('prev_close')) else None,
+                'prev_close': prev,
+                'chng': round(c - (prev or c), 2) if prev else None,
+                'pct_chng': round(((c - prev) / prev) * 100, 2) if prev else None,
                 'volume': volume,
                 'value_cr': value_cr,
                 'isin': (row.get('isin') or '').strip() or None,
