@@ -119,6 +119,19 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     except Exception as e:
         tracker.fail('tri_download', str(e))
 
+    # ── Step 0c: Index indicators (RPC) ──
+    if not skip_indicators:
+        tracker.start('index_indicators')
+        try:
+            result = db.rpc('compute_all_pending_indicators', {
+                'p_table': 'km_index_eod',
+                'p_id_col': 'index_id',
+            })
+            ind_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            tracker.complete('index_indicators', rows=ind_count)
+        except Exception as e:
+            tracker.fail('index_indicators', str(e))
+
     # ── Step 1: Download equity bhav copy ──
     tracker.start('download')
     try:
@@ -180,19 +193,26 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.fail('delivery', str(e))
         # Non-critical — don't fail the whole pipeline
 
-    # ── Step 6: Indicators (optional) ──
+    # ── Step 6: Indicators (PostgreSQL RPC — fast) ──
     if not skip_indicators:
         tracker.start('indicators')
         try:
-            from indicators.compute_engine import IndicatorEngine
-            engine = IndicatorEngine(db)
-            ind_count = engine.run(mode='equity', full=False)
+            result = db.rpc('compute_all_pending_indicators', {
+                'p_table': 'km_equity_eod',
+                'p_id_col': 'equity_id',
+            })
+            ind_count = sum(r.get('rows_updated', 0) for r in (result or []))
             tracker.complete('indicators', rows=ind_count)
-        except ImportError:
-            tracker.skip('indicators', 'Indicator engine not available')
         except Exception as e:
-            tracker.fail('indicators', str(e))
-            # Non-critical
+            # Fallback to Python compute engine
+            try:
+                print(f'  [indicators] RPC failed ({e}), falling back to Python...')
+                from indicators.compute_engine import IndicatorEngine
+                engine = IndicatorEngine(db)
+                ind_count = engine.run(mode='equity', full=False)
+                tracker.complete('indicators', rows=ind_count)
+            except Exception as e2:
+                tracker.fail('indicators', str(e2))
 
     # ── Step 7: Refresh views ──
     tracker.start('views')
@@ -278,18 +298,25 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         mark_day_status(db, trade_date, 'BSE', 'failed')
         return False
 
-    # ── Step 5: Indicators (optional) ──
+    # ── Step 5: Indicators (PostgreSQL RPC — fast) ──
     if not skip_indicators:
         tracker.start('indicators')
         try:
-            from indicators.compute_engine import IndicatorEngine
-            engine = IndicatorEngine(db)
-            ind_count = engine.run(mode='equity', full=False)
+            result = db.rpc('compute_all_pending_indicators', {
+                'p_table': 'km_equity_eod',
+                'p_id_col': 'equity_id',
+            })
+            ind_count = sum(r.get('rows_updated', 0) for r in (result or []))
             tracker.complete('indicators', rows=ind_count)
-        except ImportError:
-            tracker.skip('indicators', 'Indicator engine not available')
         except Exception as e:
-            tracker.fail('indicators', str(e))
+            try:
+                print(f'  [indicators] RPC failed ({e}), falling back to Python...')
+                from indicators.compute_engine import IndicatorEngine
+                engine = IndicatorEngine(db)
+                ind_count = engine.run(mode='equity', full=False)
+                tracker.complete('indicators', rows=ind_count)
+            except Exception as e2:
+                tracker.fail('indicators', str(e2))
 
     # ── Mark complete ──
     mark_day_status(db, trade_date, 'BSE', 'completed')
