@@ -192,12 +192,6 @@ app.add_middleware(
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@app.get('/ping')
-def ping():
-    """Lightweight liveness probe — no DB required."""
-    return {'status': 'ok'}
-
-
 @app.get('/api/pipeline/health')
 def health():
     """Overall pipeline health check."""
