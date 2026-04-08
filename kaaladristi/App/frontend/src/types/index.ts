@@ -213,6 +213,36 @@ export interface IndexCatalogItem {
   last_close: number | null;
 }
 
+// ── Equity Catalog (from mv_equity_catalog) ──
+
+export interface EquityCatalogItem {
+  id: number;
+  symbol: string;
+  exchange: string;          // 'NSE' | 'BSE'
+  is_active: boolean;
+  index_names: string[] | null;
+  data_from: string | null;
+  data_to: string | null;
+  record_count: number;
+  last_close: number | null;
+}
+
+export type EquityExchangeFilter = 'NSE' | 'BSE' | 'ALL';
+
+// ── Commodity Catalog (from mv_commodity_catalog) ──
+
+export interface CommodityCatalogItem {
+  id: number;
+  symbol: string;
+  name: string | null;
+  exchange: string;          // 'MCX' | 'NCDEX'
+  category: string | null;
+  data_from: string | null;
+  data_to: string | null;
+  record_count: number;
+  last_close: number | null;
+}
+
 // ── DC Inference Types ──
 
 export interface DcInference {

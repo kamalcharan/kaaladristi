@@ -87,6 +87,7 @@ interface QueryState {
 
 class QueryBuilder {
   private state: QueryState;
+  private _withCount = false;
 
   constructor(table: string) {
     this.state = {
@@ -114,6 +115,19 @@ class QueryBuilder {
 
   lte(column: string, value: string | number): this {
     this.state.params.append(column, `lte.${value}`);
+    return this;
+  }
+
+  /** Case-insensitive pattern match. Use * as wildcard, e.g. "*reliance*" */
+  ilike(column: string, pattern: string): this {
+    this.state.params.append(column, `ilike.${pattern}`);
+    return this;
+  }
+
+  /** Request total row count — PostgREST returns it in Content-Range header */
+  withCount(): this {
+    this._withCount = true;
+    this.state.headers = { ...this.state.headers, 'Prefer': 'count=exact' };
     return this;
   }
 
@@ -221,7 +235,17 @@ class QueryBuilder {
         return { data: null, error: null };
       }
 
-      return { data, error: null };
+      // Parse total count from Content-Range: "0-49/1380"
+      let count: number | undefined;
+      if (this._withCount) {
+        const cr = resp.headers.get('Content-Range');
+        if (cr?.includes('/')) {
+          const n = parseInt(cr.split('/')[1], 10);
+          if (!isNaN(n)) count = n;
+        }
+      }
+
+      return { data, error: null, count };
     } catch (err) {
       return {
         data: null,

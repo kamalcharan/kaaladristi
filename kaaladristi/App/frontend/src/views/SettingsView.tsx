@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Globe, BarChart3, Activity, ChevronRight, type LucideIcon } from 'lucide-react';
 import SectorLordsDetail from './settings/SectorLordsDetail';
-import MarketDataExplorer from './settings/MarketDataExplorer';
+import MarketDataHub from './settings/MarketDataHub';
 import PipelineDashboard from './settings/PipelineDashboard';
 
 // ── Card config for each settings section ──
@@ -26,7 +26,7 @@ const cards: SettingsCard[] = [
   {
     id: 'market-data',
     title: 'Market Data',
-    description: 'Index catalog — date ranges, record counts, price charts',
+    description: 'Indexes, equities and commodities — data ranges, record counts, active status',
     icon: BarChart3,
     iconColor: 'text-risk-green bg-risk-green/15',
     ready: true,
@@ -55,7 +55,7 @@ export default function SettingsView() {
       {activeCard === 'sector-lords' ? (
         <SectorLordsDetail onBack={() => setActiveCard(null)} />
       ) : activeCard === 'market-data' ? (
-        <MarketDataExplorer onBack={() => setActiveCard(null)} />
+        <MarketDataHub onBack={() => setActiveCard(null)} />
       ) : activeCard === 'pipeline' ? (
         <PipelineDashboard onBack={() => setActiveCard(null)} />
       ) : (
