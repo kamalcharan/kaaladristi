@@ -13,6 +13,12 @@ services:
       PGRST_LOG_LEVEL:     "error"
     networks:
       - kd_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     # Not exposed to host — accessed only via nginx proxy
 
   # ── Pipeline API — FastAPI + APScheduler ──────────────────────────────────
@@ -29,6 +35,12 @@ services:
       - pipeline_data:/app/data       # persist bhav audit trail
     networks:
       - kd_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8100/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     # Not exposed to host — accessed only via nginx proxy
 
   # ── Nginx — serves frontend + reverse proxy ────────────────────────────────
@@ -45,8 +57,10 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - postgrest
-      - pipeline-api
+      postgrest:
+        condition: service_healthy
+      pipeline-api:
+        condition: service_healthy
     networks:
       - kd_net
 
