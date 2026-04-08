@@ -15,6 +15,7 @@ import TransmissionView from '@/views/TransmissionView';
 import BacktestView from '@/views/BacktestView';
 import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
+import RuleEvalView from '@/views/RuleEvalView';
 import DCCalendarView from '@/views/DCCalendarView';
 import ChartView from '@/views/ChartView';
 
@@ -89,6 +90,7 @@ function AppRoutes() {
           <Route path="/calendar" element={<CalendarView />} />
           <Route path="/transmission" element={<TransmissionView />} />
           <Route path="/inference" element={<InferenceView />} />
+          <Route path="/rule-eval" element={<RuleEvalView />} />
           <Route path="/astro-calendar" element={<DCCalendarView />} />
           <Route path="/history" element={<BacktestView />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />

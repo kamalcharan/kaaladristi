@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, X, AlertCircle, Loader2, Search, ChevronLeft, ChevronRight, Activity, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, AlertCircle, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary, KaalaLoader, ToastContainer, useToast } from '@/components/ui';
-import { fetchInferences, createInference, updateInference, deleteInference, evaluateInferences } from '@/services/dcInference';
-import type { InferenceEvalRow } from '@/services/dcInference';
+import { fetchInferences, createInference, updateInference, deleteInference } from '@/services/dcInference';
 import { fetchLookupByCategory } from '@/services/dcLookup';
 import type { DcInference, DcInferenceInput, DcLookupItem } from '@/types';
 import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
@@ -612,59 +611,15 @@ function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, sa
   );
 }
 
-// ── Outcome Badge ────────────────────────────────────────────────────────────
-
-const OUTCOME_STYLES: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  worked:       { bg: 'bg-risk-green/15',    text: 'text-risk-green',    border: 'border-risk-green/35',    label: 'Worked'    },
-  partial:      { bg: 'bg-risk-amber/15',    text: 'text-risk-amber',    border: 'border-risk-amber/35',    label: 'Partial'   },
-  failed:       { bg: 'bg-risk-red/15',      text: 'text-risk-red',      border: 'border-risk-red/35',      label: 'Failed'    },
-  inconclusive: { bg: 'bg-slate-800/60',     text: 'text-slate-500',     border: 'border-white/10',         label: 'No Signal' },
-  running:      { bg: 'bg-risk-amber/10',    text: 'text-risk-amber',    border: 'border-risk-amber/25',    label: 'Running'   },
-  pending:      { bg: 'bg-accent-indigo/10', text: 'text-accent-indigo', border: 'border-accent-indigo/25', label: 'Pending'   },
-  turned:       { bg: 'bg-teal-500/10',      text: 'text-teal-400',      border: 'border-teal-400/30',      label: 'Turned'    },
-};
-
-function OutcomeBadge({ result }: { result: InferenceEvalRow }) {
-  const { outcome, final_return_pct, peak_return_pct, trough_return_pct, market_impact, turn_direction, eval_status } = result;
-  const s = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.inconclusive;
-  const isPos = market_impact?.includes('positive') || market_impact === 'bullish';
-  const isNeg = market_impact?.includes('negative') || market_impact === 'bearish';
-  const swingVal = isPos ? peak_return_pct : isNeg ? trough_return_pct : null;
-  const sign = (n: number) => n >= 0 ? '+' : '';
-
-  return (
-    <span className={cn(
-      'inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-semibold shrink-0',
-      s.bg, s.text, s.border,
-    )}>
-      {s.label}
-      {eval_status !== 'pending' && final_return_pct != null && (
-        <span className="mono font-normal opacity-80">
-          {sign(final_return_pct)}{final_return_pct.toFixed(2)}%
-          {swingVal != null && Math.abs(swingVal) > Math.abs(final_return_pct) + 0.1 && (
-            <span className="opacity-60"> (swing {sign(swingVal)}{swingVal.toFixed(2)}%)</span>
-          )}
-        </span>
-      )}
-      {outcome === 'turned' && turn_direction && (
-        <span className="mono font-normal opacity-70 ml-0.5">
-          {turn_direction.replace(/_/g, ' ')}
-        </span>
-      )}
-    </span>
-  );
-}
-
 // ── Inference Card ───────────────────────────────────────────────────────────
 
 function InferenceCard({
-  row, onEdit, onDelete, deleteConfirmId, evalResult,
+  row, onEdit, onDelete, deleteConfirmId,
 }: {
   row: DcInference;
   onEdit: (row: DcInference) => void;
   onDelete: (id: number) => void;
   deleteConfirmId: number | null;
-  evalResult?: InferenceEvalRow;
 }) {
   const scopeLabels = getScopeLabels(row);
   const isConfirming = deleteConfirmId === row.id;
@@ -713,7 +668,6 @@ function InferenceCard({
             {s}
           </span>
         ))}
-        {evalResult && <OutcomeBadge result={evalResult} />}
         {row.inference && (
           <span className="text-[12px] text-slate-400 line-clamp-1 ml-1">— {row.inference}</span>
         )}
@@ -740,35 +694,6 @@ export default function InferenceView() {
   const [filterScope, setFilterScope] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
-
-  // Evaluate rules panel
-  const [evalOpen, setEvalOpen] = useState(false);
-  const [evalIndex] = useState('NIFTY 50');
-  const [evalMinor, setEvalMinor] = useState(0.5);
-  const [evalMajor, setEvalMajor] = useState(1.0);
-  const [evalLookback, setEvalLookback] = useState(5);
-
-  const {
-    data: evalData,
-    isLoading: evalLoading,
-    isError: evalIsError,
-    refetch: refetchEval,
-  } = useQuery({
-    queryKey: ['dc_eval', evalIndex, evalMinor, evalMajor, evalLookback],
-    queryFn: () => evaluateInferences({
-      indexName: evalIndex,
-      minorThreshold: evalMinor,
-      majorThreshold: evalMajor,
-      lookbackDays: evalLookback,
-    }),
-    enabled: evalOpen,
-    staleTime: 60_000,
-  });
-
-  const evalMap = useMemo(
-    () => new Map((evalData ?? []).map(r => [r.inference_id, r])),
-    [evalData],
-  );
 
   const { data: rows = [], isLoading, isError, error } = useQuery({
     queryKey: ['dc_inference'],
@@ -917,112 +842,6 @@ export default function InferenceView() {
           </div>
         )}
 
-        {/* Evaluate Rules Panel */}
-        {rows.length > 0 && (
-          <div className="mb-6 border border-kd-border rounded-2xl overflow-hidden">
-            <button
-              onClick={() => setEvalOpen(o => !o)}
-              className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-900/40 hover:bg-slate-900/60 transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <Activity className="w-4 h-4 text-accent-indigo" />
-                <span className="text-sm font-semibold text-white">Evaluate Rules</span>
-                {evalData && !evalLoading && (
-                  <span className="text-[11px] text-muted mono">
-                    {evalData.filter(r => r.outcome === 'worked').length}W ·{' '}
-                    {evalData.filter(r => r.outcome === 'partial').length}P ·{' '}
-                    {evalData.filter(r => r.outcome === 'failed').length}F
-                  </span>
-                )}
-              </div>
-              {evalLoading
-                ? <Loader2 className="w-4 h-4 text-accent-indigo animate-spin" />
-                : evalOpen
-                  ? <ChevronUp   className="w-4 h-4 text-slate-400" />
-                  : <ChevronDown className="w-4 h-4 text-slate-400" />
-              }
-            </button>
-
-            {evalOpen && (
-              <div className="px-5 py-4 border-t border-kd-border bg-slate-950/30 space-y-4">
-                {/* Threshold controls */}
-                <div className="flex flex-wrap items-end gap-4">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">Index</p>
-                    <span className="px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 mono block">
-                      {evalIndex}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">Minor %</p>
-                    <input
-                      type="number" min="0.1" max="5" step="0.1"
-                      value={evalMinor}
-                      onChange={e => setEvalMinor(Number(e.target.value))}
-                      className="w-20 px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white text-center mono focus:outline-none focus:border-accent-indigo/60"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">Major %</p>
-                    <input
-                      type="number" min="0.1" max="10" step="0.1"
-                      value={evalMajor}
-                      onChange={e => setEvalMajor(Number(e.target.value))}
-                      className="w-20 px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white text-center mono focus:outline-none focus:border-accent-indigo/60"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">Lookback Days</p>
-                    <input
-                      type="number" min="1" max="30" step="1"
-                      value={evalLookback}
-                      onChange={e => setEvalLookback(Number(e.target.value))}
-                      className="w-20 px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white text-center mono focus:outline-none focus:border-accent-indigo/60"
-                    />
-                  </div>
-                  <button
-                    onClick={() => refetchEval()}
-                    disabled={evalLoading}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-xs font-semibold text-accent-indigo hover:bg-accent-indigo/30 disabled:opacity-50 transition-all"
-                  >
-                    <RefreshCw className={cn('w-3.5 h-3.5', evalLoading && 'animate-spin')} />
-                    Re-evaluate
-                  </button>
-                </div>
-
-                {/* Summary pills */}
-                {evalData && !evalLoading && (
-                  <div className="flex flex-wrap gap-2">
-                    {(([
-                      ['worked',       'Worked',    'text-risk-green bg-risk-green/10 border-risk-green/30'],
-                      ['partial',      'Partial',   'text-risk-amber bg-risk-amber/10 border-risk-amber/30'],
-                      ['failed',       'Failed',    'text-risk-red bg-risk-red/10 border-risk-red/30'],
-                      ['inconclusive', 'No Signal', 'text-slate-400 bg-slate-800/50 border-white/10'],
-                      ['running',      'Running',   'text-risk-amber bg-risk-amber/10 border-risk-amber/30'],
-                      ['pending',      'Pending',   'text-accent-indigo bg-accent-indigo/10 border-accent-indigo/20'],
-                      ['turned',       'Turned',    'text-teal-400 bg-teal-500/10 border-teal-500/20'],
-                    ]) as [string, string, string][]).map(([key, label, cls]) => {
-                      const count = evalData.filter(r => r.outcome === key).length;
-                      if (!count) return null;
-                      return (
-                        <span key={key} className={cn('px-2.5 py-1 rounded-lg border text-[11px] font-semibold', cls)}>
-                          {count} {label}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {evalIsError && (
-                  <p className="text-xs text-risk-red">
-                    Evaluation failed — apply <span className="mono">km_migration_017_inference_evaluation.sql</span> first.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Filter bar */}
         {rows.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -1124,7 +943,6 @@ export default function InferenceView() {
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   deleteConfirmId={deleteConfirm}
-                  evalResult={evalMap.get(row.id)}
                 />
               ))}
               {filtered.length === 0 && isFiltered && (

@@ -9,6 +9,7 @@ import {
   LogOut,
   Shield,
   Sparkles,
+  Activity,
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/astro-calendar', icon: CalendarDays, label: 'Planetary Intel' },
       { to: '/inference',      icon: Sparkles,     label: 'Inference DB' },
+      { to: '/rule-eval',      icon: Activity,     label: 'Rule Eval'    },
       { to: '/calendar',       icon: CalendarIcon, label: 'Risk Calendar' },
       { to: '/transmission',   icon: Zap,          label: 'Risk Transmission' },
     ],
