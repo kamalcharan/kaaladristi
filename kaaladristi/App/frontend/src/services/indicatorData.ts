@@ -160,3 +160,55 @@ export async function fetchIndicatorDataById(
 
   return (data ?? []) as IndicatorRow[];
 }
+
+/** Fetch OHLCV data for an equity by its DB id (used by /chart/equity/:id).
+ *  Returns IndicatorRow[] with indicator fields set to null — TradingChart
+ *  renders a clean candlestick + volume chart without overlays. */
+export async function fetchEquityEodById(
+  equityId: number,
+  range: TimeRange,
+): Promise<IndicatorRow[]> {
+  const startDate = getStartDate(range);
+
+  let query = from('km_equity_eod')
+    .select('trade_date,open,high,low,close,volume')
+    .eq('equity_id', equityId)
+    .order('trade_date', { ascending: true })
+    .limit(10000);
+
+  if (startDate) {
+    query = query.gte('trade_date', startDate);
+  }
+
+  const { data, error } = await query.execute();
+  if (error) throw new Error(error.message);
+
+  // Pad with null indicators so TradingChart receives the expected shape
+  const NULL_INDICATORS: Omit<IndicatorRow, 'trade_date' | 'open' | 'high' | 'low' | 'close' | 'volume'> = {
+    sma_8: null, sma_21: null, sma_50: null, sma_55: null,
+    sma_89: null, sma_150: null, sma_200: null, sma_233: null,
+    rsi_14: null, rsi_9: null, mfi_14: null,
+    atr_10: null, atr_14: null, supertrend: null, supertrend_dir: null,
+    obv: null, obv_sma_20: null, rvol: null, tvol: null,
+    magic_rs: null, magic_rs_sma144: null, magic_ma: null, magic_rs_zone: null,
+    sniper_inst: null, sniper_hot: null, sniper_rsi: null,
+    rss_value: null, rss_rsi: null,
+    pivot_pp: null, pivot_r1: null, pivot_r2: null, pivot_r3: null,
+    pivot_s1: null, pivot_s2: null, pivot_s3: null,
+    chartink_emd_pct: null, chartink_emd_ok: null,
+    chartink_ca_pct: null, chartink_ca_ok: null,
+    chartink_vmac_ok: null, chartink_score: null,
+    dot_svd: false, dot_sbd: false, dot_syd: false,
+    swing_high: false, swing_low: false,
+  };
+
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    ...NULL_INDICATORS,
+    trade_date: row.trade_date as string,
+    open:   Number(row.open   ?? 0),
+    high:   Number(row.high   ?? 0),
+    low:    Number(row.low    ?? 0),
+    close:  Number(row.close  ?? 0),
+    volume: Number(row.volume ?? 0),
+  }));
+}

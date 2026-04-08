@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -27,10 +27,13 @@ export default function ChartView() {
   const name = searchParams.get('name') ?? `${type} #${id}`;
 
   const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['chart', 'indicator', type, numId, range],
-    queryFn: () => fetchIndicatorDataById(numId, range),
+    queryKey: ['chart', type, numId, range],
+    queryFn: () =>
+      type === 'equity'
+        ? fetchEquityEodById(numId, range)
+        : fetchIndicatorDataById(numId, range),
     staleTime: 120_000,
-    enabled: !!numId && type === 'index',
+    enabled: !!numId && (type === 'index' || type === 'equity'),
   });
 
   // Stats from latest row

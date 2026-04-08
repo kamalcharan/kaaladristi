@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { keepPreviousData } from '@tanstack/react-query';
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight,
-  Loader2, Power,
+  Loader2, Power, BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchEquityCatalog, toggleEquityActive } from '@/services/equityCatalog';
 import { fmtDate } from '@/lib/dateUtils';
 import type { EquityExchangeFilter } from '@/types';
+import { useNavigate } from 'react-router-dom';
 
 const PAGE_SIZE = 50;
 
@@ -19,6 +20,7 @@ const EXCHANGE_OPTIONS: { value: EquityExchangeFilter; label: string }[] = [
 ];
 
 export default function EquityCatalog({ onBack }: { onBack: () => void }) {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [exchange, setExchange] = useState<EquityExchangeFilter>('NSE');
   const [search, setSearch] = useState('');
@@ -199,6 +201,19 @@ export default function EquityCatalog({ onBack }: { onBack: () => void }) {
                     ? item.last_close.toLocaleString('en-IN', { minimumFractionDigits: 2 })
                     : '—'}
                 </span>
+
+                {/* Chart link */}
+                {item.record_count > 0 ? (
+                  <button
+                    onClick={() => navigate(`/chart/equity/${item.id}?name=${encodeURIComponent(item.symbol)}`)}
+                    title={`View ${item.symbol} chart`}
+                    className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <div className="w-7 shrink-0" />
+                )}
               </div>
             ))}
           </div>
