@@ -171,8 +171,8 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
           </div>
 
           {/* Table */}
-          <div className="bg-kd-surface border border-kd-border rounded-2xl overflow-hidden">
-            <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-3 bg-kd-elevated/30 border-b border-kd-border">
+          <div className="bg-kd-surface border-2 border-kd-border rounded-2xl overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-3.5 bg-kd-elevated/50 border-b-2 border-kd-border">
               <button
                 onClick={() => toggleSort('sector')}
                 className="flex items-center gap-1.5 text-[11px] font-bold text-secondary uppercase tracking-wider hover:text-[var(--text-primary)] transition-colors text-left"
@@ -196,8 +196,8 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
                 rows.map((r, i) => (
                   <div
                     key={`${r.sectorId}-${r.planetId}`}
-                    className={`grid grid-cols-[1fr_auto] gap-4 px-5 py-3 text-sm ${
-                      i % 2 === 0 ? 'bg-kd-surface' : 'bg-kd-elevated/30'
+                    className={`grid grid-cols-[1fr_auto] gap-4 px-5 py-3 text-sm border-b border-kd-border last:border-b-0 ${
+                      i % 2 === 0 ? 'bg-kd-surface' : 'bg-kd-elevated/20'
                     } hover:bg-kd-elevated/50 transition-colors`}
                   >
                     <span className="text-[var(--text-primary)]">{r.sector}</span>
