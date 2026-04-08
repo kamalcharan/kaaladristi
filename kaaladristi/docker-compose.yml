@@ -57,10 +57,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      postgrest:
-        condition: service_healthy
-      pipeline-api:
-        condition: service_healthy
+      - postgrest
+      - pipeline-api
     networks:
       - kd_net
 
