@@ -50,6 +50,9 @@ NSE_TRI_URL_PATTERNS = [
     'https://nsearchives.nseindia.com/content/indices/ind_tri_close_all_{date}.csv',
 ]
 
+# NSE FII/DII cash market activity (returns last ~10 trading days)
+NSE_FIIDII_URL = 'https://www.nseindia.com/api/fiidiiTradeReact'
+
 # ── BSE URLs ──────────────────────────────────────────────────────────────────
 
 BSE_BASE_URL = 'https://www.bseindia.com'

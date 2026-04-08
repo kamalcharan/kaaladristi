@@ -1,0 +1,58 @@
+services:
+
+  # ── PostgREST — REST API layer over PostgreSQL ─────────────────────────────
+  postgrest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI:        "${DB_PRIMARY}"       # reuse existing env var
+      PGRST_DB_SCHEMA:     "public"
+      PGRST_DB_ANON_ROLE:  "anon"
+      PGRST_JWT_SECRET:    "${JWT_SECRET}"
+      PGRST_SERVER_PORT:   "3000"
+      PGRST_LOG_LEVEL:     "error"
+    networks:
+      - kd_net
+    # Not exposed to host — accessed only via nginx proxy
+
+  # ── Pipeline API — FastAPI + APScheduler ──────────────────────────────────
+  pipeline-api:
+    build:
+      context: ./App/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./App/frontend/.env   # DB_PRIMARY, JWT_SECRET, BREEZE_* etc.
+    environment:
+      DATABASE_URL: "${DB_PRIMARY}"   # explicit alias so lib/config.py finds it
+    volumes:
+      - pipeline_data:/app/data       # persist bhav audit trail
+    networks:
+      - kd_net
+    # Not exposed to host — accessed only via nginx proxy
+
+  # ── Nginx — serves frontend + reverse proxy ────────────────────────────────
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+      args:
+        VITE_POSTGREST_URL:    "http://${VPS_IP}/db"
+        VITE_PIPELINE_API_URL: "http://${VPS_IP}"
+        VITE_ANON_KEY:         "${VITE_ANON_KEY:-}"
+        GEMINI_API_KEY:        "${GEMINI_API_KEY:-}"
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - postgrest
+      - pipeline-api
+    networks:
+      - kd_net
+
+volumes:
+  pipeline_data:
+
+networks:
+  kd_net:
+    driver: bridge

@@ -62,6 +62,7 @@ export interface DownloadType {
   status: string;
   gap_days: number;
   depends_on?: string;
+  run_exchange?: string;   // which exchange to trigger when "Run" is clicked
 }
 
 export interface JobResponse {
@@ -106,8 +107,8 @@ export const fetchBreezeStatus = () => apiGet<BreezeStatus>('/api/pipeline/breez
 export const fetchSchedulerStatus = () => apiGet<SchedulerStatus>('/api/pipeline/scheduler');
 export const fetchDownloadTypes = () => apiGet<DownloadType[]>('/api/pipeline/downloads');
 
-export const triggerPipelineRun = (date?: string, exchange: string = 'ALL') =>
-  apiPost<JobResponse>('/api/pipeline/run', { date, exchange });
+export const triggerPipelineRun = (date?: string, exchange: string = 'ALL', force: boolean = false) =>
+  apiPost<JobResponse>('/api/pipeline/run', { date, exchange, force });
 
 export const triggerBackfill = (dateFrom: string, dateTo: string, exchange: string = 'ALL') =>
   apiPost<JobResponse>('/api/pipeline/backfill', { date_from: dateFrom, date_to: dateTo, exchange });

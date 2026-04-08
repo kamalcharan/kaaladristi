@@ -7,6 +7,7 @@ Preferred over PostgREST for backend scripts (no JWT needed).
 """
 
 import json
+import time
 import psycopg2
 import psycopg2.pool
 import psycopg2.extras
@@ -14,6 +15,13 @@ from .config import DATABASE_URL
 
 # Register JSONB adapter so psycopg2 returns dicts, not strings
 psycopg2.extras.register_default_jsonb(loads=json.loads)
+
+# Pool sizing:
+#   FastAPI polls 4 endpoints every 10s → up to 4 concurrent reads
+#   Background pipeline thread → up to 3 concurrent step writes
+#   Headroom for backfill jobs (multiple dates in flight)
+_POOL_MIN = 2
+_POOL_MAX = 20
 
 
 class PgClient:
@@ -23,10 +31,18 @@ class PgClient:
         dsn = dsn or DATABASE_URL
         if not dsn:
             raise ValueError('DATABASE_URL is not set')
-        self._pool = psycopg2.pool.ThreadedConnectionPool(1, 5, dsn)
+        self._pool = psycopg2.pool.ThreadedConnectionPool(_POOL_MIN, _POOL_MAX, dsn)
 
     def _conn(self):
-        return self._pool.getconn()
+        """Get a connection from the pool, retrying briefly if exhausted."""
+        for attempt in range(10):
+            try:
+                return self._pool.getconn()
+            except psycopg2.pool.PoolError:
+                if attempt < 9:
+                    time.sleep(0.2)   # wait 200ms, total ~2s max
+                else:
+                    raise
 
     def _put(self, conn):
         self._pool.putconn(conn)

@@ -18,7 +18,10 @@ load_dotenv(_backend_env, override=True)
 
 # Database / PostgREST
 POSTGREST_URL = os.getenv('POSTGREST_URL', '').strip()          # e.g. http://postgrest:3000
-DATABASE_URL = os.getenv('DATABASE_URL', '').strip()             # direct PG connection string
+DATABASE_URL  = (
+    os.getenv('DATABASE_URL', '').strip() or
+    os.getenv('DB_PRIMARY', '').strip()      # Docker / shared env alias
+)
 JWT_SECRET = os.getenv('JWT_SECRET', '').strip()
 
 # Legacy Supabase env vars — map to PostgREST equivalents for backward compat

@@ -63,10 +63,23 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
   const { data: sched } = useQuery({ queryKey: ['scheduler_status'], queryFn: fetchSchedulerStatus, staleTime: 60_000, retry: 1 });
   const { data: downloads } = useQuery({ queryKey: ['download_types'], queryFn: fetchDownloadTypes, staleTime: 60_000, retry: 1 });
 
+  const [forceRun, setForceRun] = useState(false);
+  const [runningSource, setRunningSource] = useState<string | null>(null);
+
   const runMutation = useMutation({
-    mutationFn: ({ date, exchange }: { date?: string; exchange: string }) => triggerPipelineRun(date, exchange),
-    onSuccess: (data) => { toast('success', data.message); qc.invalidateQueries({ queryKey: ['pipeline_status'] }); },
-    onError: (err: Error) => toast('error', err.message),
+    mutationFn: ({ date, exchange, force }: { date?: string; exchange: string; force?: boolean }) =>
+      triggerPipelineRun(date, exchange, force ?? false),
+    onSuccess: (data) => {
+      toast('success', data.message);
+      setForceRun(false);
+      setRunningSource(null);
+      qc.invalidateQueries({ queryKey: ['pipeline_status'] });
+      qc.invalidateQueries({ queryKey: ['download_types'] });
+    },
+    onError: (err: Error) => {
+      toast('error', err.message);
+      setRunningSource(null);
+    },
   });
 
   const [showBackfill, setShowBackfill] = useState(false);
@@ -145,24 +158,45 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
       {/* ── Health + Downloads ── */}
       <div className="glass-card rounded-2xl p-5 mb-4">
         <h3 className="text-xs font-bold uppercase tracking-widest text-muted mb-3">Data Sources</h3>
-        <div className="grid gap-2">
-          {(downloads ?? []).map(dl => (
-            <div key={dl.type} className="flex items-center gap-3 py-1.5">
-              <StatusDot status={dl.status} />
-              <span className="text-[12px] text-white font-medium flex-1">{dl.label}</span>
-              <span className="text-[10px] text-slate-500 mono">
-                {dl.last_sync ? fmtDate(dl.last_sync) : 'Never synced'}
-              </span>
-              {dl.gap_days > 0 && (
-                <span className="text-[10px] text-risk-amber">{dl.gap_days}d behind</span>
-              )}
-              {dl.status === 'breeze_expired' && (
-                <button onClick={() => setShowBreeze(true)} className="text-[10px] text-accent-indigo hover:underline">
-                  Connect
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="grid gap-1">
+          {(downloads ?? []).map(dl => {
+            const isSourceRunning = runningSource === dl.type;
+            const canRun = !!dl.run_exchange && !apiDown && dl.status !== 'breeze_expired';
+            return (
+              <div key={dl.type} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-slate-900/40 group">
+                <StatusDot status={dl.status} />
+                <span className="text-[12px] text-white font-medium flex-1">{dl.label}</span>
+                <span className="text-[10px] text-slate-500 mono">
+                  {dl.last_sync ? fmtDate(dl.last_sync) : 'Never synced'}
+                </span>
+                {dl.gap_days > 0 && (
+                  <span className="text-[10px] text-risk-amber">{dl.gap_days}d behind</span>
+                )}
+                {dl.status === 'breeze_expired' && (
+                  <button onClick={() => setShowBreeze(true)} className="text-[10px] text-accent-indigo hover:underline">
+                    Connect
+                  </button>
+                )}
+                {canRun && (
+                  <button
+                    onClick={() => {
+                      setRunningSource(dl.type);
+                      runMutation.mutate({ exchange: dl.run_exchange!, force: true });
+                    }}
+                    disabled={isRunning}
+                    title={`Re-run ${dl.label}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800/80 border border-kd-border rounded-lg text-[10px] text-slate-400 hover:text-accent-indigo hover:border-accent-indigo/40 hover:bg-slate-800 disabled:opacity-30 transition-all"
+                  >
+                    {isSourceRunning
+                      ? <Loader2 className="w-2.5 h-2.5 animate-spin text-accent-indigo" />
+                      : <Play className="w-2.5 h-2.5" />
+                    }
+                    {isSourceRunning ? 'Running...' : 'Run'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
           {!downloads && !apiDown && (
             <p className="text-xs text-muted py-2">Loading...</p>
           )}
@@ -238,12 +272,17 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => runMutation.mutate({ exchange: 'ALL' })}
+              onClick={() => runMutation.mutate({ exchange: 'ALL', force: forceRun })}
               disabled={isRunning || apiDown}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-xs font-semibold text-accent-indigo hover:bg-accent-indigo/30 disabled:opacity-40 transition-all"
+              className={cn(
+                'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all disabled:opacity-40',
+                forceRun
+                  ? 'bg-risk-amber/20 border border-risk-amber/40 text-risk-amber hover:bg-risk-amber/30'
+                  : 'bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/30',
+              )}
             >
               {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-              {isRunning ? 'Running...' : 'Run Now'}
+              {isRunning ? 'Running...' : forceRun ? 'Force Run' : 'Run Now'}
             </button>
             <button
               onClick={() => setShowBackfill(!showBackfill)}
@@ -261,6 +300,24 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
               </button>
             )}
           </div>
+          {/* Force re-run toggle */}
+          <label className="flex items-center gap-2 mt-2 cursor-pointer w-fit">
+            <div
+              onClick={() => setForceRun(v => !v)}
+              className={cn(
+                'w-8 h-4 rounded-full transition-colors relative',
+                forceRun ? 'bg-risk-amber/60' : 'bg-slate-700',
+              )}
+            >
+              <div className={cn(
+                'absolute top-0.5 w-3 h-3 rounded-full transition-transform bg-white',
+                forceRun ? 'translate-x-4' : 'translate-x-0.5',
+              )} />
+            </div>
+            <span className="text-[10px] text-slate-500">
+              Force re-run{forceRun && <span className="text-risk-amber ml-1">(will reset today's completed steps)</span>}
+            </span>
+          </label>
         </div>
       </div>
 

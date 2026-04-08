@@ -66,6 +66,7 @@ IST = pytz.timezone('Asia/Kolkata')
 class RunRequest(BaseModel):
     date: Optional[str] = None       # YYYY-MM-DD, default: last trading day
     exchange: str = 'ALL'            # NSE / BSE / ALL
+    force: bool = False              # re-run even if already completed
 
 class BackfillRequest(BaseModel):
     date_from: str                   # YYYY-MM-DD
@@ -83,7 +84,7 @@ class JobResponse(BaseModel):
 # ── Pipeline Runner (background thread) ───────────────────────────────────────
 
 def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
-                        skip_indicators: bool = False):
+                        skip_indicators: bool = False, force: bool = False):
     """Run the pipeline for a list of dates. Executed in background thread."""
     global db
 
@@ -96,14 +97,14 @@ def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
     for d in dates:
         try:
             if exchange in ('NSE', 'ALL'):
-                ok = run_nse_pipeline(db, d, skip_indicators=skip_indicators)
+                ok = run_nse_pipeline(db, d, skip_indicators=skip_indicators, force=force)
                 if ok:
                     success += 1
                 else:
                     failed += 1
 
             if exchange in ('BSE', 'ALL'):
-                ok = run_bse_pipeline(db, d, skip_indicators=skip_indicators)
+                ok = run_bse_pipeline(db, d, skip_indicators=skip_indicators, force=force)
                 if ok:
                     success += 1
                 else:
@@ -243,15 +244,22 @@ def status():
                             filters={'trade_date': today}, order='id')
 
     # Last 14 days from trading calendar
-    since = str(date.today() - timedelta(days=14))
+    # Use date object for comparison (psycopg2 returns datetime.date, not str)
+    since_date = date.today() - timedelta(days=14)
+    since = str(since_date)
     calendar = db.select('km_trading_calendar', '*',
                          order='trade_date.desc', limit=100)
-    calendar = [c for c in calendar if c['trade_date'] >= since]
+    calendar = [c for c in calendar if c['trade_date'] >= since_date]
+    # Normalise trade_date to str for JSON serialisation
+    for c in calendar:
+        c['trade_date'] = str(c['trade_date'])
 
     # Recent pipeline runs
     recent_runs = db.select('km_pipeline_runs', '*',
                             order='trade_date.desc,id', limit=200)
-    recent_runs = [r for r in recent_runs if r['trade_date'] >= since]
+    recent_runs = [r for r in recent_runs if r['trade_date'] >= since_date]
+    for r in recent_runs:
+        r['trade_date'] = str(r['trade_date'])
 
     return {
         'today': today,
@@ -284,8 +292,8 @@ def run_pipeline(req: RunRequest, background_tasks: BackgroundTasks):
         'type': 'manual',
     }
 
-    background_tasks.add_task(_run_pipeline_dates, job_id, [target], req.exchange)
-    log.info(f'Job {job_id}: queued for {target} ({req.exchange})')
+    background_tasks.add_task(_run_pipeline_dates, job_id, [target], req.exchange, force=req.force)
+    log.info(f'Job {job_id}: queued for {target} ({req.exchange}){" [FORCE]" if req.force else ""}')
 
     return JobResponse(
         job_id=job_id,
@@ -399,6 +407,24 @@ def scheduler_status():
     }
 
 
+@app.get('/api/fii-dii')
+def fii_dii_data(days: int = 30):
+    """
+    Return FII/DII cash market activity for the last N trading days.
+    Each row: {trade_date, category, buy_value, sell_value, net_value}
+    """
+    since = str(date.today() - timedelta(days=days))
+    rows = db.select(
+        'km_fii_dii',
+        'trade_date,category,buy_value,sell_value,net_value',
+        order='trade_date.desc',
+        limit=days * 2,   # 2 categories (FII + DII) per day
+    )
+    # Filter client-side since PostgREST filter on date range
+    rows = [r for r in rows if r.get('trade_date', '') >= since]
+    return rows
+
+
 @app.get('/api/pipeline/downloads')
 def download_types():
     """List all download types with their status."""
@@ -425,7 +451,24 @@ def download_types():
             'last_sync': last_date,
             'status': 'ok' if gap == 0 else f'gap_{gap}_days',
             'gap_days': gap,
+            'run_exchange': exchange,
         })
+
+    # FII/DII — last date in km_fii_dii
+    try:
+        fii_rows = db.select('km_fii_dii', 'trade_date', order='trade_date.desc', limit=1)
+        fii_last = fii_rows[0]['trade_date'] if fii_rows else None
+    except Exception:
+        fii_last = None
+
+    types.append({
+        'type': 'fii_dii',
+        'label': 'FII / DII Activity',
+        'last_sync': fii_last,
+        'status': 'ok' if fii_last == last_td else ('never' if not fii_last else 'gap'),
+        'gap_days': 0,
+        'run_exchange': 'NSE',   # FII/DII step runs inside NSE pipeline
+    })
 
     # Breeze status
     breeze_rows = db.select('km_api_sessions', 'status', filters={'provider': 'breeze'}, limit=1)
@@ -439,6 +482,7 @@ def download_types():
             'status': 'ok' if breeze_ok else 'breeze_expired',
             'gap_days': 0,
             'depends_on': dep,
+            'run_exchange': 'NSE',
         })
 
     return types
