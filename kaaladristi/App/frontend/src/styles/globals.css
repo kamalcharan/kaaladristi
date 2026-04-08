@@ -60,7 +60,7 @@
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
   .glass-card {
-    @apply bg-kd-card border border-kd-border backdrop-blur-xl;
+    @apply bg-kd-surface border border-kd-border backdrop-blur-xl;
   }
 
   .glass-elevated {
