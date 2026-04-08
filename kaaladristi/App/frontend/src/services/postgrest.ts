@@ -15,14 +15,6 @@ const anonKey = (
   import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()  // legacy fallback
 );
 
-if (!postgrestUrl) {
-  console.error(
-    '[Kala-Drishti] PostgREST URL missing!\n' +
-    '  VITE_POSTGREST_URL:', postgrestUrl ? 'set' : 'MISSING', '\n' +
-    '  Make sure .env file exists in App/frontend/ with this value.'
-  );
-}
-
 /** Resolve the base URL — Supabase URLs need /rest/v1, self-hosted PostgREST does not */
 function resolveBase(url: string): string {
   if (!url) return '';
@@ -32,7 +24,9 @@ function resolveBase(url: string): string {
   return url;
 }
 
-const BASE_URL = resolveBase(postgrestUrl || '');
+// Default to '/db' so Vite dev proxy (or nginx in production) handles routing.
+// Set VITE_POSTGREST_URL in .env to override (e.g. direct PostgREST URL).
+const BASE_URL = resolveBase(postgrestUrl || '/db');
 
 console.log('[Kala-Drishti] PostgREST URL:', BASE_URL || '(not set)');
 
