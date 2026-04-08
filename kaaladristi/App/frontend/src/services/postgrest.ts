@@ -24,9 +24,7 @@ function resolveBase(url: string): string {
   return url;
 }
 
-// Default to '/db' so Vite dev proxy (or nginx in production) handles routing.
-// Set VITE_POSTGREST_URL in .env to override (e.g. direct PostgREST URL).
-const BASE_URL = resolveBase(postgrestUrl || '/db');
+const BASE_URL = resolveBase(postgrestUrl || '');
 
 console.log('[Kala-Drishti] PostgREST URL:', BASE_URL || '(not set)');
 
