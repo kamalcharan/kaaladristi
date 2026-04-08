@@ -13,7 +13,7 @@ const badgeVariants = cva(
         red:        'bg-risk-red/10 border-risk-red/30 text-risk-red',
         violet:     'bg-accent-violet/10 border-accent-violet/30 text-accent-violet',
         cyan:       'bg-accent-cyan/10 border-accent-cyan/30 text-accent-cyan',
-        muted:      'bg-slate-800/50 border-kd-border text-muted',
+        muted:      'bg-kd-elevated border-kd-border text-muted',
       },
       size: {
         sm: 'px-2.5 py-1 text-[9px] rounded-lg',

@@ -32,17 +32,17 @@ function CustomTooltip({ active, payload, label }: any) {
   const d = payload[0].payload as ChartDataPoint;
   return (
     <div className="glass-card rounded-xl px-4 py-3 shadow-2xl text-xs space-y-1.5">
-      <p className="font-semibold text-white">
+      <p className="font-semibold text-[var(--text-primary)]">
         {format(parseISO(d.date), 'dd MMM yyyy')}
       </p>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-slate-300">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-[var(--text-secondary)]">
         <span>Open</span>  <span className="text-right mono">{d.open.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         <span>High</span>  <span className="text-right mono">{d.high.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
         <span>Low</span>   <span className="text-right mono">{d.low.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-        <span>Close</span> <span className="text-right mono font-bold text-white">{d.close.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        <span>Close</span> <span className="text-right mono font-bold text-[var(--text-primary)]">{d.close.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
       </div>
       {d.volume > 0 && (
-        <p className="text-slate-500 pt-1 border-t border-white/5">
+        <p className="text-[var(--text-muted)] pt-1 border-t border-kd-border">
           Vol: {(d.volume / 1e6).toFixed(1)}M
         </p>
       )}
@@ -100,7 +100,7 @@ export default function IndexPriceChart({
               'px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
               range === r
                 ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
-                : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
             )}
           >
             {r}
@@ -120,7 +120,7 @@ export default function IndexPriceChart({
             </defs>
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="rgba(255,255,255,0.04)"
+              stroke="var(--kd-border)"
               vertical={false}
             />
             <XAxis
@@ -129,15 +129,15 @@ export default function IndexPriceChart({
                 try { return format(parseISO(d), xTickFormat); }
                 catch { return d; }
               }}
-              tick={{ fontSize: 10, fill: '#64748b' }}
-              axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+              tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+              axisLine={{ stroke: 'var(--kd-border)' }}
               tickLine={false}
               minTickGap={40}
             />
             <YAxis
               domain={[yMin, yMax]}
               tickFormatter={formatYAxis}
-              tick={{ fontSize: 10, fill: '#64748b' }}
+              tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
               axisLine={false}
               tickLine={false}
               width={60}

@@ -20,8 +20,8 @@ const cardVariants = cva(
       },
       hover: {
         none:  '',
-        lift:  'hover:-translate-y-0.5 hover:border-white/20 cursor-pointer',
-        glow:  'hover:border-kd-border-active hover:shadow-lg hover:shadow-indigo-500/5 cursor-pointer',
+        lift:  'hover:-translate-y-0.5 hover:border-kd-border-active cursor-pointer',
+        glow:  'hover:border-kd-border-active hover:shadow-lg hover:shadow-[color-mix(in_srgb,var(--accent-indigo)_5%,transparent)] cursor-pointer',
       },
     },
     defaultVariants: {

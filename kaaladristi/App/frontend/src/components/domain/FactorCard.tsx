@@ -26,10 +26,10 @@ export default function FactorCard({
     <Card hover="lift" className={cn('p-6', className)}>
       {/* Icon + Score */}
       <div className="flex justify-between items-center mb-6">
-        <div className="p-2.5 rounded-xl bg-slate-950/50 border border-kd-border group-hover:border-accent-indigo/30 transition-colors">
-          <Icon className="w-5 h-5 text-slate-400 group-hover:text-indigo-400" />
+        <div className="p-2.5 rounded-xl bg-kd-bg/50 border border-kd-border group-hover:border-accent-indigo/30 transition-colors">
+          <Icon className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-accent-indigo" />
         </div>
-        <span className="font-mono text-xl font-bold text-slate-100">
+        <span className="font-mono text-xl font-bold text-[var(--text-primary)]">
           {value}<span className="text-[10px] text-muted font-normal ml-1">/{max}</span>
         </span>
       </div>
@@ -46,7 +46,7 @@ export default function FactorCard({
       {details && details.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-1.5">
           {details.map((d) => (
-            <span key={d} className="text-[9px] px-2 py-0.5 rounded bg-slate-800/60 text-secondary border border-kd-border">
+            <span key={d} className="text-[9px] px-2 py-0.5 rounded bg-kd-elevated text-secondary border border-kd-border">
               {d}
             </span>
           ))}

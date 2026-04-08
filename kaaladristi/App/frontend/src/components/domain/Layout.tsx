@@ -4,7 +4,7 @@ import SymbolSwitcher from './SymbolSwitcher';
 
 export default function Layout() {
   return (
-    <div className="flex min-h-screen bg-kd-bg text-[var(--text-primary)] selection:bg-indigo-500/30">
+    <div className="flex min-h-screen bg-kd-bg text-[var(--text-primary)] selection:bg-accent-indigo/30">
       <Sidebar />
 
       <main className="flex-1 ml-[var(--sidebar-width)] p-6 lg:p-12 relative">
@@ -16,7 +16,7 @@ export default function Layout() {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-3 px-5 py-2.5 bg-slate-900/40 border border-kd-border rounded-2xl text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              <div className="hidden md:flex items-center gap-3 px-5 py-2.5 bg-kd-card border border-kd-border rounded-2xl text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest">
                 <div className="w-2 h-2 rounded-full bg-accent-indigo animate-pulse-live" />
                 Temporal Feed Active
               </div>

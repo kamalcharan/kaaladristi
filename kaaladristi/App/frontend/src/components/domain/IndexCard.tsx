@@ -28,7 +28,7 @@ export default function IndexCard({
         <RiskGauge score={riskScore} size="mini" label="" animated={false} />
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white truncate">{name}</p>
+          <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{name}</p>
           <p className="text-[10px] font-mono text-muted uppercase tracking-wider mt-0.5">{symbol}</p>
 
           <div className="flex items-center gap-2 mt-2">

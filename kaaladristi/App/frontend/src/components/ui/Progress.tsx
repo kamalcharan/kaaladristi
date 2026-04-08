@@ -22,7 +22,7 @@ const Progress = forwardRef<HTMLDivElement, ProgressProps>(
       <div
         ref={ref}
         className={cn(
-          'w-full bg-white/5 rounded-full overflow-hidden border border-kd-border',
+          'w-full bg-kd-elevated rounded-full overflow-hidden border border-kd-border',
           sizeMap[size],
           className
         )}

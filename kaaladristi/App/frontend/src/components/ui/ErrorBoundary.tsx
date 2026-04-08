@@ -33,11 +33,11 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <AlertTriangle className="w-12 h-12 text-risk-amber mb-4" />
-          <p className="text-lg font-semibold text-slate-300 mb-2">Something went wrong</p>
+          <p className="text-lg font-semibold text-[var(--text-secondary)] mb-2">Something went wrong</p>
           <p className="text-sm text-muted max-w-md mb-4">
             {this.state.error?.message || 'An unexpected error occurred'}
           </p>
-          <pre className="text-[10px] text-slate-500 bg-slate-900/60 border border-white/10 rounded-xl p-4 max-w-lg overflow-auto max-h-40">
+          <pre className="text-[10px] text-[var(--text-muted)] bg-kd-elevated border border-kd-border rounded-xl p-4 max-w-lg overflow-auto max-h-40">
             {this.state.error?.stack}
           </pre>
           <button

@@ -46,36 +46,49 @@ function toTime(dateStr: string): Time {
   return dateStr as Time;
 }
 
-// ── Chart colors matching KaalaDristi dark theme ──
-const CHART_BG = '#0a0e17';
-const GRID_COLOR = 'rgba(255,255,255,0.04)';
-const TEXT_COLOR = '#64748b';
-const CROSSHAIR_COLOR = 'rgba(99,102,241,0.4)';
+// ── Chart colors — read from CSS custom properties at render time ──
+function getThemeColors() {
+  const s = getComputedStyle(document.documentElement);
+  const v = (name: string, fallback: string) => s.getPropertyValue(name).trim() || fallback;
+  return {
+    bg:         v('--kd-bg',            '#030712'),
+    grid:       v('--kd-border',        'rgba(255,255,255,0.06)'),
+    text:       v('--text-muted',       '#64748b'),
+    crosshair:  v('--kd-border-active', 'rgba(99,102,241,0.4)'),
+    riskGreen:  v('--risk-green',       '#10b981'),
+    riskRed:    v('--risk-red',         '#ef4444'),
+    riskAmber:  v('--risk-amber',       '#f59e0b'),
+    violet:     v('--accent-violet',    '#8b5cf6'),
+    cyan:       v('--accent-cyan',      '#06b6d4'),
+    indigo:     v('--accent-indigo',    '#6366f1'),
+    textPrimary: v('--text-primary',    '#f8fafc'),
+  };
+}
 
-function createChartOptions(container: HTMLElement, height: number) {
+function createChartOptions(container: HTMLElement, height: number, colors: ReturnType<typeof getThemeColors>) {
   return {
     width: container.clientWidth,
     height,
     layout: {
-      background: { type: ColorType.Solid as const, color: CHART_BG },
-      textColor: TEXT_COLOR,
+      background: { type: ColorType.Solid as const, color: colors.bg },
+      textColor: colors.text,
       fontSize: 11,
     },
     grid: {
-      vertLines: { color: GRID_COLOR },
-      horzLines: { color: GRID_COLOR },
+      vertLines: { color: colors.grid },
+      horzLines: { color: colors.grid },
     },
     crosshair: {
       mode: CrosshairMode.Normal,
-      vertLine: { color: CROSSHAIR_COLOR, width: 1 as LineWidth, style: LineStyle.Dashed, labelVisible: true },
-      horzLine: { color: CROSSHAIR_COLOR, width: 1 as LineWidth, style: LineStyle.Dashed, labelVisible: true },
+      vertLine: { color: colors.crosshair, width: 1 as LineWidth, style: LineStyle.Dashed, labelVisible: true },
+      horzLine: { color: colors.crosshair, width: 1 as LineWidth, style: LineStyle.Dashed, labelVisible: true },
     },
     rightPriceScale: {
-      borderColor: 'rgba(255,255,255,0.06)',
+      borderColor: colors.grid,
       scaleMargins: { top: 0.1, bottom: 0.1 },
     },
     timeScale: {
-      borderColor: 'rgba(255,255,255,0.06)',
+      borderColor: colors.grid,
       timeVisible: false,
       rightOffset: 5,
     },
@@ -96,6 +109,9 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     if (!mainRef.current || !rsiRef.current || !sniperRef.current || !magicRef.current) return;
     if (data.length === 0) return;
 
+    // Read theme colors from CSS vars
+    const C = getThemeColors();
+
     // Cleanup previous
     chartsRef.current.forEach((c) => c.remove());
     chartsRef.current = [];
@@ -108,9 +124,9 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     // ═══════════════════════════════════════════════════════════════════
 
     const mainChart = createChart(mainRef.current, {
-      ...createChartOptions(mainRef.current, mainHeight),
+      ...createChartOptions(mainRef.current, mainHeight, C),
       rightPriceScale: {
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: C.grid,
         scaleMargins: { top: 0.05, bottom: 0.25 },
       },
     });
@@ -118,12 +134,12 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
 
     // Candlestick
     const candleSeries = mainChart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e80',
-      wickDownColor: '#ef444480',
+      upColor: C.riskGreen,
+      downColor: C.riskRed,
+      borderUpColor: C.riskGreen,
+      borderDownColor: C.riskRed,
+      wickUpColor: C.riskGreen + '80',
+      wickDownColor: C.riskRed + '80',
     });
 
     const candleData: CandlestickData<Time>[] = data.map((d) => ({
@@ -147,7 +163,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     const volData: HistogramData<Time>[] = data.map((d) => ({
       time: toTime(d.trade_date),
       value: d.volume || 0,
-      color: d.close >= d.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
+      color: d.close >= d.open ? C.riskGreen + '4d' : C.riskRed + '4d',
     }));
     volumeSeries.setData(volData);
 
@@ -179,7 +195,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     }
     if (stData.length > 0) {
       const stSeries = mainChart.addSeries(LineSeries, {
-        color: '#22c55e',
+        color: C.riskGreen,
         lineWidth: 2 as LineWidth,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -191,11 +207,11 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     // Markers: Dot signals + Swing High/Low
     const markers: SeriesMarker<Time>[] = [];
     for (const d of data) {
-      if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: '#a855f7', shape: 'circle', text: 'SVD' });
-      if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: '#3b82f6', shape: 'circle', text: 'SBD' });
-      if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: '#eab308', shape: 'circle', text: 'SYD' });
-      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: 'SH' });
-      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: '#22c55e', shape: 'arrowUp', text: 'SL' });
+      if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.violet, shape: 'circle', text: 'SVD' });
+      if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.indigo, shape: 'circle', text: 'SBD' });
+      if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskAmber, shape: 'circle', text: 'SYD' });
+      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown', text: 'SH' });
+      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp', text: 'SL' });
     }
     if (markers.length > 0) {
       markers.sort((a, b) => (a.time as string).localeCompare(b.time as string));
@@ -207,8 +223,8 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     // ═══════════════════════════════════════════════════════════════════
 
     const rsiChart = createChart(rsiRef.current, {
-      ...createChartOptions(rsiRef.current, subHeight),
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.05, bottom: 0.05 } },
+      ...createChartOptions(rsiRef.current, subHeight, C),
+      rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
     });
     chartsRef.current.push(rsiChart);
 
@@ -216,7 +232,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     const rsiLine: LineData<Time>[] = [];
     for (const d of data) { if (d.rsi_14 != null) rsiLine.push({ time: toTime(d.trade_date), value: d.rsi_14 }); }
     if (rsiLine.length > 0) {
-      const rsiSeries = rsiChart.addSeries(LineSeries, { color: '#a855f7', lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+      const rsiSeries = rsiChart.addSeries(LineSeries, { color: C.violet, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
       rsiSeries.setData(rsiLine);
     }
 
@@ -224,7 +240,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     const mfiLine: LineData<Time>[] = [];
     for (const d of data) { if (d.mfi_14 != null) mfiLine.push({ time: toTime(d.trade_date), value: d.mfi_14 }); }
     if (mfiLine.length > 0) {
-      const mfiSeries = rsiChart.addSeries(LineSeries, { color: '#06b6d4', lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+      const mfiSeries = rsiChart.addSeries(LineSeries, { color: C.cyan, lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
       mfiSeries.setData(mfiLine);
     }
 
@@ -240,8 +256,8 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     // ═══════════════════════════════════════════════════════════════════
 
     const sniperChart = createChart(sniperRef.current, {
-      ...createChartOptions(sniperRef.current, subHeight),
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.05, bottom: 0.05 } },
+      ...createChartOptions(sniperRef.current, subHeight, C),
+      rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
     });
     chartsRef.current.push(sniperChart);
 
@@ -269,7 +285,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     const sniperRsiLine: LineData<Time>[] = [];
     for (const d of data) { if (d.sniper_rsi != null) sniperRsiLine.push({ time: toTime(d.trade_date), value: d.sniper_rsi }); }
     if (sniperRsiLine.length > 0) {
-      const sniperRsiSeries = sniperChart.addSeries(LineSeries, { color: '#000000', lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: false });
+      const sniperRsiSeries = sniperChart.addSeries(LineSeries, { color: C.textPrimary, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: false });
       sniperRsiSeries.setData(sniperRsiLine);
     }
 
@@ -278,8 +294,8 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     // ═══════════════════════════════════════════════════════════════════
 
     const magicChart = createChart(magicRef.current, {
-      ...createChartOptions(magicRef.current, subHeight),
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.05, bottom: 0.05 } },
+      ...createChartOptions(magicRef.current, subHeight, C),
+      rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
     });
     chartsRef.current.push(magicChart);
 
@@ -287,7 +303,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     const rsLine: LineData<Time>[] = [];
     for (const d of data) { if (d.magic_rs != null) rsLine.push({ time: toTime(d.trade_date), value: d.magic_rs }); }
     if (rsLine.length > 0) {
-      const rsSeries = magicChart.addSeries(LineSeries, { color: '#22c55e', lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+      const rsSeries = magicChart.addSeries(LineSeries, { color: C.riskGreen, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
       rsSeries.setData(rsLine);
     }
 
@@ -295,7 +311,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     const maLine: LineData<Time>[] = [];
     for (const d of data) { if (d.magic_ma != null) maLine.push({ time: toTime(d.trade_date), value: d.magic_ma }); }
     if (maLine.length > 0) {
-      const maSeries = magicChart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+      const maSeries = magicChart.addSeries(LineSeries, { color: C.indigo, lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
       maSeries.setData(maLine);
     }
 
@@ -352,7 +368,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
           </span>
         ))}
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-0.5 rounded bg-green-500" />
+          <span className="inline-block w-3 h-0.5 rounded bg-risk-green" />
           SuperTrend
         </span>
       </div>
@@ -361,21 +377,21 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
 
       <div className="relative">
         <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
-          RSI(14) <span style={{ color: '#a855f7' }}>━</span> &nbsp; MFI(14) <span style={{ color: '#06b6d4' }}>━</span>
+          RSI(14) <span style={{ color: 'var(--accent-violet)' }}>━</span> &nbsp; MFI(14) <span style={{ color: 'var(--accent-cyan)' }}>━</span>
         </span>
         <div ref={rsiRef} className="rounded-xl overflow-hidden" />
       </div>
 
       <div className="relative">
         <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
-          Sniper Dragon — <span style={{ color: '#ff0000' }}>Inst</span> / <span style={{ color: '#ffeb3b' }}>Hot$</span> / <span style={{ color: '#048c0b' }}>Retail</span>
+          Sniper Dragon — <span style={{ color: 'var(--risk-red)' }}>Inst</span> / <span style={{ color: 'var(--risk-amber)' }}>Hot$</span> / <span style={{ color: 'var(--risk-green)' }}>Retail</span>
         </span>
         <div ref={sniperRef} className="rounded-xl overflow-hidden" />
       </div>
 
       <div className="relative">
         <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
-          MagicRS <span style={{ color: '#22c55e' }}>━</span> &nbsp; MagicMA <span style={{ color: '#3b82f6' }}>━</span>
+          MagicRS <span style={{ color: 'var(--risk-green)' }}>━</span> &nbsp; MagicMA <span style={{ color: 'var(--accent-indigo)' }}>━</span>
         </span>
         <div ref={magicRef} className="rounded-xl overflow-hidden" />
       </div>

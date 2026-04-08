@@ -8,9 +8,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary:   'bg-gradient-to-r from-accent-indigo to-accent-violet text-white shadow-[0_4px_20px_rgba(99,102,241,0.3)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(99,102,241,0.4)]',
-        secondary: 'bg-kd-card border border-kd-border text-[var(--text-primary)] hover:bg-kd-elevated hover:border-white/15',
-        ghost:     'text-secondary hover:text-[var(--text-primary)] hover:bg-white/5',
+        primary:   'bg-gradient-to-r from-accent-indigo to-accent-violet text-[var(--text-primary)] shadow-[0_4px_20px_color-mix(in_srgb,var(--accent-indigo)_30%,transparent)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_color-mix(in_srgb,var(--accent-indigo)_40%,transparent)]',
+        secondary: 'bg-kd-card border border-kd-border text-[var(--text-primary)] hover:bg-kd-elevated hover:border-kd-border-active',
+        ghost:     'text-secondary hover:text-[var(--text-primary)] hover:bg-kd-elevated',
         danger:    'bg-risk-red/10 border border-risk-red/30 text-risk-red hover:bg-risk-red/20',
       },
       size: {

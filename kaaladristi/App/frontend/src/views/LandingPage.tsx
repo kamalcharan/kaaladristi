@@ -34,9 +34,9 @@ function StarField() {
 function AnimatedLogo() {
   return (
     <div className="w-12 h-12 relative">
-      <div className="absolute inset-0 border-2 border-indigo-500/60 rounded-full animate-[orbit_15s_linear_infinite]" />
-      <div className="absolute inset-[15%] border-2 border-violet-500/50 rounded-full animate-[orbit_10s_linear_infinite_reverse]" />
-      <div className="absolute inset-[30%] border-2 border-cyan-500/60 rounded-full animate-[orbit_8s_linear_infinite]" />
+      <div className="absolute inset-0 border-2 border-accent-indigo/60 rounded-full animate-[orbit_15s_linear_infinite]" />
+      <div className="absolute inset-[15%] border-2 border-accent-violet/50 rounded-full animate-[orbit_10s_linear_infinite_reverse]" />
+      <div className="absolute inset-[30%] border-2 border-accent-cyan/60 rounded-full animate-[orbit_8s_linear_infinite]" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-gradient-to-br from-accent-indigo to-accent-violet rounded-full shadow-[0_0_20px_var(--accent-indigo)]" />
     </div>
   );
@@ -124,13 +124,13 @@ export default function LandingPage() {
       {/* Backgrounds */}
       <StarField />
       <div className="fixed w-[800px] h-[800px] rounded-full top-[-300px] left-1/2 -translate-x-1/2 blur-[100px] pointer-events-none z-0 animate-[orbit1_30s_linear_infinite]"
-           style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 70%)' }} />
+           style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-indigo) 25%, transparent) 0%, transparent 70%)' }} />
       <div className="fixed w-[600px] h-[600px] rounded-full bottom-[-200px] right-[-200px] blur-[100px] pointer-events-none z-0 animate-[orbit2_25s_linear_infinite]"
-           style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%)' }} />
+           style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-violet) 20%, transparent) 0%, transparent 70%)' }} />
       <div className="fixed w-[400px] h-[400px] rounded-full top-[40%] left-[-100px] blur-[100px] pointer-events-none z-0 animate-[orbit3_20s_linear_infinite]"
-           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 70%)' }} />
+           style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-cyan) 15%, transparent) 0%, transparent 70%)' }} />
       <div className="fixed inset-0 pointer-events-none z-0"
-           style={{ backgroundImage: 'linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+           style={{ backgroundImage: 'linear-gradient(color-mix(in srgb, var(--accent-indigo) 3%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--accent-indigo) 3%, transparent) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
 
       {/* Main Layout */}
       <div className="relative z-10 min-h-screen flex flex-col lg:flex-row">
@@ -150,7 +150,7 @@ export default function LandingPage() {
           </nav>
 
           <div className="max-w-[600px]">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[13px] text-accent-indigo mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-accent-indigo/10 border border-accent-indigo/20 rounded-full text-[13px] text-accent-indigo mb-8">
               <div className="w-2 h-2 bg-accent-indigo rounded-full animate-pulse" />
               Pre-Market Intelligence for Indian Indices
             </div>
@@ -304,7 +304,7 @@ export default function LandingPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="py-4 bg-gradient-to-r from-accent-indigo to-accent-violet rounded-xl text-[15px] font-semibold text-white shadow-[0_4px_20px_rgba(99,102,241,0.3)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(99,102,241,0.4)] transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
+                className="py-4 bg-gradient-to-r from-accent-indigo to-accent-violet rounded-xl text-[15px] font-semibold text-[var(--text-primary)] shadow-[0_4px_20px_color-mix(in_srgb,var(--accent-indigo)_30%,transparent)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_color-mix(in_srgb,var(--accent-indigo)_40%,transparent)] transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 {authMode === 'forgot' ? 'Send Reset Link' : authMode === 'login' ? 'Sign In' : 'Create Account'}
