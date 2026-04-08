@@ -46,8 +46,8 @@ export default function SettingsView() {
 
   return (
     <div className="animate-fade-in">
-      <header className="mb-10">
-        <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Settings</h1>
+      <header className="mb-6 sm:mb-10">
+        <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Settings</h1>
         <p className="text-secondary font-medium">Master data reference tables</p>
       </header>
 
@@ -65,7 +65,7 @@ export default function SettingsView() {
               key={card.id}
               onClick={() => card.ready && setActiveCard(card.id)}
               disabled={!card.ready}
-              className="group bg-kd-card border border-kd-border rounded-2xl p-6 text-left hover:border-accent-indigo/40 hover:[box-shadow:0_0_30px_color-mix(in_srgb,var(--accent-indigo)_8%,transparent)] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="group bg-kd-surface border-2 border-kd-border rounded-2xl p-6 text-left hover:border-accent-indigo/40 hover:[box-shadow:0_0_30px_color-mix(in_srgb,var(--accent-indigo)_8%,transparent)] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${card.iconColor}`}>
@@ -75,7 +75,7 @@ export default function SettingsView() {
                   <ChevronRight className="w-4 h-4 text-muted group-hover:text-accent-indigo transition-colors" />
                 )}
               </div>
-              <h3 className="text-sm font-semibold mb-1">{card.title}</h3>
+              <h3 className="text-sm font-semibold mb-1 text-[var(--text-primary)]">{card.title}</h3>
               <p className="text-xs text-muted leading-relaxed">{card.description}</p>
               {!card.ready && (
                 <span className="inline-block mt-3 text-[10px] uppercase tracking-wider text-muted">Coming soon</span>
