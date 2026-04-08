@@ -57,14 +57,14 @@ export default function ChartView() {
         {/* Back button */}
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-xs text-muted hover:text-white mb-6 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-muted hover:text-[var(--text-primary)] mb-6 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Back
         </button>
 
         <header className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">{name}</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">{name}</h1>
           <p className="text-secondary font-medium">Historical price data &amp; technical indicators</p>
         </header>
 
@@ -83,7 +83,7 @@ export default function ChartView() {
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{name}</p>
                 <div className="flex items-baseline gap-4">
-                  <span className="text-3xl font-bold mono text-white">
+                  <span className="text-3xl font-bold mono text-[var(--text-primary)]">
                     {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                   <div className={cn('flex items-center gap-1.5', isPositive ? 'text-risk-green' : 'text-risk-red')}>
@@ -126,7 +126,7 @@ export default function ChartView() {
                     'px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
                     range === r
                       ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
                   )}
                 >
                   {r}
@@ -150,7 +150,7 @@ export default function ChartView() {
               <div className="w-16 h-16 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-6">
                 <AlertCircle className="w-8 h-8 text-risk-red" />
               </div>
-              <p className="text-lg font-semibold text-white mb-2">Failed to Load Chart Data</p>
+              <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">Failed to Load Chart Data</p>
               <p className="text-sm text-secondary max-w-md mb-4">{errorMsg || 'Unexpected error.'}</p>
               <button
                 onClick={() => refetch()}
@@ -161,12 +161,12 @@ export default function ChartView() {
             </div>
           ) : rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-slate-800/60 border border-white/5 flex items-center justify-center mb-6">
-                <BarChart3 className="w-8 h-8 text-slate-500" />
+              <div className="w-16 h-16 rounded-2xl bg-kd-elevated border border-kd-border flex items-center justify-center mb-6">
+                <BarChart3 className="w-8 h-8 text-[var(--text-muted)]" />
               </div>
-              <p className="text-lg font-semibold text-white mb-2">No Price Data</p>
+              <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Price Data</p>
               <p className="text-sm text-secondary max-w-md leading-relaxed">
-                <span className="text-white font-medium">{name}</span> has no EOD data loaded yet.
+                <span className="text-[var(--text-primary)] font-medium">{name}</span> has no EOD data loaded yet.
               </p>
             </div>
           ) : (
@@ -186,9 +186,9 @@ export default function ChartView() {
 
 function StatPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="px-3 py-1.5 bg-slate-900/50 border border-white/5 rounded-xl">
+    <div className="px-3 py-1.5 bg-kd-elevated border border-kd-border rounded-xl">
       <span className="text-muted">{label}: </span>
-      <span className="text-slate-300 mono font-medium">{value}</span>
+      <span className="text-[var(--text-secondary)] mono font-medium">{value}</span>
     </div>
   );
 }

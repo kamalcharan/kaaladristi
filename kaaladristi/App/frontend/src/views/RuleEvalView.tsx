@@ -21,20 +21,20 @@ const OUTCOME_STYLES: Record<string, { bg: string; text: string; border: string;
   worked:       { bg: 'bg-risk-green/15',    text: 'text-risk-green',    border: 'border-risk-green/35',    label: 'Worked'    },
   partial:      { bg: 'bg-risk-amber/15',    text: 'text-risk-amber',    border: 'border-risk-amber/35',    label: 'Partial'   },
   failed:       { bg: 'bg-risk-red/15',      text: 'text-risk-red',      border: 'border-risk-red/35',      label: 'Failed'    },
-  inconclusive: { bg: 'bg-slate-800/60',     text: 'text-slate-500',     border: 'border-white/10',         label: 'No Signal' },
+  inconclusive: { bg: 'bg-kd-elevated',       text: 'text-[var(--text-muted)]', border: 'border-kd-border',    label: 'No Signal' },
   running:      { bg: 'bg-risk-amber/10',    text: 'text-risk-amber',    border: 'border-risk-amber/25',    label: 'Running'   },
   pending:      { bg: 'bg-accent-indigo/10', text: 'text-accent-indigo', border: 'border-accent-indigo/25', label: 'Pending'   },
-  turned:       { bg: 'bg-teal-500/10',      text: 'text-teal-400',      border: 'border-teal-400/30',      label: 'Turned'    },
+  turned:       { bg: 'bg-accent-cyan/10',    text: 'text-accent-cyan',   border: 'border-accent-cyan/30',   label: 'Turned'    },
 };
 
 const SUMMARY_PILLS = [
   ['worked',       'Worked',    'text-risk-green border-risk-green/30 bg-risk-green/10'],
   ['partial',      'Partial',   'text-risk-amber border-risk-amber/30 bg-risk-amber/10'],
   ['failed',       'Failed',    'text-risk-red border-risk-red/30 bg-risk-red/10'],
-  ['inconclusive', 'No Signal', 'text-slate-400 border-white/10 bg-slate-800/50'],
+  ['inconclusive', 'No Signal', 'text-[var(--text-secondary)] border-kd-border bg-kd-elevated'],
   ['running',      'Running',   'text-risk-amber border-risk-amber/30 bg-risk-amber/10'],
   ['pending',      'Pending',   'text-accent-indigo border-accent-indigo/20 bg-accent-indigo/10'],
-  ['turned',       'Turned',    'text-teal-400 border-teal-400/30 bg-teal-500/10'],
+  ['turned',       'Turned',    'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/10'],
 ] as [string, string, string][];
 
 const PAGE_SIZE = 15;
@@ -119,7 +119,7 @@ function SwingBar({
   return (
     <div className="relative h-5 select-none mt-1" title={`Trough ${fmtPct(trough)} · Peak ${fmtPct(peak)} · Close ${fmtPct(close)}`}>
       {/* Track */}
-      <div className="absolute top-2 bottom-2 left-0 right-0 rounded-full bg-slate-900/80 border border-white/5" />
+      <div className="absolute top-2 bottom-2 left-0 right-0 rounded-full bg-kd-bg/80 border border-kd-border" />
 
       {/* Major zones */}
       <div className="absolute top-2 bottom-2 bg-risk-green/8 rounded-r-full"
@@ -139,7 +139,7 @@ function SwingBar({
       <div className="absolute top-1 bottom-1 w-px bg-risk-red/60"   style={{ left: `${maN}%` }} />
 
       {/* Zero line */}
-      <div className="absolute top-0.5 bottom-0.5 w-px bg-slate-400/50" style={{ left: `${mid}%` }} />
+      <div className="absolute top-0.5 bottom-0.5 w-px bg-[var(--text-secondary)]/50" style={{ left: `${mid}%` }} />
 
       {/* Swing range fill */}
       {swingL != null && swingW != null && (
@@ -177,19 +177,19 @@ function OHLCRow({ r }: { r: InferenceEvalRow }) {
   const close = r.final_return_pct  != null ? prev * (1 + n(r.final_return_pct)!  / 100) : null;
 
   return (
-    <div className="flex items-center gap-3 text-[10px] mono pt-1.5 mt-1.5 border-t border-white/5">
-      <span className="text-slate-600 uppercase tracking-wider font-bold">OHLC</span>
-      <span className="text-slate-400">
-        O <span className="text-slate-200">{fmtPrice(prev, prev)}</span>
+    <div className="flex items-center gap-3 text-[10px] mono pt-1.5 mt-1.5 border-t border-kd-border">
+      <span className="text-[var(--text-muted)] uppercase tracking-wider font-bold">OHLC</span>
+      <span className="text-[var(--text-secondary)]">
+        O <span className="text-[var(--text-primary)]">{fmtPrice(prev, prev)}</span>
       </span>
-      <span className="text-slate-400">
+      <span className="text-[var(--text-secondary)]">
         H <span className="text-risk-green">{high != null ? fmtPrice(high, prev) : '—'}</span>
       </span>
-      <span className="text-slate-400">
+      <span className="text-[var(--text-secondary)]">
         L <span className="text-risk-red">{low != null ? fmtPrice(low, prev) : '—'}</span>
       </span>
-      <span className="text-slate-400">
-        C <span className="text-white font-semibold">{close != null ? fmtPrice(close, prev) : '—'}</span>
+      <span className="text-[var(--text-secondary)]">
+        C <span className="text-[var(--text-primary)] font-semibold">{close != null ? fmtPrice(close, prev) : '—'}</span>
       </span>
       {close != null && (
         <span className={cn(
@@ -239,7 +239,7 @@ function OutcomeBadge({ result }: { result: InferenceEvalRow }) {
 // ── Impact Badge ──────────────────────────────────────────────────────────────
 
 function ImpactBadge({ impact }: { impact: string | null }) {
-  if (!impact) return <span className="text-[10px] text-slate-500 italic">turning date</span>;
+  if (!impact) return <span className="text-[10px] text-[var(--text-muted)] italic">turning date</span>;
   const s = MARKET_STATUS_MAP.get(impact);
   const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
   return (
@@ -259,16 +259,16 @@ function EvalRow({ r, minor, major }: { r: InferenceEvalRow; minor: number; majo
   const hasPrice  = n(r.prev_close) != null;
 
   return (
-    <div className="px-4 py-3 rounded-xl bg-[#0f172a] border border-kd-border hover:border-white/15 transition-all">
+    <div className="px-4 py-3 rounded-xl bg-kd-bg border border-kd-border hover:border-kd-border-active transition-all">
 
       {/* Row 1 — outcome + event name + date */}
       <div className="flex items-start gap-3">
         <OutcomeBadge result={r} />
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-white truncate leading-tight">
+          <p className="text-[13px] font-semibold text-[var(--text-primary)] truncate leading-tight">
             {r.astro_event}
           </p>
-          <p className="text-[10px] text-slate-500 mono mt-0.5">
+          <p className="text-[10px] text-[var(--text-muted)] mono mt-0.5">
             {formatDateRange(r.start_date, r.end_date)}
           </p>
         </div>
@@ -276,35 +276,35 @@ function EvalRow({ r, minor, major }: { r: InferenceEvalRow; minor: number; majo
 
       {/* Row 2 — expected → achieved */}
       <div className="flex flex-wrap items-center gap-2 mt-2">
-        <span className="text-[10px] text-slate-600 uppercase tracking-wider font-bold">Expected</span>
+        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Expected</span>
         <ImpactBadge impact={r.market_impact} />
-        <span className="text-slate-700">→</span>
-        <span className="text-[10px] text-slate-600 uppercase tracking-wider font-bold">Achieved</span>
+        <span className="text-[var(--text-muted)]">→</span>
+        <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold">Achieved</span>
 
         {r.eval_status === 'pending' ? (
-          <span className="text-[10px] text-slate-500 italic">starts {fmtDate(r.start_date)}</span>
+          <span className="text-[10px] text-[var(--text-muted)] italic">starts {fmtDate(r.start_date)}</span>
         ) : !hasPrice ? (
-          <span className="text-[10px] text-slate-500 italic">no price data</span>
+          <span className="text-[10px] text-[var(--text-muted)] italic">no price data</span>
         ) : (
-          <div className="flex items-center gap-2 text-[10px] mono text-slate-400">
+          <div className="flex items-center gap-2 text-[10px] mono text-[var(--text-secondary)]">
             <span>
               Close <span className={cn(
                 'font-semibold',
                 n(r.final_return_pct)! > 0 ? 'text-risk-green' :
-                n(r.final_return_pct)! < 0 ? 'text-risk-red' : 'text-slate-300',
+                n(r.final_return_pct)! < 0 ? 'text-risk-red' : 'text-[var(--text-secondary)]',
               )}>{fmtPct(r.final_return_pct)}</span>
             </span>
             {r.peak_return_pct != null && (
-              <span className="text-slate-500" title="Peak swing">↑ {fmtPct(r.peak_return_pct)}</span>
+              <span className="text-[var(--text-muted)]" title="Peak swing">↑ {fmtPct(r.peak_return_pct)}</span>
             )}
             {r.trough_return_pct != null && (
-              <span className="text-slate-500" title="Trough swing">↓ {fmtPct(r.trough_return_pct)}</span>
+              <span className="text-[var(--text-muted)]" title="Trough swing">↓ {fmtPct(r.trough_return_pct)}</span>
             )}
             {isTurning && r.eval_status === 'completed' && (
               <>
-                <span className="text-slate-600 mx-1">|</span>
+                <span className="text-[var(--text-muted)] mx-1">|</span>
                 <span title="Pre-event trend">Pre {fmtPct(r.pre_trend_pct)}</span>
-                <span className="text-slate-600">→</span>
+                <span className="text-[var(--text-muted)]">→</span>
                 <span title="Post-event trend">Post {fmtPct(r.post_trend_pct)}</span>
               </>
             )}
@@ -419,8 +419,8 @@ export default function RuleEvalView() {
 
   const resetPage = () => setPage(1);
 
-  const selectCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors';
-  const inputCls  = 'w-20 px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white text-center mono focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const selectCls = 'px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-secondary)] focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const inputCls  = 'w-20 px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-primary)] text-center mono focus:outline-none focus:border-accent-indigo/60 transition-colors';
   const labelCls  = 'block text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5';
 
   const PERIOD_PILLS: [PeriodFilter, string][] = [
@@ -436,7 +436,7 @@ export default function RuleEvalView() {
 
         {/* Header */}
         <header className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Rule Evaluation</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Rule Evaluation</h1>
           <p className="text-secondary font-medium">
             Did each DC inference rule work? Checked against real {index} price data.
           </p>
@@ -449,7 +449,7 @@ export default function RuleEvalView() {
           <div className="flex flex-wrap items-end gap-5">
             <div>
               <label className={labelCls}>Index</label>
-              <span className="px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 mono block">
+              <span className="px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-secondary)] mono block">
                 {index}
               </span>
             </div>
@@ -500,7 +500,7 @@ export default function RuleEvalView() {
                         'px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-all',
                         period === key
                           ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/40'
-                          : 'bg-slate-900/40 text-slate-400 border-white/5 hover:border-white/20 hover:text-slate-200',
+                          : 'bg-kd-elevated text-[var(--text-secondary)] border-kd-border hover:border-kd-border-active hover:text-[var(--text-primary)]',
                       )}
                     >{label}</button>
                   ))}
@@ -562,7 +562,7 @@ export default function RuleEvalView() {
                   'px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all',
                   !filterOutcome
                     ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/40'
-                    : 'bg-slate-900/40 text-slate-400 border-white/5 hover:border-white/20',
+                    : 'bg-kd-elevated text-[var(--text-secondary)] border-kd-border hover:border-kd-border-active',
                 )}
               >
                 All {dateFiltered.length}
@@ -598,7 +598,7 @@ export default function RuleEvalView() {
             <div className="w-14 h-14 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center">
               <AlertCircle className="w-7 h-7 text-risk-red" />
             </div>
-            <p className="text-base font-semibold text-white">Evaluation Failed</p>
+            <p className="text-base font-semibold text-[var(--text-primary)]">Evaluation Failed</p>
             <p className="text-sm text-muted max-w-sm">
               {error instanceof Error ? error.message : 'Unknown error'}
             </p>
@@ -626,38 +626,38 @@ export default function RuleEvalView() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
-                <span className="text-[11px] text-slate-500 mono">
+                <span className="text-[11px] text-[var(--text-muted)] mono">
                   {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, sorted.length)} of {sorted.length}
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage(1)}
                     disabled={safePage <= 1}
-                    className="px-2.5 py-1.5 text-[11px] border border-kd-border rounded-lg text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="px-2.5 py-1.5 text-[11px] border border-kd-border rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     First
                   </button>
                   <button
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={safePage <= 1}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="text-xs text-slate-400 mono px-1">
+                  <span className="text-xs text-[var(--text-secondary)] mono px-1">
                     {safePage} / {totalPages}
                   </span>
                   <button
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                     disabled={safePage >= totalPages}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setPage(totalPages)}
                     disabled={safePage >= totalPages}
-                    className="px-2.5 py-1.5 text-[11px] border border-kd-border rounded-lg text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="px-2.5 py-1.5 text-[11px] border border-kd-border rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     Last
                   </button>

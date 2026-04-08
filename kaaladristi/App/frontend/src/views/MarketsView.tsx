@@ -46,7 +46,7 @@ export default function MarketsView() {
     <ErrorBoundary>
       <div className="animate-fade-in">
         <header className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Markets</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Markets</h1>
           <p className="text-secondary font-medium">Historical price data &amp; technical indicators</p>
         </header>
 
@@ -65,7 +65,7 @@ export default function MarketsView() {
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{indexName}</p>
                 <div className="flex items-baseline gap-4">
-                  <span className="text-3xl font-bold mono text-white">
+                  <span className="text-3xl font-bold mono text-[var(--text-primary)]">
                     {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                   <div className={cn('flex items-center gap-1.5', isPositive ? 'text-risk-green' : 'text-risk-red')}>
@@ -111,7 +111,7 @@ export default function MarketsView() {
                     'px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
                     range === r
                       ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
                   )}
                 >
                   {r}
@@ -138,7 +138,7 @@ export default function MarketsView() {
                   <div className="w-16 h-16 rounded-2xl bg-risk-amber/10 border border-risk-amber/30 flex items-center justify-center mb-6">
                     <AlertCircle className="w-8 h-8 text-risk-amber" />
                   </div>
-                  <p className="text-lg font-semibold text-white mb-2">Connection Issue</p>
+                  <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">Connection Issue</p>
                   <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
                     Unable to connect to the database. Check your PostgREST URL and auth session.
                   </p>
@@ -154,9 +154,9 @@ export default function MarketsView() {
                   <div className="w-16 h-16 rounded-2xl bg-accent-violet/10 border border-accent-violet/30 flex items-center justify-center mb-6">
                     <Database className="w-8 h-8 text-accent-violet" />
                   </div>
-                  <p className="text-lg font-semibold text-white mb-2">Index Not Found</p>
+                  <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">Index Not Found</p>
                   <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                    The <span className="text-white font-medium">{indexName}</span> index was not found.
+                    The <span className="text-[var(--text-primary)] font-medium">{indexName}</span> index was not found.
                     Run km_seed_masters.sql to seed index symbols.
                   </p>
                 </>
@@ -165,7 +165,7 @@ export default function MarketsView() {
                   <div className="w-16 h-16 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-6">
                     <AlertCircle className="w-8 h-8 text-risk-red" />
                   </div>
-                  <p className="text-lg font-semibold text-white mb-2">Failed to Load Chart Data</p>
+                  <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">Failed to Load Chart Data</p>
                   <p className="text-sm text-secondary max-w-md mb-4">{errorMsg || 'Unexpected error.'}</p>
                   <button
                     onClick={() => refetch()}
@@ -178,16 +178,16 @@ export default function MarketsView() {
             </div>
           ) : rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-slate-800/60 border border-white/5 flex items-center justify-center mb-6">
-                <BarChart3 className="w-8 h-8 text-slate-500" />
+              <div className="w-16 h-16 rounded-2xl bg-kd-elevated border border-kd-border flex items-center justify-center mb-6">
+                <BarChart3 className="w-8 h-8 text-[var(--text-muted)]" />
               </div>
-              <p className="text-lg font-semibold text-white mb-2">No Price Data</p>
+              <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Price Data</p>
               <p className="text-sm text-secondary max-w-md mb-6 leading-relaxed">
-                The <span className="text-white font-medium">{indexName}</span> index has no EOD data.
+                The <span className="text-[var(--text-primary)] font-medium">{indexName}</span> index has no EOD data.
                 Run the historical downloader to backfill.
               </p>
-              <div className="text-left text-xs space-y-2 bg-slate-900/60 border border-white/5 rounded-xl p-4 max-w-md">
-                <p className="text-slate-400 font-semibold mb-2">From App/backend/ run:</p>
+              <div className="text-left text-xs space-y-2 bg-kd-card border border-kd-border rounded-xl p-4 max-w-md">
+                <p className="text-[var(--text-secondary)] font-semibold mb-2">From App/backend/ run:</p>
                 <code className="block text-accent-indigo mono">
                   python3 yfinance_historical.py --mode index
                 </code>
@@ -211,9 +211,9 @@ export default function MarketsView() {
 
 function StatPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="px-3 py-1.5 bg-slate-900/50 border border-white/5 rounded-xl">
+    <div className="px-3 py-1.5 bg-kd-elevated border border-kd-border rounded-xl">
       <span className="text-muted">{label}: </span>
-      <span className="text-slate-300 mono font-medium">{value}</span>
+      <span className="text-[var(--text-secondary)] mono font-medium">{value}</span>
     </div>
   );
 }

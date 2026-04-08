@@ -73,14 +73,14 @@ export default function Sidebar() {
   };
 
   return (
-    <nav className="w-[var(--sidebar-width)] bg-[#0f172a]/80 backdrop-blur-2xl border-r border-kd-border fixed h-full z-[100] flex flex-col py-5 overflow-hidden">
+    <nav className="w-[var(--sidebar-width)] bg-kd-bg/80 backdrop-blur-2xl border-r border-kd-border fixed h-full z-[100] flex flex-col py-5 overflow-hidden">
 
       {/* ── Logo + Brand ── */}
       <div className="flex items-center gap-3 px-4 mb-6 shrink-0">
         <div className="w-9 h-9 shrink-0 bg-gradient-to-br from-accent-indigo to-accent-violet rounded-[10px] flex items-center justify-center text-lg shadow-lg shadow-indigo-500/20">
           &#x27E1;
         </div>
-        <span className="text-sm font-semibold tracking-tight text-slate-100 leading-tight">
+        <span className="text-sm font-semibold tracking-tight text-[var(--text-primary)] leading-tight">
           Kāla-Drishti
         </span>
       </div>
@@ -92,9 +92,9 @@ export default function Sidebar() {
             {/* Divider + section heading */}
             {si > 0 && (
               <div className="mt-3 mb-1">
-                <div className="mx-4 border-t border-white/[0.05] mb-2" />
+                <div className="mx-4 border-t border-kd-border mb-2" />
                 {section.heading && (
-                  <p className="text-[9px] uppercase tracking-[0.2em] text-slate-600 font-bold px-4 py-1">
+                  <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--text-muted)] font-bold px-4 py-1">
                     {section.heading}
                   </p>
                 )}
@@ -111,8 +111,8 @@ export default function Sidebar() {
                   cn(
                     'group relative flex items-center gap-3 mx-2 px-3 py-2 rounded-lg transition-all duration-150 text-sm',
                     isActive
-                      ? 'bg-indigo-500/10 text-indigo-400 border-l-[3px] border-indigo-500 pl-[9px]'
-                      : 'text-slate-500 hover:bg-slate-800/40 hover:text-slate-300 border-l-[3px] border-transparent pl-[9px]'
+                      ? 'bg-accent-indigo/10 text-accent-indigo border-l-[3px] border-accent-indigo pl-[9px]'
+                      : 'text-[var(--text-muted)] hover:bg-kd-elevated hover:text-[var(--text-secondary)] border-l-[3px] border-transparent pl-[9px]'
                   )
                 }
               >
@@ -121,7 +121,7 @@ export default function Sidebar() {
                     <item.icon
                       className={cn(
                         'w-[18px] h-[18px] shrink-0',
-                        isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+                        isActive ? 'text-accent-indigo' : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'
                       )}
                     />
                     <span className="truncate leading-none">{item.label}</span>
@@ -134,7 +134,7 @@ export default function Sidebar() {
       </div>
 
       {/* ── User Section ── */}
-      <div className="mt-auto pt-3 border-t border-white/[0.05] shrink-0">
+      <div className="mt-auto pt-3 border-t border-kd-border shrink-0">
         {/* User row */}
         <div className="flex items-center gap-3 px-4 py-2">
           {/* Avatar */}
@@ -142,7 +142,7 @@ export default function Sidebar() {
             className="relative shrink-0"
             title={profile?.display_name || profile?.full_name || profile?.email || 'User'}
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-indigo-500 flex items-center justify-center font-bold text-[11px] text-white">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-cyan to-accent-indigo flex items-center justify-center font-bold text-[11px] text-[var(--text-primary)]">
               {profile ? getInitials(profile) : '?'}
             </div>
             {isAdmin && (
@@ -156,7 +156,7 @@ export default function Sidebar() {
           </div>
 
           {/* Name */}
-          <span className="flex-1 text-xs text-slate-400 truncate leading-none">
+          <span className="flex-1 text-xs text-[var(--text-secondary)] truncate leading-none">
             {profile?.display_name || profile?.full_name || profile?.email || 'User'}
           </span>
 
@@ -164,7 +164,7 @@ export default function Sidebar() {
           <button
             onClick={handleSignOut}
             title="Sign out"
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-800/50 hover:text-slate-200 transition-all shrink-0"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-kd-elevated hover:text-[var(--text-primary)] transition-all shrink-0"
           >
             <LogOut className="w-[15px] h-[15px]" />
           </button>

@@ -14,7 +14,7 @@ export function KaalaLoader({
   subtext  = 'aligning charts with planetary transits...',
 }: KaalaLoaderProps) {
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#0b0e14]/90 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-kd-bg/90 backdrop-blur-sm">
       {/* Rings */}
       <div className="relative flex items-center justify-center w-[120px] h-[120px]">
 
@@ -61,12 +61,12 @@ export function KaalaLoader({
 
       {/* Text */}
       <div
-        className="mt-12 text-center text-[#fbbf24] uppercase text-xs font-bold tracking-[0.2em]"
+        className="mt-12 text-center text-accent-gold uppercase text-xs font-bold tracking-[0.2em]"
         style={{ animation: 'kaala-fade-text 2s infinite' }}
       >
         {message}
         {subtext && (
-          <div className="text-[10px] text-slate-500 mt-1 lowercase font-normal tracking-normal italic not-italic normal-case">
+          <div className="text-[10px] text-[var(--text-muted)] mt-1 lowercase font-normal tracking-normal italic not-italic normal-case">
             {subtext}
           </div>
         )}
