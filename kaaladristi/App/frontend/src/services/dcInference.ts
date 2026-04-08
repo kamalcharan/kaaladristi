@@ -1,6 +1,46 @@
-import { from } from './postgrest';
+import { from, rpc } from './postgrest';
 import type { DcInference, DcInferenceInput } from '@/types';
 import { toIso, getDaysInMonth } from '@/lib/dateUtils';
+
+// ── Inference Evaluation ─────────────────────────────────────────────────────
+
+export interface InferenceEvalRow {
+  inference_id: number;
+  astro_event: string;
+  start_date: string;
+  end_date: string | null;
+  market_impact: string | null;
+  eval_status: 'pending' | 'running' | 'completed';
+  prev_close: number | null;
+  peak_return_pct: number | null;
+  trough_return_pct: number | null;
+  final_return_pct: number | null;
+  swing_attained: boolean | null;
+  closed_direction: 'positive' | 'negative' | 'neutral' | null;
+  outcome: 'worked' | 'partial' | 'failed' | 'inconclusive' | 'running' | 'pending' | 'turned';
+  outcome_detail: string | null;
+  pre_trend_pct: number | null;
+  post_trend_pct: number | null;
+  turn_direction: 'turned_positive' | 'turned_negative' | 'more_positive' | 'more_negative' | 'no_clear_turn' | null;
+}
+
+export interface EvalParams {
+  indexName: string;
+  minorThreshold: number;
+  majorThreshold: number;
+  lookbackDays: number;
+}
+
+export async function evaluateInferences(params: EvalParams): Promise<InferenceEvalRow[]> {
+  const { data, error } = await rpc('evaluate_dc_inferences', {
+    p_index_name:      params.indexName,
+    p_minor_threshold: params.minorThreshold,
+    p_major_threshold: params.majorThreshold,
+    p_lookback_days:   params.lookbackDays,
+  });
+  if (error) throw new Error(`Evaluation failed: ${error.message}`);
+  return (data ?? []) as InferenceEvalRow[];
+}
 
 const TABLE = 'dc_inference';
 
