@@ -3,8 +3,12 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    // Load env from App/frontend/ (where .env lives alongside .env.example)
-    const env = loadEnv(mode, __dirname, '');
+    // Load env — check App/frontend/ first, then App/ (one level up) as fallback.
+    // Both locations are valid: .env.example lives in App/frontend/,
+    // but older setups may have placed .env in App/.
+    const envFrontend = loadEnv(mode, __dirname, '');
+    const envParent   = loadEnv(mode, path.resolve(__dirname, '..'), '');
+    const env         = { ...envParent, ...envFrontend }; // frontend takes priority
 
     // PostgREST target for the dev proxy.
     // In production nginx handles /db/ → postgrest:3000.
