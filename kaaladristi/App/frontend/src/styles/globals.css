@@ -6,6 +6,7 @@
   :root {
     /* ── Background ── */
     --kd-bg:            #030712;
+    --kd-surface:       #0f172a;
     --kd-card:          rgba(15, 23, 42, 0.95);
     --kd-elevated:      rgba(30, 41, 59, 0.7);
     --kd-border:        rgba(255, 255, 255, 0.09);
