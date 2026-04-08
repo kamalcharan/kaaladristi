@@ -38,8 +38,8 @@
 
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #0f172a; }
-  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+  ::-webkit-scrollbar-track { background: var(--kd-bg); }
+  ::-webkit-scrollbar-thumb { background: var(--kd-border-active); border-radius: 10px; }
 }
 
 @layer utilities {
@@ -82,7 +82,7 @@
 }
 @keyframes kaala-fade-text {
   0%, 100% { opacity: 0.4; }
-  50%       { opacity: 1; text-shadow: 0 0 10px #f97316; }
+  50%       { opacity: 1; text-shadow: 0 0 10px var(--accent-gold); }
 }
 @keyframes kaala-toast-in {
   from { opacity: 0; transform: translateX(20px); }
