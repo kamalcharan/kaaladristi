@@ -39,6 +39,7 @@ import pytz
 
 from lib.db_client import get_db
 from lib.breeze_client import init_breeze, get_login_url
+from lib.ai_prompts import SKILLS as _AI_SKILLS
 from pipeline.utils.trading_calendar import (
     is_weekend, is_trading_day, is_already_completed,
     mark_day_status, get_missing_dates, last_trading_day,
@@ -412,15 +413,6 @@ def scheduler_status():
 # Per-day in-memory cache — insight for a given date never changes
 _insight_cache: dict[str, str] = {}
 
-_PANCHANG_SYSTEM = (
-    "You are the AI intelligence layer of Kāla-Drishti, a deterministic market risk platform. "
-    "Given today's Hindu Panchangam, write exactly 2 sentences: "
-    "(1) The dominant time-cycle energy and what it means structurally for markets. "
-    "(2) A practical implication for Indian equity derivatives traders (NIFTY/BANKNIFTY). "
-    "Rules: factual, educational, non-predictive. Never say buy/sell/target/guaranteed. "
-    "Use phrases like 'elevated caution', 'favorable window', 'structural stress', 'risk is heightened'."
-)
-
 
 @app.get('/api/ai/panchang-insight')
 def panchang_insight(date: str):
@@ -466,11 +458,12 @@ def panchang_insight(date: str):
         f"What is today's market risk context?"
     )
 
+    skill = _AI_SKILLS["panchang_insight"]
     try:
         response = client.messages.create(
             model=AI_MODEL,
-            max_tokens=200,
-            system=_PANCHANG_SYSTEM,
+            max_tokens=skill.max_tokens,
+            system=skill.system,
             messages=[{"role": "user", "content": user_msg}],
         )
         insight = response.content[0].text.strip() if response.content else None
