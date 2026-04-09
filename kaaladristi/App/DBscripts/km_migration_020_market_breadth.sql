@@ -3,10 +3,28 @@
 -- Breadth Score = 50% × (% above 20 EMA) + 30% × (% above 50 EMA) + 20% × (% above 150 EMA)
 -- Regimes: Greed >55 · Neutral 35-55 · Fear <35
 
--- Drop any previous attempt (plain view or materialized view)
-DROP VIEW             IF EXISTS km_market_breadth CASCADE;
-DROP MATERIALIZED VIEW IF EXISTS km_market_breadth CASCADE;
-DROP TABLE            IF EXISTS km_market_breadth CASCADE;
+-- Drop whatever type km_market_breadth currently is (view / mat-view / table)
+-- DROP VIEW IF EXISTS errors on a mat-view even with IF EXISTS — use pg_class instead.
+DO $$
+DECLARE
+  obj_kind char;
+BEGIN
+  SELECT relkind INTO obj_kind
+  FROM   pg_class c
+  JOIN   pg_namespace n ON n.oid = c.relnamespace
+  WHERE  c.relname = 'km_market_breadth'
+    AND  n.nspname = 'public';
+
+  IF obj_kind = 'v' THEN
+    EXECUTE 'DROP VIEW              km_market_breadth CASCADE';
+  ELSIF obj_kind = 'm' THEN
+    EXECUTE 'DROP MATERIALIZED VIEW km_market_breadth CASCADE';
+  ELSIF obj_kind = 'r' THEN
+    EXECUTE 'DROP TABLE             km_market_breadth CASCADE';
+  END IF;
+  -- If obj_kind IS NULL the object doesn't exist — nothing to do.
+END;
+$$;
 
 CREATE TABLE km_market_breadth (
     trade_date    DATE        PRIMARY KEY,
