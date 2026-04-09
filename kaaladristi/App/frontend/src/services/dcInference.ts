@@ -75,6 +75,12 @@ export async function fetchInferencesForRange(startDate: string, endDate: string
     r.end_date === null ? r.start_date >= startDate : r.end_date >= startDate
   );
 }
+
+/**
+ * Fetch all inference entries active during a given month.
+ * Includes multi-month events (e.g. Saturn-Mars Conjunction Apr–May).
+ */
+export async function fetchInferencesForMonth(year: number, month: number): Promise<DcInference[]> {
   const firstDay = toIso(year, month, 1);
   const lastDay  = toIso(year, month, getDaysInMonth(year, month));
 
