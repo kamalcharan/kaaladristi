@@ -9,8 +9,10 @@ All AI features are **opt-in**, driven entirely by environment variables.
 
 ```
 AI_ENABLED=false          # master switch — set true to enable
-AI_MODEL=claude-haiku-4-5 # any Anthropic model ID
-ANTHROPIC_API_KEY=sk-ant-…
+AI_PROVIDER=anthropic     # anthropic | openai
+AI_MODEL=claude-haiku-4-5 # any model ID the chosen provider accepts
+AI_API_KEY=sk-ant-…       # or ANTHROPIC_API_KEY (legacy alias)
+AI_BASE_URL=              # optional — proxy / self-hosted endpoint
 ```
 
 When `AI_ENABLED=false` (default), every AI endpoint returns
@@ -23,11 +25,16 @@ No API key is required to run the product.
 
 ```
 Browser  →  pipeline_api.py (FastAPI, port 8100)
-                └── lib/ai_client.py     (Anthropic SDK singleton)
+                └── lib/ai_client.py     (vendor-agnostic direct HTTP, no SDK)
                 └── lib/ai_prompts.py    (skill registry — all system prompts)
 ```
 
-The frontend **never** calls Anthropic directly. API keys stay server-side.
+**No SDK dependency.** `ai_client.py` calls the provider REST API directly via
+`requests`. Switching vendors = change `AI_PROVIDER` + `AI_MODEL` + `AI_API_KEY`.
+`AI_BASE_URL` enables proxies, self-hosted models (Ollama, vLLM), or Anthropic
+Vertex/Bedrock gateway URLs.
+
+The frontend **never** calls the LLM directly. API keys stay server-side.
 React Query adds a 24h client-side cache; the backend adds a per-process
 in-memory cache (keyed by date) so the same insight is never generated twice.
 

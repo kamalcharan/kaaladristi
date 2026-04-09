@@ -40,6 +40,7 @@ import pytz
 from lib.db_client import get_db
 from lib.breeze_client import init_breeze, get_login_url
 from lib.ai_prompts import SKILLS as _AI_SKILLS
+from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED
 from pipeline.utils.trading_calendar import (
     is_weekend, is_trading_day, is_already_completed,
     mark_day_status, get_missing_dates, last_trading_day,
@@ -417,9 +418,7 @@ _insight_cache: dict[str, str] = {}
 @app.get('/api/ai/panchang-insight')
 def panchang_insight(date: str):
     """Return an AI-generated 2-sentence market insight for a given date's Panchangam."""
-    from lib.ai_client import get_client, AI_ENABLED, AI_MODEL
-
-    if not AI_ENABLED:
+    if not _AI_ENABLED:
         return {"date": date, "insight": None, "ai": False}
 
     if date in _insight_cache:
@@ -436,10 +435,6 @@ def panchang_insight(date: str):
         return {"date": date, "insight": None, "ai": False}
 
     p = rows[0]
-    client = get_client()
-    if not client:
-        return {"date": date, "insight": None, "ai": False}
-
     special = ", ".join(filter(None, [
         "Purnima"   if p.get("is_purnima")   else "",
         "Amavasya"  if p.get("is_amavasya")  else "",
@@ -459,20 +454,10 @@ def panchang_insight(date: str):
     )
 
     skill = _AI_SKILLS["panchang_insight"]
-    try:
-        response = client.messages.create(
-            model=AI_MODEL,
-            max_tokens=skill.max_tokens,
-            system=skill.system,
-            messages=[{"role": "user", "content": user_msg}],
-        )
-        insight = response.content[0].text.strip() if response.content else None
-        if insight:
-            _insight_cache[date] = insight
-        return {"date": date, "insight": insight, "ai": True}
-    except Exception as e:
-        log.error(f"AI panchang insight failed for {date}: {e}")
-        return {"date": date, "insight": None, "ai": False}
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[date] = insight
+    return {"date": date, "insight": insight, "ai": insight is not None}
 
 
 @app.get('/api/fii-dii')
