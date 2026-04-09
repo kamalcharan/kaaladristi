@@ -93,22 +93,22 @@ function DayCell({ day, inferences }: { day: string; inferences: DcInference[] }
         <div className="text-[9px] mono text-muted mt-0.5">{dd} {mon}</div>
       </div>
 
-      {/* Inferences as colored dot + name */}
-      <div className="flex flex-col gap-1 min-h-[32px]">
+      {/* Inferences as colored dots only — hover for detail */}
+      <div className="flex flex-wrap gap-1 justify-center min-h-[16px] mt-0.5">
         {active.length === 0 ? (
-          <span className="text-[9px] text-muted text-center mt-1">—</span>
+          <span className="text-[9px] text-muted">—</span>
         ) : (
-          active.map(inf => (
-            <div key={inf.id} className="flex items-start gap-1 min-w-0">
-              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0 mt-[3px]', dotClass(inf.market_impact))} />
+          active.map(inf => {
+            const opt = MARKET_STATUS_MAP.get(inf.market_impact ?? '');
+            const tip = `${inf.astro_event}${opt ? ` · ${opt.label}` : ''}`;
+            return (
               <span
-                className={cn('text-[9px] leading-snug truncate min-w-0', textClass(inf.market_impact))}
-                title={inf.astro_event}
-              >
-                {inf.astro_event}
-              </span>
-            </div>
-          ))
+                key={inf.id}
+                className={cn('w-2.5 h-2.5 rounded-full shrink-0 cursor-default', dotClass(inf.market_impact))}
+                title={tip}
+              />
+            );
+          })
         )}
       </div>
     </div>
