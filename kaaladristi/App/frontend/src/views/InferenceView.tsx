@@ -130,7 +130,7 @@ function ConfidenceDots({ value }: { value: number | null }) {
       {Array.from({ length: 10 }).map((_, i) => (
         <div
           key={i}
-          className={cn('w-1.5 h-1.5 rounded-full', i < value ? 'bg-accent-indigo' : 'bg-slate-700')}
+          className={cn('w-1.5 h-1.5 rounded-full', i < value ? 'bg-accent-indigo' : 'bg-kd-border')}
         />
       ))}
       <span className="ml-1.5 text-[11px] text-muted mono">{value}/10</span>
@@ -291,16 +291,16 @@ function AppliesTo({
                   ? focused
                     ? 'bg-accent-indigo/20 border-accent-indigo/50 ring-1 ring-accent-indigo/30'
                     : 'bg-accent-indigo/10 border-accent-indigo/30'
-                  : 'bg-slate-900/40 border-white/5 hover:border-white/15'
+                  : 'bg-kd-elevated border-kd-border hover:border-kd-border-active'
               )}
             >
               <div className="flex items-center justify-between">
-                <span className={cn('text-xs font-semibold', active ? 'text-accent-indigo' : 'text-slate-500')}>
+                <span className={cn('text-xs font-semibold', active ? 'text-accent-indigo' : 'text-muted')}>
                   {card.label}
                 </span>
                 <div className={cn(
                   'w-2 h-2 rounded-full',
-                  active ? 'bg-accent-indigo' : 'bg-slate-700'
+                  active ? 'bg-accent-indigo' : 'bg-[var(--text-muted)]/40'
                 )} />
               </div>
               <p className="text-[10px] text-muted mt-0.5">{card.sub}</p>
@@ -311,9 +311,9 @@ function AppliesTo({
 
       {/* Right: detail panel */}
       {activePanel && activePanel !== 'stockMarket' && panelSection && (
-        <div className="flex-1 p-3 bg-slate-950/50 border border-kd-border rounded-xl">
+        <div className="flex-1 p-3 bg-kd-elevated/50 border border-kd-border rounded-xl">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-white">{panelLabel}</span>
+            <span className="text-[11px] font-bold text-[var(--text-primary)]">{panelLabel}</span>
             <button
               type="button"
               onClick={() => handleDisable(activePanel)}
@@ -332,7 +332,7 @@ function AppliesTo({
                 onChange={e => toggleAll(e.target.checked)}
                 className="accent-accent-indigo w-3 h-3"
               />
-              <span className="text-[11px] text-slate-300">All {panelLabel}</span>
+              <span className="text-[11px] text-[var(--text-secondary)]">All {panelLabel}</span>
             </label>
           )}
 
@@ -340,25 +340,25 @@ function AppliesTo({
           {!showAll && (
             <>
               <div className="relative mb-2">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted" />
                 <input
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder={`Search ${panelLabel.toLowerCase()}...`}
-                  className="w-full pl-7 pr-3 py-1.5 bg-slate-900/60 border border-kd-border rounded-lg text-[11px] text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60"
+                  className="w-full pl-7 pr-3 py-1.5 bg-kd-elevated border border-kd-border rounded-lg text-[11px] text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60"
                 />
               </div>
               <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1">
                 {filteredItems.map(it => (
-                  <label key={it.code} className="flex items-center gap-2 py-0.5 cursor-pointer hover:bg-slate-800/40 rounded px-1">
+                  <label key={it.code} className="flex items-center gap-2 py-0.5 cursor-pointer hover:bg-kd-elevated/40 rounded px-1">
                     <input
                       type="checkbox"
                       checked={selectedCodes.includes(it.code)}
                       onChange={e => updateCodes(it.code, e.target.checked)}
                       className="accent-accent-indigo w-3 h-3"
                     />
-                    <span className="text-[11px] text-slate-300">{it.label}</span>
+                    <span className="text-[11px] text-[var(--text-secondary)]">{it.label}</span>
                   </label>
                 ))}
                 {filteredItems.length === 0 && (
@@ -375,7 +375,7 @@ function AppliesTo({
 
       {/* Stock Market selected — no children, just confirmation */}
       {activePanel === 'stockMarket' && (
-        <div className="flex-1 flex items-center justify-center p-3 bg-slate-950/50 border border-kd-border rounded-xl">
+        <div className="flex-1 flex items-center justify-center p-3 bg-kd-elevated/50 border border-kd-border rounded-xl">
           <p className="text-[11px] text-muted text-center">Applies broadly to the entire stock market</p>
         </div>
       )}
@@ -421,24 +421,24 @@ function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, sa
 
   const isValid = form.astro_event.trim() && form.start_date;
 
-  const inputCls = 'w-full px-4 py-3 bg-slate-900/60 border border-kd-border rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const inputCls = 'w-full px-4 py-3 bg-kd-elevated border border-kd-border rounded-xl text-sm text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60 transition-colors';
   const labelCls = 'block text-[11px] uppercase tracking-widest font-bold text-muted mb-2';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-4xl bg-[#0f172a] border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden">
+      <div className="w-full max-w-4xl bg-kd-surface border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-kd-border">
           <div>
-            <h2 className="text-lg font-bold text-white">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
               {editId ? 'Edit Inference' : 'New Inference Entry'}
             </h2>
             <p className="text-xs text-muted mt-0.5">Expert planetary event observation</p>
           </div>
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-800 hover:text-slate-200 transition-all"
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-muted hover:bg-kd-elevated hover:text-[var(--text-primary)] transition-all"
           >
             <X className="w-4 h-4" />
           </button>
@@ -515,7 +515,7 @@ function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, sa
                           'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
                           active
                             ? cn(c.bg, c.text, c.border)
-                            : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
+                            : 'bg-kd-elevated text-muted border-kd-border hover:border-kd-border-active hover:text-[var(--text-secondary)]'
                         )}
                       >
                         {s.label}
@@ -543,7 +543,7 @@ function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, sa
                           'w-9 h-9 rounded-lg text-sm font-bold border transition-all mono',
                           active
                             ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/50'
-                            : 'bg-slate-900/40 text-slate-500 border-white/5 hover:border-white/20 hover:text-slate-300'
+                            : 'bg-kd-elevated text-muted border-kd-border hover:border-kd-border-active hover:text-[var(--text-secondary)]'
                         )}
                       >
                         {n}
@@ -567,7 +567,7 @@ function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, sa
 
               {/* Notes */}
               <div>
-                <label className={labelCls}>Notes <span className="text-slate-600">(optional)</span></label>
+                <label className={labelCls}>Notes <span className="text-muted">(optional)</span></label>
                 <textarea
                   value={form.notes ?? ''}
                   onChange={e => set('notes', e.target.value)}
@@ -592,7 +592,7 @@ function FormModal({ initial, initialAppl, editId, onClose, onSave, isSaving, sa
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+              className="px-5 py-2.5 rounded-xl text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-kd-elevated transition-all"
             >
               Cancel
             </button>
@@ -626,17 +626,17 @@ function InferenceCard({
 
   return (
     <div className={cn(
-      'border-l-4 rounded-xl bg-[#0f172a] border border-kd-border px-4 py-3 transition-all hover:border-white/15',
+      'border-l-4 rounded-xl bg-kd-surface border border-kd-border px-4 py-3 transition-all hover:border-kd-border-active',
       borderColorForImpact(row.market_impact),
     )}>
       {/* Row 1: event + date + actions */}
       <div className="flex items-center gap-3">
-        <p className="text-[13px] font-bold text-white leading-tight flex-1 truncate">{row.astro_event}</p>
-        <span className="text-[10px] mono text-slate-500 whitespace-nowrap shrink-0">
+        <p className="text-[13px] font-bold text-[var(--text-primary)] leading-tight flex-1 truncate">{row.astro_event}</p>
+        <span className="text-[10px] mono text-muted whitespace-nowrap shrink-0">
           {formatDateRange(row)}
         </span>
         <div className="flex items-center gap-0.5 shrink-0 ml-1">
-          <button onClick={() => onEdit(row)} title="Edit" className="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all">
+          <button onClick={() => onEdit(row)} title="Edit" className="w-7 h-7 rounded-md flex items-center justify-center text-muted hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all">
             <Pencil className="w-3 h-3" />
           </button>
           <button
@@ -646,7 +646,7 @@ function InferenceCard({
               'h-7 rounded-md flex items-center justify-center transition-all text-[11px] font-medium',
               isConfirming
                 ? 'px-2 bg-risk-red/20 text-risk-red border border-risk-red/40'
-                : 'w-7 text-slate-500 hover:text-risk-red hover:bg-risk-red/10'
+                : 'w-7 text-muted hover:text-risk-red hover:bg-risk-red/10'
             )}
           >
             {isConfirming ? 'Confirm?' : <Trash2 className="w-3 h-3" />}
@@ -659,7 +659,7 @@ function InferenceCard({
         <ImpactBadge impact={row.market_impact} />
         <ConfidenceDots value={row.confidence} />
         {scopeLabels.map(lbl => (
-          <span key={lbl} className="px-1.5 py-px rounded bg-slate-800/80 border border-white/5 text-[10px] text-slate-400 font-medium">
+          <span key={lbl} className="px-1.5 py-px rounded bg-kd-elevated border border-kd-border text-[10px] text-[var(--text-secondary)] font-medium">
             {lbl}
           </span>
         ))}
@@ -669,7 +669,7 @@ function InferenceCard({
           </span>
         ))}
         {row.inference && (
-          <span className="text-[12px] text-slate-400 line-clamp-1 ml-1">— {row.inference}</span>
+          <span className="text-[12px] text-[var(--text-secondary)] line-clamp-1 ml-1">— {row.inference}</span>
         )}
       </div>
     </div>
@@ -809,16 +809,16 @@ export default function InferenceView() {
 
   const formAppl = editRow ? applFromRow(editRow) : { ...DEFAULT_APPL };
 
-  const selectCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const selectCls = 'px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-secondary)] focus:outline-none focus:border-accent-indigo/60 transition-colors';
 
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
 
         {/* Header */}
-        <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <header className="mb-6 sm:mb-8 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight text-white mb-2">DC Inference</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">DC Inference</h1>
             <p className="text-secondary font-medium">
               Expert planetary event annotations — the seed data for correlation &amp; rule discovery
             </p>
@@ -847,13 +847,13 @@ export default function InferenceView() {
           <div className="flex flex-wrap items-center gap-3 mb-6">
             {/* Search */}
             <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
               <input
                 type="text"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
                 placeholder="Search events, inferences, notes..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors"
+                className="w-full pl-9 pr-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60 transition-colors"
               />
             </div>
 
@@ -901,7 +901,7 @@ export default function InferenceView() {
               <>
                 <button
                   onClick={clearFilters}
-                  className="px-3 py-2 text-xs text-risk-amber hover:text-white border border-risk-amber/30 hover:border-white/20 rounded-xl transition-all"
+                  className="px-3 py-2 text-xs text-risk-amber hover:text-[var(--text-primary)] border border-risk-amber/30 hover:border-kd-border rounded-xl transition-all"
                 >
                   Clear
                 </button>
@@ -925,7 +925,7 @@ export default function InferenceView() {
               <div className="w-14 h-14 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-5">
                 <AlertCircle className="w-7 h-7 text-risk-red" />
               </div>
-              <p className="text-base font-semibold text-white mb-2">Failed to Load</p>
+              <p className="text-base font-semibold text-[var(--text-primary)] mb-2">Failed to Load</p>
               <p className="text-sm text-muted max-w-sm">
                 {error instanceof Error ? error.message : 'Could not connect to database.'}
               </p>
@@ -961,17 +961,17 @@ export default function InferenceView() {
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-xs text-slate-400 mono">
+                <span className="text-xs text-[var(--text-secondary)] mono">
                   {safePage} / {totalPages}
                 </span>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-kd-border-active disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -1022,10 +1022,10 @@ function StatPill({ label, value, accent }: { label: string; value: string; acce
       'px-4 py-2 rounded-xl border text-xs',
       accent
         ? 'bg-accent-indigo/10 border-accent-indigo/30 text-accent-indigo'
-        : 'bg-slate-900/50 border-white/5 text-slate-400'
+        : 'bg-kd-elevated border-kd-border text-[var(--text-secondary)]'
     )}>
       <span className="text-muted">{label}: </span>
-      <span className={cn('font-bold mono', accent ? 'text-accent-indigo' : 'text-white')}>{value}</span>
+      <span className={cn('font-bold mono', accent ? 'text-accent-indigo' : 'text-[var(--text-primary)]')}>{value}</span>
     </div>
   );
 }
@@ -1037,15 +1037,15 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         <div className="w-16 h-16 rounded-2xl bg-accent-indigo/10 border border-accent-indigo/20 flex items-center justify-center mb-6 text-2xl">
           ✦
         </div>
-        <p className="text-lg font-semibold text-white mb-2">No Inference Data Yet</p>
+        <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Inference Data Yet</p>
         <p className="text-sm text-secondary max-w-md mb-2 leading-relaxed">
           Start by entering planetary events — what astrological conditions are active
           and what market behavior do you expect or observe?
         </p>
         <p className="text-xs text-muted max-w-sm mb-8 leading-relaxed">
-          Examples: <span className="text-slate-400">"Rahu Mars in same sign"</span>,{' '}
-          <span className="text-slate-400">"Saturn retrograde"</span>,{' '}
-          <span className="text-slate-400">"Jupiter conjuncts Sun"</span>
+          Examples: <span className="text-[var(--text-secondary)]">"Rahu Mars in same sign"</span>,{' '}
+          <span className="text-[var(--text-secondary)]">"Saturn retrograde"</span>,{' '}
+          <span className="text-[var(--text-secondary)]">"Jupiter conjuncts Sun"</span>
         </p>
         <button
           onClick={onAdd}
