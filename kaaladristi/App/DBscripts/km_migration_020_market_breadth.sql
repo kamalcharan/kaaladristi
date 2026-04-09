@@ -3,8 +3,13 @@
 -- Refresh daily after EOD pipeline completes.
 
 -- ── 1. Materialized view ──────────────────────────────────────────────────────
+-- Drop any existing plain view or materialized view with this name first.
+-- A plain VIEW cannot have indexes, which causes "cannot create index" errors.
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS km_market_breadth AS
+DROP VIEW IF EXISTS km_market_breadth CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS km_market_breadth CASCADE;
+
+CREATE MATERIALIZED VIEW km_market_breadth AS
 SELECT
     e.trade_date,
     COUNT(*) FILTER (WHERE e.pct_chng > 0)   AS advances,
@@ -24,8 +29,7 @@ GROUP BY e.trade_date
 ORDER BY e.trade_date;
 
 -- Unique index required for REFRESH ... CONCURRENTLY
-CREATE UNIQUE INDEX IF NOT EXISTS idx_km_market_breadth_date
-    ON km_market_breadth (trade_date);
+CREATE UNIQUE INDEX idx_km_market_breadth_date ON km_market_breadth (trade_date);
 
 GRANT SELECT ON km_market_breadth TO authenticated, anon;
 
