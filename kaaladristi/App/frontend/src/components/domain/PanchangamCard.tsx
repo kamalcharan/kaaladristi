@@ -55,12 +55,14 @@ function Badge({ children, className }: { children: React.ReactNode; className?:
 function Row({
   label,
   value,
+  nextValue,
   endTime,
   endNextDay,
   nowSec,
 }: {
   label: string;
   value: string | null | undefined;
+  nextValue?: string | null;
   endTime?: string | null;
   endNextDay?: boolean | null;
   nowSec?: number;
@@ -80,19 +82,23 @@ function Row({
     if (!isPast) remaining = timeUntil(resolved.sec, nowSec);
   }
 
+  const displayValue = isPast && nextValue ? nextValue : value;
+
   return (
     <div className="flex items-baseline justify-between gap-2 py-1 border-b border-kd-border last:border-b-0">
       <span className="text-[10px] uppercase tracking-widest text-muted font-bold shrink-0">{label}</span>
       <div className="flex items-center gap-1.5 min-w-0">
-        <span className={cn('text-[12px] font-medium text-right truncate', isPast ? 'text-muted line-through' : 'text-[var(--text-primary)]')}>
-          {value}
+        <span className="text-[12px] font-medium text-right truncate text-[var(--text-primary)]">
+          {displayValue}
         </span>
-        {endTime && (
-          <span
-            className={cn('text-[9px] font-mono shrink-0', isPast ? 'text-risk-amber' : 'text-muted')}
-            title={`Changes at ${endTime} IST${nextDay ? ' (next day)' : ''}`}
-          >
-            {isPast ? 'changed' : `until ${displayEnd}${remaining ? ` (${remaining})` : ''}`}
+        {endTime && isPast && (
+          <span className="text-[9px] font-mono shrink-0 text-muted" title={`Changed at ${endTime} IST${nextDay ? ' (next day)' : ''}`}>
+            since {endTime.slice(0, 5)}{nextDay ? ' +1' : ''}
+          </span>
+        )}
+        {endTime && !isPast && (
+          <span className="text-[9px] font-mono shrink-0 text-muted" title={`Changes at ${endTime} IST${nextDay ? ' (next day)' : ''}`}>
+            until {displayEnd}{remaining ? ` (${remaining})` : ''}
           </span>
         )}
       </div>
@@ -102,7 +108,7 @@ function Row({
 
 // ── Content ───────────────────────────────────────────────────────────────────
 
-function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) {
+function PanchangContent({ p, next, istTime }: { p: DailyPanchang; next: DailyPanchang | null | undefined; istTime: string }) {
   const nowSec = toSeconds(istTime);
   const paksha = p.paksha === 'shukla' ? 'Shukla' : 'Krishna';
 
@@ -162,6 +168,7 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
       <Row
         label="Tithi"
         value={`${p.tithi_num}. ${p.tithi_name}${p.tithi_lord ? ` · ${p.tithi_lord}` : ''}`}
+        nextValue={next ? `${next.tithi_num}. ${next.tithi_name}${next.tithi_lord ? ` · ${next.tithi_lord}` : ''}` : null}
         endTime={p.tithi_end_ist}
         endNextDay={p.tithi_end_next_day}
         nowSec={nowSec}
@@ -169,6 +176,7 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
       <Row
         label="Nakshatra"
         value={`${p.nakshatra_name}${p.nakshatra_pada ? ` Pada ${p.nakshatra_pada}` : ''}${p.nakshatra_lord ? ` · ${p.nakshatra_lord}` : ''}`}
+        nextValue={next ? `${next.nakshatra_name}${next.nakshatra_pada ? ` Pada ${next.nakshatra_pada}` : ''}${next.nakshatra_lord ? ` · ${next.nakshatra_lord}` : ''}` : null}
         endTime={p.nakshatra_end_ist}
         endNextDay={p.nakshatra_end_next_day}
         nowSec={nowSec}
@@ -187,8 +195,15 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 
+function nextDateStr(date: string): string {
+  const d = new Date(date + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function PanchangamCard({ date }: { date: string }) {
   const { data, isLoading, isError } = usePanchang(date);
+  const { data: nextData } = usePanchang(nextDateStr(date));
   const { data: aiData, isLoading: aiLoading } = usePanchangInsight(date);
 
   // Live IST clock — ticks every second
@@ -217,7 +232,7 @@ export default function PanchangamCard({ date }: { date: string }) {
           {isError ? 'Failed to load panchang data' : `No panchang data for ${date}`}
         </p>
       ) : (
-        <PanchangContent p={data} istTime={istTime} />
+        <PanchangContent p={data} next={nextData} istTime={istTime} />
       )}
 
       {/* AI Insight */}
