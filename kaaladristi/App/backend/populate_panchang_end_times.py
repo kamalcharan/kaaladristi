@@ -113,7 +113,7 @@ def compute_end_times(date_str, sunrise_ist):
     falls past midnight IST (i.e. on the following calendar date).
     """
     jd_start = _sunrise_to_jd(date_str, sunrise_ist)
-    jd_end   = jd_start + 1.0
+    jd_end   = jd_start + 1.25     # 30h — nakshatras can extend ~26h past sunrise
 
     t0 = _tithi_num(jd_start)
     n0 = _nakshatra_num(jd_start)
