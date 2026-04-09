@@ -17,17 +17,17 @@ export default function DashboardPage() {
       <div className="space-y-10 animate-fade-in">
         <header className="flex justify-between items-end">
           <div>
-            <div className="h-10 w-72 bg-slate-800/60 rounded-xl animate-pulse" />
-            <div className="h-5 w-48 bg-slate-800/40 rounded-lg animate-pulse mt-3" />
+            <div className="h-10 w-72 bg-kd-elevated/60 rounded-xl animate-pulse" />
+            <div className="h-5 w-48 bg-kd-elevated/40 rounded-lg animate-pulse mt-3" />
           </div>
         </header>
         <div className="glass-card rounded-5xl p-10 flex flex-col lg:flex-row items-center gap-16">
           <SkeletonGauge />
           <div className="flex-1 space-y-4 w-full">
-            <div className="h-6 w-40 bg-slate-800/60 rounded-full animate-pulse" />
-            <div className="h-5 w-full bg-slate-800/40 rounded-lg animate-pulse" />
-            <div className="h-5 w-3/4 bg-slate-800/40 rounded-lg animate-pulse" />
-            <div className="h-8 w-64 bg-slate-800/40 rounded-xl animate-pulse" />
+            <div className="h-6 w-40 bg-kd-elevated/60 rounded-full animate-pulse" />
+            <div className="h-5 w-full bg-kd-elevated/40 rounded-lg animate-pulse" />
+            <div className="h-5 w-3/4 bg-kd-elevated/40 rounded-lg animate-pulse" />
+            <div className="h-8 w-64 bg-kd-elevated/40 rounded-xl animate-pulse" />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -42,7 +42,7 @@ export default function DashboardPage() {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center text-center animate-fade-in">
         <AlertTriangle className="w-16 h-16 text-risk-amber mb-6" />
-        <p className="text-lg font-semibold text-slate-300 mb-2">Unable to load risk data</p>
+        <p className="text-lg font-semibold text-[var(--text-secondary)] mb-2">Unable to load risk data</p>
         <p className="text-sm text-muted mb-6">{(dayRisk.error as Error)?.message || 'Unknown error'}</p>
         <button
           onClick={() => dayRisk.refetch()}
@@ -58,7 +58,7 @@ export default function DashboardPage() {
   if (!dayRisk.data) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center text-center">
-        <p className="text-lg text-slate-400">No data available</p>
+        <p className="text-lg text-[var(--text-secondary)]">No data available</p>
         <p className="text-sm text-muted mt-2">No risk report for {selectedSymbol} on {selectedDate}</p>
       </div>
     );

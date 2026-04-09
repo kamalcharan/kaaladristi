@@ -12,11 +12,11 @@ interface DashboardViewProps {
 
 export default function DashboardView({ report, proofs, weekData }: DashboardViewProps) {
   return (
-    <div className="space-y-10 animate-fade-in">
+    <div className="space-y-6 sm:space-y-10 animate-fade-in">
       {/* Header */}
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Cycle Intelligence</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Cycle Intelligence</h1>
           <p className="text-secondary font-medium">
             Deterministic risk assessment for <span className="text-accent-indigo font-bold">{report.symbol}</span>
           </p>
@@ -30,7 +30,7 @@ export default function DashboardView({ report, proofs, weekData }: DashboardVie
       {/* ── Main Grid: Hero Gauge + Weekly Preview ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Hero Risk Gauge */}
-        <Card rounded="xxl" className="p-10 flex flex-col lg:flex-row items-center gap-16 relative overflow-hidden group shadow-2xl">
+        <Card rounded="xxl" className="p-6 sm:p-10 flex flex-col lg:flex-row items-center gap-8 sm:gap-16 relative overflow-hidden group shadow-2xl">
           <div className="absolute top-0 right-0 w-64 h-64 bg-accent-indigo/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-accent-indigo/10 transition-colors duration-700" />
 
           <RiskGauge score={report.riskScore} size="hero" />
@@ -102,7 +102,7 @@ export default function DashboardView({ report, proofs, weekData }: DashboardVie
       {/* Sector Impact Summary */}
       {report.sectorImpacts.length > 0 && (
         <Card rounded="xxl" className="p-8">
-          <h3 className="text-sm font-bold text-white mb-6">Sector Sensitivity</h3>
+          <h3 className="text-sm font-bold text-[var(--text-primary)] mb-6">Sector Sensitivity</h3>
           <div className="space-y-4">
             {report.sectorImpacts.map((s) => (
               <div key={s.sector} className="flex items-center gap-4">
@@ -124,8 +124,8 @@ export default function DashboardView({ report, proofs, weekData }: DashboardVie
       )}
 
       {/* Historical Proofs */}
-      <Card rounded="xxl" className="p-10 shadow-xl">
-        <div className="flex justify-between items-center mb-10">
+      <Card rounded="xxl" className="p-6 sm:p-10 shadow-xl">
+        <div className="flex justify-between items-center mb-6 sm:mb-10">
           <div>
             <h3 className="text-xl font-bold text-[var(--text-primary)]">Historical Convergence</h3>
             <p className="text-sm text-muted mt-1">Correlation between intelligence and market reality</p>
