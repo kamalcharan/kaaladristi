@@ -1,7 +1,42 @@
-import { Sun, Moon, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Sun, Moon, Sparkles, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePanchang, usePanchangInsight } from '@/hooks';
 import type { DailyPanchang } from '@/types';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function toSeconds(t: string): number {
+  const [h, m, s = '0'] = t.split(':');
+  return Number(h) * 3600 + Number(m) * 60 + Number(s);
+}
+
+function getISTTime(): string {
+  return new Date().toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
+function dayProgress(sunrise: string, sunset: string, now: string): number {
+  const sr = toSeconds(sunrise), ss = toSeconds(sunset), cur = toSeconds(now);
+  if (cur <= sr) return 0;
+  if (cur >= ss) return 100;
+  return Math.round(((cur - sr) / (ss - sr)) * 100);
+}
+
+function timeUntil(endTime: string, nowSec: number): string {
+  const diff = toSeconds(endTime) - nowSec;
+  if (diff <= 0) return '';
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
@@ -11,18 +46,54 @@ function Badge({ children, className }: { children: React.ReactNode; className?:
   );
 }
 
-function Row({ label, value }: { label: string; value: string | null | undefined }) {
+function Row({
+  label,
+  value,
+  endTime,
+  nowSec,
+}: {
+  label: string;
+  value: string | null | undefined;
+  endTime?: string | null;
+  nowSec?: number;
+}) {
   if (!value) return null;
+
+  const isPast = endTime && nowSec !== undefined ? toSeconds(endTime) <= nowSec : false;
+  const remaining = endTime && nowSec !== undefined && !isPast
+    ? timeUntil(endTime, nowSec)
+    : null;
+
   return (
     <div className="flex items-baseline justify-between gap-2 py-1 border-b border-kd-border last:border-b-0">
       <span className="text-[10px] uppercase tracking-widest text-muted font-bold shrink-0">{label}</span>
-      <span className="text-[12px] text-[var(--text-primary)] font-medium text-right">{value}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className={cn('text-[12px] font-medium text-right truncate', isPast ? 'text-muted line-through' : 'text-[var(--text-primary)]')}>
+          {value}
+        </span>
+        {endTime && (
+          <span
+            className={cn('text-[9px] font-mono shrink-0', isPast ? 'text-risk-amber' : 'text-muted')}
+            title={`Changes at ${endTime} IST`}
+          >
+            {isPast ? 'changed' : `until ${endTime.slice(0, 5)}${remaining ? ` (${remaining})` : ''}`}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-function PanchangContent({ p }: { p: DailyPanchang }) {
+// ── Content ───────────────────────────────────────────────────────────────────
+
+function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) {
+  const nowSec = toSeconds(istTime);
   const paksha = p.paksha === 'shukla' ? 'Shukla' : 'Krishna';
+
+  const progress = p.sunrise_ist && p.sunset_ist
+    ? dayProgress(p.sunrise_ist, p.sunset_ist, istTime)
+    : null;
+
   const specialEvents: { label: string; cls: string }[] = [];
   if (p.is_purnima)   specialEvents.push({ label: 'Purnima',  cls: 'bg-risk-amber/10 border-risk-amber/30 text-risk-amber' });
   if (p.is_amavasya)  specialEvents.push({ label: 'Amavasya', cls: 'bg-accent-violet/10 border-accent-violet/30 text-accent-violet' });
@@ -32,22 +103,58 @@ function PanchangContent({ p }: { p: DailyPanchang }) {
 
   return (
     <div className="space-y-0">
-      {/* Sunrise / Sunset */}
-      <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-kd-border">
-        <div className="flex items-center gap-1.5 text-[11px] text-risk-amber">
-          <Sun className="w-3 h-3" />
-          <span className="mono font-medium">{p.sunrise_ist ?? '—'}</span>
+      {/* Sunrise → Live clock → Sunset */}
+      <div className="mb-3 pb-2.5 border-b border-kd-border space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-[11px] text-risk-amber">
+            <Sun className="w-3 h-3" />
+            <span className="mono font-medium">{p.sunrise_ist ?? '—'}</span>
+          </div>
+
+          {/* Ticking clock */}
+          <div className="flex items-center gap-1 text-[11px]">
+            <Clock className="w-2.5 h-2.5 text-muted" />
+            <span className="mono font-semibold text-[var(--text-secondary)] tabular-nums">{istTime}</span>
+            <span className="text-[9px] text-muted font-bold">IST</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-accent-indigo">
+            <span className="mono font-medium">{p.sunset_ist ?? '—'}</span>
+            <Moon className="w-3 h-3" />
+          </div>
         </div>
-        <div className="text-[10px] text-muted font-medium">{paksha} Paksha</div>
-        <div className="flex items-center gap-1.5 text-[11px] text-accent-indigo">
-          <span className="mono font-medium">{p.sunset_ist ?? '—'}</span>
-          <Moon className="w-3 h-3" />
+
+        {/* Day progress bar */}
+        {progress !== null && (
+          <div className="relative h-1 bg-kd-elevated rounded-full overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-risk-amber to-accent-indigo"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
+
+        <div className="flex justify-between">
+          <span className="text-[9px] text-muted">{paksha} Paksha</span>
+          {progress !== null && (
+            <span className="text-[9px] text-muted mono">{progress}% of day</span>
+          )}
         </div>
       </div>
 
       <Row label="Vara"      value={`${p.vara}${p.vara_lord ? ` · ${p.vara_lord}` : ''}`} />
-      <Row label="Tithi"     value={`${p.tithi_num}. ${p.tithi_name}${p.tithi_lord ? ` · ${p.tithi_lord}` : ''}`} />
-      <Row label="Nakshatra" value={`${p.nakshatra_name}${p.nakshatra_pada ? ` Pada ${p.nakshatra_pada}` : ''}${p.nakshatra_lord ? ` · ${p.nakshatra_lord}` : ''}`} />
+      <Row
+        label="Tithi"
+        value={`${p.tithi_num}. ${p.tithi_name}${p.tithi_lord ? ` · ${p.tithi_lord}` : ''}`}
+        endTime={p.tithi_end_ist}
+        nowSec={nowSec}
+      />
+      <Row
+        label="Nakshatra"
+        value={`${p.nakshatra_name}${p.nakshatra_pada ? ` Pada ${p.nakshatra_pada}` : ''}${p.nakshatra_lord ? ` · ${p.nakshatra_lord}` : ''}`}
+        endTime={p.nakshatra_end_ist}
+        nowSec={nowSec}
+      />
       <Row label="Yoga"      value={p.yoga_name ?? null} />
       <Row label="Karana"    value={p.karana_name ?? null} />
       <Row label="Moon"      value={p.moon_sign_name ?? null} />
@@ -64,9 +171,18 @@ function PanchangContent({ p }: { p: DailyPanchang }) {
   );
 }
 
+// ── Card ──────────────────────────────────────────────────────────────────────
+
 export default function PanchangamCard({ date }: { date: string }) {
   const { data, isLoading, isError } = usePanchang(date);
   const { data: aiData, isLoading: aiLoading } = usePanchangInsight(date);
+
+  // Live IST clock — ticks every second
+  const [istTime, setIstTime] = useState(getISTTime);
+  useEffect(() => {
+    const id = setInterval(() => setIstTime(getISTTime()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -78,7 +194,7 @@ export default function PanchangamCard({ date }: { date: string }) {
 
       {isLoading ? (
         <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
+          {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-5 bg-kd-elevated rounded animate-pulse" />
           ))}
         </div>
@@ -87,7 +203,7 @@ export default function PanchangamCard({ date }: { date: string }) {
           {isError ? 'Failed to load panchang data' : `No panchang data for ${date}`}
         </p>
       ) : (
-        <PanchangContent p={data} />
+        <PanchangContent p={data} istTime={istTime} />
       )}
 
       {/* AI Insight */}

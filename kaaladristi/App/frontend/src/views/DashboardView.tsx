@@ -17,7 +17,7 @@ export default function DashboardView({ report, proofs, weekData }: DashboardVie
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <header className="mb-6">
+      <header className="mb-4">
         <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-1">
           Cycle Intelligence
         </h1>
@@ -134,39 +134,11 @@ export default function DashboardView({ report, proofs, weekData }: DashboardVie
           </Card>
         </div>
 
-        {/* ── RIGHT COLUMN ── */}
-        <div className="space-y-5 lg:sticky lg:top-6">
-
-          {/* Date + Market Status */}
-          <div className="glass-card rounded-2xl p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-0.5">
-                  {new Date(report.date).toLocaleDateString('en-IN', { weekday: 'long' })}
-                </p>
-                <p className="text-lg font-bold text-[var(--text-primary)] mono">{report.date}</p>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-risk-green/10 border border-risk-green/25 rounded-full">
-                <span className="w-2 h-2 bg-risk-green rounded-full animate-pulse" />
-                <span className="text-[11px] text-risk-green font-semibold">Market Open</span>
-              </div>
-            </div>
-          </div>
+      {/* ── RIGHT COLUMN ── */}
+        <div className="space-y-4 lg:sticky lg:top-4">
 
           {/* Panchangam */}
           <PanchangamCard date={report.date} />
-
-          {/* Opportunity Card — TBD */}
-          <div className="glass-card rounded-2xl p-5 flex flex-col items-center justify-center text-center min-h-[120px] border-dashed">
-            <p className="text-[11px] font-semibold text-muted">Opportunity Card</p>
-            <p className="text-[10px] text-muted mt-1 opacity-60">Coming soon</p>
-          </div>
-
-          {/* TBD Card */}
-          <div className="glass-card rounded-2xl p-5 flex flex-col items-center justify-center text-center min-h-[100px] border-dashed">
-            <p className="text-[11px] font-semibold text-muted">TBD</p>
-            <p className="text-[10px] text-muted mt-1 opacity-60">Coming soon</p>
-          </div>
         </div>
       </div>
     </div>
