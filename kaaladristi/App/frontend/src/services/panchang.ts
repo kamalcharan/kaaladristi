@@ -1,5 +1,5 @@
 import { from, rpc } from './postgrest';
-import type { DailyPanchang, MarketBreadthDay } from '@/types';
+import type { DailyPanchang, MarketBreadthDay, BreadthRocDay } from '@/types';
 
 export async function fetchPanchang(date: string): Promise<DailyPanchang | null> {
   const { data, error } = await from('km_daily_panchang')
@@ -19,4 +19,14 @@ export async function fetchMarketBreadth(days = 66): Promise<MarketBreadthDay[]>
     .execute();
   if (error) throw new Error(`[km_market_breadth] ${error.message}`);
   return ((data ?? []) as MarketBreadthDay[]).reverse();
+}
+
+export async function fetchBreadthRoc(days = 66): Promise<BreadthRocDay[]> {
+  const { data, error } = await from('km_breadth_roc')
+    .select('*')
+    .order('trade_date', { ascending: false })
+    .limit(days)
+    .execute();
+  if (error) throw new Error(`[km_breadth_roc] ${error.message}`);
+  return ((data ?? []) as BreadthRocDay[]).reverse();
 }

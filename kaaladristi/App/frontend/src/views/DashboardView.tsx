@@ -4,7 +4,7 @@ import { cn, getRiskColor, getRiskHex } from '@/lib/utils';
 import { Card } from '@/components/ui';
 import {
   RiskGauge, FactorCard, RegimeBadge,
-  PanchangamCard, ActiveIndexScroll, MarketBreadthChart, SevenDayStrip,
+  PanchangamCard, ActiveIndexScroll, MarketBreadthChart, BreadthRocChart, SevenDayStrip,
 } from '@/components/domain';
 
 interface DashboardViewProps {
@@ -53,8 +53,11 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
           {/* 6-Day Outlook */}
           <SevenDayStrip selectedDate={report.date} />
 
-          {/* Market Breadth */}
+          {/* Market Breadth — EMA positioning */}
           <MarketBreadthChart />
+
+          {/* Breadth Momentum — ROC oscillator */}
+          <BreadthRocChart />
 
           {/* Factor Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

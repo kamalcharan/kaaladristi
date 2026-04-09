@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchPanchang, fetchMarketBreadth } from '@/services/panchang';
+import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc } from '@/services/panchang';
 import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
 import type { IndexCatalogItem } from '@/types';
@@ -24,6 +24,28 @@ export function useMarketBreadth(days = 66) {
     queryKey: ['market_breadth', days],
     queryFn: () => fetchMarketBreadth(days),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useBreadthRoc(days = 66) {
+  return useQuery({
+    queryKey: ['breadth_roc', days],
+    queryFn: () => fetchBreadthRoc(days),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useBreadthRocInsight() {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  return useQuery({
+    queryKey: ['breadth_roc_insight'],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/breadth-roc-insight`);
+      if (!res.ok) return { date: '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 60 * 60 * 1000,
+    retry: false,
   });
 }
 

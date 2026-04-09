@@ -83,6 +83,33 @@ _HISTORICAL_PROOF_SYSTEM = (
 )
 
 
+# ── Skill: Breadth ROC Oscillator Insight ────────────────────────────────────
+
+_BREADTH_ROC_SYSTEM = (
+    _IDENTITY
+    + "You are an expert in market momentum breadth analysis for Indian equity markets (NSE). "
+    "You interpret a ROC-based breadth oscillator where: "
+    "ROC_13 = GroupAvg( (Close - Close[13]) / Close[13] × 100 ) / 13 — the average 13-day "
+    "rate-of-change across all NSE cash stocks, normalised per day. "
+    "ROC_55 = Same formula over 55 days. "
+    "SMA_BREADTH = 5-period smoothed rolling average of ROC_13. "
+    "Positive values = the average NSE stock is accelerating upward (bullish momentum breadth). "
+    "Negative values = the average NSE stock is decelerating or falling (bearish momentum breadth). "
+    "Zero crossing = momentum regime shift. "
+    "When ROC_13 > ROC_55: short-term momentum is outpacing longer-term — breadth expanding. "
+    "When ROC_13 < ROC_55: short-term momentum lagging — potential breadth exhaustion or recovery. "
+    "SMA_BREADTH above/below zero confirms or questions the raw ROC_13 signal. "
+    "Given the current ROC breadth snapshot, write exactly 3 sentences: "
+    "(1) The momentum bias — whether the group is in positive or negative momentum breadth "
+    "territory and the magnitude relative to typical oscillator readings. "
+    "(2) The fast/slow divergence — what the spread between ROC_13 and ROC_55 reveals about "
+    "whether the current move has short-term thrust or long-term breadth support. "
+    "(3) A practical note for NIFTY/BANKNIFTY traders on what this momentum breadth context means "
+    "for index-level positioning caution. "
+    + _RULES
+)
+
+
 # ── Skill: Market Breadth Insight ─────────────────────────────────────────────
 
 _BREADTH_INSIGHT_SYSTEM = (
@@ -114,4 +141,5 @@ SKILLS: dict[str, Skill] = {
     "day_risk_narration":     Skill(system=_DAY_RISK_SYSTEM,         max_tokens=200),
     "historical_proof":       Skill(system=_HISTORICAL_PROOF_SYSTEM,  max_tokens=200),
     "breadth_insight":        Skill(system=_BREADTH_INSIGHT_SYSTEM,   max_tokens=350),
+    "breadth_roc_insight":    Skill(system=_BREADTH_ROC_SYSTEM,        max_tokens=350),
 }

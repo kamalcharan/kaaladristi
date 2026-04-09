@@ -251,6 +251,16 @@ export interface MarketBreadthDay {
   stock_count:   number | null;
 }
 
+// ── Breadth ROC Oscillator (from km_breadth_roc) ──
+
+export interface BreadthRocDay {
+  trade_date:  string;
+  roc_13:      number | null;   // avg 13-day ROC / 13 (normalised per day)
+  roc_55:      number | null;   // avg 55-day ROC / 55
+  sma_breadth: number | null;   // 5-period SMA of roc_13
+  stock_count: number | null;
+}
+
 // ── Index Catalog (from mv_index_catalog) ──
 
 export interface IndexCatalogItem {

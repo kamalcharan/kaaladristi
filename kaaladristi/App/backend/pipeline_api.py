@@ -125,6 +125,34 @@ def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
 
     if success > 0:
         _refresh_market_breadth()
+        _refresh_breadth_roc()
+
+
+def _refresh_breadth_roc():
+    """Recompute ROC breadth for missing dates after EOD data loads."""
+    try:
+        from compute_breadth_roc import load_closes, compute_roc, upsert
+        import psycopg2 as _pg
+        from lib.config import DATABASE_URL
+        if not DATABASE_URL:
+            return
+        conn = _pg.connect(DATABASE_URL)
+        try:
+            closes = load_closes(conn)
+            df     = compute_roc(closes)
+            with conn.cursor() as cur:
+                cur.execute('SELECT trade_date FROM km_breadth_roc')
+                existing = {str(r[0]) for r in cur.fetchall()}
+            df = df[[str(d) not in existing for d in df.index]]
+            if df.empty:
+                log.info('breadth_roc: no new dates to compute')
+                return
+            n = upsert(conn, df, dry_run=False)
+            log.info(f'breadth_roc: {n} dates upserted')
+        finally:
+            conn.close()
+    except Exception as e:
+        log.warning(f'breadth_roc refresh failed (non-fatal): {e}')
 
 
 def _refresh_market_breadth():
@@ -446,9 +474,16 @@ def scheduler_status():
 
 @app.post('/api/pipeline/refresh-breadth')
 def refresh_breadth(background_tasks: BackgroundTasks):
-    """Recompute market breadth scores for missing dates."""
+    """Recompute EMA market breadth scores for missing dates."""
     background_tasks.add_task(_refresh_market_breadth)
     return {'status': 'queued', 'message': 'Breadth recompute queued'}
+
+
+@app.post('/api/pipeline/refresh-breadth-roc')
+def refresh_breadth_roc(background_tasks: BackgroundTasks):
+    """Recompute ROC breadth oscillator for missing dates."""
+    background_tasks.add_task(_refresh_breadth_roc)
+    return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
 
 
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
@@ -551,6 +586,67 @@ def breadth_insight(date: str = None):
     )
 
     skill = _AI_SKILLS["breadth_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"date": target_date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/breadth-roc-insight')
+def breadth_roc_insight():
+    """Return an AI-generated 3-sentence ROC breadth oscillator insight (latest date)."""
+    if not _AI_ENABLED:
+        return {"date": None, "insight": None, "ai": False}
+
+    cache_key = "breadth_roc:latest"
+    if cache_key in _insight_cache:
+        return {"date": None, "insight": _insight_cache[cache_key], "ai": True}
+
+    try:
+        rows = db.select('km_breadth_roc', '*', order='trade_date.desc', limit=2)
+    except Exception as e:
+        log.error(f"Failed to fetch breadth_roc: {e}")
+        return {"date": None, "insight": None, "ai": False}
+
+    if not rows:
+        return {"date": None, "insight": None, "ai": False}
+
+    latest = rows[0]
+    prev   = rows[1] if len(rows) > 1 else None
+    target_date = str(latest.get('trade_date', ''))
+
+    roc13 = float(latest.get('roc_13') or 0)
+    roc55 = float(latest.get('roc_55') or 0)
+    sma   = float(latest.get('sma_breadth') or 0)
+
+    bias_13 = 'positive (bullish)' if roc13 > 0 else 'negative (bearish)'
+    bias_55 = 'positive' if roc55 > 0 else 'negative'
+    sma_dir = 'above zero (confirming)' if sma > 0 else 'below zero (diverging)'
+
+    spread = roc13 - roc55
+    spread_desc = (
+        'fast momentum outpacing long-term (breadth expanding)'
+        if spread > 0 else
+        'fast momentum lagging long-term (breadth narrowing)'
+    )
+
+    trend = 'stable'
+    if prev and prev.get('roc_13') is not None:
+        delta = roc13 - float(prev['roc_13'])
+        trend = 'strengthening' if delta > 0.0002 else ('weakening' if delta < -0.0002 else 'stable')
+
+    user_msg = (
+        f"ROC Breadth Oscillator snapshot as of {target_date}:\n"
+        f"ROC_13 (13-day momentum breadth): {roc13:+.4f} — {bias_13}\n"
+        f"ROC_55 (55-day momentum breadth): {roc55:+.4f} — {bias_55}\n"
+        f"SMA_BREADTH (5-day smoothed ROC_13): {sma:+.4f} — {sma_dir}\n"
+        f"Fast vs slow spread: {spread_desc}\n"
+        f"Momentum trend vs prior session: {trend}\n"
+        f"Stock universe: {latest.get('stock_count', 'N/A')} NSE equities\n"
+        f"\nProvide your ROC breadth oscillator insight."
+    )
+
+    skill = _AI_SKILLS["breadth_roc_insight"]
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
     if insight:
         _insight_cache[cache_key] = insight
