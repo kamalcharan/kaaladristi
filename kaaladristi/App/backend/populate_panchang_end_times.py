@@ -86,13 +86,13 @@ def _jd_to_ist(jd):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 def _is_next_day(jd_change, date_str):
-    """
-    True if jd_change falls on the NEXT calendar day in IST.
-    Midnight IST on date D = 18:30 UTC on date D  (IST = UTC+5:30).
-    """
-    d = datetime.strptime(date_str, '%Y-%m-%d')
-    jd_midnight_ist = swe.julday(d.year, d.month, d.day, 18.5)
-    return jd_change >= jd_midnight_ist
+    """True if the IST calendar date of jd_change is the day after date_str."""
+    year, month, day, utc_h = swe.revjul(jd_change)
+    h = int(utc_h)
+    m = int((utc_h - h) * 60)
+    s = int(((utc_h - h) * 60 - m) * 60)
+    ist_dt = datetime(year, month, day, h, m, s) + timedelta(hours=5, minutes=30)
+    return ist_dt.date() > datetime.strptime(date_str, '%Y-%m-%d').date()
 
 def _sunrise_to_jd(date_str, sunrise_ist):
     parts = sunrise_ist.split(':')
