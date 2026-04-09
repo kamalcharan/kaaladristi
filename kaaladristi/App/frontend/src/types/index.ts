@@ -198,6 +198,53 @@ export interface IndexStats {
   dayLow: number;
 }
 
+// ── Panchangam (from km_daily_panchang) ──
+
+export interface DailyPanchang {
+  id: number;
+  date: string;
+  sunrise_ist: string | null;
+  sunset_ist: string | null;
+  tithi_num: number;
+  tithi_name: string;
+  tithi_base_name: string | null;
+  paksha: string;
+  tithi_group: string | null;
+  tithi_lord: string | null;
+  nakshatra_num: number;
+  nakshatra_name: string;
+  nakshatra_lord: string | null;
+  nakshatra_pada: number | null;
+  yoga_num: number | null;
+  yoga_name: string | null;
+  karana_num: number | null;
+  karana_name: string | null;
+  vara: string;
+  vara_lord: string;
+  dlnl_match: boolean | null;
+  sun_sign: number | null;
+  sun_sign_name: string | null;
+  moon_sign: number | null;
+  moon_sign_name: string | null;
+  is_sankranti: boolean | null;
+  sankranti_from: string | null;
+  sankranti_to: string | null;
+  hemisphere_event: string | null;
+  is_purnima: boolean | null;
+  is_amavasya: boolean | null;
+  is_ekadashi: boolean | null;
+}
+
+// ── Market Breadth (from km_market_breadth) ──
+
+export interface MarketBreadthDay {
+  trade_date: string;
+  advances: number;
+  declines: number;
+  unchanged: number;
+  advance_pct: number;
+}
+
 // ── Index Catalog (from mv_index_catalog) ──
 
 export interface IndexCatalogItem {

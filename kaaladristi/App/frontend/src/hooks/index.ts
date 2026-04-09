@@ -19,3 +19,4 @@ export {
 
 export { useIndexChart } from './useEodData';
 export { useIndicatorChart } from './useIndicatorData';
+export { usePanchang, useMarketBreadth, useActiveIndexes } from './useDashboardExtras';
