@@ -1,5 +1,5 @@
 import { useAppStore } from '@/stores/appStore';
-import { useDayRisk, useWeekRisk, useHistoricalProofs } from '@/hooks';
+import { useDayRisk, useHistoricalProofs } from '@/hooks';
 import DashboardView from './DashboardView';
 import { SkeletonGauge, SkeletonCard } from '@/components/ui';
 import { AlertTriangle } from 'lucide-react';
@@ -7,9 +7,8 @@ import { AlertTriangle } from 'lucide-react';
 export default function DashboardPage() {
   const { selectedSymbol, selectedDate } = useAppStore();
 
-  const dayRisk  = useDayRisk(selectedDate, selectedSymbol);
-  const weekRisk = useWeekRisk(selectedDate, selectedSymbol);
-  const proofs   = useHistoricalProofs(selectedSymbol);
+  const dayRisk = useDayRisk(selectedDate, selectedSymbol);
+  const proofs  = useHistoricalProofs(selectedSymbol);
 
   // ── Loading ──
   if (dayRisk.isLoading) {
@@ -68,7 +67,6 @@ export default function DashboardPage() {
     <DashboardView
       report={dayRisk.data}
       proofs={proofs.data ?? []}
-      weekData={weekRisk.data ?? []}
     />
   );
 }

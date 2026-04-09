@@ -1,7 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchPanchang, fetchMarketBreadth } from '@/services/panchang';
+import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
 import type { IndexCatalogItem } from '@/types';
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 export function usePanchang(date: string) {
   return useQuery({
@@ -32,6 +39,18 @@ export function usePanchangInsight(date: string) {
     staleTime: 24 * 60 * 60 * 1000, // 24h — daily insight is stable
     enabled: !!date,
     retry: false,
+  });
+}
+
+/** Inferences active across the next 6 trading days (from tomorrow, Mon–Fri only). */
+export function useOutlookInferences(fromDate: string) {
+  const start = shiftDate(fromDate, 1);
+  const end   = shiftDate(fromDate, 14); // 14 calendar days comfortably covers 6 trading days
+  return useQuery({
+    queryKey: ['outlook_inferences', fromDate],
+    queryFn: () => fetchInferencesForRange(start, end),
+    staleTime: 30 * 60 * 1000,
+    enabled: !!fromDate,
   });
 }
 

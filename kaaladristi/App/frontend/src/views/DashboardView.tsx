@@ -1,5 +1,5 @@
 import { Shield, Activity, Zap, AlertTriangle, ChevronRight, CheckCircle2 } from 'lucide-react';
-import type { DayRiskReport, HistoricalProof, WeekDay } from '@/types';
+import type { DayRiskReport, HistoricalProof } from '@/types';
 import { cn, getRiskColor, getRiskHex } from '@/lib/utils';
 import { Card } from '@/components/ui';
 import {
@@ -10,10 +10,9 @@ import {
 interface DashboardViewProps {
   report: DayRiskReport;
   proofs: HistoricalProof[];
-  weekData: WeekDay[];
 }
 
-export default function DashboardView({ report, proofs, weekData }: DashboardViewProps) {
+export default function DashboardView({ report, proofs }: DashboardViewProps) {
   return (
     <div className="animate-fade-in">
       {/* Header */}
@@ -51,8 +50,8 @@ export default function DashboardView({ report, proofs, weekData }: DashboardVie
           {/* Active Indexes */}
           <ActiveIndexScroll />
 
-          {/* 7-Day Bird's Eye */}
-          <SevenDayStrip weekData={weekData} selectedDate={report.date} />
+          {/* 6-Day Outlook */}
+          <SevenDayStrip selectedDate={report.date} />
 
           {/* Market Breadth */}
           <MarketBreadthChart days={60} />
