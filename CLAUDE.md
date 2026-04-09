@@ -141,8 +141,8 @@ Working through a 7-step EOD data pipeline build:
 ## SQL Migration Convention
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
-Run them via `psql` or the `apply_migration_*.py` helpers.
-Next migration number: **018**.
+Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
+Next migration number: **019**.
 
 ---
 
