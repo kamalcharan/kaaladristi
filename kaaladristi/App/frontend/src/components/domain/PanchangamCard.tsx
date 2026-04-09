@@ -36,12 +36,10 @@ function timeUntil(endSec: number, nowSec: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-// If end time (e.g. 08:47) is earlier than sunrise (e.g. 06:13) it means
-// the element crosses midnight — treat it as next day (+24h).
-function resolveEndSec(endTime: string, sunriseSec: number): { sec: number; nextDay: boolean } {
+function resolveEndSec(endTime: string, nextDay: boolean): { sec: number; nextDay: boolean } {
   const sec = toSeconds(endTime);
-  if (sec < sunriseSec) return { sec: sec + 86400, nextDay: true };
-  return { sec, nextDay: false };
+  // If the DB flagged this as next-day, add 24h so isPast is never true today
+  return { sec: nextDay ? sec + 86400 : sec, nextDay };
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -58,14 +56,14 @@ function Row({
   label,
   value,
   endTime,
+  endNextDay,
   nowSec,
-  sunriseSec,
 }: {
   label: string;
   value: string | null | undefined;
   endTime?: string | null;
+  endNextDay?: boolean | null;
   nowSec?: number;
-  sunriseSec?: number;
 }) {
   if (!value) return null;
 
@@ -74,8 +72,8 @@ function Row({
   let nextDay = false;
   let displayEnd = '';
 
-  if (endTime && nowSec !== undefined && sunriseSec !== undefined) {
-    const resolved = resolveEndSec(endTime, sunriseSec);
+  if (endTime && nowSec !== undefined) {
+    const resolved = resolveEndSec(endTime, !!endNextDay);
     nextDay = resolved.nextDay;
     isPast = resolved.sec <= nowSec;
     displayEnd = endTime.slice(0, 5) + (nextDay ? ' +1' : '');
@@ -106,7 +104,6 @@ function Row({
 
 function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) {
   const nowSec = toSeconds(istTime);
-  const sunriseSec = p.sunrise_ist ? toSeconds(p.sunrise_ist) : 21600; // fallback 06:00
   const paksha = p.paksha === 'shukla' ? 'Shukla' : 'Krishna';
 
   const progress = p.sunrise_ist && p.sunset_ist
@@ -166,15 +163,15 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
         label="Tithi"
         value={`${p.tithi_num}. ${p.tithi_name}${p.tithi_lord ? ` · ${p.tithi_lord}` : ''}`}
         endTime={p.tithi_end_ist}
+        endNextDay={p.tithi_end_next_day}
         nowSec={nowSec}
-        sunriseSec={sunriseSec}
       />
       <Row
         label="Nakshatra"
         value={`${p.nakshatra_name}${p.nakshatra_pada ? ` Pada ${p.nakshatra_pada}` : ''}${p.nakshatra_lord ? ` · ${p.nakshatra_lord}` : ''}`}
         endTime={p.nakshatra_end_ist}
+        endNextDay={p.nakshatra_end_next_day}
         nowSec={nowSec}
-        sunriseSec={sunriseSec}
       />
 
       {specialEvents.length > 0 && (

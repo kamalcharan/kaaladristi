@@ -233,9 +233,11 @@ export interface DailyPanchang {
   is_purnima: boolean | null;
   is_amavasya: boolean | null;
   is_ekadashi: boolean | null;
-  // Change times — populated by pipeline when astronomically computed
+  // Change times — populated by populate_panchang_end_times.py
   tithi_end_ist: string | null;
+  tithi_end_next_day: boolean | null;
   nakshatra_end_ist: string | null;
+  nakshatra_end_next_day: boolean | null;
 }
 
 // ── Market Breadth (from km_market_breadth) ──
