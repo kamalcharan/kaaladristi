@@ -53,7 +53,7 @@ export default function ProfileSetup() {
     <div className="min-h-screen bg-kd-bg text-[var(--text-primary)] flex items-center justify-center px-4">
       <div className="w-full max-w-[440px]">
         {/* Header */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-6 sm:mb-10">
           <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-br from-accent-indigo to-accent-violet rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-indigo-500/20">
             &#x27E1;
           </div>
@@ -64,7 +64,7 @@ export default function ProfileSetup() {
         </div>
 
         {/* Card */}
-        <div className="bg-kd-card border border-kd-border rounded-2xl p-8">
+        <div className="bg-kd-surface border border-kd-border rounded-2xl p-5 sm:p-8">
           {error && (
             <div className="mb-6 px-4 py-3 bg-risk-red/10 border border-risk-red/30 rounded-xl text-sm text-risk-red">
               {error}
