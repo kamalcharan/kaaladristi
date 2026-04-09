@@ -19,10 +19,13 @@ export function usePanchang(date: string) {
   });
 }
 
-export function useMarketBreadth(days = 60) {
+export function useMarketBreadth(
+  days = 90,
+  resolution: 'daily' | 'weekly' | 'monthly' = 'daily',
+) {
   return useQuery({
-    queryKey: ['market_breadth', days],
-    queryFn: () => fetchMarketBreadth(days),
+    queryKey: ['market_breadth', days, resolution],
+    queryFn: () => fetchMarketBreadth(days, resolution),
     staleTime: 5 * 60 * 1000,
   });
 }

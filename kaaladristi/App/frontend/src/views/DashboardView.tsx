@@ -54,7 +54,7 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
           <SevenDayStrip selectedDate={report.date} />
 
           {/* Market Breadth */}
-          <MarketBreadthChart days={60} />
+          <MarketBreadthChart />
 
           {/* Factor Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

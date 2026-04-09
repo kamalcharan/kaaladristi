@@ -123,6 +123,31 @@ def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
     })
     log.info(f'Job {job_id}: completed — {success} success, {failed} failed')
 
+    if success > 0:
+        _refresh_market_breadth()
+
+
+def _refresh_market_breadth():
+    """
+    Refresh km_market_breadth materialized view after EOD data loads.
+    Uses CONCURRENTLY so reads are never blocked.
+    Safe to call from background threads.
+    """
+    try:
+        import psycopg2
+        from lib.config import DATABASE_URL
+        if not DATABASE_URL:
+            log.warning('breadth refresh skipped — DATABASE_URL not set')
+            return
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+        with conn.cursor() as cur:
+            cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY km_market_breadth')
+        conn.close()
+        log.info('km_market_breadth refreshed')
+    except Exception as e:
+        log.warning(f'km_market_breadth refresh failed (non-fatal): {e}')
+
 
 def _scheduled_daily_run():
     """Called by APScheduler at 6 PM IST Mon-Fri."""
@@ -407,6 +432,16 @@ def scheduler_status():
         'next_run': job.next_run_time.isoformat() if job and job.next_run_time else None,
         'trigger': '6:00 PM IST (Mon-Fri)',
     }
+
+
+@app.post('/api/pipeline/refresh-breadth')
+def refresh_breadth():
+    """Manually refresh km_market_breadth materialized view."""
+    try:
+        _refresh_market_breadth()
+        return {'status': 'ok', 'message': 'km_market_breadth refreshed'}
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
