@@ -196,9 +196,8 @@ function PanchangContent({ p, next, istTime }: { p: DailyPanchang; next: DailyPa
 // ── Card ──────────────────────────────────────────────────────────────────────
 
 function nextDateStr(date: string): string {
-  const d = new Date(date + 'T00:00:00');
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 export default function PanchangamCard({ date }: { date: string }) {

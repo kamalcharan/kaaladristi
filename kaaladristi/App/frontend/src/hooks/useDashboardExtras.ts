@@ -5,9 +5,9 @@ import { from } from '@/services/postgrest';
 import type { IndexCatalogItem } from '@/types';
 
 function shiftDate(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
 }
 
 export function usePanchang(date: string) {
