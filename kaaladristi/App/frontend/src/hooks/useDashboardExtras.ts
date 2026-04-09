@@ -7,7 +7,7 @@ export function usePanchang(date: string) {
   return useQuery({
     queryKey: ['panchang', date],
     queryFn: () => fetchPanchang(date),
-    staleTime: 60 * 60 * 1000, // panchang is daily — cache 1h
+    staleTime: 5 * 60 * 1000, // 5 min — allows DB updates to reflect quickly
     enabled: !!date,
   });
 }
