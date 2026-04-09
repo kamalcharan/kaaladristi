@@ -14,7 +14,8 @@ function StarField() {
     if (!el) return;
     for (let i = 0; i < 200; i++) {
       const star = document.createElement('div');
-      star.className = 'absolute w-[2px] h-[2px] bg-white rounded-full opacity-0';
+      star.className = 'absolute w-[2px] h-[2px] rounded-full opacity-0';
+      star.style.backgroundColor = 'var(--text-primary)';
       star.style.left = `${Math.random() * 100}%`;
       star.style.top = `${Math.random() * 100}%`;
       const dur = 2 + Math.random() * 4;
@@ -51,7 +52,7 @@ function MiniGauge({ score }: { score: number }) {
   return (
     <div className="w-14 h-14 relative">
       <svg width="56" height="56" viewBox="0 0 56 56" className="-rotate-90">
-        <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="6" />
+        <circle cx="28" cy="28" r="22" fill="none" stroke="color-mix(in srgb, var(--text-primary) 10%, transparent)" strokeWidth="6" />
         <circle
           cx="28" cy="28" r="22" fill="none"
           stroke={color} strokeWidth="6" strokeLinecap="round"
@@ -136,7 +137,7 @@ export default function LandingPage() {
       <div className="relative z-10 min-h-screen flex flex-col lg:flex-row">
 
         {/* ── Left: Brand Panel ── */}
-        <div className="flex-1 flex flex-col justify-center px-10 lg:px-20 py-16 relative">
+        <div className="flex-1 flex flex-col justify-center px-6 sm:px-10 lg:px-20 py-10 sm:py-16 relative">
           <nav className="absolute top-10 left-10 lg:left-20 right-10 lg:right-20 flex justify-between items-center">
             <div className="flex items-center gap-3">
               <AnimatedLogo />
@@ -155,7 +156,7 @@ export default function LandingPage() {
               Pre-Market Intelligence for Indian Indices
             </div>
 
-            <h1 className="font-display text-[44px] lg:text-[56px] font-semibold leading-[1.15] mb-6 tracking-tight">
+            <h1 className="font-display text-[28px] sm:text-[44px] lg:text-[56px] font-semibold leading-[1.15] mb-6 tracking-tight">
               Know Market Risk<br />
               <span className="bg-gradient-to-r from-accent-indigo via-accent-violet to-accent-cyan bg-clip-text text-transparent">
                 Before It Happens
@@ -196,7 +197,7 @@ export default function LandingPage() {
         </div>
 
         {/* ── Right: Auth Panel ── */}
-        <div className="w-full lg:w-[480px] bg-kd-card backdrop-blur-xl lg:border-l border-t lg:border-t-0 border-kd-border flex flex-col justify-center px-10 lg:px-[60px] py-16">
+        <div className="w-full lg:w-[480px] bg-kd-surface backdrop-blur-xl lg:border-l border-t lg:border-t-0 border-kd-border flex flex-col justify-center px-6 sm:px-10 lg:px-[60px] py-10 sm:py-16">
           <div className="max-w-[360px] mx-auto w-full">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-semibold mb-2">
@@ -213,7 +214,7 @@ export default function LandingPage() {
                 onClick={() => { setAuthMode('login'); setError(''); setSuccess(''); }}
                 className={`flex-1 py-3 rounded-[10px] text-sm font-medium transition-all ${
                   authMode === 'login'
-                    ? 'bg-kd-card text-[var(--text-primary)] shadow-lg'
+                    ? 'bg-kd-surface text-[var(--text-primary)] shadow-lg'
                     : 'text-secondary hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -223,7 +224,7 @@ export default function LandingPage() {
                 onClick={() => { setAuthMode('register'); setError(''); setSuccess(''); }}
                 className={`flex-1 py-3 rounded-[10px] text-sm font-medium transition-all ${
                   authMode === 'register'
-                    ? 'bg-kd-card text-[var(--text-primary)] shadow-lg'
+                    ? 'bg-kd-surface text-[var(--text-primary)] shadow-lg'
                     : 'text-secondary hover:text-[var(--text-primary)]'
                 }`}
               >
