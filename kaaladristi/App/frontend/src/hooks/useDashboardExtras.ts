@@ -19,14 +19,25 @@ export function usePanchang(date: string) {
   });
 }
 
-export function useMarketBreadth(
-  days = 90,
-  resolution: 'daily' | 'weekly' | 'monthly' = 'daily',
-) {
+export function useMarketBreadth(days = 66) {
   return useQuery({
-    queryKey: ['market_breadth', days, resolution],
-    queryFn: () => fetchMarketBreadth(days, resolution),
+    queryKey: ['market_breadth', days],
+    queryFn: () => fetchMarketBreadth(days),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useBreadthInsight() {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  return useQuery({
+    queryKey: ['breadth_insight'],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/breadth-insight`);
+      if (!res.ok) return { date: '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 60 * 60 * 1000, // 1h — breadth insight is stable during the trading day
+    retry: false,
   });
 }
 

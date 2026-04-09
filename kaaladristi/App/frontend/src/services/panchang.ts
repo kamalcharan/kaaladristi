@@ -11,14 +11,12 @@ export async function fetchPanchang(date: string): Promise<DailyPanchang | null>
   return data as DailyPanchang | null;
 }
 
-export async function fetchMarketBreadth(
-  days = 90,
-  resolution: 'daily' | 'weekly' | 'monthly' = 'daily',
-): Promise<MarketBreadthDay[]> {
-  const { data, error } = await rpc('get_market_breadth', {
-    p_days:       days,
-    p_resolution: resolution,
-  });
-  if (error) throw new Error(`[get_market_breadth] ${error.message}`);
-  return (data ?? []) as MarketBreadthDay[];
+export async function fetchMarketBreadth(days = 66): Promise<MarketBreadthDay[]> {
+  const { data, error } = await from('km_market_breadth')
+    .select('*')
+    .order('trade_date', { ascending: false })
+    .limit(days)
+    .execute();
+  if (error) throw new Error(`[km_market_breadth] ${error.message}`);
+  return ((data ?? []) as MarketBreadthDay[]).reverse();
 }

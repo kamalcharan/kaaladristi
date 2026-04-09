@@ -1,176 +1,278 @@
 import { useState } from 'react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid,
+  AreaChart, Area, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
-import { useMarketBreadth } from '@/hooks';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { useMarketBreadth, useBreadthInsight } from '@/hooks';
+import { Loader2, AlertCircle, TrendingUp, TrendingDown, Minus, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { MarketBreadthDay } from '@/types';
 
-// ── Range config ──────────────────────────────────────────────────────────────
+// ── Config ────────────────────────────────────────────────────────────────────
 
-const RANGES = [
-  { label: '1M',  days: 30,   resolution: 'daily'   },
-  { label: '3M',  days: 90,   resolution: 'daily'   },
-  { label: '6M',  days: 180,  resolution: 'daily'   },
-  { label: '1Y',  days: 365,  resolution: 'daily'   },
-  { label: '5Y',  days: 1825, resolution: 'weekly'  },
-  { label: 'MAX', days: 0,    resolution: 'monthly' },
+const PERIODS = [
+  { label: '22D', days: 22 },
+  { label: '44D', days: 44 },
+  { label: '66D', days: 66 },
 ] as const;
+type PeriodLabel = typeof PERIODS[number]['label'];
 
-type RangeLabel = typeof RANGES[number]['label'];
+const GREED_THRESHOLD = 55;
+const FEAR_THRESHOLD  = 35;
 
-// ── Tick formatter ────────────────────────────────────────────────────────────
+function regime(score: number): { label: string; color: string; bg: string; border: string } {
+  if (score > GREED_THRESHOLD) return { label: 'Greed',   color: 'text-risk-red',   bg: 'bg-risk-red/10',   border: 'border-risk-red/40'   };
+  if (score < FEAR_THRESHOLD)  return { label: 'Fear',    color: 'text-risk-green', bg: 'bg-risk-green/10', border: 'border-risk-green/40' };
+  return                               { label: 'Neutral', color: 'text-risk-amber', bg: 'bg-risk-amber/10', border: 'border-risk-amber/40' };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-function fmtTick(d: string, resolution: string): string {
-  const [y, m, day] = d.split('-');
-  if (resolution === 'monthly') return `${MONTHS[+m - 1]} ${y.slice(2)}`;
-  if (resolution === 'weekly')  return `${+day} ${MONTHS[+m - 1]}`;
+function fmtDate(d: string): string {
+  const [, m, day] = d.split('-');
   return `${+day} ${MONTHS[+m - 1]}`;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+function fmtPct(v: number | null): string {
+  return v == null ? '—' : `${v.toFixed(1)}%`;
+}
+
+// ── EMA stat pill ─────────────────────────────────────────────────────────────
+
+function EmaStat({ label, value, prev }: { label: string; value: number | null; prev: number | null }) {
+  const up   = value != null && prev != null && value > prev;
+  const down = value != null && prev != null && value < prev;
+  return (
+    <div className="text-center">
+      <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">{label}</div>
+      <div className={cn('text-[12px] font-bold mono flex items-center gap-0.5',
+        up ? 'text-risk-green' : down ? 'text-risk-red' : 'text-[var(--text-primary)]'
+      )}>
+        {fmtPct(value)}
+        {up   && <TrendingUp   className="w-2.5 h-2.5" />}
+        {down && <TrendingDown className="w-2.5 h-2.5" />}
+        {!up && !down && <Minus className="w-2.5 h-2.5 text-muted" />}
+      </div>
+    </div>
+  );
+}
+
+// ── Custom tooltip ────────────────────────────────────────────────────────────
+
+function BreadthTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload as MarketBreadthDay;
+  if (!d) return null;
+  const r = regime(d.breadth_score ?? 0);
+  return (
+    <div className="glass-card rounded-xl p-3 text-[11px] border border-kd-border min-w-[160px]">
+      <div className="font-bold text-[var(--text-primary)] mb-2">{fmtDate(d.trade_date)}</div>
+      <div className="flex justify-between gap-4 mb-1">
+        <span className="text-muted">Score</span>
+        <span className={cn('font-bold mono', r.color)}>{d.breadth_score?.toFixed(1)} ({r.label})</span>
+      </div>
+      <div className="flex justify-between gap-4 mb-0.5">
+        <span className="text-muted">Above 20 EMA</span>
+        <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_20)}</span>
+      </div>
+      <div className="flex justify-between gap-4 mb-0.5">
+        <span className="text-muted">Above 50 EMA</span>
+        <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_50)}</span>
+      </div>
+      <div className="flex justify-between gap-4">
+        <span className="text-muted">Above 150 EMA</span>
+        <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_150)}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function MarketBreadthChart() {
-  const [range, setRange] = useState<RangeLabel>('3M');
-  const cfg = RANGES.find(r => r.label === range)!;
-  const resolution = cfg.resolution as 'daily' | 'weekly' | 'monthly';
+  const [period, setPeriod] = useState<PeriodLabel>('66D');
+  const days = PERIODS.find(p => p.label === period)!.days;
 
-  const { data = [], isLoading, isError } = useMarketBreadth(cfg.days, resolution);
+  const { data = [], isLoading, isError } = useMarketBreadth(days);
+  const { data: aiData } = useBreadthInsight();
 
   const latest = data[data.length - 1];
+  const prev   = data[data.length - 2];
+  const r      = latest?.breadth_score != null ? regime(latest.breadth_score) : null;
 
   return (
     <div className="glass-card rounded-2xl p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Market Breadth</h3>
-          <p className="text-[10px] text-muted mt-0.5">NSE equity advances vs declines</p>
+          {latest?.stock_count != null && (
+            <p className="text-[10px] text-muted mt-0.5">
+              {latest.stock_count.toLocaleString()}+ stocks analyzed
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Latest A/D */}
-          {latest && (
-            <div className="text-right">
-              <div className="text-[10px] text-muted">Latest A/D</div>
-              <div className="text-[13px] font-bold mono">
-                <span className="text-risk-green">{latest.advances}</span>
-                <span className="text-muted mx-1">/</span>
-                <span className="text-risk-red">{latest.declines}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Range selector */}
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Period buttons */}
           <div className="flex items-center gap-0.5 bg-kd-elevated rounded-lg p-0.5">
-            {RANGES.map(r => (
+            {PERIODS.map(p => (
               <button
-                key={r.label}
-                onClick={() => setRange(r.label)}
+                key={p.label}
+                onClick={() => setPeriod(p.label)}
                 className={cn(
-                  'px-2 py-1 rounded-md text-[10px] font-bold transition-all',
-                  range === r.label
+                  'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
+                  period === p.label
                     ? 'bg-accent-indigo text-white'
                     : 'text-muted hover:text-[var(--text-secondary)]',
                 )}
               >
-                {r.label}
+                {p.label}
               </button>
             ))}
           </div>
+
+          {/* EMA stats */}
+          <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
+            <EmaStat label="20 EMA"  value={latest?.pct_above_20  ?? null} prev={prev?.pct_above_20  ?? null} />
+            <EmaStat label="50 EMA"  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
+            <EmaStat label="150 EMA" value={latest?.pct_above_150 ?? null} prev={prev?.pct_above_150 ?? null} />
+          </div>
+
+          {/* Regime badge */}
+          {r && (
+            <span className={cn('px-2.5 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-wider', r.bg, r.color, r.border)}>
+              {r.label}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Chart */}
+      {/* ── Chart title + current score ── */}
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className="text-[11px] font-bold text-[var(--text-secondary)]">Breadth Score Trend</div>
+          <div className="text-[9px] text-muted">50% Above 20 EMA · 30% Above 50 EMA · 20% Above 150 EMA</div>
+        </div>
+        {latest?.breadth_score != null && (
+          <div className="text-right">
+            <div className={cn('text-[22px] font-bold mono leading-none', r?.color)}>
+              {latest.breadth_score.toFixed(1)}
+            </div>
+            <div className="text-[9px] text-muted">Current Score</div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Chart ── */}
       {isLoading ? (
-        <div className="flex items-center justify-center h-[180px] gap-2">
+        <div className="flex items-center justify-center h-[200px] gap-2">
           <Loader2 className="w-4 h-4 text-accent-indigo animate-spin" />
           <span className="text-sm text-muted">Loading...</span>
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center justify-center h-[180px] gap-2">
+        <div className="flex flex-col items-center justify-center h-[200px] gap-2">
           <AlertCircle className="w-5 h-5 text-risk-red" />
           <p className="text-xs text-muted">Failed to load breadth data</p>
         </div>
       ) : data.length === 0 ? (
-        <div className="flex items-center justify-center h-[180px]">
-          <p className="text-xs text-muted">No breadth data available — run migration 020</p>
+        <div className="flex items-center justify-center h-[200px]">
+          <p className="text-xs text-muted text-center">
+            No breadth data — run migration 020, then<br />
+            <code className="text-accent-indigo">python compute_market_breadth.py</code>
+          </p>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <ComposedChart data={data} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--kd-border)" vertical={false} />
+          <AreaChart data={data} margin={{ top: 4, right: 40, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id="breadthGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0.05} />
+              </linearGradient>
+            </defs>
+
+            {/* Regime background zones */}
+            <ReferenceArea y1={GREED_THRESHOLD} y2={100} fill="#ef4444" fillOpacity={0.06} />
+            <ReferenceArea y1={FEAR_THRESHOLD}  y2={GREED_THRESHOLD} fill="#f59e0b" fillOpacity={0.06} />
+            <ReferenceArea y1={0}               y2={FEAR_THRESHOLD}  fill="#10b981" fillOpacity={0.06} />
+
             <XAxis
               dataKey="trade_date"
-              tickFormatter={d => fmtTick(d, resolution)}
+              tickFormatter={fmtDate}
               tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
-              yAxisId="count"
-              tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
-              tickLine={false}
-              axisLine={false}
-            />
-            <YAxis
-              yAxisId="pct"
-              orientation="right"
               domain={[0, 100]}
               tick={{ fontSize: 9, fill: 'var(--text-muted)' }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={v => `${v}%`}
             />
-            <Tooltip
-              contentStyle={{
-                background: 'var(--kd-surface)',
-                border: '1px solid var(--kd-border)',
-                borderRadius: 10,
-                fontSize: 11,
-                color: 'var(--text-primary)',
-              }}
-              labelFormatter={d => fmtTick(d, resolution)}
-              formatter={(value: number, name: string) => {
-                if (name === 'advance_pct') return [`${value}%`, 'Advance %'];
-                if (name === 'advances')    return [value.toLocaleString(), 'Advances'];
-                if (name === 'declines')    return [value.toLocaleString(), 'Declines'];
-                return [value, name];
-              }}
+
+            {/* Threshold reference lines */}
+            <ReferenceLine
+              y={GREED_THRESHOLD}
+              stroke="#ef4444"
+              strokeDasharray="4 2"
+              strokeOpacity={0.6}
+              label={{ value: `Greed ${GREED_THRESHOLD}`, position: 'right', fontSize: 9, fill: '#ef4444' }}
             />
-            <Bar yAxisId="count" dataKey="advances" fill="#10b981" opacity={0.75} radius={[2,2,0,0]} maxBarSize={12} />
-            <Bar yAxisId="count" dataKey="declines" fill="#ef4444" opacity={0.75} radius={[2,2,0,0]} maxBarSize={12} />
-            <Line
-              yAxisId="pct"
-              dataKey="advance_pct"
+            <ReferenceLine
+              y={FEAR_THRESHOLD}
+              stroke="#10b981"
+              strokeDasharray="4 2"
+              strokeOpacity={0.6}
+              label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: '#10b981' }}
+            />
+
+            <Tooltip content={<BreadthTooltip />} />
+
+            <Area
+              dataKey="breadth_score"
               stroke="#6366f1"
               strokeWidth={1.5}
+              fill="url(#breadthGrad)"
               dot={false}
-              strokeDasharray="4 2"
+              activeDot={{ r: 3, fill: '#6366f1' }}
             />
-          </ComposedChart>
+          </AreaChart>
         </ResponsiveContainer>
       )}
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 mt-2 justify-center">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-[#10b981] opacity-75" />
-          <span className="text-[9px] text-muted">Advances</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-[#ef4444] opacity-75" />
-          <span className="text-[9px] text-muted">Declines</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-5 h-0 border-t-2 border-dashed border-[#6366f1]" />
-          <span className="text-[9px] text-muted">Advance %</span>
-        </div>
+      {/* ── Legend ── */}
+      <div className="flex items-center justify-center gap-5 mt-2">
+        {[
+          { color: 'bg-risk-red',   label: `Greed (>${GREED_THRESHOLD})` },
+          { color: 'bg-risk-amber', label: `Neutral (${FEAR_THRESHOLD}-${GREED_THRESHOLD})` },
+          { color: 'bg-risk-green', label: `Fear (<${FEAR_THRESHOLD})` },
+        ].map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <span className={cn('w-2 h-2 rounded-full', color)} />
+            <span className="text-[9px] text-muted">{label}</span>
+          </div>
+        ))}
       </div>
+
+      {/* ── AI Breadth Insight ── */}
+      {aiData?.insight && (
+        <div className="mt-3 pt-3 border-t border-kd-border">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="w-3 h-3 text-accent-indigo" />
+            <span className="text-[9px] font-bold uppercase tracking-wider text-accent-indigo">
+              AI Breadth Analysis
+            </span>
+          </div>
+          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+            {aiData.insight}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

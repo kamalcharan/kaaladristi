@@ -129,24 +129,34 @@ def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
 
 def _refresh_market_breadth():
     """
-    Refresh km_market_breadth materialized view after EOD data loads.
-    Uses CONCURRENTLY so reads are never blocked.
-    Safe to call from background threads.
+    Recompute market breadth scores for any missing dates after EOD data loads.
+    Runs compute_market_breadth.py in-process (missing dates only — fast daily incremental).
     """
     try:
-        import psycopg2
+        from compute_market_breadth import load_closes, compute_breadth, upsert
+        import psycopg2 as _pg
         from lib.config import DATABASE_URL
         if not DATABASE_URL:
             log.warning('breadth refresh skipped — DATABASE_URL not set')
             return
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-        with conn.cursor() as cur:
-            cur.execute('REFRESH MATERIALIZED VIEW CONCURRENTLY km_market_breadth')
-        conn.close()
-        log.info('km_market_breadth refreshed')
+        conn = _pg.connect(DATABASE_URL)
+        try:
+            closes = load_closes(conn)
+            df     = compute_breadth(closes)
+            # Missing dates only
+            with conn.cursor() as cur:
+                cur.execute('SELECT trade_date FROM km_market_breadth')
+                existing = {str(r[0]) for r in cur.fetchall()}
+            df = df[[str(d) not in existing for d in df.index]]
+            if df.empty:
+                log.info('breadth: no new dates to compute')
+                return
+            n = upsert(conn, df, dry_run=False)
+            log.info(f'breadth: {n} dates upserted')
+        finally:
+            conn.close()
     except Exception as e:
-        log.warning(f'km_market_breadth refresh failed (non-fatal): {e}')
+        log.warning(f'breadth refresh failed (non-fatal): {e}')
 
 
 def _scheduled_daily_run():
@@ -435,13 +445,10 @@ def scheduler_status():
 
 
 @app.post('/api/pipeline/refresh-breadth')
-def refresh_breadth():
-    """Manually refresh km_market_breadth materialized view."""
-    try:
-        _refresh_market_breadth()
-        return {'status': 'ok', 'message': 'km_market_breadth refreshed'}
-    except Exception as e:
-        raise HTTPException(500, str(e))
+def refresh_breadth(background_tasks: BackgroundTasks):
+    """Recompute market breadth scores for missing dates."""
+    background_tasks.add_task(_refresh_market_breadth)
+    return {'status': 'queued', 'message': 'Breadth recompute queued'}
 
 
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
@@ -493,6 +500,61 @@ def panchang_insight(date: str):
     if insight:
         _insight_cache[date] = insight
     return {"date": date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/breadth-insight')
+def breadth_insight(date: str = None):
+    """Return an AI-generated 3-sentence market breadth insight for a given date (default: latest)."""
+    if not _AI_ENABLED:
+        return {"date": date, "insight": None, "ai": False}
+
+    cache_key = f"breadth:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"date": date, "insight": _insight_cache[cache_key], "ai": True}
+
+    # Fetch breadth row from DB
+    try:
+        if date:
+            rows = db.select('km_market_breadth', '*', filters={'trade_date': date}, limit=1)
+        else:
+            rows = db.select('km_market_breadth', '*', order='trade_date.desc', limit=2)
+    except Exception as e:
+        log.error(f"Failed to fetch market breadth: {e}")
+        return {"date": date, "insight": None, "ai": False}
+
+    if not rows:
+        return {"date": date, "insight": None, "ai": False}
+
+    latest = rows[0]
+    prev   = rows[1] if len(rows) > 1 else None
+    target_date = str(latest.get('trade_date', date or ''))
+
+    # Regime label
+    score = float(latest.get('breadth_score') or 0)
+    regime = 'Greed' if score > 55 else ('Fear' if score < 35 else 'Neutral')
+
+    # Trend direction
+    trend = 'stable'
+    if prev and prev.get('breadth_score') is not None:
+        delta = score - float(prev['breadth_score'])
+        trend = 'improving' if delta > 1.5 else ('deteriorating' if delta < -1.5 else 'stable')
+
+    user_msg = (
+        f"Market Breadth snapshot as of {target_date}:\n"
+        f"Regime: {regime} (Breadth Score: {score:.1f})\n"
+        f"% Stocks above 20-day EMA : {latest.get('pct_above_20', 'N/A')}%\n"
+        f"% Stocks above 50-day EMA : {latest.get('pct_above_50', 'N/A')}%\n"
+        f"% Stocks above 150-day EMA: {latest.get('pct_above_150', 'N/A')}%\n"
+        f"Stock universe size: {latest.get('stock_count', 'N/A')} NSE equities\n"
+        f"Breadth trend (vs previous session): {trend}\n"
+        f"\nProvide your structural market breadth insight."
+    )
+
+    skill = _AI_SKILLS["breadth_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
 @app.get('/api/fii-dii')

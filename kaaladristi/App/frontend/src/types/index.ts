@@ -243,11 +243,12 @@ export interface DailyPanchang {
 // ── Market Breadth (from km_market_breadth) ──
 
 export interface MarketBreadthDay {
-  trade_date: string;
-  advances: number;
-  declines: number;
-  unchanged: number;
-  advance_pct: number;
+  trade_date:    string;
+  pct_above_20:  number | null;
+  pct_above_50:  number | null;
+  pct_above_150: number | null;
+  breadth_score: number | null;
+  stock_count:   number | null;
 }
 
 // ── Index Catalog (from mv_index_catalog) ──

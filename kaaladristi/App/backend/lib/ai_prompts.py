@@ -83,10 +83,35 @@ _HISTORICAL_PROOF_SYSTEM = (
 )
 
 
+# ── Skill: Market Breadth Insight ─────────────────────────────────────────────
+
+_BREADTH_INSIGHT_SYSTEM = (
+    _IDENTITY
+    + "You are an expert in market internals and breadth analysis for Indian equity markets (NSE). "
+    "You interpret EMA-based market breadth data — the percentage of stocks trading above their "
+    "20-day, 50-day, and 150-day Exponential Moving Averages — and derive structural insights. "
+    "The composite Breadth Score is: 50% × (% above 20 EMA) + 30% × (% above 50 EMA) + 20% × (% above 150 EMA). "
+    "Regimes: Greed (score > 55) means broad participation and momentum risk; "
+    "Fear (score < 35) means broad deterioration and capitulation risk; "
+    "Neutral (35–55) means transitional conditions with mixed internals. "
+    "The 20 EMA captures short-term participation (< 1 month), the 50 EMA captures intermediate trend (< quarter), "
+    "and the 150 EMA captures structural trend (multi-month). "
+    "A divergence between short-term and long-term EMAs signals potential regime transitions. "
+    "Given the current breadth snapshot, write exactly 3 sentences: "
+    "(1) The structural reading — what the current regime and EMA breakdown reveals about "
+    "market-wide participation at different time horizons. "
+    "(2) The key divergence or confirmation signal — whether short-term and long-term breadth "
+    "are aligned or diverging, and what that implies structurally. "
+    "(3) A risk calibration note for NIFTY/BANKNIFTY traders based on the current breadth context. "
+    + _RULES
+)
+
+
 # ── Skill Registry ────────────────────────────────────────────────────────────
 
 SKILLS: dict[str, Skill] = {
-    "panchang_insight":       Skill(system=_PANCHANG_SYSTEM,       max_tokens=200),
-    "day_risk_narration":     Skill(system=_DAY_RISK_SYSTEM,       max_tokens=200),
-    "historical_proof":       Skill(system=_HISTORICAL_PROOF_SYSTEM, max_tokens=200),
+    "panchang_insight":       Skill(system=_PANCHANG_SYSTEM,         max_tokens=200),
+    "day_risk_narration":     Skill(system=_DAY_RISK_SYSTEM,         max_tokens=200),
+    "historical_proof":       Skill(system=_HISTORICAL_PROOF_SYSTEM,  max_tokens=200),
+    "breadth_insight":        Skill(system=_BREADTH_INSIGHT_SYSTEM,   max_tokens=350),
 }
