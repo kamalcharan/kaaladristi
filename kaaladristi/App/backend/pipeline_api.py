@@ -407,6 +407,81 @@ def scheduler_status():
     }
 
 
+# ── AI Endpoints ──────────────────────────────────────────────────────────────
+
+# Per-day in-memory cache — insight for a given date never changes
+_insight_cache: dict[str, str] = {}
+
+_PANCHANG_SYSTEM = (
+    "You are the AI intelligence layer of Kāla-Drishti, a deterministic market risk platform. "
+    "Given today's Hindu Panchangam, write exactly 2 sentences: "
+    "(1) The dominant time-cycle energy and what it means structurally for markets. "
+    "(2) A practical implication for Indian equity derivatives traders (NIFTY/BANKNIFTY). "
+    "Rules: factual, educational, non-predictive. Never say buy/sell/target/guaranteed. "
+    "Use phrases like 'elevated caution', 'favorable window', 'structural stress', 'risk is heightened'."
+)
+
+
+@app.get('/api/ai/panchang-insight')
+def panchang_insight(date: str):
+    """Return an AI-generated 2-sentence market insight for a given date's Panchangam."""
+    from lib.ai_client import get_client, AI_ENABLED, AI_MODEL
+
+    if not AI_ENABLED:
+        return {"date": date, "insight": None, "ai": False}
+
+    if date in _insight_cache:
+        return {"date": date, "insight": _insight_cache[date], "ai": True}
+
+    # Fetch panchang row from DB
+    try:
+        rows = db.select('km_daily_panchang', '*', filters={'date': date}, limit=1)
+    except Exception as e:
+        log.error(f"Failed to fetch panchang for {date}: {e}")
+        return {"date": date, "insight": None, "ai": False}
+
+    if not rows:
+        return {"date": date, "insight": None, "ai": False}
+
+    p = rows[0]
+    client = get_client()
+    if not client:
+        return {"date": date, "insight": None, "ai": False}
+
+    special = ", ".join(filter(None, [
+        "Purnima"   if p.get("is_purnima")   else "",
+        "Amavasya"  if p.get("is_amavasya")  else "",
+        "Ekadashi"  if p.get("is_ekadashi")  else "",
+        "Sankranti" if p.get("is_sankranti") else "",
+    ])) or "None"
+
+    user_msg = (
+        f"Panchangam for {date}:\n"
+        f"Tithi: {p.get('tithi_num', '')}. {p.get('tithi_name', '')} (Lord: {p.get('tithi_lord', '')})\n"
+        f"Nakshatra: {p.get('nakshatra_name', '')} Pada {p.get('nakshatra_pada', '')} (Lord: {p.get('nakshatra_lord', '')})\n"
+        f"Yoga: {p.get('yoga_name', '')}\n"
+        f"Vara: {p.get('vara_name', p.get('vara', ''))} (Lord: {p.get('vara_lord', '')})\n"
+        f"Moon Sign: {p.get('moon_sign_name', p.get('moon_sign', ''))}\n"
+        f"Special Events: {special}\n"
+        f"What is today's market risk context?"
+    )
+
+    try:
+        response = client.messages.create(
+            model=AI_MODEL,
+            max_tokens=200,
+            system=_PANCHANG_SYSTEM,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        insight = response.content[0].text.strip() if response.content else None
+        if insight:
+            _insight_cache[date] = insight
+        return {"date": date, "insight": insight, "ai": True}
+    except Exception as e:
+        log.error(f"AI panchang insight failed for {date}: {e}")
+        return {"date": date, "insight": None, "ai": False}
+
+
 @app.get('/api/fii-dii')
 def fii_dii_data(days: int = 30):
     """

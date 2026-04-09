@@ -20,6 +20,21 @@ export function useMarketBreadth(days = 60) {
   });
 }
 
+export function usePanchangInsight(date: string) {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  return useQuery({
+    queryKey: ['panchang_insight', date],
+    queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/panchang-insight?date=${encodeURIComponent(date)}`);
+      if (!res.ok) return { date, insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 24 * 60 * 60 * 1000, // 24h — daily insight is stable
+    enabled: !!date,
+    retry: false,
+  });
+}
+
 export function useActiveIndexes() {
   return useQuery({
     queryKey: ['active_indexes'],

@@ -1,6 +1,6 @@
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePanchang } from '@/hooks';
+import { usePanchang, usePanchangInsight } from '@/hooks';
 import type { DailyPanchang } from '@/types';
 
 function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -66,6 +66,7 @@ function PanchangContent({ p }: { p: DailyPanchang }) {
 
 export default function PanchangamCard({ date }: { date: string }) {
   const { data, isLoading, isError } = usePanchang(date);
+  const { data: aiData, isLoading: aiLoading } = usePanchangInsight(date);
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -87,6 +88,24 @@ export default function PanchangamCard({ date }: { date: string }) {
         </p>
       ) : (
         <PanchangContent p={data} />
+      )}
+
+      {/* AI Insight */}
+      {(aiLoading || aiData?.insight) && (
+        <div className="mt-3 pt-3 border-t border-kd-border">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="w-3 h-3 text-accent-indigo" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-accent-indigo">AI Insight</span>
+          </div>
+          {aiLoading ? (
+            <div className="space-y-1.5">
+              <div className="h-3 bg-kd-elevated rounded animate-pulse w-full" />
+              <div className="h-3 bg-kd-elevated rounded animate-pulse w-4/5" />
+            </div>
+          ) : (
+            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{aiData?.insight}</p>
+          )}
+        </div>
       )}
     </div>
   );
