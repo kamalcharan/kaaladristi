@@ -1,14 +1,17 @@
 """
 Apply km_migration_018_panchang_end_times.sql
 
-Usage:
+Usage (Windows):
+    cd App\\backend
+    python apply_migration_018.py
+
+Usage (Linux/Mac):
     cd App/backend
     python3 apply_migration_018.py
 """
 
 import os
 import sys
-import subprocess
 import psycopg2
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,13 +24,31 @@ MIGRATION_FILE = os.path.normpath(
 )
 
 
+def apply(dsn: str, sql_path: str):
+    with open(sql_path, 'r', encoding='utf-8') as f:
+        sql = f.read()
+
+    conn = psycopg2.connect(dsn)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+        print('  Migration executed successfully.')
+    except psycopg2.Error as e:
+        conn.rollback()
+        # IF NOT EXISTS makes this idempotent — already-exists is fine
+        print(f'  Note: {e.pgcode} — {e.pgerror.strip() if e.pgerror else e}')
+    finally:
+        conn.close()
+
+
 def verify(dsn: str) -> bool:
     conn = psycopg2.connect(dsn)
     try:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT COUNT(*) FROM information_schema.columns
-                WHERE table_name = 'km_daily_panchang'
+                WHERE table_name   = 'km_daily_panchang'
                   AND column_name IN ('tithi_end_ist', 'nakshatra_end_ist')
             """)
             row = cur.fetchone()
@@ -41,19 +62,19 @@ def main():
         print('ERROR: DATABASE_URL not set — check App/.env')
         sys.exit(1)
 
+    if not os.path.exists(MIGRATION_FILE):
+        print(f'ERROR: Migration file not found: {MIGRATION_FILE}')
+        sys.exit(1)
+
     print(f'Applying {os.path.basename(MIGRATION_FILE)} ...')
-    result = subprocess.run(
-        ['psql', DATABASE_URL, '-f', MIGRATION_FILE, '--set=ON_ERROR_STOP=0'],
-        capture_output=True, text=True,
-    )
-    for line in (result.stdout + result.stderr).splitlines():
-        print(f'  {line}')
+    apply(DATABASE_URL, MIGRATION_FILE)
 
     if verify(DATABASE_URL):
-        print('\n  ✓  tithi_end_ist and nakshatra_end_ist columns present')
-        print('\nNext step: python3 populate_panchang_end_times.py')
+        print('  ✓  tithi_end_ist and nakshatra_end_ist columns present')
+        print('\nNext step:')
+        print('  python populate_panchang_end_times.py')
     else:
-        print('\nERROR: columns not found after migration — check output above')
+        print('ERROR: columns not found after migration — check output above')
         sys.exit(1)
 
 
