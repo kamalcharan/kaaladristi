@@ -28,12 +28,20 @@ function dayProgress(sunrise: string, sunset: string, now: string): number {
   return Math.round(((cur - sr) / (ss - sr)) * 100);
 }
 
-function timeUntil(endTime: string, nowSec: number): string {
-  const diff = toSeconds(endTime) - nowSec;
+function timeUntil(endSec: number, nowSec: number): string {
+  const diff = endSec - nowSec;
   if (diff <= 0) return '';
   const h = Math.floor(diff / 3600);
   const m = Math.floor((diff % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// If end time (e.g. 08:47) is earlier than sunrise (e.g. 06:13) it means
+// the element crosses midnight — treat it as next day (+24h).
+function resolveEndSec(endTime: string, sunriseSec: number): { sec: number; nextDay: boolean } {
+  const sec = toSeconds(endTime);
+  if (sec < sunriseSec) return { sec: sec + 86400, nextDay: true };
+  return { sec, nextDay: false };
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -51,18 +59,28 @@ function Row({
   value,
   endTime,
   nowSec,
+  sunriseSec,
 }: {
   label: string;
   value: string | null | undefined;
   endTime?: string | null;
   nowSec?: number;
+  sunriseSec?: number;
 }) {
   if (!value) return null;
 
-  const isPast = endTime && nowSec !== undefined ? toSeconds(endTime) <= nowSec : false;
-  const remaining = endTime && nowSec !== undefined && !isPast
-    ? timeUntil(endTime, nowSec)
-    : null;
+  let isPast = false;
+  let remaining: string | null = null;
+  let nextDay = false;
+  let displayEnd = '';
+
+  if (endTime && nowSec !== undefined && sunriseSec !== undefined) {
+    const resolved = resolveEndSec(endTime, sunriseSec);
+    nextDay = resolved.nextDay;
+    isPast = resolved.sec <= nowSec;
+    displayEnd = endTime.slice(0, 5) + (nextDay ? ' +1' : '');
+    if (!isPast) remaining = timeUntil(resolved.sec, nowSec);
+  }
 
   return (
     <div className="flex items-baseline justify-between gap-2 py-1 border-b border-kd-border last:border-b-0">
@@ -74,9 +92,9 @@ function Row({
         {endTime && (
           <span
             className={cn('text-[9px] font-mono shrink-0', isPast ? 'text-risk-amber' : 'text-muted')}
-            title={`Changes at ${endTime} IST`}
+            title={`Changes at ${endTime} IST${nextDay ? ' (next day)' : ''}`}
           >
-            {isPast ? 'changed' : `until ${endTime.slice(0, 5)}${remaining ? ` (${remaining})` : ''}`}
+            {isPast ? 'changed' : `until ${displayEnd}${remaining ? ` (${remaining})` : ''}`}
           </span>
         )}
       </div>
@@ -88,6 +106,7 @@ function Row({
 
 function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) {
   const nowSec = toSeconds(istTime);
+  const sunriseSec = p.sunrise_ist ? toSeconds(p.sunrise_ist) : 21600; // fallback 06:00
   const paksha = p.paksha === 'shukla' ? 'Shukla' : 'Krishna';
 
   const progress = p.sunrise_ist && p.sunset_ist
@@ -142,23 +161,21 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
         </div>
       </div>
 
-      <Row label="Vara"      value={`${p.vara}${p.vara_lord ? ` · ${p.vara_lord}` : ''}`} />
+      <Row label="Vara" value={`${p.vara}${p.vara_lord ? ` · ${p.vara_lord}` : ''}`} />
       <Row
         label="Tithi"
         value={`${p.tithi_num}. ${p.tithi_name}${p.tithi_lord ? ` · ${p.tithi_lord}` : ''}`}
         endTime={p.tithi_end_ist}
         nowSec={nowSec}
+        sunriseSec={sunriseSec}
       />
       <Row
         label="Nakshatra"
         value={`${p.nakshatra_name}${p.nakshatra_pada ? ` Pada ${p.nakshatra_pada}` : ''}${p.nakshatra_lord ? ` · ${p.nakshatra_lord}` : ''}`}
         endTime={p.nakshatra_end_ist}
         nowSec={nowSec}
+        sunriseSec={sunriseSec}
       />
-      <Row label="Yoga"      value={p.yoga_name ?? null} />
-      <Row label="Karana"    value={p.karana_name ?? null} />
-      <Row label="Moon"      value={p.moon_sign_name ?? null} />
-      <Row label="Sun"       value={p.sun_sign_name ?? null} />
 
       {specialEvents.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-2.5">
