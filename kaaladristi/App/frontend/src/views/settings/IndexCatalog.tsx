@@ -65,20 +65,20 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
   const isFiltered = search || filterCategory || filterStatus || filterTri;
   const activeCount = catalog.filter(c => c.is_active).length;
 
-  const selectCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const selectCls = 'px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-secondary)] focus:outline-none focus:border-accent-indigo/60 transition-colors';
 
   return (
     <div>
       <button
         onClick={onBack}
-        className="flex items-center gap-1.5 text-xs text-muted hover:text-white mb-6 transition-colors"
+        className="flex items-center gap-1.5 text-xs text-muted hover:text-[var(--text-primary)] mb-6 transition-colors"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         Back to Market Data
       </button>
 
       <header className="mb-6">
-        <h2 className="text-2xl font-bold tracking-tight text-white mb-1">Index Data</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] mb-1">Index Data</h2>
         <p className="text-sm text-secondary">
           {activeCount} active of {catalog.length} indexes
         </p>
@@ -87,13 +87,13 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
           <input
             type="text"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search indexes..."
-            className="w-full pl-9 pr-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-accent-indigo/60 transition-colors"
+            className="w-full pl-9 pr-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60 transition-colors"
           />
         </div>
         <select
@@ -124,7 +124,7 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
           <>
             <button
               onClick={() => { setSearch(''); setFilterCategory(''); setFilterStatus(''); setFilterTri(''); setPage(1); }}
-              className="px-3 py-2 text-xs text-risk-amber hover:text-white border border-risk-amber/30 hover:border-white/20 rounded-xl transition-all"
+              className="px-3 py-2 text-xs text-risk-amber hover:text-[var(--text-primary)] border border-risk-amber/30 hover:border-kd-border rounded-xl transition-all"
             >
               Clear
             </button>
@@ -147,12 +147,12 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
         </div>
       ) : (
         <>
-          <div className="grid gap-1.5">
-            {paged.map((item: IndexCatalogItem) => (
+          <div className="bg-kd-surface border-2 border-kd-border rounded-2xl overflow-hidden">
+            {paged.map((item: IndexCatalogItem, i) => (
               <div
                 key={item.id}
                 className={cn(
-                  'flex items-center gap-3 bg-[#0f172a] border border-kd-border rounded-xl px-4 py-2.5 transition-all',
+                  'flex items-center gap-3 px-4 py-2.5 border-b border-kd-border last:border-b-0 transition-all hover:bg-kd-elevated/40',
                   !item.is_active && 'opacity-50',
                 )}
               >
@@ -163,18 +163,18 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
                     'w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-all',
                     item.is_active
                       ? 'text-risk-green hover:bg-risk-green/10'
-                      : 'text-slate-600 hover:bg-slate-800 hover:text-slate-400',
+                      : 'text-muted hover:bg-kd-elevated hover:text-[var(--text-secondary)]',
                   )}
                 >
                   <Power className="w-3.5 h-3.5" />
                 </button>
 
-                <span className="text-[13px] font-semibold text-white truncate min-w-[180px] flex-1">
+                <span className="text-[13px] font-semibold text-[var(--text-primary)] truncate min-w-[180px] flex-1">
                   {item.name}
                 </span>
 
                 {item.category && (
-                  <span className="text-[10px] px-1.5 py-px rounded bg-slate-800/80 border border-white/5 text-slate-400 font-medium shrink-0 hidden sm:inline">
+                  <span className="text-[10px] px-1.5 py-px rounded bg-kd-elevated border border-kd-border text-[var(--text-secondary)] font-medium shrink-0 hidden sm:inline">
                     {item.category}
                   </span>
                 )}
@@ -185,19 +185,19 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
                   </span>
                 )}
 
-                <span className="text-[10px] text-slate-500 mono shrink-0 w-8">{item.exchange}</span>
+                <span className="text-[10px] text-muted mono shrink-0 w-8">{item.exchange}</span>
 
-                <span className="text-[10px] text-slate-500 mono shrink-0 hidden md:inline w-[200px]">
+                <span className="text-[10px] text-muted mono shrink-0 hidden md:inline w-[200px]">
                   {item.data_from && item.data_to
                     ? `${fmtDate(item.data_from)} → ${fmtDate(item.data_to)}`
                     : '—'}
                 </span>
 
-                <span className="text-[10px] text-slate-400 mono font-medium shrink-0 w-14 text-right hidden sm:inline">
+                <span className="text-[10px] text-[var(--text-secondary)] mono font-medium shrink-0 w-14 text-right hidden sm:inline">
                   {item.record_count > 0 ? item.record_count.toLocaleString('en-IN') : '—'}
                 </span>
 
-                <span className="text-[11px] text-slate-300 mono font-medium shrink-0 w-20 text-right">
+                <span className="text-[11px] text-[var(--text-secondary)] mono font-medium shrink-0 w-20 text-right">
                   {item.last_close
                     ? item.last_close.toLocaleString('en-IN', { minimumFractionDigits: 2 })
                     : '—'}
@@ -207,7 +207,7 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
                   <button
                     onClick={() => navigate(`/chart/index/${item.id}?name=${encodeURIComponent(item.name)}`)}
                     title={`View ${item.name} chart`}
-                    className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-slate-500 hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
+                    className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-muted hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
                   >
                     <BarChart3 className="w-3.5 h-3.5" />
                   </button>
@@ -216,30 +216,30 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
                 )}
               </div>
             ))}
-          </div>
 
-          {paged.length === 0 && (
-            <div className="text-center py-16">
-              <p className="text-sm text-muted">
-                {isFiltered ? 'No indexes match your filters.' : 'No indexes found.'}
-              </p>
-            </div>
-          )}
+            {paged.length === 0 && (
+              <div className="text-center py-16">
+                <p className="text-sm text-muted">
+                  {isFiltered ? 'No indexes match your filters.' : 'No indexes found.'}
+                </p>
+              </div>
+            )}
+          </div>
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-3 mt-4">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={safePage <= 1}
-                className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-accent-indigo/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-xs text-slate-400 mono">{safePage} / {totalPages}</span>
+              <span className="text-xs text-[var(--text-secondary)] mono">{safePage} / {totalPages}</span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={safePage >= totalPages}
-                className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-slate-400 hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                className="w-8 h-8 rounded-lg flex items-center justify-center border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-accent-indigo/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
