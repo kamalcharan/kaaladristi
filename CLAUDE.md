@@ -53,7 +53,12 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **017** (`km_migration_017_inference_evaluation.sql`)
+Latest migration: **021** (`km_migration_021_breadth_roc.sql`)
+
+| Table | Description |
+|---|---|
+| `km_market_breadth` | EMA-based breadth score (migration 020) |
+| `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
 
 ---
 
@@ -138,11 +143,59 @@ Working through a 7-step EOD data pipeline build:
 
 ---
 
+## VaNi — AI Intelligence Layer
+
+**VaNi** (वाणी, *Vāṇī*) is the branded AI intelligence layer of Kāla-Drishti.
+The name means *voice / speech* in Sanskrit — also an epithet of Saraswati (goddess of knowledge).
+
+VaNi implements **PRD FR-05: Natural Language Explanation** — factual, educational,
+non-predictive insights explaining *why* risk is elevated or low in astronomical terms.
+
+### Architecture
+
+| Layer | File | Purpose |
+|---|---|---|
+| Skill registry | `App/backend/lib/ai_prompts.py` | `Skill(system, max_tokens)` named tuples per skill |
+| AI client | `App/backend/lib/ai_client.py` | Vendor-agnostic HTTP client (Anthropic / OpenAI) |
+| API endpoints | `App/backend/pipeline_api.py` | `GET /api/ai/*` — fetch + cache per-date insights |
+| UI component | `src/components/domain/VaNiInsight.tsx` | Reusable panel shown below any data card |
+
+### Current Skills
+
+| Key | Endpoint | Feeds |
+|---|---|---|
+| `panchang_insight` | `/api/ai/panchang-insight?date=` | PanchangamCard |
+| `breadth_insight` | `/api/ai/breadth-insight` | MarketBreadthChart |
+| `breadth_roc_insight` | `/api/ai/breadth-roc-insight` | BreadthRocChart |
+
+### Tone Rules (all skills)
+- Factual · Educational · Non-predictive
+- Never: buy / sell / target price / guaranteed / certain
+- Always explain in **astronomical terms**, not stock attribution
+- Safe vocabulary: "elevated caution", "favorable window", "structural stress",
+  "historically correlated with", "risk is heightened"
+
+### Adding a New VaNi Skill
+1. Add `_SKILL_SYSTEM` constant + register in `SKILLS` dict in `lib/ai_prompts.py`
+2. Add `GET /api/ai/<skill-name>` endpoint in `pipeline_api.py`
+3. Add `use<SkillName>Insight()` React Query hook in `hooks/useDashboardExtras.ts`
+4. Drop `<VaNiInsight insight={...} isLoading={...} />` below any card
+
+### Env Vars
+```
+AI_ENABLED=true
+AI_PROVIDER=anthropic          # anthropic | openai
+AI_API_KEY=sk-ant-...
+AI_MODEL=claude-haiku-4-5      # any model the provider supports
+```
+
+---
+
 ## SQL Migration Convention
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **019**.
+Next migration number: **022**.
 
 ---
 

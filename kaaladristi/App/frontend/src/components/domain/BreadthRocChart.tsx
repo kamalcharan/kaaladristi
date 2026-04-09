@@ -4,7 +4,8 @@ import {
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { useBreadthRoc, useBreadthRocInsight } from '@/hooks';
-import { Loader2, AlertCircle, Sparkles } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import VaNiInsight from './VaNiInsight';
 import { cn } from '@/lib/utils';
 import type { BreadthRocDay } from '@/types';
 
@@ -274,20 +275,7 @@ export default function BreadthRocChart() {
         ))}
       </div>
 
-      {/* ── AI ROC Insight ── */}
-      {aiData?.insight && (
-        <div className="mt-3 pt-3 border-t border-kd-border">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Sparkles className="w-3 h-3 text-accent-indigo" />
-            <span className="text-[9px] font-bold uppercase tracking-wider text-accent-indigo">
-              AI Momentum Breadth Analysis
-            </span>
-          </div>
-          <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
-            {aiData.insight}
-          </p>
-        </div>
-      )}
+      <VaNiInsight insight={aiData?.insight} />
     </div>
   );
 }

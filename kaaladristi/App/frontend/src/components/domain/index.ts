@@ -12,4 +12,5 @@ export { default as PanchangamCard } from './PanchangamCard';
 export { default as ActiveIndexScroll } from './ActiveIndexScroll';
 export { default as MarketBreadthChart } from './MarketBreadthChart';
 export { default as BreadthRocChart } from './BreadthRocChart';
+export { default as VaNiInsight } from './VaNiInsight';
 export { default as SevenDayStrip } from './SevenDayStrip';

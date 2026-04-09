@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Sun, Moon, Sparkles, Clock } from 'lucide-react';
+import { Sun, Moon, Clock } from 'lucide-react';
+import VaNiInsight from './VaNiInsight';
 import { cn } from '@/lib/utils';
 import { usePanchang, usePanchangInsight } from '@/hooks';
 import type { DailyPanchang } from '@/types';
@@ -234,23 +235,7 @@ export default function PanchangamCard({ date }: { date: string }) {
         <PanchangContent p={data} next={nextData} istTime={istTime} />
       )}
 
-      {/* AI Insight */}
-      {(aiLoading || aiData?.insight) && (
-        <div className="mt-3 pt-3 border-t border-kd-border">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Sparkles className="w-3 h-3 text-accent-indigo" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-accent-indigo">AI Insight</span>
-          </div>
-          {aiLoading ? (
-            <div className="space-y-1.5">
-              <div className="h-3 bg-kd-elevated rounded animate-pulse w-full" />
-              <div className="h-3 bg-kd-elevated rounded animate-pulse w-4/5" />
-            </div>
-          ) : (
-            <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{aiData?.insight}</p>
-          )}
-        </div>
-      )}
+      <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} />
     </div>
   );
 }
