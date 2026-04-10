@@ -253,6 +253,9 @@ export default function PipelineExecution() {
   const exchanges = live?.exchanges ?? [];
   const isFixJob = job?.type?.startsWith('fix:') ?? false;
   const hasDates = exchanges.some(e => e.dates.length > 0);
+  // Fix jobs with dates (backfill-style) should show step view, not simple card
+  const showStepView = hasDates;
+  const showFixCard = isFixJob && !hasDates;
 
   // Don't render if no job data at all
   if (!isLoading && !job && exchanges.length === 0) {
@@ -311,8 +314,8 @@ export default function PipelineExecution() {
         </div>
       )}
 
-      {/* Fix job view — simple status display */}
-      {isFixJob && job && (
+      {/* Fix job view — simple status display (only when no date-level steps) */}
+      {showFixCard && job && (
         <div className={cn(
           'flex items-center gap-3 py-4 px-4 rounded-xl border mb-3',
           isActive ? 'bg-accent-indigo/5 border-accent-indigo/20' :
@@ -344,8 +347,8 @@ export default function PipelineExecution() {
         </div>
       )}
 
-      {/* Per-exchange execution view (for pipeline/backfill jobs) */}
-      {!isFixJob && hasDates && exchanges.map(exch => (
+      {/* Per-exchange execution view (for pipeline/backfill jobs, or fix jobs with dates) */}
+      {showStepView && exchanges.map(exch => (
         <div key={exch.exchange} className="mb-3">
           {exchanges.length > 1 && (
             <div className="text-[9px] font-bold uppercase tracking-widest text-muted mb-2">

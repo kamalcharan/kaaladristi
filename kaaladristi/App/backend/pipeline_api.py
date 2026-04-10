@@ -700,13 +700,17 @@ def _fix_flow_intelligence():
     except Exception as e:
         log.error(f'[fix:flow_intel] error: {e}')
 
-def _fix_nse_backfill(days: int):
+def _fix_nse_backfill(days: int, job_id: str = None):
     """Backfill NSE equity pipeline for missing dates."""
     from pipeline.utils.trading_calendar import get_missing_dates as _gm
     from daily_pipeline import run_nse_pipeline
-    from_dt = date.today() - timedelta(days=int(days * 1.5))  # weekday coverage
+    from_dt = date.today() - timedelta(days=int(days * 1.5))
     missing = _gm(db, from_dt, date.today(), 'NSE')
     log.info(f'[fix:nse] {len(missing)} missing dates to backfill')
+    # Update active job with actual dates so live view can track
+    if job_id and job_id in active_jobs:
+        active_jobs[job_id]['dates'] = [str(d) for d in missing]
+        active_jobs[job_id]['exchange'] = 'NSE'
     for d in missing:
         try:
             run_nse_pipeline(db, d, force=False)
@@ -715,13 +719,16 @@ def _fix_nse_backfill(days: int):
     _refresh_market_breadth()
     _refresh_breadth_roc()
 
-def _fix_bse_backfill(days: int):
+def _fix_bse_backfill(days: int, job_id: str = None):
     """Backfill BSE equity pipeline for missing dates."""
     from pipeline.utils.trading_calendar import get_missing_dates as _gm
     from daily_pipeline import run_bse_pipeline
     from_dt = date.today() - timedelta(days=int(days * 1.5))
     missing = _gm(db, from_dt, date.today(), 'BSE')
     log.info(f'[fix:bse] {len(missing)} missing dates to backfill')
+    if job_id and job_id in active_jobs:
+        active_jobs[job_id]['dates'] = [str(d) for d in missing]
+        active_jobs[job_id]['exchange'] = 'BSE'
     for d in missing:
         try:
             run_bse_pipeline(db, d, force=False)
@@ -756,13 +763,13 @@ def _fix_fii_dii():
 
 
 FIX_HANDLERS = {
-    'nse_equities':       lambda days: _fix_nse_backfill(days),
-    'bse_equities':       lambda days: _fix_bse_backfill(days),
-    'indicators':         lambda days: _fix_indicators(),
-    'flow_intelligence':  lambda days: _fix_flow_intelligence(),
-    'market_breadth':     lambda days: _refresh_market_breadth(),
-    'breadth_roc':        lambda days: _refresh_breadth_roc(),
-    'fii_dii':            lambda days: _fix_fii_dii(),
+    'nse_equities':       lambda days, jid: _fix_nse_backfill(days, jid),
+    'bse_equities':       lambda days, jid: _fix_bse_backfill(days, jid),
+    'indicators':         lambda days, jid: _fix_indicators(),
+    'flow_intelligence':  lambda days, jid: _fix_flow_intelligence(),
+    'market_breadth':     lambda days, jid: _refresh_market_breadth(),
+    'breadth_roc':        lambda days, jid: _refresh_breadth_roc(),
+    'fii_dii':            lambda days, jid: _fix_fii_dii(),
 }
 
 
@@ -790,7 +797,7 @@ def fix_dimension(req: FixRequest, background_tasks: BackgroundTasks):
 
     def _run():
         try:
-            handler(req.days)
+            handler(req.days, job_id)
             active_jobs[job_id].update({
                 'status': 'completed',
                 'completed_at': datetime.utcnow().isoformat(),
