@@ -44,7 +44,7 @@ function scoreMeta(score: number): DayMeta {
   if (score >= 4) return { borderClass:'border-emerald-400/60', bgClass:'bg-emerald-950/30', glowClass:'shadow-emerald-900/40', scoreColor:'text-emerald-400', label:'Strong Positive' };
   if (score >= 2) return { borderClass:'border-emerald-600/40', bgClass:'bg-emerald-950/15', glowClass:'', scoreColor:'text-emerald-500', label:'Positive' };
   if (score > 0)  return { borderClass:'border-green-800/30',   bgClass:'bg-green-950/10',   glowClass:'', scoreColor:'text-green-600',  label:'Mild Positive' };
-  if (score === 0)return { borderClass:'border-white/6',        bgClass:'',                  glowClass:'', scoreColor:'text-slate-500',  label:'Neutral' };
+  if (score === 0)return { borderClass:'border-kd-border',      bgClass:'',                  glowClass:'', scoreColor:'text-muted',      label:'Neutral' };
   if (score >= -1)return { borderClass:'border-red-800/30',     bgClass:'bg-red-950/10',     glowClass:'', scoreColor:'text-red-500',    label:'Mild Negative' };
   if (score >= -2)return { borderClass:'border-red-600/40',     bgClass:'bg-red-950/20',     glowClass:'', scoreColor:'text-red-400',    label:'Negative' };
   return            { borderClass:'border-red-400/60',          bgClass:'bg-red-950/30',     glowClass:'shadow-red-900/40', scoreColor:'text-red-400', label:'Strong Negative' };
@@ -106,7 +106,7 @@ function DayCell({ dayIso, dayNum, weekday, events, isToday, isCurrentMonth }: D
 
   return (
     <div className={cn(
-      'relative flex flex-col rounded-xl border p-2 min-h-[130px] transition-all',
+      'relative flex flex-col rounded-xl border p-1.5 sm:p-2 min-h-[80px] sm:min-h-[130px] transition-all',
       meta.borderClass, meta.bgClass,
       isToday && 'ring-2 ring-accent-indigo/70 ring-offset-1 ring-offset-kd-bg',
       !isCurrentMonth && 'opacity-25',
@@ -117,7 +117,7 @@ function DayCell({ dayIso, dayNum, weekday, events, isToday, isCurrentMonth }: D
         <div>
           <span className={cn(
             'text-base font-bold mono leading-none',
-            isToday ? 'text-accent-indigo' : 'text-white',
+            isToday ? 'text-accent-indigo' : 'text-[var(--text-primary)]',
           )}>{dayNum}</span>
           <span className="text-[10px] text-muted ml-1">{weekday}</span>
         </div>
@@ -126,7 +126,7 @@ function DayCell({ dayIso, dayNum, weekday, events, isToday, isCurrentMonth }: D
             <span className="text-risk-amber text-xs" title="Turning Date">◈</span>
           )}
           {hasMajor && (
-            <span className="text-[#fbbf24] text-xs" title="Major Event">✦</span>
+            <span className="text-accent-gold text-xs" title="Major Event">✦</span>
           )}
           {events.length > 0 && (
             <span className={cn('text-[11px] font-bold mono', meta.scoreColor)}>
@@ -145,7 +145,7 @@ function DayCell({ dayIso, dayNum, weekday, events, isToday, isCurrentMonth }: D
           <span className="text-[10px] text-muted pl-1">+{overflow} more</span>
         )}
         {events.length === 0 && (
-          <span className="text-[10px] text-slate-700 mt-auto">—</span>
+          <span className="text-[10px] text-muted mt-auto">—</span>
         )}
       </div>
     </div>
@@ -178,7 +178,7 @@ function MonthSummary({ events, year, month }: { events: DcInference[]; year: nu
         <div className="flex gap-4">
           <Stat value={posCount} label="Positive Days" color="text-emerald-400" />
           <Stat value={negCount} label="Caution Days"  color="text-red-400" />
-          <Stat value={strongPos} label="Peak Days"    color="text-[#fbbf24]" />
+          <Stat value={strongPos} label="Peak Days"    color="text-accent-gold" />
           <Stat value={events.length} label="Total Events" color="text-accent-indigo" />
         </div>
 
@@ -193,7 +193,7 @@ function MonthSummary({ events, year, month }: { events: DcInference[]; year: nu
                 return (
                   <div key={e.id} className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px]', c.bg, c.border)}>
                     <span className={cn('font-bold', c.text)}>{fmtDate(e.start_date)}</span>
-                    <span className="text-slate-300">{e.astro_event}</span>
+                    <span className="text-[var(--text-secondary)]">{e.astro_event}</span>
                     {isTurningDate(e) && <span className="text-risk-amber">◈</span>}
                   </div>
                 );
@@ -233,7 +233,7 @@ function Legend() {
       {items.map(i => (
         <div key={i.label} className="flex items-center gap-1.5">
           <div className={cn('w-2.5 h-2.5 rounded-sm', i.dotClass)} />
-          <span className="text-[11px] text-slate-400">{i.label}</span>
+          <span className="text-[11px] text-[var(--text-secondary)]">{i.label}</span>
         </div>
       ))}
       <div className="flex items-center gap-1.5">
@@ -241,11 +241,11 @@ function Legend() {
         <span className="text-[11px] text-slate-400">Turning Date</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[#fbbf24] text-sm">✦</span>
+        <span className="text-accent-gold text-sm">✦</span>
         <span className="text-[11px] text-slate-400">Major Event</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] text-slate-500">↔</span>
+        <span className="text-[11px] text-muted">↔</span>
         <span className="text-[11px] text-slate-400">Multi-day event</span>
       </div>
     </div>
@@ -347,7 +347,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
   }
 
   return (
-    <div className="glass-card rounded-3xl p-6">
+    <div className="glass-card rounded-3xl p-4 sm:p-6">
       <p className="text-[10px] text-muted uppercase tracking-widest font-bold mb-5">
         Market Sentiment Timeline · {MONTH_FULL[month - 1]} {year}
       </p>
@@ -359,10 +359,10 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
             <div key={wStart} className="flex items-stretch gap-0">
               {/* Week label */}
               <div className="w-[72px] shrink-0 flex flex-col items-end justify-center pr-3 border-r border-kd-border/50">
-                <span className="text-[12px] font-mono font-bold text-white/70">
+                <span className="text-[12px] font-mono font-bold text-[var(--text-secondary)]">
                   {wStart}–{wEnd}
                 </span>
-                <span className="text-[9px] uppercase tracking-widest text-slate-600 mt-0.5">
+                <span className="text-[9px] uppercase tracking-widest text-muted mt-0.5">
                   {MONTH_ABBR[month - 1]}
                 </span>
               </div>
@@ -380,7 +380,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                         key={d}
                         className={cn(
                           'absolute text-[9px] font-mono -translate-x-1/2',
-                          isWeekend ? 'text-slate-600' : 'text-slate-500',
+                          isWeekend ? 'text-muted' : 'text-[var(--text-secondary)]',
                         )}
                         style={{ left: `${((i + 0.5) / wDays) * 100}%` }}
                       >
@@ -392,7 +392,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
 
                 {/* Track band */}
                 <div
-                  className="relative rounded-lg bg-black/25 border border-kd-border/40"
+                  className="relative rounded-lg bg-kd-elevated/50 border border-kd-border/40"
                   style={{ height: rowH }}
                 >
                   {/* Day separator lines */}
@@ -495,7 +495,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
 
                   {/* Empty state */}
                   {!hasEvents && (
-                    <span className="absolute inset-0 flex items-center px-3 text-[11px] text-slate-700">
+                    <span className="absolute inset-0 flex items-center px-3 text-[11px] text-muted">
                       No events
                     </span>
                   )}
@@ -517,7 +517,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
           <div
             className={cn(
               'fixed z-[9999] pointer-events-none rounded-xl border shadow-2xl',
-              'bg-slate-900/98 backdrop-blur-sm', c.border,
+              'bg-kd-surface border backdrop-blur-sm', c.border,
             )}
             style={{ left, top, width: tooltipW }}
             onMouseEnter={() => { if (hideTimer.current) clearTimeout(hideTimer.current); }}
@@ -531,11 +531,11 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                 </span>
               )}
               {/* Inference */}
-              <p className="text-[12px] text-white leading-relaxed mb-2.5">
+              <p className="text-[12px] text-[var(--text-primary)] leading-relaxed mb-2.5">
                 {hoveredEvent.inference ?? '—'}
               </p>
               {/* Date + confidence */}
-              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <div className="flex items-center justify-between pt-2 border-t border-kd-border">
                 <span className="text-[10px] font-mono text-muted">
                   {fmtDate(hoveredEvent.start_date)}
                   {hoveredEvent.end_date && hoveredEvent.end_date !== hoveredEvent.start_date
@@ -566,7 +566,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
           return (
             <div key={s.value} className="flex items-center gap-1.5">
               <div className={cn('w-3 h-3 rounded-sm border', c.bg, c.border)} />
-              <span className="text-[11px] text-slate-400">{s.label}</span>
+              <span className="text-[11px] text-[var(--text-secondary)]">{s.label}</span>
             </div>
           );
         })}
@@ -618,7 +618,7 @@ export default function DCCalendarView() {
         <header className="mb-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight text-white mb-1">
+              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-1">
                 Planetary Intelligence
               </h1>
               <p className="text-secondary font-medium">
@@ -628,13 +628,13 @@ export default function DCCalendarView() {
 
             <div className="flex items-center gap-3">
               {/* View toggle */}
-              <div className="flex bg-slate-900/60 border border-kd-border rounded-xl p-1 gap-1">
+              <div className="flex bg-kd-elevated border border-kd-border rounded-xl p-1 gap-1">
                 <button
                   onClick={() => setView('calendar')}
                   title="Calendar view"
                   className={cn(
                     'w-8 h-8 rounded-lg flex items-center justify-center transition-all',
-                    view === 'calendar' ? 'bg-accent-indigo/20 text-indigo-400' : 'text-slate-500 hover:text-slate-300',
+                    view === 'calendar' ? 'bg-accent-indigo/20 text-accent-indigo' : 'text-muted hover:text-[var(--text-secondary)]',
                   )}
                 >
                   <LayoutGrid className="w-4 h-4" />
@@ -644,7 +644,7 @@ export default function DCCalendarView() {
                   title="Timeline view"
                   className={cn(
                     'w-8 h-8 rounded-lg flex items-center justify-center transition-all',
-                    view === 'timeline' ? 'bg-accent-indigo/20 text-indigo-400' : 'text-slate-500 hover:text-slate-300',
+                    view === 'timeline' ? 'bg-accent-indigo/20 text-accent-indigo' : 'text-muted hover:text-[var(--text-secondary)]',
                   )}
                 >
                   <AlignLeft className="w-4 h-4" />
@@ -654,17 +654,17 @@ export default function DCCalendarView() {
               {/* Month navigator */}
               <button
                 onClick={prevMonth}
-                className="w-9 h-9 rounded-xl border border-kd-border flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                className="w-9 h-9 rounded-xl border border-kd-border flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-kd-elevated transition-all"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div className="text-center min-w-[140px]">
-                <p className="text-xl font-bold text-white">{MONTH_FULL[month - 1]}</p>
+                <p className="text-xl font-bold text-[var(--text-primary)]">{MONTH_FULL[month - 1]}</p>
                 <p className="text-xs text-muted mono">{year}</p>
               </div>
               <button
                 onClick={nextMonth}
-                className="w-9 h-9 rounded-xl border border-kd-border flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                className="w-9 h-9 rounded-xl border border-kd-border flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-kd-elevated transition-all"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

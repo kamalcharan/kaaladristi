@@ -56,6 +56,27 @@ export async function fetchInferences(): Promise<DcInference[]> {
 }
 
 /**
+ * Fetch all inference entries active during [startDate, endDate] (ISO strings).
+ * Includes multi-day events that overlap the range.
+ */
+export async function fetchInferencesForRange(startDate: string, endDate: string): Promise<DcInference[]> {
+  const { data, error } = await from(TABLE)
+    .select('*')
+    .lte('start_date', endDate)
+    .order('start_date', { ascending: true })
+    .limit(500)
+    .execute();
+
+  if (error) throw new Error(`Failed to fetch inferences: ${error.message}`);
+
+  // Single-day: end_date IS NULL → active only on start_date
+  // Range: active when start_date <= day <= end_date
+  return ((data ?? []) as DcInference[]).filter(r =>
+    r.end_date === null ? r.start_date >= startDate : r.end_date >= startDate
+  );
+}
+
+/**
  * Fetch all inference entries active during a given month.
  * Includes multi-month events (e.g. Saturn-Mars Conjunction Apr–May).
  */

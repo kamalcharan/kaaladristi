@@ -45,8 +45,8 @@ export default function MarketsView() {
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
-        <header className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Markets</h1>
+        <header className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Markets</h1>
           <p className="text-secondary font-medium">Historical price data &amp; technical indicators</p>
         </header>
 
@@ -60,12 +60,12 @@ export default function MarketsView() {
             </div>
           </div>
         ) : latest ? (
-          <div className="glass-card rounded-3xl p-6 mb-6">
-            <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+          <div className="glass-card rounded-3xl p-4 sm:p-6 mb-6">
+            <div className="flex flex-wrap items-end gap-x-6 sm:gap-x-10 gap-y-4">
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{indexName}</p>
                 <div className="flex items-baseline gap-4">
-                  <span className="text-3xl font-bold mono text-[var(--text-primary)]">
+                  <span className="text-2xl sm:text-3xl font-bold mono text-[var(--text-primary)]">
                     {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                   <div className={cn('flex items-center gap-1.5', isPositive ? 'text-risk-green' : 'text-risk-red')}>
@@ -102,7 +102,7 @@ export default function MarketsView() {
         <div className="glass-card rounded-3xl p-4">
           {/* Time range selector */}
           {!isLoading && !isError && rows.length > 0 && (
-            <div className="flex items-center gap-1.5 mb-4 px-2">
+            <div className="flex flex-wrap items-center gap-1.5 mb-4 px-2">
               {TIME_RANGES.map((r) => (
                 <button
                   key={r}
@@ -186,7 +186,7 @@ export default function MarketsView() {
                 The <span className="text-[var(--text-primary)] font-medium">{indexName}</span> index has no EOD data.
                 Run the historical downloader to backfill.
               </p>
-              <div className="text-left text-xs space-y-2 bg-kd-card border border-kd-border rounded-xl p-4 max-w-md">
+              <div className="text-left text-xs space-y-2 bg-kd-elevated border border-kd-border rounded-xl p-4 max-w-md">
                 <p className="text-[var(--text-secondary)] font-semibold mb-2">From App/backend/ run:</p>
                 <code className="block text-accent-indigo mono">
                   python3 yfinance_historical.py --mode index

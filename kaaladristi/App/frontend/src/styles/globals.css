@@ -6,9 +6,10 @@
   :root {
     /* ── Background ── */
     --kd-bg:            #030712;
-    --kd-card:          rgba(15, 23, 42, 0.8);
-    --kd-elevated:      rgba(30, 41, 59, 0.5);
-    --kd-border:        rgba(255, 255, 255, 0.06);
+    --kd-surface:       #0f172a;
+    --kd-card:          rgba(15, 23, 42, 0.95);
+    --kd-elevated:      rgba(30, 41, 59, 0.7);
+    --kd-border:        rgba(255, 255, 255, 0.09);
     --kd-border-active: rgba(99, 102, 241, 0.4);
 
     /* ── Text ── */
@@ -38,8 +39,8 @@
 
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #0f172a; }
-  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+  ::-webkit-scrollbar-track { background: var(--kd-bg); }
+  ::-webkit-scrollbar-thumb { background: var(--kd-border-active); border-radius: 10px; }
 }
 
 @layer utilities {
@@ -59,7 +60,7 @@
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
   .glass-card {
-    @apply bg-kd-card border border-kd-border backdrop-blur-xl;
+    @apply bg-kd-surface border border-kd-border backdrop-blur-xl;
   }
 
   .glass-elevated {
@@ -82,7 +83,7 @@
 }
 @keyframes kaala-fade-text {
   0%, 100% { opacity: 0.4; }
-  50%       { opacity: 1; text-shadow: 0 0 10px #f97316; }
+  50%       { opacity: 1; text-shadow: 0 0 10px var(--accent-gold); }
 }
 @keyframes kaala-toast-in {
   from { opacity: 0; transform: translateX(20px); }

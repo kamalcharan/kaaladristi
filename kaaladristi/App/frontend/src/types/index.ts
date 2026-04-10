@@ -198,6 +198,69 @@ export interface IndexStats {
   dayLow: number;
 }
 
+// ── Panchangam (from km_daily_panchang) ──
+
+export interface DailyPanchang {
+  id: number;
+  date: string;
+  sunrise_ist: string | null;
+  sunset_ist: string | null;
+  tithi_num: number;
+  tithi_name: string;
+  tithi_base_name: string | null;
+  paksha: string;
+  tithi_group: string | null;
+  tithi_lord: string | null;
+  nakshatra_num: number;
+  nakshatra_name: string;
+  nakshatra_lord: string | null;
+  nakshatra_pada: number | null;
+  yoga_num: number | null;
+  yoga_name: string | null;
+  karana_num: number | null;
+  karana_name: string | null;
+  vara: string;
+  vara_lord: string;
+  dlnl_match: boolean | null;
+  sun_sign: number | null;
+  sun_sign_name: string | null;
+  moon_sign: number | null;
+  moon_sign_name: string | null;
+  is_sankranti: boolean | null;
+  sankranti_from: string | null;
+  sankranti_to: string | null;
+  hemisphere_event: string | null;
+  is_purnima: boolean | null;
+  is_amavasya: boolean | null;
+  is_ekadashi: boolean | null;
+  // Change times — populated by populate_panchang_end_times.py
+  tithi_end_ist: string | null;
+  tithi_end_next_day: boolean | null;
+  nakshatra_end_ist: string | null;
+  nakshatra_end_next_day: boolean | null;
+}
+
+// ── Market Breadth (from km_market_breadth) ──
+
+export interface MarketBreadthDay {
+  trade_date:    string;
+  pct_above_20:  number | null;
+  pct_above_50:  number | null;
+  pct_above_150: number | null;
+  breadth_score: number | null;
+  stock_count:   number | null;
+}
+
+// ── Breadth ROC Oscillator (from km_breadth_roc) ──
+
+export interface BreadthRocDay {
+  trade_date:  string;
+  roc_13:      number | null;   // avg 13-day ROC / 13 (normalised per day)
+  roc_55:      number | null;   // avg 55-day ROC / 55
+  sma_breadth: number | null;   // 5-period SMA of roc_13
+  stock_count: number | null;
+}
+
 // ── Index Catalog (from mv_index_catalog) ──
 
 export interface IndexCatalogItem {

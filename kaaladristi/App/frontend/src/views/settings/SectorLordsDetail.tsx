@@ -116,7 +116,7 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div>
-          <h2 className="text-xl font-semibold">Sector Lords</h2>
+          <h2 className="text-xl font-semibold text-[var(--text-primary)]">Sector Lords</h2>
           <p className="text-xs text-muted">
             {isLoading ? 'Loading...' : `${sectorLords?.length ?? 0} mappings across ${planetStats.length} planets`}
           </p>
@@ -171,8 +171,8 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
           </div>
 
           {/* Table */}
-          <div className="bg-kd-card border border-kd-border rounded-2xl overflow-hidden">
-            <div className="grid grid-cols-[1fr_200px] gap-4 px-5 py-3 bg-kd-elevated/50 border-b border-kd-border">
+          <div className="bg-kd-surface border-2 border-kd-border rounded-2xl overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-3.5 bg-kd-elevated/50 border-b-2 border-kd-border">
               <button
                 onClick={() => toggleSort('sector')}
                 className="flex items-center gap-1.5 text-[11px] font-bold text-secondary uppercase tracking-wider hover:text-[var(--text-primary)] transition-colors text-left"
@@ -187,7 +187,7 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
               </button>
             </div>
 
-            <div className="max-h-[560px] overflow-y-auto scrollbar-thin">
+            <div className="max-h-[60vh] sm:max-h-[560px] overflow-y-auto scrollbar-thin">
               {rows.length === 0 ? (
                 <div className="px-5 py-10 text-center text-sm text-muted">
                   No matches found
@@ -196,9 +196,9 @@ export default function SectorLordsDetail({ onBack }: SectorLordsDetailProps) {
                 rows.map((r, i) => (
                   <div
                     key={`${r.sectorId}-${r.planetId}`}
-                    className={`grid grid-cols-[1fr_200px] gap-4 px-5 py-3 text-sm ${
-                      i % 2 === 0 ? '' : 'bg-kd-elevated/20'
-                    } hover:bg-kd-elevated/40 transition-colors`}
+                    className={`grid grid-cols-[1fr_auto] gap-4 px-5 py-3 text-sm border-b border-kd-border last:border-b-0 ${
+                      i % 2 === 0 ? 'bg-kd-surface' : 'bg-kd-elevated/20'
+                    } hover:bg-kd-elevated/50 transition-colors`}
                   >
                     <span className="text-[var(--text-primary)]">{r.sector}</span>
                     <span className="inline-flex items-center gap-2">

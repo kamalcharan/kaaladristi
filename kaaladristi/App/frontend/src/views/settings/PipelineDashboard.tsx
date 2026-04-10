@@ -22,9 +22,9 @@ function StepIcon({ status }: { status: string }) {
   switch (status) {
     case 'completed': return <CheckCircle2 className="w-3.5 h-3.5 text-risk-green" />;
     case 'failed':    return <XCircle className="w-3.5 h-3.5 text-risk-red" />;
-    case 'skipped':   return <MinusCircle className="w-3.5 h-3.5 text-slate-500" />;
+    case 'skipped':   return <MinusCircle className="w-3.5 h-3.5 text-muted" />;
     case 'running':   return <Loader2 className="w-3.5 h-3.5 text-accent-indigo animate-spin" />;
-    default:          return <Clock className="w-3.5 h-3.5 text-slate-600" />;
+    default:          return <Clock className="w-3.5 h-3.5 text-muted" />;
   }
 }
 
@@ -32,9 +32,9 @@ function StatusDot({ status }: { status: string }) {
   const cls: Record<string, string> = {
     ok: 'bg-risk-green', connected: 'bg-risk-green', completed: 'bg-risk-green', active: 'bg-risk-green',
     error: 'bg-risk-red', failed: 'bg-risk-red', expired: 'bg-risk-amber', breeze_expired: 'bg-risk-amber',
-    disconnected: 'bg-slate-600', unknown: 'bg-slate-600', pending: 'bg-slate-700',
+    disconnected: 'bg-[var(--text-muted)]', unknown: 'bg-[var(--text-muted)]', pending: 'bg-[var(--text-muted)]',
   };
-  return <div className={cn('w-2 h-2 rounded-full shrink-0', cls[status] ?? 'bg-slate-600')} />;
+  return <div className={cn('w-2 h-2 rounded-full shrink-0', cls[status] ?? 'bg-[var(--text-muted)]')} />;
 }
 
 function fmtDuration(ms: number | null): string {
@@ -128,19 +128,19 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
 
   const isRunning = runMutation.isPending || (health?.active_jobs ?? 0) > 0;
 
-  const inputCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-white focus:outline-none focus:border-accent-indigo/60 transition-colors';
-  const selectCls = 'px-3 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs text-slate-300 focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const inputCls = 'px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-primary)] focus:outline-none focus:border-accent-indigo/60 transition-colors';
+  const selectCls = 'px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-secondary)] focus:outline-none focus:border-accent-indigo/60 transition-colors';
 
   const apiDown = !health;
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted hover:text-white mb-6 transition-colors">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted hover:text-[var(--text-primary)] mb-6 transition-colors">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Settings
       </button>
 
       <header className="mb-6">
-        <h2 className="text-2xl font-bold tracking-tight text-white mb-1">Data Pipeline</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] mb-1">Data Pipeline</h2>
         <p className="text-sm text-secondary">Daily market data sync — NSE, BSE, MCX</p>
       </header>
 
@@ -150,7 +150,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
           <WifiOff className="w-4 h-4 text-risk-amber shrink-0" />
           <div>
             <p className="text-xs text-risk-amber font-semibold">Pipeline API not reachable</p>
-            <p className="text-[10px] text-muted mt-0.5">Run: <span className="mono text-slate-400">uvicorn pipeline_api:app --host 0.0.0.0 --port 8100</span></p>
+            <p className="text-[10px] text-muted mt-0.5">Run: <span className="mono text-[var(--text-secondary)]">uvicorn pipeline_api:app --host 0.0.0.0 --port 8100</span></p>
           </div>
         </div>
       )}
@@ -163,10 +163,10 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
             const isSourceRunning = runningSource === dl.type;
             const canRun = !!dl.run_exchange && !apiDown && dl.status !== 'breeze_expired';
             return (
-              <div key={dl.type} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-slate-900/40 group">
+              <div key={dl.type} className="flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-kd-elevated/40 group">
                 <StatusDot status={dl.status} />
-                <span className="text-[12px] text-white font-medium flex-1">{dl.label}</span>
-                <span className="text-[10px] text-slate-500 mono">
+                <span className="text-[12px] text-[var(--text-primary)] font-medium flex-1">{dl.label}</span>
+                <span className="text-[10px] text-muted mono">
                   {dl.last_sync ? fmtDate(dl.last_sync) : 'Never synced'}
                 </span>
                 {dl.gap_days > 0 && (
@@ -185,7 +185,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                     }}
                     disabled={isRunning}
                     title={`Re-run ${dl.label}`}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800/80 border border-kd-border rounded-lg text-[10px] text-slate-400 hover:text-accent-indigo hover:border-accent-indigo/40 hover:bg-slate-800 disabled:opacity-30 transition-all"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-kd-elevated border border-kd-border rounded-lg text-[10px] text-muted hover:text-accent-indigo hover:border-accent-indigo/40 hover:bg-kd-elevated disabled:opacity-30 transition-all"
                   >
                     {isSourceRunning
                       ? <Loader2 className="w-2.5 h-2.5 animate-spin text-accent-indigo" />
@@ -208,11 +208,11 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
         <div className="glass-card rounded-2xl p-5 mb-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold uppercase tracking-widest text-muted">Breeze Connection</h3>
-            <button onClick={() => setShowBreeze(false)} className="text-xs text-slate-500 hover:text-white">Close</button>
+            <button onClick={() => setShowBreeze(false)} className="text-xs text-muted hover:text-[var(--text-primary)]">Close</button>
           </div>
           <div className="flex items-center gap-2 mb-3">
             <StatusDot status={breeze?.status ?? 'unknown'} />
-            <span className="text-[12px] text-slate-300">
+            <span className="text-[12px] text-[var(--text-secondary)]">
               {breeze?.status === 'connected' ? `Connected (expires ${fmtDateTime(breeze.expires_at)})` : breeze?.status ?? 'Unknown'}
             </span>
           </div>
@@ -246,17 +246,17 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
         <div className="glass-card rounded-2xl p-4 flex-1 min-w-[200px]">
           <div className="flex items-center gap-2 mb-2">
             <Activity className="w-3.5 h-3.5 text-accent-indigo" />
-            <span className="text-xs font-bold text-white">Scheduler</span>
+            <span className="text-xs font-bold text-[var(--text-primary)]">Scheduler</span>
           </div>
           {sched ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <StatusDot status={sched.active ? 'active' : 'error'} />
-                <span className="text-[11px] text-slate-300">{sched.active ? 'Active' : 'Stopped'}</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">{sched.active ? 'Active' : 'Stopped'}</span>
               </div>
               <p className="text-[10px] text-muted">{sched.trigger}</p>
               {sched.next_run && (
-                <p className="text-[10px] text-slate-400">Next: {fmtDateTime(sched.next_run)}</p>
+                <p className="text-[10px] text-[var(--text-secondary)]">Next: {fmtDateTime(sched.next_run)}</p>
               )}
             </div>
           ) : (
@@ -268,7 +268,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
         <div className="glass-card rounded-2xl p-4 flex-1 min-w-[200px]">
           <div className="flex items-center gap-2 mb-3">
             <Play className="w-3.5 h-3.5 text-accent-indigo" />
-            <span className="text-xs font-bold text-white">Actions</span>
+            <span className="text-xs font-bold text-[var(--text-primary)]">Actions</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -287,14 +287,14 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
             <button
               onClick={() => setShowBackfill(!showBackfill)}
               disabled={apiDown}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs font-medium text-slate-300 hover:border-white/20 disabled:opacity-40 transition-all"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs font-medium text-[var(--text-secondary)] hover:border-accent-indigo/30 disabled:opacity-40 transition-all"
             >
               <RefreshCw className="w-3 h-3" /> Backfill
             </button>
             {!showBreeze && (
               <button
                 onClick={() => setShowBreeze(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900/60 border border-kd-border rounded-xl text-xs font-medium text-slate-300 hover:border-white/20 transition-all"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs font-medium text-[var(--text-secondary)] hover:border-accent-indigo/30 transition-all"
               >
                 <Wifi className="w-3 h-3" /> Breeze
               </button>
@@ -306,15 +306,15 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
               onClick={() => setForceRun(v => !v)}
               className={cn(
                 'w-8 h-4 rounded-full transition-colors relative',
-                forceRun ? 'bg-risk-amber/60' : 'bg-slate-700',
+                forceRun ? 'bg-risk-amber/60' : 'bg-[var(--text-muted)]/40',
               )}
             >
               <div className={cn(
-                'absolute top-0.5 w-3 h-3 rounded-full transition-transform bg-white',
+                'absolute top-0.5 w-3 h-3 rounded-full transition-transform bg-kd-surface border border-kd-border',
                 forceRun ? 'translate-x-4' : 'translate-x-0.5',
               )} />
             </div>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-muted">
               Force re-run{forceRun && <span className="text-risk-amber ml-1">(will reset today's completed steps)</span>}
             </span>
           </label>
@@ -349,7 +349,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
             >
               {backfillMutation.isPending ? 'Starting...' : 'Start Backfill'}
             </button>
-            <button onClick={() => setShowBackfill(false)} className="text-xs text-slate-500 hover:text-white px-2 py-2">
+            <button onClick={() => setShowBackfill(false)} className="text-xs text-muted hover:text-[var(--text-primary)] px-2 py-2">
               Cancel
             </button>
           </div>
@@ -361,7 +361,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
         <div className="glass-card rounded-2xl p-5 mb-4">
           <div className="flex items-center gap-2 mb-4">
             <Calendar className="w-3.5 h-3.5 text-accent-indigo" />
-            <span className="text-xs font-bold text-white">Today — {fmtDate(status?.today ?? '')}</span>
+            <span className="text-xs font-bold text-[var(--text-primary)]">Today — {fmtDate(status?.today ?? '')}</span>
           </div>
           <div className="space-y-4">
             {[...todayByExchange.entries()].map(([exchange, steps]) => {
@@ -371,20 +371,20 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
               return (
                 <div key={exchange}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-semibold text-white">{exchange}</span>
-                    <span className="text-[10px] text-slate-500 mono">
+                    <span className="text-[11px] font-semibold text-[var(--text-primary)]">{exchange}</span>
+                    <span className="text-[10px] text-muted mono">
                       {totalRows.toLocaleString('en-IN')} rows &middot; {fmtDuration(totalMs)}
                     </span>
                   </div>
                   <div className="grid gap-0.5">
                     {sorted.map(s => (
-                      <div key={s.step} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-slate-900/40">
+                      <div key={s.step} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-kd-elevated/40">
                         <StepIcon status={s.status} />
-                        <span className="text-[11px] text-slate-300 w-20">{s.step}</span>
-                        <span className="text-[10px] text-slate-500 mono flex-1">
+                        <span className="text-[11px] text-[var(--text-secondary)] w-20">{s.step}</span>
+                        <span className="text-[10px] text-muted mono flex-1">
                           {s.rows_count ? `${s.rows_count.toLocaleString('en-IN')} rows` : ''}
                         </span>
-                        <span className="text-[10px] text-slate-600 mono w-12 text-right">{fmtDuration(s.duration_ms)}</span>
+                        <span className="text-[10px] text-muted mono w-12 text-right">{fmtDuration(s.duration_ms)}</span>
                         {s.error_msg && (
                           <span className="text-[10px] text-risk-red truncate max-w-[180px]" title={s.error_msg}>{s.error_msg}</span>
                         )}
@@ -413,10 +413,10 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
             {historyDates.map(dt => {
               const exMap = historyByDate.get(dt)!;
               return (
-                <div key={dt} className="bg-[#0f172a] border border-kd-border rounded-xl px-4 py-2">
+                <div key={dt} className="bg-kd-surface border border-kd-border rounded-xl px-4 py-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-[11px] mono text-slate-300 font-medium w-20">{fmtDate(dt)}</span>
-                    <span className="text-[10px] text-slate-500 w-6">
+                    <span className="text-[11px] mono text-[var(--text-secondary)] font-medium w-20">{fmtDate(dt)}</span>
+                    <span className="text-[10px] text-muted w-6">
                       {new Date(dt + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}
                     </span>
                     <div className="flex items-center gap-4 flex-1">
@@ -427,10 +427,10 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                         return (
                           <div key={exchange} className="flex items-center gap-1.5">
                             <StatusDot status={fail > 0 ? 'failed' : done === steps.length ? 'completed' : 'pending'} />
-                            <span className="text-[10px] text-slate-400">{exchange}</span>
-                            <span className="text-[10px] text-slate-500 mono">{done}/{steps.length}</span>
+                            <span className="text-[10px] text-[var(--text-secondary)]">{exchange}</span>
+                            <span className="text-[10px] text-muted mono">{done}/{steps.length}</span>
                             {fail > 0 && <span className="text-[10px] text-risk-red">{fail}✗</span>}
-                            <span className="text-[10px] text-slate-600 mono">{totalRows > 0 ? `${totalRows.toLocaleString('en-IN')}r` : ''}</span>
+                            <span className="text-[10px] text-muted mono">{totalRows > 0 ? `${totalRows.toLocaleString('en-IN')}r` : ''}</span>
                           </div>
                         );
                       })}

@@ -63,8 +63,8 @@ export default function ChartView() {
           Back
         </button>
 
-        <header className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">{name}</h1>
+        <header className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">{name}</h1>
           <p className="text-secondary font-medium">Historical price data &amp; technical indicators</p>
         </header>
 
@@ -78,12 +78,12 @@ export default function ChartView() {
             </div>
           </div>
         ) : latest ? (
-          <div className="glass-card rounded-3xl p-6 mb-6">
-            <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
+          <div className="glass-card rounded-3xl p-4 sm:p-6 mb-6">
+            <div className="flex flex-wrap items-end gap-x-6 sm:gap-x-10 gap-y-4">
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{name}</p>
                 <div className="flex items-baseline gap-4">
-                  <span className="text-3xl font-bold mono text-[var(--text-primary)]">
+                  <span className="text-2xl sm:text-3xl font-bold mono text-[var(--text-primary)]">
                     {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                   <div className={cn('flex items-center gap-1.5', isPositive ? 'text-risk-green' : 'text-risk-red')}>
@@ -117,7 +117,7 @@ export default function ChartView() {
         <div className="glass-card rounded-3xl p-4">
           {/* Time range selector */}
           {!isLoading && !isError && rows.length > 0 && (
-            <div className="flex items-center gap-1.5 mb-4 px-2">
+            <div className="flex flex-wrap items-center gap-1.5 mb-4 px-2">
               {TIME_RANGES.map(r => (
                 <button
                   key={r}

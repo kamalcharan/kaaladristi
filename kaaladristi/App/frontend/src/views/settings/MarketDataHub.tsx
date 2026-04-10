@@ -59,14 +59,14 @@ export default function MarketDataHub({ onBack }: { onBack: () => void }) {
     <div>
       <button
         onClick={onBack}
-        className="flex items-center gap-1.5 text-xs text-muted hover:text-white mb-6 transition-colors"
+        className="flex items-center gap-1.5 text-xs text-muted hover:text-[var(--text-primary)] mb-6 transition-colors"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         Back to Settings
       </button>
 
       <header className="mb-8">
-        <h2 className="text-2xl font-bold tracking-tight text-white mb-1">Market Data</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] mb-1">Market Data</h2>
         <p className="text-sm text-secondary">Symbol catalogs — data ranges, record counts, active status</p>
       </header>
 
@@ -75,7 +75,7 @@ export default function MarketDataHub({ onBack }: { onBack: () => void }) {
           <button
             key={s.id}
             onClick={() => setActiveSection(s.id)}
-            className="group bg-kd-card border border-kd-border rounded-2xl p-6 text-left hover:border-accent-indigo/40 hover:shadow-[0_0_30px_rgba(99,102,241,0.08)] transition-all"
+            className="group bg-kd-surface border-2 border-kd-border rounded-2xl p-6 text-left hover:border-accent-indigo/40 hover:[box-shadow:0_0_30px_color-mix(in_srgb,var(--accent-indigo)_8%,transparent)] transition-all"
           >
             <div className="flex items-start justify-between mb-4">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.iconColor}`}>
@@ -83,9 +83,9 @@ export default function MarketDataHub({ onBack }: { onBack: () => void }) {
               </div>
               <ChevronRight className="w-4 h-4 text-muted group-hover:text-accent-indigo transition-colors" />
             </div>
-            <h3 className="text-sm font-semibold mb-1">{s.title}</h3>
+            <h3 className="text-sm font-semibold mb-1 text-[var(--text-primary)]">{s.title}</h3>
             <p className="text-xs text-muted leading-relaxed mb-3">{s.description}</p>
-            <span className="text-[10px] mono text-slate-500 uppercase tracking-wider">{s.meta}</span>
+            <span className="text-[10px] mono text-muted uppercase tracking-wider">{s.meta}</span>
           </button>
         ))}
       </div>

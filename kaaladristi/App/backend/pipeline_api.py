@@ -39,6 +39,8 @@ import pytz
 
 from lib.db_client import get_db
 from lib.breeze_client import init_breeze, get_login_url
+from lib.ai_prompts import SKILLS as _AI_SKILLS
+from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED
 from pipeline.utils.trading_calendar import (
     is_weekend, is_trading_day, is_already_completed,
     mark_day_status, get_missing_dates, last_trading_day,
@@ -120,6 +122,69 @@ def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
         'failed': failed,
     })
     log.info(f'Job {job_id}: completed — {success} success, {failed} failed')
+
+    if success > 0:
+        _refresh_market_breadth()
+        _refresh_breadth_roc()
+
+
+def _refresh_breadth_roc():
+    """Recompute ROC breadth for missing dates after EOD data loads."""
+    try:
+        from compute_breadth_roc import load_closes, compute_roc, upsert
+        import psycopg2 as _pg
+        from lib.config import DATABASE_URL
+        if not DATABASE_URL:
+            return
+        conn = _pg.connect(DATABASE_URL)
+        try:
+            closes = load_closes(conn)
+            df     = compute_roc(closes)
+            with conn.cursor() as cur:
+                cur.execute('SELECT trade_date FROM km_breadth_roc')
+                existing = {str(r[0]) for r in cur.fetchall()}
+            df = df[[str(d) not in existing for d in df.index]]
+            if df.empty:
+                log.info('breadth_roc: no new dates to compute')
+                return
+            n = upsert(conn, df, dry_run=False)
+            log.info(f'breadth_roc: {n} dates upserted')
+        finally:
+            conn.close()
+    except Exception as e:
+        log.warning(f'breadth_roc refresh failed (non-fatal): {e}')
+
+
+def _refresh_market_breadth():
+    """
+    Recompute market breadth scores for any missing dates after EOD data loads.
+    Runs compute_market_breadth.py in-process (missing dates only — fast daily incremental).
+    """
+    try:
+        from compute_market_breadth import load_closes, compute_breadth, upsert
+        import psycopg2 as _pg
+        from lib.config import DATABASE_URL
+        if not DATABASE_URL:
+            log.warning('breadth refresh skipped — DATABASE_URL not set')
+            return
+        conn = _pg.connect(DATABASE_URL)
+        try:
+            closes = load_closes(conn)
+            df     = compute_breadth(closes)
+            # Missing dates only
+            with conn.cursor() as cur:
+                cur.execute('SELECT trade_date FROM km_market_breadth')
+                existing = {str(r[0]) for r in cur.fetchall()}
+            df = df[[str(d) not in existing for d in df.index]]
+            if df.empty:
+                log.info('breadth: no new dates to compute')
+                return
+            n = upsert(conn, df, dry_run=False)
+            log.info(f'breadth: {n} dates upserted')
+        finally:
+            conn.close()
+    except Exception as e:
+        log.warning(f'breadth refresh failed (non-fatal): {e}')
 
 
 def _scheduled_daily_run():
@@ -405,6 +470,187 @@ def scheduler_status():
         'next_run': job.next_run_time.isoformat() if job and job.next_run_time else None,
         'trigger': '6:00 PM IST (Mon-Fri)',
     }
+
+
+@app.post('/api/pipeline/refresh-breadth')
+def refresh_breadth(background_tasks: BackgroundTasks):
+    """Recompute EMA market breadth scores for missing dates."""
+    background_tasks.add_task(_refresh_market_breadth)
+    return {'status': 'queued', 'message': 'Breadth recompute queued'}
+
+
+@app.post('/api/pipeline/refresh-breadth-roc')
+def refresh_breadth_roc(background_tasks: BackgroundTasks):
+    """Recompute ROC breadth oscillator for missing dates."""
+    background_tasks.add_task(_refresh_breadth_roc)
+    return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
+
+
+# ── AI Endpoints ──────────────────────────────────────────────────────────────
+
+# Per-day in-memory cache — insight for a given date never changes
+_insight_cache: dict[str, str] = {}
+
+
+@app.get('/api/ai/panchang-insight')
+def panchang_insight(date: str):
+    """Return an AI-generated 2-sentence market insight for a given date's Panchangam."""
+    if not _AI_ENABLED:
+        return {"date": date, "insight": None, "ai": False}
+
+    if date in _insight_cache:
+        return {"date": date, "insight": _insight_cache[date], "ai": True}
+
+    # Fetch panchang row from DB
+    try:
+        rows = db.select('km_daily_panchang', '*', filters={'date': date}, limit=1)
+    except Exception as e:
+        log.error(f"Failed to fetch panchang for {date}: {e}")
+        return {"date": date, "insight": None, "ai": False}
+
+    if not rows:
+        return {"date": date, "insight": None, "ai": False}
+
+    p = rows[0]
+    special = ", ".join(filter(None, [
+        "Purnima"   if p.get("is_purnima")   else "",
+        "Amavasya"  if p.get("is_amavasya")  else "",
+        "Ekadashi"  if p.get("is_ekadashi")  else "",
+        "Sankranti" if p.get("is_sankranti") else "",
+    ])) or "None"
+
+    user_msg = (
+        f"Panchangam for {date}:\n"
+        f"Tithi: {p.get('tithi_num', '')}. {p.get('tithi_name', '')} (Lord: {p.get('tithi_lord', '')})\n"
+        f"Nakshatra: {p.get('nakshatra_name', '')} Pada {p.get('nakshatra_pada', '')} (Lord: {p.get('nakshatra_lord', '')})\n"
+        f"Yoga: {p.get('yoga_name', '')}\n"
+        f"Vara: {p.get('vara_name', p.get('vara', ''))} (Lord: {p.get('vara_lord', '')})\n"
+        f"Moon Sign: {p.get('moon_sign_name', p.get('moon_sign', ''))}\n"
+        f"Special Events: {special}\n"
+        f"What is today's market risk context?"
+    )
+
+    skill = _AI_SKILLS["panchang_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[date] = insight
+    return {"date": date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/breadth-insight')
+def breadth_insight(date: str = None):
+    """Return an AI-generated 3-sentence market breadth insight for a given date (default: latest)."""
+    if not _AI_ENABLED:
+        return {"date": date, "insight": None, "ai": False}
+
+    cache_key = f"breadth:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"date": date, "insight": _insight_cache[cache_key], "ai": True}
+
+    # Fetch breadth row from DB
+    try:
+        if date:
+            rows = db.select('km_market_breadth', '*', filters={'trade_date': date}, limit=1)
+        else:
+            rows = db.select('km_market_breadth', '*', order='trade_date.desc', limit=2)
+    except Exception as e:
+        log.error(f"Failed to fetch market breadth: {e}")
+        return {"date": date, "insight": None, "ai": False}
+
+    if not rows:
+        return {"date": date, "insight": None, "ai": False}
+
+    latest = rows[0]
+    prev   = rows[1] if len(rows) > 1 else None
+    target_date = str(latest.get('trade_date', date or ''))
+
+    # Regime label
+    score = float(latest.get('breadth_score') or 0)
+    regime = 'Greed' if score > 55 else ('Fear' if score < 35 else 'Neutral')
+
+    # Trend direction
+    trend = 'stable'
+    if prev and prev.get('breadth_score') is not None:
+        delta = score - float(prev['breadth_score'])
+        trend = 'improving' if delta > 1.5 else ('deteriorating' if delta < -1.5 else 'stable')
+
+    user_msg = (
+        f"Market Breadth snapshot as of {target_date}:\n"
+        f"Regime: {regime} (Breadth Score: {score:.1f})\n"
+        f"% Stocks above 20-day EMA : {latest.get('pct_above_20', 'N/A')}%\n"
+        f"% Stocks above 50-day EMA : {latest.get('pct_above_50', 'N/A')}%\n"
+        f"% Stocks above 150-day EMA: {latest.get('pct_above_150', 'N/A')}%\n"
+        f"Stock universe size: {latest.get('stock_count', 'N/A')} NSE equities\n"
+        f"Breadth trend (vs previous session): {trend}\n"
+        f"\nProvide your structural market breadth insight."
+    )
+
+    skill = _AI_SKILLS["breadth_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"date": target_date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/breadth-roc-insight')
+def breadth_roc_insight():
+    """Return an AI-generated 3-sentence ROC breadth oscillator insight (latest date)."""
+    if not _AI_ENABLED:
+        return {"date": None, "insight": None, "ai": False}
+
+    cache_key = "breadth_roc:latest"
+    if cache_key in _insight_cache:
+        return {"date": None, "insight": _insight_cache[cache_key], "ai": True}
+
+    try:
+        rows = db.select('km_breadth_roc', '*', order='trade_date.desc', limit=2)
+    except Exception as e:
+        log.error(f"Failed to fetch breadth_roc: {e}")
+        return {"date": None, "insight": None, "ai": False}
+
+    if not rows:
+        return {"date": None, "insight": None, "ai": False}
+
+    latest = rows[0]
+    prev   = rows[1] if len(rows) > 1 else None
+    target_date = str(latest.get('trade_date', ''))
+
+    roc13 = float(latest.get('roc_13') or 0)
+    roc55 = float(latest.get('roc_55') or 0)
+    sma   = float(latest.get('sma_breadth') or 0)
+
+    bias_13 = 'positive (bullish)' if roc13 > 0 else 'negative (bearish)'
+    bias_55 = 'positive' if roc55 > 0 else 'negative'
+    sma_dir = 'above zero (confirming)' if sma > 0 else 'below zero (diverging)'
+
+    spread = roc13 - roc55
+    spread_desc = (
+        'fast momentum outpacing long-term (breadth expanding)'
+        if spread > 0 else
+        'fast momentum lagging long-term (breadth narrowing)'
+    )
+
+    trend = 'stable'
+    if prev and prev.get('roc_13') is not None:
+        delta = roc13 - float(prev['roc_13'])
+        trend = 'strengthening' if delta > 0.0002 else ('weakening' if delta < -0.0002 else 'stable')
+
+    user_msg = (
+        f"ROC Breadth Oscillator snapshot as of {target_date}:\n"
+        f"ROC_13 (13-day momentum breadth): {roc13:+.4f} — {bias_13}\n"
+        f"ROC_55 (55-day momentum breadth): {roc55:+.4f} — {bias_55}\n"
+        f"SMA_BREADTH (5-day smoothed ROC_13): {sma:+.4f} — {sma_dir}\n"
+        f"Fast vs slow spread: {spread_desc}\n"
+        f"Momentum trend vs prior session: {trend}\n"
+        f"Stock universe: {latest.get('stock_count', 'N/A')} NSE equities\n"
+        f"\nProvide your ROC breadth oscillator insight."
+    )
+
+    skill = _AI_SKILLS["breadth_roc_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
 @app.get('/api/fii-dii')

@@ -9,6 +9,7 @@ export default {
       colors: {
         kd: {
           bg:        'var(--kd-bg)',
+          surface:   'var(--kd-surface)',
           card:      'var(--kd-card)',
           elevated:  'var(--kd-elevated)',
           border:    'var(--kd-border)',

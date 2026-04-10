@@ -72,6 +72,7 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
 
   // ── Backgrounds ──
   set('--kd-bg',            c.utility.primaryBackground);
+  set('--kd-surface',       c.utility.secondaryBackground ?? c.utility.primaryBackground);
   set('--kd-card',          c.surface.glass);
   set('--kd-elevated',      c.surface.glassStrong);
   set('--kd-border',        c.surface.glassBorder);

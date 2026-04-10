@@ -157,9 +157,9 @@ function SwingBar({
         <div className="absolute top-1 bottom-1 w-[3px] rounded-full bg-risk-green/80"
              style={{ left: `${peakPos}%`, transform: 'translateX(-50%)' }} />
       )}
-      {/* Close marker (white, thicker) */}
+      {/* Close marker (thicker) */}
       {closePos != null && (
-        <div className="absolute top-0.5 bottom-0.5 w-[3px] rounded-full bg-white shadow-[0_0_4px_rgba(255,255,255,0.4)]"
+        <div className="absolute top-0.5 bottom-0.5 w-[3px] rounded-full bg-[var(--text-primary)] shadow-[0_0_4px_color-mix(in_srgb,var(--text-primary)_40%,transparent)]"
              style={{ left: `${closePos}%`, transform: 'translateX(-50%)' }} />
       )}
     </div>
@@ -194,7 +194,7 @@ function OHLCRow({ r }: { r: InferenceEvalRow }) {
       {close != null && (
         <span className={cn(
           'ml-1 font-semibold',
-          close > prev ? 'text-risk-green' : close < prev ? 'text-risk-red' : 'text-slate-400',
+          close > prev ? 'text-risk-green' : close < prev ? 'text-risk-red' : 'text-[var(--text-muted)]',
         )}>
           {fmtPct(r.final_return_pct)}
         </span>
@@ -259,7 +259,7 @@ function EvalRow({ r, minor, major }: { r: InferenceEvalRow; minor: number; majo
   const hasPrice  = n(r.prev_close) != null;
 
   return (
-    <div className="px-4 py-3 rounded-xl bg-kd-bg border border-kd-border hover:border-kd-border-active transition-all">
+    <div className="px-4 py-3 rounded-xl bg-kd-surface border border-kd-border hover:border-kd-border-active transition-all">
 
       {/* Row 1 — outcome + event name + date */}
       <div className="flex items-start gap-3">
@@ -435,8 +435,8 @@ export default function RuleEvalView() {
       <div className="animate-fade-in">
 
         {/* Header */}
-        <header className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Rule Evaluation</h1>
+        <header className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Rule Evaluation</h1>
           <p className="text-secondary font-medium">
             Did each DC inference rule work? Checked against real {index} price data.
           </p>
@@ -576,7 +576,7 @@ export default function RuleEvalView() {
                     onClick={() => { setFilterOutcome(f => f === key ? '' : key); resetPage(); }}
                     className={cn(
                       'px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all',
-                      filterOutcome === key ? cls : 'bg-slate-900/40 text-slate-400 border-white/5 hover:border-white/20',
+                      filterOutcome === key ? cls : 'bg-kd-elevated text-[var(--text-muted)] border-kd-border hover:border-kd-border-active',
                     )}
                   >
                     {count} {label}
@@ -603,7 +603,7 @@ export default function RuleEvalView() {
               {error instanceof Error ? error.message : 'Unknown error'}
             </p>
             <p className="text-[11px] text-muted mono">
-              Run: <span className="text-slate-400">python3 backend/apply_migration_017.py</span>
+              Run: <span className="text-[var(--text-secondary)]">python3 backend/apply_migration_017.py</span>
             </p>
           </div>
         ) : allRows.length === 0 ? (
