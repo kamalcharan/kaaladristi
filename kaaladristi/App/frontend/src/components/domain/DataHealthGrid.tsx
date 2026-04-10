@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Loader2, Database, Cpu } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Database, Cpu, Wrench } from 'lucide-react';
 import VaNiInsight from './VaNiInsight';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -143,12 +143,23 @@ function DayBox({ day, dimension }: { day: DayStatus; dimension: string }) {
   );
 }
 
+// ── Fixable dimensions ───────────────────────────────────────────────────────
+
+const FIXABLE_DIMENSIONS = new Set([
+  'nse_equities', 'bse_equities', 'indicators', 'flow_intelligence',
+  'market_breadth', 'breadth_roc', 'fii_dii',
+]);
+
 // ── Health row ───────────────────────────────────────────────────────────────
 
-function HealthRowComponent({ row }: { row: HealthRow }) {
+function HealthRowComponent({ row, period, onFix }: {
+  row: HealthRow; period: number;
+  onFix: (dimension: string, days: number) => void;
+}) {
   const stats = summaryStats(row.days);
   const allGood = stats.missing === 0 && stats.total > 0;
   const hasGaps = stats.missing > 0;
+  const canFix = FIXABLE_DIMENSIONS.has(row.id) && hasGaps;
 
   return (
     <div className="flex items-center gap-3 py-2">
@@ -165,7 +176,7 @@ function HealthRowComponent({ row }: { row: HealthRow }) {
         ))}
       </div>
 
-      <div className="w-16 shrink-0 text-right">
+      <div className="w-20 shrink-0 text-right flex items-center justify-end gap-1.5">
         {allGood ? (
           <span className="text-[9px] font-bold text-risk-green uppercase tracking-wider">Current</span>
         ) : hasGaps ? (
@@ -174,6 +185,18 @@ function HealthRowComponent({ row }: { row: HealthRow }) {
           </span>
         ) : (
           <span className="text-[9px] text-muted">—</span>
+        )}
+        {canFix && (
+          <button
+            onClick={() => onFix(row.id, period)}
+            className={cn(
+              'p-1 rounded-md transition-all',
+              'text-accent-indigo hover:bg-accent-indigo/10 hover:scale-110',
+            )}
+            title={`Fix ${row.label}`}
+          >
+            <Wrench className="w-3 h-3" />
+          </button>
         )}
       </div>
     </div>
@@ -239,8 +262,37 @@ function Legend() {
 
 export default function DataHealthGrid() {
   const [period, setPeriod] = useState<number>(60);
+  const [fixingId, setFixingId] = useState<string | null>(null);
+  const qc = useQueryClient();
   const { data: checks, isLoading } = useHealthChecks(period);
   const { data: healthInsight, isLoading: insightLoading } = useHealthInsight(period);
+
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const fixMutation = useMutation({
+    mutationFn: async ({ dimension, days }: { dimension: string; days: number }) => {
+      const res = await fetch(`${pipelineUrl}/api/pipeline/fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dimension, days }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Fix failed' }));
+        throw new Error(err.detail || 'Fix failed');
+      }
+      return res.json();
+    },
+    onMutate: ({ dimension }) => setFixingId(dimension),
+    onSettled: () => {
+      setFixingId(null);
+      // Refresh health checks after a short delay to let the fix run
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['health_checks'] }), 5000);
+    },
+  });
+
+  const handleFix = (dimension: string, days: number) => {
+    if (fixingId) return;
+    fixMutation.mutate({ dimension, days });
+  };
 
   if (isLoading) {
     return (
@@ -312,7 +364,7 @@ export default function DataHealthGrid() {
             <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Downloads</span>
           </div>
           <div className="divide-y divide-kd-border/30">
-            {downloads.map(row => <HealthRowComponent key={row.id} row={row} />)}
+            {downloads.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} />)}
           </div>
         </div>
       )}
@@ -325,7 +377,7 @@ export default function DataHealthGrid() {
             <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Computations</span>
           </div>
           <div className="divide-y divide-kd-border/30">
-            {snapshots.map(row => <HealthRowComponent key={row.id} row={row} />)}
+            {snapshots.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} />)}
           </div>
         </div>
       )}

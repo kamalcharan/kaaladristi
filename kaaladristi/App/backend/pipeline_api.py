@@ -670,6 +670,143 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
     return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
 
 
+# ── Per-dimension Fix Endpoint ────────────────────────────────────────────────
+
+class FixRequest(BaseModel):
+    dimension: str           # health check ID: nse_equities, indicators, etc.
+    days: int = 60           # how far back to look for gaps
+
+def _fix_indicators():
+    """Recompute technical indicators for all pending symbols."""
+    try:
+        for table, id_col in [('km_index_eod', 'index_id'), ('km_equity_eod', 'equity_id')]:
+            result = db.rpc('compute_all_pending_indicators', {
+                'p_table': table, 'p_id_col': id_col,
+            })
+            count = sum(r.get('rows_updated', 0) for r in (result or []))
+            log.info(f'[fix:indicators] {table}: {count} rows updated')
+    except Exception as e:
+        log.error(f'[fix:indicators] error: {e}')
+
+def _fix_flow_intelligence():
+    """Recompute flow intelligence for all symbols."""
+    try:
+        for table, id_col in [('km_index_eod', 'index_id'), ('km_equity_eod', 'equity_id')]:
+            result = db.rpc('compute_all_flow_intelligence', {
+                'p_table': table, 'p_id_col': id_col,
+            })
+            count = sum(r.get('rows_updated', 0) for r in (result or []))
+            log.info(f'[fix:flow_intel] {table}: {count} rows updated')
+    except Exception as e:
+        log.error(f'[fix:flow_intel] error: {e}')
+
+def _fix_nse_backfill(days: int):
+    """Backfill NSE equity pipeline for missing dates."""
+    from pipeline.utils.trading_calendar import get_missing_dates as _gm
+    from daily_pipeline import run_nse_pipeline
+    from_dt = date.today() - timedelta(days=int(days * 1.5))  # weekday coverage
+    missing = _gm(db, from_dt, date.today(), 'NSE')
+    log.info(f'[fix:nse] {len(missing)} missing dates to backfill')
+    for d in missing:
+        try:
+            run_nse_pipeline(db, d, force=False)
+        except Exception as e:
+            log.error(f'[fix:nse] {d} failed: {e}')
+    _refresh_market_breadth()
+    _refresh_breadth_roc()
+
+def _fix_bse_backfill(days: int):
+    """Backfill BSE equity pipeline for missing dates."""
+    from pipeline.utils.trading_calendar import get_missing_dates as _gm
+    from daily_pipeline import run_bse_pipeline
+    from_dt = date.today() - timedelta(days=int(days * 1.5))
+    missing = _gm(db, from_dt, date.today(), 'BSE')
+    log.info(f'[fix:bse] {len(missing)} missing dates to backfill')
+    for d in missing:
+        try:
+            run_bse_pipeline(db, d, force=False)
+        except Exception as e:
+            log.error(f'[fix:bse] {d} failed: {e}')
+
+def _fix_fii_dii():
+    """Re-download FII/DII for recent missing dates."""
+    from daily_pipeline import run_nse_pipeline
+    # Run last 5 trading days — FII/DII is a step inside NSE pipeline
+    cursor = date.today()
+    for _ in range(7):
+        if cursor.weekday() < 5:
+            try:
+                # Only run the FII/DII-relevant parts
+                from pipeline.downloaders.fii_dii import download_fii_dii
+                from pipeline.utils.step_tracker import StepTracker
+                tracker = StepTracker(db, cursor, 'NSE')
+                tracker.start('fii_dii')
+                try:
+                    count = download_fii_dii(db, cursor)
+                    if count > 0:
+                        tracker.complete('fii_dii', rows=count)
+                    else:
+                        tracker.skip('fii_dii', 'No data')
+                except Exception as e:
+                    tracker.fail('fii_dii', str(e))
+            except ImportError:
+                log.warning('[fix:fii_dii] download_fii_dii not available as standalone')
+                break
+        cursor -= timedelta(days=1)
+
+
+FIX_HANDLERS = {
+    'nse_equities':       lambda days: _fix_nse_backfill(days),
+    'bse_equities':       lambda days: _fix_bse_backfill(days),
+    'indicators':         lambda days: _fix_indicators(),
+    'flow_intelligence':  lambda days: _fix_flow_intelligence(),
+    'market_breadth':     lambda days: _refresh_market_breadth(),
+    'breadth_roc':        lambda days: _refresh_breadth_roc(),
+    'fii_dii':            lambda days: _fix_fii_dii(),
+}
+
+
+@app.post('/api/pipeline/fix')
+def fix_dimension(req: FixRequest, background_tasks: BackgroundTasks):
+    """Fix a specific data health dimension."""
+    handler = FIX_HANDLERS.get(req.dimension)
+    if not handler:
+        raise HTTPException(400, f'Unknown dimension: {req.dimension}. '
+                            f'Available: {", ".join(FIX_HANDLERS.keys())}')
+
+    # Check for running jobs
+    running = [j for j in active_jobs.values() if j['status'] == 'running']
+    if running:
+        raise HTTPException(409, 'A pipeline job is already running')
+
+    job_id = str(uuid.uuid4())[:8]
+    active_jobs[job_id] = {
+        'status': 'running',
+        'started_at': datetime.utcnow().isoformat(),
+        'type': f'fix:{req.dimension}',
+        'exchange': 'ALL',
+        'dates': [],
+    }
+
+    def _run():
+        try:
+            handler(req.days)
+            active_jobs[job_id].update({
+                'status': 'completed',
+                'completed_at': datetime.utcnow().isoformat(),
+            })
+        except Exception as e:
+            active_jobs[job_id].update({
+                'status': 'failed',
+                'completed_at': datetime.utcnow().isoformat(),
+                'error': str(e),
+            })
+
+    background_tasks.add_task(_run)
+    return {'job_id': job_id, 'status': 'queued',
+            'message': f'Fix queued for {req.dimension}'}
+
+
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
 
 # Per-day in-memory cache — insight for a given date never changes
