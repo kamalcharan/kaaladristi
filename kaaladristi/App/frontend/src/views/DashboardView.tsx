@@ -5,6 +5,7 @@ import { Card } from '@/components/ui';
 import {
   RiskGauge, FactorCard, RegimeBadge,
   PanchangamCard, ActiveIndexScroll, MarketBreadthChart, BreadthRocChart, SevenDayStrip,
+  MarketPulseCard,
 } from '@/components/domain';
 
 interface DashboardViewProps {
@@ -52,6 +53,9 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
 
           {/* 6-Day Outlook */}
           <SevenDayStrip selectedDate={report.date} />
+
+          {/* Market Pulse — flow + participation + cycle alignment */}
+          <MarketPulseCard date={report.date} />
 
           {/* Market Breadth — EMA positioning */}
           <MarketBreadthChart />

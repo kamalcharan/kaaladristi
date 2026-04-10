@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { fetchIndicatorDataById, fetchEquityEodById } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
+import { InstrumentIntelligence } from '@/components/domain';
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { TimeRange } from '@/types';
@@ -112,6 +113,11 @@ export default function ChartView() {
             </div>
           </div>
         ) : null}
+
+        {/* Intelligence Panel */}
+        {!isLoading && !isError && rows.length > 0 && (
+          <InstrumentIntelligence id={numId} type={type ?? 'index'} />
+        )}
 
         {/* Chart area */}
         <div className="glass-card rounded-3xl p-4">
