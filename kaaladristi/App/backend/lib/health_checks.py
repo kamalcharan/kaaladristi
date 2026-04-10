@@ -5,17 +5,11 @@ Modular health check registry. Each check reports 60 trading days
 of coverage status for one data dimension.
 
 Adding a new health check:
-  1. Write a function: def check_xxx(db, trading_days) -> HealthRow
+  1. Write a function: def check_xxx(db, trading_days, holidays) -> HealthRow
   2. Register it in HEALTH_CHECKS list at the bottom
 """
 
 from datetime import date, timedelta
-
-
-# ── Types ────────────────────────────────────────────────────────────────────
-
-# Per-day status: 'ok' | 'missing' | 'partial' | 'holiday' | 'future'
-# HealthRow: { id, layer, label, latest_date, days: [{date, status, detail?}] }
 
 
 def _generate_trading_days(n: int = 60) -> list[date]:
@@ -23,66 +17,36 @@ def _generate_trading_days(n: int = 60) -> list[date]:
     days = []
     cursor = date.today()
     while len(days) < n:
-        if cursor.weekday() < 5:  # Mon=0 .. Fri=4
+        if cursor.weekday() < 5:
             days.append(cursor)
         cursor -= timedelta(days=1)
-    days.reverse()  # oldest first
+    days.reverse()
     return days
 
 
-def _date_set_from_query(db, table: str, date_col: str = 'trade_date',
-                         filters: dict = None, days: list[date] = None) -> set[str]:
-    """Query a table and return set of date strings that have data."""
-    if not days:
-        return set()
-
-    from_date = str(days[0])
-    to_date = str(days[-1])
-
+def _query_distinct_dates(db, sql: str, params: list = None) -> set[str]:
+    """Run a raw SQL query that returns date rows, return as set of date strings."""
     try:
-        rows = db.select(
-            table, date_col,
-            filters=filters or {},
-            order=f'{date_col}.asc',
-            limit=5000,
-        )
-        return {str(r[date_col]) for r in (rows or []) if r.get(date_col)}
-    except Exception:
+        conn = db._conn()
+        try:
+            import psycopg2.extras
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, params or [])
+                rows = cur.fetchall()
+            return {str(r['trade_date']) for r in rows if r.get('trade_date')}
+        finally:
+            db._put(conn)
+    except Exception as e:
+        print(f'  [health] query error: {e}')
         return set()
 
 
-def _count_by_date(db, table: str, date_col: str = 'trade_date',
-                   count_col: str = '*', filters: dict = None,
-                   days: list[date] = None) -> dict[str, int]:
-    """Query distinct count per date. Returns {date_str: count}."""
-    # PostgREST doesn't support GROUP BY, so we fetch and count client-side
-    try:
-        rows = db.select(
-            table, date_col,
-            filters=filters or {},
-            order=f'{date_col}.asc',
-            limit=50000,
-        )
-        counts: dict[str, int] = {}
-        for r in (rows or []):
-            d = str(r.get(date_col, ''))
-            counts[d] = counts.get(d, 0) + 1
-        return counts
-    except Exception:
-        return {}
-
-
-def _get_holidays(db, exchange: str = 'NSE') -> set[str]:
+def _get_holidays(db, from_date: str, to_date: str) -> set[str]:
     """Get known holidays from trading calendar."""
-    try:
-        rows = db.select(
-            'km_trading_calendar', 'trade_date',
-            filters={'exchange': exchange, 'is_holiday': True},
-            limit=500,
-        )
-        return {str(r['trade_date']) for r in (rows or [])}
-    except Exception:
-        return set()
+    return _query_distinct_dates(db,
+        "SELECT trade_date FROM km_trading_calendar "
+        "WHERE is_holiday = TRUE AND trade_date BETWEEN %s AND %s",
+        [from_date, to_date])
 
 
 def _build_day_statuses(trading_days: list[date], dates_with_data: set[str],
@@ -103,177 +67,142 @@ def _build_day_statuses(trading_days: list[date], dates_with_data: set[str],
     return result
 
 
-def _latest_date(dates_with_data: set[str]) -> str | None:
-    """Return the most recent date string from a set."""
-    if not dates_with_data:
-        return None
-    return max(dates_with_data)
+def _latest_date(dates: set[str]) -> str | None:
+    return max(dates) if dates else None
 
 
 # ── Health Check Functions ───────────────────────────────────────────────────
 
 
-def check_nse_equities(db, trading_days: list[date], holidays: set[str]) -> dict:
-    """NSE equity EOD data coverage."""
-    dates = _date_set_from_query(db, 'km_trading_calendar',
-                                 filters={'exchange': 'NSE', 'status': 'completed'},
-                                 days=trading_days)
+def check_nse_equities(db, trading_days, holidays):
+    """NSE equity pipeline completion."""
+    dates = _query_distinct_dates(db,
+        "SELECT trade_date FROM km_trading_calendar "
+        "WHERE exchange = 'NSE' AND status = 'completed' "
+        "AND trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'nse_equities',
-        'layer': 'download',
-        'label': 'NSE Equities',
+        'id': 'nse_equities', 'layer': 'download', 'label': 'NSE Equities',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
-def check_bse_equities(db, trading_days: list[date], holidays: set[str]) -> dict:
-    """BSE equity EOD data coverage."""
-    dates = _date_set_from_query(db, 'km_trading_calendar',
-                                 filters={'exchange': 'BSE', 'status': 'completed'},
-                                 days=trading_days)
+def check_bse_equities(db, trading_days, holidays):
+    """BSE equity pipeline completion."""
+    dates = _query_distinct_dates(db,
+        "SELECT trade_date FROM km_trading_calendar "
+        "WHERE exchange = 'BSE' AND status = 'completed' "
+        "AND trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'bse_equities',
-        'layer': 'download',
-        'label': 'BSE Equities',
+        'id': 'bse_equities', 'layer': 'download', 'label': 'BSE Equities',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
-def check_indexes(db, trading_days: list[date], holidays: set[str]) -> dict:
-    """Index EOD data — check distinct trade_dates in km_index_eod."""
-    dates = _date_set_from_query(db, 'km_index_eod', days=trading_days)
-    day_strs = {str(d) for d in trading_days}
-    dates = dates & day_strs  # only keep dates in our window
+def check_indexes(db, trading_days, holidays):
+    """Index EOD data coverage (distinct trade_dates in km_index_eod)."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_index_eod "
+        "WHERE trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'indexes',
-        'layer': 'download',
-        'label': 'Indexes',
+        'id': 'indexes', 'layer': 'download', 'label': 'Indexes',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
-def check_fii_dii(db, trading_days: list[date], holidays: set[str]) -> dict:
+def check_fii_dii(db, trading_days, holidays):
     """FII/DII activity data coverage."""
-    dates = _date_set_from_query(db, 'km_fii_dii', days=trading_days)
-    day_strs = {str(d) for d in trading_days}
-    dates = dates & day_strs
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_fii_dii "
+        "WHERE trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'fii_dii',
-        'layer': 'download',
-        'label': 'FII / DII',
+        'id': 'fii_dii', 'layer': 'download', 'label': 'FII / DII',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
-def check_panchang(db, trading_days: list[date], holidays: set[str]) -> dict:
+def check_panchang(db, trading_days, holidays):
     """Panchangam data coverage."""
-    dates = _date_set_from_query(db, 'km_daily_panchang', date_col='date',
-                                 days=trading_days)
-    day_strs = {str(d) for d in trading_days}
-    dates = dates & day_strs
+    dates = _query_distinct_dates(db,
+        "SELECT date AS trade_date FROM km_daily_panchang "
+        "WHERE date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'panchang',
-        'layer': 'download',
-        'label': 'Panchangam',
+        'id': 'panchang', 'layer': 'download', 'label': 'Panchangam',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
-def check_indicators(db, trading_days: list[date], holidays: set[str]) -> dict:
-    """Technical indicators computed — check indicators_computed_at IS NOT NULL."""
-    try:
-        # Check which trade_dates have at least one row with indicators computed
-        rows = db.select(
-            'km_index_eod', 'trade_date',
-            order='trade_date.asc', limit=50000,
-        )
-        # Filter to rows where indicators_computed_at exists
-        # PostgREST: we can't easily filter NOT NULL, so fetch all and check
-        dates_with_indicators = set()
-        for r in (rows or []):
-            if r.get('indicators_computed_at'):
-                dates_with_indicators.add(str(r['trade_date']))
-    except Exception:
-        dates_with_indicators = set()
-
-    day_strs = {str(d) for d in trading_days}
-    dates_with_indicators = dates_with_indicators & day_strs
-
+def check_indicators(db, trading_days, holidays):
+    """Technical indicators coverage (dates with indicators_computed_at set)."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_index_eod "
+        "WHERE indicators_computed_at IS NOT NULL "
+        "AND trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'indicators',
-        'layer': 'snapshot',
-        'label': 'Indicators',
-        'latest_date': _latest_date(dates_with_indicators),
-        'days': _build_day_statuses(trading_days, dates_with_indicators, holidays),
-    }
-
-
-def check_flow_intelligence(db, trading_days: list[date], holidays: set[str]) -> dict:
-    """Flow intelligence (flow_type) coverage on index EOD."""
-    try:
-        rows = db.select('km_index_eod', 'trade_date,flow_type',
-                         order='trade_date.asc', limit=50000)
-        dates = {str(r['trade_date']) for r in (rows or [])
-                 if r.get('flow_type') is not None}
-    except Exception:
-        dates = set()
-
-    day_strs = {str(d) for d in trading_days}
-    dates = dates & day_strs
-
-    return {
-        'id': 'flow_intelligence',
-        'layer': 'snapshot',
-        'label': 'Flow Intelligence',
+        'id': 'indicators', 'layer': 'snapshot', 'label': 'Indicators',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
-def check_market_breadth(db, trading_days: list[date], holidays: set[str]) -> dict:
+def check_flow_intelligence(db, trading_days, holidays):
+    """Flow intelligence (flow_type) coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_index_eod "
+        "WHERE flow_type IS NOT NULL "
+        "AND trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'flow_intelligence', 'layer': 'snapshot', 'label': 'Flow Intelligence',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, holidays),
+    }
+
+
+def check_market_breadth(db, trading_days, holidays):
     """Market breadth computation coverage."""
-    dates = _date_set_from_query(db, 'km_market_breadth', days=trading_days)
-    day_strs = {str(d) for d in trading_days}
-    dates = dates & day_strs
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_market_breadth "
+        "WHERE trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'market_breadth',
-        'layer': 'snapshot',
-        'label': 'Market Breadth',
+        'id': 'market_breadth', 'layer': 'snapshot', 'label': 'Market Breadth',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
-def check_breadth_roc(db, trading_days: list[date], holidays: set[str]) -> dict:
+def check_breadth_roc(db, trading_days, holidays):
     """Breadth ROC computation coverage."""
-    dates = _date_set_from_query(db, 'km_breadth_roc', days=trading_days)
-    day_strs = {str(d) for d in trading_days}
-    dates = dates & day_strs
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_breadth_roc "
+        "WHERE trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'breadth_roc',
-        'layer': 'snapshot',
-        'label': 'Breadth ROC',
+        'id': 'breadth_roc', 'layer': 'snapshot', 'label': 'Breadth ROC',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, holidays),
     }
 
 
 # ── Registry ─────────────────────────────────────────────────────────────────
-# Add new checks here — they'll automatically appear in the health grid.
 
 HEALTH_CHECKS = [
-    # Layer: download
     check_nse_equities,
     check_bse_equities,
     check_indexes,
     check_fii_dii,
     check_panchang,
-    # Layer: snapshot
     check_indicators,
     check_flow_intelligence,
     check_market_breadth,
@@ -284,7 +213,10 @@ HEALTH_CHECKS = [
 def run_all_health_checks(db) -> list[dict]:
     """Run all registered health checks and return results."""
     trading_days = _generate_trading_days(60)
-    holidays = _get_holidays(db)
+    from_date = str(trading_days[0])
+    to_date = str(trading_days[-1])
+    holidays = _get_holidays(db, from_date, to_date)
+
     results = []
     for check_fn in HEALTH_CHECKS:
         try:
@@ -292,10 +224,7 @@ def run_all_health_checks(db) -> list[dict]:
         except Exception as e:
             results.append({
                 'id': check_fn.__name__.replace('check_', ''),
-                'layer': 'unknown',
-                'label': check_fn.__name__,
-                'latest_date': None,
-                'days': [],
-                'error': str(e),
+                'layer': 'unknown', 'label': check_fn.__name__,
+                'latest_date': None, 'days': [], 'error': str(e),
             })
     return results
