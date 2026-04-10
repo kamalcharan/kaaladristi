@@ -111,13 +111,13 @@ function MonthMarkers({ days }: { days: DayStatus[] }) {
 
 function DayBox({ day, dimension }: { day: DayStatus; dimension: string }) {
   return (
-    <div className="relative group/box">
+    <div className="relative group">
       <div
         className={cn(
-          'w-[8px] h-[8px] sm:w-[10px] sm:h-[10px] rounded-[2px] transition-all',
+          'w-[8px] h-[8px] sm:w-[10px] sm:h-[10px] rounded-[2px] transition-all cursor-pointer',
           STATUS_COLORS[day.status] ?? 'bg-kd-border',
-          day.status === 'ok' && 'opacity-90 hover:opacity-100 hover:scale-125',
-          day.status === 'missing' && 'opacity-80 hover:opacity-100 hover:scale-125',
+          day.status === 'ok' && 'opacity-90 hover:opacity-100 hover:scale-150',
+          day.status === 'missing' && 'opacity-80 hover:opacity-100 hover:scale-150',
           day.status === 'holiday' && 'opacity-40',
           day.status === 'future' && 'opacity-20',
         )}
@@ -126,7 +126,7 @@ function DayBox({ day, dimension }: { day: DayStatus; dimension: string }) {
         'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 rounded-lg',
         'bg-kd-card border border-kd-border shadow-xl',
         'text-[9px] whitespace-nowrap z-50',
-        'opacity-0 group-hover/box:opacity-100 pointer-events-none transition-opacity duration-150',
+        'hidden group-hover:block',
       )}>
         <div className="text-[var(--text-primary)] font-bold">{fmtFull(day.date)}</div>
         <div className="text-[var(--text-secondary)] mt-0.5">{dimension}</div>
@@ -159,7 +159,7 @@ function HealthRowComponent({ row }: { row: HealthRow }) {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center gap-[2px] sm:gap-[3px] min-w-0 overflow-hidden">
+      <div className="flex-1 flex items-center gap-[2px] sm:gap-[3px] min-w-0 overflow-visible">
         {row.days.map(day => (
           <DayBox key={day.date} day={day} dimension={row.label} />
         ))}
