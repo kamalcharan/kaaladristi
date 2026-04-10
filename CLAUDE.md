@@ -214,8 +214,8 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Latest migration: **025** (`km_migration_025_indicator_rpc_windowed.sql`)
-Next migration number: **026**.
+Latest migration: **026** (`km_migration_026_magic_rs_rpc.sql`)
+Next migration number: **027**.
 
 ### Job Queue Architecture
 
