@@ -5,7 +5,7 @@ Modular health check registry. Each check reports 60 trading days
 of coverage status for one data dimension.
 
 Adding a new health check:
-  1. Write a function: def check_xxx(db, trading_days, holidays) -> HealthRow
+  1. Write a function: def check_xxx(db, trading_days, skip_dates) -> HealthRow
   2. Register it in HEALTH_CHECKS list at the bottom
 """
 
@@ -41,25 +41,44 @@ def _query_distinct_dates(db, sql: str, params: list = None) -> set[str]:
         return set()
 
 
-def _get_holidays(db, from_date: str, to_date: str) -> set[str]:
-    """Get known holidays from trading calendar."""
-    return _query_distinct_dates(db,
-        "SELECT trade_date FROM km_trading_calendar "
-        "WHERE is_holiday = TRUE AND trade_date BETWEEN %s AND %s",
-        [from_date, to_date])
+def _get_skip_dates(db, from_date: str, to_date: str) -> dict[str, str]:
+    """Get holidays and no_data dates from trading calendar. Returns {date: status}."""
+    try:
+        import psycopg2.extras
+        conn = db._conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT trade_date, status, is_holiday FROM km_trading_calendar "
+                    "WHERE (is_holiday = TRUE OR status IN ('holiday', 'no_data', 'weekend')) "
+                    "AND trade_date BETWEEN %s AND %s",
+                    [from_date, to_date]
+                )
+                result = {}
+                for r in cur.fetchall():
+                    ds = str(r['trade_date'])
+                    if r.get('is_holiday') or r.get('status') == 'holiday':
+                        result[ds] = 'holiday'
+                    else:
+                        result[ds] = 'no_data'
+                return result
+        finally:
+            db._put(conn)
+    except Exception:
+        return {}
 
 
 def _build_day_statuses(trading_days: list[date], dates_with_data: set[str],
-                        holidays: set[str] = None) -> list[dict]:
-    """Build per-day status array."""
+                        skip_dates: dict[str, str] = None) -> list[dict]:
+    """Build per-day status array. skip_dates maps date_str -> 'holiday'|'no_data'."""
     today = date.today()
     result = []
     for d in trading_days:
         ds = str(d)
         if d > today:
             result.append({'date': ds, 'status': 'future'})
-        elif holidays and ds in holidays:
-            result.append({'date': ds, 'status': 'holiday'})
+        elif skip_dates and ds in skip_dates:
+            result.append({'date': ds, 'status': skip_dates[ds]})
         elif ds in dates_with_data:
             result.append({'date': ds, 'status': 'ok'})
         else:
@@ -74,7 +93,7 @@ def _latest_date(dates: set[str]) -> str | None:
 # ── Health Check Functions ───────────────────────────────────────────────────
 
 
-def check_nse_equities(db, trading_days, holidays):
+def check_nse_equities(db, trading_days, skip_dates):
     """NSE equity EOD data coverage — checks actual data in km_equity_eod."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
@@ -85,11 +104,11 @@ def check_nse_equities(db, trading_days, holidays):
     return {
         'id': 'nse_equities', 'layer': 'download', 'label': 'NSE Equities',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_bse_equities(db, trading_days, holidays):
+def check_bse_equities(db, trading_days, skip_dates):
     """BSE equity EOD data coverage — checks actual data in km_equity_eod."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
@@ -100,11 +119,11 @@ def check_bse_equities(db, trading_days, holidays):
     return {
         'id': 'bse_equities', 'layer': 'download', 'label': 'BSE Equities',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_indexes(db, trading_days, holidays):
+def check_indexes(db, trading_days, skip_dates):
     """Index EOD data coverage (distinct trade_dates in km_index_eod)."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_index_eod "
@@ -113,11 +132,11 @@ def check_indexes(db, trading_days, holidays):
     return {
         'id': 'indexes', 'layer': 'download', 'label': 'Indexes',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_fii_dii(db, trading_days, holidays):
+def check_fii_dii(db, trading_days, skip_dates):
     """FII/DII activity data coverage."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_fii_dii "
@@ -126,11 +145,11 @@ def check_fii_dii(db, trading_days, holidays):
     return {
         'id': 'fii_dii', 'layer': 'download', 'label': 'FII / DII',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_panchang(db, trading_days, holidays):
+def check_panchang(db, trading_days, skip_dates):
     """Panchangam data coverage."""
     dates = _query_distinct_dates(db,
         "SELECT date AS trade_date FROM km_daily_panchang "
@@ -139,11 +158,11 @@ def check_panchang(db, trading_days, holidays):
     return {
         'id': 'panchang', 'layer': 'download', 'label': 'Panchangam',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_indicators(db, trading_days, holidays):
+def check_indicators(db, trading_days, skip_dates):
     """Technical indicators coverage (dates with indicators_computed_at set)."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_index_eod "
@@ -153,11 +172,11 @@ def check_indicators(db, trading_days, holidays):
     return {
         'id': 'indicators', 'layer': 'snapshot', 'label': 'Indicators',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_flow_intelligence(db, trading_days, holidays):
+def check_flow_intelligence(db, trading_days, skip_dates):
     """Flow intelligence (flow_type) coverage."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_index_eod "
@@ -167,11 +186,11 @@ def check_flow_intelligence(db, trading_days, holidays):
     return {
         'id': 'flow_intelligence', 'layer': 'snapshot', 'label': 'Flow Intelligence',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_market_breadth(db, trading_days, holidays):
+def check_market_breadth(db, trading_days, skip_dates):
     """Market breadth computation coverage."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_market_breadth "
@@ -180,11 +199,11 @@ def check_market_breadth(db, trading_days, holidays):
     return {
         'id': 'market_breadth', 'layer': 'snapshot', 'label': 'Market Breadth',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
-def check_breadth_roc(db, trading_days, holidays):
+def check_breadth_roc(db, trading_days, skip_dates):
     """Breadth ROC computation coverage."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_breadth_roc "
@@ -193,7 +212,7 @@ def check_breadth_roc(db, trading_days, holidays):
     return {
         'id': 'breadth_roc', 'layer': 'snapshot', 'label': 'Breadth ROC',
         'latest_date': _latest_date(dates),
-        'days': _build_day_statuses(trading_days, dates, holidays),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
 
 
@@ -217,12 +236,12 @@ def run_all_health_checks(db, days: int = 60) -> list[dict]:
     trading_days = _generate_trading_days(days)
     from_date = str(trading_days[0])
     to_date = str(trading_days[-1])
-    holidays = _get_holidays(db, from_date, to_date)
+    skip_dates = _get_skip_dates(db, from_date, to_date)
 
     results = []
     for check_fn in HEALTH_CHECKS:
         try:
-            results.append(check_fn(db, trading_days, holidays))
+            results.append(check_fn(db, trading_days, skip_dates))
         except Exception as e:
             results.append({
                 'id': check_fn.__name__.replace('check_', ''),

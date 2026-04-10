@@ -27,7 +27,8 @@ const STATUS_COLORS: Record<string, string> = {
   ok:      'bg-risk-green',
   missing: 'bg-risk-red',
   partial: 'bg-risk-amber',
-  holiday: 'bg-kd-border',
+  holiday: 'bg-accent-violet',
+  no_data: 'bg-accent-violet',
   future:  'bg-kd-elevated/30',
 };
 
@@ -36,6 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
   missing: 'Missing',
   partial: 'Partial',
   holiday: 'Holiday',
+  no_data: 'No Data (skipped)',
   future:  'Future',
 };
 
@@ -126,7 +128,7 @@ function DayBox({ day, dimension, onMark }: {
           STATUS_COLORS[day.status] ?? 'bg-kd-border',
           day.status === 'ok' && 'opacity-90 hover:opacity-100 hover:scale-150',
           day.status === 'missing' && 'opacity-80 hover:opacity-100 hover:scale-150',
-          day.status === 'holiday' && 'opacity-40',
+          (day.status === 'holiday' || day.status === 'no_data') && 'opacity-60',
           day.status === 'future' && 'opacity-20',
         )}
       />
@@ -283,15 +285,15 @@ function Legend() {
     <div className="flex items-center gap-4 text-[9px] text-muted">
       <div className="flex items-center gap-1">
         <div className="w-2 h-2 rounded-sm bg-risk-green opacity-90" />
-        <span>Data present</span>
+        <span>Present</span>
       </div>
       <div className="flex items-center gap-1">
         <div className="w-2 h-2 rounded-sm bg-risk-red opacity-80" />
         <span>Missing</span>
       </div>
       <div className="flex items-center gap-1">
-        <div className="w-2 h-2 rounded-sm bg-kd-border opacity-40" />
-        <span>Holiday</span>
+        <div className="w-2 h-2 rounded-sm bg-accent-violet opacity-60" />
+        <span>Holiday / Skipped</span>
       </div>
       <div className="flex items-center gap-1">
         <div className="w-2 h-2 rounded-sm bg-kd-elevated/30 opacity-20" />
