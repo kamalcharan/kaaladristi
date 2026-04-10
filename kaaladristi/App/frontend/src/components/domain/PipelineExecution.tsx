@@ -81,8 +81,15 @@ function fmtTime(iso: string | null): string {
 function fmtTimeIST(iso: string | null): string {
   if (!iso) return '';
   try {
-    // Backend stores UTC — convert to IST for display
-    const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+    // Handle various timestamp formats from the DB
+    let d: Date;
+    if (iso.includes('+') || iso.endsWith('Z')) {
+      // Already has timezone info
+      d = new Date(iso);
+    } else {
+      // No timezone — assume UTC
+      d = new Date(iso + 'Z');
+    }
     return d.toLocaleTimeString('en-IN', {
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       hour12: true, timeZone: 'Asia/Kolkata',
