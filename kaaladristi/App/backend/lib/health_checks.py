@@ -75,11 +75,12 @@ def _latest_date(dates: set[str]) -> str | None:
 
 
 def check_nse_equities(db, trading_days, holidays):
-    """NSE equity pipeline completion."""
+    """NSE equity EOD data coverage — checks actual data in km_equity_eod."""
     dates = _query_distinct_dates(db,
-        "SELECT trade_date FROM km_trading_calendar "
-        "WHERE exchange = 'NSE' AND status = 'completed' "
-        "AND trade_date BETWEEN %s AND %s",
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'NSE' "
+        "AND e.trade_date BETWEEN %s AND %s",
         [str(trading_days[0]), str(trading_days[-1])])
     return {
         'id': 'nse_equities', 'layer': 'download', 'label': 'NSE Equities',
@@ -89,11 +90,12 @@ def check_nse_equities(db, trading_days, holidays):
 
 
 def check_bse_equities(db, trading_days, holidays):
-    """BSE equity pipeline completion."""
+    """BSE equity EOD data coverage — checks actual data in km_equity_eod."""
     dates = _query_distinct_dates(db,
-        "SELECT trade_date FROM km_trading_calendar "
-        "WHERE exchange = 'BSE' AND status = 'completed' "
-        "AND trade_date BETWEEN %s AND %s",
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'BSE' "
+        "AND e.trade_date BETWEEN %s AND %s",
         [str(trading_days[0]), str(trading_days[-1])])
     return {
         'id': 'bse_equities', 'layer': 'download', 'label': 'BSE Equities',
