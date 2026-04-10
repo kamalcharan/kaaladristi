@@ -158,33 +158,89 @@ def handle_fix_indicators(db, job_id, params):
     return total
 
 
-def handle_fix_equity_indicators(db, job_id, params):
-    """Compute indicators for EQUITY — separate heavy job."""
+def handle_fix_nse_equity_indicators(db, job_id, params):
+    """Compute indicators for NSE EQUITY only."""
     days = params.get('days', 60)
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
     total = 0
-    table, id_col = 'km_equity_eod', 'equity_id'
-    pending = _pending_symbols(db, table, id_col, 'indicators_computed_at', from_dt, cutoff)
-    _update_job(db, job_id, progress=f'{len(pending)} equity symbols to compute')
-    log.info(f'{table}: {len(pending)} symbols with indicator gaps')
+    # Find NSE equity IDs with gaps
+    import psycopg2.extras
+    conn = db._conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT DISTINCT e.equity_id AS sid FROM km_equity_eod e
+                JOIN km_equity_symbols s ON s.id = e.equity_id
+                WHERE s.exchange = 'NSE' AND e.indicators_computed_at IS NULL
+                AND e.trade_date BETWEEN %s AND %s
+            """, [str(from_dt), str(cutoff)])
+            pending = [r['sid'] for r in cur.fetchall()]
+    finally:
+        db._put(conn)
+
+    _update_job(db, job_id, progress=f'{len(pending)} NSE equity symbols to compute')
+    log.info(f'NSE Equity indicators: {len(pending)} symbols with gaps')
 
     for i, sid in enumerate(pending):
         if _is_cancelled(db, job_id):
             return total
         _update_job(db, job_id,
-                    progress=f'Equity {i+1}/{len(pending)}',
+                    progress=f'NSE Equity {i+1}/{len(pending)}',
                     progress_pct=int((i / max(len(pending), 1)) * 100))
         try:
             result = db.rpc('compute_indicators_batch', {
-                'p_table': table, 'p_id_col': id_col,
+                'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
                 'p_symbol_id': sid, 'p_from_date': str(from_dt),
             })
             count = result[0].get('compute_indicators_batch', 0) if result else 0
             total += count
         except Exception as e:
-            log.error(f'{table} sid={sid}: {e}')
+            log.error(f'NSE equity sid={sid}: {e}')
+
+    return total
+
+
+def handle_fix_bse_equity_indicators(db, job_id, params):
+    """Compute indicators for BSE EQUITY only."""
+    days = params.get('days', 60)
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
+
+    total = 0
+    import psycopg2.extras
+    conn = db._conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT DISTINCT e.equity_id AS sid FROM km_equity_eod e
+                JOIN km_equity_symbols s ON s.id = e.equity_id
+                WHERE s.exchange = 'BSE' AND e.indicators_computed_at IS NULL
+                AND e.trade_date BETWEEN %s AND %s
+            """, [str(from_dt), str(cutoff)])
+            pending = [r['sid'] for r in cur.fetchall()]
+    finally:
+        db._put(conn)
+
+    _update_job(db, job_id, progress=f'{len(pending)} BSE equity symbols to compute')
+    log.info(f'BSE Equity indicators: {len(pending)} symbols with gaps')
+
+    for i, sid in enumerate(pending):
+        if _is_cancelled(db, job_id):
+            return total
+        _update_job(db, job_id,
+                    progress=f'BSE Equity {i+1}/{len(pending)}',
+                    progress_pct=int((i / max(len(pending), 1)) * 100))
+        try:
+            result = db.rpc('compute_indicators_batch', {
+                'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+                'p_symbol_id': sid, 'p_from_date': str(from_dt),
+            })
+            count = result[0].get('compute_indicators_batch', 0) if result else 0
+            total += count
+        except Exception as e:
+            log.error(f'BSE equity sid={sid}: {e}')
 
     return total
 
@@ -427,9 +483,10 @@ def handle_fix_bse_equities(db, job_id, params):
 # ── Handler Registry ─────────────────────────────────────────────────────────
 
 HANDLERS = {
-    'fix:indicators':            handle_fix_indicators,
-    'fix:equity_indicators':     handle_fix_equity_indicators,
-    'fix:flow_intelligence':     handle_fix_flow,
+    'fix:indicators':              handle_fix_indicators,
+    'fix:nse_equity_indicators':   handle_fix_nse_equity_indicators,
+    'fix:bse_equity_indicators':   handle_fix_bse_equity_indicators,
+    'fix:flow_intelligence':       handle_fix_flow,
     'fix:market_breadth':    handle_fix_breadth,
     'fix:breadth_roc':       handle_fix_breadth_roc,
     'fix:fii_dii':           handle_fix_fii_dii,

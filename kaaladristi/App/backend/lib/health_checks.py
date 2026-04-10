@@ -163,14 +163,44 @@ def check_panchang(db, trading_days, skip_dates):
 
 
 def check_indicators(db, trading_days, skip_dates):
-    """Technical indicators coverage (dates with indicators_computed_at set)."""
+    """Index technical indicators coverage."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_index_eod "
         "WHERE indicators_computed_at IS NOT NULL "
         "AND trade_date BETWEEN %s AND %s",
         [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'indicators', 'layer': 'snapshot', 'label': 'Indicators',
+        'id': 'indicators', 'layer': 'snapshot', 'label': 'Index Indicators',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
+def check_nse_equity_indicators(db, trading_days, skip_dates):
+    """NSE equity technical indicators coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'NSE' AND e.indicators_computed_at IS NOT NULL "
+        "AND e.trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'nse_equity_indicators', 'layer': 'snapshot', 'label': 'NSE Equity Indicators',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
+def check_bse_equity_indicators(db, trading_days, skip_dates):
+    """BSE equity technical indicators coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'BSE' AND e.indicators_computed_at IS NOT NULL "
+        "AND e.trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'bse_equity_indicators', 'layer': 'snapshot', 'label': 'BSE Equity Indicators',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
@@ -219,12 +249,16 @@ def check_breadth_roc(db, trading_days, skip_dates):
 # ── Registry ─────────────────────────────────────────────────────────────────
 
 HEALTH_CHECKS = [
+    # Layer: download
     check_nse_equities,
     check_bse_equities,
     check_indexes,
     check_fii_dii,
     check_panchang,
+    # Layer: snapshot
     check_indicators,
+    check_nse_equity_indicators,
+    check_bse_equity_indicators,
     check_flow_intelligence,
     check_market_breadth,
     check_breadth_roc,

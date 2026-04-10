@@ -397,23 +397,23 @@ def status():
 
 # Ordered step definitions for live execution view
 NSE_STEPS = [
-    {'step': 'index_download',    'label': 'Index Download'},
-    {'step': 'tri_download',      'label': 'TRI Download'},
-    {'step': 'fii_dii',           'label': 'FII / DII'},
+    {'step': 'index_download',    'label': 'NSE Index Download'},
+    {'step': 'tri_download',      'label': 'TRI Index Download'},
+    {'step': 'fii_dii',           'label': 'FII / DII Activity'},
     {'step': 'index_indicators',  'label': 'Index Indicators'},
-    {'step': 'download',          'label': 'Equity Download'},
-    {'step': 'parse',             'label': 'Parse CSV'},
-    {'step': 'insert',            'label': 'Insert Records'},
-    {'step': 'delivery',          'label': 'Delivery Data'},
-    {'step': 'indicators',        'label': 'Equity Indicators'},
+    {'step': 'download',          'label': 'NSE Equity Download'},
+    {'step': 'parse',             'label': 'NSE Parse CSV'},
+    {'step': 'insert',            'label': 'NSE Insert Records'},
+    {'step': 'delivery',          'label': 'NSE Delivery Data'},
+    {'step': 'indicators',        'label': 'NSE Equity Indicators'},
     {'step': 'views',             'label': 'Refresh Views'},
 ]
 
 BSE_STEPS = [
-    {'step': 'download',          'label': 'BSE Download'},
-    {'step': 'parse',             'label': 'Parse CSV'},
-    {'step': 'insert',            'label': 'Insert Records'},
-    {'step': 'indicators',        'label': 'Equity Indicators'},
+    {'step': 'download',          'label': 'BSE Equity Download'},
+    {'step': 'parse',             'label': 'BSE Parse CSV'},
+    {'step': 'insert',            'label': 'BSE Insert Records'},
+    {'step': 'indicators',        'label': 'BSE Equity Indicators'},
 ]
 
 
@@ -1117,7 +1117,8 @@ def _get_known_holidays_set(from_dt: date, to_dt: date) -> set[str]:
 
 
 FIX_DIMENSIONS = {
-    'nse_equities', 'bse_equities', 'indicators', 'equity_indicators',
+    'nse_equities', 'bse_equities', 'indicators',
+    'nse_equity_indicators', 'bse_equity_indicators',
     'flow_intelligence', 'market_breadth', 'breadth_roc', 'fii_dii',
 }
 
