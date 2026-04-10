@@ -128,63 +128,95 @@ def _is_cancelled(db, job_id):
 # ── Job Handlers ─────────────────────────────────────────────────────────────
 
 def handle_fix_indicators(db, job_id, params):
-    """Compute indicators only for missing rows in date range."""
+    """Compute indicators only for missing rows in date range — INDEX only."""
     days = params.get('days', 60)
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
     total = 0
-    for table, id_col in [('km_index_eod', 'index_id'), ('km_equity_eod', 'equity_id')]:
-        pending = _pending_symbols(db, table, id_col, 'indicators_computed_at', from_dt, cutoff)
-        _update_job(db, job_id, progress=f'{table}: {len(pending)} symbols to compute')
-        log.info(f'{table}: {len(pending)} symbols with indicator gaps')
+    # Only process indexes — equity indicators are a separate, heavier job
+    table, id_col = 'km_index_eod', 'index_id'
+    pending = _pending_symbols(db, table, id_col, 'indicators_computed_at', from_dt, cutoff)
+    _update_job(db, job_id, progress=f'{len(pending)} index symbols to compute')
+    log.info(f'{table}: {len(pending)} symbols with indicator gaps')
 
-        for i, sid in enumerate(pending):
-            if _is_cancelled(db, job_id):
-                return total
-            _update_job(db, job_id,
-                        progress=f'{table}: {i+1}/{len(pending)}',
-                        progress_pct=int((i / max(len(pending), 1)) * 100))
-            try:
-                result = db.rpc('compute_indicators_batch', {
-                    'p_table': table, 'p_id_col': id_col,
-                    'p_symbol_id': sid, 'p_from_date': str(from_dt),
-                })
-                count = result[0].get('compute_indicators_batch', 0) if result else 0
-                total += count
-            except Exception as e:
-                log.error(f'{table} sid={sid}: {e}')
+    for i, sid in enumerate(pending):
+        if _is_cancelled(db, job_id):
+            return total
+        _update_job(db, job_id,
+                    progress=f'Index {i+1}/{len(pending)}',
+                    progress_pct=int((i / max(len(pending), 1)) * 100))
+        try:
+            result = db.rpc('compute_indicators_batch', {
+                'p_table': table, 'p_id_col': id_col,
+                'p_symbol_id': sid, 'p_from_date': str(from_dt),
+            })
+            count = result[0].get('compute_indicators_batch', 0) if result else 0
+            total += count
+        except Exception as e:
+            log.error(f'{table} sid={sid}: {e}')
+
+    return total
+
+
+def handle_fix_equity_indicators(db, job_id, params):
+    """Compute indicators for EQUITY — separate heavy job."""
+    days = params.get('days', 60)
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
+
+    total = 0
+    table, id_col = 'km_equity_eod', 'equity_id'
+    pending = _pending_symbols(db, table, id_col, 'indicators_computed_at', from_dt, cutoff)
+    _update_job(db, job_id, progress=f'{len(pending)} equity symbols to compute')
+    log.info(f'{table}: {len(pending)} symbols with indicator gaps')
+
+    for i, sid in enumerate(pending):
+        if _is_cancelled(db, job_id):
+            return total
+        _update_job(db, job_id,
+                    progress=f'Equity {i+1}/{len(pending)}',
+                    progress_pct=int((i / max(len(pending), 1)) * 100))
+        try:
+            result = db.rpc('compute_indicators_batch', {
+                'p_table': table, 'p_id_col': id_col,
+                'p_symbol_id': sid, 'p_from_date': str(from_dt),
+            })
+            count = result[0].get('compute_indicators_batch', 0) if result else 0
+            total += count
+        except Exception as e:
+            log.error(f'{table} sid={sid}: {e}')
 
     return total
 
 
 def handle_fix_flow(db, job_id, params):
-    """Compute flow intelligence only for missing rows in date range."""
+    """Compute flow intelligence only for missing rows — INDEX only."""
     days = params.get('days', 60)
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
     total = 0
-    for table, id_col in [('km_index_eod', 'index_id'), ('km_equity_eod', 'equity_id')]:
-        pending = _pending_symbols(db, table, id_col, 'flow_type', from_dt, cutoff)
-        _update_job(db, job_id, progress=f'{table}: {len(pending)} symbols')
-        log.info(f'{table}: {len(pending)} symbols with flow gaps')
+    table, id_col = 'km_index_eod', 'index_id'
+    pending = _pending_symbols(db, table, id_col, 'flow_type', from_dt, cutoff)
+    _update_job(db, job_id, progress=f'{len(pending)} index symbols')
+    log.info(f'{table}: {len(pending)} symbols with flow gaps')
 
-        for i, sid in enumerate(pending):
-            if _is_cancelled(db, job_id):
-                return total
-            _update_job(db, job_id,
-                        progress=f'{table}: {i+1}/{len(pending)}',
-                        progress_pct=int((i / max(len(pending), 1)) * 100))
-            try:
-                result = db.rpc('compute_flow_intelligence', {
-                    'p_table': table, 'p_id_col': id_col,
-                    'p_symbol_id': sid, 'p_from_date': str(from_dt),
-                })
-                count = result[0].get('compute_flow_intelligence', 0) if result else 0
-                total += count
-            except Exception as e:
-                log.error(f'{table} sid={sid}: {e}')
+    for i, sid in enumerate(pending):
+        if _is_cancelled(db, job_id):
+            return total
+        _update_job(db, job_id,
+                    progress=f'Index {i+1}/{len(pending)}',
+                    progress_pct=int((i / max(len(pending), 1)) * 100))
+        try:
+            result = db.rpc('compute_flow_intelligence', {
+                'p_table': table, 'p_id_col': id_col,
+                'p_symbol_id': sid, 'p_from_date': str(from_dt),
+            })
+            count = result[0].get('compute_flow_intelligence', 0) if result else 0
+            total += count
+        except Exception as e:
+            log.error(f'{table} sid={sid}: {e}')
 
     return total
 
@@ -337,8 +369,9 @@ def handle_fix_bse_equities(db, job_id, params):
 # ── Handler Registry ─────────────────────────────────────────────────────────
 
 HANDLERS = {
-    'fix:indicators':        handle_fix_indicators,
-    'fix:flow_intelligence':  handle_fix_flow,
+    'fix:indicators':            handle_fix_indicators,
+    'fix:equity_indicators':     handle_fix_equity_indicators,
+    'fix:flow_intelligence':     handle_fix_flow,
     'fix:market_breadth':    handle_fix_breadth,
     'fix:breadth_roc':       handle_fix_breadth_roc,
     'fix:fii_dii':           handle_fix_fii_dii,

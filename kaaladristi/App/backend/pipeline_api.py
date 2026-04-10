@@ -1042,8 +1042,8 @@ def _get_known_holidays_set(from_dt: date, to_dt: date) -> set[str]:
 
 
 FIX_DIMENSIONS = {
-    'nse_equities', 'bse_equities', 'indicators', 'flow_intelligence',
-    'market_breadth', 'breadth_roc', 'fii_dii',
+    'nse_equities', 'bse_equities', 'indicators', 'equity_indicators',
+    'flow_intelligence', 'market_breadth', 'breadth_roc', 'fii_dii',
 }
 
 
