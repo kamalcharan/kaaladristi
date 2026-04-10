@@ -411,7 +411,18 @@ export default function PipelineExecution() {
         </div>
       )}
 
-      {/* Reserved: per-date step view for future backfill detail */}
+      {/* Per-date step-by-step view */}
+      {exchanges.length > 0 && exchanges.map(exch => (
+        <div key={exch.exchange} className="mb-3">
+          {exch.dates.map((view) => (
+            <DateSection
+              key={view.date}
+              view={view}
+              defaultOpen={true}
+            />
+          ))}
+        </div>
+      ))}
 
       {/* Job timestamps */}
       {job && (

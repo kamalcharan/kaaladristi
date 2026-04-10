@@ -467,13 +467,88 @@ def pipeline_live():
         except Exception:
             pass
 
+    # Get step-level data from km_pipeline_runs for the dates being processed
+    job_params = job.get('params') or {}
+    if isinstance(job_params, str):
+        import json as _json
+        job_params = _json.loads(job_params)
+
+    # Determine exchange from job type
+    exchange = 'NSE'
+    if 'bse' in (job.get('job_type') or ''):
+        exchange = 'BSE'
+
+    # Build step-level view for dates in progress
+    exchanges = []
+    progress_text = running_job.get('progress', '')
+
+    # Extract current date from progress text (format: "2026-04-02 (2/5) — downloading...")
+    current_dates = []
+    if progress_text:
+        import re
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', progress_text)
+        if date_match:
+            current_dates = [date_match.group(1)]
+
+    # Also check recent pipeline runs for this exchange in the last 2 days
+    if not current_dates and job_status == 'running':
+        recent = db.select('km_pipeline_runs', 'trade_date',
+                           filters={'exchange': exchange},
+                           order='started_at.desc', limit=1)
+        if recent:
+            current_dates = [str(recent[0]['trade_date'])]
+
+    if current_dates:
+        step_defs = NSE_STEPS if exchange == 'NSE' else BSE_STEPS
+        date_views = []
+
+        for d in current_dates:
+            runs = db.select('km_pipeline_runs', '*',
+                             filters={'trade_date': d, 'exchange': exchange},
+                             order='id')
+            run_map = {r['step']: r for r in runs}
+
+            steps = []
+            for sd in step_defs:
+                run = run_map.get(sd['step'])
+                if run:
+                    for k in ('trade_date', 'started_at', 'completed_at'):
+                        if run.get(k):
+                            run[k] = str(run[k])
+                    steps.append({
+                        **sd,
+                        'status': run.get('status', 'pending'),
+                        'rows_count': run.get('rows_count', 0),
+                        'duration_ms': run.get('duration_ms'),
+                        'error_msg': run.get('error_msg'),
+                    })
+                else:
+                    steps.append({
+                        **sd,
+                        'status': 'pending',
+                        'rows_count': 0,
+                        'duration_ms': None,
+                        'error_msg': None,
+                    })
+
+            completed_count = sum(1 for s in steps if s['status'] in ('completed', 'skipped'))
+            date_views.append({
+                'date': d,
+                'steps': steps,
+                'completed': completed_count,
+                'total': len(steps),
+                'progress_pct': round(completed_count / len(steps) * 100) if steps else 0,
+            })
+
+        exchanges.append({'exchange': exchange, 'dates': date_views})
+
     return {
         'active': job_status in ('running', 'queued'),
         'job': {
             'job_id': running_job['job_id'],
             'status': job_status,
             'type': running_job['type'],
-            'exchange': running_job.get('exchange', ''),
+            'exchange': exchange,
             'started_at': running_job.get('started_at'),
             'completed_at': running_job.get('completed_at'),
             'elapsed_ms': elapsed_ms,
@@ -481,7 +556,7 @@ def pipeline_live():
             'progress_pct': running_job.get('progress_pct', 0),
             'error_msg': running_job.get('error_msg'),
         },
-        'exchanges': [],  # Step-level view stays for backfill jobs via km_pipeline_runs
+        'exchanges': exchanges,
     }
 
 
