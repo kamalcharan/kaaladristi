@@ -109,12 +109,20 @@ function MonthMarkers({ days }: { days: DayStatus[] }) {
 
 // ── Day box ──────────────────────────────────────────────────────────────────
 
-function DayBox({ day, dimension }: { day: DayStatus; dimension: string }) {
+function DayBox({ day, dimension, onMark }: {
+  day: DayStatus; dimension: string;
+  onMark?: (date: string, status: string) => void;
+}) {
+  const [showMenu, setShowMenu] = useState(false);
+  const canMark = day.status === 'missing' && onMark;
+
   return (
     <div className="relative group">
       <div
+        onClick={() => canMark && setShowMenu(!showMenu)}
         className={cn(
-          'w-[8px] h-[8px] sm:w-[10px] sm:h-[10px] rounded-[2px] transition-all cursor-pointer',
+          'w-[8px] h-[8px] sm:w-[10px] sm:h-[10px] rounded-[2px] transition-all',
+          canMark && 'cursor-pointer',
           STATUS_COLORS[day.status] ?? 'bg-kd-border',
           day.status === 'ok' && 'opacity-90 hover:opacity-100 hover:scale-150',
           day.status === 'missing' && 'opacity-80 hover:opacity-100 hover:scale-150',
@@ -122,23 +130,57 @@ function DayBox({ day, dimension }: { day: DayStatus; dimension: string }) {
           day.status === 'future' && 'opacity-20',
         )}
       />
-      <div className={cn(
-        'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 rounded-lg',
-        'bg-kd-card border border-kd-border shadow-xl',
-        'text-[9px] whitespace-nowrap z-50',
-        'hidden group-hover:block',
-      )}>
-        <div className="text-[var(--text-primary)] font-bold">{fmtFull(day.date)}</div>
-        <div className="text-[var(--text-secondary)] mt-0.5">{dimension}</div>
+      {/* Tooltip (hover) */}
+      {!showMenu && (
         <div className={cn(
-          'font-bold uppercase tracking-wider mt-1',
-          day.status === 'ok' ? 'text-risk-green' :
-          day.status === 'missing' ? 'text-risk-red' :
-          day.status === 'partial' ? 'text-risk-amber' : 'text-muted',
+          'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 rounded-lg',
+          'bg-kd-card border border-kd-border shadow-xl',
+          'text-[9px] whitespace-nowrap z-50',
+          'hidden group-hover:block',
         )}>
-          {STATUS_LABELS[day.status] ?? day.status}
+          <div className="text-[var(--text-primary)] font-bold">{fmtFull(day.date)}</div>
+          <div className="text-[var(--text-secondary)] mt-0.5">{dimension}</div>
+          <div className={cn(
+            'font-bold uppercase tracking-wider mt-1',
+            day.status === 'ok' ? 'text-risk-green' :
+            day.status === 'missing' ? 'text-risk-red' :
+            day.status === 'partial' ? 'text-risk-amber' : 'text-muted',
+          )}>
+            {STATUS_LABELS[day.status] ?? day.status}
+          </div>
+          {canMark && (
+            <div className="text-accent-indigo mt-1">Click to mark</div>
+          )}
         </div>
-      </div>
+      )}
+      {/* Mark menu (click) */}
+      {showMenu && (
+        <div className={cn(
+          'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 rounded-lg',
+          'bg-kd-card border border-kd-border shadow-xl z-50',
+          'text-[9px] whitespace-nowrap',
+        )}>
+          <div className="text-[var(--text-primary)] font-bold mb-2">{fmtFull(day.date)}</div>
+          <button
+            onClick={() => { onMark?.(day.date, 'holiday'); setShowMenu(false); }}
+            className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-[var(--text-secondary)] transition-colors"
+          >
+            Mark as Holiday
+          </button>
+          <button
+            onClick={() => { onMark?.(day.date, 'no_data'); setShowMenu(false); }}
+            className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-[var(--text-secondary)] transition-colors"
+          >
+            Mark as No Data
+          </button>
+          <button
+            onClick={() => setShowMenu(false)}
+            className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-muted transition-colors mt-1"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -152,9 +194,10 @@ const FIXABLE_DIMENSIONS = new Set([
 
 // ── Health row ───────────────────────────────────────────────────────────────
 
-function HealthRowComponent({ row, period, onFix }: {
+function HealthRowComponent({ row, period, onFix, onMark }: {
   row: HealthRow; period: number;
   onFix: (dimension: string, days: number) => void;
+  onMark: (date: string, status: string) => void;
 }) {
   const stats = summaryStats(row.days);
   const allGood = stats.missing === 0 && stats.total > 0;
@@ -172,7 +215,7 @@ function HealthRowComponent({ row, period, onFix }: {
 
       <div className="flex-1 flex items-center gap-[2px] sm:gap-[3px] min-w-0 overflow-visible">
         {row.days.map(day => (
-          <DayBox key={day.date} day={day} dimension={row.label} />
+          <DayBox key={day.date} day={day} dimension={row.label} onMark={onMark} />
         ))}
       </div>
 
@@ -289,9 +332,28 @@ export default function DataHealthGrid() {
     },
   });
 
+  const markMutation = useMutation({
+    mutationFn: async ({ date, status }: { date: string; status: string }) => {
+      const res = await fetch(`${pipelineUrl}/api/pipeline/mark-date`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, status, exchange: 'NSE' }),
+      });
+      if (!res.ok) throw new Error('Mark failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['health_checks'] });
+    },
+  });
+
   const handleFix = (dimension: string, days: number) => {
     if (fixingId) return;
     fixMutation.mutate({ dimension, days });
+  };
+
+  const handleMark = (date: string, status: string) => {
+    markMutation.mutate({ date, status });
   };
 
   if (isLoading) {
@@ -364,7 +426,7 @@ export default function DataHealthGrid() {
             <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Downloads</span>
           </div>
           <div className="divide-y divide-kd-border/30">
-            {downloads.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} />)}
+            {downloads.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} />)}
           </div>
         </div>
       )}
@@ -377,7 +439,7 @@ export default function DataHealthGrid() {
             <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Computations</span>
           </div>
           <div className="divide-y divide-kd-border/30">
-            {snapshots.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} />)}
+            {snapshots.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} />)}
           </div>
         </div>
       )}

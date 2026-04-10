@@ -702,6 +702,29 @@ def cancel_job(job_id: str = None):
 
     return {'status': 'cancelled', 'message': f'Cancelled {len(targets)} job(s)', 'job_ids': targets}
 
+
+class MarkDateRequest(BaseModel):
+    date: str              # YYYY-MM-DD
+    status: str = 'no_data'  # no_data | holiday
+    exchange: str = 'NSE'
+
+
+@app.post('/api/pipeline/mark-date')
+def mark_date(req: MarkDateRequest):
+    """Mark a date as holiday/no_data so backfill skips it."""
+    if req.status not in ('no_data', 'holiday'):
+        raise HTTPException(400, 'Status must be no_data or holiday')
+
+    record = {
+        'trade_date': req.date,
+        'exchange': req.exchange,
+        'status': req.status,
+        'is_holiday': req.status == 'holiday',
+    }
+    db.upsert('km_trading_calendar', [record], 'trade_date,exchange')
+    log.info(f'[mark-date] {req.date} ({req.exchange}) → {req.status}')
+    return {'status': 'ok', 'message': f'{req.date} marked as {req.status}'}
+
 def _fix_indicators():
     """Recompute technical indicators for all pending symbols."""
     try:
