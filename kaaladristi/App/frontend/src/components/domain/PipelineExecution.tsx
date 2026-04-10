@@ -78,6 +78,18 @@ function fmtTime(iso: string | null): string {
   } catch { return ''; }
 }
 
+function fmtTimeIST(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    // Backend stores UTC — convert to IST for display
+    const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+    return d.toLocaleTimeString('en-IN', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: true, timeZone: 'Asia/Kolkata',
+    });
+  } catch { return ''; }
+}
+
 // ── Step icon ────────────────────────────────────────────────────────────────
 
 function StepIcon({ status }: { status: string }) {
@@ -219,6 +231,18 @@ function usePipelineLive(enabled: boolean) {
   });
 }
 
+// ── Fix job label mapping ────────────────────────────────────────────────────
+
+const FIX_LABELS: Record<string, string> = {
+  'fix:indicators': 'Recomputing Technical Indicators',
+  'fix:flow_intelligence': 'Recomputing Flow Intelligence',
+  'fix:market_breadth': 'Recomputing Market Breadth',
+  'fix:breadth_roc': 'Recomputing Breadth ROC',
+  'fix:nse_equities': 'Backfilling NSE Equities',
+  'fix:bse_equities': 'Backfilling BSE Equities',
+  'fix:fii_dii': 'Downloading FII/DII Data',
+};
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function PipelineExecution() {
@@ -227,6 +251,8 @@ export default function PipelineExecution() {
   const isActive = live?.active ?? false;
   const job = live?.job;
   const exchanges = live?.exchanges ?? [];
+  const isFixJob = job?.type?.startsWith('fix:') ?? false;
+  const hasDates = exchanges.some(e => e.dates.length > 0);
 
   // Don't render if no job data at all
   if (!isLoading && !job && exchanges.length === 0) {
@@ -240,6 +266,10 @@ export default function PipelineExecution() {
         <div className="flex items-center gap-2">
           {isActive ? (
             <Loader2 className="w-4 h-4 text-accent-indigo animate-spin" />
+          ) : job?.status === 'completed' ? (
+            <CheckCircle2 className="w-4 h-4 text-risk-green" />
+          ) : job?.status === 'failed' ? (
+            <XCircle className="w-4 h-4 text-risk-red" />
           ) : (
             <Play className="w-4 h-4 text-muted" />
           )}
@@ -258,11 +288,11 @@ export default function PipelineExecution() {
             {job.type === 'backfill' && (
               <span className="font-bold">{job.total_dates} dates</span>
             )}
-            <span className="mono">{job.exchange}</span>
+            {!isFixJob && <span className="mono">{job.exchange}</span>}
             {job.elapsed_ms != null && (
               <span className="mono">{fmtDuration(job.elapsed_ms)}</span>
             )}
-            {job.status === 'completed' && (
+            {job.status === 'completed' && !isFixJob && (
               <span className={cn(
                 'font-bold uppercase',
                 job.failed > 0 ? 'text-risk-amber' : 'text-risk-green',
@@ -281,8 +311,41 @@ export default function PipelineExecution() {
         </div>
       )}
 
-      {/* Per-exchange execution view */}
-      {exchanges.map(exch => (
+      {/* Fix job view — simple status display */}
+      {isFixJob && job && (
+        <div className={cn(
+          'flex items-center gap-3 py-4 px-4 rounded-xl border mb-3',
+          isActive ? 'bg-accent-indigo/5 border-accent-indigo/20' :
+          job.status === 'completed' ? 'bg-risk-green/5 border-risk-green/20' :
+          job.status === 'failed' ? 'bg-risk-red/5 border-risk-red/20' :
+          'bg-kd-elevated border-kd-border',
+        )}>
+          {isActive ? (
+            <Loader2 className="w-5 h-5 text-accent-indigo animate-spin shrink-0" />
+          ) : job.status === 'completed' ? (
+            <CheckCircle2 className="w-5 h-5 text-risk-green shrink-0" />
+          ) : (
+            <XCircle className="w-5 h-5 text-risk-red shrink-0" />
+          )}
+          <div>
+            <div className={cn(
+              'text-[13px] font-bold',
+              isActive ? 'text-accent-indigo' :
+              job.status === 'completed' ? 'text-risk-green' : 'text-risk-red',
+            )}>
+              {FIX_LABELS[job.type] ?? job.type.replace('fix:', 'Fixing ')}
+            </div>
+            <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+              {isActive ? 'Running in background — this may take a few minutes...' :
+               job.status === 'completed' ? 'Completed successfully. Refresh health grid to verify.' :
+               'Failed — check server logs for details.'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-exchange execution view (for pipeline/backfill jobs) */}
+      {!isFixJob && hasDates && exchanges.map(exch => (
         <div key={exch.exchange} className="mb-3">
           {exchanges.length > 1 && (
             <div className="text-[9px] font-bold uppercase tracking-widest text-muted mb-2">
@@ -294,7 +357,6 @@ export default function PipelineExecution() {
               key={view.date}
               view={view}
               defaultOpen={
-                // Auto-expand: the currently running date, or last date if few dates
                 exch.dates.length <= 3 ||
                 view.steps.some(s => s.status === 'running') ||
                 (i === exch.dates.length - 1 && !isActive)
@@ -304,14 +366,14 @@ export default function PipelineExecution() {
         </div>
       ))}
 
-      {/* Job start/end timestamps */}
+      {/* Job timestamps */}
       {job && (
         <div className="flex items-center gap-4 mt-3 pt-3 border-t border-kd-border/30 text-[9px] text-muted">
           {job.started_at && (
-            <span>Started: <span className="mono text-[var(--text-secondary)]">{fmtTime(job.started_at)}</span></span>
+            <span>Started: <span className="mono text-[var(--text-secondary)]">{fmtTimeIST(job.started_at)}</span></span>
           )}
           {job.completed_at && (
-            <span>Completed: <span className="mono text-[var(--text-secondary)]">{fmtTime(job.completed_at)}</span></span>
+            <span>Completed: <span className="mono text-[var(--text-secondary)]">{fmtTimeIST(job.completed_at)}</span></span>
           )}
           <span className="ml-auto mono">{job.job_id}</span>
         </div>
