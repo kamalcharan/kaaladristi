@@ -287,13 +287,15 @@ def handle_fix_fii_dii(db, job_id, params):
 
 
 def handle_fix_nse_equities(db, job_id, params):
-    """Backfill NSE equities — download only missing dates."""
+    """Backfill NSE equities — download only missing dates, with per-date timeout."""
     days = params.get('days', 60)
     strategy = params.get('strategy', 'smart')
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
     from daily_pipeline import run_nse_pipeline
+    import signal
+    import threading
 
     holidays = _get_holidays(db, from_dt, cutoff)
     existing = _dates_with_data(db, 'km_equity_eod', 'NSE', from_dt, cutoff) if strategy == 'smart' else set()
@@ -309,31 +311,61 @@ def handle_fix_nse_equities(db, job_id, params):
     log.info(f'NSE Equities: {len(existing)} have data, {len(to_process)} to process')
     _update_job(db, job_id, progress=f'{len(to_process)} dates to process')
 
+    MAX_MINUTES_PER_DATE = 3  # Skip date if takes longer than 3 minutes
+
     success = 0
+    failed_dates = []
     for i, d in enumerate(to_process):
         if _is_cancelled(db, job_id):
             return success
         _update_job(db, job_id,
-                    progress=f'{d} ({i+1}/{len(to_process)})',
+                    progress=f'{d} ({i+1}/{len(to_process)}) — downloading...',
                     progress_pct=int((i / max(len(to_process), 1)) * 100))
-        try:
-            ok = run_nse_pipeline(db, d, force=(strategy == 'force'))
-            if ok:
-                success += 1
-        except Exception as e:
-            log.error(f'NSE {d}: {e}')
 
+        # Run with timeout using a thread
+        result = [None]  # [True/False/None]
+        error = [None]
+
+        def _run_date():
+            try:
+                ok = run_nse_pipeline(db, d, force=(strategy == 'force'))
+                result[0] = ok
+            except Exception as e:
+                error[0] = str(e)
+                result[0] = False
+
+        t = threading.Thread(target=_run_date, daemon=True)
+        t.start()
+        t.join(timeout=MAX_MINUTES_PER_DATE * 60)
+
+        if t.is_alive():
+            # Timed out — skip this date
+            log.warning(f'NSE {d}: TIMEOUT after {MAX_MINUTES_PER_DATE}m — skipping')
+            _update_job(db, job_id,
+                        progress=f'{d} ({i+1}/{len(to_process)}) — TIMEOUT, skipping')
+            failed_dates.append(str(d))
+            # Thread will eventually die when the HTTP request returns
+        elif result[0]:
+            success += 1
+        else:
+            log.error(f'NSE {d}: failed — {error[0]}')
+            failed_dates.append(str(d))
+
+    if failed_dates:
+        _update_job(db, job_id,
+                    progress=f'Done: {success} ok, {len(failed_dates)} failed ({", ".join(failed_dates[:5])})')
     return success
 
 
 def handle_fix_bse_equities(db, job_id, params):
-    """Backfill BSE equities — download only missing dates."""
+    """Backfill BSE equities — download only missing dates, with per-date timeout."""
     days = params.get('days', 60)
     strategy = params.get('strategy', 'smart')
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
     from daily_pipeline import run_bse_pipeline
+    import threading
 
     holidays = _get_holidays(db, from_dt, cutoff)
     existing = _dates_with_data(db, 'km_equity_eod', 'BSE', from_dt, cutoff) if strategy == 'smart' else set()
@@ -347,21 +379,48 @@ def handle_fix_bse_equities(db, job_id, params):
         cursor += timedelta(days=1)
 
     log.info(f'BSE Equities: {len(existing)} have data, {len(to_process)} to process')
+    _update_job(db, job_id, progress=f'{len(to_process)} dates to process')
+
+    MAX_MINUTES_PER_DATE = 3
 
     success = 0
+    failed_dates = []
     for i, d in enumerate(to_process):
         if _is_cancelled(db, job_id):
             return success
         _update_job(db, job_id,
-                    progress=f'{d} ({i+1}/{len(to_process)})',
+                    progress=f'{d} ({i+1}/{len(to_process)}) — downloading...',
                     progress_pct=int((i / max(len(to_process), 1)) * 100))
-        try:
-            ok = run_bse_pipeline(db, d, force=(strategy == 'force'))
-            if ok:
-                success += 1
-        except Exception as e:
-            log.error(f'BSE {d}: {e}')
 
+        result = [None]
+        error = [None]
+
+        def _run_date():
+            try:
+                ok = run_bse_pipeline(db, d, force=(strategy == 'force'))
+                result[0] = ok
+            except Exception as e:
+                error[0] = str(e)
+                result[0] = False
+
+        t = threading.Thread(target=_run_date, daemon=True)
+        t.start()
+        t.join(timeout=MAX_MINUTES_PER_DATE * 60)
+
+        if t.is_alive():
+            log.warning(f'BSE {d}: TIMEOUT after {MAX_MINUTES_PER_DATE}m — skipping')
+            _update_job(db, job_id,
+                        progress=f'{d} ({i+1}/{len(to_process)}) — TIMEOUT, skipping')
+            failed_dates.append(str(d))
+        elif result[0]:
+            success += 1
+        else:
+            log.error(f'BSE {d}: failed — {error[0]}')
+            failed_dates.append(str(d))
+
+    if failed_dates:
+        _update_job(db, job_id,
+                    progress=f'Done: {success} ok, {len(failed_dates)} failed ({", ".join(failed_dates[:5])})')
     return success
 
 
