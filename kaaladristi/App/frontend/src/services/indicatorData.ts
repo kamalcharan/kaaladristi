@@ -35,6 +35,7 @@ const INDICATOR_COLS = [
   'chartink_emd_pct', 'chartink_emd_ok', 'chartink_ca_pct', 'chartink_ca_ok', 'chartink_vmac_ok', 'chartink_score',
   'dot_svd', 'dot_sbd', 'dot_syd',
   'swing_high', 'swing_low',
+  'flow_type', 'vacuum_flag', 'accum_distrib',
 ].join(',');
 
 export interface IndicatorRow {
@@ -101,6 +102,10 @@ export interface IndicatorRow {
   // Swing
   swing_high: boolean;
   swing_low: boolean;
+  // Flow Intelligence
+  flow_type: string | null;
+  vacuum_flag: string | null;
+  accum_distrib: string | null;
 }
 
 export async function fetchIndicatorData(
@@ -200,6 +205,7 @@ export async function fetchEquityEodById(
     chartink_vmac_ok: null, chartink_score: null,
     dot_svd: false, dot_sbd: false, dot_syd: false,
     swing_high: false, swing_low: false,
+    flow_type: null, vacuum_flag: null, accum_distrib: null,
   };
 
   return (data ?? []).map((row: Record<string, unknown>) => ({

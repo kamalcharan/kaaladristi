@@ -153,6 +153,19 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             tracker.fail('index_indicators', str(e))
 
+    # ── Step 0e: Index flow intelligence ──
+    if not skip_indicators:
+        try:
+            result = db.rpc('compute_all_flow_intelligence', {
+                'p_table': 'km_index_eod',
+                'p_id_col': 'index_id',
+            })
+            fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            if fi_count > 0:
+                print(f'  [flow-intel] Index: updated {fi_count} rows')
+        except Exception as e:
+            print(f'  [flow-intel] Index: skipped ({e})')
+
     # ── Step 1: Download equity bhav copy ──
     tracker.start('download')
     try:
@@ -234,6 +247,19 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
                 tracker.complete('indicators', rows=ind_count)
             except Exception as e2:
                 tracker.fail('indicators', str(e2))
+
+    # ── Step 6b: Flow Intelligence (derived indicators — runs after Step 6) ──
+    if not skip_indicators:
+        try:
+            print(f'  [flow-intel] Computing flow intelligence...')
+            result = db.rpc('compute_all_flow_intelligence', {
+                'p_table': 'km_equity_eod',
+                'p_id_col': 'equity_id',
+            })
+            fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            print(f'  [flow-intel] Updated {fi_count} rows')
+        except Exception as e:
+            print(f'  [flow-intel] Skipped ({e})')
 
     # ── Step 7: Refresh views ──
     tracker.start('views')
@@ -341,6 +367,19 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
                 tracker.complete('indicators', rows=ind_count)
             except Exception as e2:
                 tracker.fail('indicators', str(e2))
+
+    # ── Step 5b: Flow Intelligence ──
+    if not skip_indicators:
+        try:
+            print(f'  [flow-intel] Computing flow intelligence...')
+            result = db.rpc('compute_all_flow_intelligence', {
+                'p_table': 'km_equity_eod',
+                'p_id_col': 'equity_id',
+            })
+            fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            print(f'  [flow-intel] Updated {fi_count} rows')
+        except Exception as e:
+            print(f'  [flow-intel] Skipped ({e})')
 
     # ── Mark complete ──
     mark_day_status(db, trade_date, 'BSE', 'completed')

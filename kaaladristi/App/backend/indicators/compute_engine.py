@@ -53,7 +53,104 @@ INDICATOR_COLUMNS = [
     'swing_high', 'swing_low',
     # MagicRS (computed separately)
     'magic_rs', 'magic_rs_sma144', 'magic_ma', 'magic_rs_zone',
+    # Flow Intelligence (derived from existing indicators)
+    'flow_type', 'vacuum_flag', 'accum_distrib',
 ]
+
+
+def compute_flow_intelligence(df: pd.DataFrame) -> dict:
+    """
+    Derive flow_type, vacuum_flag, accum_distrib from existing indicators.
+
+    Flow classification (LuckyPop Order Flow using MagicRS as OI proxy):
+      FRESH_LONGS / SHORT_COVERING / FRESH_SHORTS / LONG_LIQUIDATION / MIXED / LOW_VOLUME
+
+    Vacuum detection:
+      Price moved > 1% over 5 days but avg RVOL < 0.5 → VACUUM_UP / VACUUM_DOWN
+
+    Accumulation / Distribution:
+      Below/above Golden Line (SMA 150) + RVOL >= 3.0 + momentum/RS aligned
+    """
+    n = len(df)
+    flow = pd.Series([None] * n, index=df.index, dtype=object)
+    vacuum = pd.Series([None] * n, index=df.index, dtype=object)
+    accum = pd.Series([None] * n, index=df.index, dtype=object)
+
+    close = df['close'].values
+    rvol = df.get('rvol', pd.Series([None] * n)).values
+    rsi = df.get('rsi_14', pd.Series([None] * n)).values
+    mfi = df.get('mfi_14', pd.Series([None] * n)).values
+    sma150 = df.get('sma_150', pd.Series([None] * n)).values
+    mrs_zone = df.get('magic_rs_zone', pd.Series([None] * n)).values
+    mrs = df.get('magic_rs', pd.Series([None] * n)).values
+    mrs_ma = df.get('magic_ma', pd.Series([None] * n)).values
+
+    for i in range(1, n):
+        if close[i] is None or np.isnan(close[i]) or close[i-1] is None or np.isnan(close[i-1]):
+            continue
+
+        price_up = close[i] > close[i-1]
+        price_down = close[i] < close[i-1]
+        cur_rvol = float(rvol[i]) if rvol[i] is not None and not (isinstance(rvol[i], float) and np.isnan(rvol[i])) else 0.0
+        high_vol = cur_rvol >= 1.1
+
+        # MagicRS direction
+        zone = mrs_zone[i] if mrs_zone[i] is not None else None
+        rs_bullish = zone in ('Strong Bull', 'Mild Bull') if zone else False
+        rs_bearish = zone in ('Strong Bear', 'Mild Bear') if zone else False
+        if not rs_bullish and not rs_bearish:
+            # Fallback to raw values
+            mr = mrs[i] if mrs[i] is not None and not (isinstance(mrs[i], float) and np.isnan(mrs[i])) else None
+            mm = mrs_ma[i] if mrs_ma[i] is not None and not (isinstance(mrs_ma[i], float) and np.isnan(mrs_ma[i])) else None
+            if mr is not None and mm is not None:
+                rs_bullish = mr > mm
+                rs_bearish = mr < mm
+
+        # Flow type
+        if not high_vol:
+            flow.iloc[i] = 'LOW_VOLUME'
+        elif price_up and rs_bullish:
+            flow.iloc[i] = 'FRESH_LONGS'
+        elif price_up and rs_bearish:
+            flow.iloc[i] = 'SHORT_COVERING'
+        elif price_down and rs_bearish:
+            flow.iloc[i] = 'FRESH_SHORTS'
+        elif price_down and rs_bullish:
+            flow.iloc[i] = 'LONG_LIQUIDATION'
+        else:
+            flow.iloc[i] = 'MIXED'
+
+        # Vacuum detection (need 5-day lookback)
+        if i >= 5 and close[i-5] is not None and not np.isnan(close[i-5]) and close[i-5] > 0:
+            pct_change_5 = ((close[i] - close[i-5]) / close[i-5]) * 100
+            rvol_vals = [float(rvol[j]) for j in range(i-4, i+1)
+                         if rvol[j] is not None and not (isinstance(rvol[j], float) and np.isnan(rvol[j]))]
+            avg_rvol_5 = sum(rvol_vals) / len(rvol_vals) if rvol_vals else None
+
+            if avg_rvol_5 is not None and avg_rvol_5 < 0.5:
+                if pct_change_5 > 1.0:
+                    vacuum.iloc[i] = 'VACUUM_UP'
+                elif pct_change_5 < -1.0:
+                    vacuum.iloc[i] = 'VACUUM_DOWN'
+
+        # Accumulation / Distribution
+        cur_sma150 = sma150[i] if sma150[i] is not None and not (isinstance(sma150[i], float) and np.isnan(sma150[i])) else None
+        cur_rsi = float(rsi[i]) if rsi[i] is not None and not (isinstance(rsi[i], float) and np.isnan(rsi[i])) else 0.0
+        cur_mfi = float(mfi[i]) if mfi[i] is not None and not (isinstance(mfi[i], float) and np.isnan(mfi[i])) else 0.0
+        mom_bullish = cur_rsi > 50 and cur_mfi > 50
+        mom_bearish = cur_rsi < 50 and cur_mfi < 50
+
+        if cur_sma150 is not None and cur_rvol >= 3.0:
+            if close[i] < cur_sma150 and (mom_bullish or rs_bullish):
+                accum.iloc[i] = 'ACCUMULATION'
+            elif close[i] > cur_sma150 and (mom_bearish or rs_bearish):
+                accum.iloc[i] = 'DISTRIBUTION'
+
+    return {
+        'flow_type': flow,
+        'vacuum_flag': vacuum,
+        'accum_distrib': accum,
+    }
 
 
 class IndicatorEngine:
@@ -184,6 +281,14 @@ class IndicatorEngine:
                     df[col] = series.values
             except Exception as e:
                 print(f'    [error] compute_magic_rs: {e}')
+
+        # Flow Intelligence — derived from existing indicators
+        try:
+            flow_result = compute_flow_intelligence(df)
+            for col, series in flow_result.items():
+                df[col] = series
+        except Exception as e:
+            print(f'    [error] compute_flow_intelligence: {e}')
 
         df['indicators_computed_at'] = datetime.utcnow().isoformat()
         return df

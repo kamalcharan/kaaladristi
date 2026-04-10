@@ -53,12 +53,14 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **021** (`km_migration_021_breadth_roc.sql`)
+Latest migration: **023** (`km_migration_023_flow_intelligence_rpc.sql`)
 
 | Table | Description |
 |---|---|
 | `km_market_breadth` | EMA-based breadth score (migration 020) |
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
+
+Migrations 022-023 add **flow intelligence** columns (`flow_type`, `vacuum_flag`, `accum_distrib`) to `km_index_eod` and `km_equity_eod`, plus the `compute_flow_intelligence()` SQL RPC that derives them from existing indicators (MagicRS, RVOL, RSI/MFI, SMA 150).
 
 ---
 
@@ -195,7 +197,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **022**.
+Next migration number: **024**.
 
 ---
 
