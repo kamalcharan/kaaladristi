@@ -17,3 +17,4 @@ export { default as SevenDayStrip } from './SevenDayStrip';
 export { default as MarketPulseCard } from './MarketPulseCard';
 export { default as InstrumentIntelligence } from './InstrumentIntelligence';
 export { default as DataHealthGrid } from './DataHealthGrid';
+export { default as PipelineExecution } from './PipelineExecution';

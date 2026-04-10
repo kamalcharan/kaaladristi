@@ -354,13 +354,11 @@ def status():
                             filters={'trade_date': today}, order='id')
 
     # Last 14 days from trading calendar
-    # Use date object for comparison (psycopg2 returns datetime.date, not str)
     since_date = date.today() - timedelta(days=14)
     since = str(since_date)
     calendar = db.select('km_trading_calendar', '*',
                          order='trade_date.desc', limit=100)
     calendar = [c for c in calendar if c['trade_date'] >= since_date]
-    # Normalise trade_date to str for JSON serialisation
     for c in calendar:
         c['trade_date'] = str(c['trade_date'])
 
@@ -377,6 +375,147 @@ def status():
         'calendar': calendar,
         'recent_runs': recent_runs,
         'active_jobs': active_jobs,
+    }
+
+
+# Ordered step definitions for live execution view
+NSE_STEPS = [
+    {'step': 'index_download',    'label': 'Index Download'},
+    {'step': 'tri_download',      'label': 'TRI Download'},
+    {'step': 'fii_dii',           'label': 'FII / DII'},
+    {'step': 'index_indicators',  'label': 'Index Indicators'},
+    {'step': 'download',          'label': 'Equity Download'},
+    {'step': 'parse',             'label': 'Parse CSV'},
+    {'step': 'insert',            'label': 'Insert Records'},
+    {'step': 'delivery',          'label': 'Delivery Data'},
+    {'step': 'indicators',        'label': 'Equity Indicators'},
+    {'step': 'views',             'label': 'Refresh Views'},
+]
+
+BSE_STEPS = [
+    {'step': 'download',          'label': 'BSE Download'},
+    {'step': 'parse',             'label': 'Parse CSV'},
+    {'step': 'insert',            'label': 'Insert Records'},
+    {'step': 'indicators',        'label': 'Equity Indicators'},
+]
+
+
+@app.get('/api/pipeline/live')
+def pipeline_live():
+    """Live execution state — ordered steps with progress for active/recent jobs."""
+    # Find active job
+    running_job = None
+    for job_id, job in active_jobs.items():
+        if job['status'] in ('running', 'queued'):
+            running_job = {'job_id': job_id, **job}
+            break
+
+    # If no running job, find the most recently completed one
+    if not running_job:
+        completed = [(jid, j) for jid, j in active_jobs.items()
+                     if j['status'] == 'completed']
+        if completed:
+            completed.sort(key=lambda x: x[1].get('completed_at', ''), reverse=True)
+            jid, j = completed[0]
+            running_job = {'job_id': jid, **j}
+
+    if not running_job:
+        return {
+            'active': False,
+            'job': None,
+            'exchanges': [],
+        }
+
+    # Determine which dates and exchange
+    job_dates = running_job.get('dates', [])
+    exchange = running_job.get('exchange', 'NSE')
+    job_status = running_job.get('status', 'completed')
+
+    # Build per-exchange, per-date execution view
+    exchanges = []
+
+    for exch in (['NSE', 'BSE'] if exchange == 'ALL' else [exchange]):
+        step_defs = NSE_STEPS if exch == 'NSE' else BSE_STEPS
+
+        date_views = []
+        for d in job_dates:
+            # Fetch step statuses for this date + exchange
+            runs = db.select('km_pipeline_runs', '*',
+                             filters={'trade_date': d, 'exchange': exch},
+                             order='id')
+            run_map = {r['step']: r for r in runs}
+
+            steps = []
+            for sd in step_defs:
+                run = run_map.get(sd['step'])
+                if run:
+                    # Serialise dates
+                    for k in ('trade_date', 'started_at', 'completed_at'):
+                        if run.get(k):
+                            run[k] = str(run[k])
+                    steps.append({
+                        **sd,
+                        'status': run.get('status', 'pending'),
+                        'rows_count': run.get('rows_count', 0),
+                        'duration_ms': run.get('duration_ms'),
+                        'error_msg': run.get('error_msg'),
+                        'started_at': run.get('started_at'),
+                        'completed_at': run.get('completed_at'),
+                    })
+                else:
+                    steps.append({
+                        **sd,
+                        'status': 'pending',
+                        'rows_count': 0,
+                        'duration_ms': None,
+                        'error_msg': None,
+                        'started_at': None,
+                        'completed_at': None,
+                    })
+
+            # Calculate progress
+            completed_count = sum(1 for s in steps if s['status'] in ('completed', 'skipped'))
+            total_count = len(steps)
+
+            date_views.append({
+                'date': d,
+                'steps': steps,
+                'completed': completed_count,
+                'total': total_count,
+                'progress_pct': round(completed_count / total_count * 100) if total_count else 0,
+            })
+
+        exchanges.append({
+            'exchange': exch,
+            'dates': date_views,
+        })
+
+    # Elapsed time
+    started = running_job.get('started_at', '')
+    elapsed_ms = None
+    if started:
+        try:
+            start_dt = datetime.fromisoformat(started)
+            end_dt = datetime.fromisoformat(running_job['completed_at']) if running_job.get('completed_at') else datetime.utcnow()
+            elapsed_ms = int((end_dt - start_dt).total_seconds() * 1000)
+        except Exception:
+            pass
+
+    return {
+        'active': job_status in ('running', 'queued'),
+        'job': {
+            'job_id': running_job.get('job_id'),
+            'status': job_status,
+            'exchange': exchange,
+            'type': running_job.get('type', 'manual'),
+            'total_dates': len(job_dates),
+            'success': running_job.get('success', 0),
+            'failed': running_job.get('failed', 0),
+            'started_at': started,
+            'completed_at': running_job.get('completed_at'),
+            'elapsed_ms': elapsed_ms,
+        },
+        'exchanges': exchanges,
     }
 
 

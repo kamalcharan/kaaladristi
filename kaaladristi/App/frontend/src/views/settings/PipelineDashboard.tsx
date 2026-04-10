@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import { fmtDate } from '@/lib/dateUtils';
 import DataHealthGrid from '@/components/domain/DataHealthGrid';
+import PipelineExecution from '@/components/domain/PipelineExecution';
 import {
   fetchPipelineHealth, fetchPipelineStatus, fetchBreezeStatus,
   fetchSchedulerStatus, fetchDownloadTypes,
@@ -158,6 +159,9 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
 
       {/* ── Data Health Heatmap ── */}
       <DataHealthGrid />
+
+      {/* ── Live Pipeline Execution ── */}
+      <PipelineExecution />
 
       {/* ── Health + Downloads ── */}
       <div className="glass-card rounded-2xl p-5 mb-4">
