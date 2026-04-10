@@ -257,6 +257,13 @@ app.add_middleware(
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@app.get('/api/pipeline/health-checks')
+def health_checks():
+    """Return 60-day heatmap data for all data health dimensions."""
+    from lib.health_checks import run_all_health_checks
+    return run_all_health_checks(db)
+
+
 @app.get('/api/pipeline/health')
 def health():
     """Overall pipeline health check."""

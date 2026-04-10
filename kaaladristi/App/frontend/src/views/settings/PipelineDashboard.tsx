@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtDate } from '@/lib/dateUtils';
+import DataHealthGrid from '@/components/domain/DataHealthGrid';
 import {
   fetchPipelineHealth, fetchPipelineStatus, fetchBreezeStatus,
   fetchSchedulerStatus, fetchDownloadTypes,
@@ -154,6 +155,9 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       )}
+
+      {/* ── Data Health Heatmap ── */}
+      <DataHealthGrid />
 
       {/* ── Health + Downloads ── */}
       <div className="glass-card rounded-2xl p-5 mb-4">
