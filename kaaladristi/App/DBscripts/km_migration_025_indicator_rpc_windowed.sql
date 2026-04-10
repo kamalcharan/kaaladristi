@@ -288,3 +288,28 @@ BEGIN
   RETURN updated;
 END;
 $$;
+
+
+-- ── Patch compute_all_pending_indicators to pass p_from_date ────────
+-- Without this, the daily pipeline calls compute_indicators_batch
+-- without p_from_date, loading FULL history for each symbol.
+
+CREATE OR REPLACE FUNCTION compute_all_pending_indicators(
+  p_table TEXT DEFAULT 'km_index_eod',
+  p_id_col TEXT DEFAULT 'index_id'
+)
+RETURNS TABLE(symbol_id INT, rows_updated INT) LANGUAGE plpgsql AS $$
+DECLARE
+  r RECORD;
+  v_from_date DATE := CURRENT_DATE - INTERVAL '90 days';
+BEGIN
+  FOR r IN EXECUTE format(
+    'SELECT DISTINCT %I AS sid FROM %I WHERE indicators_computed_at IS NULL AND trade_date >= $1',
+    p_id_col, p_table
+  ) USING v_from_date LOOP
+    symbol_id := r.sid;
+    rows_updated := compute_indicators_batch(p_table, p_id_col, r.sid, v_from_date);
+    RETURN NEXT;
+  END LOOP;
+END;
+$$;
