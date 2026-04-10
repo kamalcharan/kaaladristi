@@ -258,10 +258,48 @@ app.add_middleware(
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get('/api/pipeline/health-checks')
-def health_checks():
-    """Return 60-day heatmap data for all data health dimensions."""
+def health_checks(days: int = 60):
+    """Return N-day heatmap data for all data health dimensions."""
     from lib.health_checks import run_all_health_checks
-    return run_all_health_checks(db)
+    days = min(max(days, 30), 365)  # clamp to 30-365
+    return run_all_health_checks(db, days=days)
+
+
+@app.get('/api/ai/data-health-insight')
+def data_health_insight(days: int = 60):
+    """VaNi insight on data pipeline health — actionable fix guidance."""
+    if not _AI_ENABLED:
+        return {"insight": None, "ai": False}
+
+    days = min(max(days, 30), 365)
+    cache_key = f"health_insight:{days}"
+    if cache_key in _insight_cache:
+        return {"insight": _insight_cache[cache_key], "ai": True}
+
+    from lib.health_checks import run_all_health_checks
+    checks = run_all_health_checks(db, days=days)
+
+    # Build summary for VaNi
+    lines = [f"Data Health Summary — {days} trading days:\n"]
+    for c in checks:
+        day_list = c.get('days', [])
+        ok = sum(1 for d in day_list if d['status'] == 'ok')
+        missing = sum(1 for d in day_list if d['status'] == 'missing')
+        total = sum(1 for d in day_list if d['status'] not in ('future', 'holiday'))
+        latest = c.get('latest_date', 'Never')
+        lines.append(
+            f"  {c['label']} [{c['layer']}]: "
+            f"{ok}/{total} days present, {missing} gaps, "
+            f"latest: {latest}"
+        )
+    lines.append("\nProvide your data health assessment and recommended fix.")
+    user_msg = '\n'.join(lines)
+
+    skill = _AI_SKILLS["data_health_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"insight": insight, "ai": insight is not None}
 
 
 @app.get('/api/pipeline/health')

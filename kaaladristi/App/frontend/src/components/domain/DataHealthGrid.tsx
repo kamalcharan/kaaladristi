@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Database, Cpu } from 'lucide-react';
+import VaNiInsight from './VaNiInsight';
+import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -36,7 +39,15 @@ const STATUS_LABELS: Record<string, string> = {
   future:  'Future',
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Period options ────────────────────────────────────────────────────────────
+
+const PERIODS = [
+  { label: '60D', days: 60 },
+  { label: '90D', days: 90 },
+  { label: '120D', days: 120 },
+] as const;
+
+// ── Date helpers ─────────────────────────────────────────────────────────────
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -52,6 +63,11 @@ function fmtFull(dateStr: string): string {
   return `${DAYS[dt.getDay()]}, ${d} ${MONTHS[m - 1]} ${y}`;
 }
 
+function getMonth(dateStr: string): string {
+  const [, m] = dateStr.split('-');
+  return MONTHS[+m - 1];
+}
+
 function summaryStats(days: DayStatus[]): { ok: number; missing: number; total: number } {
   const ok = days.filter(d => d.status === 'ok').length;
   const missing = days.filter(d => d.status === 'missing').length;
@@ -59,31 +75,63 @@ function summaryStats(days: DayStatus[]): { ok: number; missing: number; total: 
   return { ok, missing, total };
 }
 
+// ── Month markers ────────────────────────────────────────────────────────────
+
+function MonthMarkers({ days }: { days: DayStatus[] }) {
+  // Find first occurrence of each month
+  const markers: { month: string; index: number }[] = [];
+  let lastMonth = '';
+  days.forEach((d, i) => {
+    const m = getMonth(d.date);
+    if (m !== lastMonth) {
+      markers.push({ month: m, index: i });
+      lastMonth = m;
+    }
+  });
+
+  return (
+    <div className="flex items-center gap-[2px] sm:gap-[3px] ml-0">
+      {days.map((d, i) => {
+        const marker = markers.find(m => m.index === i);
+        return (
+          <div key={d.date} className="w-[8px] sm:w-[10px] text-center">
+            {marker ? (
+              <span className="text-[7px] sm:text-[8px] text-muted font-bold uppercase tracking-wider">
+                {marker.month}
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Day box ──────────────────────────────────────────────────────────────────
 
-function DayBox({ day }: { day: DayStatus }) {
+function DayBox({ day, dimension }: { day: DayStatus; dimension: string }) {
   return (
-    <div className="relative group">
+    <div className="relative group/box">
       <div
         className={cn(
           'w-[8px] h-[8px] sm:w-[10px] sm:h-[10px] rounded-[2px] transition-all',
           STATUS_COLORS[day.status] ?? 'bg-kd-border',
-          day.status === 'ok' && 'opacity-90 hover:opacity-100',
-          day.status === 'missing' && 'opacity-80 hover:opacity-100',
+          day.status === 'ok' && 'opacity-90 hover:opacity-100 hover:scale-125',
+          day.status === 'missing' && 'opacity-80 hover:opacity-100 hover:scale-125',
           day.status === 'holiday' && 'opacity-40',
           day.status === 'future' && 'opacity-20',
         )}
       />
-      {/* Tooltip */}
       <div className={cn(
-        'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 rounded-md',
-        'bg-kd-card border border-kd-border shadow-lg',
+        'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 rounded-lg',
+        'bg-kd-card border border-kd-border shadow-xl',
         'text-[9px] whitespace-nowrap z-50',
-        'opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150',
+        'opacity-0 group-hover/box:opacity-100 pointer-events-none transition-opacity duration-150',
       )}>
-        <div className="text-[var(--text-primary)] font-medium">{fmtFull(day.date)}</div>
+        <div className="text-[var(--text-primary)] font-bold">{fmtFull(day.date)}</div>
+        <div className="text-[var(--text-secondary)] mt-0.5">{dimension}</div>
         <div className={cn(
-          'font-bold uppercase tracking-wider mt-0.5',
+          'font-bold uppercase tracking-wider mt-1',
           day.status === 'ok' ? 'text-risk-green' :
           day.status === 'missing' ? 'text-risk-red' :
           day.status === 'partial' ? 'text-risk-amber' : 'text-muted',
@@ -104,7 +152,6 @@ function HealthRowComponent({ row }: { row: HealthRow }) {
 
   return (
     <div className="flex items-center gap-3 py-2">
-      {/* Label */}
       <div className="w-28 sm:w-36 shrink-0">
         <div className="text-[11px] font-bold text-[var(--text-primary)] truncate">{row.label}</div>
         <div className="text-[9px] text-muted mono">
@@ -112,14 +159,12 @@ function HealthRowComponent({ row }: { row: HealthRow }) {
         </div>
       </div>
 
-      {/* Heatmap boxes */}
       <div className="flex-1 flex items-center gap-[2px] sm:gap-[3px] min-w-0 overflow-hidden">
         {row.days.map(day => (
-          <DayBox key={day.date} day={day} />
+          <DayBox key={day.date} day={day} dimension={row.label} />
         ))}
       </div>
 
-      {/* Summary */}
       <div className="w-16 shrink-0 text-right">
         {allGood ? (
           <span className="text-[9px] font-bold text-risk-green uppercase tracking-wider">Current</span>
@@ -137,17 +182,31 @@ function HealthRowComponent({ row }: { row: HealthRow }) {
 
 // ── Data fetch ───────────────────────────────────────────────────────────────
 
-function useHealthChecks() {
+function useHealthChecks(days: number) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
   return useQuery({
-    queryKey: ['health_checks'],
+    queryKey: ['health_checks', days],
     queryFn: async (): Promise<HealthRow[]> => {
-      const res = await fetch(`${pipelineUrl}/api/pipeline/health-checks`);
+      const res = await fetch(`${pipelineUrl}/api/pipeline/health-checks?days=${days}`);
       if (!res.ok) return [];
       return res.json();
     },
     staleTime: 60_000,
     retry: 1,
+  });
+}
+
+function useHealthInsight(days: number) {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  return useQuery({
+    queryKey: ['health_insight', days],
+    queryFn: async (): Promise<{ insight: string | null; ai: boolean }> => {
+      const res = await fetch(`${pipelineUrl}/api/ai/data-health-insight?days=${days}`);
+      if (!res.ok) return { insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 60 * 60 * 1000,
+    retry: false,
   });
 }
 
@@ -179,11 +238,13 @@ function Legend() {
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function DataHealthGrid() {
-  const { data: checks, isLoading } = useHealthChecks();
+  const [period, setPeriod] = useState<number>(60);
+  const { data: checks, isLoading } = useHealthChecks(period);
+  const { data: healthInsight, isLoading: insightLoading } = useHealthInsight(period);
 
   if (isLoading) {
     return (
-      <div className="glass-card rounded-2xl p-5 mb-4">
+      <Card rounded="xxl" className="p-5 mb-4">
         <div className="flex items-center gap-2 mb-4">
           <Database className="w-4 h-4 text-accent-indigo" />
           <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-primary)]">Data Health</h3>
@@ -192,26 +253,56 @@ export default function DataHealthGrid() {
           <Loader2 className="w-4 h-4 animate-spin" />
           <span className="text-xs">Checking data health...</span>
         </div>
-      </div>
+      </Card>
     );
   }
 
   const downloads = (checks ?? []).filter(c => c.layer === 'download');
   const snapshots = (checks ?? []).filter(c => c.layer === 'snapshot');
 
+  // Use first row's days for month markers (all rows share the same days)
+  const firstRow = checks?.[0];
+
   return (
-    <div className="glass-card rounded-2xl p-5 mb-4">
+    <Card rounded="xxl" className="p-5 mb-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Database className="w-4 h-4 text-accent-indigo" />
           <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-primary)]">
             Data Health
           </h3>
-          <span className="text-[9px] text-muted">60 trading days</span>
         </div>
-        <Legend />
+        <div className="flex items-center gap-3">
+          {/* Period selector */}
+          <div className="flex items-center gap-1">
+            {PERIODS.map(p => (
+              <button
+                key={p.days}
+                onClick={() => setPeriod(p.days)}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all',
+                  period === p.days
+                    ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
+                    : 'text-muted hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <Legend />
+        </div>
       </div>
+
+      {/* Month markers */}
+      {firstRow && firstRow.days.length > 0 && (
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-28 sm:w-36 shrink-0" />
+          <MonthMarkers days={firstRow.days} />
+          <div className="w-16 shrink-0" />
+        </div>
+      )}
 
       {/* Download layer */}
       {downloads.length > 0 && (
@@ -244,6 +335,9 @@ export default function DataHealthGrid() {
           No health data available — is the Pipeline API running?
         </div>
       )}
-    </div>
+
+      {/* VaNi Health Insight */}
+      <VaNiInsight insight={healthInsight?.insight} isLoading={insightLoading} />
+    </Card>
   );
 }

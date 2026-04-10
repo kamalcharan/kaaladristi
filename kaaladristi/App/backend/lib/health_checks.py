@@ -210,9 +210,9 @@ HEALTH_CHECKS = [
 ]
 
 
-def run_all_health_checks(db) -> list[dict]:
+def run_all_health_checks(db, days: int = 60) -> list[dict]:
     """Run all registered health checks and return results."""
-    trading_days = _generate_trading_days(60)
+    trading_days = _generate_trading_days(days)
     from_date = str(trading_days[0])
     to_date = str(trading_days[-1])
     holidays = _get_holidays(db, from_date, to_date)
