@@ -1,9 +1,7 @@
 -- ============================================================
--- Migration 025 · Patch indicator RPC — limit data load window
--- Fixes: compute_indicators_batch was loading ALL history for
--- each symbol (7000+ rows), even when only 10 days needed.
--- Now loads only from (p_from_date - 300 days) when p_from_date
--- is specified, cutting execution from 15 min to seconds.
+-- Migration 025 · Patch indicator RPC — windowed load + skip computed
+-- 1. Only loads (p_from_date - 300 days) instead of full history
+-- 2. Only UPDATES rows where indicators_computed_at IS NULL
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION compute_indicators_batch(
@@ -269,7 +267,7 @@ BEGIN
           sniper_inst=$24, sniper_hot=$25, sniper_rsi=$26,
           rss_rsi=$27,
           indicators_computed_at=NOW()
-        WHERE %I=$28 AND trade_date=$29',
+        WHERE %I=$28 AND trade_date=$29 AND indicators_computed_at IS NULL',
         p_table, p_id_col
       ) USING
         a_sma_8[i], a_sma_21[i], a_sma_50[i], a_sma_55[i], a_sma_89[i], a_sma_150[i], a_sma_200[i], a_sma_233[i],
