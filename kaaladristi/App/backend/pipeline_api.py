@@ -213,7 +213,7 @@ def _scheduled_daily_run():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global db, scheduler
+    global db, scheduler, _worker_process
 
     log.info('Pipeline API starting...')
     db = get_db()
@@ -233,10 +233,26 @@ async def lifespan(app: FastAPI):
     next_run = scheduler.get_job('daily_pipeline').next_run_time
     log.info(f'Next scheduled run: {next_run}')
 
+    # Start worker process automatically
+    import subprocess
+    worker_path = os.path.join(script_dir, 'worker.py')
+    _worker_process = subprocess.Popen(
+        [sys.executable, worker_path, '--watch'],
+        cwd=script_dir,
+    )
+    log.info(f'Worker process started (PID: {_worker_process.pid})')
+
     yield
 
-    log.info('Shutting down scheduler...')
+    log.info('Shutting down...')
     scheduler.shutdown(wait=False)
+    if _worker_process and _worker_process.poll() is None:
+        _worker_process.terminate()
+        _worker_process.wait(timeout=5)
+        log.info('Worker process stopped')
+
+
+_worker_process = None
 
 
 # ── FastAPI App ───────────────────────────────────────────────────────────────
