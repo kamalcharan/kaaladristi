@@ -913,31 +913,91 @@ def _fix_bse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
 
     _cancel_flags.pop(job_id, None)
 
-def _fix_fii_dii():
-    """Re-download FII/DII for recent missing dates."""
-    from daily_pipeline import run_nse_pipeline
-    # Run last 5 trading days — FII/DII is a step inside NSE pipeline
-    cursor = date.today()
-    for _ in range(7):
-        if cursor.weekday() < 5:
-            try:
-                # Only run the FII/DII-relevant parts
-                from pipeline.downloaders.fii_dii import download_fii_dii
-                from pipeline.utils.step_tracker import StepTracker
-                tracker = StepTracker(db, cursor, 'NSE')
-                tracker.start('fii_dii')
-                try:
-                    count = download_fii_dii(db, cursor)
-                    if count > 0:
-                        tracker.complete('fii_dii', rows=count)
-                    else:
-                        tracker.skip('fii_dii', 'No data')
-                except Exception as e:
-                    tracker.fail('fii_dii', str(e))
-            except ImportError:
-                log.warning('[fix:fii_dii] download_fii_dii not available as standalone')
+def _fix_fii_dii(days: int = 60, job_id: str = None, strategy: str = 'smart'):
+    """Download FII/DII data ONLY — no equity/index pipeline."""
+    from pipeline.downloaders.nse_fiidii import download_nse_fiidii, upsert_fii_dii
+    from pipeline.utils.nse_session import NseSession
+
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
+
+    # Check which dates already have FII/DII data
+    existing = set()
+    if strategy == 'smart':
+        existing = _query_distinct_dates_raw('km_fii_dii', from_dt, cutoff)
+
+    skip = _get_known_holidays_set(from_dt, cutoff)
+    to_process = []
+    cursor = from_dt
+    while cursor <= cutoff:
+        ds = str(cursor)
+        if cursor.weekday() < 5 and ds not in skip and ds not in existing:
+            to_process.append(cursor)
+        cursor += timedelta(days=1)
+
+    log.info(f'[fix:fii_dii] {len(existing)} have data, {len(to_process)} to process')
+
+    if job_id and job_id in active_jobs:
+        active_jobs[job_id]['dates'] = [str(d) for d in to_process]
+        active_jobs[job_id]['exchange'] = 'NSE'
+
+    backfill_db = _get_backfill_db()
+    nse = NseSession()
+    try:
+        for d in to_process:
+            if _cancel_flags.get(job_id):
                 break
-        cursor -= timedelta(days=1)
+            try:
+                records = download_nse_fiidii(d, session=nse)
+                if records:
+                    upsert_fii_dii(backfill_db, records)
+                    log.info(f'[fix:fii_dii] {d}: {len(records)} records')
+            except Exception as e:
+                log.error(f'[fix:fii_dii] {d}: {e}')
+    finally:
+        if backfill_db is not db:
+            try: backfill_db.close()
+            except Exception: pass
+    _cancel_flags.pop(job_id, None)
+
+
+def _query_distinct_dates_raw(table: str, from_dt: date, to_dt: date) -> set[str]:
+    """Quick helper to get distinct dates from a table."""
+    try:
+        import psycopg2.extras
+        conn = db._conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    f"SELECT DISTINCT trade_date FROM {table} "
+                    "WHERE trade_date BETWEEN %s AND %s",
+                    [str(from_dt), str(to_dt)]
+                )
+                return {str(r['trade_date']) for r in cur.fetchall()}
+        finally:
+            db._put(conn)
+    except Exception:
+        return set()
+
+
+def _get_known_holidays_set(from_dt: date, to_dt: date) -> set[str]:
+    """Get holiday/no_data dates as a simple set for backfill skipping."""
+    try:
+        import psycopg2.extras
+        conn = db._conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT trade_date FROM km_trading_calendar "
+                    "WHERE (is_holiday = TRUE OR status IN ('holiday', 'no_data', 'weekend')) "
+                    "AND trade_date BETWEEN %s AND %s",
+                    [str(from_dt), str(to_dt)]
+                )
+                return {str(r['trade_date']) for r in cur.fetchall()}
+        finally:
+            db._put(conn)
+    except Exception:
+        return set()
 
 
 FIX_HANDLERS = {
@@ -947,7 +1007,7 @@ FIX_HANDLERS = {
     'flow_intelligence':  lambda days, jid, strat: _fix_flow_intelligence(),
     'market_breadth':     lambda days, jid, strat: _refresh_market_breadth(),
     'breadth_roc':        lambda days, jid, strat: _refresh_breadth_roc(),
-    'fii_dii':            lambda days, jid, strat: _fix_fii_dii(),
+    'fii_dii':            lambda days, jid, strat: _fix_fii_dii(days, jid, strat),
 }
 
 
