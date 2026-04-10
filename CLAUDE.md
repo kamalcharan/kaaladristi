@@ -214,7 +214,27 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **024**.
+Latest migration: **024** (`km_migration_024_job_queue.sql`)
+Next migration number: **025**.
+
+### Job Queue Architecture
+
+Heavy pipeline work runs in a **separate worker process**, not inside the API:
+
+```
+API (uvicorn, port 8100)              Worker (separate process)
+────────────────────────              ────────────────────────
+POST /api/pipeline/fix                python worker.py --watch
+  → INSERT INTO km_jobs          →    polls km_jobs every 5s
+                                      picks up queued jobs
+GET /api/pipeline/live                executes handler
+  → SELECT FROM km_jobs               updates progress/status
+                                      writes to km_pipeline_runs
+POST /api/pipeline/cancel
+  → UPDATE km_jobs SET cancelled
+```
+
+Start the worker: `python worker.py --watch` (runs alongside uvicorn).
 
 ---
 

@@ -34,16 +34,16 @@ interface ExchangeView {
 }
 
 interface LiveJob {
-  job_id: string;
+  job_id: number;
   status: string;
   exchange: string;
   type: string;
-  total_dates: number;
-  success: number;
-  failed: number;
   started_at: string;
   completed_at: string | null;
   elapsed_ms: number | null;
+  progress: string | null;
+  progress_pct: number;
+  error_msg: string | null;
 }
 
 interface LiveData {
@@ -341,60 +341,70 @@ export default function PipelineExecution() {
         </div>
       )}
 
-      {/* Fix job view — simple status display (only when no date-level steps) */}
-      {showFixCard && job && (
+      {/* Job progress view */}
+      {job && (
         <div className={cn(
-          'flex items-center gap-3 py-4 px-4 rounded-xl border mb-3',
+          'py-4 px-4 rounded-xl border mb-3',
           isActive ? 'bg-accent-indigo/5 border-accent-indigo/20' :
           job.status === 'completed' ? 'bg-risk-green/5 border-risk-green/20' :
           job.status === 'failed' ? 'bg-risk-red/5 border-risk-red/20' :
+          job.status === 'cancelled' ? 'bg-risk-amber/5 border-risk-amber/20' :
           'bg-kd-elevated border-kd-border',
         )}>
-          {isActive ? (
-            <Loader2 className="w-5 h-5 text-accent-indigo animate-spin shrink-0" />
-          ) : job.status === 'completed' ? (
-            <CheckCircle2 className="w-5 h-5 text-risk-green shrink-0" />
-          ) : (
-            <XCircle className="w-5 h-5 text-risk-red shrink-0" />
-          )}
-          <div>
-            <div className={cn(
-              'text-[13px] font-bold',
-              isActive ? 'text-accent-indigo' :
-              job.status === 'completed' ? 'text-risk-green' : 'text-risk-red',
-            )}>
-              {FIX_LABELS[job.type] ?? job.type.replace('fix:', 'Fixing ')}
-            </div>
-            <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">
-              {isActive ? 'Running in background — this may take a few minutes...' :
-               job.status === 'completed' ? 'Completed successfully. Refresh health grid to verify.' :
-               'Failed — check server logs for details.'}
+          <div className="flex items-center gap-3">
+            {isActive ? (
+              <Loader2 className="w-5 h-5 text-accent-indigo animate-spin shrink-0" />
+            ) : job.status === 'completed' ? (
+              <CheckCircle2 className="w-5 h-5 text-risk-green shrink-0" />
+            ) : job.status === 'cancelled' ? (
+              <StopCircle className="w-5 h-5 text-risk-amber shrink-0" />
+            ) : (
+              <XCircle className="w-5 h-5 text-risk-red shrink-0" />
+            )}
+            <div className="flex-1">
+              <div className={cn(
+                'text-[13px] font-bold',
+                isActive ? 'text-accent-indigo' :
+                job.status === 'completed' ? 'text-risk-green' :
+                job.status === 'cancelled' ? 'text-risk-amber' : 'text-risk-red',
+              )}>
+                {FIX_LABELS[job.type] ?? job.type.replace('fix:', 'Fixing ')}
+              </div>
+              {/* Progress text from worker */}
+              {job.progress && (
+                <div className="text-[11px] text-[var(--text-secondary)] mt-0.5 mono">
+                  {job.progress}
+                </div>
+              )}
+              {!job.progress && (
+                <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+                  {isActive ? 'Waiting for worker to pick up job...' :
+                   job.status === 'completed' ? 'Completed successfully.' :
+                   job.status === 'cancelled' ? 'Job was cancelled.' :
+                   job.error_msg || 'Failed — check worker logs.'}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Progress bar */}
+          {isActive && job.progress_pct > 0 && (
+            <div className="mt-3">
+              <div className="h-1.5 bg-kd-elevated rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-accent-indigo transition-all duration-500"
+                  style={{ width: `${job.progress_pct}%` }}
+                />
+              </div>
+              <div className="text-[9px] text-muted mt-1 text-right mono">
+                {job.progress_pct}%
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Per-exchange execution view (for pipeline/backfill jobs, or fix jobs with dates) */}
-      {showStepView && exchanges.map(exch => (
-        <div key={exch.exchange} className="mb-3">
-          {exchanges.length > 1 && (
-            <div className="text-[9px] font-bold uppercase tracking-widest text-muted mb-2">
-              {exch.exchange} Pipeline
-            </div>
-          )}
-          {exch.dates.map((view, i) => (
-            <DateSection
-              key={view.date}
-              view={view}
-              defaultOpen={
-                exch.dates.length <= 3 ||
-                view.steps.some(s => s.status === 'running') ||
-                (i === exch.dates.length - 1 && !isActive)
-              }
-            />
-          ))}
-        </div>
-      ))}
+      {/* Reserved: per-date step view for future backfill detail */}
 
       {/* Job timestamps */}
       {job && (

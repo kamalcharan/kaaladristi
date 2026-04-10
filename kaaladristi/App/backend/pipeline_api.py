@@ -18,6 +18,7 @@ Docker:
 
 import os
 import sys
+import json
 import uuid
 import logging
 from datetime import date, datetime, timedelta
@@ -402,101 +403,50 @@ BSE_STEPS = [
 
 @app.get('/api/pipeline/live')
 def pipeline_live():
-    """Live execution state — ordered steps with progress for active/recent jobs."""
+    """Live execution state — reads from km_jobs table."""
     # Find active job
-    running_job = None
-    for job_id, job in active_jobs.items():
-        if job['status'] in ('running', 'queued'):
-            running_job = {'job_id': job_id, **job}
-            break
+    running = db.select('km_jobs', '*', filters={'status': 'running'},
+                        order='created_at.desc', limit=1)
+    if not running:
+        running = db.select('km_jobs', '*', filters={'status': 'queued'},
+                            order='created_at.desc', limit=1)
+    if not running:
+        # Show most recent completed/failed
+        running = db.select('km_jobs', '*', order='created_at.desc', limit=1)
 
-    # If no running job, find the most recently completed one
-    if not running_job:
-        completed = [(jid, j) for jid, j in active_jobs.items()
-                     if j['status'] == 'completed']
-        if completed:
-            completed.sort(key=lambda x: x[1].get('completed_at', ''), reverse=True)
-            jid, j = completed[0]
-            running_job = {'job_id': jid, **j}
+    if not running:
+        return {'active': False, 'job': None, 'exchanges': []}
 
-    if not running_job:
-        return {
-            'active': False,
-            'job': None,
-            'exchanges': [],
-        }
+    job = running[0]
+    # Serialise dates
+    for k in ('created_at', 'started_at', 'completed_at'):
+        if job.get(k):
+            job[k] = str(job[k])
 
-    # Determine which dates and exchange
-    job_dates = running_job.get('dates', [])
-    exchange = running_job.get('exchange', 'NSE')
-    job_status = running_job.get('status', 'completed')
+    running_job = {
+        'job_id': job['id'],
+        'status': job['status'],
+        'type': job['job_type'],
+        'exchange': 'NSE',
+        'started_at': job.get('started_at'),
+        'completed_at': job.get('completed_at'),
+        'progress': job.get('progress'),
+        'progress_pct': job.get('progress_pct', 0),
+        'result': job.get('result'),
+        'error_msg': job.get('error_msg'),
+    }
 
-    # Build per-exchange, per-date execution view
-    exchanges = []
-
-    for exch in (['NSE', 'BSE'] if exchange == 'ALL' else [exchange]):
-        step_defs = NSE_STEPS if exch == 'NSE' else BSE_STEPS
-
-        date_views = []
-        for d in job_dates:
-            # Fetch step statuses for this date + exchange
-            runs = db.select('km_pipeline_runs', '*',
-                             filters={'trade_date': d, 'exchange': exch},
-                             order='id')
-            run_map = {r['step']: r for r in runs}
-
-            steps = []
-            for sd in step_defs:
-                run = run_map.get(sd['step'])
-                if run:
-                    # Serialise dates
-                    for k in ('trade_date', 'started_at', 'completed_at'):
-                        if run.get(k):
-                            run[k] = str(run[k])
-                    steps.append({
-                        **sd,
-                        'status': run.get('status', 'pending'),
-                        'rows_count': run.get('rows_count', 0),
-                        'duration_ms': run.get('duration_ms'),
-                        'error_msg': run.get('error_msg'),
-                        'started_at': run.get('started_at'),
-                        'completed_at': run.get('completed_at'),
-                    })
-                else:
-                    steps.append({
-                        **sd,
-                        'status': 'pending',
-                        'rows_count': 0,
-                        'duration_ms': None,
-                        'error_msg': None,
-                        'started_at': None,
-                        'completed_at': None,
-                    })
-
-            # Calculate progress
-            completed_count = sum(1 for s in steps if s['status'] in ('completed', 'skipped'))
-            total_count = len(steps)
-
-            date_views.append({
-                'date': d,
-                'steps': steps,
-                'completed': completed_count,
-                'total': total_count,
-                'progress_pct': round(completed_count / total_count * 100) if total_count else 0,
-            })
-
-        exchanges.append({
-            'exchange': exch,
-            'dates': date_views,
-        })
+    job_status = job['status']
 
     # Elapsed time
-    started = running_job.get('started_at', '')
     elapsed_ms = None
-    if started:
+    if running_job.get('started_at'):
         try:
-            start_dt = datetime.fromisoformat(started)
-            end_dt = datetime.fromisoformat(running_job['completed_at']) if running_job.get('completed_at') else datetime.utcnow()
+            start_dt = datetime.fromisoformat(str(running_job['started_at']))
+            if running_job.get('completed_at'):
+                end_dt = datetime.fromisoformat(str(running_job['completed_at']))
+            else:
+                end_dt = datetime.utcnow()
             elapsed_ms = int((end_dt - start_dt).total_seconds() * 1000)
         except Exception:
             pass
@@ -504,18 +454,18 @@ def pipeline_live():
     return {
         'active': job_status in ('running', 'queued'),
         'job': {
-            'job_id': running_job.get('job_id'),
+            'job_id': running_job['job_id'],
             'status': job_status,
-            'exchange': exchange,
-            'type': running_job.get('type', 'manual'),
-            'total_dates': len(job_dates),
-            'success': running_job.get('success', 0),
-            'failed': running_job.get('failed', 0),
-            'started_at': started,
+            'type': running_job['type'],
+            'exchange': running_job.get('exchange', ''),
+            'started_at': running_job.get('started_at'),
             'completed_at': running_job.get('completed_at'),
             'elapsed_ms': elapsed_ms,
+            'progress': running_job.get('progress'),
+            'progress_pct': running_job.get('progress_pct', 0),
+            'error_msg': running_job.get('error_msg'),
         },
-        'exchanges': exchanges,
+        'exchanges': [],  # Step-level view stays for backfill jobs via km_pipeline_runs
     }
 
 
@@ -684,23 +634,26 @@ class FixRequest(BaseModel):
 _cancel_flags: dict[str, bool] = {}
 
 @app.post('/api/pipeline/cancel')
-def cancel_job(job_id: str = None):
-    """Cancel a running pipeline job."""
+def cancel_job(job_id: int = None):
+    """Cancel a running/queued job in km_jobs."""
     if job_id:
-        targets = [job_id]
+        db.patch('km_jobs', {'id': job_id}, {
+            'status': 'cancelled',
+            'completed_at': datetime.utcnow().isoformat(),
+        })
+        return {'status': 'cancelled', 'message': f'Job #{job_id} cancelled'}
     else:
-        targets = [jid for jid, j in active_jobs.items() if j['status'] == 'running']
-
-    if not targets:
-        return {'status': 'no_running_jobs', 'message': 'No running jobs to cancel'}
-
-    for jid in targets:
-        _cancel_flags[jid] = True
-        if jid in active_jobs:
-            active_jobs[jid]['status'] = 'cancelled'
-            active_jobs[jid]['completed_at'] = datetime.utcnow().isoformat()
-
-    return {'status': 'cancelled', 'message': f'Cancelled {len(targets)} job(s)', 'job_ids': targets}
+        # Cancel all running/queued jobs
+        running = db.select('km_jobs', 'id', filters={'status': 'running'}, limit=10)
+        queued = db.select('km_jobs', 'id', filters={'status': 'queued'}, limit=10)
+        cancelled = []
+        for row in (running or []) + (queued or []):
+            db.patch('km_jobs', {'id': row['id']}, {
+                'status': 'cancelled',
+                'completed_at': datetime.utcnow().isoformat(),
+            })
+            cancelled.append(row['id'])
+        return {'status': 'cancelled', 'message': f'Cancelled {len(cancelled)} job(s)', 'job_ids': cancelled}
 
 
 class MarkDateRequest(BaseModel):
@@ -1072,58 +1025,44 @@ def _get_known_holidays_set(from_dt: date, to_dt: date) -> set[str]:
         return set()
 
 
-FIX_HANDLERS = {
-    'nse_equities':       lambda days, jid, strat: _fix_nse_backfill(days, jid, strat),
-    'bse_equities':       lambda days, jid, strat: _fix_bse_backfill(days, jid, strat),
-    'indicators':         lambda days, jid, strat: _fix_indicators(days, jid, strat),
-    'flow_intelligence':  lambda days, jid, strat: _fix_flow_intelligence(days, jid, strat),
-    'market_breadth':     lambda days, jid, strat: _refresh_market_breadth(),
-    'breadth_roc':        lambda days, jid, strat: _refresh_breadth_roc(),
-    'fii_dii':            lambda days, jid, strat: _fix_fii_dii(days, jid, strat),
+FIX_DIMENSIONS = {
+    'nse_equities', 'bse_equities', 'indicators', 'flow_intelligence',
+    'market_breadth', 'breadth_roc', 'fii_dii',
 }
 
 
 @app.post('/api/pipeline/fix')
-def fix_dimension(req: FixRequest, background_tasks: BackgroundTasks):
-    """Fix a specific data health dimension."""
-    handler = FIX_HANDLERS.get(req.dimension)
-    if not handler:
+def fix_dimension(req: FixRequest):
+    """Queue a fix job for a specific data health dimension.
+    The job is picked up by worker.py — NOT run inside the API process."""
+    if req.dimension not in FIX_DIMENSIONS:
         raise HTTPException(400, f'Unknown dimension: {req.dimension}. '
-                            f'Available: {", ".join(FIX_HANDLERS.keys())}')
+                            f'Available: {", ".join(sorted(FIX_DIMENSIONS))}')
 
-    # Check for running jobs
-    running = [j for j in active_jobs.values() if j['status'] == 'running']
-    if running:
-        raise HTTPException(409, 'A pipeline job is already running. Cancel it first.')
+    # Check for already queued/running jobs of same type
+    existing = db.select('km_jobs', 'id,status',
+                         filters={'job_type': f'fix:{req.dimension}'},
+                         order='created_at.desc', limit=1)
+    if existing and existing[0].get('status') in ('queued', 'running'):
+        raise HTTPException(409, f'A {req.dimension} job is already queued/running (#{existing[0]["id"]})')
 
-    job_id = str(uuid.uuid4())[:8]
-    active_jobs[job_id] = {
-        'status': 'running',
-        'started_at': datetime.utcnow().isoformat(),
-        'type': f'fix:{req.dimension}',
-        'exchange': 'ALL',
-        'dates': [],
+    # Insert job into queue
+    record = {
+        'job_type': f'fix:{req.dimension}',
+        'params': json.dumps({'days': req.days, 'strategy': req.strategy}),
+        'status': 'queued',
+        'created_by': 'ui',
     }
+    db.insert('km_jobs', record)
 
-    def _run():
-        try:
-            handler(req.days, job_id, req.strategy)
-            if _cancel_flags.get(job_id):
-                active_jobs[job_id]['status'] = 'cancelled'
-            else:
-                active_jobs[job_id]['status'] = 'completed'
-            active_jobs[job_id]['completed_at'] = datetime.utcnow().isoformat()
-        except Exception as e:
-            active_jobs[job_id].update({
-                'status': 'failed',
-                'completed_at': datetime.utcnow().isoformat(),
-                'error': str(e),
-            })
-        _cancel_flags.pop(job_id, None)
+    # Get the inserted job ID
+    rows = db.select('km_jobs', 'id',
+                     filters={'job_type': f'fix:{req.dimension}', 'status': 'queued'},
+                     order='created_at.desc', limit=1)
+    job_id = rows[0]['id'] if rows else None
 
-    background_tasks.add_task(_run)
     return {'job_id': job_id, 'status': 'queued',
-            'message': f'Fix queued for {req.dimension} (strategy: {req.strategy})'}
+            'message': f'Job queued for {req.dimension}. Start worker: python worker.py --watch'}
 
 
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
