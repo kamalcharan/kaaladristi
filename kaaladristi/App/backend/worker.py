@@ -34,6 +34,12 @@ logging.basicConfig(
 log = logging.getLogger('worker')
 
 
+def _now_ist() -> str:
+    """Current time in IST as ISO string."""
+    import pytz
+    return datetime.now(pytz.timezone('Asia/Kolkata')).isoformat()
+
+
 # ── Cutoff logic ─────────────────────────────────────────────────────────────
 
 def _get_cutoff_date() -> date:
@@ -351,7 +357,7 @@ def process_one(db):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Atomic pick: grab oldest queued job and mark running
             cur.execute("""
-                UPDATE km_jobs SET status = 'running', started_at = now()
+                UPDATE km_jobs SET status = 'running', started_at = NOW() AT TIME ZONE 'Asia/Kolkata'
                 WHERE id = (
                     SELECT id FROM km_jobs WHERE status = 'queued'
                     ORDER BY created_at LIMIT 1
@@ -388,12 +394,12 @@ def process_one(db):
         # Check if it was cancelled mid-run
         if _is_cancelled(db, job_id):
             _update_job(db, job_id, status='cancelled',
-                        completed_at=datetime.utcnow().isoformat(),
+                        completed_at=_now_ist(),
                         result=json.dumps({'rows': result_count}))
             log.info(f'Job #{job_id}: cancelled after {result_count} rows')
         else:
             _update_job(db, job_id, status='completed',
-                        completed_at=datetime.utcnow().isoformat(),
+                        completed_at=_now_ist(),
                         progress_pct=100,
                         result=json.dumps({'rows': result_count}))
             log.info(f'Job #{job_id}: completed — {result_count} rows')
