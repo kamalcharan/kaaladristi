@@ -746,13 +746,44 @@ def _dates_with_eod_data(exchange: str, from_date: date, to_date: date) -> set[s
         return set()
 
 
+def _get_known_holidays(from_date: date, to_date: date) -> set[str]:
+    """Get holidays from km_trading_calendar + known Indian market holidays."""
+    holidays = set()
+    try:
+        import psycopg2.extras
+        conn = db._conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT trade_date FROM km_trading_calendar "
+                    "WHERE (is_holiday = TRUE OR status IN ('holiday', 'no_data', 'weekend')) "
+                    "AND trade_date BETWEEN %s AND %s",
+                    [str(from_date), str(to_date)]
+                )
+                holidays = {str(r['trade_date']) for r in cur.fetchall()}
+        finally:
+            db._put(conn)
+    except Exception:
+        pass
+    return holidays
+
+
+def _get_backfill_db():
+    """Get a SEPARATE db client for backfill operations so API stays responsive."""
+    try:
+        from lib.pg_client import PgClient
+        from lib.config import DATABASE_URL
+        return PgClient(DATABASE_URL)
+    except Exception:
+        return db  # fallback to shared pool
+
+
 def _get_cutoff_date() -> date:
     """Don't process today if before 6 PM IST (bhav copy not available yet)."""
     import pytz
     ist = pytz.timezone('Asia/Kolkata')
     now_ist = datetime.now(ist)
     if now_ist.hour < 18:
-        # Before 6 PM IST — only process up to yesterday
         return last_trading_day(date.today() - timedelta(days=1))
     return date.today()
 
@@ -764,7 +795,7 @@ def _fix_nse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
-    # Find dates that need processing
+    # Collect weekdays
     all_weekdays = []
     cursor = from_dt
     while cursor <= cutoff:
@@ -772,11 +803,14 @@ def _fix_nse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
             all_weekdays.append(cursor)
         cursor += timedelta(days=1)
 
+    # Skip holidays
+    holidays = _get_known_holidays(from_dt, cutoff)
+    all_weekdays = [d for d in all_weekdays if str(d) not in holidays]
+
     if strategy == 'smart':
-        # Skip dates that already have data
         existing = _dates_with_eod_data('NSE', from_dt, cutoff)
         to_process = [d for d in all_weekdays if str(d) not in existing]
-        log.info(f'[fix:nse] Smart: {len(existing)} dates have data, {len(to_process)} to process')
+        log.info(f'[fix:nse] Smart: {len(existing)} have data, {len(holidays)} holidays, {len(to_process)} to process')
     else:
         to_process = all_weekdays
         log.info(f'[fix:nse] Force: {len(to_process)} dates to process')
@@ -785,14 +819,23 @@ def _fix_nse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
         active_jobs[job_id]['dates'] = [str(d) for d in to_process]
         active_jobs[job_id]['exchange'] = 'NSE'
 
-    for d in to_process:
-        if _cancel_flags.get(job_id):
-            log.info(f'[fix:nse] Cancelled at {d}')
-            break
-        try:
-            run_nse_pipeline(db, d, force=(strategy == 'force'))
-        except Exception as e:
-            log.error(f'[fix:nse] {d} failed: {e}')
+    # Use separate DB connection to avoid starving the API
+    backfill_db = _get_backfill_db()
+    try:
+        for d in to_process:
+            if _cancel_flags.get(job_id):
+                log.info(f'[fix:nse] Cancelled at {d}')
+                break
+            try:
+                run_nse_pipeline(backfill_db, d, force=(strategy == 'force'))
+            except Exception as e:
+                log.error(f'[fix:nse] {d} failed: {e}')
+    finally:
+        if backfill_db is not db:
+            try:
+                backfill_db.close()
+            except Exception:
+                pass
 
     _cancel_flags.pop(job_id, None)
     _refresh_market_breadth()
@@ -813,10 +856,13 @@ def _fix_bse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
             all_weekdays.append(cursor)
         cursor += timedelta(days=1)
 
+    holidays = _get_known_holidays(from_dt, cutoff)
+    all_weekdays = [d for d in all_weekdays if str(d) not in holidays]
+
     if strategy == 'smart':
         existing = _dates_with_eod_data('BSE', from_dt, cutoff)
         to_process = [d for d in all_weekdays if str(d) not in existing]
-        log.info(f'[fix:bse] Smart: {len(existing)} dates have data, {len(to_process)} to process')
+        log.info(f'[fix:bse] Smart: {len(existing)} have data, {len(holidays)} holidays, {len(to_process)} to process')
     else:
         to_process = all_weekdays
         log.info(f'[fix:bse] Force: {len(to_process)} dates to process')
@@ -825,14 +871,22 @@ def _fix_bse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
         active_jobs[job_id]['dates'] = [str(d) for d in to_process]
         active_jobs[job_id]['exchange'] = 'BSE'
 
-    for d in to_process:
-        if _cancel_flags.get(job_id):
-            log.info(f'[fix:bse] Cancelled at {d}')
-            break
-        try:
-            run_bse_pipeline(db, d, force=(strategy == 'force'))
-        except Exception as e:
-            log.error(f'[fix:bse] {d} failed: {e}')
+    backfill_db = _get_backfill_db()
+    try:
+        for d in to_process:
+            if _cancel_flags.get(job_id):
+                log.info(f'[fix:bse] Cancelled at {d}')
+                break
+            try:
+                run_bse_pipeline(backfill_db, d, force=(strategy == 'force'))
+            except Exception as e:
+                log.error(f'[fix:bse] {d} failed: {e}')
+    finally:
+        if backfill_db is not db:
+            try:
+                backfill_db.close()
+            except Exception:
+                pass
 
     _cancel_flags.pop(job_id, None)
 
