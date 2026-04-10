@@ -725,29 +725,101 @@ def mark_date(req: MarkDateRequest):
     log.info(f'[mark-date] {req.date} ({req.exchange}) → {req.status}')
     return {'status': 'ok', 'message': f'{req.date} marked as {req.status}'}
 
-def _fix_indicators():
-    """Recompute technical indicators for all pending symbols."""
-    try:
-        for table, id_col in [('km_index_eod', 'index_id'), ('km_equity_eod', 'equity_id')]:
-            result = db.rpc('compute_all_pending_indicators', {
-                'p_table': table, 'p_id_col': id_col,
-            })
-            count = sum(r.get('rows_updated', 0) for r in (result or []))
-            log.info(f'[fix:indicators] {table}: {count} rows updated')
-    except Exception as e:
-        log.error(f'[fix:indicators] error: {e}')
+def _fix_indicators(days: int = 60, job_id: str = None, strategy: str = 'smart'):
+    """Recompute technical indicators ONLY for dates missing them."""
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
 
-def _fix_flow_intelligence():
-    """Recompute flow intelligence for all symbols."""
+    backfill_db = _get_backfill_db()
     try:
+        import psycopg2.extras
+        total = 0
         for table, id_col in [('km_index_eod', 'index_id'), ('km_equity_eod', 'equity_id')]:
-            result = db.rpc('compute_all_flow_intelligence', {
-                'p_table': table, 'p_id_col': id_col,
-            })
-            count = sum(r.get('rows_updated', 0) for r in (result or []))
-            log.info(f'[fix:flow_intel] {table}: {count} rows updated')
-    except Exception as e:
-        log.error(f'[fix:flow_intel] error: {e}')
+            # Find symbols with uncomputed rows IN THE DATE RANGE ONLY
+            conn = backfill_db._conn()
+            try:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(f"""
+                        SELECT DISTINCT {id_col} AS sid
+                        FROM {table}
+                        WHERE indicators_computed_at IS NULL
+                          AND trade_date BETWEEN %s AND %s
+                    """, [str(from_dt), str(cutoff)])
+                    pending = [r['sid'] for r in cur.fetchall()]
+            finally:
+                backfill_db._put(conn)
+
+            log.info(f'[fix:indicators] {table}: {len(pending)} symbols with gaps in last {days} days')
+
+            for sid in pending:
+                if _cancel_flags.get(job_id):
+                    break
+                try:
+                    result = backfill_db.rpc('compute_indicators_batch', {
+                        'p_table': table,
+                        'p_id_col': id_col,
+                        'p_symbol_id': sid,
+                        'p_from_date': str(from_dt),
+                    })
+                    count = result[0].get('compute_indicators_batch', 0) if result else 0
+                    total += count
+                except Exception as e:
+                    log.error(f'[fix:indicators] {table} sid={sid}: {e}')
+
+            log.info(f'[fix:indicators] {table}: done, {total} rows updated')
+    finally:
+        if backfill_db is not db:
+            try: backfill_db.close()
+            except Exception: pass
+    _cancel_flags.pop(job_id, None)
+
+
+def _fix_flow_intelligence(days: int = 60, job_id: str = None, strategy: str = 'smart'):
+    """Recompute flow intelligence ONLY for dates missing it."""
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
+
+    backfill_db = _get_backfill_db()
+    try:
+        import psycopg2.extras
+        total = 0
+        for table, id_col in [('km_index_eod', 'index_id'), ('km_equity_eod', 'equity_id')]:
+            conn = backfill_db._conn()
+            try:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(f"""
+                        SELECT DISTINCT {id_col} AS sid
+                        FROM {table}
+                        WHERE flow_type IS NULL
+                          AND trade_date BETWEEN %s AND %s
+                    """, [str(from_dt), str(cutoff)])
+                    pending = [r['sid'] for r in cur.fetchall()]
+            finally:
+                backfill_db._put(conn)
+
+            log.info(f'[fix:flow_intel] {table}: {len(pending)} symbols with gaps in last {days} days')
+
+            for sid in pending:
+                if _cancel_flags.get(job_id):
+                    break
+                try:
+                    result = backfill_db.rpc('compute_flow_intelligence', {
+                        'p_table': table,
+                        'p_id_col': id_col,
+                        'p_symbol_id': sid,
+                        'p_from_date': str(from_dt),
+                    })
+                    count = result if isinstance(result, int) else (result[0].get('compute_flow_intelligence', 0) if result else 0)
+                    total += count
+                except Exception as e:
+                    log.error(f'[fix:flow_intel] {table} sid={sid}: {e}')
+
+            log.info(f'[fix:flow_intel] {table}: done, {total} rows updated')
+    finally:
+        if backfill_db is not db:
+            try: backfill_db.close()
+            except Exception: pass
+    _cancel_flags.pop(job_id, None)
 
 def _dates_with_eod_data(exchange: str, from_date: date, to_date: date) -> set[str]:
     """Check which dates already have EOD data in km_equity_eod."""
@@ -1003,8 +1075,8 @@ def _get_known_holidays_set(from_dt: date, to_dt: date) -> set[str]:
 FIX_HANDLERS = {
     'nse_equities':       lambda days, jid, strat: _fix_nse_backfill(days, jid, strat),
     'bse_equities':       lambda days, jid, strat: _fix_bse_backfill(days, jid, strat),
-    'indicators':         lambda days, jid, strat: _fix_indicators(),
-    'flow_intelligence':  lambda days, jid, strat: _fix_flow_intelligence(),
+    'indicators':         lambda days, jid, strat: _fix_indicators(days, jid, strat),
+    'flow_intelligence':  lambda days, jid, strat: _fix_flow_intelligence(days, jid, strat),
     'market_breadth':     lambda days, jid, strat: _refresh_market_breadth(),
     'breadth_roc':        lambda days, jid, strat: _refresh_breadth_roc(),
     'fii_dii':            lambda days, jid, strat: _fix_fii_dii(days, jid, strat),
