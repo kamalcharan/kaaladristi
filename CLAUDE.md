@@ -64,6 +64,21 @@ Migrations 022-023 add **flow intelligence** columns (`flow_type`, `vacuum_flag`
 
 ---
 
+## Known Data Quality Issues
+
+### 1. Index Volume Scale Inconsistency
+Index EOD volumes come from multiple sources (NSE bhav copy, Breeze API) with **incompatible scales** — NSE bhav reports ~500K while Breeze reports ~450M for the same index. This makes RVOL unreliable for indexes: recent Breeze data shows RVOL=15x (false spike) while older NSE bhav data shows RVOL=0.05 (false low). **Impact**: Flow classification on indexes falls to `LOW_VOLUME` or `MIXED` for most rows. Needs volume source normalisation or single-source enforcement.
+
+### 2. MagicRS Coverage Gaps
+- **NIFTY 50** has no `magic_rs_zone` populated — MagicRS requires Python compute engine (benchmark comparison), not available via SQL RPC.
+- **Equities** have 0 rows with `magic_rs_zone` — MagicRS backfill has not run for equities.
+- **89% of index magic_rs_zone is "Neutral"** — only 8,418 of 83,403 rows are directional (Strong/Mild Bull/Bear). This limits flow classification to MIXED for most rows even when RVOL is adequate.
+
+### 3. Panchangam / Nakshatra Issues
+Nakshatra computation and end-time calculations have known accuracy issues that need to be investigated and resolved. This affects the Panchangam card display and any astro-technical correlation that depends on nakshatra data.
+
+---
+
 ## Environment Variables
 
 All env vars live in `App/.env` (single file for both frontend and backend).

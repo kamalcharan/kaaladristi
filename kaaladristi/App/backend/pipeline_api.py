@@ -653,6 +653,29 @@ def breadth_roc_insight():
     return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
+# ── Data Assembler Endpoints (Phase 2 — context for VaNi skills) ─────────────
+
+from lib.data_assemblers import assemble_instrument_context, assemble_market_pulse_context
+
+
+@app.get('/api/context/instrument')
+def get_instrument_context(id: int, type: str = 'index', date: str = None):
+    """Return assembled technical + astro context for one instrument."""
+    ctx = assemble_instrument_context(db, id, type, date)
+    if not ctx:
+        raise HTTPException(404, f'{type} #{id} not found or no data')
+    return ctx
+
+
+@app.get('/api/context/market-pulse')
+def get_market_pulse_context(date: str = None):
+    """Return assembled market-wide context for the dashboard pulse card."""
+    ctx = assemble_market_pulse_context(db, date)
+    if not ctx:
+        raise HTTPException(500, 'Failed to assemble market pulse context')
+    return ctx
+
+
 @app.get('/api/fii-dii')
 def fii_dii_data(days: int = 30):
     """
