@@ -127,152 +127,56 @@ def _is_cancelled(db, job_id):
 # ── Job Handlers ─────────────────────────────────────────────────────────────
 
 def handle_fix_indicators(db, job_id, params):
-    """Compute indicators only for missing rows in date range — INDEX only."""
-    days = params.get('days', 60)
-    cutoff = _get_cutoff_date()
-    from_dt = cutoff - timedelta(days=int(days * 1.5))
-
-    total = 0
-    # Only process indexes — equity indicators are a separate, heavier job
-    table, id_col = 'km_index_eod', 'index_id'
-    pending = _pending_symbols(db, table, id_col, 'indicators_computed_at', from_dt, cutoff)
-    _update_job(db, job_id, progress=f'{len(pending)} index symbols to compute')
-    log.info(f'{table}: {len(pending)} symbols with indicator gaps')
-
-    for i, sid in enumerate(pending):
-        if _is_cancelled(db, job_id):
-            return total
-        _update_job(db, job_id,
-                    progress=f'Index {i+1}/{len(pending)}',
-                    progress_pct=int((i / max(len(pending), 1)) * 100))
-        try:
-            result = db.rpc('compute_indicators_batch', {
-                'p_table': table, 'p_id_col': id_col,
-                'p_symbol_id': sid, 'p_from_date': str(from_dt),
-            })
-            count = result[0].get('compute_indicators_batch', 0) if result else 0
-            total += count
-        except Exception as e:
-            log.error(f'{table} sid={sid}: {e}')
-
+    """Compute index indicators — single RPC call, same as pgAdmin."""
+    _update_job(db, job_id, progress='Computing index indicators...')
+    log.info('Index indicators: calling compute_all_pending_indicators')
+    result = db.rpc('compute_all_pending_indicators', {
+        'p_table': 'km_index_eod', 'p_id_col': 'index_id',
+    })
+    total = sum(r.get('rows_updated', 0) for r in (result or []))
+    log.info(f'Index indicators: {total} rows updated')
     return total
 
 
 def handle_fix_nse_equity_indicators(db, job_id, params):
-    """Compute indicators for NSE EQUITY only."""
-    days = params.get('days', 60)
-    cutoff = _get_cutoff_date()
-    from_dt = cutoff - timedelta(days=int(days * 1.5))
-
-    total = 0
-    # Find NSE equity IDs with gaps
-    import psycopg2.extras
-    conn = db._conn()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT DISTINCT e.equity_id AS sid FROM km_equity_eod e
-                JOIN km_equity_symbols s ON s.id = e.equity_id
-                WHERE s.exchange = 'NSE' AND e.indicators_computed_at IS NULL
-                AND e.trade_date BETWEEN %s AND %s
-            """, [str(from_dt), str(cutoff)])
-            pending = [r['sid'] for r in cur.fetchall()]
-    finally:
-        db._put(conn)
-
-    _update_job(db, job_id, progress=f'{len(pending)} NSE equity symbols to compute')
-    log.info(f'NSE Equity indicators: {len(pending)} symbols with gaps')
-
-    for i, sid in enumerate(pending):
-        if _is_cancelled(db, job_id):
-            return total
-        _update_job(db, job_id,
-                    progress=f'NSE Equity {i+1}/{len(pending)}',
-                    progress_pct=int((i / max(len(pending), 1)) * 100))
-        try:
-            result = db.rpc('compute_indicators_batch', {
-                'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
-                'p_symbol_id': sid, 'p_from_date': str(from_dt),
-            })
-            count = result[0].get('compute_indicators_batch', 0) if result else 0
-            total += count
-        except Exception as e:
-            log.error(f'NSE equity sid={sid}: {e}')
-
+    """Compute NSE equity indicators — single RPC call."""
+    _update_job(db, job_id, progress='Computing NSE equity indicators...')
+    log.info('NSE Equity indicators: calling compute_all_pending_indicators')
+    result = db.rpc('compute_all_pending_indicators', {
+        'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+    })
+    total = sum(r.get('rows_updated', 0) for r in (result or []))
+    log.info(f'NSE Equity indicators: {total} rows updated')
     return total
 
 
 def handle_fix_bse_equity_indicators(db, job_id, params):
-    """Compute indicators for BSE EQUITY only."""
-    days = params.get('days', 60)
-    cutoff = _get_cutoff_date()
-    from_dt = cutoff - timedelta(days=int(days * 1.5))
-
-    total = 0
-    import psycopg2.extras
-    conn = db._conn()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT DISTINCT e.equity_id AS sid FROM km_equity_eod e
-                JOIN km_equity_symbols s ON s.id = e.equity_id
-                WHERE s.exchange = 'BSE' AND e.indicators_computed_at IS NULL
-                AND e.trade_date BETWEEN %s AND %s
-            """, [str(from_dt), str(cutoff)])
-            pending = [r['sid'] for r in cur.fetchall()]
-    finally:
-        db._put(conn)
-
-    _update_job(db, job_id, progress=f'{len(pending)} BSE equity symbols to compute')
-    log.info(f'BSE Equity indicators: {len(pending)} symbols with gaps')
-
-    for i, sid in enumerate(pending):
-        if _is_cancelled(db, job_id):
-            return total
-        _update_job(db, job_id,
-                    progress=f'BSE Equity {i+1}/{len(pending)}',
-                    progress_pct=int((i / max(len(pending), 1)) * 100))
-        try:
-            result = db.rpc('compute_indicators_batch', {
-                'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
-                'p_symbol_id': sid, 'p_from_date': str(from_dt),
-            })
-            count = result[0].get('compute_indicators_batch', 0) if result else 0
-            total += count
-        except Exception as e:
-            log.error(f'BSE equity sid={sid}: {e}')
-
+    """Compute BSE equity indicators — single RPC call."""
+    _update_job(db, job_id, progress='Computing BSE equity indicators...')
+    log.info('BSE Equity indicators: calling compute_all_pending_indicators')
+    result = db.rpc('compute_all_pending_indicators', {
+        'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+    })
+    total = sum(r.get('rows_updated', 0) for r in (result or []))
+    log.info(f'BSE Equity indicators: {total} rows updated')
     return total
 
 
 def handle_fix_flow(db, job_id, params):
-    """Compute flow intelligence only for missing rows — INDEX only."""
-    days = params.get('days', 60)
-    cutoff = _get_cutoff_date()
-    from_dt = cutoff - timedelta(days=int(days * 1.5))
-
+    """Compute flow intelligence — single RPC call per table."""
     total = 0
-    table, id_col = 'km_index_eod', 'index_id'
-    pending = _pending_symbols(db, table, id_col, 'flow_type', from_dt, cutoff)
-    _update_job(db, job_id, progress=f'{len(pending)} index symbols')
-    log.info(f'{table}: {len(pending)} symbols with flow gaps')
-
-    for i, sid in enumerate(pending):
-        if _is_cancelled(db, job_id):
-            return total
-        _update_job(db, job_id,
-                    progress=f'Index {i+1}/{len(pending)}',
-                    progress_pct=int((i / max(len(pending), 1)) * 100))
-        try:
-            result = db.rpc('compute_flow_intelligence', {
-                'p_table': table, 'p_id_col': id_col,
-                'p_symbol_id': sid, 'p_from_date': str(from_dt),
-            })
-            count = result[0].get('compute_flow_intelligence', 0) if result else 0
-            total += count
-        except Exception as e:
-            log.error(f'{table} sid={sid}: {e}')
-
+    for table, id_col, label in [
+        ('km_index_eod', 'index_id', 'Index'),
+        ('km_equity_eod', 'equity_id', 'Equity'),
+    ]:
+        _update_job(db, job_id, progress=f'Computing {label} flow intelligence...')
+        log.info(f'{label} flow: calling compute_all_flow_intelligence')
+        result = db.rpc('compute_all_flow_intelligence', {
+            'p_table': table, 'p_id_col': id_col,
+        })
+        count = sum(r.get('rows_updated', 0) for r in (result or []))
+        total += count
+        log.info(f'{label} flow: {count} rows updated')
     return total
 
 
