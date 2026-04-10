@@ -675,6 +675,32 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
 class FixRequest(BaseModel):
     dimension: str           # health check ID: nse_equities, indicators, etc.
     days: int = 60           # how far back to look for gaps
+    strategy: str = 'smart'  # smart (skip existing) | force (redownload) | compute_only (no downloads)
+
+
+# ── Cancel endpoint ───────────────────────────────────────────────────────────
+# Sets a flag that running jobs can check to abort early
+
+_cancel_flags: dict[str, bool] = {}
+
+@app.post('/api/pipeline/cancel')
+def cancel_job(job_id: str = None):
+    """Cancel a running pipeline job."""
+    if job_id:
+        targets = [job_id]
+    else:
+        targets = [jid for jid, j in active_jobs.items() if j['status'] == 'running']
+
+    if not targets:
+        return {'status': 'no_running_jobs', 'message': 'No running jobs to cancel'}
+
+    for jid in targets:
+        _cancel_flags[jid] = True
+        if jid in active_jobs:
+            active_jobs[jid]['status'] = 'cancelled'
+            active_jobs[jid]['completed_at'] = datetime.utcnow().isoformat()
+
+    return {'status': 'cancelled', 'message': f'Cancelled {len(targets)} job(s)', 'job_ids': targets}
 
 def _fix_indicators():
     """Recompute technical indicators for all pending symbols."""
@@ -700,40 +726,115 @@ def _fix_flow_intelligence():
     except Exception as e:
         log.error(f'[fix:flow_intel] error: {e}')
 
-def _fix_nse_backfill(days: int, job_id: str = None):
-    """Backfill NSE equity pipeline for missing dates."""
-    from pipeline.utils.trading_calendar import get_missing_dates as _gm
-    from daily_pipeline import run_nse_pipeline
-    from_dt = date.today() - timedelta(days=int(days * 1.5))
-    missing = _gm(db, from_dt, date.today(), 'NSE')
-    log.info(f'[fix:nse] {len(missing)} missing dates to backfill')
-    # Update active job with actual dates so live view can track
-    if job_id and job_id in active_jobs:
-        active_jobs[job_id]['dates'] = [str(d) for d in missing]
-        active_jobs[job_id]['exchange'] = 'NSE'
-    for d in missing:
+def _dates_with_eod_data(exchange: str, from_date: date, to_date: date) -> set[str]:
+    """Check which dates already have EOD data in km_equity_eod."""
+    try:
+        import psycopg2.extras
+        conn = db._conn()
         try:
-            run_nse_pipeline(db, d, force=False)
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+                    "JOIN km_equity_symbols s ON s.id = e.equity_id "
+                    "WHERE s.exchange = %s AND e.trade_date BETWEEN %s AND %s",
+                    [exchange, str(from_date), str(to_date)]
+                )
+                return {str(r['trade_date']) for r in cur.fetchall()}
+        finally:
+            db._put(conn)
+    except Exception:
+        return set()
+
+
+def _get_cutoff_date() -> date:
+    """Don't process today if before 6 PM IST (bhav copy not available yet)."""
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
+    if now_ist.hour < 18:
+        # Before 6 PM IST — only process up to yesterday
+        return last_trading_day(date.today() - timedelta(days=1))
+    return date.today()
+
+
+def _fix_nse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
+    """Backfill NSE equity pipeline for missing dates."""
+    from daily_pipeline import run_nse_pipeline
+
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
+
+    # Find dates that need processing
+    all_weekdays = []
+    cursor = from_dt
+    while cursor <= cutoff:
+        if cursor.weekday() < 5:
+            all_weekdays.append(cursor)
+        cursor += timedelta(days=1)
+
+    if strategy == 'smart':
+        # Skip dates that already have data
+        existing = _dates_with_eod_data('NSE', from_dt, cutoff)
+        to_process = [d for d in all_weekdays if str(d) not in existing]
+        log.info(f'[fix:nse] Smart: {len(existing)} dates have data, {len(to_process)} to process')
+    else:
+        to_process = all_weekdays
+        log.info(f'[fix:nse] Force: {len(to_process)} dates to process')
+
+    if job_id and job_id in active_jobs:
+        active_jobs[job_id]['dates'] = [str(d) for d in to_process]
+        active_jobs[job_id]['exchange'] = 'NSE'
+
+    for d in to_process:
+        if _cancel_flags.get(job_id):
+            log.info(f'[fix:nse] Cancelled at {d}')
+            break
+        try:
+            run_nse_pipeline(db, d, force=(strategy == 'force'))
         except Exception as e:
             log.error(f'[fix:nse] {d} failed: {e}')
+
+    _cancel_flags.pop(job_id, None)
     _refresh_market_breadth()
     _refresh_breadth_roc()
 
-def _fix_bse_backfill(days: int, job_id: str = None):
+
+def _fix_bse_backfill(days: int, job_id: str = None, strategy: str = 'smart'):
     """Backfill BSE equity pipeline for missing dates."""
-    from pipeline.utils.trading_calendar import get_missing_dates as _gm
     from daily_pipeline import run_bse_pipeline
-    from_dt = date.today() - timedelta(days=int(days * 1.5))
-    missing = _gm(db, from_dt, date.today(), 'BSE')
-    log.info(f'[fix:bse] {len(missing)} missing dates to backfill')
+
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
+
+    all_weekdays = []
+    cursor = from_dt
+    while cursor <= cutoff:
+        if cursor.weekday() < 5:
+            all_weekdays.append(cursor)
+        cursor += timedelta(days=1)
+
+    if strategy == 'smart':
+        existing = _dates_with_eod_data('BSE', from_dt, cutoff)
+        to_process = [d for d in all_weekdays if str(d) not in existing]
+        log.info(f'[fix:bse] Smart: {len(existing)} dates have data, {len(to_process)} to process')
+    else:
+        to_process = all_weekdays
+        log.info(f'[fix:bse] Force: {len(to_process)} dates to process')
+
     if job_id and job_id in active_jobs:
-        active_jobs[job_id]['dates'] = [str(d) for d in missing]
+        active_jobs[job_id]['dates'] = [str(d) for d in to_process]
         active_jobs[job_id]['exchange'] = 'BSE'
-    for d in missing:
+
+    for d in to_process:
+        if _cancel_flags.get(job_id):
+            log.info(f'[fix:bse] Cancelled at {d}')
+            break
         try:
-            run_bse_pipeline(db, d, force=False)
+            run_bse_pipeline(db, d, force=(strategy == 'force'))
         except Exception as e:
             log.error(f'[fix:bse] {d} failed: {e}')
+
+    _cancel_flags.pop(job_id, None)
 
 def _fix_fii_dii():
     """Re-download FII/DII for recent missing dates."""
@@ -763,13 +864,13 @@ def _fix_fii_dii():
 
 
 FIX_HANDLERS = {
-    'nse_equities':       lambda days, jid: _fix_nse_backfill(days, jid),
-    'bse_equities':       lambda days, jid: _fix_bse_backfill(days, jid),
-    'indicators':         lambda days, jid: _fix_indicators(),
-    'flow_intelligence':  lambda days, jid: _fix_flow_intelligence(),
-    'market_breadth':     lambda days, jid: _refresh_market_breadth(),
-    'breadth_roc':        lambda days, jid: _refresh_breadth_roc(),
-    'fii_dii':            lambda days, jid: _fix_fii_dii(),
+    'nse_equities':       lambda days, jid, strat: _fix_nse_backfill(days, jid, strat),
+    'bse_equities':       lambda days, jid, strat: _fix_bse_backfill(days, jid, strat),
+    'indicators':         lambda days, jid, strat: _fix_indicators(),
+    'flow_intelligence':  lambda days, jid, strat: _fix_flow_intelligence(),
+    'market_breadth':     lambda days, jid, strat: _refresh_market_breadth(),
+    'breadth_roc':        lambda days, jid, strat: _refresh_breadth_roc(),
+    'fii_dii':            lambda days, jid, strat: _fix_fii_dii(),
 }
 
 
@@ -784,7 +885,7 @@ def fix_dimension(req: FixRequest, background_tasks: BackgroundTasks):
     # Check for running jobs
     running = [j for j in active_jobs.values() if j['status'] == 'running']
     if running:
-        raise HTTPException(409, 'A pipeline job is already running')
+        raise HTTPException(409, 'A pipeline job is already running. Cancel it first.')
 
     job_id = str(uuid.uuid4())[:8]
     active_jobs[job_id] = {
@@ -797,21 +898,23 @@ def fix_dimension(req: FixRequest, background_tasks: BackgroundTasks):
 
     def _run():
         try:
-            handler(req.days, job_id)
-            active_jobs[job_id].update({
-                'status': 'completed',
-                'completed_at': datetime.utcnow().isoformat(),
-            })
+            handler(req.days, job_id, req.strategy)
+            if _cancel_flags.get(job_id):
+                active_jobs[job_id]['status'] = 'cancelled'
+            else:
+                active_jobs[job_id]['status'] = 'completed'
+            active_jobs[job_id]['completed_at'] = datetime.utcnow().isoformat()
         except Exception as e:
             active_jobs[job_id].update({
                 'status': 'failed',
                 'completed_at': datetime.utcnow().isoformat(),
                 'error': str(e),
             })
+        _cancel_flags.pop(job_id, None)
 
     background_tasks.add_task(_run)
     return {'job_id': job_id, 'status': 'queued',
-            'message': f'Fix queued for {req.dimension}'}
+            'message': f'Fix queued for {req.dimension} (strategy: {req.strategy})'}
 
 
 # ── AI Endpoints ──────────────────────────────────────────────────────────────

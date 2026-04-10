@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, XCircle, Loader2, Clock, MinusCircle,
-  Play, ChevronDown, ChevronRight,
+  Play, ChevronDown, ChevronRight, StopCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Card } from '@/components/ui';
@@ -247,6 +247,19 @@ const FIX_LABELS: Record<string, string> = {
 
 export default function PipelineExecution() {
   const { data: live, isLoading } = usePipelineLive(true);
+  const qc = useQueryClient();
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${pipelineUrl}/api/pipeline/cancel`, { method: 'POST' });
+      if (!res.ok) throw new Error('Cancel failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pipeline_live'] });
+    },
+  });
 
   const isActive = live?.active ?? false;
   const job = live?.job;
@@ -280,8 +293,22 @@ export default function PipelineExecution() {
             Pipeline Execution
           </h3>
           {isActive && (
-            <span className="px-2 py-0.5 rounded-md bg-accent-indigo/10 border border-accent-indigo/30 text-[9px] font-bold text-accent-indigo uppercase">
-              Live
+            <>
+              <span className="px-2 py-0.5 rounded-md bg-accent-indigo/10 border border-accent-indigo/30 text-[9px] font-bold text-accent-indigo uppercase">
+                Live
+              </span>
+              <button
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+                className="px-2 py-0.5 rounded-md bg-risk-red/10 border border-risk-red/30 text-[9px] font-bold text-risk-red uppercase hover:bg-risk-red/20 transition-colors"
+              >
+                {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
+              </button>
+            </>
+          )}
+          {job?.status === 'cancelled' && (
+            <span className="px-2 py-0.5 rounded-md bg-risk-amber/10 border border-risk-amber/30 text-[9px] font-bold text-risk-amber uppercase">
+              Cancelled
             </span>
           )}
         </div>
