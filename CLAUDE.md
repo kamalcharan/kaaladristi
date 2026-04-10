@@ -184,6 +184,8 @@ non-predictive insights explaining *why* risk is elevated or low in astronomical
 | `panchang_insight` | `/api/ai/panchang-insight?date=` | PanchangamCard |
 | `breadth_insight` | `/api/ai/breadth-insight` | MarketBreadthChart |
 | `breadth_roc_insight` | `/api/ai/breadth-roc-insight` | BreadthRocChart |
+| `instrument_insight` | `/api/ai/instrument-insight?id=&type=` | ChartView (Phase 4) |
+| `market_pulse_insight` | `/api/ai/market-pulse-insight` | DashboardView (Phase 4) |
 
 ### Tone Rules (all skills)
 - Factual · Educational · Non-predictive

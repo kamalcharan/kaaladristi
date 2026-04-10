@@ -19,4 +19,4 @@ export {
 
 export { useIndexChart } from './useEodData';
 export { useIndicatorChart } from './useIndicatorData';
-export { usePanchang, useMarketBreadth, useActiveIndexes, usePanchangInsight, useOutlookInferences, useBreadthInsight, useBreadthRoc, useBreadthRocInsight } from './useDashboardExtras';
+export { usePanchang, useMarketBreadth, useActiveIndexes, usePanchangInsight, useOutlookInferences, useBreadthInsight, useBreadthRoc, useBreadthRocInsight, useInstrumentInsight, useMarketPulseInsight } from './useDashboardExtras';

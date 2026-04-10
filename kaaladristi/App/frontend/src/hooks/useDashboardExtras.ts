@@ -78,6 +78,43 @@ export function usePanchangInsight(date: string) {
   });
 }
 
+export function useInstrumentInsight(id: number, type: string = 'index', date?: string) {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  return useQuery({
+    queryKey: ['instrument_insight', type, id, date],
+    queryFn: async (): Promise<{
+      id: number; type: string; date: string;
+      insight: string | null; ai: boolean; alignment: string;
+    }> => {
+      const params = new URLSearchParams({ id: String(id), type });
+      if (date) params.set('date', date);
+      const res = await fetch(`${pipelineUrl}/api/ai/instrument-insight?${params}`);
+      if (!res.ok) return { id, type, date: date ?? '', insight: null, ai: false, alignment: '' };
+      return res.json();
+    },
+    staleTime: 60 * 60 * 1000,
+    enabled: !!id,
+    retry: false,
+  });
+}
+
+export function useMarketPulseInsight(date?: string) {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  return useQuery({
+    queryKey: ['market_pulse_insight', date],
+    queryFn: async (): Promise<{
+      date: string; insight: string | null; ai: boolean; astro_direction: string;
+    }> => {
+      const params = date ? `?date=${encodeURIComponent(date)}` : '';
+      const res = await fetch(`${pipelineUrl}/api/ai/market-pulse-insight${params}`);
+      if (!res.ok) return { date: date ?? '', insight: null, ai: false, astro_direction: '' };
+      return res.json();
+    },
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+}
+
 /** Inferences active across the next 6 trading days (from tomorrow, Mon–Fri only). */
 export function useOutlookInferences(fromDate: string) {
   const start = shiftDate(fromDate, 1);

@@ -676,6 +676,202 @@ def get_market_pulse_context(date: str = None):
     return ctx
 
 
+# ── VaNi Skill Endpoints (Phase 3 — AI-powered instrument & market insights) ─
+
+
+def _fmt_instrument_msg(ctx: dict) -> str:
+    """Format assembled instrument context into a structured user message for VaNi."""
+    p = ctx['price']
+    f = ctx['flow']
+    part = ctx['participation']
+    mom = ctx['momentum']
+    rs = ctx['relative_strength']
+    vol = ctx['volume']
+    dots = ctx['dots']
+    gl = ctx['golden_line']
+    astro = ctx['astro']
+    pang = ctx.get('panchang')
+    align = ctx['alignment']
+
+    # Dot events summary
+    dot_events = []
+    if dots['svd_recent']:
+        dot_events.append('SVD (institutional accumulation)')
+    if dots['sbd_recent']:
+        dot_events.append('SBD (strong accumulation)')
+    if dots['syd_recent']:
+        dot_events.append('SYD (distribution)')
+    dot_str = ', '.join(dot_events) if dot_events else 'None'
+
+    # Astro events summary
+    astro_str = 'None active'
+    if astro['events']:
+        astro_str = '; '.join(
+            f"{e['event']} ({e['impact']}, conf:{e['confidence']})"
+            for e in astro['events'][:3]
+        )
+
+    # Panchang summary
+    pang_str = 'N/A'
+    if pang:
+        special = ', '.join(pang['special']) if pang.get('special') else 'None'
+        pang_str = (
+            f"Tithi: {pang['tithi']} (Lord: {pang['tithi_lord']}), "
+            f"Nakshatra: {pang['nakshatra']} (Lord: {pang['nakshatra_lord']}), "
+            f"Vara: {pang['vara']} (Lord: {pang['vara_lord']}), "
+            f"Moon: {pang['moon_sign']}, Special: {special}"
+        )
+
+    return (
+        f"Instrument: {ctx['instrument']['name']} ({ctx['instrument']['type']})\n"
+        f"Date: {ctx['date']}\n"
+        f"Price: {p['close']} ({p['change_pct']:+.2f}%)\n"
+        f"\n--- Technical Snapshot ---\n"
+        f"Flow Type: {f['type'] or 'N/A'}\n"
+        f"Vacuum: {f['vacuum'] or 'None'}\n"
+        f"Accum/Distrib: {f['accum_distrib'] or 'None'}\n"
+        f"Participation: {part['profile']} "
+        f"(Inst: {part['institution']}, Hot$: {part['hot_money']}, RSI: {part['rsi']})\n"
+        f"Momentum: RSI={mom['rsi_14']}, MFI={mom['mfi_14']}, Alignment={mom['alignment']}\n"
+        f"MagicRS Zone: {rs['zone'] or 'N/A'} "
+        f"(RS={rs['magic_rs']}, MA={rs['magic_ma']})\n"
+        f"Volume: RVOL={vol['rvol']}, TVOL={vol['tvol']}, Character={vol['character']}\n"
+        f"Dot Events (last 5 bars): {dot_str}\n"
+        f"Golden Line (SMA 150): {gl['sma_150']}, Bias={gl['bias']}, "
+        f"Distance={gl['distance_pct']}%\n"
+        f"\n--- Cycle Context ---\n"
+        f"Astro Events: {astro_str}\n"
+        f"Astro Day Score: {astro['day_score']:+.1f}, Direction: {astro['direction']}\n"
+        f"Panchang: {pang_str}\n"
+        f"\n--- Alignment ---\n"
+        f"Tech Direction: {align['tech_direction']}\n"
+        f"Astro Direction: {align['astro_direction']}\n"
+        f"Cycle-Technical Status: {align['status']}\n"
+        f"\nProvide your instrument intelligence insight."
+    )
+
+
+def _fmt_market_pulse_msg(ctx: dict) -> str:
+    """Format assembled market pulse context into a structured user message for VaNi."""
+    # Index summaries
+    idx_lines = []
+    for idx in ctx.get('indexes', []):
+        idx_lines.append(
+            f"  {idx['name']}: {idx['close']} ({idx['change_pct']:+.2f}%), "
+            f"Flow={idx['flow_type'] or 'N/A'}, "
+            f"Participation={idx['participation']}, "
+            f"MagicRS={idx['magic_rs_zone'] or 'N/A'}, "
+            f"RVOL={idx['rvol']}"
+        )
+    idx_str = '\n'.join(idx_lines) if idx_lines else '  No index data available'
+
+    # Breadth
+    b = ctx.get('breadth')
+    breadth_str = 'N/A'
+    if b:
+        breadth_str = (
+            f"Regime={b['regime']} (Score: {b['score']:.1f}), "
+            f"Above 20EMA: {b['pct_above_20']}%, "
+            f"Above 50EMA: {b['pct_above_50']}%, "
+            f"Above 150EMA: {b['pct_above_150']}%"
+        )
+
+    # Breadth ROC
+    r = ctx.get('breadth_roc')
+    roc_str = 'N/A'
+    if r:
+        roc_str = (
+            f"ROC_13={r['roc_13']:+.4f} ({r['bias']}), "
+            f"ROC_55={r['roc_55']:+.4f}, "
+            f"SMA_BREADTH={r['sma_breadth']:+.4f}"
+        )
+
+    # Astro
+    astro = ctx.get('astro', {})
+    astro_str = 'None active'
+    if astro.get('events'):
+        astro_str = '; '.join(
+            f"{e['event']} ({e['impact']}, conf:{e['confidence']})"
+            for e in astro['events'][:4]
+        )
+
+    # Panchang
+    pang = ctx.get('panchang')
+    pang_str = 'N/A'
+    if pang:
+        special = ', '.join(pang['special']) if pang.get('special') else 'None'
+        pang_str = (
+            f"Tithi: {pang['tithi']}, Nakshatra: {pang['nakshatra']}, "
+            f"Vara: {pang['vara']} (Lord: {pang['vara_lord']}), "
+            f"Moon: {pang['moon_sign']}, Special: {special}"
+        )
+
+    return (
+        f"Market Pulse — {ctx['date']}\n"
+        f"\n--- Index Summaries ---\n{idx_str}\n"
+        f"\n--- Market Breadth ---\n{breadth_str}\n"
+        f"\n--- Breadth Momentum (ROC) ---\n{roc_str}\n"
+        f"\n--- Cycle Context ---\n"
+        f"Astro Events: {astro_str}\n"
+        f"Day Score: {astro.get('day_score', 0):+.1f}, "
+        f"Direction: {astro.get('direction', 'N/A')}\n"
+        f"Panchang: {pang_str}\n"
+        f"\nProvide your market pulse insight."
+    )
+
+
+@app.get('/api/ai/instrument-insight')
+def instrument_insight(id: int, type: str = 'index', date: str = None):
+    """Return VaNi AI insight for one instrument's astro-technical correlation."""
+    if not _AI_ENABLED:
+        return {"id": id, "type": type, "date": date, "insight": None, "ai": False}
+
+    cache_key = f"instrument:{type}:{id}:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"id": id, "type": type, "date": date,
+                "insight": _insight_cache[cache_key], "ai": True}
+
+    ctx = assemble_instrument_context(db, id, type, date)
+    if not ctx:
+        return {"id": id, "type": type, "date": date, "insight": None, "ai": False}
+
+    user_msg = _fmt_instrument_msg(ctx)
+    skill = _AI_SKILLS["instrument_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {
+        "id": id, "type": type, "date": ctx['date'],
+        "insight": insight, "ai": insight is not None,
+        "alignment": ctx['alignment']['status'],
+    }
+
+
+@app.get('/api/ai/market-pulse-insight')
+def market_pulse_insight(date: str = None):
+    """Return VaNi AI insight for overall market astro-technical pulse."""
+    if not _AI_ENABLED:
+        return {"date": date, "insight": None, "ai": False}
+
+    cache_key = f"pulse:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"date": date, "insight": _insight_cache[cache_key], "ai": True}
+
+    ctx = assemble_market_pulse_context(db, date)
+    if not ctx:
+        return {"date": date, "insight": None, "ai": False}
+
+    user_msg = _fmt_market_pulse_msg(ctx)
+    skill = _AI_SKILLS["market_pulse_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {
+        "date": ctx['date'], "insight": insight, "ai": insight is not None,
+        "astro_direction": ctx.get('astro', {}).get('direction'),
+    }
+
+
 @app.get('/api/fii-dii')
 def fii_dii_data(days: int = 30):
     """
