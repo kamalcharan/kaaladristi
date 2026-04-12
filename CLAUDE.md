@@ -60,6 +60,16 @@ Latest migration: **021** (`km_migration_021_breadth_roc.sql`)
 | `km_market_breadth` | EMA-based breadth score (migration 020) |
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
 
+### Deprecated Tables — DO NOT USE
+
+| Table | Rows | Why Deprecated |
+|---|---|---|
+| `km_index_master` | 13 | Redundant subset of `km_index_symbols` (93). Only has 13 indices with yahoo tickers. |
+| `km_index_composition` | 89 | FK references `km_index_master`. All `sector` and `weight_pct` are NULL. Useless data. |
+
+**Use instead**: `km_index_symbols` for index master, `km_equity_symbols.index_names[]` for index→equity mapping.
+Frontend `masterData.ts` still references these legacy tables — to be migrated.
+
 ---
 
 ## Environment Variables
