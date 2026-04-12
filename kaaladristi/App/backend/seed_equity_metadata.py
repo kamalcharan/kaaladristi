@@ -119,9 +119,10 @@ def run(dry_run=False):
     print(f'\nPhase 1 complete: {len(all_stocks)} stocks from index API')
 
     # ── Phase 2: Fetch remaining NSE equities individually ──
-    equities = db.select('km_equity_symbols', 'id,symbol', filters={'exchange': 'NSE'})
-    missing_symbols = [eq['symbol'] for eq in equities if eq['symbol'] not in all_stocks]
-    print(f'\nPhase 2: {len(missing_symbols)} NSE equities not covered by index API')
+    equities = db.select('km_equity_symbols', 'id,symbol,industry', filters={'exchange': 'NSE'})
+    missing_symbols = [eq['symbol'] for eq in equities
+                       if eq['symbol'] not in all_stocks and not eq.get('industry')]
+    print(f'\nPhase 2: {len(missing_symbols)} NSE equities still missing industry')
 
     if missing_symbols:
         fetched = 0
