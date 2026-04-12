@@ -10,6 +10,9 @@ import {
   fetchIndices,
   fetchIndexComposition,
   fetchIndexSectorBreakdown,
+  fetchIndexSymbols,
+  fetchIndexConstituents,
+  fetchConstituentSectorBreakdown,
 } from '@/services/masterData';
 
 // Master data is static — cache aggressively (1 hour stale, never garbage collected)
@@ -43,10 +46,12 @@ export function useSectorLords() {
   return useQuery({ queryKey: ['km', 'sector_lords'], queryFn: fetchSectorLords, ...MASTER_OPTS });
 }
 
+/** @deprecated Use useIndexSymbols instead */
 export function useIndices() {
   return useQuery({ queryKey: ['km', 'indices'], queryFn: fetchIndices, ...MASTER_OPTS });
 }
 
+/** @deprecated Use useIndexConstituents instead */
 export function useIndexComposition(indexId: number | undefined) {
   return useQuery({
     queryKey: ['km', 'index_composition', indexId],
@@ -56,10 +61,35 @@ export function useIndexComposition(indexId: number | undefined) {
   });
 }
 
+/** @deprecated Use useConstituentSectorBreakdown instead */
 export function useIndexSectorBreakdown(indexId: number | undefined) {
   return useQuery({
     queryKey: ['km', 'index_sector_breakdown', indexId],
     queryFn: () => fetchIndexSectorBreakdown(indexId!),
+    enabled: !!indexId,
+    ...MASTER_OPTS,
+  });
+}
+
+// ── Production hooks (km_index_symbols + km_index_constituents) ──
+
+export function useIndexSymbols() {
+  return useQuery({ queryKey: ['km', 'index_symbols'], queryFn: fetchIndexSymbols, ...MASTER_OPTS });
+}
+
+export function useIndexConstituents(indexId: number | undefined) {
+  return useQuery({
+    queryKey: ['km', 'index_constituents', indexId],
+    queryFn: () => fetchIndexConstituents(indexId!),
+    enabled: !!indexId,
+    ...MASTER_OPTS,
+  });
+}
+
+export function useConstituentSectorBreakdown(indexId: number | undefined) {
+  return useQuery({
+    queryKey: ['km', 'constituent_sector_breakdown', indexId],
+    queryFn: () => fetchConstituentSectorBreakdown(indexId!),
     enabled: !!indexId,
     ...MASTER_OPTS,
   });

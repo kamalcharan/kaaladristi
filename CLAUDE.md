@@ -53,12 +53,13 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **021** (`km_migration_021_breadth_roc.sql`)
+Latest migration: **022** (`km_migration_022_index_constituents.sql`)
 
 | Table | Description |
 |---|---|
 | `km_market_breadth` | EMA-based breadth score (migration 020) |
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
+| `km_index_constituents` | Index→Equity mapping with sector/weight (migration 022, FK → `km_index_symbols`) |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -205,7 +206,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **022**.
+Next migration number: **023**.
 
 ---
 
