@@ -101,74 +101,16 @@ def run(dry_run=False):
     session = NseSession()
     db = get_db()
 
-    # Collect metadata for all stocks (dedup by symbol)
-    all_stocks = {}
-
-    for index_name in FETCH_INDICES:
-        stocks = fetch_index_stocks(session, index_name)
-        new_count = 0
-        for s in stocks:
-            meta = extract_metadata(s)
-            symbol = meta['symbol']
-            if symbol and symbol not in all_stocks:
-                all_stocks[symbol] = meta
-                new_count += 1
-        print(f'    {new_count} new (total: {len(all_stocks)})')
-        time.sleep(2)  # Be nice to NSE
-
-    print(f'\nPhase 1 complete: {len(all_stocks)} stocks from index API')
-
-    # ── Phase 2: Fetch remaining NSE equities individually ──
+    # Build symbol→id lookup once
     equities = db.select('km_equity_symbols', 'id,symbol,industry', filters={'exchange': 'NSE'})
-    missing_symbols = [eq['symbol'] for eq in equities
-                       if eq['symbol'] not in all_stocks and not eq.get('industry')]
-    print(f'\nPhase 2: {len(missing_symbols)} NSE equities still missing industry')
-
-    if missing_symbols:
-        fetched = 0
-        failed = 0
-        for i, symbol in enumerate(missing_symbols):
-            meta = fetch_single_stock(session, symbol)
-            if meta and meta.get('industry'):
-                all_stocks[symbol] = meta
-                fetched += 1
-            else:
-                failed += 1
-
-            # Progress every 50
-            if (i + 1) % 50 == 0:
-                print(f'    [{i+1}/{len(missing_symbols)}] fetched={fetched} failed={failed}')
-
-            # Rate limit — NSE blocks aggressive requests
-            time.sleep(0.5)
-
-        print(f'  Phase 2 done: fetched={fetched}, failed={failed}')
-
-    print(f'\nTotal unique stocks with metadata: {len(all_stocks)}')
-
-    if dry_run:
-        # Show sample
-        for symbol, meta in list(all_stocks.items())[:5]:
-            print(f'  {symbol}: {meta["industry"]} | {meta["company_name"]}')
-        print(f'  ... and {len(all_stocks) - 5} more')
-        print('\n[DRY RUN] No DB changes made.')
-        return
-
-    # ── Update km_equity_symbols ──
-    print('\nUpdating km_equity_symbols...')
-    updated = 0
-    skipped = 0
-
-    # Get all NSE equity IDs
-    equities = db.select('km_equity_symbols', 'id,symbol', filters={'exchange': 'NSE'})
     symbol_to_id = {eq['symbol']: eq['id'] for eq in equities}
+    already_seeded = {eq['symbol'] for eq in equities if eq.get('industry')}
 
-    for symbol, meta in all_stocks.items():
-        eq_id = symbol_to_id.get(symbol)
+    def save_to_db(meta):
+        """Write one stock's metadata to DB immediately."""
+        eq_id = symbol_to_id.get(meta['symbol'])
         if not eq_id:
-            skipped += 1
-            continue
-
+            return False
         update_data = {
             'company_name': meta['company_name'],
             'industry': meta['industry'],
@@ -177,59 +119,75 @@ def run(dry_run=False):
         }
         if meta['listing_date']:
             update_data['listing_date'] = meta['listing_date']
-
         db.patch('km_equity_symbols', {'id': eq_id}, update_data)
-        updated += 1
+        return True
 
-    print(f'  Updated: {updated}, Skipped (not in DB): {skipped}')
+    # ── Phase 1: Bulk fetch from index API ──
+    all_symbols = set(already_seeded)  # track what we've covered
+    phase1_updated = 0
 
-    # ── Update km_equity_eod with ffmc (latest date only) ──
-    print('\nUpdating km_equity_eod with ffmc (latest date)...')
-    ffmc_updated = 0
+    for index_name in FETCH_INDICES:
+        stocks = fetch_index_stocks(session, index_name)
+        new_count = 0
+        for s in stocks:
+            meta = extract_metadata(s)
+            symbol = meta['symbol']
+            if not symbol or symbol in all_symbols:
+                continue
+            all_symbols.add(symbol)
+            new_count += 1
+            if not dry_run and meta.get('industry'):
+                if save_to_db(meta):
+                    phase1_updated += 1
+                # Also save ffmc to EOD
+                if meta.get('ffmc'):
+                    eq_id = symbol_to_id.get(symbol)
+                    if eq_id:
+                        rows = db.select('km_equity_eod', 'trade_date',
+                                         filters={'equity_id': eq_id},
+                                         order='trade_date.desc', limit=1)
+                        if rows:
+                            db.patch('km_equity_eod',
+                                     {'equity_id': eq_id, 'trade_date': str(rows[0]['trade_date'])},
+                                     {'ffmc': meta['ffmc']})
+        print(f'    {new_count} new (total covered: {len(all_symbols)})')
+        time.sleep(2)
 
-    for symbol, meta in all_stocks.items():
-        if not meta['ffmc']:
-            continue
-        eq_id = symbol_to_id.get(symbol)
-        if not eq_id:
-            continue
+    print(f'\nPhase 1 complete: {len(all_symbols)} stocks covered, {phase1_updated} updated in DB')
 
-        # Get latest trade_date for this equity
-        rows = db.select(
-            'km_equity_eod', 'trade_date',
-            filters={'equity_id': eq_id},
-            order='trade_date.desc',
-            limit=1
-        )
-        if not rows:
-            continue
+    # ── Phase 2: Fetch remaining NSE equities individually ──
+    missing_symbols = [sym for sym in symbol_to_id if sym not in all_symbols]
+    print(f'\nPhase 2: {len(missing_symbols)} NSE equities still need industry')
 
-        trade_date = str(rows[0]['trade_date'])
-        db.patch(
-            'km_equity_eod',
-            {'equity_id': eq_id, 'trade_date': trade_date},
-            {'ffmc': meta['ffmc']}
-        )
-        ffmc_updated += 1
+    if missing_symbols and not dry_run:
+        fetched = 0
+        failed = 0
+        for i, symbol in enumerate(missing_symbols):
+            meta = fetch_single_stock(session, symbol)
+            if meta and meta.get('industry'):
+                if save_to_db(meta):
+                    fetched += 1
+                    all_symbols.add(symbol)
+            else:
+                failed += 1
 
-    print(f'  ffmc updated: {ffmc_updated}')
+            if (i + 1) % 50 == 0:
+                print(f'    [{i+1}/{len(missing_symbols)}] fetched={fetched} failed={failed}')
+
+            time.sleep(0.5)
+
+        print(f'  Phase 2 done: fetched={fetched}, failed={failed}')
+
+    if dry_run:
+        print(f'\n[DRY RUN] {len(all_symbols)} stocks would be covered. No DB changes made.')
+        return
 
     # ── Summary ──
-    remaining = db.select(
-        'km_equity_symbols',
-        "COUNT(*) AS cnt",
-        filters={'exchange': 'NSE'}
-    )
-    total_nse = remaining[0]['cnt'] if remaining else '?'
-
-    has_industry = db.select(
-        'km_equity_symbols',
-        "COUNT(*) AS cnt",
-    )
-    # Use raw SQL for NOT NULL check
+    total_nse = len(symbol_to_id)
+    has_industry = len(all_symbols)
     print(f'\n  Total NSE equities: {total_nse}')
-    print(f'  Metadata seeded: {updated}')
-    print(f'  Remaining without industry: check with SQL')
+    print(f'  With industry: {has_industry}')
+    print(f'  Still missing: {total_nse - has_industry}')
     print('\nDone!')
 
 
