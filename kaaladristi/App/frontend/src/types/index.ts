@@ -104,6 +104,7 @@ export interface KmSectorLord {
   planet_id: number;
 }
 
+/** @deprecated Use KmIndexSymbol instead — km_index_master has only 13 rows */
 export interface KmIndexMaster {
   id: number;
   symbol: string;
@@ -111,6 +112,7 @@ export interface KmIndexMaster {
   yahoo_ticker: string | null;
 }
 
+/** @deprecated Use KmIndexConstituent instead — km_index_composition has null sector/weight */
 export interface KmIndexComposition {
   id: number;
   index_id: number;
@@ -118,6 +120,25 @@ export interface KmIndexComposition {
   sector: string | null;
   weight_pct: number | null;
   snapshot_date: string | null;
+}
+
+// ── Production types (migration 022) ──
+
+export interface KmIndexSymbol {
+  id: number;
+  name: string;
+  category: string;
+  exchange: string;
+  is_tri: boolean;
+}
+
+export interface KmIndexConstituent {
+  id: number;
+  index_id: number;
+  equity_id: number;
+  sector: string | null;
+  weight_pct: number | null;
+  snapshot_date: string;
 }
 
 // ── Auth / Profile Types ──
@@ -169,8 +190,14 @@ export interface ZodiacWithLord extends KmZodiacSign {
   lord: KmPlanet | null;
 }
 
+/** @deprecated Use IndexWithConstituents instead */
 export interface IndexWithComposition extends KmIndexMaster {
   composition: KmIndexComposition[];
+  sectorBreakdown: { sector: string; totalWeight: number }[];
+}
+
+export interface IndexWithConstituents extends KmIndexSymbol {
+  constituents: KmIndexConstituent[];
   sectorBreakdown: { sector: string; totalWeight: number }[];
 }
 

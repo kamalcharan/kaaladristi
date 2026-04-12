@@ -5,6 +5,7 @@ import type {
   KmDayOfWeek, KmDayLord,
   KmSector, KmSectorLord,
   KmIndexMaster, KmIndexComposition,
+  KmIndexSymbol, KmIndexConstituent,
 } from '@/types';
 
 // ── Generic fetch helper ──
@@ -33,7 +34,7 @@ export const fetchDayLords = () => fetchTable<KmDayLord>('km_day_lords');
 export const fetchSectors = () => fetchTable<KmSector>('km_sectors');
 export const fetchSectorLords = () => fetchTable<KmSectorLord>('km_sector_lords');
 
-// ── Indices ──
+// ── Indices (deprecated — use fetchIndexSymbols instead) ──
 export const fetchIndices = () => fetchTable<KmIndexMaster>('km_index_master');
 
 export async function fetchIndexComposition(indexId: number): Promise<KmIndexComposition[]> {
@@ -45,12 +46,41 @@ export async function fetchIndexComposition(indexId: number): Promise<KmIndexCom
   return (data ?? []) as KmIndexComposition[];
 }
 
+// ── Indices (production — km_index_symbols + km_index_constituents) ──
+
+export const fetchIndexSymbols = () => fetchTable<KmIndexSymbol>('km_index_symbols');
+
+export async function fetchIndexConstituents(indexId: number): Promise<KmIndexConstituent[]> {
+  const { data, error } = await from('km_index_constituents')
+    .select('*')
+    .eq('index_id', indexId)
+    .execute();
+  if (error) throw new Error(`[km_index_constituents] ${error.message}`);
+  return (data ?? []) as KmIndexConstituent[];
+}
+
 // ── Derived: sector breakdown for an index ──
+
+/** @deprecated Use fetchConstituentSectorBreakdown instead */
 export async function fetchIndexSectorBreakdown(indexId: number) {
   const composition = await fetchIndexComposition(indexId);
   const sectorMap = new Map<string, number>();
 
   for (const row of composition) {
+    const sector = row.sector || 'Unknown';
+    sectorMap.set(sector, (sectorMap.get(sector) || 0) + (row.weight_pct || 0));
+  }
+
+  return Array.from(sectorMap.entries())
+    .map(([sector, totalWeight]) => ({ sector, totalWeight }))
+    .sort((a, b) => b.totalWeight - a.totalWeight);
+}
+
+export async function fetchConstituentSectorBreakdown(indexId: number) {
+  const constituents = await fetchIndexConstituents(indexId);
+  const sectorMap = new Map<string, number>();
+
+  for (const row of constituents) {
     const sector = row.sector || 'Unknown';
     sectorMap.set(sector, (sectorMap.get(sector) || 0) + (row.weight_pct || 0));
   }

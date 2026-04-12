@@ -59,23 +59,17 @@ Latest migration: **023** (`km_migration_023_flow_intelligence_rpc.sql`)
 |---|---|
 | `km_market_breadth` | EMA-based breadth score (migration 020) |
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
+| `km_index_constituents` | Index→Equity mapping with sector/weight (migration 022, FK → `km_index_symbols`) |
 
-Migrations 022-023 add **flow intelligence** columns (`flow_type`, `vacuum_flag`, `accum_distrib`) to `km_index_eod` and `km_equity_eod`, plus the `compute_flow_intelligence()` SQL RPC that derives them from existing indicators (MagicRS, RVOL, RSI/MFI, SMA 150).
+### Deprecated Tables — DO NOT USE
 
----
+| Table | Rows | Why Deprecated |
+|---|---|---|
+| `km_index_master` | 13 | Redundant subset of `km_index_symbols` (93). Only has 13 indices with yahoo tickers. |
+| `km_index_composition` | 89 | FK references `km_index_master`. All `sector` and `weight_pct` are NULL. Useless data. |
 
-## Known Data Quality Issues
-
-### 1. Index Volume Scale Inconsistency
-Index EOD volumes come from multiple sources (NSE bhav copy, Breeze API) with **incompatible scales** — NSE bhav reports ~500K while Breeze reports ~450M for the same index. This makes RVOL unreliable for indexes: recent Breeze data shows RVOL=15x (false spike) while older NSE bhav data shows RVOL=0.05 (false low). **Impact**: Flow classification on indexes falls to `LOW_VOLUME` or `MIXED` for most rows. Needs volume source normalisation or single-source enforcement.
-
-### 2. MagicRS Coverage Gaps
-- **NIFTY 50** has no `magic_rs_zone` populated — MagicRS requires Python compute engine (benchmark comparison), not available via SQL RPC.
-- **Equities** have 0 rows with `magic_rs_zone` — MagicRS backfill has not run for equities.
-- **89% of index magic_rs_zone is "Neutral"** — only 8,418 of 83,403 rows are directional (Strong/Mild Bull/Bear). This limits flow classification to MIXED for most rows even when RVOL is adequate.
-
-### 3. Panchangam / Nakshatra Issues
-Nakshatra computation and end-time calculations have known accuracy issues that need to be investigated and resolved. This affects the Panchangam card display and any astro-technical correlation that depends on nakshatra data.
+**Use instead**: `km_index_symbols` for index master, `km_equity_symbols.index_names[]` for index→equity mapping.
+Frontend `masterData.ts` still references these legacy tables — to be migrated.
 
 ---
 
@@ -214,27 +208,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Latest migration: **026** (`km_migration_026_magic_rs_rpc.sql`)
-Next migration number: **027**.
-
-### Job Queue Architecture
-
-Heavy pipeline work runs in a **separate worker process**, not inside the API:
-
-```
-API (uvicorn, port 8100)              Worker (separate process)
-────────────────────────              ────────────────────────
-POST /api/pipeline/fix                python worker.py --watch
-  → INSERT INTO km_jobs          →    polls km_jobs every 5s
-                                      picks up queued jobs
-GET /api/pipeline/live                executes handler
-  → SELECT FROM km_jobs               updates progress/status
-                                      writes to km_pipeline_runs
-POST /api/pipeline/cancel
-  → UPDATE km_jobs SET cancelled
-```
-
-Start the worker: `python worker.py --watch` (runs alongside uvicorn).
+Next migration number: **024**.
 
 ---
 

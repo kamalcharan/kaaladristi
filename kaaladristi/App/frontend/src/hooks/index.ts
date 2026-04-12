@@ -9,6 +9,9 @@ export {
   useIndices,
   useIndexComposition,
   useIndexSectorBreakdown,
+  useIndexSymbols,
+  useIndexConstituents,
+  useConstituentSectorBreakdown,
 } from './useMasterData';
 
 export {
