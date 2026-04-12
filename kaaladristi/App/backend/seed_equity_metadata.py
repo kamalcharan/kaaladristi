@@ -28,6 +28,7 @@ from lib.db_client import get_db
 from pipeline.utils.nse_session import NseSession
 
 NSE_INDEX_API = 'https://www.nseindia.com/api/equity-stockIndices?index={}'
+NSE_QUOTE_API = 'https://www.nseindia.com/api/quote-equity?symbol={}'
 
 # Indices to fetch, in order of coverage (largest first)
 FETCH_INDICES = [
@@ -70,6 +71,29 @@ def extract_metadata(stock: dict) -> dict:
     }
 
 
+def fetch_single_stock(session: NseSession, symbol: str) -> dict | None:
+    """Fetch metadata for a single stock via NSE quote API."""
+    from urllib.parse import quote
+    url = NSE_QUOTE_API.format(quote(symbol))
+    try:
+        resp = session.get(url)
+        data = resp.json()
+        info = data.get('info', {})
+        if not info:
+            return None
+        return {
+            'symbol': symbol,
+            'company_name': info.get('companyName'),
+            'industry': info.get('industry'),
+            'listing_date': info.get('listingDate'),
+            'is_fno': info.get('isFNOSec', False),
+            'is_etf': info.get('isETFSec', False),
+            'ffmc': None,  # Not available in quote API
+        }
+    except Exception:
+        return None
+
+
 def run(dry_run=False):
     print('Seed Equity Metadata from NSE API')
     print('=' * 50)
@@ -91,6 +115,33 @@ def run(dry_run=False):
                 new_count += 1
         print(f'    {new_count} new (total: {len(all_stocks)})')
         time.sleep(2)  # Be nice to NSE
+
+    print(f'\nPhase 1 complete: {len(all_stocks)} stocks from index API')
+
+    # ── Phase 2: Fetch remaining NSE equities individually ──
+    equities = db.select('km_equity_symbols', 'id,symbol', filters={'exchange': 'NSE'})
+    missing_symbols = [eq['symbol'] for eq in equities if eq['symbol'] not in all_stocks]
+    print(f'\nPhase 2: {len(missing_symbols)} NSE equities not covered by index API')
+
+    if missing_symbols:
+        fetched = 0
+        failed = 0
+        for i, symbol in enumerate(missing_symbols):
+            meta = fetch_single_stock(session, symbol)
+            if meta and meta.get('industry'):
+                all_stocks[symbol] = meta
+                fetched += 1
+            else:
+                failed += 1
+
+            # Progress every 50
+            if (i + 1) % 50 == 0:
+                print(f'    [{i+1}/{len(missing_symbols)}] fetched={fetched} failed={failed}')
+
+            # Rate limit — NSE blocks aggressive requests
+            time.sleep(0.5)
+
+        print(f'  Phase 2 done: fetched={fetched}, failed={failed}')
 
     print(f'\nTotal unique stocks with metadata: {len(all_stocks)}')
 
