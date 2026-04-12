@@ -53,7 +53,7 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **022** (`km_migration_022_index_constituents.sql`)
+Latest migration: **023** (`km_migration_023_flow_intelligence_rpc.sql`)
 
 | Table | Description |
 |---|---|
@@ -206,7 +206,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **023**.
+Next migration number: **024**.
 
 ---
 
