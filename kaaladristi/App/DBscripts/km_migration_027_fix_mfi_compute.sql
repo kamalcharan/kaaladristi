@@ -67,6 +67,7 @@ DECLARE
   v_obv_val FLOAT8;
 
   -- MFI temp vars
+  j INT;
   v_pos_mf FLOAT8;
   v_neg_mf FLOAT8;
 
