@@ -293,3 +293,11 @@ Missing from frontend fetch: `flow_type`, `vacuum_flag`, `accum_distrib`.
 VP-1 (RSI Signal Tower) must go through **multiple design iterations** until the
 visual language feels right. Only then proceed to VP-2. Once one metaphor works,
 the pattern applies to all others.
+
+Detailed spec for each milestone: see `docs/visual-pulse-spec.md`
+
+### Iteration Rule
+
+VP-1 (RSI Signal Tower) must go through **multiple design iterations** until the
+visual language feels right. Only then proceed to VP-2. Once one metaphor works,
+the pattern applies to all others.
