@@ -18,6 +18,7 @@ import InferenceView from '@/views/InferenceView';
 import RuleEvalView from '@/views/RuleEvalView';
 import DCCalendarView from '@/views/DCCalendarView';
 import ChartView from '@/views/ChartView';
+import { VisualPulsePage } from '@/components/domain/VisualPulse';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,6 +95,7 @@ function AppRoutes() {
           <Route path="/astro-calendar" element={<DCCalendarView />} />
           <Route path="/history" element={<BacktestView />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
+          <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/settings" element={<SettingsView />} />
         </Route>
       </Route>

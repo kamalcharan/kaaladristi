@@ -10,6 +10,7 @@ import {
   Shield,
   Sparkles,
   Activity,
+  Eye,
   ChevronLeft,
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
@@ -41,6 +42,7 @@ const navSections: NavSection[] = [
       { to: '/astro-calendar', icon: CalendarDays, label: 'Planetary Intel' },
       { to: '/inference',      icon: Sparkles,     label: 'Inference DB' },
       { to: '/rule-eval',      icon: Activity,     label: 'Rule Eval'    },
+      { to: '/pulse/1',         icon: Eye,          label: 'Visual Pulse' },
       { to: '/calendar',       icon: CalendarIcon, label: 'Risk Calendar' },
       { to: '/transmission',   icon: Zap,          label: 'Risk Transmission' },
     ],
