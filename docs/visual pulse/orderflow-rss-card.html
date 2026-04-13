@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti · Order Flow + RSS</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020917;
+    --panel: #0b1221;
+    --border: #1a2740;
+    --gold: #c9a84c;
+    --text-primary: #e8eaf0;
+    --text-mid: #8896aa;
+    --text-dim: #4a5568;
+    --green: #10b981;
+    --teal: #14b8a6;
+    --blue: #3b82f6;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --orange: #f97316;
+    --purple: #8b5cf6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 32px;
+  }
+
+  .page-label {
+    font-family: 'Playfair Display', serif;
+    font-size: 11px; color: var(--gold);
+    letter-spacing: 4px; text-transform: uppercase;
+  }
+
+  /* ── SCENARIO SWITCHER ───────────────────────────── */
+  .scenarios {
+    display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  }
+  .sc-btn {
+    padding: 6px 14px; border-radius: 20px; cursor: pointer;
+    font-size: 10px; letter-spacing: 1px; font-family: 'DM Mono', monospace;
+    border: 1px solid var(--border); background: #0f172a; color: var(--text-dim);
+    transition: all 0.2s;
+  }
+  .sc-btn:hover { border-color: var(--gold); color: var(--text-mid); }
+  .sc-btn.active { background: var(--gold); color: #000; border-color: var(--gold); }
+
+  /* ── CARD WRAPPER ───────────────────────────────── */
+  .card-wrap {
+    width: 100%; max-width: 380px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  /* ── MAIN CARD ──────────────────────────────────── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.4s ease;
+  }
+
+  /* card header strip */
+  .card-header {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-label {
+    font-size: 8px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace;
+  }
+  .card-date {
+    font-size: 9px; color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── FLOW SECTION ───────────────────────────────── */
+  .flow-section {
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid #0f172a;
+    position: relative;
+    overflow: hidden;
+  }
+  .flow-bg {
+    position: absolute; inset: 0; opacity: 0.06;
+    transition: background 0.5s ease;
+  }
+  .flow-row {
+    display: flex; align-items: center;
+    justify-content: space-between; position: relative;
+  }
+  .flow-left { display: flex; flex-direction: column; gap: 3px; }
+  .flow-type {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px; font-weight: 700;
+    transition: color 0.4s ease;
+    line-height: 1;
+  }
+  .flow-sub {
+    font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace;
+  }
+  .flow-arrow {
+    font-size: 28px; opacity: 0.8;
+    transition: all 0.4s ease;
+    letter-spacing: -4px;
+  }
+
+  /* Special flags row */
+  .flow-flags {
+    display: flex; gap: 6px; margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .flag-chip {
+    padding: 2px 8px; border-radius: 10px;
+    font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+    font-family: 'DM Mono', monospace;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .flag-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* ── VOLUME SECTION ─────────────────────────────── */
+  .vol-section {
+    padding: 10px 14px;
+    border-bottom: 1px solid #0f172a;
+  }
+  .vol-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .vol-label {
+    font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace;
+  }
+  .vol-value {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+  }
+  .vol-bar-track {
+    height: 5px; background: #0f172a; border-radius: 3px;
+    overflow: hidden; position: relative;
+  }
+  .vol-bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width 0.6s ease, background 0.4s ease;
+    position: relative;
+  }
+  /* Divergence stripe overlay */
+  .vol-bar-fill.diverging::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 6px,
+      rgba(0,0,0,0.4) 6px,
+      rgba(0,0,0,0.4) 8px
+    );
+  }
+  /* Vacuum dashed */
+  .vol-bar-fill.vacuum {
+    background: repeating-linear-gradient(
+      90deg,
+      currentColor 0px,
+      currentColor 4px,
+      transparent 4px,
+      transparent 8px
+    ) !important;
+  }
+  .vol-meta {
+    display: flex; gap: 12px; margin-top: 4px;
+  }
+  .vol-meta-item {
+    font-size: 9px; color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+    display: flex; align-items: center; gap: 3px;
+  }
+
+  /* ── RSS SECTION ────────────────────────────────── */
+  .rss-section {
+    padding: 10px 14px;
+    border-bottom: 1px solid #0f172a;
+  }
+  .rss-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .rss-label {
+    font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace;
+  }
+  .rss-values {
+    display: flex; gap: 12px; align-items: center;
+  }
+  .rss-val-block { display: flex; flex-direction: column; gap: 1px; }
+  .rss-val-num {
+    font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500;
+    transition: color 0.4s ease;
+  }
+  .rss-val-label {
+    font-size: 8px; color: var(--text-dim);
+    font-family: 'DM Mono', monospace; letter-spacing: 1px;
+  }
+  .rss-divider {
+    width: 1px; height: 28px; background: var(--border);
+  }
+
+  /* RSS arc gauge */
+  .rss-gauge-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .rss-arc { display: block; }
+  .rss-zone-label {
+    font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* RSS sparkline */
+  .rss-spark { margin-top: 6px; }
+
+  /* Spread indicator */
+  .spread-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+  }
+  .spread-label {
+    font-size: 8px; color: var(--text-dim);
+    font-family: 'DM Mono', monospace; letter-spacing: 1px;
+    width: 48px; flex-shrink: 0;
+  }
+  .spread-bar-track {
+    flex: 1; height: 4px; background: #0f172a; border-radius: 2px;
+    position: relative;
+  }
+  .spread-zero {
+    position: absolute; left: 50%; top: -2px; bottom: -2px;
+    width: 1px; background: var(--border);
+  }
+  .spread-fill {
+    position: absolute; height: 100%; border-radius: 2px;
+    transition: all 0.6s ease;
+  }
+  .spread-value {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    min-width: 60px; text-align: right;
+    transition: color 0.4s ease;
+  }
+
+  /* Pump signal */
+  .pump-signal {
+    margin-top: 6px; padding: 4px 8px;
+    border-radius: 6px; font-size: 9px;
+    font-family: 'DM Mono', monospace; letter-spacing: 1px;
+    display: none; align-items: center; gap: 6px;
+  }
+  .pump-signal.visible { display: flex; }
+
+  /* ── NARRATIVE SECTION ──────────────────────────── */
+  .narrative-section {
+    padding: 10px 14px 12px;
+  }
+  .narrative-text {
+    font-size: 11px; color: var(--text-mid);
+    line-height: 1.55; font-style: italic;
+    transition: opacity 0.3s ease;
+    min-height: 48px;
+  }
+  .narrative-text.fading { opacity: 0.2; }
+
+  /* verdict badge */
+  .verdict-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 8px;
+  }
+  .verdict-badge {
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 9px; font-weight: 600; letter-spacing: 2px;
+    text-transform: uppercase; font-family: 'DM Mono', monospace;
+    transition: all 0.4s ease;
+  }
+  .signal-strength {
+    display: flex; gap: 3px;
+  }
+  .strength-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border); transition: all 0.4s ease;
+  }
+  .strength-dot.active { background: var(--green); }
+  .strength-dot.active.warn { background: var(--amber); }
+  .strength-dot.active.danger { background: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="page-label">Kāla-Drishti · Order Flow + RSS · Inference Card</div>
+
+<!-- SCENARIO SWITCHER -->
+<div class="scenarios" id="scenarios"></div>
+
+<!-- CARD -->
+<div class="card-wrap">
+  <div class="card" id="card">
+    <div class="card-header">
+      <span class="card-label">Order Flow · RSS</span>
+      <span class="card-date" id="card-date">—</span>
+    </div>
+
+    <!-- FLOW -->
+    <div class="flow-section" id="flow-section">
+      <div class="flow-bg" id="flow-bg"></div>
+      <div class="flow-row">
+        <div class="flow-left">
+          <div class="flow-type" id="flow-type">—</div>
+          <div class="flow-sub" id="flow-sub">Order Flow Classification</div>
+        </div>
+        <div class="flow-arrow" id="flow-arrow">—</div>
+      </div>
+      <div class="flow-flags" id="flow-flags"></div>
+    </div>
+
+    <!-- VOLUME -->
+    <div class="vol-section">
+      <div class="vol-header">
+        <span class="vol-label">Volume Conviction</span>
+        <span class="vol-value" id="vol-value">—</span>
+      </div>
+      <div class="vol-bar-track">
+        <div class="vol-bar-fill" id="vol-bar"></div>
+      </div>
+      <div class="vol-meta" id="vol-meta"></div>
+    </div>
+
+    <!-- RSS -->
+    <div class="rss-section">
+      <div class="rss-header">
+        <span class="rss-label">RSS · Spread Momentum</span>
+        <div class="rss-values">
+          <div class="rss-val-block">
+            <div class="rss-val-num" id="rss-num">—</div>
+            <div class="rss-val-label">RSS VALUE</div>
+          </div>
+          <div class="rss-divider"></div>
+          <div class="rss-gauge-wrap">
+            <svg class="rss-arc" width="60" height="34" viewBox="0 0 60 34">
+              <path d="M 6 30 A 24 24 0 0 1 54 30" fill="none" stroke="#1a2740" stroke-width="4" stroke-linecap="round"/>
+              <path id="rss-arc-fill" d="M 6 30 A 24 24 0 0 1 54 30" fill="none" stroke="#4a5568" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 75"/>
+            </svg>
+            <div class="rss-zone-label" id="rss-zone">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spread bar -->
+      <div class="spread-row">
+        <span class="spread-label">SPREAD</span>
+        <div class="spread-bar-track">
+          <div class="spread-zero"></div>
+          <div class="spread-fill" id="spread-fill"></div>
+        </div>
+        <span class="spread-value" id="spread-value">—</span>
+      </div>
+
+      <!-- RSS sparkline -->
+      <svg class="rss-spark" width="100%" height="28" id="rss-spark" viewBox="0 0 352 28" preserveAspectRatio="none"></svg>
+
+      <!-- Pump/divergence signal -->
+      <div class="pump-signal" id="pump-signal">
+        <span>⚠</span>
+        <span id="pump-text">—</span>
+      </div>
+    </div>
+
+    <!-- NARRATIVE -->
+    <div class="narrative-section">
+      <div class="narrative-text" id="narrative">—</div>
+      <div class="verdict-row">
+        <div class="verdict-badge" id="verdict-badge">—</div>
+        <div class="signal-strength" id="signal-strength"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// REAL DATA — from km_index_eod (NIFTY 50, index_id=1)
+// extended with synthetic earlier bars for RSS sparkline
+// ═══════════════════════════════════════════════════════
+const DATA = [
+  // Earlier bars for sparkline context
+  { trade_date:'2026-03-25', close:23306, rsi_14:45.2, rss_value:8.1,  rss_spread:-1450, flow_type:'SHORT_COVERING', vacuum_flag:null,          volume_divergence_flag:null,           accum_distrib:null,           rvol:14.76, tvol:19.65 },
+  { trade_date:'2026-03-27', close:22819, rsi_14:38.1, rss_value:3.4,  rss_spread:-1520, flow_type:'FRESH_SHORTS',   vacuum_flag:null,          volume_divergence_flag:null,           accum_distrib:null,           rvol:15.43, tvol:18.2  },
+  { trade_date:'2026-03-30', close:22331, rsi_14:33.2, rss_value:1.2,  rss_spread:-1570, flow_type:'FRESH_SHORTS',   vacuum_flag:null,          volume_divergence_flag:null,           accum_distrib:null,           rvol:15.25, tvol:17.8  },
+  { trade_date:'2026-04-01', close:22679, rsi_14:36.96, rss_value:0.25, rss_spread:-1592, flow_type:'SHORT_COVERING', vacuum_flag:null,          volume_divergence_flag:null,           accum_distrib:null,           rvol:9.22,  tvol:8.1   },
+  { trade_date:'2026-04-02', close:22713, rsi_14:37.45, rss_value:0.24, rss_spread:-1603, flow_type:'SHORT_COVERING', vacuum_flag:null,          volume_divergence_flag:null,           accum_distrib:null,           rvol:7.50,  tvol:6.8   },
+  { trade_date:'2026-04-06', close:22968, rsi_14:41.18, rss_value:0.22, rss_spread:-1614, flow_type:'SHORT_COVERING', vacuum_flag:null,          volume_divergence_flag:null,           accum_distrib:null,           rvol:5.72,  tvol:5.1   },
+  { trade_date:'2026-04-07', close:23123, rsi_14:43.39, rss_value:12.69,rss_spread:-1539, flow_type:'SHORT_COVERING', vacuum_flag:null,          volume_divergence_flag:'VOLUME_DIV_UP',accum_distrib:null,           rvol:5.67,  tvol:4.8   },
+  { trade_date:'2026-04-08', close:23997, rsi_14:53.9,  rss_value:34.5, rss_spread:-1408, flow_type:'SHORT_COVERING', vacuum_flag:null,          volume_divergence_flag:'VOLUME_DIV_UP',accum_distrib:'ACCUMULATION', rvol:6.60,  tvol:5.9   },
+  { trade_date:'2026-04-09', close:23775, rsi_14:51.29, rss_value:61.29,rss_spread:-1230, flow_type:'FRESH_SHORTS',   vacuum_flag:null,          volume_divergence_flag:'VOLUME_DIV_UP',accum_distrib:'ACCUMULATION', rvol:4.39,  tvol:3.8   },
+  { trade_date:'2026-04-10', close:24050, rsi_14:54.25, rss_value:77.73,rss_spread:-1069, flow_type:'SHORT_COVERING', vacuum_flag:null,          volume_divergence_flag:'VOLUME_DIV_UP',accum_distrib:'ACCUMULATION', rvol:4.16,  tvol:3.6   },
+];
+
+// Synthetic scenarios to demonstrate other flow states
+const SCENARIOS = {
+  'Apr 10 · Recovery':   9,
+  'Apr 8 · Accumulation': 7,
+  'Apr 6 · Capitulation': 5,
+  'Apr 2 · Crash Floor':  4,
+  'Pump Signal Demo':    'pump',
+  'Fresh Longs Demo':    'fresh',
+  'Vacuum Demo':         'vacuum',
+};
+
+// Demo synthetic rows
+const DEMO = {
+  pump: {
+    trade_date:'2026-04-17', close:24800, rsi_14:72.4, rss_value:82.1,
+    rss_spread:120, flow_type:'SHORT_COVERING', vacuum_flag:null,
+    volume_divergence_flag:'VOLUME_DIV_UP', accum_distrib:null, rvol:1.8, tvol:1.4,
+    _rss_history:[34.5, 61.29, 77.73, 82.1, 80.5, 78.2, 82.1]
+  },
+  fresh: {
+    trade_date:'2026-04-17', close:24600, rsi_14:62.1, rss_value:71.4,
+    rss_spread:85, flow_type:'FRESH_LONGS', vacuum_flag:null,
+    volume_divergence_flag:null, accum_distrib:null, rvol:2.8, tvol:2.2,
+  },
+  vacuum: {
+    trade_date:'2026-03-23', close:22512, rsi_14:28.4, rss_value:4.2,
+    rss_spread:-1580, flow_type:'LOW_VOLUME', vacuum_flag:'VACUUM_DOWN',
+    volume_divergence_flag:null, accum_distrib:null, rvol:0.06, tvol:1.1,
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// FLOW CONFIG
+// ═══════════════════════════════════════════════════════
+const FLOW = {
+  FRESH_LONGS:      { color:'#3b82f6', bg:'#3b82f6', arrow:'▶▶', label:'Fresh Longs',      strength:4 },
+  SHORT_COVERING:   { color:'#14b8a6', bg:'#14b8a6', arrow:'▶',  label:'Short Covering',   strength:2 },
+  FRESH_SHORTS:     { color:'#ef4444', bg:'#ef4444', arrow:'◀◀', label:'Fresh Shorts',     strength:4 },
+  LONG_LIQUIDATION: { color:'#f97316', bg:'#f97316', arrow:'◀',  label:'Long Liquidation', strength:2 },
+  MIXED:            { color:'#8b5cf6', bg:'#8b5cf6', arrow:'⟺',  label:'Mixed Flow',       strength:1 },
+  LOW_VOLUME:       { color:'#475569', bg:'#475569', arrow:'—',   label:'Low Volume',       strength:0 },
+};
+
+// ═══════════════════════════════════════════════════════
+// FRONTEND COMPUTED SIGNALS
+// ═══════════════════════════════════════════════════════
+function computeSignals(row, history) {
+  const rss = row.rss_value;
+  const spread = row.rss_spread;
+  const rvol = row.rvol;
+  const flow = row.flow_type;
+
+  // RSS slope over last 5 bars
+  const rssWindow = history.slice(-6).map(r => r.rss_value);
+  const rssSlope = rssWindow.length >= 2
+    ? rssWindow[rssWindow.length-1] - rssWindow[0]
+    : 0;
+
+  // RSS new high in last 20 bars
+  const rssMax = Math.max(...history.slice(-20).map(r => r.rss_value || 0));
+  const rssNewHigh = rss >= rssMax && rss > 60;
+
+  // RSS zone
+  const rssZone = rss > 80 ? 'OVERBOUGHT'
+                : rss > 60 ? 'BULLISH'
+                : rss > 40 ? 'NEUTRAL'
+                : rss > 20 ? 'BEARISH'
+                : 'OVERSOLD';
+
+  // Spread direction
+  const spreadHistory = history.slice(-6).map(r => r.rss_spread || 0);
+  const spreadNarrowing = spreadHistory.length >= 2
+    && spreadHistory[spreadHistory.length-1] > spreadHistory[0];
+  const spreadPositive = spread > 0;
+
+  // Pump signal detection
+  // RSS > 75 + spread still negative + SHORT_COVERING + VOLUME_DIV
+  const pumpRisk = rss > 75
+    && spread < -200
+    && flow === 'SHORT_COVERING'
+    && row.volume_divergence_flag === 'VOLUME_DIV_UP';
+
+  // Pump signal 2: price at high but RSI diverging from RSS
+  const rsiRssDivergence = row.rsi_14 > 60 && rss < row.rsi_14 - 20;
+
+  // Structure repaired
+  const structureRepaired = spreadPositive && rss > 50;
+
+  // Overall conviction score 0-5
+  let conviction = 0;
+  if (flow === 'FRESH_LONGS' || flow === 'FRESH_SHORTS') conviction += 2;
+  else if (flow === 'SHORT_COVERING' || flow === 'LONG_LIQUIDATION') conviction += 1;
+  if (rvol > 2.0) conviction += 1;
+  if (rss > 60) conviction += 1;
+  if (spreadNarrowing || spreadPositive) conviction += 1;
+  if (row.accum_distrib === 'ACCUMULATION') conviction += 1;
+  // Penalties
+  if (row.volume_divergence_flag) conviction -= 1;
+  if (pumpRisk) conviction -= 2;
+  conviction = Math.max(0, Math.min(5, conviction));
+
+  return {
+    rssSlope, rssNewHigh, rssZone, spreadNarrowing,
+    spreadPositive, pumpRisk, rsiRssDivergence,
+    structureRepaired, conviction,
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// NARRATIVE ENGINE
+// ═══════════════════════════════════════════════════════
+function buildNarrative(row, sig) {
+  const parts = [];
+  const flow = row.flow_type;
+  const rss = row.rss_value;
+  const spread = row.rss_spread;
+
+  // Flow sentence
+  if (flow === 'FRESH_LONGS') parts.push('Fresh institutional longs entering.');
+  else if (flow === 'SHORT_COVERING') parts.push('Shorts covering — not fresh buying.');
+  else if (flow === 'FRESH_SHORTS') parts.push('Fresh short positions being built.');
+  else if (flow === 'LONG_LIQUIDATION') parts.push('Long positions being unwound.');
+  else if (flow === 'LOW_VOLUME') parts.push('Volume absent — no directional conviction.');
+  else parts.push('Mixed flow — no clear directional bias.');
+
+  // Volume sentence
+  if (row.vacuum_flag === 'VACUUM_UP') parts.push('Price rising on ghost volume — fragile move.');
+  else if (row.vacuum_flag === 'VACUUM_DOWN') parts.push('Price falling on ghost volume — may reverse.');
+  else if (row.volume_divergence_flag === 'VOLUME_DIV_UP') parts.push('Volume declining into the rally — conviction fading.');
+  else if (row.volume_divergence_flag === 'VOLUME_DIV_DOWN') parts.push('Volume declining into the selloff — sellers exhausting.');
+  else if (row.accum_distrib === 'ACCUMULATION') parts.push('Institutional accumulation confirmed below golden line.');
+  else if (row.accum_distrib === 'DISTRIBUTION') parts.push('Distribution detected — smart money selling into strength.');
+
+  // RSS sentence
+  if (sig.pumpRisk) parts.push('⚠ RSS overbought on broken structure — pump risk elevated.');
+  else if (sig.rssNewHigh) parts.push('RSS at new high — internal momentum leading price.');
+  else if (sig.structureRepaired) parts.push('Spread positive — structure repaired, genuine breakout zone.');
+  else if (sig.spreadNarrowing && rss > 50) parts.push('Spread narrowing, RSS bullish — structure repair in progress.');
+  else if (rss < 20) parts.push('RSS oversold — internal momentum at floor, watch for reversal.');
+  else if (sig.rssSlope > 20) parts.push('RSS rising sharply — momentum accelerating.');
+  else if (sig.rssSlope < -20) parts.push('RSS falling — momentum decelerating.');
+
+  return parts.join(' ');
+}
+
+function buildVerdict(row, sig) {
+  if (sig.pumpRisk) return { text: 'PUMP RISK', bg: '#450a0a', color: '#ef4444' };
+  if (row.vacuum_flag) return { text: 'GHOST MOVE', bg: '#1e293b', color: '#64748b' };
+  if (row.flow_type === 'FRESH_LONGS' && sig.structureRepaired && sig.conviction >= 4)
+    return { text: 'HIGH CONVICTION', bg: '#064e3b', color: '#10b981' };
+  if (row.flow_type === 'FRESH_LONGS' && sig.conviction >= 3)
+    return { text: 'BUY SETUP', bg: '#065f46', color: '#34d399' };
+  if (row.flow_type === 'SHORT_COVERING' && sig.spreadNarrowing && row.accum_distrib === 'ACCUMULATION')
+    return { text: 'WATCH · SETUP BUILDING', bg: '#1a2535', color: '#c9a84c' };
+  if (row.flow_type === 'SHORT_COVERING')
+    return { text: 'CAUTION · WEAK RALLY', bg: '#2d2008', color: '#f59e0b' };
+  if (row.flow_type === 'FRESH_SHORTS' && sig.conviction >= 3)
+    return { text: 'SELL SETUP', bg: '#450a0a', color: '#ef4444' };
+  if (row.flow_type === 'LOW_VOLUME')
+    return { text: 'AVOID', bg: '#1e293b', color: '#475569' };
+  return { text: 'NEUTRAL', bg: '#1e293b', color: '#64748b' };
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function render(row, historyRows) {
+  const sig = computeSignals(row, historyRows);
+  const fc = FLOW[row.flow_type] || FLOW.MIXED;
+  const verdict = buildVerdict(row, sig);
+
+  // Header date
+  document.getElementById('card-date').textContent = row.trade_date;
+
+  // Card border color
+  document.getElementById('card').style.borderColor = fc.color + '44';
+
+  // ── Flow section ──
+  document.getElementById('flow-bg').style.background = fc.bg;
+  document.getElementById('flow-type').textContent = fc.label;
+  document.getElementById('flow-type').style.color = fc.color;
+  document.getElementById('flow-sub').textContent =
+    `NIFTY 50 · Close ${row.close.toLocaleString('en-IN')}`;
+  document.getElementById('flow-arrow').textContent = fc.arrow;
+  document.getElementById('flow-arrow').style.color = fc.color;
+
+  // Flags
+  const flagsEl = document.getElementById('flow-flags');
+  flagsEl.innerHTML = '';
+  const flags = [];
+  if (row.vacuum_flag) flags.push({
+    text: row.vacuum_flag.replace('_', ' '),
+    color: '#f59e0b', bg: 'rgba(245,158,11,0.1)'
+  });
+  if (row.volume_divergence_flag) flags.push({
+    text: row.volume_divergence_flag === 'VOLUME_DIV_UP' ? 'VOL DIV ↑' : 'VOL DIV ↓',
+    color: '#f97316', bg: 'rgba(249,115,22,0.1)'
+  });
+  if (row.accum_distrib === 'ACCUMULATION') flags.push({
+    text: 'ACCUMULATION',
+    color: '#10b981', bg: 'rgba(16,185,129,0.1)'
+  });
+  if (row.accum_distrib === 'DISTRIBUTION') flags.push({
+    text: 'DISTRIBUTION',
+    color: '#ef4444', bg: 'rgba(239,68,68,0.1)'
+  });
+  if (sig.rssNewHigh) flags.push({
+    text: 'RSS NEW HIGH',
+    color: '#c9a84c', bg: 'rgba(201,168,76,0.1)'
+  });
+  flags.forEach(f => {
+    const el = document.createElement('div');
+    el.className = 'flag-chip';
+    el.style.cssText = `background:${f.bg};color:${f.color};border:1px solid ${f.color}44`;
+    el.innerHTML = `<div class="flag-dot" style="background:${f.color}"></div>${f.text}`;
+    flagsEl.appendChild(el);
+  });
+
+  // ── Volume section ──
+  const rvolColor = row.rvol > 2 ? '#10b981' : row.rvol > 1 ? '#c9a84c' : '#ef4444';
+  document.getElementById('vol-value').textContent = `${row.rvol?.toFixed(2)}×`;
+  document.getElementById('vol-value').style.color = rvolColor;
+
+  const bar = document.getElementById('vol-bar');
+  const barPct = Math.min(100, (row.rvol / 8) * 100);
+  bar.style.width = barPct + '%';
+  bar.style.background = rvolColor;
+  bar.className = 'vol-bar-fill';
+  if (row.vacuum_flag) bar.classList.add('vacuum');
+  else if (row.volume_divergence_flag) bar.classList.add('diverging');
+
+  const meta = document.getElementById('vol-meta');
+  meta.innerHTML = `
+    <span class="vol-meta-item" style="color:${row.rvol>1.1?'#10b981':'#ef4444'}">
+      RVOL ${row.rvol?.toFixed(2)}×
+    </span>
+    <span class="vol-meta-item" style="color:${row.tvol>1?'#10b981':'#64748b'}">
+      TVOL ${row.tvol?.toFixed(2)}×
+    </span>
+    <span class="vol-meta-item" style="color:#64748b">
+      RSI ${row.rsi_14?.toFixed(0)}
+    </span>
+  `;
+
+  // ── RSS section ──
+  const rssColor = row.rss_value > 80 ? '#ef4444'
+                 : row.rss_value > 60 ? '#10b981'
+                 : row.rss_value > 40 ? '#c9a84c'
+                 : row.rss_value > 20 ? '#f97316'
+                 : '#64748b';
+
+  document.getElementById('rss-num').textContent = row.rss_value?.toFixed(1) || '—';
+  document.getElementById('rss-num').style.color = rssColor;
+
+  // Arc gauge (0-100 maps to 0-75 dasharray of arc length ~75)
+  const arcLen = 75;
+  const arcFill = (row.rss_value / 100) * arcLen;
+  const arcEl = document.getElementById('rss-arc-fill');
+  arcEl.style.strokeDasharray = `${arcFill} ${arcLen}`;
+  arcEl.style.stroke = rssColor;
+
+  // Zone + slope
+  const slopeStr = sig.rssSlope > 5 ? '↑' : sig.rssSlope < -5 ? '↓' : '→';
+  document.getElementById('rss-zone').textContent = `${sig.rssZone} ${slopeStr}`;
+  document.getElementById('rss-zone').style.color = rssColor;
+
+  // Spread bar
+  const maxSpread = 2000;
+  const spreadNorm = row.rss_spread / maxSpread; // -1 to +1
+  const spreadFill = document.getElementById('spread-fill');
+  if (spreadNorm >= 0) {
+    spreadFill.style.left = '50%';
+    spreadFill.style.width = Math.min(50, spreadNorm * 50) + '%';
+    spreadFill.style.background = '#10b981';
+  } else {
+    const w = Math.min(50, Math.abs(spreadNorm) * 50);
+    spreadFill.style.left = (50 - w) + '%';
+    spreadFill.style.width = w + '%';
+    spreadFill.style.background = '#ef4444';
+  }
+  const spreadColor = row.rss_spread > 0 ? '#10b981'
+                    : sig.spreadNarrowing ? '#c9a84c' : '#ef4444';
+  document.getElementById('spread-value').textContent =
+    (row.rss_spread > 0 ? '+' : '') + row.rss_spread?.toFixed(0);
+  document.getElementById('spread-value').style.color = spreadColor;
+
+  // RSS sparkline
+  const spark = document.getElementById('rss-spark');
+  const sparkVals = (row._rss_history || historyRows.slice(-10).map(r => r.rss_value || 0)).concat([row.rss_value]);
+  const sparkMin = 0, sparkMax = 100;
+  const sw = 352, sh = 28;
+  const pts = sparkVals.map((v, i) => {
+    const x = (i / (sparkVals.length - 1)) * sw;
+    const y = sh - ((v - sparkMin) / (sparkMax - sparkMin)) * sh;
+    return `${x},${Math.max(1, Math.min(sh-1, y))}`;
+  });
+  // Zone lines
+  spark.innerHTML = `
+    <line x1="0" y1="${sh*(1-80/100)}" x2="${sw}" y2="${sh*(1-80/100)}" stroke="#ef444433" stroke-width="1" stroke-dasharray="3,3"/>
+    <line x1="0" y1="${sh*(1-20/100)}" x2="${sw}" y2="${sh*(1-20/100)}" stroke="#10b98133" stroke-width="1" stroke-dasharray="3,3"/>
+    <line x1="0" y1="${sh*0.5}" x2="${sw}" y2="${sh*0.5}" stroke="#1a274055" stroke-width="1"/>
+    <polyline points="${pts.join(' ')}" fill="none" stroke="${rssColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${pts[pts.length-1].split(',')[1]}" r="2.5" fill="${rssColor}"/>
+  `;
+
+  // Pump signal
+  const pumpEl = document.getElementById('pump-signal');
+  if (sig.pumpRisk) {
+    pumpEl.classList.add('visible');
+    pumpEl.style.cssText += 'background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3)';
+    document.getElementById('pump-text').textContent =
+      'RSS overbought + spread negative + vol diverging — pump signature detected';
+  } else if (sig.rsiRssDivergence) {
+    pumpEl.classList.add('visible');
+    pumpEl.style.cssText += 'background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.3)';
+    document.getElementById('pump-text').textContent =
+      'RSI elevated but RSS lagging — momentum divergence, watch for reversal';
+  } else {
+    pumpEl.classList.remove('visible');
+  }
+
+  // ── Narrative ──
+  const narrativeEl = document.getElementById('narrative');
+  narrativeEl.classList.add('fading');
+  setTimeout(() => {
+    narrativeEl.textContent = buildNarrative(row, sig);
+    narrativeEl.classList.remove('fading');
+  }, 150);
+
+  // Verdict
+  const vb = document.getElementById('verdict-badge');
+  vb.textContent = verdict.text;
+  vb.style.cssText = `background:${verdict.bg};color:${verdict.color};border:1px solid ${verdict.color}44;padding:3px 10px;border-radius:12px;font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;font-family:'DM Mono',monospace;`;
+
+  // Signal strength dots
+  const ssEl = document.getElementById('signal-strength');
+  ssEl.innerHTML = Array.from({length:5}).map((_, i) => {
+    const active = i < sig.conviction;
+    const cls = active ? (sig.pumpRisk ? 'danger' : sig.conviction < 3 ? 'warn' : '') : '';
+    return `<div class="strength-dot ${active?'active':''} ${cls}"></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// SCENARIO BUTTONS
+// ═══════════════════════════════════════════════════════
+const scWrap = document.getElementById('scenarios');
+let activeScenario = 'Apr 10 · Recovery';
+
+Object.keys(SCENARIOS).forEach(name => {
+  const btn = document.createElement('button');
+  btn.className = `sc-btn${name === activeScenario ? ' active' : ''}`;
+  btn.textContent = name;
+  btn.onclick = () => {
+    document.querySelectorAll('.sc-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeScenario = name;
+    loadScenario(name);
+  };
+  scWrap.appendChild(btn);
+});
+
+function loadScenario(name) {
+  const val = SCENARIOS[name];
+  let row, history;
+  if (typeof val === 'number') {
+    row = DATA[val];
+    history = DATA.slice(0, val);
+  } else {
+    row = DEMO[val];
+    history = DATA.slice(-8);
+  }
+  render(row, history);
+}
+
+// Init
+loadScenario(activeScenario);
+</script>
+</body>
+</html>

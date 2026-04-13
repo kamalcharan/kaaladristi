@@ -165,7 +165,7 @@ export default function LandingPage() {
 
             <p className="text-lg text-secondary leading-relaxed mb-10">
               Kala-Drishti uses time-cycle analysis to reveal hidden market stress points.
-              Get pre-computed risk intelligence for NIFTY and BANKNIFTY — every morning
+              Get pre-computed risk intelligence for Market — every morning
               before market opens.
             </p>
 

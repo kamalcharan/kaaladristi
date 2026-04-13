@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti · Visual Pulse</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════ */
+:root {
+  --bg:        #020917;
+  --panel:     #0b1221;
+  --panel-2:   #0d1628;
+  --border:    #1a2740;
+  --border-2:  #0f1c30;
+  --gold:      #c9a84c;
+  --gold-dim:  #7a6130;
+  --text-1:    #e8eaf0;
+  --text-2:    #8896aa;
+  --text-3:    #4a5568;
+  --green:     #10b981;
+  --red:       #ef4444;
+  --amber:     #f59e0b;
+  --blue:      #3b82f6;
+  --teal:      #14b8a6;
+  --purple:    #8b5cf6;
+  --smart:     #ef4444;
+  --fast:      #f59e0b;
+  --svd-c:     #8b5cf6;
+  --sbd-c:     #3b82f6;
+  --syd-c:     #f59e0b;
+}
+
+/* ═══════════════════════════════════════════════════
+   RESET + BASE
+═══════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text-1);
+  min-height: 100vh;
+  padding-bottom: 80px; /* slider clearance */
+  overflow-x: hidden;
+}
+
+/* ═══════════════════════════════════════════════════
+   TOP BAR
+═══════════════════════════════════════════════════ */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(2,9,23,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.topbar-brand {
+  font-family: 'Playfair Display', serif;
+  font-size: 13px; color: var(--gold); letter-spacing: 3px;
+  text-transform: uppercase;
+}
+.topbar-center {
+  display: flex; align-items: center; gap: 16px;
+}
+.tb-symbol {
+  font-family: 'Playfair Display', serif;
+  font-size: 17px; color: var(--text-1); font-weight: 700;
+}
+.tb-price {
+  font-family: 'DM Mono', monospace;
+  font-size: 17px; transition: color 0.3s;
+}
+.tb-change {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px; transition: color 0.3s;
+}
+.tb-sep { color: var(--border); }
+.tb-candle-info {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px; color: var(--text-3); letter-spacing: 1px;
+}
+.topbar-right {
+  display: flex; align-items: center; gap: 8px;
+}
+/* Lens toggle */
+.lens-wrap {
+  display: flex; gap: 3px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px;
+}
+.lens-btn {
+  padding: 3px 10px; border-radius: 14px;
+  font-size: 9px; font-weight: 600; letter-spacing: 1px;
+  text-transform: uppercase; font-family: 'DM Mono', monospace;
+  cursor: pointer; border: none; background: transparent;
+  color: var(--text-3); transition: all 0.2s;
+}
+.lens-btn.active[data-lens="Conservative"] {
+  background: rgba(59,130,246,0.2); color: #60a5fa; }
+.lens-btn.active[data-lens="Balanced"] {
+  background: rgba(201,168,76,0.2); color: var(--gold); }
+.lens-btn.active[data-lens="Aggressive"] {
+  background: rgba(239,68,68,0.2); color: #f87171; }
+
+/* ═══════════════════════════════════════════════════
+   CHART SECTION
+═══════════════════════════════════════════════════ */
+.chart-section {
+  padding: 16px 24px 0;
+  position: relative;
+}
+#main-chart {
+  width: 100%; display: block;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #070f1f 0%, #050c18 100%);
+}
+
+/* ═══════════════════════════════════════════════════
+   ASTRO STRIP
+═══════════════════════════════════════════════════ */
+.astro-strip-wrap {
+  padding: 10px 24px 0;
+  position: relative;
+}
+.astro-strip-label {
+  font-size: 7px; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--text-3); font-family: 'DM Mono', monospace;
+  margin-bottom: 4px;
+}
+.astro-strip-track {
+  height: 8px; border-radius: 4px;
+  background: var(--panel-2);
+  position: relative; overflow: visible;
+  cursor: pointer;
+}
+/* Gradient fill built dynamically */
+.astro-event-tick {
+  position: absolute; top: -3px; bottom: -3px;
+  width: 2px; border-radius: 1px;
+  cursor: pointer; transition: opacity 0.2s;
+}
+.astro-event-tick:hover { opacity: 1 !important; }
+.astro-today-marker {
+  position: absolute; top: -6px; bottom: -6px;
+  width: 2px; background: var(--gold);
+  box-shadow: 0 0 8px var(--gold);
+  border-radius: 1px;
+}
+.astro-strip-dates {
+  display: flex; justify-content: space-between;
+  margin-top: 4px;
+  font-family: 'DM Mono', monospace; font-size: 8px;
+  color: var(--text-3);
+}
+/* Astro tooltip */
+.astro-tooltip {
+  position: fixed; z-index: 200;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; width: 220px;
+  font-size: 10px; color: var(--text-2);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.7);
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.15s;
+  font-family: 'DM Mono', monospace;
+  line-height: 1.5;
+}
+.astro-tooltip.visible { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════
+   VANI SECTION
+═══════════════════════════════════════════════════ */
+.vani-section {
+  padding: 20px 24px 0;
+}
+
+/* VaNi header */
+.vani-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+}
+.vani-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: white;
+  font-family: 'Playfair Display', serif;
+  flex-shrink: 0;
+  box-shadow: 0 0 16px rgba(124,58,237,0.4);
+}
+.vani-header-text { flex: 1; }
+.vani-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 13px; color: var(--text-1); font-weight: 700;
+}
+.vani-status {
+  font-size: 9px; color: var(--text-3);
+  font-family: 'DM Mono', monospace; letter-spacing: 1px;
+  transition: color 0.3s;
+}
+.vani-status.reading { color: #7c3aed; }
+
+/* VaNi master summary */
+.vani-summary {
+  background: linear-gradient(135deg, rgba(79,70,229,0.06), rgba(124,58,237,0.03));
+  border: 1px solid rgba(124,58,237,0.2);
+  border-radius: 10px; padding: 14px 16px;
+  margin-bottom: 16px;
+  transition: opacity 0.3s;
+}
+.vani-summary.fading { opacity: 0.2; }
+.vani-summary-text {
+  font-size: 12px; color: var(--text-2);
+  line-height: 1.65; font-style: italic;
+}
+.vani-summary-meta {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+}
+.vani-candle-ref {
+  font-family: 'DM Mono', monospace; font-size: 9px;
+  color: var(--text-3); letter-spacing: 1px;
+}
+.vani-verdict-pill {
+  padding: 2px 8px; border-radius: 8px;
+  font-size: 8px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; font-family: 'DM Mono', monospace;
+  transition: all 0.4s;
+}
+
+/* ═══════════════════════════════════════════════════
+   INFERENCE CARDS GRID
+═══════════════════════════════════════════════════ */
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .cards-grid { grid-template-columns: 1fr; }
+}
+.card-full { grid-column: 1 / -1; }
+
+/* Shared card shell */
+.inf-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+  transition: border-color 0.4s, opacity 0.4s, transform 0.4s;
+  opacity: 0; transform: translateY(8px);
+}
+.inf-card.visible {
+  opacity: 1; transform: translateY(0);
+}
+.inf-card.fading { opacity: 0.15; }
+
+.card-head {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border-2);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-head-left { display: flex; align-items: center; gap: 8px; }
+.card-icon {
+  width: 24px; height: 24px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0;
+}
+.card-title {
+  font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-3); font-family: 'DM Mono', monospace;
+}
+.card-badge {
+  padding: 2px 8px; border-radius: 8px;
+  font-size: 8px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; font-family: 'DM Mono', monospace;
+  transition: all 0.4s;
+}
+.card-body { padding: 12px 14px; }
+
+/* ── CORRELATION CARD ─── */
+.corr-scores { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
+.corr-row { display: flex; align-items: center; gap: 8px; }
+.corr-label {
+  font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-3); font-family: 'DM Mono', monospace; width: 48px;
+}
+.corr-track {
+  flex: 1; height: 4px; background: #070f1f; border-radius: 2px; overflow: hidden;
+}
+.corr-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.6s cubic-bezier(.4,0,.2,1), background 0.4s;
+}
+.corr-val {
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  width: 28px; text-align: right; transition: color 0.4s;
+}
+/* Gap */
+.gap-row { padding-top: 8px; border-top: 1px solid var(--border-2); }
+.gap-info {
+  display: flex; justify-content: space-between; margin-bottom: 4px;
+}
+.gap-lbl { font-size: 8px; color: var(--text-3); font-family: 'DM Mono', monospace; letter-spacing: 1px; }
+.gap-val { font-size: 9px; font-family: 'DM Mono', monospace; transition: color 0.4s; }
+.gap-track {
+  height: 5px; background: #070f1f; border-radius: 3px; position: relative;
+}
+.gap-fill { height: 100%; border-radius: 3px; transition: width 0.6s cubic-bezier(.4,0,.2,1), background 0.4s; }
+.gap-marker {
+  position: absolute; top: -2px; bottom: -2px; width: 1.5px; border-radius: 1px;
+}
+
+/* Layers */
+.layers-row {
+  display: flex; gap: 6px; margin-top: 10px;
+}
+.layer-chip {
+  flex: 1; padding: 5px 6px; border-radius: 6px;
+  border: 1px solid var(--border-2);
+  display: flex; flex-direction: column; gap: 1px;
+  transition: all 0.4s;
+}
+.layer-chip-name {
+  font-size: 7px; letter-spacing: 1px; text-transform: uppercase;
+  font-family: 'DM Mono', monospace; color: var(--text-3);
+}
+.layer-chip-val {
+  font-size: 10px; font-weight: 600;
+  font-family: 'DM Mono', monospace; transition: color 0.4s;
+}
+
+/* ── FLOW CARD ─── */
+.flow-main {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.flow-type-big {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px; font-weight: 700; transition: color 0.4s;
+}
+.flow-arrow-big { font-size: 22px; transition: color 0.4s; letter-spacing: -3px; }
+.flow-flags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.flow-flag {
+  padding: 2px 7px; border-radius: 8px;
+  font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+  font-family: 'DM Mono', monospace;
+}
+/* Vol bar */
+.vol-wrap { margin-bottom: 8px; }
+.vol-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.vol-lbl { font-size: 8px; color: var(--text-3); font-family: 'DM Mono', monospace; width: 36px; }
+.vol-track { flex: 1; height: 3px; background: #070f1f; border-radius: 2px; overflow: hidden; }
+.vol-fill { height: 100%; border-radius: 2px; transition: width 0.5s, background 0.4s; }
+.vol-num { font-size: 9px; font-family: 'DM Mono', monospace; width: 32px; text-align: right; }
+/* RSS mini */
+.rss-mini { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.rss-mini-label { font-size: 8px; color: var(--text-3); font-family: 'DM Mono', monospace; letter-spacing: 1px; width: 36px; }
+.rss-arc-mini { flex-shrink: 0; }
+.rss-mini-vals { display: flex; flex-direction: column; gap: 1px; }
+.rss-mini-num { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; transition: color 0.4s; }
+.rss-mini-spread { font-size: 8px; color: var(--text-3); font-family: 'DM Mono', monospace; }
+/* Sparkline */
+.spark-wrap { margin-top: 6px; }
+
+/* ── SMART MONEY CARD ─── */
+.sm-chart-wrap {
+  background: #070f1f; border-radius: 6px;
+  overflow: hidden; margin-bottom: 8px;
+}
+.sm-values { display: flex; gap: 1px; background: #070f1f; border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+.sm-val-block {
+  flex: 1; padding: 6px 8px; background: var(--panel);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.sm-val-num { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; }
+.sm-val-lbl { font-size: 7px; color: var(--text-3); font-family: 'DM Mono', monospace; letter-spacing: 1px; text-transform: uppercase; }
+.sm-val-trend { font-size: 8px; font-family: 'DM Mono', monospace; }
+/* Dot events */
+.dots-timeline { position: relative; height: 28px; }
+.dots-track { position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); }
+.dot-evt {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+}
+.dot-evt-c {
+  border-radius: 50%; border: 1.5px solid transparent;
+  transition: all 0.4s;
+}
+.dot-evt-l { font-size: 6px; font-family: 'DM Mono', monospace; opacity: 0.7; }
+
+/* ═══════════════════════════════════════════════════
+   CARD NARRATIVE FOOTER
+═══════════════════════════════════════════════════ */
+.card-narrative {
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--border-2);
+  font-size: 10px; color: var(--text-2);
+  font-style: italic; line-height: 1.5;
+  transition: opacity 0.3s;
+}
+.card-narrative.fading { opacity: 0.2; }
+
+/* ═══════════════════════════════════════════════════
+   SLIDER BAR — FIXED BOTTOM
+═══════════════════════════════════════════════════ */
+.slider-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(7,12,24,0.97);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  padding: 0 20px;
+  height: 64px;
+  display: flex; align-items: center; gap: 14px;
+}
+.ctrl-btns { display: flex; gap: 5px; flex-shrink: 0; }
+.ctrl-btn {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--text-2); cursor: pointer; font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.ctrl-btn:hover { background: #1e293b; color: var(--text-1); }
+.ctrl-btn.playing { background: var(--gold); color: #000; border-color: var(--gold); }
+.slider-track-wrap {
+  flex: 1; position: relative; height: 40px;
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+/* Chapter marks above slider */
+.chapter-marks {
+  position: absolute; top: 0; left: 0; right: 0; height: 18px;
+  pointer-events: none;
+}
+.ch-mark {
+  position: absolute; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  cursor: pointer; pointer-events: all;
+}
+.ch-mark-line { width: 1px; height: 6px; }
+.ch-mark-lbl {
+  font-size: 7px; letter-spacing: 1px; text-transform: uppercase;
+  font-family: 'DM Mono', monospace; white-space: nowrap; opacity: 0.6;
+}
+input[type=range] {
+  -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--gold) var(--pct, 100%), var(--border) var(--pct, 100%));
+  outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--gold); border: 2px solid var(--bg);
+  box-shadow: 0 0 8px rgba(201,168,76,0.6); cursor: pointer;
+}
+.slider-meta {
+  flex-shrink: 0; text-align: right;
+  font-family: 'DM Mono', monospace; font-size: 9px;
+  color: var(--text-3); line-height: 1.6; min-width: 90px;
+}
+.slider-meta span { display: block; }
+
+/* ═══════════════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════════════ */
+@keyframes vani-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+.vani-thinking { animation: vani-pulse 1.2s ease infinite; }
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="topbar-brand">Kāla-Drishti</div>
+  <div class="topbar-center">
+    <span class="tb-symbol">NIFTY 50</span>
+    <span class="tb-price" id="tb-price">—</span>
+    <span class="tb-change" id="tb-change">—</span>
+    <span class="tb-sep">·</span>
+    <span class="tb-candle-info" id="tb-candle">—</span>
+  </div>
+  <div class="topbar-right">
+    <div class="lens-wrap" id="lens-wrap"></div>
+  </div>
+</header>
+
+<!-- CHART -->
+<div class="chart-section">
+  <canvas id="main-chart" height="220"></canvas>
+</div>
+
+<!-- ASTRO STRIP -->
+<div class="astro-strip-wrap">
+  <div class="astro-strip-label">Astro Energy · Apr 2026</div>
+  <div class="astro-strip-track" id="astro-track"></div>
+  <div class="astro-strip-dates" id="astro-dates"></div>
+</div>
+<div class="astro-tooltip" id="astro-tt"></div>
+
+<!-- VANI SECTION -->
+<div class="vani-section">
+
+  <!-- VaNi header -->
+  <div class="vani-header">
+    <div class="vani-avatar">V</div>
+    <div class="vani-header-text">
+      <div class="vani-name">VaNi · वाणी</div>
+      <div class="vani-status" id="vani-status">Reading market conditions...</div>
+    </div>
+  </div>
+
+  <!-- Master summary -->
+  <div class="vani-summary" id="vani-summary">
+    <div class="vani-summary-text" id="vani-text">—</div>
+    <div class="vani-summary-meta">
+      <span class="vani-candle-ref" id="vani-ref">—</span>
+      <span class="vani-verdict-pill" id="vani-pill">—</span>
+    </div>
+  </div>
+
+  <!-- Cards grid -->
+  <div class="cards-grid" id="cards-grid">
+
+    <!-- CORRELATION card -->
+    <div class="inf-card card-full" id="card-corr" style="transition-delay:0.05s">
+      <div class="card-head">
+        <div class="card-head-left">
+          <div class="card-icon" style="background:rgba(201,168,76,0.1)">⊕</div>
+          <span class="card-title">Correlation · Astro ↔ Technical ↔ Smart Money</span>
+        </div>
+        <span class="card-badge" id="corr-badge">—</span>
+      </div>
+      <div class="card-body">
+        <div class="corr-scores" id="corr-scores"></div>
+        <div class="gap-row">
+          <div class="gap-info">
+            <span class="gap-lbl">ALIGNMENT GAP</span>
+            <span class="gap-val" id="gap-val">—</span>
+          </div>
+          <div class="gap-track" id="gap-track">
+            <div class="gap-fill" id="gap-fill"></div>
+            <div class="gap-marker" id="gap-m-aligned"  style="background:#10b981">
+              <div style="position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:6px;color:#10b981;font-family:'DM Mono',monospace;white-space:nowrap">Aligned</div>
+            </div>
+            <div class="gap-marker" id="gap-m-conv" style="background:#c9a84c">
+              <div style="position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:6px;color:#c9a84c;font-family:'DM Mono',monospace;white-space:nowrap">Conv.</div>
+            </div>
+          </div>
+        </div>
+        <div class="layers-row" id="layers-row"></div>
+      </div>
+      <div class="card-narrative fading" id="corr-narrative">—</div>
+    </div>
+
+    <!-- FLOW + RSS card -->
+    <div class="inf-card" id="card-flow" style="transition-delay:0.15s">
+      <div class="card-head">
+        <div class="card-head-left">
+          <div class="card-icon" style="background:rgba(56,189,248,0.1)">〜</div>
+          <span class="card-title">Order Flow · RSS</span>
+        </div>
+        <span class="card-badge" id="flow-badge">—</span>
+      </div>
+      <div class="card-body">
+        <div class="flow-main">
+          <div>
+            <div class="flow-type-big" id="flow-type">—</div>
+            <div style="font-size:9px;color:var(--text-3);font-family:'DM Mono',monospace;margin-top:2px" id="flow-sub">—</div>
+          </div>
+          <div class="flow-arrow-big" id="flow-arrow">—</div>
+        </div>
+        <div class="flow-flags" id="flow-flags"></div>
+        <div class="vol-wrap">
+          <div class="vol-row">
+            <span class="vol-lbl">RVOL</span>
+            <div class="vol-track"><div class="vol-fill" id="rvol-fill"></div></div>
+            <span class="vol-num" id="rvol-val">—</span>
+          </div>
+          <div class="vol-row">
+            <span class="vol-lbl">TVOL</span>
+            <div class="vol-track"><div class="vol-fill" id="tvol-fill"></div></div>
+            <span class="vol-num" id="tvol-val">—</span>
+          </div>
+        </div>
+        <div class="rss-mini">
+          <span class="rss-mini-label">RSS</span>
+          <svg class="rss-arc-mini" width="48" height="28" viewBox="0 0 48 28">
+            <path d="M 4 24 A 20 20 0 0 1 44 24" fill="none" stroke="#0a1020" stroke-width="3.5" stroke-linecap="round"/>
+            <path id="rss-arc" d="M 4 24 A 20 20 0 0 1 44 24" fill="none" stroke="#475569" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 63"/>
+          </svg>
+          <div class="rss-mini-vals">
+            <div class="rss-mini-num" id="rss-val">—</div>
+            <div class="rss-mini-spread" id="rss-spread">—</div>
+          </div>
+        </div>
+        <div class="spark-wrap">
+          <svg width="100%" height="24" id="flow-spark" viewBox="0 0 340 24" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+      <div class="card-narrative fading" id="flow-narrative">—</div>
+    </div>
+
+    <!-- SMART MONEY card -->
+    <div class="inf-card" id="card-sm" style="transition-delay:0.25s">
+      <div class="card-head">
+        <div class="card-head-left">
+          <div class="card-icon" style="background:rgba(239,68,68,0.1)">◎</div>
+          <span class="card-title">Smart Money · Volume Signature</span>
+        </div>
+        <span class="card-badge" id="sm-badge">—</span>
+      </div>
+      <div class="card-body">
+        <div class="sm-chart-wrap">
+          <svg width="100%" height="80" id="sm-chart" viewBox="0 0 340 80" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="sm-values" id="sm-values"></div>
+        <div class="dots-timeline" id="dots-tl">
+          <div class="dots-track"></div>
+        </div>
+      </div>
+      <div class="card-narrative fading" id="sm-narrative">—</div>
+    </div>
+
+  </div><!-- /cards-grid -->
+</div><!-- /vani-section -->
+
+<!-- SLIDER -->
+<div class="slider-bar">
+  <div class="ctrl-btns">
+    <button class="ctrl-btn" id="btn-start" title="Start">⏮</button>
+    <button class="ctrl-btn" id="btn-back"  title="Back">◀</button>
+    <button class="ctrl-btn" id="btn-play"  title="Play">▶</button>
+    <button class="ctrl-btn" id="btn-fwd"   title="Forward">▶|</button>
+    <button class="ctrl-btn" id="btn-end"   title="Now">⏭</button>
+  </div>
+  <div class="slider-track-wrap">
+    <div class="chapter-marks" id="ch-marks"></div>
+    <input type="range" id="timeline" min="0" max="59" value="59" step="1">
+  </div>
+  <div class="slider-meta">
+    <span id="meta-date">—</span>
+    <span id="meta-bars">—</span>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DATA — 60 bars synthetic NIFTY, Apr structure
+// ═══════════════════════════════════════════════════════
+const N = 60;
+const BASE_DATE = new Date('2026-02-17T09:15:00+05:30');
+
+function buildData() {
+  const bars = [];
+  let price = 22400, trend = -0.3, vol = 1.0;
+
+  for (let i = 0; i < N; i++) {
+    const d = new Date(BASE_DATE);
+    d.setDate(d.getDate() + Math.floor(i * 0.8));
+
+    // Price trend phases
+    if (i < 15) trend = -0.4 + (Math.random()-0.5)*0.3;
+    else if (i < 30) trend = -0.1 + (Math.random()-0.5)*0.4;
+    else if (i < 45) trend = 0.5 + (Math.random()-0.5)*0.3;
+    else trend = 0.2 + (Math.random()-0.5)*0.4;
+
+    const open  = price;
+    const close = price + trend * 55 + (Math.random()-0.5)*70;
+    const high  = Math.max(open,close) + Math.random()*50;
+    const low   = Math.min(open,close) - Math.random()*50;
+
+    // Volume
+    vol = Math.max(0.3, vol + (Math.random()-0.48)*0.25);
+    if (i === 28) vol = 6.5; // spike
+    if (i === 44) vol = 2.8;
+
+    // RSI synthetic
+    const rsi = Math.min(80, Math.max(20, 35 + i*0.55 + Math.sin(i*0.3)*12));
+    // RSS
+    const rss = i < 15 ? Math.random()*5
+              : i < 30 ? i*0.6 + Math.random()*8
+              : Math.min(88, 30 + (i-30)*1.8 + Math.sin(i*0.25)*10);
+    const rssSpread = -1800 + i*25 + Math.sin(i*0.2)*80;
+
+    // Sniper
+    const sm = i < 10 ? 5+Math.random()*5
+             : i < 25 ? 5+(i-10)*1.4+Math.random()*4
+             : i < 45 ? 26+(i-25)*0.6+Math.random()*5
+             : 38-(i-45)*0.4+Math.random()*4;
+    const fm = i < 22 ? 4+Math.random()*7
+             : 4+(i-22)*1.8+Math.random()*5;
+
+    // Flow
+    let flowType = 'MIXED';
+    if (vol < 0.5) flowType = 'LOW_VOLUME';
+    else if (close > open && rsi > 52) flowType = 'FRESH_LONGS';
+    else if (close > open && rsi < 48) flowType = 'SHORT_COVERING';
+    else if (close < open && rsi < 48) flowType = 'FRESH_SHORTS';
+    else if (close < open && rsi > 52) flowType = 'LONG_LIQUIDATION';
+
+    // Dot conditions
+    const bodyR = Math.abs(close-open)/(high-low+1);
+    const prevC = i > 0 ? bars[i-1].close : close-20;
+    const isSVD = vol>8 && close>(high+low)/2 && close>prevC*1.02 && bodyR>=0.5 && close>open;
+    const isSBD = vol>=3&&vol<8 && close>open && close>high-(high-low)/3 && bodyR>=0.45;
+    const isSYD = close<prevC && vol>=2 && close<low+(high-low)/3;
+
+    // Accumulation
+    const sma150 = 23800; // simplified
+    const accumDistrib = close < sma150 && vol >= 3 && rsi > 50 ? 'ACCUMULATION'
+                       : close > sma150 && vol >= 3 && rsi < 50 ? 'DISTRIBUTION'
+                       : null;
+    const volDiv = i >= 5 && vol < bars[i-3]?.rvol && bars[i-3]?.rvol < bars[i-5]?.rvol
+                   && vol > 0.5
+                   ? (close > (bars[i-5]?.close||close) ? 'VOLUME_DIV_UP' : 'VOLUME_DIV_DOWN')
+                   : null;
+    const vacuum = vol < 0.5 && Math.abs((close-(bars[i-5]?.close||close))/(bars[i-5]?.close||close)*100) > 1
+                   ? (close > (bars[i-5]?.close||close) ? 'VACUUM_UP' : 'VACUUM_DOWN') : null;
+
+    price = close;
+    bars.push({
+      i, date: d, open, high, low, close,
+      rvol: vol, tvol: vol * 0.85,
+      rsi, rss, rssSpread,
+      sm: Math.max(0,Math.min(50,sm)),
+      fm: Math.max(0,Math.min(50,fm)),
+      flowType, isSVD, isSBD, isSYD,
+      accumDistrib, volDiv, vacuum,
+    });
+  }
+  return bars;
+}
+
+const DATA = buildData();
+
+// ═══════════════════════════════════════════════════════
+// ASTRO DATA — April 2026
+// ═══════════════════════════════════════════════════════
+const ASTRO_EVENTS = [
+  { start:'2026-04-02', end:'2026-05-11', impact:'major_positive', label:'Saturn Mars Conjunction' },
+  { start:'2026-04-10', end:'2026-04-15', impact:'major_positive', label:'Mercury Manifestation · Mars Rise · Saturn Rise' },
+  { start:'2026-04-13', end:'2026-04-15', impact:'minor_negative', label:'Shani Chandra Dwidwadash Yog' },
+  { start:'2026-04-14', end:'2026-04-28', impact:'minor_positive', label:'Sun in Nakshatra of Ashwini' },
+  { start:'2026-04-15', end:'2026-04-15', impact:'minor_negative', label:'Pradosh' },
+  { start:'2026-04-15', end:'2026-04-15', impact:'minor_positive', label:'Neptune Conjunct Mars' },
+  { start:'2026-04-16', end:'2026-04-17', impact:'minor_positive', label:'Vaidhriti Yog in Panchak' },
+  { start:'2026-04-16', end:'2026-04-16', impact:'minor_negative', label:'Amavasya Ghadi' },
+  { start:'2026-04-17', end:'2026-04-17', impact:'bullish',        label:'Neptune Conjuncts Mercury', inference:'sudden big spurt' },
+  { start:'2026-04-18', end:'2026-04-18', impact:'minor_positive', label:'Shukla pratipada · Saturday' },
+  { start:'2026-04-19', end:'2026-04-19', impact:'minor_negative', label:'Perigee dates', inference:'Negative (off market)' },
+  { start:'2026-04-20', end:'2026-04-20', impact:'minor_negative', label:'Kshya thithi in shukla paksha' },
+];
+const ASTRO_W = { major_positive:4, bullish:3, minor_positive:1, neutral:0, minor_negative:-1, bearish:-3 };
+const ASTRO_C = { major_positive:'#10b981', bullish:'#34d399', minor_positive:'#6ee7b7', neutral:'#64748b', minor_negative:'#fb923c', bearish:'#ef4444' };
+
+function astroScoreForDate(d) {
+  const ds = d.toISOString().split('T')[0];
+  return ASTRO_EVENTS.filter(e => ds >= e.start && ds <= (e.end||e.start))
+    .reduce((s,e) => s + (ASTRO_W[e.impact]||0), 0);
+}
+
+// ═══════════════════════════════════════════════════════
+// STYLE CONFIG
+// ═══════════════════════════════════════════════════════
+const STYLES = {
+  Conservative: {
+    color:'#3b82f6',
+    W: { FRESH_LONGS:4,SHORT_COVERING:0,FRESH_SHORTS:4,LONG_LIQUIDATION:0,
+         ACCUMULATION:3,DISTRIBUTION:-3,RSS_HIGH:3,SPREAD_OK:3,SPREAD_NARROW:1,
+         SM_UP:3,SM_FM:2,SVD:4,SBD:2,SYD:-4,PUMP:-4,SM_EXIT:-3,VOL_DIV:-3,VACUUM:-2 },
+    T: { aligned:8, converging:5, conflicting:-4 },
+    note: "Requires multi-signal confirmation. High quality, lower frequency.",
+  },
+  Balanced: {
+    color:'#c9a84c',
+    W: { FRESH_LONGS:3,SHORT_COVERING:1,FRESH_SHORTS:3,LONG_LIQUIDATION:-1,
+         ACCUMULATION:2,DISTRIBUTION:-2,RSS_HIGH:2,SPREAD_OK:2,SPREAD_NARROW:1,
+         SM_UP:2,SM_FM:1,SVD:2,SBD:1,SYD:-2,PUMP:-3,SM_EXIT:-2,VOL_DIV:-1,VACUUM:-1 },
+    T: { aligned:6, converging:4, conflicting:-3 },
+    note: "Balanced view. Standard weightages.",
+  },
+  Aggressive: {
+    color:'#ef4444',
+    W: { FRESH_LONGS:2,SHORT_COVERING:2,FRESH_SHORTS:2,LONG_LIQUIDATION:1,
+         ACCUMULATION:1,DISTRIBUTION:-1,RSS_HIGH:1,SPREAD_OK:1,SPREAD_NARROW:1,
+         SM_UP:1,SM_FM:1,SVD:1,SBD:1,SYD:-1,PUMP:-1,SM_EXIT:-1,VOL_DIV:0,VACUUM:0 },
+    T: { aligned:4, converging:3, conflicting:-2 },
+    note: "Acts on early signals. Lower confirmation threshold.",
+  },
+};
+
+function computeTechScore(bar, prevBars, style) {
+  const W = STYLES[style].W;
+  let s = 0;
+  const sm5  = prevBars.length >= 5 ? prevBars[prevBars.length-5].sm : bar.sm;
+  const smUp = bar.sm > sm5 + 1;
+  const fm5  = prevBars.length >= 5 ? prevBars[prevBars.length-5].fm : bar.fm;
+  const fmUp = bar.fm > fm5 + 1;
+  const recentSVD = prevBars.slice(-5).some(b=>b.isSVD) || bar.isSVD;
+  const recentSBD = prevBars.slice(-5).some(b=>b.isSBD) || bar.isSBD;
+  const pumpSignal = bar.sm < sm5-2 && bar.fm > 20;
+
+  if (bar.flowType==='FRESH_LONGS')      s += W.FRESH_LONGS;
+  if (bar.flowType==='SHORT_COVERING')   s += W.SHORT_COVERING;
+  if (bar.flowType==='FRESH_SHORTS')     s += W.FRESH_SHORTS;
+  if (bar.flowType==='LONG_LIQUIDATION') s += W.LONG_LIQUIDATION;
+  if (bar.accumDistrib==='ACCUMULATION') s += W.ACCUMULATION;
+  if (bar.accumDistrib==='DISTRIBUTION') s += W.DISTRIBUTION;
+  if (bar.rss > 65)  s += W.RSS_HIGH;
+  if (bar.rssSpread > 0)   s += W.SPREAD_OK;
+  else if (bar.rssSpread > -500 && bar.rss > 40) s += W.SPREAD_NARROW;
+  if (smUp)          s += W.SM_UP;
+  if (smUp && fmUp)  s += W.SM_FM;
+  if (recentSVD)     s += W.SVD;
+  if (recentSBD)     s += W.SBD;
+  if (bar.isSYD)     s += W.SYD;
+  if (pumpSignal)    s += W.PUMP;
+  if (!smUp && bar.sm < sm5-2) s += W.SM_EXIT;
+  if (bar.volDiv)    s += W.VOL_DIV;
+  if (bar.vacuum)    s += W.VACUUM;
+  return Math.max(-10, Math.min(10, s));
+}
+
+function smScoreFor(bar, prevBars) {
+  const sm5 = prevBars.length >= 5 ? prevBars[prevBars.length-5].sm : bar.sm;
+  const recentSVD = prevBars.slice(-5).some(b=>b.isSVD) || bar.isSVD;
+  let s = 0;
+  if (bar.sm > sm5+1)  s += 3;
+  if (bar.sm > 25)     s += 2;
+  if (recentSVD)       s += 3;
+  if (bar.isSBD)       s += 1;
+  if (bar.isSYD)       s -= 3;
+  if (bar.sm < sm5-2)  s -= 3;
+  return Math.max(-8, Math.min(8, s));
+}
+
+function corrState(total, style) {
+  const T = STYLES[style].T;
+  if (total >= T.aligned)    return { state:'Aligned',     color:'#10b981', tagline:'All layers converging — highest conviction window' };
+  if (total >= T.converging) return { state:'Converging',  color:'#c9a84c', tagline:'Signals building toward alignment — setup forming' };
+  if (total <= T.conflicting)return { state:'Conflicting', color:'#ef4444', tagline:'Layers disagree — elevated risk, exercise caution' };
+  if (total > 0)             return { state:'Watch',       color:'#3b82f6', tagline:'Positive lean but unconfirmed — observe closely' };
+  return                            { state:'Neutral',     color:'#475569', tagline:'No clear edge — market undecided' };
+}
+
+// Flow config
+const FLOW_CFG = {
+  FRESH_LONGS:      { color:'#3b82f6', arrow:'▶▶', label:'Fresh Capital Entering' },
+  SHORT_COVERING:   { color:'#14b8a6', arrow:'▶',  label:'Shorts Unwinding' },
+  FRESH_SHORTS:     { color:'#ef4444', arrow:'◀◀', label:'Fresh Selling Pressure' },
+  LONG_LIQUIDATION: { color:'#f97316', arrow:'◀',  label:'Longs Unwinding' },
+  MIXED:            { color:'#8b5cf6', arrow:'⟺',  label:'Mixed Flow' },
+  LOW_VOLUME:       { color:'#475569', arrow:'—',   label:'Volume Absent' },
+};
+
+// ═══════════════════════════════════════════════════════
+// DRAW CHART
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('main-chart');
+const ctx    = canvas.getContext('2d');
+let activeIdx = N-1;
+
+function resizeCanvas() {
+  canvas.width  = canvas.offsetWidth;
+  canvas.height = 220;
+  drawChart();
+}
+
+function drawChart() {
+  const W = canvas.width, H = canvas.height;
+  const PAD = { t:12, b:28, l:8, r:52 };
+  const PW = W - PAD.l - PAD.r, PH = H - PAD.t - PAD.b;
+  ctx.clearRect(0,0,W,H);
+
+  // Visible range: last 40 bars up to activeIdx
+  const start = Math.max(0, activeIdx - 39);
+  const vis   = DATA.slice(start, activeIdx+1);
+  const nv    = vis.length;
+  const prices = vis.flatMap(b=>[b.high,b.low]);
+  const minP = Math.min(...prices)-80, maxP = Math.max(...prices)+80;
+  const toX = i => PAD.l + (i/(nv-1||1))*PW;
+  const toY = p => PAD.t + PH*(1-(p-minP)/(maxP-minP));
+
+  // Grid
+  ctx.strokeStyle = '#0a1420'; ctx.lineWidth = 1;
+  for (let g=0; g<=4; g++) {
+    const y = PAD.t + (g/4)*PH;
+    ctx.beginPath(); ctx.moveTo(PAD.l,y); ctx.lineTo(W-PAD.r,y); ctx.stroke();
+    const p = maxP - (g/4)*(maxP-minP);
+    ctx.fillStyle = '#1e2f44'; ctx.font = '9px DM Mono';
+    ctx.textAlign = 'left'; ctx.fillText(p.toFixed(0), W-PAD.r+4, y+3);
+  }
+
+  // Golden Line (SMA150 approximation)
+  ctx.strokeStyle = '#c9a84c66'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4,4]);
+  const glY = toY(23800);
+  ctx.beginPath(); ctx.moveTo(PAD.l,glY); ctx.lineTo(W-PAD.r,glY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#c9a84c66'; ctx.font = '8px DM Mono'; ctx.textAlign = 'right';
+  ctx.fillText('GL', W-PAD.r-2, glY-3);
+
+  // Volume bars
+  vis.forEach((b,i) => {
+    const x  = toX(i);
+    const bw = Math.max(2, PW/nv - 2);
+    const vH = Math.min(20, b.rvol * 4);
+    ctx.fillStyle = b.close >= b.open ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)';
+    ctx.fillRect(x-bw/2, H-PAD.b-vH, bw, vH);
+  });
+
+  // Candles
+  vis.forEach((b,i) => {
+    const x  = toX(i);
+    const bw = Math.max(2, PW/nv - 2.5);
+    const bull = b.close >= b.open;
+    const alpha = (i === nv-1) ? 1 : 0.85;
+    const col   = bull ? `rgba(16,185,129,${alpha})` : `rgba(239,68,68,${alpha})`;
+    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x,toY(b.high)); ctx.lineTo(x,toY(b.low)); ctx.stroke();
+    const y1 = toY(b.open), y2 = toY(b.close);
+    ctx.fillStyle = col;
+    ctx.fillRect(x-bw/2, Math.min(y1,y2), bw, Math.max(1,Math.abs(y2-y1)));
+
+    // SVD/SBD/SYD dots
+    if (b.isSVD) {
+      ctx.beginPath(); ctx.arc(x, toY(b.low)-8, 3.5, 0, Math.PI*2);
+      ctx.fillStyle = '#8b5cf6'; ctx.fill();
+    } else if (b.isSBD) {
+      ctx.beginPath(); ctx.arc(x, toY(b.low)-6, 2.5, 0, Math.PI*2);
+      ctx.fillStyle = '#3b82f6'; ctx.fill();
+    }
+    if (b.isSYD) {
+      ctx.beginPath(); ctx.arc(x, toY(b.high)+8, 3, 0, Math.PI*2);
+      ctx.fillStyle = '#f59e0b'; ctx.fill();
+    }
+  });
+
+  // Active candle line
+  const ax = toX(nv-1);
+  ctx.strokeStyle = 'rgba(201,168,76,0.6)'; ctx.lineWidth = 1;
+  ctx.setLineDash([2,3]);
+  ctx.beginPath(); ctx.moveTo(ax,PAD.t); ctx.lineTo(ax,H-PAD.b); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Price tag
+  const cur = vis[nv-1];
+  const py  = toY(cur.close);
+  ctx.fillStyle = '#c9a84c';
+  ctx.fillRect(W-PAD.r+2, py-8, 46, 16);
+  ctx.fillStyle = '#020917'; ctx.font = 'bold 9px DM Mono'; ctx.textAlign = 'left';
+  ctx.fillText(cur.close.toFixed(0), W-PAD.r+5, py+4);
+
+  // Date labels
+  const labelStep = Math.max(1, Math.floor(nv/6));
+  ctx.fillStyle = '#2a3a4a'; ctx.font = '8px DM Mono'; ctx.textAlign = 'center';
+  vis.forEach((b,i) => {
+    if (i % labelStep === 0) {
+      ctx.fillText(b.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}),
+        toX(i), H-PAD.b+12);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// ASTRO STRIP
+// ═══════════════════════════════════════════════════════
+function buildAstroStrip() {
+  const track  = document.getElementById('astro-track');
+  const dates  = document.getElementById('astro-dates');
+  const today  = '2026-04-13';
+  const start  = '2026-04-01';
+  const end    = '2026-04-30';
+  const totalDays = 29;
+
+  // Gradient segments
+  const segments = [];
+  for (let d = 0; d < totalDays; d++) {
+    const dt  = new Date(start); dt.setDate(dt.getDate()+d);
+    const ds  = dt.toISOString().split('T')[0];
+    const sc  = ASTRO_EVENTS.filter(e=>ds>=e.start&&ds<=(e.end||e.start))
+                  .reduce((s,e)=>s+(ASTRO_W[e.impact]||0),0);
+    const col = sc >= 4 ? '#10b98166' : sc >= 2 ? '#6ee7b766'
+              : sc >= 0 ? '#1e293b'   : sc >= -2 ? '#fb923c44' : '#ef444444';
+    segments.push({ ds, sc, col, d });
+  }
+
+  // Draw gradient
+  const gradStops = segments.map(s => `${s.col} ${(s.d/totalDays*100).toFixed(1)}%`).join(', ');
+  track.style.background = `linear-gradient(to right, ${gradStops})`;
+
+  // Event ticks
+  ASTRO_EVENTS.forEach(ev => {
+    const ds  = ev.start;
+    if (ds < start || ds > end) return;
+    const d   = Math.round((new Date(ds)-new Date(start))/(86400000));
+    const pct = d/totalDays*100;
+    const col = ASTRO_C[ev.impact] || '#64748b';
+    const tick = document.createElement('div');
+    tick.className = 'astro-event-tick';
+    tick.style.cssText = `left:${pct}%;background:${col};opacity:0.8;`;
+    tick.title = ev.label;
+    tick.addEventListener('mouseenter', e => {
+      const tt = document.getElementById('astro-tt');
+      tt.innerHTML = `<b style="color:${col}">${ev.label}</b><br>
+        ${ev.start}${ev.end&&ev.end!==ev.start?' → '+ev.end:''}<br>
+        ${ev.impact.replace('_',' ').toUpperCase()}
+        ${ev.inference ? '<br><i style="color:#c9a84c">"'+ev.inference+'"</i>' : ''}`;
+      tt.classList.add('visible');
+    });
+    tick.addEventListener('mousemove', e => {
+      const tt = document.getElementById('astro-tt');
+      tt.style.left = (e.clientX+12)+'px';
+      tt.style.top  = (e.clientY-60)+'px';
+    });
+    tick.addEventListener('mouseleave', () => {
+      document.getElementById('astro-tt').classList.remove('visible');
+    });
+    track.appendChild(tick);
+  });
+
+  // Today marker
+  const todayD = Math.round((new Date(today)-new Date(start))/(86400000));
+  const tm = document.createElement('div');
+  tm.className = 'astro-today-marker';
+  tm.style.left = (todayD/totalDays*100)+'%';
+  track.appendChild(tm);
+
+  // Date labels
+  dates.innerHTML = `<span>${start.slice(5)}</span><span>Apr 15</span><span>Apr 20</span><span>Apr 25</span><span>${end.slice(5)}</span>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// VANI NARRATIVE ENGINE
+// ═══════════════════════════════════════════════════════
+function buildVaNiSummary(bar, techScore, smSc, aScore, state, style) {
+  const parts = [];
+  if (aScore >= 6) parts.push(`Favorable astro window active.`);
+  else if (aScore <= -2) parts.push(`Adverse astro conditions present.`);
+  else parts.push(`Quiet astronomical backdrop.`);
+
+  if (bar.flowType === 'FRESH_LONGS' && bar.accumDistrib === 'ACCUMULATION')
+    parts.push('Fresh capital entering with institutional accumulation confirmed.');
+  else if (bar.flowType === 'SHORT_COVERING' && bar.accumDistrib === 'ACCUMULATION')
+    parts.push('Shorts unwinding while institutions accumulate below Golden Line.');
+  else if (bar.flowType === 'FRESH_SHORTS')
+    parts.push('Fresh selling pressure building.');
+  else
+    parts.push('Flow conviction is mixed.');
+
+  if (bar.rss > 65 && bar.rssSpread > -500)
+    parts.push('Internal momentum building — spread narrowing toward repair.');
+  else if (bar.rss > 65)
+    parts.push(`RSS at ${bar.rss.toFixed(0)} — momentum elevated but structure unrepaired.`);
+  else if (bar.rss < 20)
+    parts.push('Internal momentum at floor — watch for reversal signal.');
+
+  // Conclusion
+  if (state.state === 'Aligned')      parts.push('All layers in agreement. Window is open.');
+  else if (state.state === 'Converging') parts.push('Conditions converging. Watch for confirmation.');
+  else if (state.state === 'Conflicting') parts.push('Layers conflict. Risk elevated — stay cautious.');
+  else parts.push('No clear edge at this moment.');
+
+  return parts.join(' ');
+}
+
+function flowNarrative(bar) {
+  const parts = [];
+  const fc = FLOW_CFG[bar.flowType];
+  parts.push(`${fc.label}.`);
+  if (bar.volDiv === 'VOLUME_DIV_UP') parts.push('Volume declining into the rally — conviction fading.');
+  if (bar.vacuum) parts.push(`${bar.vacuum === 'VACUUM_UP' ? 'Price rising' : 'Price falling'} on ghost volume — fragile move.`);
+  if (bar.accumDistrib === 'ACCUMULATION') parts.push('Institutional accumulation detected below Golden Line.');
+  if (bar.rss > 70) parts.push(`RSS at ${bar.rss.toFixed(0)} — internal momentum strong.`);
+  else if (bar.rss < 25) parts.push('RSS oversold — momentum at floor.');
+  if (bar.rssSpread > 0) parts.push('Spread positive — structural foundation repaired.');
+  else parts.push(`Spread ${bar.rssSpread.toFixed(0)} — structure repair in progress.`);
+  return parts.join(' ');
+}
+
+function smNarrative(bar, prevBars) {
+  const sm5 = prevBars.length >= 5 ? prevBars[prevBars.length-5].sm : bar.sm;
+  const parts = [];
+  if (bar.sm > sm5+2) parts.push(`Smart Money trending up for ${Math.min(10, Math.round(bar.sm-sm5))} bars.`);
+  else if (bar.sm < sm5-2) parts.push('Smart Money declining — institutional presence fading.');
+  else parts.push('Smart Money holding steady.');
+  if (bar.fm > bar.sm && bar.fm > 20) parts.push('Fast Money surging ahead — watch for divergence.');
+  else if (bar.fm > 15) parts.push('Fast Money joining Smart Money.');
+  if (bar.isSVD) parts.push('Smart Money fingerprint (SVD) present on this bar.');
+  else if (prevBars.slice(-5).some(b=>b.isSVD)) parts.push('SVD detected within last 5 bars — institutional conviction recent.');
+  if (bar.isSYD) parts.push('Distribution warning (SYD) — longs should exercise caution.');
+  return parts.join(' ');
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER ALL CARDS
+// ═══════════════════════════════════════════════════════
+let currentStyle = 'Balanced';
+let isUpdating   = false;
+
+function setFading(on) {
+  document.getElementById('vani-summary').classList.toggle('fading', on);
+  ['corr','flow','sm'].forEach(id => {
+    document.getElementById(`${id}-narrative`).classList.toggle('fading', on);
+    document.getElementById(`card-${id}`).classList.toggle('fading', on);
+  });
+}
+
+function update(idx) {
+  activeIdx = idx;
+  const bar      = DATA[idx];
+  const prevBars = DATA.slice(0, idx);
+  const style    = currentStyle;
+  const styleCfg = STYLES[style];
+  const aScore   = astroScoreForDate(bar.date);
+  const tScore   = computeTechScore(bar, prevBars, style);
+  const smSc     = smScoreFor(bar, prevBars);
+  const total    = aScore + tScore + smSc;
+  const corr     = corrState(total, style);
+  const T        = styleCfg.T;
+  const fc       = FLOW_CFG[bar.flowType] || FLOW_CFG.MIXED;
+
+  // VaNi status
+  document.getElementById('vani-status').textContent =
+    `${bar.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} · NIFTY 50`;
+
+  // Top bar
+  const prev = idx > 0 ? DATA[idx-1].close : bar.close;
+  const chg  = bar.close - DATA[0].close;
+  const chgPct = (chg/DATA[0].close*100).toFixed(2);
+  document.getElementById('tb-price').textContent  = bar.close.toFixed(2);
+  document.getElementById('tb-price').style.color  = bar.close>=prev ? '#10b981' : '#ef4444';
+  document.getElementById('tb-change').textContent = `${chg>=0?'▲':'▼'} ${Math.abs(chg).toFixed(2)} (${chg>=0?'+':''}${chgPct}%)`;
+  document.getElementById('tb-change').style.color = chg>=0 ? '#10b981' : '#ef4444';
+  document.getElementById('tb-candle').textContent =
+    `Candle ${idx+1} / ${N} · ${idx===N-1?'NOW':'−'+(N-1-idx)}`;
+
+  // Chart
+  drawChart();
+
+  // ── VaNi master summary ──
+  const summaryText = buildVaNiSummary(bar, tScore, smSc, aScore, corr, style);
+  document.getElementById('vani-text').textContent = summaryText;
+  document.getElementById('vani-ref').textContent  =
+    bar.date.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'});
+  const vp = document.getElementById('vani-pill');
+  vp.textContent = corr.state;
+  vp.style.cssText = `background:${corr.color}22;color:${corr.color};border:1px solid ${corr.color}44;
+    padding:2px 8px;border-radius:8px;font-size:8px;font-weight:700;letter-spacing:2px;
+    text-transform:uppercase;font-family:'DM Mono',monospace;`;
+
+  // ── CORRELATION CARD ──
+  const cb = document.getElementById('corr-badge');
+  cb.textContent = corr.state;
+  cb.style.cssText = `background:${corr.color}22;color:${corr.color};border:1px solid ${corr.color}44;
+    padding:2px 8px;border-radius:8px;font-size:8px;font-weight:700;letter-spacing:2px;
+    text-transform:uppercase;font-family:'DM Mono',monospace;`;
+  document.getElementById('card-corr').style.borderColor = corr.color+'33';
+
+  const scoreRows = [
+    { label:'Astro',    score:aScore, max:10, color: aScore>=6?'#10b981':aScore>=3?'#c9a84c':'#ef4444' },
+    { label:'Tech',     score:tScore, max:10, color: tScore>=5?'#10b981':tScore>=2?'#c9a84c':'#ef4444' },
+    { label:'Smart $',  score:smSc,   max:8,  color: smSc>=4?'#10b981':smSc>=1?'#c9a84c':'#ef4444' },
+  ];
+  document.getElementById('corr-scores').innerHTML = scoreRows.map(r => {
+    const pct = Math.max(0, ((r.score+r.max)/(r.max*2))*100);
+    return `<div class="corr-row">
+      <span class="corr-label">${r.label}</span>
+      <div class="corr-track"><div class="corr-fill" style="width:${pct}%;background:linear-gradient(90deg,${r.color}aa,${r.color})"></div></div>
+      <span class="corr-val" style="color:${r.color}">${r.score>0?'+':''}${r.score}</span>
+    </div>`;
+  }).join('');
+
+  // Gap bar
+  const totalNorm = Math.max(0,Math.min(100,((total+28)/56)*100));
+  const gf = document.getElementById('gap-fill');
+  gf.style.width   = totalNorm+'%';
+  gf.style.background = `linear-gradient(90deg,${corr.color}88,${corr.color})`;
+  const alignedPct   = ((T.aligned+28)/56*100).toFixed(1);
+  const convPct      = ((T.converging+28)/56*100).toFixed(1);
+  document.getElementById('gap-m-aligned').style.left  = alignedPct+'%';
+  document.getElementById('gap-m-conv').style.left     = convPct+'%';
+  const gapToAligned = Math.max(0, T.aligned - total);
+  document.getElementById('gap-val').textContent = gapToAligned===0 ? '✓ Threshold reached' : `${gapToAligned} pts to Aligned`;
+  document.getElementById('gap-val').style.color = gapToAligned===0 ? '#10b981' : '#c9a84c';
+
+  // Layer chips
+  const layerData = [
+    { name:'Astro',  val:aScore>=6?'Favorable':aScore>0?'Supportive':'Adverse',   color:aScore>=4?'#10b981':aScore>0?'#c9a84c':'#ef4444' },
+    { name:'Flow',   val:tScore>=5?'Confirmed':tScore>=2?'Building':'Weak',       color:tScore>=5?'#10b981':tScore>=2?'#c9a84c':'#ef4444' },
+    { name:'Smart $',val:smSc>=4?'Leading':smSc>=1?'Active':'Absent',             color:smSc>=3?'#10b981':smSc>=1?'#c9a84c':'#ef4444' },
+  ];
+  document.getElementById('layers-row').innerHTML = layerData.map(l=>`
+    <div class="layer-chip" style="background:${l.color}0d;border-color:${l.color}33">
+      <div class="layer-chip-name">${l.name}</div>
+      <div class="layer-chip-val" style="color:${l.color}">${l.val}</div>
+    </div>`).join('');
+
+  setTimeout(() => {
+    const cn = document.getElementById('corr-narrative');
+    cn.classList.add('fading');
+    setTimeout(()=>{ cn.textContent = corr.tagline; cn.classList.remove('fading'); }, 150);
+  }, 50);
+
+  // ── FLOW CARD ──
+  const flowBadge = document.getElementById('flow-badge');
+  flowBadge.textContent = fc.label;
+  flowBadge.style.cssText = `background:${fc.color}22;color:${fc.color};border:1px solid ${fc.color}44;
+    padding:2px 8px;border-radius:8px;font-size:8px;font-weight:700;letter-spacing:1px;
+    text-transform:uppercase;font-family:'DM Mono',monospace;`;
+  document.getElementById('card-flow').style.borderColor = fc.color+'33';
+  document.getElementById('flow-type').textContent = fc.label;
+  document.getElementById('flow-type').style.color = fc.color;
+  document.getElementById('flow-sub').textContent  = `Close ${bar.close.toFixed(0)} · RSI ${bar.rsi.toFixed(0)}`;
+  document.getElementById('flow-arrow').textContent = fc.arrow;
+  document.getElementById('flow-arrow').style.color = fc.color;
+
+  // Flags
+  const flags = [];
+  if (bar.vacuum)    flags.push({t:bar.vacuum.replace('_',' '),c:'#f59e0b'});
+  if (bar.volDiv)    flags.push({t:bar.volDiv==='VOLUME_DIV_UP'?'Vol Div ↑':'Vol Div ↓',c:'#f97316'});
+  if (bar.accumDistrib==='ACCUMULATION') flags.push({t:'Accumulation',c:'#10b981'});
+  if (bar.accumDistrib==='DISTRIBUTION') flags.push({t:'Distribution',c:'#ef4444'});
+  document.getElementById('flow-flags').innerHTML = flags.map(f=>
+    `<span class="flow-flag" style="background:${f.c}18;color:${f.c};border:1px solid ${f.c}33">${f.t}</span>`
+  ).join('');
+
+  // Vol bars
+  const rc = bar.rvol>2?'#10b981':bar.rvol>1?'#c9a84c':'#ef4444';
+  const tc = bar.tvol>1.5?'#10b981':bar.tvol>0.8?'#c9a84c':'#ef4444';
+  document.getElementById('rvol-fill').style.cssText = `width:${Math.min(100,bar.rvol/8*100)}%;background:${rc}`;
+  document.getElementById('tvol-fill').style.cssText = `width:${Math.min(100,bar.tvol/8*100)}%;background:${tc}`;
+  document.getElementById('rvol-val').textContent = bar.rvol.toFixed(2)+'×';
+  document.getElementById('rvol-val').style.color = rc;
+  document.getElementById('tvol-val').textContent = bar.tvol.toFixed(2)+'×';
+  document.getElementById('tvol-val').style.color = tc;
+
+  // RSS arc
+  const rssCol = bar.rss>80?'#ef4444':bar.rss>60?'#10b981':bar.rss>40?'#c9a84c':'#64748b';
+  const arcFill = (bar.rss/100)*63;
+  document.getElementById('rss-arc').style.strokeDasharray = `${arcFill} 63`;
+  document.getElementById('rss-arc').style.stroke = rssCol;
+  document.getElementById('rss-val').textContent = bar.rss.toFixed(1);
+  document.getElementById('rss-val').style.color = rssCol;
+  const spreadCol = bar.rssSpread>0?'#10b981':bar.rssSpread>-500?'#c9a84c':'#ef4444';
+  document.getElementById('rss-spread').textContent = `Spread ${bar.rssSpread>0?'+':''}${bar.rssSpread.toFixed(0)}`;
+  document.getElementById('rss-spread').style.color = spreadCol;
+
+  // RSS sparkline
+  const sparkData = DATA.slice(Math.max(0,idx-19), idx+1).map(b=>b.rss);
+  const spMin=0, spMax=100, spW=340, spH=24;
+  const spPts = sparkData.map((v,i)=>{
+    const x = (i/(sparkData.length-1||1))*spW;
+    const y = spH-((v-spMin)/(spMax-spMin))*spH;
+    return `${x},${Math.max(1,Math.min(spH-1,y))}`;
+  });
+  document.getElementById('flow-spark').innerHTML = `
+    <line x1="0" y1="${spH*(1-70/100)}" x2="${spW}" y2="${spH*(1-70/100)}" stroke="#ef444422" stroke-width="1" stroke-dasharray="2,3"/>
+    <line x1="0" y1="${spH*0.5}" x2="${spW}" y2="${spH*0.5}" stroke="#1a274033" stroke-width="1"/>
+    <polyline points="${spPts.join(' ')}" fill="none" stroke="${rssCol}" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="${spPts[spPts.length-1].split(',')[0]}" cy="${spPts[spPts.length-1].split(',')[1]}" r="2.5" fill="${rssCol}"/>
+  `;
+
+  setTimeout(() => {
+    const fn = document.getElementById('flow-narrative');
+    fn.classList.add('fading');
+    setTimeout(()=>{ fn.textContent = flowNarrative(bar); fn.classList.remove('fading'); }, 150);
+  }, 100);
+
+  // ── SMART MONEY CARD ──
+  const smBars = DATA.slice(Math.max(0,idx-29), idx+1);
+  const nSm    = smBars.length;
+  const smW=340, smH=80;
+  const tX = i => (i/(nSm-1||1))*smW;
+  const tY = v => smH*(1-v/50);
+
+  let smSVG = '';
+  // Background areas
+  const smArea = `M ${tX(0)},${smH} ${smBars.map((b,i)=>`L ${tX(i)},${tY(b.sm)}`).join(' ')} L ${tX(nSm-1)},${smH} Z`;
+  const fmArea = `M ${tX(0)},${smH} ${smBars.map((b,i)=>`L ${tX(i)},${tY(b.fm)}`).join(' ')} L ${tX(nSm-1)},${smH} Z`;
+  smSVG += `<path d="${smArea}" fill="#ef444412"/><path d="${fmArea}" fill="#f59e0b10"/>`;
+  // Grid
+  [10,25,40].forEach(v=>{
+    smSVG += `<line x1="0" y1="${tY(v)}" x2="${smW}" y2="${tY(v)}" stroke="#0a1420" stroke-width="1"/>`;
+  });
+  // Lines
+  smSVG += `<polyline points="${smBars.map((b,i)=>`${tX(i)},${tY(b.sm)}`).join(' ')}" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/>`;
+  smSVG += `<polyline points="${smBars.map((b,i)=>`${tX(i)},${tY(b.fm)}`).join(' ')}" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,2" stroke-linecap="round"/>`;
+  // Dots on SM line
+  smBars.forEach((b,i)=>{
+    const x=tX(i), y=tY(b.sm);
+    if (b.isSVD) smSVG += `<circle cx="${x}" cy="${y-6}" r="4" fill="#8b5cf6" style="filter:drop-shadow(0 0 4px #8b5cf6)"/>`;
+    else if (b.isSBD) smSVG += `<circle cx="${x}" cy="${y-4}" r="3" fill="#3b82f6"/>`;
+    if (b.isSYD) smSVG += `<circle cx="${x}" cy="${tY(b.fm)+5}" r="3" fill="#f59e0b" style="filter:drop-shadow(0 0 3px #f59e0b)"/>`;
+  });
+  // Current marker
+  smSVG += `<line x1="${smW}" y1="0" x2="${smW}" y2="${smH}" stroke="#c9a84c66" stroke-width="1" stroke-dasharray="2,3"/>`;
+  document.getElementById('sm-chart').innerHTML = smSVG;
+
+  // SM values
+  const sm5 = prevBars.length>=5 ? prevBars[prevBars.length-5].sm : bar.sm;
+  const fm5 = prevBars.length>=5 ? prevBars[prevBars.length-5].fm : bar.fm;
+  const smDelta = (bar.sm-sm5).toFixed(1);
+  const fmDelta = (bar.fm-fm5).toFixed(1);
+  const smC = bar.sm>sm5?'#10b981':bar.sm<sm5?'#ef4444':'#64748b';
+  const fmC = bar.fm>fm5?'#10b981':bar.fm<fm5?'#ef4444':'#64748b';
+  document.getElementById('sm-values').innerHTML = `
+    <div class="sm-val-block">
+      <div class="sm-val-num" style="color:#ef4444">${bar.sm.toFixed(1)}</div>
+      <div class="sm-val-lbl">Smart Money</div>
+      <div class="sm-val-trend" style="color:${smC}">${bar.sm>sm5?'↑':'↓'} ${smDelta>0?'+':''}${smDelta}</div>
+    </div>
+    <div class="sm-val-block">
+      <div class="sm-val-num" style="color:#f59e0b">${bar.fm.toFixed(1)}</div>
+      <div class="sm-val-lbl">Fast Money</div>
+      <div class="sm-val-trend" style="color:${fmC}">${bar.fm>fm5?'↑':'↓'} ${fmDelta>0?'+':''}${fmDelta}</div>
+    </div>
+    <div class="sm-val-block">
+      <div class="sm-val-num" style="color:#4a5568">50</div>
+      <div class="sm-val-lbl">Noise Floor</div>
+      <div class="sm-val-trend" style="color:#4a5568">always</div>
+    </div>`;
+
+  // Dot timeline
+  const dtl = document.getElementById('dots-tl');
+  dtl.innerHTML = '<div class="dots-track"></div>';
+  smBars.forEach((b,i)=>{
+    if (!b.isSVD && !b.isSBD && !b.isSYD) return;
+    const left = (i/(nSm-1||1)*100).toFixed(1);
+    const age  = nSm-1-i;
+    let c,l;
+    if (b.isSVD)      { c='#8b5cf6'; l='SVD'; }
+    else if (b.isSBD) { c='#3b82f6'; l='SBD'; }
+    else              { c='#f59e0b'; l='SYD'; }
+    const el = document.createElement('div');
+    el.className = 'dot-evt';
+    el.style.left = left+'%';
+    el.innerHTML = `
+      <div class="dot-evt-c" style="width:${b.isSVD?11:8}px;height:${b.isSVD?11:8}px;
+        background:${c}22;border-color:${c};box-shadow:0 0 ${b.isSVD?7:4}px ${c}"></div>
+      <div class="dot-evt-l" style="color:${c}">${l}−${age}</div>`;
+    el.title = `${l} · ${age} bars ago`;
+    dtl.appendChild(el);
+  });
+
+  // SM badge
+  const smBadgeText = bar.sm>sm5+2?'Smart Money Building':bar.sm<sm5-2?'Smart Money Fading':'Smart Money Steady';
+  const smBadgeC    = bar.sm>sm5+2?'#10b981':bar.sm<sm5-2?'#ef4444':'#64748b';
+  const smBadge = document.getElementById('sm-badge');
+  smBadge.textContent = smBadgeText;
+  smBadge.style.cssText = `background:${smBadgeC}22;color:${smBadgeC};border:1px solid ${smBadgeC}44;
+    padding:2px 8px;border-radius:8px;font-size:8px;font-weight:700;letter-spacing:1px;
+    text-transform:uppercase;font-family:'DM Mono',monospace;`;
+
+  setTimeout(() => {
+    const sn = document.getElementById('sm-narrative');
+    sn.classList.add('fading');
+    setTimeout(()=>{ sn.textContent = smNarrative(bar,prevBars); sn.classList.remove('fading'); }, 150);
+  }, 150);
+
+  // Slider gradient
+  const slider = document.getElementById('timeline');
+  slider.style.setProperty('--pct', (idx/(N-1)*100)+'%');
+  document.getElementById('meta-date').textContent =
+    bar.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  document.getElementById('meta-bars').textContent =
+    idx===N-1 ? 'NOW' : `−${N-1-idx} bars`;
+
+  setFading(false);
+}
+
+// ═══════════════════════════════════════════════════════
+// LENS TOGGLE
+// ═══════════════════════════════════════════════════════
+const lensWrap = document.getElementById('lens-wrap');
+['Conservative','Balanced','Aggressive'].forEach(name => {
+  const btn = document.createElement('button');
+  btn.className = `lens-btn${name===currentStyle?' active':''}`;
+  btn.dataset.lens = name;
+  btn.textContent  = name;
+  btn.onclick = () => {
+    currentStyle = name;
+    document.querySelectorAll('.lens-btn').forEach(b=>b.classList.toggle('active',b.dataset.lens===name));
+    setFading(true);
+    setTimeout(()=>update(activeIdx), 200);
+  };
+  lensWrap.appendChild(btn);
+});
+
+// ═══════════════════════════════════════════════════════
+// SLIDER CONTROLS
+// ═══════════════════════════════════════════════════════
+const slider = document.getElementById('timeline');
+let playTimer = null;
+
+function go(idx) {
+  idx = Math.max(0, Math.min(N-1, idx));
+  slider.value = idx;
+  setFading(true);
+  document.getElementById('vani-status').classList.add('vani-thinking');
+  setTimeout(()=>{
+    document.getElementById('vani-status').classList.remove('vani-thinking');
+    update(idx);
+  }, 180);
+}
+
+slider.addEventListener('input', () => go(parseInt(slider.value)));
+document.getElementById('btn-back').onclick  = () => go(activeIdx-1);
+document.getElementById('btn-fwd').onclick   = () => go(activeIdx+1);
+document.getElementById('btn-start').onclick = () => go(0);
+document.getElementById('btn-end').onclick   = () => go(N-1);
+document.getElementById('btn-play').onclick  = () => {
+  const btn = document.getElementById('btn-play');
+  if (playTimer) {
+    clearInterval(playTimer); playTimer=null;
+    btn.textContent='▶'; btn.classList.remove('playing');
+  } else {
+    if (activeIdx>=N-1) go(0);
+    btn.textContent='⏸'; btn.classList.add('playing');
+    playTimer = setInterval(()=>{
+      if (activeIdx>=N-1) {
+        clearInterval(playTimer); playTimer=null;
+        btn.textContent='▶'; btn.classList.remove('playing');
+        return;
+      }
+      go(activeIdx+1);
+    }, 500);
+  }
+};
+
+// Keyboard
+document.addEventListener('keydown', e=>{
+  if (e.key==='ArrowLeft')  go(activeIdx-1);
+  if (e.key==='ArrowRight') go(activeIdx+1);
+  if (e.key===' '){ e.preventDefault(); document.getElementById('btn-play').onclick(); }
+});
+
+// Chapter marks on slider
+function buildChapterMarks() {
+  const marks  = document.getElementById('ch-marks');
+  const chaps  = [
+    { i:0,  label:'Bear Phase',    color:'#ef4444' },
+    { i:15, label:'Stabilising',   color:'#f59e0b' },
+    { i:30, label:'Recovery',      color:'#c9a84c' },
+    { i:45, label:'Momentum',      color:'#10b981' },
+    { i:N-1,label:'Now',           color:'#c9a84c' },
+  ];
+  marks.innerHTML = chaps.map(c=>`
+    <div class="ch-mark" style="left:${(c.i/(N-1)*100).toFixed(1)}%" onclick="go(${c.i})">
+      <div class="ch-mark-line" style="background:${c.color}"></div>
+      <div class="ch-mark-lbl" style="color:${c.color}">${c.label}</div>
+    </div>`).join('');
+}
+window.go = go;
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', resizeCanvas);
+buildAstroStrip();
+buildChapterMarks();
+resizeCanvas();
+
+// Staggered card entrance
+setTimeout(()=>{
+  ['card-corr','card-flow','card-sm'].forEach((id,i)=>{
+    setTimeout(()=>{
+      const el = document.getElementById(id);
+      el.classList.add('visible');
+    }, i*120);
+  });
+  update(N-1);
+}, 200);
+</script>
+</body>
+</html>

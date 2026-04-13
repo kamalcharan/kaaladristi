@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti · Smart Money</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020917; --panel: #0b1221; --border: #1a2740;
+    --gold: #c9a84c; --text-primary: #e8eaf0;
+    --text-mid: #8896aa; --text-dim: #4a5568;
+    --smart: #ef4444;   /* Smart Money — red (banker/institutional) */
+    --fast:  #f59e0b;   /* Fast Money  — amber */
+    --noise: #22c55e;   /* Noise Floor — green base */
+    --svd:   #8b5cf6;   /* SVD dot — violet */
+    --sbd:   #3b82f6;   /* SBD dot — blue */
+    --syd:   #f59e0b;   /* SYD dot — yellow */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); font-family: 'DM Sans', sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 40px 20px; gap: 28px;
+  }
+  .page-label {
+    font-family: 'Playfair Display', serif; font-size: 11px;
+    color: var(--gold); letter-spacing: 4px; text-transform: uppercase;
+  }
+  .scenarios {
+    display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  }
+  .sc-btn {
+    padding: 6px 14px; border-radius: 20px; cursor: pointer;
+    font-size: 10px; letter-spacing: 1px; font-family: 'DM Mono', monospace;
+    border: 1px solid var(--border); background: #0f172a; color: var(--text-dim);
+    transition: all 0.2s;
+  }
+  .sc-btn:hover { border-color: var(--gold); color: var(--text-mid); }
+  .sc-btn.active { background: var(--gold); color: #000; border-color: var(--gold); }
+
+  /* ── CARD ───────────────────────────────────────── */
+  .card {
+    width: 100%; max-width: 400px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+  }
+  .card-header {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-label {
+    font-size: 8px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace;
+  }
+  .card-date {
+    font-size: 9px; color: var(--text-dim); font-family: 'DM Mono', monospace;
+  }
+
+  /* ── MAIN CHART AREA ────────────────────────────── */
+  .chart-section {
+    padding: 12px 14px 8px;
+    border-bottom: 1px solid #0f172a;
+    position: relative;
+  }
+  .chart-legend {
+    display: flex; gap: 14px; margin-bottom: 8px; align-items: center;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 9px; font-family: 'DM Mono', monospace;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .legend-line {
+    width: 16px; height: 2px; border-radius: 1px;
+  }
+  .legend-dot-icon {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+
+  /* SVG chart */
+  .sniperChart {
+    display: block; width: 100%; border-radius: 4px;
+    background: #070d1a;
+  }
+
+  /* ── CURRENT VALUES ROW ─────────────────────────── */
+  .values-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px; border-bottom: 1px solid #0f172a;
+    background: #0f172a;
+  }
+  .val-block {
+    padding: 8px 12px;
+    background: var(--panel);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .val-num {
+    font-family: 'DM Mono', monospace; font-size: 16px; font-weight: 500;
+    transition: color 0.4s ease;
+  }
+  .val-label {
+    font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace;
+  }
+  .val-trend {
+    font-size: 9px; font-family: 'DM Mono', monospace;
+    display: flex; align-items: center; gap: 3px;
+  }
+
+  /* ── DOT TIMELINE ───────────────────────────────── */
+  .dot-section {
+    padding: 10px 14px;
+    border-bottom: 1px solid #0f172a;
+  }
+  .dot-section-label {
+    font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace;
+    margin-bottom: 8px;
+  }
+  .dot-timeline {
+    position: relative; height: 32px;
+  }
+  .dot-timeline-track {
+    position: absolute; top: 50%; left: 0; right: 0;
+    height: 1px; background: var(--border);
+    transform: translateY(-50%);
+  }
+  .dot-event {
+    position: absolute; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 2px; cursor: default;
+    transition: transform 0.2s;
+  }
+  .dot-event:hover { transform: translateX(-50%) translateY(-2px); }
+  .dot-event-circle {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 1.5px solid transparent;
+    box-shadow: 0 0 6px currentColor;
+    transition: all 0.4s ease;
+  }
+  .dot-event-label {
+    font-size: 7px; font-family: 'DM Mono', monospace;
+    letter-spacing: 0.5px; opacity: 0.7;
+  }
+  .dot-age {
+    font-size: 7px; color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+    position: absolute; bottom: -12px;
+    white-space: nowrap;
+  }
+
+  /* ── RELATIONSHIP STATUS ────────────────────────── */
+  .relationship-section {
+    padding: 10px 14px;
+    border-bottom: 1px solid #0f172a;
+  }
+  .rel-label {
+    font-size: 8px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); font-family: 'DM Mono', monospace; margin-bottom: 6px;
+  }
+  .rel-status {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .rel-badge {
+    padding: 3px 10px; border-radius: 10px;
+    font-size: 9px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; font-family: 'DM Mono', monospace;
+    transition: all 0.4s ease; white-space: nowrap;
+  }
+  .rel-desc {
+    font-size: 10px; color: var(--text-mid); line-height: 1.4;
+  }
+
+  /* ── NARRATIVE ──────────────────────────────────── */
+  .narrative-section { padding: 10px 14px 12px; }
+  .narrative-text {
+    font-size: 11px; color: var(--text-mid);
+    line-height: 1.55; font-style: italic;
+    transition: opacity 0.3s ease; min-height: 44px;
+  }
+  .narrative-text.fading { opacity: 0.2; }
+  .state-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 8px;
+  }
+  .state-badge {
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 9px; font-weight: 600; letter-spacing: 2px;
+    text-transform: uppercase; font-family: 'DM Mono', monospace;
+    transition: all 0.4s ease;
+  }
+  .divergence-flag {
+    font-size: 9px; font-family: 'DM Mono', monospace;
+    letter-spacing: 1px; padding: 2px 8px;
+    border-radius: 8px; display: none;
+  }
+  .divergence-flag.visible { display: block; }
+</style>
+</head>
+<body>
+
+<div class="page-label">Kāla-Drishti · Smart Money · Volume Signature</div>
+
+<div class="scenarios" id="scenarios"></div>
+
+<div class="card" id="card">
+  <div class="card-header">
+    <span class="card-label">Smart Money · Fast Money · Volume Signature</span>
+    <span class="card-date" id="card-date">—</span>
+  </div>
+
+  <!-- CHART -->
+  <div class="chart-section">
+    <div class="chart-legend">
+      <div class="legend-item">
+        <div class="legend-line" style="background:var(--smart)"></div>
+        <span style="color:var(--smart)">Smart Money</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background:var(--fast)"></div>
+        <span style="color:var(--fast)">Fast Money</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background:var(--noise);opacity:0.4"></div>
+        <span style="color:#4a5568">Noise Floor</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot-icon" style="background:var(--svd)"></div>
+        <span style="color:var(--svd)">SVD</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot-icon" style="background:var(--sbd)"></div>
+        <span style="color:var(--sbd)">SBD</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot-icon" style="background:var(--syd)"></div>
+        <span style="color:var(--syd)">SYD</span>
+      </div>
+    </div>
+    <svg class="sniperChart" height="100" id="sniper-chart" viewBox="0 0 372 100" preserveAspectRatio="none"></svg>
+  </div>
+
+  <!-- CURRENT VALUES -->
+  <div class="values-row">
+    <div class="val-block">
+      <div class="val-num" id="sm-val" style="color:var(--smart)">—</div>
+      <div class="val-label">Smart Money</div>
+      <div class="val-trend" id="sm-trend">—</div>
+    </div>
+    <div class="val-block">
+      <div class="val-num" id="fm-val" style="color:var(--fast)">—</div>
+      <div class="val-label">Fast Money</div>
+      <div class="val-trend" id="fm-trend">—</div>
+    </div>
+    <div class="val-block">
+      <div class="val-num" id="noise-val" style="color:#4a5568">50</div>
+      <div class="val-label">Noise Floor</div>
+      <div class="val-trend" style="color:#4a5568;font-size:9px">always present</div>
+    </div>
+  </div>
+
+  <!-- DOT TIMELINE -->
+  <div class="dot-section">
+    <div class="dot-section-label">Volume Signature Events · Last 30 bars</div>
+    <div class="dot-timeline" id="dot-timeline">
+      <div class="dot-timeline-track"></div>
+    </div>
+  </div>
+
+  <!-- RELATIONSHIP STATUS -->
+  <div class="relationship-section">
+    <div class="rel-label">Smart ↔ Fast Money Relationship</div>
+    <div class="rel-status">
+      <div class="rel-badge" id="rel-badge">—</div>
+      <div class="rel-desc" id="rel-desc">—</div>
+    </div>
+  </div>
+
+  <!-- NARRATIVE -->
+  <div class="narrative-section">
+    <div class="narrative-text" id="narrative">—</div>
+    <div class="state-row">
+      <div class="state-badge" id="state-badge">—</div>
+      <div class="divergence-flag" id="div-flag">—</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// SYNTHETIC 30-BAR HISTORY — sniper_inst, sniper_hot per bar
+// Plus OHLCV for dot computation
+// Based on real NIFTY April data structure
+// ═══════════════════════════════════════════════════════
+
+function genHistory(scenario) {
+  const bars = 30;
+  const h = [];
+
+  for (let i = 0; i < bars; i++) {
+    let sm, fm, rvol, close, high, low, open, prevClose;
+    const t = i / (bars - 1); // 0 to 1
+
+    if (scenario === 'accumulation') {
+      // Smart money quietly rising, fast money joining late
+      sm = 8 + i * 1.3 + Math.sin(i * 0.4) * 3;
+      fm = 5 + Math.max(0, (i - 18) * 2.5) + Math.random() * 4;
+      rvol = 0.8 + i * 0.15 + Math.random() * 0.3;
+      close = 22500 + i * 55 + Math.random() * 100;
+
+    } else if (scenario === 'distribution') {
+      // Smart money declining, fast money still elevated
+      sm = 42 - i * 1.1 + Math.sin(i * 0.5) * 3;
+      fm = 38 - i * 0.3 + Math.random() * 5;
+      rvol = 2.5 - i * 0.04 + Math.random() * 0.4;
+      close = 25200 - i * 40 + Math.random() * 80;
+
+    } else if (scenario === 'pump') {
+      // Smart money exits, fast money spikes — classic pump
+      sm = 35 - Math.max(0, (i - 15) * 1.8) + Math.random() * 3;
+      fm = 12 + i * 1.6 + Math.sin(i * 0.6) * 4;
+      rvol = 1.2 + i * 0.1 + Math.random() * 0.5;
+      close = 24000 + i * 30 + Math.random() * 120;
+
+    } else if (scenario === 'retail') {
+      // Both absent — retail noise only
+      sm = 4 + Math.random() * 6;
+      fm = 6 + Math.random() * 8;
+      rvol = 0.4 + Math.random() * 0.3;
+      close = 23500 + (Math.random() - 0.5) * 200;
+
+    } else { // april_recovery — matches real data
+      sm = i < 10 ? 6 + Math.random() * 4
+         : i < 20 ? 8 + (i-10) * 1.4 + Math.random() * 3
+         : 22 + (i-20) * 0.8 + Math.random() * 4;
+      fm = i < 20 ? 5 + Math.random() * 8
+         : 5 + (i-20) * 2.2 + Math.random() * 5;
+      rvol = i < 5 ? 0.05 + Math.random() * 0.02
+           : i < 10 ? 8 + Math.random() * 2
+           : 14 - (i-10) * 0.4 + Math.random() * 1;
+      close = 22500 + i * 52 + (Math.random() - 0.4) * 100;
+    }
+
+    sm = Math.max(0, Math.min(50, sm));
+    fm = Math.max(0, Math.min(50, fm));
+    const range = 150 + Math.random() * 100;
+    open = close - (Math.random() - 0.5) * 80;
+    high = Math.max(open, close) + Math.random() * range * 0.4;
+    low  = Math.min(open, close) - Math.random() * range * 0.4;
+    prevClose = i > 0 ? h[i-1].close : close - 30;
+
+    // Compute dot conditions (Pine Script logic)
+    const avgVol = 2.0; // normalized
+    const bodyRatio = Math.abs(close - open) / (high - low + 0.001);
+    const aboveMid = close > (high + low) / 2;
+    const strongClose = close > prevClose * 1.02;
+
+    const isSVD = rvol > 8 && aboveMid && strongClose && bodyRatio >= 0.5 && close > open;
+    const isSBD = rvol >= 3 && rvol < 8 && close > open
+                  && close > high - (high - low) / 3 && bodyRatio >= 0.45;
+    const isSYD = close < prevClose && rvol >= 2
+                  && close < low + (high - low) / 3;
+
+    h.push({ i, sm, fm, rvol, close, open, high, low, prevClose,
+             isSVD, isSBD, isSYD });
+  }
+  return h;
+}
+
+// ═══════════════════════════════════════════════════════
+// COMPUTE SIGNALS
+// ═══════════════════════════════════════════════════════
+function computeSignals(history) {
+  const cur = history[history.length - 1];
+  const sm5ago = history[history.length - 6]?.sm || cur.sm;
+  const fm5ago = history[history.length - 6]?.fm || cur.fm;
+  const sm10ago = history[history.length - 11]?.sm || cur.sm;
+
+  const smSlope5  = cur.sm - sm5ago;
+  const fmSlope5  = cur.fm - fm5ago;
+  const smSlope10 = cur.sm - sm10ago;
+
+  // Who is leading
+  const smLeading = cur.sm > cur.fm && smSlope5 > 0;
+  const fmLeading = cur.fm > cur.sm && fmSlope5 > 0;
+  const smExiting = smSlope5 < -2 && cur.fm > cur.sm * 0.8;
+  const bothActive = cur.sm > 15 && cur.fm > 15;
+  const bothAbsent = cur.sm < 8 && cur.fm < 8;
+
+  // Recent dots
+  const recentSVD = history.slice(-10).filter(b => b.isSVD);
+  const recentSBD = history.slice(-10).filter(b => b.isSBD);
+  const recentSYD = history.slice(-5).filter(b => b.isSYD);
+  const lastSVD = recentSVD.length > 0 ? recentSVD[recentSVD.length-1] : null;
+  const lastSBD = recentSBD.length > 0 ? recentSBD[recentSBD.length-1] : null;
+  const lastSYD = recentSYD.length > 0 ? recentSYD[recentSYD.length-1] : null;
+
+  // Pump detection
+  const pumpRisk = smExiting && cur.fm > 20 && !lastSVD;
+
+  // Relationship
+  let relationship, relDesc, relColor;
+  if (pumpRisk) {
+    relationship = 'Diverging';
+    relDesc = 'Smart Money declining while Fast Money elevated — distribution risk';
+    relColor = '#ef4444';
+  } else if (smLeading && !lastSYD) {
+    relationship = 'Smart Leading';
+    relDesc = 'Smart Money active and trending up — institutional conviction building';
+    relColor = '#10b981';
+  } else if (fmLeading && lastSVD) {
+    relationship = 'Momentum Building';
+    relDesc = 'Smart Money fingerprint present, Fast Money accelerating — setup forming';
+    relColor = '#c9a84c';
+  } else if (bothActive) {
+    relationship = 'Aligned';
+    relDesc = 'Both Smart and Fast Money elevated — broad participation';
+    relColor = '#3b82f6';
+  } else if (bothAbsent) {
+    relationship = 'Absent';
+    relDesc = 'No significant participation — only Noise Floor active';
+    relColor = '#475569';
+  } else if (fmLeading) {
+    relationship = 'Fast Only';
+    relDesc = 'Fast Money active without Smart Money backing — fragile';
+    relColor = '#f59e0b';
+  } else {
+    relationship = 'Mixed';
+    relDesc = 'No clear directional bias in participation';
+    relColor = '#64748b';
+  }
+
+  // Market state
+  let state, stateBg, stateColor;
+  if (pumpRisk) {
+    state = 'Distribution Risk';
+    stateBg = '#450a0a'; stateColor = '#ef4444';
+  } else if (smLeading && lastSVD && !lastSYD) {
+    state = 'Accumulation in Progress';
+    stateBg = '#064e3b'; stateColor = '#10b981';
+  } else if (smLeading && lastSBD) {
+    state = 'Smart Money Active';
+    stateBg = '#065f46'; stateColor = '#34d399';
+  } else if (lastSYD) {
+    state = 'Distribution Warning';
+    stateBg = '#3a1a07'; stateColor = '#f97316';
+  } else if (bothAbsent) {
+    state = 'No Conviction';
+    stateBg = '#1e293b'; stateColor = '#475569';
+  } else if (fmLeading && !smLeading) {
+    state = 'Fragile Rally';
+    stateBg = '#2d2008'; stateColor = '#f59e0b';
+  } else {
+    state = 'Monitoring';
+    stateBg = '#1a2535'; stateColor = '#64748b';
+  }
+
+  // Narrative
+  const parts = [];
+
+  // Smart money sentence
+  if (smSlope5 > 3) parts.push(`Smart Money building for ${Math.round(smSlope10 > 0 ? 10 : 5)} bars.`);
+  else if (smSlope5 < -3) parts.push('Smart Money declining — institutional selling detected.');
+  else if (cur.sm > 25) parts.push('Smart Money elevated and holding.');
+  else parts.push('Smart Money subdued — institutional activity low.');
+
+  // Fast money sentence
+  if (fmSlope5 > 3 && cur.fm > cur.sm) parts.push('Fast Money surging ahead of Smart Money — watch for reversal.');
+  else if (fmSlope5 > 3) parts.push('Fast Money joining Smart Money — momentum broadening.');
+  else if (cur.fm < 8) parts.push('Fast Money absent.');
+
+  // Dot sentence
+  if (lastSVD) {
+    const age = 29 - lastSVD.i;
+    parts.push(`Smart Money fingerprint (SVD) ${age} bars ago at ${lastSVD.close.toFixed(0)}.`);
+  } else if (lastSBD) {
+    const age = 29 - lastSBD.i;
+    parts.push(`Accumulation signature (SBD) detected ${age} bars ago.`);
+  }
+  if (lastSYD) {
+    parts.push('Distribution warning (SYD) recently — longs should be cautious.');
+  }
+
+  return {
+    smSlope5, fmSlope5, smLeading, fmLeading, smExiting,
+    bothActive, bothAbsent, pumpRisk,
+    lastSVD, lastSBD, lastSYD,
+    relationship, relDesc, relColor,
+    state, stateBg, stateColor,
+    narrative: parts.join(' '),
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// DRAW SNIPER CHART
+// ═══════════════════════════════════════════════════════
+function drawChart(history, sig) {
+  const svg = document.getElementById('sniper-chart');
+  const W = 372, H = 100;
+  const PAD = { l: 4, r: 4, t: 8, b: 8 };
+  const PW = W - PAD.l - PAD.r;
+  const PH = H - PAD.t - PAD.b;
+  const n = history.length;
+
+  const toX = i => PAD.l + (i / (n - 1)) * PW;
+  const toY = v => PAD.t + PH * (1 - v / 50);
+
+  // Build SVG
+  let html = '';
+
+  // Background grid lines at 10, 25, 40
+  [10, 25, 40].forEach(v => {
+    const y = toY(v);
+    html += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}"
+      stroke="#0f172a" stroke-width="1"/>`;
+  });
+
+  // Noise floor fill (constant 50 — always at top, just a reference)
+  html += `<rect x="${PAD.l}" y="${PAD.t}" width="${PW}" height="3"
+    fill="#22c55e" opacity="0.15" rx="1"/>`;
+
+  // Smart Money area fill
+  const smPts = history.map((b, i) => `${toX(i)},${toY(b.sm)}`);
+  html += `<polyline points="${smPts.join(' ')}" fill="none"
+    stroke="#ef4444" stroke-width="0" opacity="0"/>`;
+
+  // Area under smart money
+  const smArea = `M ${toX(0)},${toY(0)} ` +
+    history.map((b, i) => `L ${toX(i)},${toY(b.sm)}`).join(' ') +
+    ` L ${toX(n-1)},${toY(0)} Z`;
+  html += `<path d="${smArea}" fill="#ef4444" opacity="0.06"/>`;
+
+  // Fast Money area fill
+  const fmArea = `M ${toX(0)},${toY(0)} ` +
+    history.map((b, i) => `L ${toX(i)},${toY(b.fm)}`).join(' ') +
+    ` L ${toX(n-1)},${toY(0)} Z`;
+  html += `<path d="${fmArea}" fill="#f59e0b" opacity="0.06"/>`;
+
+  // Smart Money line
+  html += `<polyline points="${history.map((b,i) => `${toX(i)},${toY(b.sm)}`).join(' ')}"
+    fill="none" stroke="#ef4444" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  // Fast Money line
+  html += `<polyline points="${history.map((b,i) => `${toX(i)},${toY(b.fm)}`).join(' ')}"
+    fill="none" stroke="#f59e0b" stroke-width="1.5"
+    stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="4,2"/>`;
+
+  // SVD / SBD / SYD dots on chart
+  history.forEach((b, i) => {
+    const x = toX(i);
+    if (b.isSVD) {
+      html += `<circle cx="${x}" cy="${toY(b.sm) - 6}" r="4"
+        fill="#8b5cf6" opacity="0.9"
+        style="filter:drop-shadow(0 0 3px #8b5cf6)"/>`;
+    }
+    if (b.isSBD) {
+      html += `<circle cx="${x}" cy="${toY(b.sm) - 4}" r="3"
+        fill="#3b82f6" opacity="0.8"/>`;
+    }
+    if (b.isSYD) {
+      html += `<circle cx="${x}" cy="${toY(b.fm) + 5}" r="3.5"
+        fill="#f59e0b" opacity="0.9"
+        style="filter:drop-shadow(0 0 3px #f59e0b)"/>`;
+    }
+  });
+
+  // Current bar marker
+  const lastX = toX(n - 1);
+  html += `<line x1="${lastX}" y1="${PAD.t}" x2="${lastX}" y2="${H-PAD.b}"
+    stroke="#c9a84c" stroke-width="1" stroke-dasharray="2,3" opacity="0.6"/>`;
+
+  // Y-axis labels
+  [0, 25, 50].forEach(v => {
+    const y = toY(v);
+    html += `<text x="${W-PAD.r-1}" y="${y+3}" text-anchor="end"
+      fill="#2a3a4a" font-size="7" font-family="DM Mono">
+      ${v}
+    </text>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════
+// DRAW DOT TIMELINE
+// ═══════════════════════════════════════════════════════
+function drawTimeline(history) {
+  const container = document.getElementById('dot-timeline');
+  // Keep the track div
+  container.innerHTML = '<div class="dot-timeline-track"></div>';
+
+  const W = container.offsetWidth || 372;
+  const n = history.length;
+
+  history.forEach((b, i) => {
+    if (!b.isSVD && !b.isSBD && !b.isSYD) return;
+    const left = (i / (n - 1)) * 100;
+    const age = n - 1 - i;
+
+    let color, label;
+    if (b.isSVD) { color = '#8b5cf6'; label = 'SVD'; }
+    else if (b.isSBD) { color = '#3b82f6'; label = 'SBD'; }
+    else { color = '#f59e0b'; label = 'SYD'; }
+
+    const el = document.createElement('div');
+    el.className = 'dot-event';
+    el.style.left = left + '%';
+    el.style.top = '50%';
+    el.style.transform = 'translate(-50%, -50%)';
+    el.innerHTML = `
+      <div class="dot-event-circle" style="
+        background:${color}22;
+        border-color:${color};
+        color:${color};
+        width:${b.isSVD ? 12 : 9}px;
+        height:${b.isSVD ? 12 : 9}px;
+        box-shadow: 0 0 ${b.isSVD ? 8 : 4}px ${color};
+      "></div>
+      <div class="dot-event-label" style="color:${color}">${label}</div>
+      <div class="dot-age">−${age}</div>
+    `;
+    el.title = `${label} · ${age} bars ago · Close ${b.close.toFixed(0)}`;
+    container.appendChild(el);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function render(history, scenarioName) {
+  const cur = history[history.length - 1];
+  const sig = computeSignals(history);
+  const sm5ago = history[history.length - 6]?.sm || cur.sm;
+  const fm5ago = history[history.length - 6]?.fm || cur.fm;
+
+  // Date
+  document.getElementById('card-date').textContent = scenarioName;
+
+  // Draw chart
+  drawChart(history, sig);
+  drawTimeline(history);
+
+  // Values
+  const smTrendColor = cur.sm > sm5ago ? '#10b981' : '#ef4444';
+  const fmTrendColor = cur.fm > fm5ago ? '#10b981' : '#ef4444';
+
+  document.getElementById('sm-val').textContent = cur.sm.toFixed(1);
+  document.getElementById('fm-val').textContent = cur.fm.toFixed(1);
+
+  const smArrow = cur.sm > sm5ago ? '↑' : cur.sm < sm5ago ? '↓' : '→';
+  const fmArrow = cur.fm > fm5ago ? '↑' : cur.fm < fm5ago ? '↓' : '→';
+  const smDelta = (cur.sm - sm5ago).toFixed(1);
+  const fmDelta = (cur.fm - fm5ago).toFixed(1);
+
+  document.getElementById('sm-trend').innerHTML =
+    `<span style="color:${smTrendColor}">${smArrow} ${smDelta > 0 ? '+' : ''}${smDelta} (5 bars)</span>`;
+  document.getElementById('fm-trend').innerHTML =
+    `<span style="color:${fmTrendColor}">${fmArrow} ${fmDelta > 0 ? '+' : ''}${fmDelta} (5 bars)</span>`;
+
+  // Relationship
+  const rb = document.getElementById('rel-badge');
+  rb.textContent = sig.relationship;
+  rb.style.cssText = `background:${sig.relColor}22;color:${sig.relColor};
+    border:1px solid ${sig.relColor}44;padding:3px 10px;border-radius:10px;
+    font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+    font-family:'DM Mono',monospace;white-space:nowrap;`;
+  document.getElementById('rel-desc').textContent = sig.relDesc;
+
+  // Narrative
+  const nar = document.getElementById('narrative');
+  nar.classList.add('fading');
+  setTimeout(() => {
+    nar.textContent = sig.narrative;
+    nar.classList.remove('fading');
+  }, 150);
+
+  // State badge
+  const sb = document.getElementById('state-badge');
+  sb.textContent = sig.state;
+  sb.style.cssText = `background:${sig.stateBg};color:${sig.stateColor};
+    border:1px solid ${sig.stateColor}44;padding:3px 10px;border-radius:12px;
+    font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;
+    font-family:'DM Mono',monospace;`;
+
+  // Pump divergence flag
+  const df = document.getElementById('div-flag');
+  if (sig.pumpRisk) {
+    df.classList.add('visible');
+    df.textContent = '⚠ Smart ↓ Fast ↑';
+    df.style.cssText += 'background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);';
+  } else {
+    df.classList.remove('visible');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SCENARIOS
+// ═══════════════════════════════════════════════════════
+const SCENARIOS = {
+  'Apr · Recovery':    'april_recovery',
+  'Accumulation':      'accumulation',
+  'Distribution':      'distribution',
+  'Pump Signal':       'pump',
+  'Retail Noise Only': 'retail',
+};
+
+const scWrap = document.getElementById('scenarios');
+let active = 'Apr · Recovery';
+
+Object.keys(SCENARIOS).forEach(name => {
+  const btn = document.createElement('button');
+  btn.className = `sc-btn${name === active ? ' active' : ''}`;
+  btn.textContent = name;
+  btn.onclick = () => {
+    document.querySelectorAll('.sc-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    active = name;
+    const hist = genHistory(SCENARIOS[name]);
+    render(hist, name);
+  };
+  scWrap.appendChild(btn);
+});
+
+// Init
+render(genHistory(SCENARIOS[active]), active);
+</script>
+</body>
+</html>

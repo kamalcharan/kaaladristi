@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti · Visual Pulse Story</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020917;
+    --panel-chart: #0e1e35;
+    --panel-story: #07080d;
+    --border: #1a2740;
+    --gold: #c9a84c;
+    --gold-dim: #7a6130;
+    --text-primary: #e8eaf0;
+    --text-dim: #4a5568;
+    --text-mid: #8896aa;
+    --green: #10b981;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --blue: #3b82f6;
+    --teal: #14b8a6;
+    --purple: #8b5cf6;
+    --chapter-1: #1e3a5f;
+    --chapter-2: #1a3d2b;
+    --chapter-3: #2d3a1e;
+    --chapter-4: #3d1e1e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); font-family: 'DM Sans', sans-serif; }
+
+  /* ── LAYOUT ──────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    grid-template-rows: 48px 1fr 72px;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* ── TOP BAR ──────────────────────────────────────────── */
+  .topbar {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    background: #07080d;
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-brand {
+    font-family: 'Playfair Display', serif;
+    font-size: 15px; color: var(--gold); letter-spacing: 2px;
+  }
+  .topbar-symbol {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .symbol-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px; color: var(--text-primary); font-weight: 700;
+  }
+  .symbol-price {
+    font-family: 'DM Mono', monospace;
+    font-size: 18px; color: var(--green);
+  }
+  .symbol-change { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--green); }
+  .topbar-candle {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; color: var(--text-dim); letter-spacing: 1px;
+  }
+  #candle-label {
+    color: var(--gold);
+    transition: color 0.3s;
+  }
+
+  /* ── CHART PANEL (LEFT) ───────────────────────────────── */
+  .chart-panel {
+    background: var(--panel-chart);
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  canvas#chart {
+    flex: 1;
+    width: 100%;
+  }
+
+  /* Chapter overlay on chart */
+  .chart-overlay {
+    position: absolute; top: 12px; left: 16px;
+    display: flex; gap: 6px;
+  }
+  .chapter-pip {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border);
+    transition: all 0.4s ease;
+    cursor: pointer;
+  }
+  .chapter-pip.active { transform: scale(1.4); }
+  .chapter-pip[data-ch="1"] { background: #3b82f6; }
+  .chapter-pip[data-ch="2"] { background: #10b981; }
+  .chapter-pip[data-ch="3"] { background: #c9a84c; }
+  .chapter-pip[data-ch="4"] { background: #ef4444; }
+
+  /* Crosshair line on chart */
+  #crosshair-line {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(201,168,76,0.5);
+    pointer-events: none;
+    transition: left 0.1s;
+  }
+
+  /* ── STORY PANEL (RIGHT) ──────────────────────────────── */
+  .story-panel {
+    background: var(--panel-story);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  .story-header {
+    padding: 12px 16px 8px;
+    border-bottom: 1px solid #111827;
+    flex-shrink: 0;
+  }
+  .story-header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .story-title {
+    font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .chapter-badge {
+    padding: 2px 10px; border-radius: 20px;
+    font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+    transition: all 0.4s ease;
+  }
+  .story-sentence {
+    font-size: 12px; color: var(--text-mid); line-height: 1.5;
+    font-style: italic;
+    min-height: 36px;
+    transition: opacity 0.3s ease;
+  }
+
+  /* Inference cards scroll area */
+  .inference-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: #1a2740 transparent;
+  }
+  .inference-scroll::-webkit-scrollbar { width: 4px; }
+  .inference-scroll::-webkit-scrollbar-thumb { background: #1a2740; border-radius: 2px; }
+
+  /* Individual inference card */
+  .inf-card {
+    border-radius: 8px;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .inf-card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    border-radius: 2px 0 0 2px;
+  }
+  .inf-card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 5px;
+  }
+  .inf-label {
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .inf-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+  }
+  .inf-story {
+    font-size: 11px; color: var(--text-mid); line-height: 1.4;
+  }
+  .inf-trend {
+    display: flex; align-items: center; gap: 4px; margin-top: 4px;
+  }
+  .trend-bar {
+    height: 3px; border-radius: 2px; flex: 1;
+    background: var(--border);
+    position: relative; overflow: hidden;
+  }
+  .trend-fill {
+    height: 100%; border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+  .trend-arrow { font-size: 10px; }
+  .trend-label { font-size: 9px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+
+  /* MicroSparkline */
+  .micro-spark {
+    display: block; margin-top: 4px;
+  }
+
+  /* ── SLIDER BAR (BOTTOM) ──────────────────────────────── */
+  .slider-bar {
+    grid-column: 1 / -1;
+    background: #07080d;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 20px; gap: 16px;
+  }
+  .slider-controls {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  .ctrl-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: #111827; border: 1px solid var(--border);
+    color: var(--text-mid); cursor: pointer; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .ctrl-btn:hover { background: #1e293b; color: var(--text-primary); }
+  .ctrl-btn.playing { background: var(--gold); color: #000; border-color: var(--gold); }
+
+  /* Chapter markers + slider track */
+  .slider-track-wrap {
+    flex: 1; position: relative; height: 40px;
+    display: flex; align-items: center;
+  }
+  .chapter-markers {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 20px; pointer-events: none;
+  }
+  .ch-marker {
+    position: absolute; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .ch-marker-line {
+    width: 1px; height: 8px;
+  }
+  .ch-marker-label {
+    font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+    white-space: nowrap; opacity: 0.7;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none; width: 100%;
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, var(--gold) var(--pct, 100%), #1a2740 var(--pct, 100%));
+    outline: none; cursor: pointer;
+    margin-top: 20px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--gold);
+    border: 2px solid #020917;
+    box-shadow: 0 0 8px rgba(201,168,76,0.6);
+    cursor: pointer;
+  }
+
+  .slider-meta {
+    flex-shrink: 0; text-align: right;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* ── CARD STATES ──────────────────────────────────────── */
+  .card-bullish { background: rgba(16,185,129,0.06); border-color: rgba(16,185,129,0.2); }
+  .card-bullish::before { background: var(--green); }
+  .card-bearish { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.2); }
+  .card-bearish::before { background: var(--red); }
+  .card-neutral { background: rgba(100,116,139,0.06); border-color: rgba(100,116,139,0.15); }
+  .card-neutral::before { background: var(--text-dim); }
+  .card-warning { background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.2); }
+  .card-warning::before { background: var(--amber); }
+  .card-accent { background: rgba(201,168,76,0.06); border-color: rgba(201,168,76,0.2); }
+  .card-accent::before { background: var(--gold); }
+
+  /* chapter badge colors */
+  .badge-1 { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+  .badge-2 { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+  .badge-3 { background: rgba(201,168,76,0.15); color: var(--gold); border: 1px solid rgba(201,168,76,0.3); }
+  .badge-4 { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+
+  /* fade transition */
+  .fading { opacity: 0.3; }
+
+  /* scrollbar hint */
+  .scroll-hint {
+    font-size: 8px; color: var(--text-dim); text-align: center;
+    padding: 4px; letter-spacing: 1px; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-brand">Kāla-Drishti</div>
+    <div class="topbar-symbol">
+      <span class="symbol-name">NIFTY 50</span>
+      <span class="symbol-price" id="ltp">24,318.45</span>
+      <span class="symbol-change" id="chg">▲ +275.50 (+1.16%)</span>
+    </div>
+    <div class="topbar-candle">
+      CANDLE&nbsp; <span id="candle-label">NOW</span>
+      &nbsp;·&nbsp; 15 MIN
+    </div>
+  </header>
+
+  <!-- CHART PANEL -->
+  <div class="chart-panel">
+    <div class="chart-overlay" id="chapter-pips"></div>
+    <div id="crosshair-line"></div>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <!-- STORY PANEL -->
+  <div class="story-panel">
+    <div class="story-header">
+      <div class="story-header-row">
+        <span class="story-title">Visual Pulse · Story</span>
+        <span class="chapter-badge badge-1" id="chapter-badge">Chapter 1 · Setup</span>
+      </div>
+      <div class="story-sentence" id="story-sentence">
+        Banker RSI quietly building for 8 bars — price hasn't moved yet. Watch for MagicRS approaching the CNX500 waterline.
+      </div>
+    </div>
+
+    <div class="inference-scroll" id="inference-scroll">
+      <!-- Cards injected by JS -->
+    </div>
+    <div class="scroll-hint">↑ scroll to see all signals</div>
+  </div>
+
+  <!-- SLIDER BAR -->
+  <div class="slider-bar">
+    <div class="slider-controls">
+      <button class="ctrl-btn" id="btn-start" title="Go to start">⏮</button>
+      <button class="ctrl-btn" id="btn-back" title="Back 1 candle">◀</button>
+      <button class="ctrl-btn" id="btn-play" title="Play">▶</button>
+      <button class="ctrl-btn" id="btn-fwd" title="Forward 1 candle">▶|</button>
+      <button class="ctrl-btn" id="btn-end" title="Go to end (NOW)">⏭</button>
+    </div>
+
+    <div class="slider-track-wrap">
+      <div class="chapter-markers" id="chapter-markers"></div>
+      <input type="range" id="timeline" min="0" max="59" value="59" step="1">
+    </div>
+
+    <div class="slider-meta">
+      <div id="meta-date">13 Apr 2026 · 14:45</div>
+      <div id="meta-bars">Candle 0 of 60</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DUMMY DATA — 60 candles of NIFTY 15-min
+// ═══════════════════════════════════════════════════════
+
+const BASE = 23800;
+function genCandles(n) {
+  let price = BASE, vol = 1.0;
+  const candles = [];
+  for (let i = 0; i < n; i++) {
+    const trend = i < 15 ? -0.2 : i < 30 ? 0.3 : i < 45 ? 0.8 : 0.2;
+    const noise = (Math.random() - 0.5) * 80;
+    const open = price;
+    const close = price + trend * 30 + noise;
+    const high = Math.max(open, close) + Math.random() * 40;
+    const low  = Math.min(open, close) - Math.random() * 40;
+    vol = Math.max(0.4, vol + (Math.random() - 0.45) * 0.3);
+    candles.push({ open, high, low, close, rvol: vol });
+    price = close;
+  }
+  return candles;
+}
+
+const CANDLES = genCandles(60);
+
+// ── Synthetic indicator series ─────────────────────────
+function smooth(arr, w) {
+  return arr.map((v, i) => {
+    const slice = arr.slice(Math.max(0, i-w+1), i+1);
+    return slice.reduce((a,b) => a+b, 0) / slice.length;
+  });
+}
+
+// RSI synthetic
+const rsi14 = CANDLES.map((c, i) => {
+  const base = 35 + i * 0.4 + Math.sin(i * 0.3) * 12;
+  return Math.min(82, Math.max(22, base));
+});
+
+// MagicRS — negative early, crosses zero ~candle 28, rises
+const magicRS = CANDLES.map((c, i) => {
+  if (i < 20) return -8 + i * 0.3 + Math.sin(i * 0.5) * 2;
+  if (i < 35) return -2 + (i - 20) * 0.8 + Math.sin(i * 0.4) * 1.5;
+  return 8 + (i - 35) * 0.5 + Math.sin(i * 0.3) * 2;
+});
+const magicMA = smooth(magicRS, 10);
+
+// Sniper Banker (slow, deliberate — starts rising candle 10)
+const sniperBanker = CANDLES.map((c, i) => {
+  if (i < 10) return 8 + Math.random() * 5;
+  if (i < 25) return 8 + (i-10) * 1.5 + Math.random() * 4;
+  if (i < 45) return 30 + (i-25) * 0.8 + Math.random() * 5;
+  return 46 - (i-45) * 0.5 + Math.random() * 4; // banker starts exiting
+});
+
+// Sniper Hot Money (fast, joins later at candle 28)
+const sniperHot = CANDLES.map((c, i) => {
+  if (i < 25) return 5 + Math.random() * 8;
+  if (i < 35) return 5 + (i-25) * 3 + Math.random() * 6;
+  if (i < 50) return 32 + Math.random() * 8;
+  return 35 + Math.random() * 5; // hot money stays high even as banker leaves
+});
+
+// RSS (leads price)
+const rss = CANDLES.map((c, i) => {
+  const base = 30 + i * 0.6 + Math.sin(i * 0.25) * 15;
+  return Math.min(88, Math.max(18, base));
+});
+const rssNewHigh = rss.map((v, i) => {
+  if (i === 0) return false;
+  return v > Math.max(...rss.slice(0, i));
+});
+
+// RVOL series
+const rvolSeries = CANDLES.map(c => c.rvol);
+
+// Flow classification
+const flowSeries = CANDLES.map((c, i) => {
+  if (i < 15) return { type: 'GREY', label: 'Low Volume', color: '#64748b' };
+  if (i < 28) return { type: 'HOLLOW_GREEN', label: 'Short Covering', color: '#6ee7b7' };
+  if (i < 45) return { type: 'SOLID_GREEN', label: 'Fresh Longs', color: '#10b981' };
+  return { type: 'HOLLOW_GREEN', label: 'Short Covering', color: '#6ee7b7' };
+});
+
+// DOT signals
+const dotSeries = CANDLES.map((c, i) => ({
+  svd: i > 30 && i < 50,
+  sbd: i > 20 && i < 48,
+  syd: i > 50,
+}));
+
+// Chapter detection
+function detectChapter(i) {
+  const magicAboveWater = magicRS[i] > 0;
+  const magicAboveMA = magicRS[i] > magicMA[i];
+  const bankerSlope = i > 5 ? sniperBanker[i] - sniperBanker[i-5] : 0;
+  const hotSlope    = i > 5 ? sniperHot[i] - sniperHot[i-5] : 0;
+
+  if (i > 50 && bankerSlope < -1) return 4;
+  if (magicAboveWater && magicAboveMA && dotSeries[i].svd && rvolSeries[i] > 1.2) return 3;
+  if (magicAboveWater && bankerSlope > 0) return 2;
+  return 1;
+}
+
+// Story sentences per chapter
+const CHAPTER_META = {
+  1: {
+    label: 'Chapter 1 · Setup',
+    badge: 'badge-1',
+    sentence: (i) => `Banker RSI building silently for ${Math.max(1,i-8)} bars — price hasn't moved yet. MagicRS is ${Math.abs(magicRS[i]).toFixed(1)}% below the CNX500 waterline.`,
+    color: '#3b82f6',
+  },
+  2: {
+    label: 'Chapter 2 · Signal',
+    badge: 'badge-2',
+    sentence: (i) => `MagicRS just crossed above CNX500 waterline (+${magicRS[i].toFixed(1)}%). Institutions loaded — Hot Money now joining. RSS at ${rss[i].toFixed(0)}${rssNewHigh[i] ? ' — NEW HIGH, leading price' : ''}.`,
+    color: '#10b981',
+  },
+  3: {
+    label: 'Chapter 3 · Confirmation',
+    badge: 'badge-3',
+    sentence: (i) => `Full alignment. MagicRS ${magicRS[i].toFixed(1)}% above water, above signal line. Fresh Longs confirmed, RVOL ${rvolSeries[i].toFixed(2)}×. All three DOT timeframes aligned.`,
+    color: '#c9a84c',
+  },
+  4: {
+    label: 'Chapter 4 · Warning',
+    badge: 'badge-4',
+    sentence: (i) => `Banker RSI declining while Hot Money holds. Divergence forming. MagicRS still above water but losing slope. Consider tightening stop or booking partial.`,
+    color: '#ef4444',
+  },
+};
+
+// Chapter transition markers
+const chapterTransitions = [];
+let lastCh = 0;
+for (let i = 0; i < 60; i++) {
+  const ch = detectChapter(i);
+  if (ch !== lastCh) { chapterTransitions.push({ i, ch }); lastCh = ch; }
+}
+
+// Dates (backwards from now)
+function candleLabel(i) {
+  const offset = 59 - i;
+  if (offset === 0) return 'NOW';
+  return `−${offset}`;
+}
+function candleDate(i) {
+  const d = new Date('2026-04-13T14:45:00');
+  d.setMinutes(d.getMinutes() - (59 - i) * 15);
+  return d.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:false });
+}
+
+// ═══════════════════════════════════════════════════════
+// CHART DRAWING
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+let currentCandle = 59;
+
+function resizeCanvas() {
+  const panel = canvas.parentElement;
+  canvas.width = panel.clientWidth;
+  canvas.height = panel.clientHeight - 40;
+  drawChart(currentCandle);
+}
+
+function drawChart(activeIdx) {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = { top: 20, bottom: 40, left: 10, right: 60 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+
+  // Price range
+  const prices = CANDLES.flatMap(c => [c.high, c.low]);
+  const minP = Math.min(...prices) - 50;
+  const maxP = Math.max(...prices) + 50;
+  const toY = p => pad.top + plotH * (1 - (p - minP) / (maxP - minP));
+  const toX = i => pad.left + (i / 59) * plotW;
+
+  // Background grid
+  ctx.strokeStyle = '#0e1e2e';
+  ctx.lineWidth = 1;
+  for (let g = 0; g <= 5; g++) {
+    const y = pad.top + (g / 5) * plotH;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y);
+    ctx.stroke();
+    const price = maxP - (g / 5) * (maxP - minP);
+    ctx.fillStyle = '#2a3a4a';
+    ctx.font = '9px DM Mono'; ctx.textAlign = 'right';
+    ctx.fillText(price.toFixed(0), W - 4, y + 3);
+  }
+
+  // Chapter background shading
+  chapterTransitions.forEach((t, ti) => {
+    const nextI = chapterTransitions[ti+1]?.i ?? 60;
+    const x1 = toX(t.i); const x2 = toX(nextI);
+    const colors = { 1:'rgba(59,130,246,0.04)', 2:'rgba(16,185,129,0.04)', 3:'rgba(201,168,76,0.04)', 4:'rgba(239,68,68,0.06)' };
+    ctx.fillStyle = colors[t.ch] || 'transparent';
+    ctx.fillRect(x1, pad.top, x2 - x1, plotH);
+    // Chapter label
+    ctx.fillStyle = { 1:'#3b82f6',2:'#10b981',3:'#c9a84c',4:'#ef4444' }[t.ch];
+    ctx.font = '8px DM Mono'; ctx.textAlign = 'left';
+    ctx.fillText(`Ch.${t.ch}`, x1 + 4, pad.top + 10);
+  });
+
+  // Volume bars
+  const volH = 30;
+  CANDLES.forEach((c, i) => {
+    const x = toX(i);
+    const bw = Math.max(2, plotW / 60 - 1);
+    const vH = c.rvol * volH;
+    const alpha = i <= activeIdx ? 0.7 : 0.15;
+    ctx.fillStyle = c.close >= c.open
+      ? `rgba(16,185,129,${alpha * 0.6})`
+      : `rgba(239,68,68,${alpha * 0.6})`;
+    ctx.fillRect(x - bw/2, H - pad.bottom - vH + 10, bw, vH);
+  });
+
+  // MagicRS zero line (CNX500 waterline)
+  const waterlineY = toY(CANDLES[30].close); // approximate midpoint visual
+  // Draw as dashed line at the zero-crossing price
+  const magicZeroPrice = CANDLES[28].close; // where magicRS crosses zero
+  const waterY = toY(magicZeroPrice);
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(59,130,246,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, waterY); ctx.lineTo(W - pad.right, waterY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(59,130,246,0.6)';
+  ctx.font = '8px DM Mono'; ctx.textAlign = 'right';
+  ctx.fillText('CNX500 waterline', W - pad.right - 2, waterY - 3);
+
+  // Candles
+  CANDLES.forEach((c, i) => {
+    const x = toX(i);
+    const bw = Math.max(2, plotW / 60 - 2);
+    const bull = c.close >= c.open;
+    const alpha = i <= activeIdx ? 1 : 0.2;
+    const col = bull ? `rgba(16,185,129,${alpha})` : `rgba(239,68,68,${alpha})`;
+
+    // Wick
+    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, toY(c.high)); ctx.lineTo(x, toY(c.low));
+    ctx.stroke();
+
+    // Body
+    const yO = toY(c.open), yC = toY(c.close);
+    ctx.fillStyle = col;
+    ctx.fillRect(x - bw/2, Math.min(yO, yC), bw, Math.max(1, Math.abs(yC - yO)));
+  });
+
+  // Active candle highlight
+  const ax = toX(activeIdx);
+  ctx.strokeStyle = 'rgba(201,168,76,0.8)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.moveTo(ax, pad.top); ctx.lineTo(ax, H - pad.bottom);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Active candle price dot
+  const ac = CANDLES[activeIdx];
+  const dotY = toY(ac.close);
+  ctx.beginPath();
+  ctx.arc(ax, dotY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#c9a84c';
+  ctx.fill();
+
+  // Price label on right axis
+  ctx.fillStyle = '#c9a84c';
+  ctx.font = 'bold 10px DM Mono'; ctx.textAlign = 'left';
+  ctx.fillRect(W - pad.right + 2, dotY - 7, 52, 14);
+  ctx.fillStyle = '#020917';
+  ctx.fillText(ac.close.toFixed(0), W - pad.right + 5, dotY + 4);
+
+  // MagicRS crossing marker
+  const crossIdx = chapterTransitions.find(t => t.ch === 2)?.i;
+  if (crossIdx !== undefined) {
+    const cx2 = toX(crossIdx);
+    ctx.strokeStyle = 'rgba(16,185,129,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(cx2, pad.top); ctx.lineTo(cx2, H - pad.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(16,185,129,0.8)';
+    ctx.font = '8px DM Mono'; ctx.textAlign = 'center';
+    ctx.fillText('RS Cross', cx2, pad.top + 22);
+  }
+
+  // Update crosshair position
+  document.getElementById('crosshair-line').style.left = (ax + 10) + 'px';
+}
+
+// ═══════════════════════════════════════════════════════
+// INFERENCE CARDS
+// ═══════════════════════════════════════════════════════
+
+function slope5(arr, i) {
+  if (i < 5) return 0;
+  return arr[i] - arr[i-5];
+}
+
+function slopeLabel(v) {
+  if (v > 3) return { arrow: '↑↑', label: 'Strong Rise', color: '#10b981' };
+  if (v > 0.5) return { arrow: '↑', label: 'Rising', color: '#34d399' };
+  if (v < -3) return { arrow: '↓↓', label: 'Sharp Drop', color: '#ef4444' };
+  if (v < -0.5) return { arrow: '↓', label: 'Falling', color: '#f87171' };
+  return { arrow: '→', label: 'Flat', color: '#64748b' };
+}
+
+function sparklineSVG(values, color, h=20, w=80) {
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / range) * h;
+    return `${x},${y}`;
+  });
+  return `<svg width="${w}" height="${h}" class="micro-spark" viewBox="0 0 ${w} ${h}">
+    <polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${pts[pts.length-1].split(',')[1]}" r="2" fill="${color}"/>
+  </svg>`;
+}
+
+function getWindow(arr, i, w=12) {
+  return arr.slice(Math.max(0, i - w + 1), i + 1);
+}
+
+function renderCards(i) {
+  const ch = detectChapter(i);
+  const scroll = document.getElementById('inference-scroll');
+
+  // ── Card 1: MagicRS ─────────────────────────────────
+  const mrs = magicRS[i];
+  const mrsMA = magicMA[i];
+  const mrsSlope = slope5(magicRS, i);
+  const mrsSL = slopeLabel(mrsSlope);
+  const mrsAboveWater = mrs > 0;
+  const mrsAboveMA = mrs > mrsMA;
+  const mrsState = mrsAboveWater && mrsAboveMA ? 'card-bullish' :
+                   mrsAboveWater ? 'card-accent' :
+                   mrsSlope > 0 ? 'card-neutral' : 'card-bearish';
+  const mrsStory = mrsAboveWater && mrsAboveMA
+    ? `Outperforming CNX500 AND above signal line. Relative strength confirmed. Gap: ${(mrs - mrsMA).toFixed(1)}%`
+    : mrsAboveWater
+    ? `Above CNX500 waterline (+${mrs.toFixed(1)}%) but below signal MA — strength not yet confirmed.`
+    : mrsSlope > 0
+    ? `Still below CNX500 (${mrs.toFixed(1)}%) but slope turning up — approaching waterline crossing.`
+    : `Underperforming CNX500 (${mrs.toFixed(1)}%). No relative strength case yet.`;
+
+  // ── Card 2: Sniper Dragon ────────────────────────────
+  const banker = sniperBanker[i];
+  const hot = sniperHot[i];
+  const bankerSlope = slope5(sniperBanker, i);
+  const hotSlope = slope5(sniperHot, i);
+  const bSL = slopeLabel(bankerSlope);
+  const hSL = slopeLabel(hotSlope);
+  const sniperState = banker > 30 && bankerSlope > 0 ? 'card-bullish' :
+                      banker > 20 && hot > 25 ? 'card-accent' :
+                      banker < 15 && hot < 15 ? 'card-neutral' : 'card-warning';
+  const sniperStory = banker > hot && bankerSlope > 0
+    ? `Institutions leading — bankers ${banker.toFixed(0)} vs hot money ${hot.toFixed(0)}. Smart money positioning before move.`
+    : hot > banker && bankerSlope < 0
+    ? `Hot money (${hot.toFixed(0)}) holding while bankers (${banker.toFixed(0)}) declining. Distribution risk — hot money holding the bag.`
+    : banker > 30 && hot > 25
+    ? `Both bankers and hot money active. Broad conviction. Banker ${banker.toFixed(0)} · Hot ${hot.toFixed(0)}.`
+    : `Low participation. Banker ${banker.toFixed(0)} · Hot ${hot.toFixed(0)}. Retail noise only.`;
+
+  // ── Card 3: RSS ──────────────────────────────────────
+  const rssVal = rss[i];
+  const rssSlope = slope5(rss, i);
+  const rssSL = slopeLabel(rssSlope);
+  const isNewH = rssNewHigh[i];
+  const rssState = rssVal > 70 && rssSlope > 0 ? 'card-warning' :
+                   rssVal > 50 && isNewH ? 'card-bullish' :
+                   rssVal > 50 ? 'card-accent' : 'card-neutral';
+  const rssStory = isNewH
+    ? `RSS making NEW HIGH (${rssVal.toFixed(0)}) — internal momentum exceeding price. This leads price. Strong signal.`
+    : rssVal > 70
+    ? `RSS overbought territory (${rssVal.toFixed(0)}). Momentum may be exhausting. Watch for reversal.`
+    : rssVal > 50
+    ? `RSS bullish (${rssVal.toFixed(0)}), above midline. Momentum intact.`
+    : `RSS below 50 (${rssVal.toFixed(0)}). Momentum not yet supportive.`;
+
+  // ── Card 4: Flow ─────────────────────────────────────
+  const flow = flowSeries[i];
+  const rvol = rvolSeries[i];
+  const flowState = flow.type === 'SOLID_GREEN' ? 'card-bullish' :
+                    flow.type === 'HOLLOW_GREEN' ? 'card-accent' :
+                    flow.type === 'SOLID_RED' ? 'card-bearish' : 'card-neutral';
+  const flowStory = flow.type === 'SOLID_GREEN'
+    ? `Fresh longs entering — real buying interest, not just short covering. RVOL ${rvol.toFixed(2)}× confirms volume backing.`
+    : flow.type === 'HOLLOW_GREEN'
+    ? `Short covering only — price rising but it's weak hands exiting shorts, not new longs. Fragile.`
+    : `Low volume noise. No directional commitment. RVOL ${rvol.toFixed(2)}× below threshold.`;
+
+  // ── Card 5: DOT Signals ───────────────────────────────
+  const dots = dotSeries[i];
+  const dotCount = (dots.svd?1:0)+(dots.sbd?1:0)+(dots.syd?1:0);
+  const dotState = dots.svd ? 'card-bullish' : dots.sbd ? 'card-accent' : dots.syd ? 'card-warning' : 'card-neutral';
+  const dotStory = dots.svd
+    ? `SVD present — Solid Violet Dot. Institutional volume spike with strong close. Highest conviction dot.`
+    : dots.sbd
+    ? `SBD present — Solid Blue Dot. Accumulation volume with positive price action.`
+    : dots.syd
+    ? `SYD detected — Solid Yellow Dot. Distribution signal. Counter to long position.`
+    : `No dot signals in lookback window. Volume not showing institutional activity.`;
+
+  // ── BUILD HTML ───────────────────────────────────────
+  scroll.innerHTML = `
+
+    <!-- MagicRS -->
+    <div class="inf-card ${mrsState}">
+      <div class="inf-card-header">
+        <span class="inf-label">MagicRS · Relative Strength</span>
+        <span class="inf-value" style="color:${mrsAboveWater?'#10b981':'#ef4444'}">${mrs > 0 ? '+' : ''}${mrs.toFixed(1)}%</span>
+      </div>
+      <div class="inf-story">${mrsStory}</div>
+      <div class="inf-trend">
+        <span class="trend-arrow" style="color:${mrsSL.color}">${mrsSL.arrow}</span>
+        <div class="trend-bar"><div class="trend-fill" style="width:${Math.min(100,Math.abs(mrs)*4)}%;background:${mrsAboveWater?'#10b981':'#ef4444'}"></div></div>
+        <span class="trend-label">${mrsSL.label} · vs MA: ${mrsAboveMA?'above':'below'}</span>
+      </div>
+      ${sparklineSVG(getWindow(magicRS, i), mrsAboveWater?'#10b981':'#ef4444')}
+    </div>
+
+    <!-- Sniper Dragon -->
+    <div class="inf-card ${sniperState}">
+      <div class="inf-card-header">
+        <span class="inf-label">Sniper Dragon · Who's In</span>
+        <span class="inf-value" style="color:#ef4444">B:${banker.toFixed(0)} <span style="color:#f59e0b">H:${hot.toFixed(0)}</span></span>
+      </div>
+      <div class="inf-story">${sniperStory}</div>
+      <div class="inf-trend" style="margin-top:6px">
+        <span style="font-size:9px;color:#ef4444;width:52px">Banker</span>
+        <div class="trend-bar"><div class="trend-fill" style="width:${Math.min(100,banker*2)}%;background:#ef4444"></div></div>
+        <span class="trend-arrow" style="color:${bSL.color}">${bSL.arrow}</span>
+      </div>
+      <div class="inf-trend">
+        <span style="font-size:9px;color:#f59e0b;width:52px">Hot $</span>
+        <div class="trend-bar"><div class="trend-fill" style="width:${Math.min(100,hot*2)}%;background:#f59e0b"></div></div>
+        <span class="trend-arrow" style="color:${hSL.color}">${hSL.arrow}</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:2px">
+        ${sparklineSVG(getWindow(sniperBanker, i), '#ef4444', 16, 60)}
+        ${sparklineSVG(getWindow(sniperHot, i), '#f59e0b', 16, 60)}
+      </div>
+    </div>
+
+    <!-- RSS -->
+    <div class="inf-card ${rssState}">
+      <div class="inf-card-header">
+        <span class="inf-label">RSS · Internal Momentum</span>
+        <span class="inf-value" style="color:${rssVal>70?'#f59e0b':rssVal>50?'#10b981':'#64748b'}">${rssVal.toFixed(0)}</span>
+      </div>
+      ${isNewH ? '<div style="font-size:9px;color:#c9a84c;letter-spacing:2px;margin-bottom:4px">★ NEW HIGH — LEADS PRICE</div>' : ''}
+      <div class="inf-story">${rssStory}</div>
+      <div class="inf-trend">
+        <span class="trend-arrow" style="color:${rssSL.color}">${rssSL.arrow}</span>
+        <div class="trend-bar"><div class="trend-fill" style="width:${rssVal}%;background:${rssVal>70?'#f59e0b':'#3b82f6'}"></div></div>
+        <span class="trend-label">${rssSL.label}</span>
+      </div>
+      ${sparklineSVG(getWindow(rss, i), rssVal>50?'#3b82f6':'#64748b')}
+    </div>
+
+    <!-- Flow -->
+    <div class="inf-card ${flowState}">
+      <div class="inf-card-header">
+        <span class="inf-label">Order Flow · River</span>
+        <span class="inf-value" style="color:${flow.color}">${flow.label}</span>
+      </div>
+      <div class="inf-story">${flowStory}</div>
+      <div class="inf-trend">
+        <div class="trend-bar" style="height:5px"><div class="trend-fill" style="width:${Math.min(100,rvol*50)}%;background:${flow.color}"></div></div>
+        <span class="trend-label">RVOL ${rvol.toFixed(2)}×</span>
+      </div>
+      ${sparklineSVG(getWindow(rvolSeries, i), flow.color)}
+    </div>
+
+    <!-- DOT Signals -->
+    <div class="inf-card ${dotState}">
+      <div class="inf-card-header">
+        <span class="inf-label">DOT Signals · Timeframes</span>
+        <span class="inf-value">${dots.svd?'<span style="color:#8b5cf6">SVD</span> ':''} ${dots.sbd?'<span style="color:#3b82f6">SBD</span> ':''} ${dots.syd?'<span style="color:#f59e0b">SYD</span>':''} ${dotCount===0?'<span style="color:#475569">—</span>':''}</span>
+      </div>
+      <div class="inf-story">${dotStory}</div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        ${['SVD','SBD','SYD'].map((d,di) => {
+          const active = [dots.svd, dots.sbd, dots.syd][di];
+          const colors = ['#8b5cf6','#3b82f6','#f59e0b'];
+          return `<div style="display:flex;align-items:center;gap:4px">
+            <div style="width:10px;height:10px;border-radius:50%;background:${active?colors[di]:'#1e293b'};border:1px solid ${active?colors[di]:'#334155'};box-shadow:${active?`0 0 6px ${colors[di]}`:''};transition:all 0.4s"></div>
+            <span style="font-size:9px;color:${active?colors[di]:'#475569'}">${d}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// CHAPTER MARKERS ON SLIDER
+// ═══════════════════════════════════════════════════════
+function buildChapterMarkers() {
+  const wrap = document.getElementById('chapter-markers');
+  const chColors = { 1:'#3b82f6', 2:'#10b981', 3:'#c9a84c', 4:'#ef4444' };
+  const chLabels = { 1:'Setup', 2:'Signal', 3:'Confirm', 4:'Warning' };
+  wrap.innerHTML = chapterTransitions.map(t => `
+    <div class="ch-marker" style="left:${(t.i/59)*100}%" data-i="${t.i}" onclick="jumpTo(${t.i})">
+      <div class="ch-marker-line" style="background:${chColors[t.ch]}"></div>
+      <div class="ch-marker-label" style="color:${chColors[t.ch]}">${chLabels[t.ch]}</div>
+    </div>
+  `).join('');
+
+  // Chapter pips in chart overlay
+  const pipsEl = document.getElementById('chapter-pips');
+  pipsEl.innerHTML = [1,2,3,4].map(ch => `<div class="chapter-pip" data-ch="${ch}" title="Chapter ${ch}" onclick="jumpToChapter(${ch})"></div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// UPDATE ALL UI
+// ═══════════════════════════════════════════════════════
+function updateAll(i) {
+  currentCandle = i;
+  const ch = detectChapter(i);
+  const meta = CHAPTER_META[ch];
+
+  // Price header
+  const c = CANDLES[i];
+  const change = c.close - CANDLES[0].close;
+  document.getElementById('ltp').textContent = c.close.toFixed(2);
+  document.getElementById('chg').textContent = `${change >= 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}`;
+  document.getElementById('chg').style.color = change >= 0 ? '#10b981' : '#ef4444';
+  document.getElementById('candle-label').textContent = candleLabel(i);
+
+  // Chapter badge + sentence
+  const badge = document.getElementById('chapter-badge');
+  badge.textContent = meta.label;
+  badge.className = `chapter-badge ${meta.badge}`;
+  const sentEl = document.getElementById('story-sentence');
+  sentEl.classList.add('fading');
+  setTimeout(() => {
+    sentEl.textContent = meta.sentence(i);
+    sentEl.classList.remove('fading');
+  }, 150);
+
+  // Chapter pips
+  document.querySelectorAll('.chapter-pip').forEach(p => {
+    p.classList.toggle('active', parseInt(p.dataset.ch) === ch);
+  });
+
+  // Slider gradient
+  const slider = document.getElementById('timeline');
+  const pct = (i / 59) * 100;
+  slider.style.setProperty('--pct', pct + '%');
+
+  // Meta
+  document.getElementById('meta-date').textContent = candleDate(i);
+  document.getElementById('meta-bars').textContent = `Candle ${i} of 60 · ${59-i===0?'NOW':`−${59-i} bars`}`;
+
+  // Draw chart
+  drawChart(i);
+
+  // Render inference cards
+  renderCards(i);
+}
+
+// ═══════════════════════════════════════════════════════
+// CONTROLS
+// ═══════════════════════════════════════════════════════
+const slider = document.getElementById('timeline');
+slider.addEventListener('input', () => updateAll(parseInt(slider.value)));
+
+let playInterval = null;
+function togglePlay() {
+  const btn = document.getElementById('btn-play');
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+    btn.textContent = '▶';
+    btn.classList.remove('playing');
+  } else {
+    if (currentCandle >= 59) updateAll(0);
+    btn.textContent = '⏸';
+    btn.classList.add('playing');
+    playInterval = setInterval(() => {
+      const next = currentCandle + 1;
+      if (next > 59) { togglePlay(); return; }
+      slider.value = next;
+      updateAll(next);
+    }, 600);
+  }
+}
+
+document.getElementById('btn-play').addEventListener('click', togglePlay);
+document.getElementById('btn-back').addEventListener('click', () => { const v = Math.max(0, currentCandle-1); slider.value = v; updateAll(v); });
+document.getElementById('btn-fwd').addEventListener('click',  () => { const v = Math.min(59, currentCandle+1); slider.value = v; updateAll(v); });
+document.getElementById('btn-start').addEventListener('click', () => { slider.value = 0; updateAll(0); });
+document.getElementById('btn-end').addEventListener('click',   () => { slider.value = 59; updateAll(59); });
+
+window.jumpTo = function(i) { slider.value = i; updateAll(i); };
+window.jumpToChapter = function(ch) {
+  const t = chapterTransitions.find(x => x.ch === ch);
+  if (t) jumpTo(t.i);
+};
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft')  { const v = Math.max(0, currentCandle-1);  slider.value = v; updateAll(v); }
+  if (e.key === 'ArrowRight') { const v = Math.min(59, currentCandle+1); slider.value = v; updateAll(v); }
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+});
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', resizeCanvas);
+buildChapterMarkers();
+resizeCanvas();
+updateAll(59);
+</script>
+</body>
+</html>
