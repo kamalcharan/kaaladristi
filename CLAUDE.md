@@ -53,7 +53,7 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **030** (`km_migration_030_volume_divergence.sql`)
+Latest migration: **031** (`km_migration_031_volume_scale_guard.sql`)
 
 | Table | Description |
 |---|---|
@@ -220,7 +220,20 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **031**.
+Next migration number: **032**.
+
+---
+
+## Known Issues
+
+### Volume Scale Discontinuity (km_index_eod)
+- Detected: 2026-04-13
+- Affected: index_id = 1 (NIFTY 50), possibly others
+- Symptom: Pre-2026-03-25 volume ~500K/day vs post-2026-03-25 ~400M/day
+- Impact: RVOL near-zero for pre-discontinuity dates causing false LOW_VOLUME and VACUUM_DOWN signals
+- Workaround: RVOL < 0.1 AND TVOL > 0.5 guard in compute_flow_intelligence()
+- Root cause: Unknown — possibly data source change or index reconstitution. Needs investigation.
+- Status: Guard applied in migration 031. Root cause investigation pending.
 
 ---
 
