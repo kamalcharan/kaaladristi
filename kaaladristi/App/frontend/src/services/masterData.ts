@@ -59,6 +59,18 @@ export async function fetchIndexConstituents(indexId: number): Promise<KmIndexCo
   return (data ?? []) as KmIndexConstituent[];
 }
 
+/** Fetch constituents with equity details (symbol, company_name, industry) */
+export async function fetchIndexBreakdown(indexId: number) {
+  const { data, error } = await from('km_index_constituents')
+    .select('id,index_id,equity_id,sector,weight_pct,snapshot_date,km_equity_symbols(symbol,company_name,industry,is_fno)')
+    .eq('index_id', indexId)
+    .execute();
+  if (error) throw new Error(`[km_index_constituents] ${error.message}`);
+  return (data ?? []) as Array<KmIndexConstituent & {
+    km_equity_symbols: { symbol: string; company_name: string | null; industry: string | null; is_fno: boolean };
+  }>;
+}
+
 // ── Derived: sector breakdown for an index ──
 
 /** @deprecated Use fetchConstituentSectorBreakdown instead */

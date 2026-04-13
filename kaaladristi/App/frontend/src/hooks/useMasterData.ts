@@ -13,6 +13,7 @@ import {
   fetchIndexSymbols,
   fetchIndexConstituents,
   fetchConstituentSectorBreakdown,
+  fetchIndexBreakdown,
 } from '@/services/masterData';
 
 // Master data is static — cache aggressively (1 hour stale, never garbage collected)
@@ -90,6 +91,15 @@ export function useConstituentSectorBreakdown(indexId: number | undefined) {
   return useQuery({
     queryKey: ['km', 'constituent_sector_breakdown', indexId],
     queryFn: () => fetchConstituentSectorBreakdown(indexId!),
+    enabled: !!indexId,
+    ...MASTER_OPTS,
+  });
+}
+
+export function useIndexBreakdown(indexId: number | undefined) {
+  return useQuery({
+    queryKey: ['km', 'index_breakdown', indexId],
+    queryFn: () => fetchIndexBreakdown(indexId!),
     enabled: !!indexId,
     ...MASTER_OPTS,
   });

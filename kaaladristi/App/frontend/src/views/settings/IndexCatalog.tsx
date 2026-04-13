@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight,
-  BarChart3, Loader2, Power,
+  BarChart3, Loader2, Power, LayoutList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchIndexCatalog, toggleIndexActive } from '@/services/indexCatalog';
 import { fmtDate } from '@/lib/dateUtils';
 import type { IndexCatalogItem } from '@/types';
+import IndexBreakdown from './IndexBreakdown';
 
 const PAGE_SIZE = 25;
 
@@ -26,6 +27,7 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterTri, setFilterTri] = useState('');
   const [page, setPage] = useState(1);
+  const [breakdownIndex, setBreakdownIndex] = useState<{ id: number; name: string } | null>(null);
 
   const { data: catalog = [], isLoading, isError, error } = useQuery({
     queryKey: ['index_catalog'],
@@ -66,6 +68,16 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
   const activeCount = catalog.filter(c => c.is_active).length;
 
   const selectCls = 'px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl text-xs text-[var(--text-secondary)] focus:outline-none focus:border-accent-indigo/60 transition-colors';
+
+  if (breakdownIndex) {
+    return (
+      <IndexBreakdown
+        indexId={breakdownIndex.id}
+        indexName={breakdownIndex.name}
+        onBack={() => setBreakdownIndex(null)}
+      />
+    );
+  }
 
   return (
     <div>
@@ -202,6 +214,14 @@ export default function IndexCatalog({ onBack }: { onBack: () => void }) {
                     ? item.last_close.toLocaleString('en-IN', { minimumFractionDigits: 2 })
                     : '—'}
                 </span>
+
+                <button
+                  onClick={() => setBreakdownIndex({ id: item.id, name: item.name })}
+                  title={`${item.name} breakdown`}
+                  className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-muted hover:text-accent-violet hover:bg-accent-violet/10 transition-all"
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                </button>
 
                 {item.record_count > 0 ? (
                   <button
