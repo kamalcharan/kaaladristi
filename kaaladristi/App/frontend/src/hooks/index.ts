@@ -12,6 +12,7 @@ export {
   useIndexSymbols,
   useIndexConstituents,
   useConstituentSectorBreakdown,
+  useIndexBreakdown,
 } from './useMasterData';
 
 export {
