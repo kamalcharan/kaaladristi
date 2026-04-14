@@ -192,7 +192,7 @@ export default function ChartView() {
         {/* ═══ Main Content: 65/35 split when pulse is available ═══ */}
         <div className={cn(
           'gap-4',
-          showPulse ? 'grid grid-cols-[1fr_360px]' : '',
+          showPulse ? 'grid grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]' : '',
         )}>
           {/* ── Left Panel: Chart + Intelligence ── */}
           <div className="min-w-0">
@@ -271,7 +271,7 @@ export default function ChartView() {
 
           {/* ── Right Panel: Visual Pulse Cards (index only) ── */}
           {showPulse && snapshot && (
-            <div className="min-w-0 flex flex-col gap-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1"
+            <div className="min-w-0 flex flex-col gap-3 sticky top-0 max-h-screen overflow-y-auto pr-1 pb-4"
               style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
             >
               {/* VaNi Header */}
