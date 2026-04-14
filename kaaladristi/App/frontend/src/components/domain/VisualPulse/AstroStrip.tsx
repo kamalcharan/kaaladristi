@@ -30,13 +30,14 @@ const IMPACT_COLORS: Record<string, string> = {
 };
 
 function scoreToColor(score: number): string {
-  if (score >= 6) return '#10b981';
-  if (score >= 3) return '#34d399';
-  if (score >= 1) return '#6ee7b766';
-  if (score === 0) return '#1e293b';
-  if (score >= -1) return '#fb923c88';
-  if (score >= -3) return '#ef444488';
-  return '#ef4444';
+  // Subtle, low-opacity backgrounds — track is a backdrop, not the main visual
+  if (score >= 6) return 'rgba(16,185,129,0.25)';    // green tint
+  if (score >= 3) return 'rgba(52,211,153,0.15)';
+  if (score >= 1) return 'rgba(110,231,183,0.08)';
+  if (score === 0) return '#0d1628';                   // near-black neutral
+  if (score >= -1) return 'rgba(251,146,60,0.1)';
+  if (score >= -3) return 'rgba(239,68,68,0.15)';
+  return 'rgba(239,68,68,0.25)';                       // red tint
 }
 
 interface AstroStripProps {
@@ -192,7 +193,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
       <div
         ref={trackRef}
         style={{
-          height: 10, borderRadius: 5, position: 'relative',
+          height: 12, borderRadius: 6, position: 'relative',
           background: `linear-gradient(to right, ${gradientStops})`,
           overflow: 'visible',
         }}
@@ -207,12 +208,13 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
             style={{
               position: 'absolute',
               left: `${tick.pct}%`,
-              top: -3, bottom: -3,
-              width: 2.5, borderRadius: 1,
+              top: -5, bottom: -5,
+              width: 3, borderRadius: 1.5,
               background: tick.color,
-              opacity: 0.9,
+              opacity: 1,
               cursor: 'pointer',
               transition: 'opacity 0.2s, transform 0.2s',
+              boxShadow: `0 0 4px ${tick.color}`,
             }}
             onMouseOver={(e) => {
               (e.currentTarget as HTMLElement).style.opacity = '1';
