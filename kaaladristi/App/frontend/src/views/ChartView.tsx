@@ -162,7 +162,7 @@ export default function ChartView() {
         {/* ═══ Main Grid: starts immediately after header ═══ */}
         <div className={cn(
           'gap-3',
-          showPulse ? 'grid grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]' : '',
+          showPulse ? 'grid grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px]' : '',
         )}>
           {/* ── Left Panel: Intelligence + Chart ── */}
           <div className="min-w-0">
