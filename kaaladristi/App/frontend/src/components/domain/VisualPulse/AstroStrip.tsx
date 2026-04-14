@@ -1,12 +1,12 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import type { DcInferenceEvent } from '@/services/visualPulseEngine';
-import { getDaysInMonth, toIso, MONTH_ABBR } from '@/lib/dateUtils';
+import { MONTH_ABBR } from '@/lib/dateUtils';
 
 /**
- * AstroStrip — matches kaaladristi-v2.html spec.
- * CSS gradient track colored by net astro score per day,
- * event tick marks overlaid, today marker with glow,
- * cursor-following tooltip, weekly date labels, legend.
+ * AstroStrip — 7-day window centered on active date.
+ * Shows astro energy gradient, event ticks, today marker,
+ * cursor-following tooltip with inference details.
+ * Moves with the timeline slider.
  */
 
 const ASTRO_WEIGHTS: Record<string, number> = {
@@ -30,14 +30,24 @@ const IMPACT_COLORS: Record<string, string> = {
 };
 
 function scoreToColor(score: number): string {
-  // Subtle, low-opacity backgrounds — track is a backdrop, not the main visual
-  if (score >= 6) return 'rgba(16,185,129,0.25)';    // green tint
-  if (score >= 3) return 'rgba(52,211,153,0.15)';
-  if (score >= 1) return 'rgba(110,231,183,0.08)';
-  if (score === 0) return '#0d1628';                   // near-black neutral
-  if (score >= -1) return 'rgba(251,146,60,0.1)';
-  if (score >= -3) return 'rgba(239,68,68,0.15)';
-  return 'rgba(239,68,68,0.25)';                       // red tint
+  if (score >= 6) return 'rgba(16,185,129,0.3)';
+  if (score >= 3) return 'rgba(52,211,153,0.2)';
+  if (score >= 1) return 'rgba(110,231,183,0.12)';
+  if (score === 0) return '#0d1628';
+  if (score >= -1) return 'rgba(251,146,60,0.15)';
+  if (score >= -3) return 'rgba(239,68,68,0.2)';
+  return 'rgba(239,68,68,0.3)';
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function formatDayLabel(dateStr: string): string {
+  const [, m, d] = dateStr.split('-');
+  return `${parseInt(d)} ${MONTH_ABBR[parseInt(m) - 1]}`;
 }
 
 interface AstroStripProps {
@@ -52,107 +62,68 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
     y: number;
     events: DcInferenceEvent[];
     dateStr: string;
-  }>({ visible: false, x: 0, y: 0, events: [], dateStr: '' });
+    score: number;
+  }>({ visible: false, x: 0, y: 0, events: [], dateStr: '', score: 0 });
 
-  const trackRef = useRef<HTMLDivElement>(null);
+  // 7-day window: 3 days before active, active, 3 days after
+  const windowStart = addDays(activeDate || new Date().toISOString().split('T')[0], -3);
+  const WINDOW_DAYS = 7;
+  const today = new Date().toISOString().split('T')[0];
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const daysInMonth = getDaysInMonth(year, month);
-  const todayStr = toIso(year, month, now.getDate());
-  const monthStart = toIso(year, month, 1);
-
-  // Compute net astro score per day
-  function dayScore(day: number): number {
-    const dateStr = toIso(year, month, day);
-    return dcInferences
-      .filter((ev) => dateStr >= ev.start_date && dateStr <= (ev.end_date ?? ev.start_date))
-      .reduce((sum, ev) => sum + (ASTRO_WEIGHTS[ev.market_impact ?? 'neutral'] ?? 0), 0);
-  }
-
-  // Events active on a day
-  function dayEvents(day: number): DcInferenceEvent[] {
-    const dateStr = toIso(year, month, day);
-    return dcInferences.filter(
+  // Build days array
+  const days = Array.from({ length: WINDOW_DAYS }, (_, i) => {
+    const dateStr = addDays(windowStart, i);
+    const events = dcInferences.filter(
       (ev) => dateStr >= ev.start_date && dateStr <= (ev.end_date ?? ev.start_date),
     );
-  }
+    const score = events.reduce(
+      (sum, ev) => sum + (ASTRO_WEIGHTS[ev.market_impact ?? 'neutral'] ?? 0), 0,
+    );
+    return { dateStr, events, score, color: scoreToColor(score) };
+  });
 
-  // Build gradient stops
-  const gradientStops = Array.from({ length: daysInMonth }, (_, i) => {
-    const pct = ((i / daysInMonth) * 100).toFixed(1);
-    return `${scoreToColor(dayScore(i + 1))} ${pct}%`;
-  }).join(', ');
-
-  // Unique event tick marks (one per event start date in this month)
-  const ticks: { pct: number; color: string; event: DcInferenceEvent }[] = [];
+  // Unique event ticks within window
+  const ticks: { dayIdx: number; color: string; event: DcInferenceEvent }[] = [];
   const seenKeys = new Set<string>();
   dcInferences.forEach((ev) => {
-    if (ev.start_date < monthStart || ev.start_date > toIso(year, month, daysInMonth)) return;
     const key = ev.start_date + ev.astro_event;
     if (seenKeys.has(key)) return;
+    // Check if event start falls within our window
+    const dayIdx = days.findIndex((d) => d.dateStr === ev.start_date);
+    if (dayIdx < 0) return;
     seenKeys.add(key);
-    const dayNum = parseInt(ev.start_date.split('-')[2], 10);
-    const pct = ((dayNum - 1) / daysInMonth) * 100;
     ticks.push({
-      pct,
+      dayIdx,
       color: IMPACT_COLORS[ev.market_impact ?? 'neutral'] ?? '#64748b',
       event: ev,
     });
   });
 
-  // Today position
-  const todayDay = now.getDate();
-  const todayPct = ((todayDay - 1) / daysInMonth) * 100;
-
-  // Active date position
-  let activePct: number | null = null;
-  if (activeDate) {
-    const parts = activeDate.split('-');
-    const aMonth = parseInt(parts[1], 10);
-    const aDay = parseInt(parts[2], 10);
-    if (aMonth === month) {
-      activePct = ((aDay - 1) / daysInMonth) * 100;
-    }
-  }
-
-  // Weekly date labels
-  const weekLabels: { label: string; pct: number }[] = [];
-  for (let d = 1; d <= daysInMonth; d += 7) {
-    weekLabels.push({
-      label: `${MONTH_ABBR[month - 1]} ${String(d).padStart(2, '0')}`,
-      pct: ((d - 1) / daysInMonth) * 100,
-    });
-  }
-  // Always include last day
-  weekLabels.push({
-    label: `${MONTH_ABBR[month - 1]} ${daysInMonth}`,
-    pct: ((daysInMonth - 1) / daysInMonth) * 100,
-  });
-
-  const handleTickEnter = useCallback(
-    (e: React.MouseEvent, ev: DcInferenceEvent) => {
-      const dateStr = ev.start_date;
-      const eventsOnDay = dcInferences.filter(
-        (d) => dateStr >= d.start_date && dateStr <= (d.end_date ?? d.start_date),
-      );
-      setTooltip({ visible: true, x: e.clientX + 12, y: e.clientY - 70, events: eventsOnDay, dateStr });
+  const handleDayEnter = useCallback(
+    (e: React.MouseEvent, day: typeof days[0]) => {
+      setTooltip({
+        visible: true,
+        x: e.clientX + 12,
+        y: e.clientY - 80,
+        events: day.events,
+        dateStr: day.dateStr,
+        score: day.score,
+      });
     },
-    [dcInferences],
+    [],
   );
 
-  const handleTickMove = useCallback((e: React.MouseEvent) => {
+  const handleDayMove = useCallback((e: React.MouseEvent) => {
     setTooltip((t) => {
       let x = e.clientX + 12;
-      let y = e.clientY - 70;
-      if (x + 220 > window.innerWidth) x = e.clientX - 230;
+      let y = e.clientY - 80;
+      if (x + 250 > window.innerWidth) x = e.clientX - 260;
       if (y < 10) y = 10;
       return { ...t, x, y };
     });
   }, []);
 
-  const handleTickLeave = useCallback(() => {
+  const handleDayLeave = useCallback(() => {
     setTooltip((t) => ({ ...t, visible: false }));
   }, []);
 
@@ -164,16 +135,16 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
         marginBottom: 6,
       }}>
         <span style={{
-          fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
-          textTransform: 'uppercase', letterSpacing: 3, color: 'var(--text-muted)',
+          fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+          textTransform: 'uppercase', letterSpacing: 2, color: 'var(--text-muted)',
         }}>
-          Astro Energy &middot; {MONTH_ABBR[month - 1]} {year}
+          Astro Energy &middot; 7-Day Window
         </span>
         <div style={{ display: 'flex', gap: 10 }}>
           {[
             { label: 'Major+', color: '#10b981' },
             { label: 'Minor+', color: '#6ee7b7' },
-            { label: 'Minor-', color: '#fb923c' },
+            { label: 'Minor−', color: '#fb923c' },
             { label: 'Bearish', color: '#ef4444' },
           ].map((item) => (
             <span key={item.label} style={{
@@ -189,132 +160,162 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
         </div>
       </div>
 
-      {/* Gradient Track + Ticks + Today */}
-      <div
-        ref={trackRef}
-        style={{
-          height: 12, borderRadius: 6, position: 'relative',
-          background: `linear-gradient(to right, ${gradientStops})`,
-          overflow: 'visible',
-        }}
-      >
-        {/* Event tick marks */}
-        {ticks.map((tick, i) => (
-          <div
-            key={i}
-            onMouseEnter={(e) => handleTickEnter(e, tick.event)}
-            onMouseMove={handleTickMove}
-            onMouseLeave={handleTickLeave}
-            style={{
-              position: 'absolute',
-              left: `${tick.pct}%`,
-              top: -5, bottom: -5,
-              width: 3, borderRadius: 1.5,
-              background: tick.color,
-              opacity: 1,
-              cursor: 'pointer',
-              transition: 'opacity 0.2s, transform 0.2s',
-              boxShadow: `0 0 4px ${tick.color}`,
-            }}
-            onMouseOver={(e) => {
-              (e.currentTarget as HTMLElement).style.opacity = '1';
-              (e.currentTarget as HTMLElement).style.transform = 'scaleY(1.3)';
-            }}
-            onMouseOut={(e) => {
-              (e.currentTarget as HTMLElement).style.opacity = '0.9';
-              (e.currentTarget as HTMLElement).style.transform = 'scaleY(1)';
-            }}
-          />
-        ))}
+      {/* Day segments */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: `repeat(${WINDOW_DAYS}, 1fr)`, gap: 2,
+        position: 'relative',
+      }}>
+        {days.map((day, i) => {
+          const isToday = day.dateStr === today;
+          const isActive = day.dateStr === activeDate;
 
-        {/* Today marker */}
-        <div style={{
-          position: 'absolute',
-          left: `${todayPct}%`,
-          top: -5, bottom: -5,
-          width: 2,
-          background: 'var(--accent-gold)',
-          boxShadow: '0 0 8px var(--accent-gold)',
-          borderRadius: 1,
-          zIndex: 2,
-        }}>
-          <div style={{
-            position: 'absolute', bottom: 'calc(100% + 3px)', left: '50%',
-            transform: 'translateX(-50%)',
-            fontSize: 6, fontFamily: 'var(--font-mono, monospace)',
-            color: 'var(--accent-gold)', letterSpacing: 2,
-            textTransform: 'uppercase', whiteSpace: 'nowrap',
-          }}>TODAY</div>
-        </div>
+          return (
+            <div
+              key={day.dateStr}
+              onMouseEnter={(e) => handleDayEnter(e, day)}
+              onMouseMove={handleDayMove}
+              onMouseLeave={handleDayLeave}
+              style={{
+                height: 28, borderRadius: 4, position: 'relative',
+                background: day.color,
+                border: isActive
+                  ? '2px solid var(--accent-gold)'
+                  : isToday
+                  ? '1px solid var(--accent-gold)'
+                  : '1px solid var(--kd-border)',
+                boxShadow: isActive ? '0 0 8px var(--accent-gold)' : isToday ? '0 0 4px rgba(201,168,76,0.3)' : undefined,
+                cursor: 'pointer',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {/* Day number */}
+              <span style={{
+                fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                fontWeight: isActive ? 700 : 400,
+                color: isActive ? 'var(--accent-gold)' : 'var(--text-primary)',
+              }}>
+                {parseInt(day.dateStr.split('-')[2], 10)}
+              </span>
 
-        {/* Active date marker */}
-        {activePct != null && activeDate !== todayStr && (
-          <div style={{
-            position: 'absolute',
-            left: `${activePct}%`,
-            top: -4, bottom: -4,
-            width: 2,
-            background: 'var(--text-secondary)',
-            borderRadius: 1,
-            zIndex: 1,
-            opacity: 0.7,
-          }} />
-        )}
+              {/* Event dots below day number */}
+              {day.events.length > 0 && (
+                <div style={{ display: 'flex', gap: 2, marginTop: 1 }}>
+                  {day.events.slice(0, 4).map((ev, j) => (
+                    <span key={j} style={{
+                      width: 4, height: 4, borderRadius: '50%',
+                      background: IMPACT_COLORS[ev.market_impact ?? 'neutral'],
+                    }} />
+                  ))}
+                </div>
+              )}
+
+              {/* Today label */}
+              {isToday && (
+                <span style={{
+                  position: 'absolute', top: -10,
+                  fontSize: 6, fontFamily: 'var(--font-mono, monospace)',
+                  color: 'var(--accent-gold)', letterSpacing: 1,
+                  textTransform: 'uppercase',
+                }}>TODAY</span>
+              )}
+
+              {/* Score badge */}
+              {day.score !== 0 && (
+                <span style={{
+                  position: 'absolute', bottom: -10,
+                  fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
+                  color: day.score > 0 ? '#10b981' : '#ef4444',
+                }}>
+                  {day.score > 0 ? '+' : ''}{day.score}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Weekly date labels */}
+      {/* Day labels */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between',
-        marginTop: 5,
-        fontSize: 7, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
+        display: 'grid', gridTemplateColumns: `repeat(${WINDOW_DAYS}, 1fr)`, gap: 2,
+        marginTop: 12,
       }}>
-        {weekLabels.map((lbl, i) => (
-          <span key={i}>{lbl.label}</span>
+        {days.map((day) => (
+          <span key={day.dateStr} style={{
+            textAlign: 'center',
+            fontSize: 7, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
+          }}>
+            {formatDayLabel(day.dateStr)}
+          </span>
         ))}
       </div>
 
       {/* Cursor-following tooltip */}
-      {tooltip.visible && tooltip.events.length > 0 && (
+      {tooltip.visible && (
         <div style={{
           position: 'fixed',
           left: tooltip.x,
           top: tooltip.y,
           zIndex: 999,
-          padding: '8px 12px',
+          padding: '10px 14px',
           borderRadius: 8,
           background: 'var(--kd-surface)',
           border: '1px solid var(--kd-border)',
           boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           fontSize: 9,
           color: 'var(--text-secondary)',
-          lineHeight: 1.5,
-          maxWidth: 220,
+          lineHeight: 1.6,
+          maxWidth: 260,
           pointerEvents: 'none',
         }}>
           <div style={{
-            fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
-            color: 'var(--text-primary)', marginBottom: 4,
-          }}>{tooltip.dateStr}</div>
-          {tooltip.events.map((ev) => (
-            <div key={ev.id} style={{ marginBottom: 3 }}>
-              <div style={{
-                color: IMPACT_COLORS[ev.market_impact ?? 'neutral'],
-                fontWeight: 600, marginBottom: 1,
-              }}>{ev.astro_event}</div>
-              <div style={{ color: 'var(--text-muted)' }}>
-                {ev.start_date}{ev.end_date && ev.end_date !== ev.start_date ? ` → ${ev.end_date}` : ''}
-              </div>
-              <div style={{
-                color: IMPACT_COLORS[ev.market_impact ?? 'neutral'],
-                textTransform: 'uppercase', fontSize: 8, marginTop: 1,
-              }}>{(ev.market_impact ?? 'neutral').replace(/_/g, ' ')}</div>
-              {ev.inference && (
-                <div style={{
-                  color: 'var(--accent-gold)', fontStyle: 'italic', marginTop: 2,
-                }}>"{ev.inference}"</div>
-              )}
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            marginBottom: 4,
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
+              color: 'var(--text-primary)',
+            }}>{tooltip.dateStr}</span>
+            <span style={{
+              fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
+              fontSize: 10,
+              color: tooltip.score > 0 ? '#10b981' : tooltip.score < 0 ? '#ef4444' : 'var(--text-muted)',
+            }}>
+              Score: {tooltip.score > 0 ? '+' : ''}{tooltip.score}
+            </span>
+          </div>
+
+          {tooltip.events.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              No astro events active
             </div>
-          ))}
+          ) : (
+            tooltip.events.map((ev) => (
+              <div key={ev.id} style={{
+                marginBottom: 6, paddingBottom: 4,
+                borderBottom: '1px solid var(--kd-border)',
+              }}>
+                <div style={{
+                  color: IMPACT_COLORS[ev.market_impact ?? 'neutral'],
+                  fontWeight: 600,
+                }}>{ev.astro_event}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 8 }}>
+                  {ev.start_date}{ev.end_date && ev.end_date !== ev.start_date ? ` → ${ev.end_date}` : ''}
+                  {' · '}
+                  <span style={{
+                    color: IMPACT_COLORS[ev.market_impact ?? 'neutral'],
+                    textTransform: 'uppercase',
+                  }}>{(ev.market_impact ?? 'neutral').replace(/_/g, ' ')}</span>
+                </div>
+                {ev.inference && (
+                  <div style={{
+                    color: 'var(--accent-gold)', fontStyle: 'italic', marginTop: 2,
+                    fontSize: 9,
+                  }}>"{ev.inference}"</div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
