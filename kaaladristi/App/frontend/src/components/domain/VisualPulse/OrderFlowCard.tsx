@@ -137,7 +137,7 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
   return (
     <div style={{
       background: 'var(--kd-surface)', border: '1px solid var(--kd-border)',
-      borderRadius: 12, overflow: 'hidden',
+      borderRadius: 12,
     }}>
       {/* Header */}
       <div style={{

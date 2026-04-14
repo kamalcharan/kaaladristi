@@ -121,7 +121,7 @@ export default function CorrelationCard({
   return (
     <div style={{
       background: 'var(--kd-surface)', border: '1px solid var(--kd-border)',
-      borderRadius: 12, overflow: 'hidden',
+      borderRadius: 12,
       transition: 'border-color 0.5s ease',
     }}>
       {/* Verdict Hero */}

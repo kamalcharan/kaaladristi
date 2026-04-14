@@ -80,7 +80,7 @@ export default function DivergenceCard({ divergence, rsiHistory, priceHistory }:
   return (
     <div style={{
       background: 'var(--kd-surface)', border: '1px solid var(--kd-border)',
-      borderRadius: 12, overflow: 'hidden',
+      borderRadius: 12,
     }}>
       {/* Header */}
       <div style={{
