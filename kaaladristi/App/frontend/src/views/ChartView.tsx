@@ -129,72 +129,42 @@ export default function ChartView() {
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
-        {/* Back button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 text-xs text-muted hover:text-[var(--text-primary)] mb-4 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back
-        </button>
-
-        {/* Header */}
-        <header className="mb-4">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--text-primary)] mb-1">{name}</h1>
-          <p className="text-secondary text-sm">Historical price data &amp; technical indicators</p>
-        </header>
-
-        {/* Stats bar */}
-        {isLoading ? (
-          <div className="glass-card rounded-3xl p-6 mb-4">
-            <div className="flex items-center gap-8">
-              <Skeleton className="h-10 w-48" />
-              <Skeleton className="h-6 w-32" />
-              <Skeleton className="h-6 w-24" />
-            </div>
-          </div>
-        ) : latest ? (
-          <div className="glass-card rounded-3xl p-4 sm:p-5 mb-4">
-            <div className="flex flex-wrap items-end gap-x-6 sm:gap-x-10 gap-y-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted font-bold mb-1">{name}</p>
-                <div className="flex items-baseline gap-4">
-                  <span className="text-2xl sm:text-3xl font-bold mono text-[var(--text-primary)]">
-                    {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                  <div className={cn('flex items-center gap-1.5', isPositive ? 'text-risk-green' : 'text-risk-red')}>
-                    {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    <span className="text-sm font-bold mono">
-                      {isPositive ? '+' : ''}{change.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className="text-sm font-bold mono">
-                      ({isPositive ? '+' : ''}{changePct.toFixed(2)}%)
-                    </span>
-                  </div>
-                </div>
+        {/* ═══ Compact Header Row: Back + Name + Price + Stats ═══ */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </button>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
+          {!isLoading && latest && (
+            <>
+              <span className="text-xl font-bold mono text-[var(--text-primary)]">
+                {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+              <div className={cn('flex items-center gap-1', isPositive ? 'text-risk-green' : 'text-risk-red')}>
+                {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                <span className="text-xs font-bold mono">
+                  {isPositive ? '+' : ''}{changePct.toFixed(2)}%
+                </span>
               </div>
-              <div className="flex flex-wrap gap-3 text-xs">
-                <StatPill label="Day H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
-                <StatPill label="52W High" value={fmt(high52w)} />
-                <StatPill label="52W Low" value={fmt(low52w)} />
-                <StatPill label="Prev Close" value={fmt(prevClose)} />
+              <div className="flex flex-wrap gap-2 text-xs ml-auto">
+                <StatPill label="H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
+                <StatPill label="52W" value={`${fmt(low52w)} – ${fmt(high52w)}`} />
                 {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
-                {latest.supertrend_dir != null && (
-                  <StatPill label="SuperTrend" value={latest.supertrend_dir === 1 ? 'Bullish' : 'Bearish'} />
-                )}
-                {latest.magic_rs_zone && <StatPill label="MagicRS" value={latest.magic_rs_zone} />}
-                {latest.chartink_score != null && <StatPill label="Chartink" value={`${latest.chartink_score}/3`} />}
+                {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
               </div>
-            </div>
-          </div>
-        ) : null}
+            </>
+          )}
+        </div>
 
-        {/* ═══ Main Content: 65/35 split when pulse is available ═══ */}
+        {/* ═══ Main Grid: starts immediately after header ═══ */}
         <div className={cn(
-          'gap-4',
-          showPulse ? 'grid grid-cols-[1fr_340px] xl:grid-cols-[1fr_380px]' : '',
+          'gap-3',
+          showPulse ? 'grid grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]' : '',
         )}>
-          {/* ── Left Panel: Chart + Intelligence ── */}
+          {/* ── Left Panel: Intelligence + Chart ── */}
           <div className="min-w-0">
             {/* Intelligence Panel */}
             {!isLoading && !isError && rows.length > 0 && (
@@ -202,16 +172,16 @@ export default function ChartView() {
             )}
 
             {/* Chart area */}
-            <div className="glass-card rounded-3xl p-4 mt-4">
+            <div className="glass-card rounded-2xl p-3 mt-3">
               {/* Time range selector */}
               {!isLoading && !isError && rows.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 mb-4 px-2">
+                <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
                   {TIME_RANGES.map(r => (
                     <button
                       key={r}
                       onClick={() => setRange(r)}
                       className={cn(
-                        'px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
+                        'px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all duration-200',
                         range === r
                           ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
                           : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
@@ -225,36 +195,29 @@ export default function ChartView() {
 
               {isLoading ? (
                 <div className="space-y-4 p-2">
-                  <div className="flex gap-2">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <Skeleton key={i} className="h-8 w-12 rounded-lg" />
-                    ))}
-                  </div>
-                  <Skeleton className="h-[500px] w-full rounded-2xl" />
-                  <Skeleton className="h-[120px] w-full rounded-2xl" />
+                  <Skeleton className="h-[400px] w-full rounded-2xl" />
+                  <Skeleton className="h-[100px] w-full rounded-2xl" />
                 </div>
               ) : isError ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-6">
-                    <AlertCircle className="w-8 h-8 text-risk-red" />
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-4">
+                    <AlertCircle className="w-6 h-6 text-risk-red" />
                   </div>
-                  <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">Failed to Load Chart Data</p>
-                  <p className="text-sm text-secondary max-w-md mb-4">{errorMsg || 'Unexpected error.'}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Failed to Load</p>
+                  <p className="text-xs text-secondary max-w-md mb-3">{errorMsg || 'Unexpected error.'}</p>
                   <button
                     onClick={() => refetch()}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-xs font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" /> Retry
+                    <RefreshCw className="w-3 h-3" /> Retry
                   </button>
                 </div>
               ) : rows.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-kd-elevated border border-kd-border flex items-center justify-center mb-6">
-                    <BarChart3 className="w-8 h-8 text-[var(--text-muted)]" />
-                  </div>
-                  <p className="text-lg font-semibold text-[var(--text-primary)] mb-2">No Price Data</p>
-                  <p className="text-sm text-secondary max-w-md leading-relaxed">
-                    <span className="text-[var(--text-primary)] font-medium">{name}</span> has no EOD data loaded yet.
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <BarChart3 className="w-8 h-8 text-[var(--text-muted)] mb-3" />
+                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">No Price Data</p>
+                  <p className="text-xs text-secondary">
+                    <span className="text-[var(--text-primary)] font-medium">{name}</span> has no EOD data.
                   </p>
                 </div>
               ) : (
@@ -263,19 +226,29 @@ export default function ChartView() {
             </div>
 
             {rows.length > 0 && (
-              <p className="text-[10px] text-muted mt-2 text-right mono">
-                {rows.length} trading days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
+              <p className="text-[9px] text-muted mt-1 text-right mono">
+                {rows.length} days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
               </p>
+            )}
+
+            {/* Astro Strip (below chart, inside left column) */}
+            {isIndex && dcInferences.length > 0 && (
+              <div className="glass-card rounded-2xl p-3 mt-3">
+                <AstroStrip
+                  dcInferences={dcInferences}
+                  activeDate={latest?.trade_date ?? ''}
+                />
+              </div>
             )}
           </div>
 
           {/* ── Right Panel: Visual Pulse Cards (index only) ── */}
           {showPulse && snapshot && (
-            <div className="min-w-0 flex flex-col gap-3 sticky top-0 max-h-screen overflow-y-auto pr-1 pb-4"
+            <div className="min-w-0 flex flex-col gap-2.5 sticky top-0 max-h-screen overflow-y-auto pb-4"
               style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
             >
               {/* VaNi Header */}
-              <div className="glass-card rounded-2xl p-3">
+              <div className="glass-card rounded-xl p-2.5">
                 <VaNiHeader
                   date={snapshot.bar.trade_date}
                   barPosition="Latest"
@@ -324,16 +297,6 @@ export default function ChartView() {
             </div>
           )}
         </div>
-
-        {/* ═══ Astro Strip (full width, index only) ═══ */}
-        {isIndex && dcInferences.length > 0 && (
-          <div className="mt-4 glass-card rounded-2xl p-3">
-            <AstroStrip
-              dcInferences={dcInferences}
-              activeDate={latest?.trade_date ?? ''}
-            />
-          </div>
-        )}
       </div>
     </ErrorBoundary>
   );
