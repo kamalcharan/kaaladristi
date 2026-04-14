@@ -244,8 +244,8 @@ export default function ChartView() {
 
           {/* ── Right Panel: Visual Pulse Cards (index only) ── */}
           {showPulse && snapshot && (
-            <div className="min-w-0 flex flex-col gap-2.5 sticky top-0 max-h-screen overflow-y-auto pb-4"
-              style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
+            <div className="min-w-0 flex flex-col gap-2.5 overflow-y-auto pb-4"
+              style={{ maxHeight: 'calc(100vh - 80px)', scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
             >
               {/* VaNi Header */}
               <div className="glass-card rounded-xl p-2.5">

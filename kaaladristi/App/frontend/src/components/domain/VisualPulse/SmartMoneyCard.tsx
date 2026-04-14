@@ -214,6 +214,7 @@ export default function SmartMoneyCard({ smHistory, sm, narrative }: SmartMoneyC
       <div style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1,
         background: 'var(--kd-border)', borderTop: '1px solid var(--kd-border)',
+        overflow: 'hidden',
       }}>
         <div style={{ background: 'var(--kd-surface)' }}>
           <ValueBlock label="Smart Money" value={sm.smartMoney} color="var(--risk-red)" trend={sm.smSlope5} />
