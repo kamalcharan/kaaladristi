@@ -29,9 +29,9 @@ import {
   DivergenceCard,
   VaNiHeader,
   VaNiSentence,
-  AstroStrip,
   TimelineSlider,
 } from '@/components/domain/VisualPulse';
+import SevenDayStrip from '@/components/domain/SevenDayStrip';
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
@@ -184,13 +184,10 @@ export default function ChartView() {
               <InstrumentIntelligence id={numId} type={type ?? 'index'} />
             )}
 
-            {/* Astro Strip (above chart) */}
-            {isIndex && dcInferences.length > 0 && (
-              <div className="glass-card rounded-2xl px-3 py-2 mt-2">
-                <AstroStrip
-                  dcInferences={dcInferences}
-                  activeDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? ''}
-                />
+            {/* Astro Strip (above chart) — reuses existing SevenDayStrip */}
+            {isIndex && (
+              <div className="mt-2">
+                <SevenDayStrip selectedDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? new Date().toISOString().split('T')[0]} />
               </div>
             )}
 
