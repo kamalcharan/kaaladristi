@@ -16,8 +16,8 @@ function ScoreBar({ label, score, max }: { label: string; score: number; max: nu
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <span style={{
-        width: 52, fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
-        letterSpacing: 1, color: 'var(--text-muted)', textTransform: 'uppercase',
+        width: 64, flexShrink: 0, fontFamily: 'var(--font-mono, monospace)', fontSize: 8,
+        letterSpacing: 0.5, color: 'var(--text-muted)', textTransform: 'uppercase',
       }}>{label}</span>
       <div style={{
         flex: 1, height: 5, background: 'var(--kd-bg)', borderRadius: 3, overflow: 'hidden',

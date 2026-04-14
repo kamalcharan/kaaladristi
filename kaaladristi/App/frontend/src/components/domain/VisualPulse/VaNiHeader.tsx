@@ -22,7 +22,7 @@ export default function VaNiHeader({ date, barPosition, isThinking }: VaNiHeader
           fontSize: 13, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
           color: 'var(--text-primary)',
         }}>
-          VaNi &middot; <span style={{ fontWeight: 400 }}>\u0935\u093E\u0923\u0940</span>
+          VaNi &middot; <span style={{ fontWeight: 400 }}>वाणी</span>
         </div>
         <div style={{
           fontSize: 9, fontFamily: 'var(--font-mono, monospace)',

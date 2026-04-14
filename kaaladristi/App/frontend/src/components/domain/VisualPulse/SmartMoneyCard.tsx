@@ -152,13 +152,13 @@ function ValueBlock({ label, value, color, trend }: {
   return (
     <div style={{ padding: '6px 10px', textAlign: 'center' }}>
       <div style={{
-        fontSize: 14, fontFamily: 'var(--font-mono, monospace)', fontWeight: 500,
+        fontSize: 12, fontFamily: 'var(--font-mono, monospace)', fontWeight: 500,
         color,
       }}>
         {value?.toFixed(1) ?? '—'}
         {trend != null && (
           <span style={{
-            fontSize: 9, marginLeft: 4,
+            fontSize: 8, marginLeft: 2, whiteSpace: 'nowrap',
             color: trend > 0 ? 'var(--risk-green)' : trend < 0 ? 'var(--risk-red)' : 'var(--text-muted)',
           }}>
             {trend > 0 ? '↑' : trend < 0 ? '↓' : '→'}{Math.abs(trend).toFixed(1)}
