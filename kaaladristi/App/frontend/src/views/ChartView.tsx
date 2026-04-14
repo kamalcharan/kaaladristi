@@ -13,11 +13,13 @@ import type { TimeRange } from '@/types';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import {
   computePulseSnapshot,
+  computeCorrHistory,
   computeRssSignals,
   computeSmartMoney,
   computeDots,
   type TradingStyle,
   type DotSignals,
+  type CorrelationState,
   type PulseSnapshot,
 } from '@/services/visualPulseEngine';
 import {
@@ -28,6 +30,7 @@ import {
   VaNiHeader,
   VaNiSentence,
   AstroStrip,
+  TimelineSlider,
 } from '@/components/domain/VisualPulse';
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 
@@ -45,6 +48,7 @@ export default function ChartView() {
   const navigate = useNavigate();
   const [range, setRange] = useState<TimeRange>('1Y');
   const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const numId = Number(id);
   const name = searchParams.get('name') ?? `${type} #${id}`;
@@ -79,13 +83,18 @@ export default function ChartView() {
 
   const errorMsg = error instanceof Error ? error.message : '';
 
-  // ── Visual Pulse computations (latest bar only) ──
-  const pulseIdx = pulseBars.length > 0 ? pulseBars.length - 1 : 0;
+  // ── Visual Pulse computations ──
+  const pulseIdx = activeIndex ?? (pulseBars.length > 0 ? pulseBars.length - 1 : 0);
 
   const snapshot: PulseSnapshot | null = useMemo(() => {
     if (pulseBars.length === 0) return null;
     return computePulseSnapshot(pulseBars, pulseIdx, dcInferences, selectedStyle);
   }, [pulseBars, pulseIdx, dcInferences, selectedStyle]);
+
+  const corrHistory: CorrelationState[] = useMemo(() => {
+    if (pulseBars.length === 0) return [];
+    return computeCorrHistory(pulseBars, dcInferences, selectedStyle);
+  }, [pulseBars, dcInferences, selectedStyle]);
 
   const dotsHistory: DotSignals[] = useMemo(() => {
     return pulseBars.map((b, i) => computeDots(b, i > 0 ? pulseBars[i - 1] : null));
@@ -121,6 +130,10 @@ export default function ChartView() {
 
   const handleStyleChange = useCallback((style: TradingStyle) => {
     setSelectedStyle(style);
+  }, []);
+
+  const handleSliderChange = useCallback((idx: number) => {
+    setActiveIndex(idx);
   }, []);
 
   // Show pulse panel only for index with data
@@ -297,6 +310,19 @@ export default function ChartView() {
             </div>
           )}
         </div>
+
+        {/* ═══ Timeline Slider (full width, index only) ═══ */}
+        {showPulse && (
+          <div className="mt-3 glass-card rounded-2xl overflow-hidden">
+            <TimelineSlider
+              total={pulseBars.length}
+              activeIndex={pulseIdx}
+              bars={pulseBars}
+              corrHistory={corrHistory}
+              onChange={handleSliderChange}
+            />
+          </div>
+        )}
       </div>
     </ErrorBoundary>
   );
