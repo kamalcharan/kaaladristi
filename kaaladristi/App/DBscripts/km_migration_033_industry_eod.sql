@@ -9,13 +9,33 @@
 --   stock_count, avg_magic_rs, pct_strong_bull, pct_strong_bear,
 --   pct_accumulation, pct_distribution, dominant_flow_type,
 --   avg_sniper_inst, pct_with_recent_svd, pct_with_recent_sbd,
---   pct_volume_div_up, pct_volume_div_down, industry_rank
+--   pct_with_recent_syd, pct_volume_div_up, pct_volume_div_down,
+--   industry_rank
 --
--- SVD/SBD/SYD logic implemented in SQL matching the TypeScript
--- visualPulseEngine.ts computeDots() function:
---   SVD: rvol>10, aboveMid, strongClose(>2%), bodyRatio≥0.5, bullish
---   SBD: rvol 3-10, bullish, closeInUpperThird, bodyRatio≥0.45
---   SYD: close<prevClose, rvol≥2, closeInLowerThird
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  CANONICAL DOT SIGNAL DEFINITIONS (SQL copy)               │
+-- │  Source of truth: visualPulseEngine.ts  computeDots()       │
+-- │  This SQL is a deliberate performance copy — NOT a fork.    │
+-- │  If you change a threshold here, change it there too.       │
+-- │                                                             │
+-- │  SVD  (Strong Volume Drive)                                 │
+-- │    rvol > 10                                                │
+-- │    AND close > (high + low) / 2            — above midpoint │
+-- │    AND close > prev_close * 1.02           — 2 % gap-up     │
+-- │    AND abs(close − open) / (high − low) ≥ 0.5  — body ≥ 50%│
+-- │    AND close > open                        — bullish candle  │
+-- │                                                             │
+-- │  SBD  (Smart Buy Day / Accumulation Signature)              │
+-- │    rvol ≥ 3  AND  rvol < 10                                 │
+-- │    AND close > open                        — bullish         │
+-- │    AND close > high − (high − low) / 3     — upper third    │
+-- │    AND abs(close − open) / (high − low) ≥ 0.45             │
+-- │                                                             │
+-- │  SYD  (Sell Yellow Day / Distribution Signal)               │
+-- │    close < prev_close                      — down day        │
+-- │    AND rvol ≥ 2                                              │
+-- │    AND close < low + (high − low) / 3      — lower third    │
+-- └─────────────────────────────────────────────────────────────┘
 --
 -- Filter: stock_count >= 5, exclude 'Shell Companies'
 -- Called after compute_all_flow_intelligence() in daily pipeline.
@@ -35,6 +55,7 @@ CREATE TABLE IF NOT EXISTS km_industry_eod (
     avg_sniper_inst       FLOAT8,
     pct_with_recent_svd   FLOAT8,
     pct_with_recent_sbd   FLOAT8,
+    pct_with_recent_syd   FLOAT8,
     pct_volume_div_up     FLOAT8,
     pct_volume_div_down   FLOAT8,
     industry_rank         INT,
@@ -58,6 +79,8 @@ COMMENT ON COLUMN km_industry_eod.pct_with_recent_svd IS
   '% of stocks with SVD (Strong Volume Drive) in last 5 trading bars.';
 COMMENT ON COLUMN km_industry_eod.pct_with_recent_sbd IS
   '% of stocks with SBD (Smart Buy Day / Accumulation Signature) in last 5 trading bars.';
+COMMENT ON COLUMN km_industry_eod.pct_with_recent_syd IS
+  '% of stocks with SYD (Sell Yellow Day / Distribution Signal) in last 5 trading bars.';
 
 
 -- ── RLS ────────────────────────────────────────────────────────
@@ -139,16 +162,24 @@ BEGIN
         AND (high - low) > 0
         AND close > high - (high - low) / 3.0
         AND ABS(close - open) / (high - low) >= 0.45
-      THEN TRUE ELSE FALSE END AS is_sbd
+      THEN TRUE ELSE FALSE END AS is_sbd,
+
+      CASE WHEN
+        prev_close IS NOT NULL AND close < prev_close
+        AND COALESCE(rvol, 0) >= 2
+        AND (high - low) > 0
+        AND close < low + (high - low) / 3.0
+      THEN TRUE ELSE FALSE END AS is_syd
     FROM equity_window
   ),
 
-  -- Per equity: did SVD or SBD fire in any of the last 5 bars?
+  -- Per equity: did SVD, SBD, or SYD fire in any of the last 5 bars?
   equity_dot_5d AS (
     SELECT
       equity_id,
       BOOL_OR(is_svd) AS has_recent_svd,
-      BOOL_OR(is_sbd) AS has_recent_sbd
+      BOOL_OR(is_sbd) AS has_recent_sbd,
+      BOOL_OR(is_syd) AS has_recent_syd
     FROM dot_signals
     GROUP BY equity_id
   ),
@@ -195,6 +226,8 @@ BEGIN
                   / NULLIF(COUNT(*), 0), 2)::FLOAT8 AS pct_with_recent_svd,
       ROUND(100.0 * COUNT(*) FILTER (WHERE d5.has_recent_sbd)
                   / NULLIF(COUNT(*), 0), 2)::FLOAT8 AS pct_with_recent_sbd,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE d5.has_recent_syd)
+                  / NULLIF(COUNT(*), 0), 2)::FLOAT8 AS pct_with_recent_syd,
       ROUND(100.0 * COUNT(*) FILTER (WHERE cd.volume_divergence_flag = 'VOLUME_DIV_UP')
                   / NULLIF(COUNT(*), 0), 2)::FLOAT8 AS pct_volume_div_up,
       ROUND(100.0 * COUNT(*) FILTER (WHERE cd.volume_divergence_flag = 'VOLUME_DIV_DOWN')
@@ -218,7 +251,7 @@ BEGIN
     avg_magic_rs, pct_strong_bull, pct_strong_bear,
     pct_accumulation, pct_distribution,
     dominant_flow_type, avg_sniper_inst,
-    pct_with_recent_svd, pct_with_recent_sbd,
+    pct_with_recent_svd, pct_with_recent_sbd, pct_with_recent_syd,
     pct_volume_div_up, pct_volume_div_down,
     industry_rank
   )
@@ -228,7 +261,7 @@ BEGIN
     r.avg_magic_rs, r.pct_strong_bull, r.pct_strong_bear,
     r.pct_accumulation, r.pct_distribution,
     df.dominant_flow_type, r.avg_sniper_inst,
-    r.pct_with_recent_svd, r.pct_with_recent_sbd,
+    r.pct_with_recent_svd, r.pct_with_recent_sbd, r.pct_with_recent_syd,
     r.pct_volume_div_up, r.pct_volume_div_down,
     r.industry_rank
   FROM ranked r

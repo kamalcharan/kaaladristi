@@ -234,7 +234,8 @@ PK: `(trade_date, industry)`. Filter: stock_count >= 5, excludes "Shell Companie
 
 Columns: `stock_count`, `avg_magic_rs`, `pct_strong_bull`, `pct_strong_bear`,
 `pct_accumulation`, `pct_distribution`, `dominant_flow_type`, `avg_sniper_inst`,
-`pct_with_recent_svd`, `pct_with_recent_sbd`, `pct_volume_div_up`, `pct_volume_div_down`,
+`pct_with_recent_svd`, `pct_with_recent_sbd`, `pct_with_recent_syd`,
+`pct_volume_div_up`, `pct_volume_div_down`,
 `industry_rank`.
 
 **Pipeline integration**: Call `compute_all_industry_composites(trade_date)` after

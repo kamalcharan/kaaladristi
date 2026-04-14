@@ -163,6 +163,33 @@ const ASTRO_WEIGHTS: Record<string, number> = {
 };
 
 // ── 2A. DOT Signals ─────────────────────────────────────────────
+//
+// ┌─────────────────────────────────────────────────────────────┐
+// │  CANONICAL DOT SIGNAL DEFINITIONS                           │
+// │  This TypeScript function is the source of truth.           │
+// │  Copies exist in:                                           │
+// │    • km_migration_033_industry_eod.sql  (SQL, precomputed)  │
+// │    • scanEngine.ts  hasDotInHistory()   (TS, per-stock)     │
+// │  If you change a threshold here, update both copies.        │
+// │                                                             │
+// │  SVD  (Strong Volume Drive)                                 │
+// │    rvol > 10                                                │
+// │    AND close > (high + low) / 2            — above midpoint │
+// │    AND close > prevClose * 1.02            — 2% gap-up      │
+// │    AND abs(close − open) / range ≥ 0.5     — body ≥ 50%    │
+// │    AND close > open                        — bullish candle  │
+// │                                                             │
+// │  SBD  (Smart Buy Day / Accumulation Signature)              │
+// │    rvol ≥ 3  AND  rvol < 10                                 │
+// │    AND close > open                        — bullish         │
+// │    AND close > high − range / 3            — upper third    │
+// │    AND abs(close − open) / range ≥ 0.45                     │
+// │                                                             │
+// │  SYD  (Sell Yellow Day / Distribution Signal)               │
+// │    close < prevClose                       — down day        │
+// │    AND rvol ≥ 2                                              │
+// │    AND close < low + range / 3             — lower third    │
+// └─────────────────────────────────────────────────────────────┘
 
 export function computeDots(bar: PulseBar, prevBar: PulseBar | null): DotSignals {
   const range = bar.high - bar.low;

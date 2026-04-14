@@ -178,6 +178,10 @@ async function loadScanData(): Promise<ScanDataBundle> {
 }
 
 // ── Helper: DOT detection in history ───────────────────────────
+// Per-stock lookback copy of the canonical DOT logic.
+// Source of truth: visualPulseEngine.ts computeDots()
+// SQL copy:        km_migration_033_industry_eod.sql dot_signals CTE
+// If you change a threshold, update all three locations.
 
 function hasDotInHistory(
   history: EquityEodSnapshot[],

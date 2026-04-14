@@ -371,6 +371,7 @@ export interface IndustryEodRow {
   avg_sniper_inst: number | null;
   pct_with_recent_svd: number | null;
   pct_with_recent_sbd: number | null;
+  pct_with_recent_syd: number | null;
   pct_volume_div_up: number | null;
   pct_volume_div_down: number | null;
   industry_rank: number;
