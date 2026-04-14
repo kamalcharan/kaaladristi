@@ -19,6 +19,7 @@ import RuleEvalView from '@/views/RuleEvalView';
 import DCCalendarView from '@/views/DCCalendarView';
 import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
+import ScanView from '@/views/ScanView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +97,7 @@ function AppRoutes() {
           <Route path="/history" element={<BacktestView />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
+          <Route path="/scan" element={<ScanView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Route>
       </Route>

@@ -124,6 +124,36 @@ class QueryBuilder {
     return this;
   }
 
+  /** IN filter: column IN (val1, val2, ...) */
+  in(column: string, values: (string | number)[]): this {
+    this.state.params.append(column, `in.(${values.join(',')})`);
+    return this;
+  }
+
+  /** Greater than */
+  gt(column: string, value: string | number): this {
+    this.state.params.append(column, `gt.${value}`);
+    return this;
+  }
+
+  /** Less than */
+  lt(column: string, value: string | number): this {
+    this.state.params.append(column, `lt.${value}`);
+    return this;
+  }
+
+  /** Not equal */
+  neq(column: string, value: string | number): this {
+    this.state.params.append(column, `neq.${value}`);
+    return this;
+  }
+
+  /** IS filter for null/true/false */
+  is(column: string, value: 'null' | 'true' | 'false'): this {
+    this.state.params.append(column, `is.${value}`);
+    return this;
+  }
+
   /** Request total row count — PostgREST returns it in Content-Range header */
   withCount(): this {
     this._withCount = true;

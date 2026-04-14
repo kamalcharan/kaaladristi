@@ -124,14 +124,6 @@ export interface KmIndexComposition {
 
 // ── Production types (migration 022) ──
 
-export interface KmIndexSymbol {
-  id: number;
-  name: string;
-  category: string;
-  exchange: string;
-  is_tri: boolean;
-}
-
 export interface KmIndexConstituent {
   id: number;
   index_id: number;
@@ -162,8 +154,10 @@ export interface KmIndexSymbol {
   id: number;
   name: string;
   category: string | null;
-  vendor_codes: Record<string, string> | null;
-  created_at: string;
+  exchange?: string;
+  is_tri?: boolean;
+  vendor_codes?: Record<string, string> | null;
+  created_at?: string;
 }
 
 export interface KmIndexEod {
@@ -361,3 +355,91 @@ export type DcInferenceInput = Omit<DcInference, 'id' | 'rule_definition' | 'cre
 // ── DC Lookup Types ──
 
 export type { DcLookupItem } from '../services/dcLookup';
+
+// ── Industry EOD (from km_industry_eod, migration 033) ──
+
+export interface IndustryEodRow {
+  trade_date: string;
+  industry: string;
+  stock_count: number;
+  avg_magic_rs: number | null;
+  pct_strong_bull: number | null;
+  pct_strong_bear: number | null;
+  pct_accumulation: number | null;
+  pct_distribution: number | null;
+  dominant_flow_type: string | null;
+  avg_sniper_inst: number | null;
+  pct_with_recent_svd: number | null;
+  pct_with_recent_sbd: number | null;
+  pct_volume_div_up: number | null;
+  pct_volume_div_down: number | null;
+  industry_rank: number;
+}
+
+export type RotationCategory = 'rotating_in' | 'leading' | 'rotating_out';
+
+export interface IndustryRotationItem extends IndustryEodRow {
+  category: RotationCategory;
+  rank_change: number;      // positive = improved
+  prev_rank: number | null; // rank N days ago
+}
+
+// ── Scan Engine Types ──
+
+export interface ScanStock {
+  equity_id: number;
+  symbol: string;
+  company_name: string | null;
+  industry: string | null;
+  close: number;
+  pct_chng: number | null;
+  magic_rs: number | null;
+  magic_rs_zone: string | null;
+  flow_type: string | null;
+  rvol: number | null;
+  sniper_inst: number | null;
+  accum_distrib: string | null;
+  rss_value: number | null;
+  volume_divergence_flag: string | null;
+  has_recent_svd: boolean;
+  has_recent_sbd: boolean;
+  has_recent_syd: boolean;
+}
+
+export interface ScanDefinition {
+  id: string;
+  name: string;
+  description: string;
+  limit: number;
+}
+
+export interface EquitySymbolRow {
+  id: number;
+  symbol: string;
+  company_name: string | null;
+  industry: string | null;
+  is_active: boolean;
+}
+
+export interface EquityEodSnapshot {
+  equity_id: number;
+  trade_date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  prev_close: number | null;
+  pct_chng: number | null;
+  volume: number | null;
+  rvol: number | null;
+  tvol: number | null;
+  magic_rs: number | null;
+  magic_rs_zone: string | null;
+  flow_type: string | null;
+  accum_distrib: string | null;
+  sniper_inst: number | null;
+  sniper_hot: number | null;
+  rss_value: number | null;
+  sma_150: number | null;
+  volume_divergence_flag: string | null;
+}

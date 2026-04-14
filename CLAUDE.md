@@ -53,13 +53,14 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **032** (`km_migration_032_rss_computation.sql`)
+Latest migration: **033** (`km_migration_033_industry_eod.sql`)
 
 | Table | Description |
 |---|---|
 | `km_market_breadth` | EMA-based breadth score (migration 020) |
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
 | `km_index_constituents` | Index→Equity mapping with sector/weight (migration 022, FK → `km_index_symbols`) |
+| `km_industry_eod` | Daily industry-level aggregation from equity EOD (migration 033, PK: trade_date + industry) |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -107,7 +108,7 @@ BREEZE_SESSION_TOKEN=...
 
 - **Stack**: React 18, TypeScript, Vite, Tailwind CSS, React Query, Recharts, lightweight-charts
 - **Theme**: Driven by `VITE_THEME` env var — 3 themes in `src/config/theme/themes/`
-- **Routes/Views**: Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Settings
+- **Routes/Views**: Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings
 - **Settings sub-pages**: Index Catalog, Equity Catalog, Commodity Catalog, Market Data Hub, Pipeline Dashboard
 
 ### Running locally
@@ -220,7 +221,57 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **033**.
+Next migration number: **034**.
+
+---
+
+## Industry Rotation MVP (Sprint: 2026-04-14)
+
+### km_industry_eod (Migration 033)
+
+Per-industry per-trade_date aggregation from `km_equity_eod JOIN km_equity_symbols ON industry`.
+PK: `(trade_date, industry)`. Filter: stock_count >= 5, excludes "Shell Companies".
+
+Columns: `stock_count`, `avg_magic_rs`, `pct_strong_bull`, `pct_strong_bear`,
+`pct_accumulation`, `pct_distribution`, `dominant_flow_type`, `avg_sniper_inst`,
+`pct_with_recent_svd`, `pct_with_recent_sbd`, `pct_volume_div_up`, `pct_volume_div_down`,
+`industry_rank`.
+
+**Pipeline integration**: Call `compute_all_industry_composites(trade_date)` after
+`compute_all_flow_intelligence()` in the daily pipeline.
+
+### Industry Rotation Panel
+
+Dashboard component showing 3-column rotation view:
+- **Rotating In**: rank improved 5+ in last 5 trading days
+- **Leading**: top quartile by avg_magic_rs
+- **Rotating Out**: rank dropped 5+ in last 5 trading days
+
+Tap industry → expands inline showing top 10 stocks by magic_rs.
+
+Lookback constant: `INDUSTRY_ROTATION_LOOKBACK_DAYS = 5` (V2: user-toggleable).
+
+### Scanner (`/scan`)
+
+Six preset scans combining industry rotation + stock-level signals:
+1. **Power Buy** — strong stocks in rotating-in/leading industries
+2. **Power Sell** — weak stocks in rotating-out/lagging industries
+3. **Smart Money Loading** — high accumulation + rising sniper_inst + RSS recovery
+4. **Fresh Breakouts** — 20-day highs + RVOL > 2 in top-quartile industries
+5. **Quiet Accumulation** — contrarian: non-top industries with rising accumulation
+6. **Distribution Warnings** — ex-Strong Bull degrading + SYD/volume divergence
+
+All scan logic in `services/scanEngine.ts` — pure TypeScript, no backend RPC.
+Tap stock row → modal detail card (price, RS, flow, dots).
+
+### KaalaDristi Vocabulary
+
+| Internal Term | Display Label |
+|---|---|
+| `sniper_inst` | Smart Money |
+| SBD signal | Accumulation Signature |
+| SVD signal | Strong Volume Drive / Volume Drive |
+| SYD signal | Distribution Signal |
 
 ---
 
