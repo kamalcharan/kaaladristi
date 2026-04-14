@@ -221,7 +221,7 @@ export default function ChartView() {
                   </p>
                 </div>
               ) : (
-                <TradingChart data={rows} />
+                <TradingChart data={rows} compact={showPulse} />
               )}
             </div>
 

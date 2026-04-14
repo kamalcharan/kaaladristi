@@ -40,6 +40,7 @@ const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width:
 interface TradingChartProps {
   data: IndicatorRow[];
   height?: number;
+  compact?: boolean;  // hide RSI + Sniper panes (when Visual Pulse cards show them)
 }
 
 function toTime(dateStr: string): Time {
@@ -97,7 +98,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900 }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false }: TradingChartProps) {
   const mainRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
   const sniperRef = useRef<HTMLDivElement>(null);
@@ -116,7 +117,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     chartsRef.current.forEach((c) => c.remove());
     chartsRef.current = [];
 
-    const mainHeight = Math.round(height * 0.50);
+    const mainHeight = compact ? Math.round(height * 0.70) : Math.round(height * 0.50);
     const subHeight = Math.round(height * 0.16);
 
     // ═══════════════════════════════════════════════════════════════════
@@ -219,74 +220,74 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // PANE 2: RSI(14) + MFI(14)
+    // PANE 2: RSI(14) + MFI(14) — hidden in compact mode
     // ═══════════════════════════════════════════════════════════════════
 
-    const rsiChart = createChart(rsiRef.current, {
-      ...createChartOptions(rsiRef.current, subHeight, C),
-      rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
-    });
-    chartsRef.current.push(rsiChart);
+    let rsiChart: IChartApi | null = null;
+    let sniperChart: IChartApi | null = null;
 
-    // RSI line
-    const rsiLine: LineData<Time>[] = [];
-    for (const d of data) { if (d.rsi_14 != null) rsiLine.push({ time: toTime(d.trade_date), value: d.rsi_14 }); }
-    if (rsiLine.length > 0) {
-      const rsiSeries = rsiChart.addSeries(LineSeries, { color: C.violet, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
-      rsiSeries.setData(rsiLine);
+    if (!compact && rsiRef.current) {
+      rsiChart = createChart(rsiRef.current, {
+        ...createChartOptions(rsiRef.current, subHeight, C),
+        rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
+      });
+      chartsRef.current.push(rsiChart);
+
+      const rsiLine: LineData<Time>[] = [];
+      for (const d of data) { if (d.rsi_14 != null) rsiLine.push({ time: toTime(d.trade_date), value: d.rsi_14 }); }
+      if (rsiLine.length > 0) {
+        const rsiSeries = rsiChart.addSeries(LineSeries, { color: C.violet, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+        rsiSeries.setData(rsiLine);
+      }
+
+      const mfiLine: LineData<Time>[] = [];
+      for (const d of data) { if (d.mfi_14 != null) mfiLine.push({ time: toTime(d.trade_date), value: d.mfi_14 }); }
+      if (mfiLine.length > 0) {
+        const mfiSeries = rsiChart.addSeries(LineSeries, { color: C.cyan, lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+        mfiSeries.setData(mfiLine);
+      }
+
+      const refOpts = { color: 'rgba(255,255,255,0.12)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+      const obLine = rsiChart.addSeries(LineSeries, refOpts);
+      obLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 70 })));
+      const osLine = rsiChart.addSeries(LineSeries, refOpts);
+      osLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 30 })));
     }
-
-    // MFI line
-    const mfiLine: LineData<Time>[] = [];
-    for (const d of data) { if (d.mfi_14 != null) mfiLine.push({ time: toTime(d.trade_date), value: d.mfi_14 }); }
-    if (mfiLine.length > 0) {
-      const mfiSeries = rsiChart.addSeries(LineSeries, { color: C.cyan, lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
-      mfiSeries.setData(mfiLine);
-    }
-
-    // OB/OS reference lines
-    const refOpts = { color: 'rgba(255,255,255,0.12)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
-    const obLine = rsiChart.addSeries(LineSeries, refOpts);
-    obLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 70 })));
-    const osLine = rsiChart.addSeries(LineSeries, refOpts);
-    osLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 30 })));
 
     // ═══════════════════════════════════════════════════════════════════
-    // PANE 3: Sniper Dragon Histogram
+    // PANE 3: Sniper Dragon Histogram — hidden in compact mode
     // ═══════════════════════════════════════════════════════════════════
 
-    const sniperChart = createChart(sniperRef.current, {
-      ...createChartOptions(sniperRef.current, subHeight, C),
-      rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
-    });
-    chartsRef.current.push(sniperChart);
+    if (!compact && sniperRef.current) {
+      sniperChart = createChart(sniperRef.current, {
+        ...createChartOptions(sniperRef.current, subHeight, C),
+        rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
+      });
+      chartsRef.current.push(sniperChart);
 
-    // Retail (green background)
-    const retailSeries = sniperChart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false });
-    retailSeries.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 50, color: 'rgba(4,140,11,0.3)' })));
+      const retailSeries = sniperChart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false });
+      retailSeries.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 50, color: 'rgba(4,140,11,0.3)' })));
 
-    // Hot Money (yellow)
-    const hotData: HistogramData<Time>[] = [];
-    for (const d of data) { if (d.sniper_hot != null) hotData.push({ time: toTime(d.trade_date), value: d.sniper_hot, color: 'rgba(255,235,59,0.7)' }); }
-    if (hotData.length > 0) {
-      const hotSeries = sniperChart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false });
-      hotSeries.setData(hotData);
-    }
+      const hotData: HistogramData<Time>[] = [];
+      for (const d of data) { if (d.sniper_hot != null) hotData.push({ time: toTime(d.trade_date), value: d.sniper_hot, color: 'rgba(255,235,59,0.7)' }); }
+      if (hotData.length > 0) {
+        const hotSeries = sniperChart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false });
+        hotSeries.setData(hotData);
+      }
 
-    // Institutional (red)
-    const instData: HistogramData<Time>[] = [];
-    for (const d of data) { if (d.sniper_inst != null) instData.push({ time: toTime(d.trade_date), value: d.sniper_inst, color: 'rgba(255,0,0,0.7)' }); }
-    if (instData.length > 0) {
-      const instSeries = sniperChart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false });
-      instSeries.setData(instData);
-    }
+      const instData: HistogramData<Time>[] = [];
+      for (const d of data) { if (d.sniper_inst != null) instData.push({ time: toTime(d.trade_date), value: d.sniper_inst, color: 'rgba(255,0,0,0.7)' }); }
+      if (instData.length > 0) {
+        const instSeries = sniperChart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false });
+        instSeries.setData(instData);
+      }
 
-    // Sniper RSI line
-    const sniperRsiLine: LineData<Time>[] = [];
-    for (const d of data) { if (d.sniper_rsi != null) sniperRsiLine.push({ time: toTime(d.trade_date), value: d.sniper_rsi }); }
-    if (sniperRsiLine.length > 0) {
-      const sniperRsiSeries = sniperChart.addSeries(LineSeries, { color: C.textPrimary, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: false });
-      sniperRsiSeries.setData(sniperRsiLine);
+      const sniperRsiLine: LineData<Time>[] = [];
+      for (const d of data) { if (d.sniper_rsi != null) sniperRsiLine.push({ time: toTime(d.trade_date), value: d.sniper_rsi }); }
+      if (sniperRsiLine.length > 0) {
+        const sniperRsiSeries = sniperChart.addSeries(LineSeries, { color: C.textPrimary, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: false });
+        sniperRsiSeries.setData(sniperRsiLine);
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -326,7 +327,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     // SYNC TIME SCALES
     // ═══════════════════════════════════════════════════════════════════
 
-    const allCharts = [mainChart, rsiChart, sniperChart, magicChart];
+    const allCharts = [mainChart, rsiChart, sniperChart, magicChart].filter((c): c is IChartApi => c != null);
     allCharts.forEach((chart, i) => {
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (range) {
@@ -338,7 +339,7 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
     });
 
     mainChart.timeScale().fitContent();
-  }, [data, height]);
+  }, [data, height, compact]);
 
   useEffect(() => {
     buildCharts();
@@ -375,19 +376,23 @@ export default function TradingChart({ data, height = 900 }: TradingChartProps) 
 
       <div ref={mainRef} className="rounded-xl overflow-hidden" />
 
-      <div className="relative">
-        <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
-          RSI(14) <span style={{ color: 'var(--accent-violet)' }}>━</span> &nbsp; MFI(14) <span style={{ color: 'var(--accent-cyan)' }}>━</span>
-        </span>
-        <div ref={rsiRef} className="rounded-xl overflow-hidden" />
-      </div>
+      {!compact && (
+        <div className="relative">
+          <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
+            RSI(14) <span style={{ color: 'var(--accent-violet)' }}>━</span> &nbsp; MFI(14) <span style={{ color: 'var(--accent-cyan)' }}>━</span>
+          </span>
+          <div ref={rsiRef} className="rounded-xl overflow-hidden" />
+        </div>
+      )}
 
-      <div className="relative">
-        <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
-          Sniper Dragon — <span style={{ color: 'var(--risk-red)' }}>Inst</span> / <span style={{ color: 'var(--risk-amber)' }}>Hot$</span> / <span style={{ color: 'var(--risk-green)' }}>Retail</span>
-        </span>
-        <div ref={sniperRef} className="rounded-xl overflow-hidden" />
-      </div>
+      {!compact && (
+        <div className="relative">
+          <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
+            Sniper Dragon — <span style={{ color: 'var(--risk-red)' }}>Inst</span> / <span style={{ color: 'var(--risk-amber)' }}>Hot$</span> / <span style={{ color: 'var(--risk-green)' }}>Retail</span>
+          </span>
+          <div ref={sniperRef} className="rounded-xl overflow-hidden" />
+        </div>
+      )}
 
       <div className="relative">
         <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
