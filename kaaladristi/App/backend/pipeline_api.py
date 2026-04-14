@@ -1543,6 +1543,50 @@ def market_pulse_insight(date: str = None):
     }
 
 
+@app.post('/api/ai/visual-pulse-insight')
+def visual_pulse_insight(payload: dict):
+    """Return VaNi AI narrative for a single Visual Pulse candle snapshot.
+
+    The frontend computes all signals and sends the snapshot as JSON.
+    We format it as a user message and send to the LLM.
+    Falls back to null when AI is disabled — frontend uses rule-based narrative.
+    """
+    if not _AI_ENABLED:
+        return {"insight": None, "ai": False}
+
+    trade_date = payload.get("trade_date", "unknown")
+    cache_key = f"vpulse:{trade_date}:{payload.get('style', 'Balanced')}"
+    if cache_key in _insight_cache:
+        return {"date": trade_date, "insight": _insight_cache[cache_key], "ai": True}
+
+    # Build compact user message from the signal snapshot
+    parts = [
+        f"Date: {trade_date}",
+        f"Flow: {payload.get('flow_type', 'N/A')}",
+        f"Accum/Dist: {payload.get('accum_distrib', 'none')}",
+        f"Vacuum: {payload.get('vacuum_flag', 'none')}",
+        f"Vol Divergence: {payload.get('volume_divergence_flag', 'none')}",
+        f"RVOL: {payload.get('rvol', 'N/A')}, TVOL: {payload.get('tvol', 'N/A')}",
+        f"RSI-14: {payload.get('rsi_14', 'N/A')}, MFI-14: {payload.get('mfi_14', 'N/A')}",
+        f"RSS: {payload.get('rss_value', 'N/A')}, Spread: {payload.get('rss_spread', 'N/A')}",
+        f"Smart Money: {payload.get('sniper_inst', 'N/A')}, Fast Money: {payload.get('sniper_hot', 'N/A')}",
+        f"SM Relationship: {payload.get('sm_relationship', 'N/A')}",
+        f"MagicRS Zone: {payload.get('magic_rs_zone', 'N/A')}",
+        f"Astro Score: {payload.get('astro_score', 0)}",
+        f"Tech Score: {payload.get('tech_score', 0)} ({payload.get('style', 'Balanced')} lens)",
+        f"Correlation: {payload.get('corr_state', 'Neutral')}",
+    ]
+    user_msg = "\n".join(parts)
+
+    skill = _AI_SKILLS["visual_pulse_insight"]
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {
+        "date": trade_date, "insight": insight, "ai": insight is not None,
+    }
+
+
 @app.get('/api/fii-dii')
 def fii_dii_data(days: int = 30):
     """

@@ -246,6 +246,29 @@ _DATA_HEALTH_SYSTEM = (
 )
 
 
+# ── Skill: Visual Pulse Insight (per-candle narrative) ──────────────────────
+
+_VISUAL_PULSE_SYSTEM = (
+    _IDENTITY
+    + "You narrate a single candle's market intelligence for a Visual Pulse page. "
+    "You receive a structured signal snapshot with: "
+    "flow_type (FRESH_LONGS/SHORT_COVERING/FRESH_SHORTS/LONG_LIQUIDATION/MIXED/LOW_VOLUME), "
+    "accum_distrib (ACCUMULATION/DISTRIBUTION/null), "
+    "vacuum_flag, volume_divergence_flag, "
+    "RSS value (0-100 oscillator) and spread, "
+    "smart money relationship (Smart Leading/Aligned/Diverging/Absent/Fast Only/Mixed), "
+    "astro score and active events, "
+    "correlation state (Aligned/Converging/Watch/Neutral/Conflicting). "
+    "\n"
+    "Write exactly 3 sentences: "
+    "(1) The dominant signal — what flow type and volume character reveal about who is driving this candle. "
+    "(2) The supporting or contradicting layer — whether smart money, RSS momentum, or astro context "
+    "confirms or challenges the flow signal. "
+    "(3) The verdict — what the correlation state means for conviction right now. "
+    + _RULES
+)
+
+
 # ── Skill Registry ────────────────────────────────────────────────────────────
 
 SKILLS: dict[str, Skill] = {
@@ -257,4 +280,5 @@ SKILLS: dict[str, Skill] = {
     "instrument_insight":     Skill(system=_INSTRUMENT_INSIGHT_SYSTEM,  max_tokens=400),
     "market_pulse_insight":   Skill(system=_MARKET_PULSE_SYSTEM,        max_tokens=400),
     "data_health_insight":    Skill(system=_DATA_HEALTH_SYSTEM,         max_tokens=350),
+    "visual_pulse_insight":   Skill(system=_VISUAL_PULSE_SYSTEM,        max_tokens=250),
 }
