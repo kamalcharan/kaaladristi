@@ -234,7 +234,7 @@ export default function ChartView() {
                   </p>
                 </div>
               ) : (
-                <TradingChart data={rows} compact={showPulse} />
+                <TradingChart data={rows} compact={showPulse} highlightDate={pulseBars[pulseIdx]?.trade_date ?? null} />
               )}
             </div>
 
@@ -249,7 +249,7 @@ export default function ChartView() {
               <div className="glass-card rounded-2xl p-3 mt-3">
                 <AstroStrip
                   dcInferences={dcInferences}
-                  activeDate={latest?.trade_date ?? ''}
+                  activeDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? ''}
                 />
               </div>
             )}

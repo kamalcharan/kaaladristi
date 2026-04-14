@@ -41,6 +41,7 @@ interface TradingChartProps {
   data: IndicatorRow[];
   height?: number;
   compact?: boolean;  // hide RSI + Sniper panes (when Visual Pulse cards show them)
+  highlightDate?: string | null;  // scroll chart to center on this date
 }
 
 function toTime(dateStr: string): Time {
@@ -98,7 +99,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, highlightDate = null }: TradingChartProps) {
   const mainRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
   const sniperRef = useRef<HTMLDivElement>(null);
@@ -341,6 +342,21 @@ export default function TradingChart({ data, height = 900, compact = false }: Tr
 
     mainChart.timeScale().fitContent();
   }, [data, height, compact]);
+
+  // Scroll to highlighted date when slider moves
+  useEffect(() => {
+    if (!highlightDate || chartsRef.current.length === 0 || data.length === 0) return;
+    const idx = data.findIndex((d) => d.trade_date === highlightDate);
+    if (idx < 0) return;
+
+    // Center the highlighted bar in view with some padding
+    const barsToShow = 60;
+    const from = Math.max(0, idx - barsToShow / 2);
+    const to = Math.min(data.length - 1, from + barsToShow);
+    chartsRef.current.forEach((chart) => {
+      chart.timeScale().setVisibleLogicalRange({ from, to });
+    });
+  }, [highlightDate, data]);
 
   useEffect(() => {
     buildCharts();
