@@ -107,7 +107,8 @@ export default function TradingChart({ data, height = 900, compact = false }: Tr
   const chartsRef = useRef<IChartApi[]>([]);
 
   const buildCharts = useCallback(() => {
-    if (!mainRef.current || !rsiRef.current || !sniperRef.current || !magicRef.current) return;
+    if (!mainRef.current || !magicRef.current) return;
+    if (!compact && (!rsiRef.current || !sniperRef.current)) return;
     if (data.length === 0) return;
 
     // Read theme colors from CSS vars
