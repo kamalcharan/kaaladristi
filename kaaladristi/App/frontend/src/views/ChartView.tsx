@@ -184,8 +184,18 @@ export default function ChartView() {
               <InstrumentIntelligence id={numId} type={type ?? 'index'} />
             )}
 
+            {/* Astro Strip (above chart) */}
+            {isIndex && dcInferences.length > 0 && (
+              <div className="glass-card rounded-2xl px-3 py-2 mt-2">
+                <AstroStrip
+                  dcInferences={dcInferences}
+                  activeDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? ''}
+                />
+              </div>
+            )}
+
             {/* Chart area */}
-            <div className="glass-card rounded-2xl p-3 mt-3">
+            <div className="glass-card rounded-2xl p-3 mt-2">
               {/* Time range selector */}
               {!isLoading && !isError && rows.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
@@ -244,15 +254,6 @@ export default function ChartView() {
               </p>
             )}
 
-            {/* Astro Strip (below chart, inside left column) */}
-            {isIndex && dcInferences.length > 0 && (
-              <div className="glass-card rounded-2xl p-3 mt-3">
-                <AstroStrip
-                  dcInferences={dcInferences}
-                  activeDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? ''}
-                />
-              </div>
-            )}
           </div>
 
           {/* ── Right Panel: Visual Pulse Cards (index only) ── */}
