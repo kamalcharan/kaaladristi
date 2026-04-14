@@ -166,8 +166,8 @@ export default function ChartView() {
         )}>
           {/* ── Left Panel: Intelligence + Chart ── */}
           <div className="min-w-0">
-            {/* Intelligence Panel */}
-            {!isLoading && !isError && rows.length > 0 && (
+            {/* Intelligence Panel — hidden when Visual Pulse cards are showing */}
+            {!showPulse && !isLoading && !isError && rows.length > 0 && (
               <InstrumentIntelligence id={numId} type={type ?? 'index'} />
             )}
 
