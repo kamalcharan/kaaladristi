@@ -233,9 +233,9 @@ export default function VisualPulsePage() {
         }}>
           {snapshot && (
             <>
-              {/* VaNi Narrative */}
+              {/* VaNi Narrative — AI only, no fallback */}
               <VaNiSentence
-                narrative={snapshot.narrative}
+                narrative={null}
                 corrState={snapshot.corrState}
                 date={bar.trade_date}
                 isFading={isFading}

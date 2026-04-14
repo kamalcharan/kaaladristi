@@ -393,98 +393,6 @@ export function getCorrelationState(
   };
 }
 
-// ── 2H. VaNi Narrative (Rule-Based Fallback) ────────────────────
-
-export function buildVaNiNarrative(
-  bar: PulseBar,
-  astroScore: number,
-  rss: RssSignals,
-  sm: SmartMoneySignals,
-  corrState: CorrelationState,
-  dcInferences: DcInferenceEvent[],
-  dateStr: string,
-): string {
-  const parts: string[] = [];
-
-  // Sentence 1 — Astro context
-  if (astroScore >= 6) {
-    const strongest = dcInferences.find(
-      (ev) =>
-        dateStr >= ev.start_date &&
-        dateStr <= (ev.end_date ?? ev.start_date) &&
-        (ASTRO_WEIGHTS[ev.market_impact ?? 'neutral'] ?? 0) >= 3,
-    );
-    parts.push(
-      strongest
-        ? `Favorable astro window active. ${strongest.astro_event} present.`
-        : 'Favorable astronomical backdrop.',
-    );
-  } else if (astroScore <= -2) {
-    const adverse = dcInferences.find(
-      (ev) =>
-        dateStr >= ev.start_date &&
-        dateStr <= (ev.end_date ?? ev.start_date) &&
-        (ASTRO_WEIGHTS[ev.market_impact ?? 'neutral'] ?? 0) <= -3,
-    );
-    parts.push(
-      adverse
-        ? `Adverse astro conditions — ${adverse.astro_event}.`
-        : 'Cautionary astronomical backdrop.',
-    );
-  } else {
-    parts.push('Quiet astronomical backdrop.');
-  }
-
-  // Sentence 2 — Flow
-  const ft = bar.flow_type;
-  const ad = bar.accum_distrib;
-  const vd = bar.volume_divergence_flag;
-
-  if (ft === 'FRESH_LONGS' && ad === 'ACCUMULATION')
-    parts.push('Fresh capital entering with institutional accumulation confirmed below Golden Line.');
-  else if (ft === 'FRESH_LONGS')
-    parts.push('Fresh capital entering. Volume conviction solid.');
-  else if (ft === 'SHORT_COVERING' && ad === 'ACCUMULATION')
-    parts.push('Shorts unwinding while institutions accumulate below Golden Line. Recovery but not yet confirmed.');
-  else if (ft === 'SHORT_COVERING' && vd === 'VOLUME_DIV_UP')
-    parts.push('Shorts unwinding on declining volume — conviction fading into the rally.');
-  else if (ft === 'FRESH_SHORTS' && ad === 'DISTRIBUTION')
-    parts.push('Fresh selling pressure with distribution above Golden Line. Smart money exiting strength.');
-  else if (ft === 'FRESH_SHORTS')
-    parts.push('Fresh selling pressure building.');
-  else if (ft === 'LONG_LIQUIDATION')
-    parts.push('Long positions being unwound — watch for exhaustion signal.');
-  else if (ft === 'LOW_VOLUME')
-    parts.push('Volume absent — no directional conviction. Market in wait mode.');
-  else if (ft === 'MIXED')
-    parts.push('Flow conviction is mixed. No clear directional bias.');
-
-  // Sentence 3 — RSS + Smart Money
-  if (rss.pumpRisk)
-    parts.push('RSS overbought on broken structure — pump signature. Exercise caution.');
-  else if (rss.isNewHigh)
-    parts.push('RSS making new high — internal momentum leading price.');
-  else if (rss.spreadRepaired)
-    parts.push('Structural spread positive — genuine momentum foundation.');
-  else if (rss.zone === 'OVERSOLD')
-    parts.push('RSS at floor — watch for reversal signal.');
-
-  if (sm.relationship === 'Diverging')
-    parts.push('Smart money diverging from fast money — distribution risk elevated.');
-  else if (sm.relationship === 'Smart Leading')
-    parts.push('Institutional conviction leading. Smart money active.');
-
-  // Sentence 4 — Correlation conclusion
-  if (corrState.state === 'Aligned')
-    parts.push('All layers in agreement. Window is open.');
-  else if (corrState.state === 'Converging')
-    parts.push('Signals building but not yet confirmed. Setup forming.');
-  else if (corrState.state === 'Conflicting')
-    parts.push('Layers in disagreement. Elevated risk — stay cautious.');
-
-  return parts.join(' ');
-}
-
 // ── 3. RSI Divergence Detection ─────────────────────────────────
 
 function findSwingLows(
@@ -624,7 +532,6 @@ export interface PulseSnapshot {
   totalScore: number;
   corrState: CorrelationState;
   divergence: DivergenceSignal;
-  narrative: string;
 }
 
 export function computePulseSnapshot(
@@ -645,14 +552,11 @@ export function computePulseSnapshot(
   const totalScore = astroScore + techScore + smScore;
   const corrState = getCorrelationState(totalScore, style);
   const divergence = detectDivergence(bars, idx);
-  const narrative = buildVaNiNarrative(
-    bar, astroScore, rss, sm, corrState, dcInferences, bar.trade_date,
-  );
 
   return {
     bar, dots, rss, sm,
     astroScore, techScore, smScore, totalScore,
-    corrState, divergence, narrative,
+    corrState, divergence,
   };
 }
 

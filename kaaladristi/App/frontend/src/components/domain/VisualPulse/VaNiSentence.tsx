@@ -2,27 +2,35 @@ import React from 'react';
 import type { CorrelationState } from '@/services/visualPulseEngine';
 
 interface VaNiSentenceProps {
-  narrative: string;
+  narrative: string | null;
   corrState: CorrelationState;
   date: string;
   isFading?: boolean;
 }
 
 export default function VaNiSentence({ narrative, corrState, date, isFading }: VaNiSentenceProps) {
+  const isOffline = !narrative;
+
   return (
     <div style={{
       padding: '12px 14px',
-      background: 'color-mix(in srgb, var(--accent-violet) 6%, var(--kd-surface))',
-      border: '1px solid color-mix(in srgb, var(--accent-violet) 20%, transparent)',
+      background: isOffline
+        ? 'color-mix(in srgb, var(--text-muted) 4%, var(--kd-surface))'
+        : 'color-mix(in srgb, var(--accent-violet) 6%, var(--kd-surface))',
+      border: `1px solid ${isOffline
+        ? 'color-mix(in srgb, var(--text-muted) 15%, transparent)'
+        : 'color-mix(in srgb, var(--accent-violet) 20%, transparent)'}`,
       borderRadius: 10,
       opacity: isFading ? 0.2 : 1,
       transition: 'opacity 0.3s ease',
     }}>
       <div style={{
-        fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)',
+        fontSize: isOffline ? 10 : 12,
+        fontStyle: 'italic',
+        color: isOffline ? 'var(--text-muted)' : 'var(--text-secondary)',
         lineHeight: 1.65,
       }}>
-        {narrative || 'Awaiting data...'}
+        {isOffline ? 'VaNi is offline' : narrative}
       </div>
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
