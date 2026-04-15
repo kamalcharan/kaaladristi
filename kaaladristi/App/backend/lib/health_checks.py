@@ -206,15 +206,88 @@ def check_bse_equity_indicators(db, trading_days, skip_dates):
     }
 
 
+def check_nse_magic_rs(db, trading_days, skip_dates):
+    """NSE equity MagicRS coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'NSE' AND e.magic_rs_zone IS NOT NULL "
+        "AND e.trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'nse_magic_rs', 'layer': 'snapshot', 'label': 'NSE Magic RS',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
+def check_bse_magic_rs(db, trading_days, skip_dates):
+    """BSE equity MagicRS coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'BSE' AND e.magic_rs_zone IS NOT NULL "
+        "AND e.trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'bse_magic_rs', 'layer': 'snapshot', 'label': 'BSE Magic RS',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
+def check_nse_flow_intelligence(db, trading_days, skip_dates):
+    """NSE equity flow intelligence (flow_type) coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'NSE' AND e.flow_type IS NOT NULL "
+        "AND e.trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'nse_flow_intelligence', 'layer': 'snapshot', 'label': 'NSE Flow Intelligence',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
+def check_bse_flow_intelligence(db, trading_days, skip_dates):
+    """BSE equity flow intelligence (flow_type) coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT e.trade_date FROM km_equity_eod e "
+        "JOIN km_equity_symbols s ON s.id = e.equity_id "
+        "WHERE s.exchange = 'BSE' AND e.flow_type IS NOT NULL "
+        "AND e.trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'bse_flow_intelligence', 'layer': 'snapshot', 'label': 'BSE Flow Intelligence',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
 def check_flow_intelligence(db, trading_days, skip_dates):
-    """Flow intelligence (flow_type) coverage."""
+    """Index flow intelligence (flow_type) coverage."""
     dates = _query_distinct_dates(db,
         "SELECT DISTINCT trade_date FROM km_index_eod "
         "WHERE flow_type IS NOT NULL "
         "AND trade_date BETWEEN %s AND %s",
         [str(trading_days[0]), str(trading_days[-1])])
     return {
-        'id': 'flow_intelligence', 'layer': 'snapshot', 'label': 'Flow Intelligence',
+        'id': 'flow_intelligence', 'layer': 'snapshot', 'label': 'Index Flow Intelligence',
+        'latest_date': _latest_date(dates),
+        'days': _build_day_statuses(trading_days, dates, skip_dates),
+    }
+
+
+def check_industry_composites(db, trading_days, skip_dates):
+    """Industry composites (km_industry_eod) coverage."""
+    dates = _query_distinct_dates(db,
+        "SELECT DISTINCT trade_date FROM km_industry_eod "
+        "WHERE trade_date BETWEEN %s AND %s",
+        [str(trading_days[0]), str(trading_days[-1])])
+    return {
+        'id': 'industry_composites', 'layer': 'snapshot', 'label': 'Industry Composites',
         'latest_date': _latest_date(dates),
         'days': _build_day_statuses(trading_days, dates, skip_dates),
     }
@@ -255,11 +328,16 @@ HEALTH_CHECKS = [
     check_indexes,
     check_fii_dii,
     check_panchang,
-    # Layer: snapshot
+    # Layer: snapshot (computation)
     check_indicators,
     check_nse_equity_indicators,
     check_bse_equity_indicators,
+    check_nse_magic_rs,
+    check_bse_magic_rs,
     check_flow_intelligence,
+    check_nse_flow_intelligence,
+    check_bse_flow_intelligence,
+    check_industry_composites,
     check_market_breadth,
     check_breadth_roc,
 ]
