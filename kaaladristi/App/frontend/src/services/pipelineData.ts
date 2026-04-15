@@ -7,13 +7,17 @@ export interface PipelineRun {
   trade_date: string;
   exchange: string;
   step: string;
+  step_order: number | null;
   status: string;
   rows_count: number;
+  rows_expected: number | null;
+  coverage_pct: number | null;
   duration_ms: number | null;
   error_msg: string | null;
   metadata: Record<string, unknown> | null;
   started_at: string | null;
   completed_at: string | null;
+  triggered_by: string | null;
 }
 
 export interface TradingCalendarDay {
@@ -140,7 +144,35 @@ export interface CoverageSummary {
 export const fetchCoverageSummary = (tradeDate?: string) =>
   apiGet<CoverageSummary>(`/api/pipeline/coverage-summary${tradeDate ? `?trade_date=${tradeDate}` : ''}`);
 
-// ── Direct DB reads (for history — doesn't need pipeline API) ────────────────
+// ── Direct DB reads (PostgREST — no Pipeline API dependency) ─────────────────
+
+/** Fetch pipeline runs for the latest available trade_date, grouped for matrix view */
+export async function fetchLatestPipelineSteps(): Promise<{
+  trade_date: string;
+  steps: PipelineRun[];
+} | null> {
+  // Get the latest trade_date
+  const { data: dateRows, error: dateErr } = await from('km_pipeline_runs')
+    .select('trade_date')
+    .order('trade_date', { ascending: false })
+    .limit(1)
+    .execute();
+
+  if (dateErr || !dateRows || dateRows.length === 0) return null;
+
+  const latestDate = (dateRows[0] as { trade_date: string }).trade_date;
+
+  // Get all steps for that date
+  const { data, error } = await from('km_pipeline_runs')
+    .select('*')
+    .eq('trade_date', latestDate)
+    .order('step_order', { ascending: true })
+    .execute();
+
+  if (error || !data) return null;
+
+  return { trade_date: latestDate, steps: data as PipelineRun[] };
+}
 
 export async function fetchPipelineRuns(days: number = 14): Promise<PipelineRun[]> {
   const since = new Date();
