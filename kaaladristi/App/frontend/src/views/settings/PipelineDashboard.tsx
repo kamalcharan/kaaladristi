@@ -376,57 +376,109 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {/* ── Today's Progress ── */}
-      {todayByExchange.size > 0 && (
-        <div className="glass-card rounded-2xl p-5 mb-4">
-          <div className="flex items-center gap-2 mb-4">
-            <Calendar className="w-3.5 h-3.5 text-accent-indigo" />
-            <span className="text-xs font-bold text-[var(--text-primary)]">Today — {fmtDate(status?.today ?? '')}</span>
-          </div>
-          <div className="space-y-4">
-            {[...todayByExchange.entries()].map(([exchange, steps]) => {
-              const sorted = [...steps].sort((a, b) => (a.id || 0) - (b.id || 0));
-              const totalRows = steps.reduce((a, s) => a + (s.rows_count || 0), 0);
-              const totalMs = steps.reduce((a, s) => a + (s.duration_ms || 0), 0);
-              return (
-                <div key={exchange}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-semibold text-[var(--text-primary)]">{exchange}</span>
-                    <span className="text-[10px] text-muted mono">
-                      {totalRows.toLocaleString('en-IN')} rows &middot; {fmtDuration(totalMs)}
-                    </span>
-                  </div>
-                  <div className="grid gap-0.5">
-                    {sorted.map(s => (
-                      <div key={s.step} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-kd-elevated/40 group/step">
-                        <StepIcon status={s.status} />
-                        <span className="text-[11px] text-[var(--text-secondary)] w-24">{s.step}</span>
-                        <span className="text-[10px] text-muted mono flex-1">
-                          {s.rows_count ? `${s.rows_count.toLocaleString('en-IN')} rows` : ''}
-                        </span>
-                        <span className="text-[10px] text-muted mono w-12 text-right">{fmtDuration(s.duration_ms)}</span>
-                        {s.error_msg && (
-                          <span className="text-[10px] text-risk-red truncate max-w-[140px]" title={s.error_msg}>{s.error_msg}</span>
-                        )}
-                        {RERUNNABLE_STEPS.has(s.step) && (
+      {/* ── Today's Progress — NSE | BSE Matrix ── */}
+      {todayByExchange.size > 0 && (() => {
+        // Build unified step list across exchanges
+        const allSteps = new Map<string, { nse?: PipelineRun; bse?: PipelineRun }>();
+        for (const [exchange, steps] of todayByExchange.entries()) {
+          for (const s of steps) {
+            if (!allSteps.has(s.step)) allSteps.set(s.step, {});
+            const entry = allSteps.get(s.step)!;
+            if (exchange === 'NSE') entry.nse = s;
+            else if (exchange === 'BSE') entry.bse = s;
+            else entry.nse = s; // N/A steps go to NSE column
+          }
+        }
+        const stepOrder = (r: PipelineRun | undefined) => r?.id ?? 999;
+        const sortedSteps = [...allSteps.entries()].sort((a, b) =>
+          stepOrder(a[1].nse ?? a[1].bse) - stepOrder(b[1].nse ?? b[1].bse)
+        );
+        const hasNse = todayByExchange.has('NSE') || todayByExchange.has('N/A');
+        const hasBse = todayByExchange.has('BSE');
+
+        const CoverageCell = ({ run }: { run?: PipelineRun }) => {
+          if (!run) return <span className="text-[10px] text-muted">—</span>;
+          const rows = run.rows_count || 0;
+          const cov = (run as any).coverage_pct as number | null;
+          const expected = (run as any).rows_expected as number | null;
+          return (
+            <div className="flex items-center gap-1.5">
+              <StepIcon status={run.status} />
+              <span className="text-[10px] mono text-[var(--text-secondary)]">
+                {rows.toLocaleString('en-IN')}
+                {expected ? `/${expected.toLocaleString('en-IN')}` : ''}
+              </span>
+              {cov != null && (
+                <span className={cn(
+                  'text-[9px] font-bold',
+                  cov >= 90 ? 'text-risk-green' : cov >= 70 ? 'text-risk-amber' : 'text-risk-red',
+                )}>
+                  ({cov.toFixed(0)}%)
+                </span>
+              )}
+              {run.status === 'failed' && run.error_msg && (
+                <span className="text-[9px] text-risk-red truncate max-w-[100px]" title={run.error_msg}>
+                  {run.error_msg.slice(0, 30)}
+                </span>
+              )}
+            </div>
+          );
+        };
+
+        return (
+          <div className="glass-card rounded-2xl p-5 mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar className="w-3.5 h-3.5 text-accent-indigo" />
+              <span className="text-xs font-bold text-[var(--text-primary)]">Today — {fmtDate(status?.today ?? '')}</span>
+            </div>
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-kd-border">
+                  <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-40">Step</th>
+                  {hasNse && <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider">NSE</th>}
+                  {hasBse && <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider">BSE</th>}
+                  <th className="text-right py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-12">Time</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSteps.map(([step, { nse, bse }]) => {
+                  const primary = nse ?? bse;
+                  return (
+                    <tr key={step} className="border-b border-kd-border/30 hover:bg-kd-elevated/20 group/step">
+                      <td className="py-1.5 px-2 text-[var(--text-secondary)] font-medium">{step}</td>
+                      {hasNse && <td className="py-1.5 px-2"><CoverageCell run={nse} /></td>}
+                      {hasBse && <td className="py-1.5 px-2"><CoverageCell run={bse} /></td>}
+                      <td className="py-1.5 px-2 text-right text-[10px] text-muted mono">
+                        {fmtDuration(primary?.duration_ms ?? null)}
+                      </td>
+                      <td className="py-1.5 px-1">
+                        {RERUNNABLE_STEPS.has(step) && (
                           <button
-                            onClick={() => stepRerunMutation.mutate({ step: s.step, exchange })}
+                            onClick={() => stepRerunMutation.mutate({ step, exchange: nse ? 'NSE' : 'BSE' })}
                             disabled={stepRerunMutation.isPending}
                             className="opacity-0 group-hover/step:opacity-100 p-0.5 rounded text-muted hover:text-accent-indigo transition-all"
-                            title={`Re-run ${s.step}`}
+                            title={`Re-run ${step}`}
                           >
                             <RefreshCw className="w-3 h-3" />
                           </button>
                         )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Legend */}
+            <div className="flex items-center gap-4 mt-3 pt-2 border-t border-kd-border/30 text-[9px] text-muted">
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-risk-green" /> Healthy</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-risk-amber" /> Warning</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-risk-red" /> Failed</span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── History ── */}
       <div className="glass-card rounded-2xl p-5">

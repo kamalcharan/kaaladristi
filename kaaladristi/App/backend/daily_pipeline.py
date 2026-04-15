@@ -56,6 +56,7 @@ from pipeline.downloaders.nse_fiidii import download_nse_fiidii, upsert_fii_dii
 from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
+from pipeline.utils.coverage import get_step_coverage, count_active_symbols
 
 
 def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
@@ -149,7 +150,8 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
                 'p_id_col': 'index_id',
             })
             ind_count = sum(r.get('rows_updated', 0) for r in (result or []))
-            tracker.complete('index_indicators', rows=ind_count)
+            actual, expected = get_step_coverage(db, 'index_indicators', trade_date)
+            tracker.complete('index_indicators', rows=actual or ind_count, rows_expected=expected)
         except Exception as e:
             tracker.fail('index_indicators', str(e))
 
@@ -204,7 +206,8 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     tracker.start('insert')
     try:
         count = upsert_equity_eod(db, matched)
-        tracker.complete('insert', rows=count, metadata={
+        expected_symbols = count_active_symbols(db, 'NSE') if hasattr(db, '_conn') else len(matched)
+        tracker.complete('insert', rows=count, rows_expected=expected_symbols, metadata={
             'unmatched_count': len(unmatched),
             'unmatched_sample': unmatched[:20],
         })
@@ -236,7 +239,8 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
                 'p_id_col': 'equity_id',
             })
             ind_count = sum(r.get('rows_updated', 0) for r in (result or []))
-            tracker.complete('indicators', rows=ind_count)
+            actual, expected = get_step_coverage(db, 'indicators', trade_date, 'NSE')
+            tracker.complete('indicators', rows=actual or ind_count, rows_expected=expected)
         except Exception as e:
             # Fallback to Python compute engine
             try:
@@ -248,43 +252,45 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             except Exception as e2:
                 tracker.fail('indicators', str(e2))
 
-    # ── Step 6a: MagicRS for equities (benchmark = NIFTY 500 from km_index_eod) ──
+    # ── Step 6a: MagicRS for equities ──
     if not skip_indicators:
+        tracker.start('magic_rs')
         try:
-            print(f'  [magic-rs] Computing equity MagicRS...')
             result = db.rpc('compute_all_magic_rs', {
                 'p_table': 'km_equity_eod',
                 'p_id_col': 'equity_id',
             })
             mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
-            print(f'  [magic-rs] Updated {mrs_count} rows')
+            actual, expected = get_step_coverage(db, 'magic_rs', trade_date, 'NSE')
+            tracker.complete('magic_rs', rows=actual or mrs_count, rows_expected=expected)
         except Exception as e:
-            print(f'  [magic-rs] Skipped ({e})')
+            tracker.fail('magic_rs', str(e))
 
-    # ── Step 6b: Flow Intelligence (derived indicators — runs after Step 6) ──
+    # ── Step 6b: Flow Intelligence ──
     if not skip_indicators:
+        tracker.start('flow_intelligence')
         try:
-            print(f'  [flow-intel] Computing flow intelligence...')
             result = db.rpc('compute_all_flow_intelligence', {
                 'p_table': 'km_equity_eod',
                 'p_id_col': 'equity_id',
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
-            print(f'  [flow-intel] Updated {fi_count} rows')
+            actual, expected = get_step_coverage(db, 'flow_intelligence', trade_date, 'NSE')
+            tracker.complete('flow_intelligence', rows=actual or fi_count, rows_expected=expected)
         except Exception as e:
-            print(f'  [flow-intel] Skipped ({e})')
+            tracker.fail('flow_intelligence', str(e))
 
-    # ── Step 6c: Industry Composites (after flow intelligence) ──
+    # ── Step 6c: Industry Composites ──
     if not skip_indicators:
+        tracker.start('industry_composites')
         try:
-            print(f'  [industry] Computing industry composites...')
             result = db.rpc('compute_all_industry_composites', {
                 'p_trade_date': str(trade_date),
             })
             ic_count = result[0].get('compute_all_industry_composites', 0) if result else 0
-            print(f'  [industry] {ic_count} industries computed')
+            tracker.complete('industry_composites', rows=ic_count, rows_expected=max(ic_count, 40))
         except Exception as e:
-            print(f'  [industry] Skipped ({e})')
+            tracker.fail('industry_composites', str(e))
 
     # ── Step 7: Refresh views ──
     tracker.start('views')
