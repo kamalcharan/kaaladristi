@@ -50,3 +50,12 @@ Pipeline steps that complete without errors but produce incomplete output are th
 
 - **Fix**: Migration 035 adds `rows_expected`, `coverage_pct` to `km_pipeline_runs`. Each step now records expected vs actual rows. Coverage rules in `config/pipeline_steps.py` define thresholds (healthy/warning/failure) per step. Sparse signals (e.g. `accum_distrib` at 1-5%) are marked `is_sparse` to avoid false alarms.
 - **Pattern**: Every computed column must have a coverage rule. Anything not on the sparse exception list that drops below threshold = immediate red alert. "Completed with 0 rows" should be classified as `partial`, not `success`.
+
+## RLS Policy Roles Must Match Application Roles (2026-04-15)
+
+RLS policies must list every role the application uses, not just `anon` and `authenticated`. A permissive policy with `qual: true` only permits the roles named in its `TO` clause. If the Pipeline API connects as `kd_app` (or any custom role) and the policy lists only `anon, authenticated`, queries return empty arrays without errors. PostgREST returns `200 OK` with `[]`, masking the issue.
+
+- **Root cause**: `km_industry_eod` had RLS enabled with policies for `authenticated` and `anon`. The health check code in Pipeline API used `db._conn()` (PgClient) which connects via DATABASE_URL. If that role isn't `authenticated` or `anon`, RLS silently returns 0 rows.
+- **The silent failure is the worst part**: No error, no log, no exception. Just empty arrays that look like "no data" instead of "access denied."
+- **Fix**: Computed aggregate tables (km_industry_eod, km_market_breadth, km_breadth_roc) should not have RLS at all — they contain no user-specific data. RLS on pipeline-computed tables creates permission bugs with zero security benefit.
+- **Rule**: Always cross-check `pg_policies.roles` against the actual role used by every application component (PostgREST, Pipeline API, Worker). After any DDL change, run `NOTIFY pgrst, 'reload schema'`.
