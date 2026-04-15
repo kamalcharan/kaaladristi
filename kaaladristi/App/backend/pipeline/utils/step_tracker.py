@@ -61,7 +61,10 @@ class StepTracker:
 
         coverage_pct = None
         if rows_expected and rows_expected > 0:
-            coverage_pct = round(100.0 * rows / rows_expected, 2)
+            # Cap at 999.99 to prevent NUMERIC(5,2) overflow in km_pipeline_runs.
+            # Overcoverage > 100% happens when rows counts multi-date RPC results
+            # against single-date expected counts.
+            coverage_pct = min(round(100.0 * rows / rows_expected, 2), 999.99)
 
         record = {
             'trade_date': str(self.trade_date),

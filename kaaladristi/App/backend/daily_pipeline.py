@@ -242,15 +242,7 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             actual, expected = get_step_coverage(db, 'indicators', trade_date, 'NSE')
             tracker.complete('indicators', rows=actual or ind_count, rows_expected=expected)
         except Exception as e:
-            # Fallback to Python compute engine
-            try:
-                print(f'  [indicators] RPC failed ({e}), falling back to Python...')
-                from indicators.compute_engine import IndicatorEngine
-                engine = IndicatorEngine(db)
-                ind_count = engine.run(mode='equity', full=False)
-                tracker.complete('indicators', rows=ind_count)
-            except Exception as e2:
-                tracker.fail('indicators', str(e2))
+            tracker.fail('indicators', str(e))
 
     # ── Step 6a: MagicRS for equities ──
     if not skip_indicators:
@@ -390,14 +382,7 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
             ind_count = sum(r.get('rows_updated', 0) for r in (result or []))
             tracker.complete('indicators', rows=ind_count)
         except Exception as e:
-            try:
-                print(f'  [indicators] RPC failed ({e}), falling back to Python...')
-                from indicators.compute_engine import IndicatorEngine
-                engine = IndicatorEngine(db)
-                ind_count = engine.run(mode='equity', full=False)
-                tracker.complete('indicators', rows=ind_count)
-            except Exception as e2:
-                tracker.fail('indicators', str(e2))
+            tracker.fail('indicators', str(e))
 
     # ── Step 5b: Flow Intelligence ──
     if not skip_indicators:

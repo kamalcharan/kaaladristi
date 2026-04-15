@@ -100,3 +100,17 @@ A safety feature styled identically to opportunity features defeats its purpose.
 - Dump suspect rows: red background tint + red left border + warning icon + red symbol text.
 - Page header: amber/red gradient accent bar to visually distinguish from Scanner's neutral palette.
 - **Rule**: When a feature carries a different risk message than its neighbors, the visual treatment must make that difference obvious within 1 second of page load.
+
+## Pipeline Observability Column Overflow (2026-04-15)
+
+`coverage_pct NUMERIC(5,2)` in `km_pipeline_runs` overflows when multi-date RPC results (e.g., 92 indices × 90 days = 8,280 rows updated) are divided by single-date expected counts (92), producing coverage = 9000%. NUMERIC(5,2) max is 999.99 — boom. The error "numeric field overflow" appears to come from the RPC itself, but actually comes from the step tracker writing the coverage result.
+
+- **Cascading failure**: index_indicators overflows → indicators RPC also overflows, then dead Python fallback masks the error with "cannot import name" → magic_rs, flow_intelligence also overflow → industry_composites fails because it depends on upstream data (or hits RLS)
+- **Fix**: Cap `coverage_pct` at 999.99 in Python + widen column to NUMERIC(7,2) in migration 036
+- **Rule**: Never put constrained NUMERIC on observability columns. Observability data should NEVER cause pipeline failures — it exists to diagnose them, not create new ones.
+
+## Dead Fallbacks Mask Real Errors (2026-04-15)
+
+The indicators step had a Python fallback (`from indicators.compute_engine import IndicatorEngine`) that activates when the PostgreSQL RPC fails. The fallback itself was broken (missing `calculators/` subpackage), so it always failed with "cannot import name". This replaced the real error ("numeric field overflow") with a misleading one, making diagnosis harder.
+
+- **Rule**: Either pass or fail. No fallback paths that haven't been tested and maintained. A broken fallback is worse than no fallback — it swallows the real error and substitutes a confusing one.
