@@ -588,101 +588,241 @@ export function invalidateScanCache(): void {
 // ── Manipulation Watch ────────────────────────────────────────
 // Separate from scanner presets — safety feature, not opportunity.
 // No industry filter: manipulation can happen anywhere.
-// Returns enriched stocks with why-flagged tags for plain-English display.
+// Scans across a date range (default 30 trading days) to catch
+// patterns that play out over days/weeks.
 
 export interface ManipulationWatchStock extends ScanStock {
   whyFlagged: string[];
+  triggerDates: string[];   // dates where conditions were met (desc order)
+  triggerCount: number;     // how many days in range the stock triggered
+  latestTrigger: string;    // most recent trigger date
 }
 
 export interface ManipulationWatchResult {
   pumpSuspects: ManipulationWatchStock[];
   dumpSuspects: ManipulationWatchStock[];
   latestDate: string | null;
+  lookbackDays: number;
 }
 
-/** Pump Suspects — artificial price inflation signatures */
-function scanPumpSuspects(bundle: ScanDataBundle): ManipulationWatchStock[] {
-  const results: ManipulationWatchStock[] = [];
+// Separate cache for manipulation watch (wider date range than scanner)
+let _mwCache: { data: ManipulationWatchBundle; fetchedAt: number; lookback: number } | null = null;
 
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
-    if (!stock) continue;
+interface ManipulationWatchBundle {
+  symbols: Map<number, EquitySymbolRow>;
+  // equity_id → array of snapshots sorted by date desc
+  eodHistory: Map<number, EquityEodSnapshot[]>;
+  tradeDates: string[]; // all trade dates in range, desc order
+}
 
-    const rssVal = stock.rss_value ?? 0;
-    const rssSpread = stock.rss_spread ?? 0;
+async function loadManipulationData(lookbackDays: number): Promise<ManipulationWatchBundle> {
+  if (_mwCache && Date.now() - _mwCache.fetchedAt < CACHE_TTL && _mwCache.lookback === lookbackDays) {
+    return _mwCache.data;
+  }
 
-    if (
-      rssVal > 75 &&
-      rssSpread < -200 &&
-      stock.flow_type === 'SHORT_COVERING' &&
-      stock.volume_divergence_flag === 'VOLUME_DIV_UP'
-    ) {
-      const tags: string[] = [
-        `RSS overbought (${Math.round(rssVal)})`,
-        `Spread broken (${rssSpread > -1000 ? rssSpread.toFixed(0) : (rssSpread / 1000).toFixed(1) + 'K'})`,
-        'Short covering',
-        'Volume diverging up',
-      ];
-      results.push({ ...stock, whyFlagged: tags });
+  // Fetch lookback + 6 dates (extra for sniper slope calculation)
+  const dates = await fetchRecentDates(lookbackDays + 6);
+  if (dates.length === 0) {
+    return { symbols: new Map(), eodHistory: new Map(), tradeDates: [] };
+  }
+
+  const oldestDate = dates[dates.length - 1];
+
+  const [symbolRes, eodRes] = await Promise.all([
+    from('km_equity_symbols')
+      .select('id,symbol,company_name,industry,exchange,isin,is_active')
+      .is('is_active', 'true')
+      .limit(8000)
+      .execute(),
+
+    from('km_equity_eod')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
+      .gte('trade_date', oldestDate)
+      .order('trade_date', { ascending: false })
+      .limit(lookbackDays * 8000) // ~8K equities × N days
+      .execute(),
+  ]);
+
+  const symbols = new Map<number, EquitySymbolRow>();
+  for (const s of (symbolRes.data ?? []) as EquitySymbolRow[]) {
+    symbols.set(s.id, s);
+  }
+
+  const eodHistory = new Map<number, EquityEodSnapshot[]>();
+  for (const r of (eodRes.data ?? []) as EquityEodSnapshot[]) {
+    const arr = eodHistory.get(r.equity_id) ?? [];
+    arr.push(r);
+    eodHistory.set(r.equity_id, arr);
+  }
+
+  const bundle: ManipulationWatchBundle = {
+    symbols,
+    eodHistory,
+    tradeDates: dates.slice(0, lookbackDays), // only the lookback range (not the buffer dates)
+  };
+
+  _mwCache = { data: bundle, fetchedAt: Date.now(), lookback: lookbackDays };
+  return bundle;
+}
+
+/** Check pump conditions for a single EOD snapshot */
+function isPumpSignal(eod: EquityEodSnapshot): boolean {
+  return (
+    (eod.rss_value ?? 0) > 75 &&
+    (eod.rss_spread ?? 0) < -200 &&
+    eod.flow_type === 'SHORT_COVERING' &&
+    eod.volume_divergence_flag === 'VOLUME_DIV_UP'
+  );
+}
+
+/** Check dump conditions for a single EOD snapshot + history context */
+function isDumpSignal(eod: EquityEodSnapshot, history: EquityEodSnapshot[], dateIdx: number): boolean {
+  if ((eod.rss_value ?? 100) >= 25) return false;
+  if (eod.flow_type !== 'LONG_LIQUIDATION') return false;
+  if (eod.volume_divergence_flag !== 'VOLUME_DIV_DOWN') return false;
+
+  // sniper slope: need 5 bars after this date in history
+  const sniperNow = eod.sniper_inst ?? 0;
+  const sniper5 = (dateIdx + 5 < history.length) ? (history[dateIdx + 5]?.sniper_inst ?? 0) : 0;
+  return (sniperNow - sniper5) < -2;
+}
+
+/** Build why-flagged tags for a pump signal */
+function buildPumpTags(eod: EquityEodSnapshot): string[] {
+  const rssVal = eod.rss_value ?? 0;
+  const rssSpread = eod.rss_spread ?? 0;
+  return [
+    `RSS overbought (${Math.round(rssVal)})`,
+    `Spread broken (${rssSpread > -1000 ? rssSpread.toFixed(0) : (rssSpread / 1000).toFixed(1) + 'K'})`,
+    'Short covering',
+    'Volume diverging up',
+  ];
+}
+
+/** Build why-flagged tags for a dump signal */
+function buildDumpTags(eod: EquityEodSnapshot): string[] {
+  const rssVal = eod.rss_value ?? 0;
+  return [
+    `RSS oversold (${Math.round(rssVal)})`,
+    'Long liquidation',
+    'Volume diverging down',
+    'Smart money exiting',
+  ];
+}
+
+/** Build a ScanStock-like object from any EOD snapshot (not just latest) */
+function buildStockFromEod(
+  equityId: number,
+  eod: EquityEodSnapshot,
+  history: EquityEodSnapshot[],
+  sym: EquitySymbolRow,
+): ScanStock {
+  return {
+    equity_id: equityId,
+    symbol: sym.symbol,
+    company_name: sym.company_name,
+    industry: sym.industry,
+    exchange: sym.exchange ?? null,
+    close: eod.close,
+    pct_chng: eod.pct_chng,
+    magic_rs: eod.magic_rs,
+    magic_rs_zone: eod.magic_rs_zone,
+    flow_type: eod.flow_type,
+    rvol: eod.rvol,
+    sniper_inst: eod.sniper_inst,
+    accum_distrib: eod.accum_distrib,
+    rss_value: eod.rss_value,
+    rss_spread: eod.rss_spread,
+    sma_150: eod.sma_150,
+    volume_divergence_flag: eod.volume_divergence_flag,
+    has_recent_svd: false, // not needed for manipulation watch
+    has_recent_sbd: false,
+    has_recent_syd: false,
+  };
+}
+
+/** Execute Manipulation Watch — scans across lookbackDays trading days */
+export async function executeManipulationWatch(lookbackDays: number = 30): Promise<ManipulationWatchResult> {
+  const bundle = await loadManipulationData(lookbackDays);
+
+  // Track triggers per stock: equity_id → { dates, latestEod, tags }
+  const pumpMap = new Map<number, { dates: string[]; eod: EquityEodSnapshot; tags: string[] }>();
+  const dumpMap = new Map<number, { dates: string[]; eod: EquityEodSnapshot; tags: string[] }>();
+
+  for (const [equityId, history] of bundle.eodHistory) {
+    const sym = bundle.symbols.get(equityId);
+    if (!sym) continue;
+
+    // Iterate over each date in the lookback range
+    for (let i = 0; i < history.length; i++) {
+      const eod = history[i];
+      if (!bundle.tradeDates.includes(eod.trade_date)) continue; // skip buffer dates
+
+      // Check pump
+      if (isPumpSignal(eod)) {
+        const existing = pumpMap.get(equityId);
+        if (existing) {
+          existing.dates.push(eod.trade_date);
+        } else {
+          pumpMap.set(equityId, {
+            dates: [eod.trade_date],
+            eod, // first hit = most recent (history sorted desc)
+            tags: buildPumpTags(eod),
+          });
+        }
+      }
+
+      // Check dump
+      if (isDumpSignal(eod, history, i)) {
+        const existing = dumpMap.get(equityId);
+        if (existing) {
+          existing.dates.push(eod.trade_date);
+        } else {
+          dumpMap.set(equityId, {
+            dates: [eod.trade_date],
+            eod,
+            tags: buildDumpTags(eod),
+          });
+        }
+      }
     }
   }
 
-  return results
-    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
-    .slice(0, 25);
-}
-
-/** Dump Suspects — artificial price collapse signatures */
-function scanDumpSuspects(bundle: ScanDataBundle): ManipulationWatchStock[] {
-  const results: ManipulationWatchStock[] = [];
-
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
-    if (!stock) continue;
-
-    const rssVal = stock.rss_value ?? 100;
-
-    // sniper_inst slope over last 5 bars
-    const history = bundle.eodHistory.get(id) ?? [];
-    const sniperNow = history[0]?.sniper_inst ?? 0;
-    const sniper5 = history.length > 4 ? (history[4]?.sniper_inst ?? 0) : 0;
-    const sniperSlope5d = sniperNow - sniper5;
-
-    if (
-      rssVal < 25 &&
-      stock.flow_type === 'LONG_LIQUIDATION' &&
-      stock.volume_divergence_flag === 'VOLUME_DIV_DOWN' &&
-      sniperSlope5d < -2
-    ) {
-      const tags: string[] = [
-        `RSS oversold (${Math.round(rssVal)})`,
-        'Long liquidation',
-        'Volume diverging down',
-        'Smart money exiting',
-      ];
-      results.push({ ...stock, whyFlagged: tags });
+  // Convert to result arrays
+  const buildResult = (
+    map: Map<number, { dates: string[]; eod: EquityEodSnapshot; tags: string[] }>,
+  ): ManipulationWatchStock[] => {
+    const results: ManipulationWatchStock[] = [];
+    for (const [equityId, trigger] of map) {
+      const sym = bundle.symbols.get(equityId);
+      if (!sym) continue;
+      const history = bundle.eodHistory.get(equityId) ?? [];
+      const stock = buildStockFromEod(equityId, trigger.eod, history, sym);
+      results.push({
+        ...stock,
+        whyFlagged: trigger.tags,
+        triggerDates: trigger.dates,
+        triggerCount: trigger.dates.length,
+        latestTrigger: trigger.dates[0],
+      });
     }
-  }
+    // Sort: most frequent triggers first, then by rvol
+    return results
+      .sort((a, b) => b.triggerCount - a.triggerCount || (b.rvol ?? 0) - (a.rvol ?? 0))
+      .slice(0, 50); // higher limit for range scan
+  };
 
-  return results
-    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
-    .slice(0, 25);
-}
+  let pumpSuspects = buildResult(pumpMap);
+  let dumpSuspects = buildResult(dumpMap);
 
-/** Execute Manipulation Watch — returns both pump and dump suspect lists (combined/deduped) */
-export async function executeManipulationWatch(): Promise<ManipulationWatchResult> {
-  const bundle = await loadScanData();
-
-  let pumpSuspects = scanPumpSuspects(bundle);
-  let dumpSuspects = scanDumpSuspects(bundle);
-
-  // Deduplicate by ISIN (combined view only for V1)
+  // Deduplicate by ISIN
   pumpSuspects = deduplicateByIsin(pumpSuspects, bundle.symbols) as ManipulationWatchStock[];
   dumpSuspects = deduplicateByIsin(dumpSuspects, bundle.symbols) as ManipulationWatchStock[];
 
   return {
     pumpSuspects,
     dumpSuspects,
-    latestDate: bundle.latestDate,
+    latestDate: bundle.tradeDates[0] ?? null,
+    lookbackDays,
   };
 }

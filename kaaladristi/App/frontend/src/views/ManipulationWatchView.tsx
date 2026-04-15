@@ -178,10 +178,27 @@ function SuspectRow({
         </div>
       </div>
 
-      {/* Industry line */}
-      <p className="text-[11px] text-muted mb-1.5 pl-[22px]">
-        {stock.industry ?? 'Unknown industry'}
-      </p>
+      {/* Industry + trigger info */}
+      <div className="flex items-center justify-between mb-1.5 pl-[22px]">
+        <p className="text-[11px] text-muted">
+          {stock.industry ?? 'Unknown industry'}
+        </p>
+        <div className="flex items-center gap-2 text-[10px] font-mono">
+          {stock.triggerCount > 1 && (
+            <span className={cn(
+              'px-1.5 py-0.5 rounded font-bold',
+              variant === 'pump'
+                ? 'bg-risk-amber/15 text-risk-amber'
+                : 'bg-risk-red/15 text-risk-red',
+            )}>
+              {stock.triggerCount}x
+            </span>
+          )}
+          <span className="text-muted">
+            {stock.latestTrigger}
+          </span>
+        </div>
+      </div>
 
       {/* Why flagged */}
       <p className={cn(
@@ -202,12 +219,14 @@ function SuspectSection({
   description,
   stocks,
   variant,
+  lookbackDays,
   onSelect,
 }: {
   title: string;
   description: string;
   stocks: ManipulationWatchStock[];
   variant: 'pump' | 'dump';
+  lookbackDays: number;
   onSelect: (stock: ManipulationWatchStock) => void;
 }) {
   const accentColor = variant === 'pump' ? 'text-risk-amber' : 'text-risk-red';
@@ -249,7 +268,7 @@ function SuspectSection({
         </div>
       ) : (
         <div className="py-10 text-center">
-          <p className="text-sm text-muted">No suspect activity detected today.</p>
+          <p className="text-sm text-muted">No suspect activity detected in the last {lookbackDays} trading days.</p>
         </div>
       )}
     </Card>
@@ -325,8 +344,16 @@ function EducationalFooter() {
 
 // ── Main View ─────────────────────────────────────────────────
 
+const LOOKBACK_OPTIONS = [
+  { days: 7, label: '7d' },
+  { days: 14, label: '14d' },
+  { days: 30, label: '30d' },
+  { days: 60, label: '60d' },
+];
+
 export default function ManipulationWatchView() {
-  const { data, isLoading, error } = useManipulationWatch();
+  const [lookbackDays, setLookbackDays] = useState(30);
+  const { data, isLoading, error } = useManipulationWatch(lookbackDays);
   const [selectedStock, setSelectedStock] = useState<{ stock: ManipulationWatchStock; variant: 'pump' | 'dump' } | null>(null);
 
   return (
@@ -347,11 +374,30 @@ export default function ManipulationWatchView() {
           <p className="text-secondary font-medium text-sm">
             Stocks showing artificial price movement signatures
           </p>
-          {data?.latestDate && (
-            <span className="text-[10px] text-muted font-mono shrink-0">
-              Data as of {data.latestDate}
-            </span>
-          )}
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Lookback selector */}
+            <div className="flex items-center gap-1">
+              {LOOKBACK_OPTIONS.map((opt) => (
+                <button
+                  key={opt.days}
+                  onClick={() => setLookbackDays(opt.days)}
+                  className={cn(
+                    'px-2 py-1 rounded-lg text-[10px] font-bold transition-all border',
+                    lookbackDays === opt.days
+                      ? 'bg-risk-amber/15 text-risk-amber border-risk-amber/30'
+                      : 'text-muted border-transparent hover:text-[var(--text-secondary)]',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {data?.latestDate && (
+              <span className="text-[10px] text-muted font-mono">
+                as of {data.latestDate}
+              </span>
+            )}
+          </div>
         </div>
         {/* Warning accent bar */}
         <div className="mt-3 h-[2px] bg-gradient-to-r from-risk-amber/60 via-risk-red/40 to-transparent rounded-full" />
@@ -380,6 +426,7 @@ export default function ManipulationWatchView() {
             description="Stocks rising on operator activity. Price moves up but underlying volume and structure don't support it."
             stocks={data.pumpSuspects}
             variant="pump"
+            lookbackDays={lookbackDays}
             onSelect={(stock) => setSelectedStock({ stock, variant: 'pump' })}
           />
 
@@ -388,6 +435,7 @@ export default function ManipulationWatchView() {
             description="Stocks collapsing with smart money exiting and weakening volume. Distribution disguised as panic selling."
             stocks={data.dumpSuspects}
             variant="dump"
+            lookbackDays={lookbackDays}
             onSelect={(stock) => setSelectedStock({ stock, variant: 'dump' })}
           />
 
