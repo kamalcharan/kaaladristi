@@ -153,14 +153,21 @@ export async function fetchLatestPipelineSteps(): Promise<{
   trade_date: string;
   steps: PipelineRun[];
 } | null> {
-  // Get recent trade_dates (check a few in case latest is all-failed)
+  // Get recent trade_dates
   const { data: dateRows, error: dateErr } = await from('km_pipeline_runs')
     .select('trade_date,status')
     .order('trade_date', { ascending: false })
     .limit(200)
     .execute();
 
-  if (dateErr || !dateRows || dateRows.length === 0) return null;
+  if (dateErr) {
+    console.error('[pipeline] Failed to fetch dates:', dateErr);
+    return null;
+  }
+  if (!dateRows || dateRows.length === 0) {
+    console.warn('[pipeline] No pipeline runs found in km_pipeline_runs');
+    return null;
+  }
 
   // Find latest date with at least one completed step
   const dateSet = new Map<string, boolean>();
@@ -174,19 +181,28 @@ export async function fetchLatestPipelineSteps(): Promise<{
     if (hasCompleted) { latestDate = d; break; }
   }
   if (!latestDate) {
-    // Fallback: just use the most recent date
     latestDate = (dateRows[0] as { trade_date: string }).trade_date;
   }
 
-  // Get all steps for that date
+  console.log('[pipeline] Latest date with data:', latestDate);
+
+  // Get all steps for that date — order by id (step_order may not be visible to PostgREST)
   const { data, error } = await from('km_pipeline_runs')
     .select('*')
     .eq('trade_date', latestDate)
-    .order('step_order', { ascending: true })
+    .order('id', { ascending: true })
     .execute();
 
-  if (error || !data) return null;
+  if (error) {
+    console.error('[pipeline] Failed to fetch steps for', latestDate, ':', error);
+    return null;
+  }
+  if (!data || data.length === 0) {
+    console.warn('[pipeline] No steps found for', latestDate);
+    return null;
+  }
 
+  console.log('[pipeline] Found', data.length, 'steps for', latestDate);
   return { trade_date: latestDate, steps: data as PipelineRun[] };
 }
 
