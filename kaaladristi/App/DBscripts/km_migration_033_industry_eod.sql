@@ -91,12 +91,8 @@ CREATE POLICY "industry_eod_read" ON km_industry_eod
 
 CREATE POLICY "industry_eod_admin_write" ON km_industry_eod
     FOR ALL TO authenticated
-    USING (
-        EXISTS (SELECT 1 FROM km_profiles WHERE id = auth.uid() AND role = 'admin')
-    )
-    WITH CHECK (
-        EXISTS (SELECT 1 FROM km_profiles WHERE id = auth.uid() AND role = 'admin')
-    );
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
 
 
 -- ── Compute Function ──────────────────────────────────────────
