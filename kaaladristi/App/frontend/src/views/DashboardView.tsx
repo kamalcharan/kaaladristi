@@ -5,7 +5,7 @@ import { Card } from '@/components/ui';
 import {
   RiskGauge, FactorCard, RegimeBadge,
   PanchangamCard, ActiveIndexScroll, MarketBreadthChart, BreadthRocChart, SevenDayStrip,
-  MarketPulseCard,
+  MarketPulseCard, IndustryRotationPanel,
 } from '@/components/domain';
 
 interface DashboardViewProps {
@@ -70,6 +70,9 @@ export default function DashboardView({ report, proofs }: DashboardViewProps) {
             <FactorCard label="Volatility" value={report.factors.volatility} icon={Zap}           color="bg-risk-amber" />
             <FactorCard label="Deception"  value={report.factors.deception}  icon={AlertTriangle} color="bg-accent-violet" />
           </div>
+
+          {/* Industry Rotation — between sector tiles and breadth panels */}
+          <IndustryRotationPanel />
 
           {/* Sector Impact */}
           {report.sectorImpacts.length > 0 && (

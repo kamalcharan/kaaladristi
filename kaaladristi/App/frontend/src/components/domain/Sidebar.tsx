@@ -12,6 +12,7 @@ import {
   Activity,
   Eye,
   ChevronLeft,
+  ScanSearch,
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -43,6 +44,7 @@ const navSections: NavSection[] = [
       { to: '/inference',      icon: Sparkles,     label: 'Inference DB' },
       { to: '/rule-eval',      icon: Activity,     label: 'Rule Eval'    },
       { to: '/pulse/1',         icon: Eye,          label: 'Visual Pulse' },
+      { to: '/scan',            icon: ScanSearch,   label: 'Scanner' },
       { to: '/calendar',       icon: CalendarIcon, label: 'Risk Calendar' },
       { to: '/transmission',   icon: Zap,          label: 'Risk Transmission' },
     ],

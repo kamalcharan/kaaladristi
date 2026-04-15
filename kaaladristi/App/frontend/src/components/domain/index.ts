@@ -18,3 +18,4 @@ export { default as MarketPulseCard } from './MarketPulseCard';
 export { default as InstrumentIntelligence } from './InstrumentIntelligence';
 export { default as DataHealthGrid } from './DataHealthGrid';
 export { default as PipelineExecution } from './PipelineExecution';
+export { default as IndustryRotationPanel } from './IndustryRotationPanel';

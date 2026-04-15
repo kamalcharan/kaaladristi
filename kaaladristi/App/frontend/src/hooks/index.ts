@@ -25,3 +25,5 @@ export { useIndexChart } from './useEodData';
 export { useIndicatorChart } from './useIndicatorData';
 export { usePanchang, useMarketBreadth, useActiveIndexes, usePanchangInsight, useOutlookInferences, useBreadthInsight, useBreadthRoc, useBreadthRocInsight, useInstrumentInsight, useMarketPulseInsight } from './useDashboardExtras';
 export { useVisualPulse } from './useVisualPulse';
+export { useIndustryRotation, useIndustryStocks } from './useIndustryRotation';
+export { useScan } from './useScan';
