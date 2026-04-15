@@ -13,8 +13,10 @@ import {
   fetchPipelineHealth, fetchPipelineStatus, fetchBreezeStatus,
   fetchSchedulerStatus, fetchDownloadTypes,
   triggerPipelineRun, triggerBackfill, connectBreeze, triggerStepRerun,
+  fetchCoverageSummary,
   type PipelineHealth, type PipelineStatus, type BreezeStatus,
   type SchedulerStatus, type DownloadType, type PipelineRun,
+  type CoverageSummary,
 } from '@/services/pipelineData';
 import { useToast, ToastContainer } from '@/components/ui';
 
@@ -61,6 +63,7 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
 
   const { data: health } = useQuery({ queryKey: ['pipeline_health'], queryFn: fetchPipelineHealth, staleTime: 15_000, retry: 1 });
   const { data: status, isLoading } = useQuery({ queryKey: ['pipeline_status'], queryFn: fetchPipelineStatus, staleTime: 10_000, refetchInterval: 10_000, retry: 1 });
+  const { data: coverage } = useQuery({ queryKey: ['coverage_summary'], queryFn: () => fetchCoverageSummary(), staleTime: 30_000, retry: 1 });
   const { data: breeze } = useQuery({ queryKey: ['breeze_status'], queryFn: fetchBreezeStatus, staleTime: 30_000, retry: 1 });
   const { data: sched } = useQuery({ queryKey: ['scheduler_status'], queryFn: fetchSchedulerStatus, staleTime: 60_000, retry: 1 });
   const { data: downloads } = useQuery({ queryKey: ['download_types'], queryFn: fetchDownloadTypes, staleTime: 60_000, retry: 1 });
@@ -376,49 +379,43 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {/* ── Today's Progress — NSE | BSE Matrix ── */}
-      {todayByExchange.size > 0 && (() => {
-        // Build unified step list across exchanges
-        const allSteps = new Map<string, { nse?: PipelineRun; bse?: PipelineRun }>();
-        for (const [exchange, steps] of todayByExchange.entries()) {
-          for (const s of steps) {
-            if (!allSteps.has(s.step)) allSteps.set(s.step, {});
-            const entry = allSteps.get(s.step)!;
-            if (exchange === 'NSE') entry.nse = s;
-            else if (exchange === 'BSE') entry.bse = s;
-            else entry.nse = s; // N/A steps go to NSE column
-          }
+      {/* ── Step Coverage Matrix — NSE | BSE ── */}
+      {coverage && coverage.steps.length > 0 && (() => {
+        type CovStep = CoverageSummary['steps'][number];
+        // Group by step name, split NSE vs BSE
+        const stepMap = new Map<string, { label: string; order: number; nse?: CovStep; bse?: CovStep }>();
+        for (const s of coverage.steps) {
+          if (!stepMap.has(s.step)) stepMap.set(s.step, { label: s.label, order: s.order });
+          const entry = stepMap.get(s.step)!;
+          if (s.exchange === 'NSE' || s.exchange === 'N/A') entry.nse = s;
+          else if (s.exchange === 'BSE') entry.bse = s;
+          else if (!entry.nse) entry.nse = s;
         }
-        const stepOrder = (r: PipelineRun | undefined) => r?.id ?? 999;
-        const sortedSteps = [...allSteps.entries()].sort((a, b) =>
-          stepOrder(a[1].nse ?? a[1].bse) - stepOrder(b[1].nse ?? b[1].bse)
-        );
-        const hasNse = todayByExchange.has('NSE') || todayByExchange.has('N/A');
-        const hasBse = todayByExchange.has('BSE');
+        const sorted = [...stepMap.entries()].sort((a, b) => a[1].order - b[1].order);
+        const hasNse = coverage.steps.some(s => s.exchange === 'NSE' || s.exchange === 'N/A');
+        const hasBse = coverage.steps.some(s => s.exchange === 'BSE');
 
-        const CoverageCell = ({ run }: { run?: PipelineRun }) => {
-          if (!run) return <span className="text-[10px] text-muted">—</span>;
-          const rows = run.rows_count || 0;
-          const cov = (run as any).coverage_pct as number | null;
-          const expected = (run as any).rows_expected as number | null;
+        const CoverageCell = ({ step }: { step?: CovStep }) => {
+          if (!step) return <span className="text-[10px] text-muted">—</span>;
+          const rows = step.rows_count ?? 0;
           return (
             <div className="flex items-center gap-1.5">
-              <StepIcon status={run.status} />
+              <StepIcon status={step.status} />
               <span className="text-[10px] mono text-[var(--text-secondary)]">
                 {rows.toLocaleString('en-IN')}
-                {expected ? `/${expected.toLocaleString('en-IN')}` : ''}
+                {step.rows_expected ? `/${step.rows_expected.toLocaleString('en-IN')}` : ''}
               </span>
-              {cov != null && (
+              {step.coverage_pct != null && (
                 <span className={cn(
                   'text-[9px] font-bold',
-                  cov >= 90 ? 'text-risk-green' : cov >= 70 ? 'text-risk-amber' : 'text-risk-red',
+                  step.coverage_pct >= 90 ? 'text-risk-green' : step.coverage_pct >= 70 ? 'text-risk-amber' : 'text-risk-red',
                 )}>
-                  ({cov.toFixed(0)}%)
+                  ({step.coverage_pct.toFixed(0)}%)
                 </span>
               )}
-              {run.status === 'failed' && run.error_msg && (
-                <span className="text-[9px] text-risk-red truncate max-w-[100px]" title={run.error_msg}>
-                  {run.error_msg.slice(0, 30)}
+              {step.status === 'failed' && step.error_msg && (
+                <span className="text-[9px] text-risk-red truncate max-w-[100px]" title={step.error_msg}>
+                  {step.error_msg.slice(0, 30)}
                 </span>
               )}
             </div>
@@ -427,38 +424,51 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
 
         return (
           <div className="glass-card rounded-2xl p-5 mb-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Calendar className="w-3.5 h-3.5 text-accent-indigo" />
-              <span className="text-xs font-bold text-[var(--text-primary)]">Today — {fmtDate(status?.today ?? '')}</span>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-3.5 h-3.5 text-accent-indigo" />
+                <span className="text-xs font-bold text-[var(--text-primary)]">
+                  Step Coverage — {coverage.trade_date}
+                </span>
+              </div>
+              <div className={cn(
+                'px-2 py-0.5 rounded-md text-[9px] font-bold uppercase border',
+                coverage.overall === 'healthy' ? 'text-risk-green bg-risk-green/10 border-risk-green/30' :
+                coverage.overall === 'warning' || coverage.overall === 'partial' ? 'text-risk-amber bg-risk-amber/10 border-risk-amber/30' :
+                coverage.overall === 'failed' ? 'text-risk-red bg-risk-red/10 border-risk-red/30' :
+                'text-muted bg-kd-elevated border-kd-border',
+              )}>
+                {coverage.overall}
+              </div>
             </div>
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-kd-border">
-                  <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-40">Step</th>
+                  <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-44">Step</th>
                   {hasNse && <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider">NSE</th>}
                   {hasBse && <th className="text-left py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider">BSE</th>}
-                  <th className="text-right py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-12">Time</th>
+                  <th className="text-right py-2 px-2 text-[10px] font-bold text-muted uppercase tracking-wider w-14">Time</th>
                   <th className="w-8" />
                 </tr>
               </thead>
               <tbody>
-                {sortedSteps.map(([step, { nse, bse }]) => {
+                {sorted.map(([stepName, { label, nse, bse }]) => {
                   const primary = nse ?? bse;
                   return (
-                    <tr key={step} className="border-b border-kd-border/30 hover:bg-kd-elevated/20 group/step">
-                      <td className="py-1.5 px-2 text-[var(--text-secondary)] font-medium">{step}</td>
-                      {hasNse && <td className="py-1.5 px-2"><CoverageCell run={nse} /></td>}
-                      {hasBse && <td className="py-1.5 px-2"><CoverageCell run={bse} /></td>}
+                    <tr key={stepName} className="border-b border-kd-border/30 hover:bg-kd-elevated/20 group/step">
+                      <td className="py-1.5 px-2 text-[var(--text-secondary)] font-medium">{label}</td>
+                      {hasNse && <td className="py-1.5 px-2"><CoverageCell step={nse} /></td>}
+                      {hasBse && <td className="py-1.5 px-2"><CoverageCell step={bse} /></td>}
                       <td className="py-1.5 px-2 text-right text-[10px] text-muted mono">
                         {fmtDuration(primary?.duration_ms ?? null)}
                       </td>
                       <td className="py-1.5 px-1">
-                        {RERUNNABLE_STEPS.has(step) && (
+                        {RERUNNABLE_STEPS.has(stepName) && (
                           <button
-                            onClick={() => stepRerunMutation.mutate({ step, exchange: nse ? 'NSE' : 'BSE' })}
+                            onClick={() => stepRerunMutation.mutate({ step: stepName, exchange: nse ? 'NSE' : 'BSE' })}
                             disabled={stepRerunMutation.isPending}
                             className="opacity-0 group-hover/step:opacity-100 p-0.5 rounded text-muted hover:text-accent-indigo transition-all"
-                            title={`Re-run ${step}`}
+                            title={`Re-run ${label}`}
                           >
                             <RefreshCw className="w-3 h-3" />
                           </button>

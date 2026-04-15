@@ -1211,10 +1211,16 @@ def run_step(req: RunStepRequest):
 
 @app.get('/api/pipeline/coverage-summary')
 def coverage_summary(trade_date: str = None):
-    """Return per-step coverage for a date. Used by header status dot."""
+    """Return per-step coverage for a date. Used by header status dot.
+    If no date specified, uses the latest date with pipeline runs."""
     if not trade_date:
-        from datetime import date as date_cls
-        trade_date = str(date_cls.today())
+        latest = db.select('km_pipeline_runs', 'trade_date',
+                           order='trade_date.desc', limit=1)
+        if latest:
+            trade_date = str(latest[0]['trade_date'])
+        else:
+            from datetime import date as date_cls
+            trade_date = str(date_cls.today())
 
     rows = db.select('km_pipeline_runs', '*',
                      filters={'trade_date': trade_date},
