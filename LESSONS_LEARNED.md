@@ -43,3 +43,10 @@ Worse: when BSE data is missing (different holiday calendar, delayed data), the 
 Industry composites must use a stable stock universe across dates. Per-exchange as-of tracking (`nse_as_of_date`, `bse_as_of_date`, `nse_stock_count`, `bse_stock_count`) was added to `km_industry_eod` so the UI can detect and warn when BSE data is stale. The dashboard header shows `NSE 13 Apr · BSE 12 Apr (delayed)` when exchanges are out of sync.
 
 - **Pattern**: For any table that aggregates across exchanges, always track which exchange contributed data and when. Don't assume both exchanges have the same trading calendar.
+
+## Coverage Thresholds Prevent Silent Failures (2026-04-15)
+
+Pipeline steps that complete without errors but produce incomplete output are the most dangerous bugs — they pass health checks but break downstream features. The magic_rs NULL incident: the RPC returned 0 rows without raising an error, the step was marked "completed", the health grid showed green, but every downstream feature (industry rotation, scans) was broken.
+
+- **Fix**: Migration 035 adds `rows_expected`, `coverage_pct` to `km_pipeline_runs`. Each step now records expected vs actual rows. Coverage rules in `config/pipeline_steps.py` define thresholds (healthy/warning/failure) per step. Sparse signals (e.g. `accum_distrib` at 1-5%) are marked `is_sparse` to avoid false alarms.
+- **Pattern**: Every computed column must have a coverage rule. Anything not on the sparse exception list that drops below threshold = immediate red alert. "Completed with 0 rows" should be classified as `partial`, not `success`.

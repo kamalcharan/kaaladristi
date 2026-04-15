@@ -12,7 +12,7 @@ import PipelineExecution from '@/components/domain/PipelineExecution';
 import {
   fetchPipelineHealth, fetchPipelineStatus, fetchBreezeStatus,
   fetchSchedulerStatus, fetchDownloadTypes,
-  triggerPipelineRun, triggerBackfill, connectBreeze,
+  triggerPipelineRun, triggerBackfill, connectBreeze, triggerStepRerun,
   type PipelineHealth, type PipelineStatus, type BreezeStatus,
   type SchedulerStatus, type DownloadType, type PipelineRun,
 } from '@/services/pipelineData';
@@ -92,6 +92,18 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
   const backfillMutation = useMutation({
     mutationFn: () => triggerBackfill(bfFrom, bfTo, bfExchange),
     onSuccess: (data) => { toast('success', data.message); setShowBackfill(false); qc.invalidateQueries({ queryKey: ['pipeline_status'] }); },
+    onError: (err: Error) => toast('error', err.message),
+  });
+
+  const RERUNNABLE_STEPS = new Set(['indicators', 'index_indicators', 'magic_rs', 'flow_intelligence', 'industry_composites', 'market_breadth', 'breadth_roc']);
+
+  const stepRerunMutation = useMutation({
+    mutationFn: ({ step, exchange }: { step: string; exchange: string }) =>
+      triggerStepRerun(status?.today ?? new Date().toISOString().split('T')[0], step, exchange),
+    onSuccess: (data) => {
+      toast('success', data.message);
+      qc.invalidateQueries({ queryKey: ['pipeline_status'] });
+    },
     onError: (err: Error) => toast('error', err.message),
   });
 
@@ -386,15 +398,25 @@ export default function PipelineDashboard({ onBack }: { onBack: () => void }) {
                   </div>
                   <div className="grid gap-0.5">
                     {sorted.map(s => (
-                      <div key={s.step} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-kd-elevated/40">
+                      <div key={s.step} className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-kd-elevated/40 group/step">
                         <StepIcon status={s.status} />
-                        <span className="text-[11px] text-[var(--text-secondary)] w-20">{s.step}</span>
+                        <span className="text-[11px] text-[var(--text-secondary)] w-24">{s.step}</span>
                         <span className="text-[10px] text-muted mono flex-1">
                           {s.rows_count ? `${s.rows_count.toLocaleString('en-IN')} rows` : ''}
                         </span>
                         <span className="text-[10px] text-muted mono w-12 text-right">{fmtDuration(s.duration_ms)}</span>
                         {s.error_msg && (
-                          <span className="text-[10px] text-risk-red truncate max-w-[180px]" title={s.error_msg}>{s.error_msg}</span>
+                          <span className="text-[10px] text-risk-red truncate max-w-[140px]" title={s.error_msg}>{s.error_msg}</span>
+                        )}
+                        {RERUNNABLE_STEPS.has(s.step) && (
+                          <button
+                            onClick={() => stepRerunMutation.mutate({ step: s.step, exchange })}
+                            disabled={stepRerunMutation.isPending}
+                            className="opacity-0 group-hover/step:opacity-100 p-0.5 rounded text-muted hover:text-accent-indigo transition-all"
+                            title={`Re-run ${s.step}`}
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                          </button>
                         )}
                       </div>
                     ))}

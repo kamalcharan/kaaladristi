@@ -116,6 +116,30 @@ export const triggerBackfill = (dateFrom: string, dateTo: string, exchange: stri
 export const connectBreeze = (sessionToken: string) =>
   apiPost<{ status: string; message: string }>('/api/pipeline/breeze-connect', { session_token: sessionToken });
 
+export const triggerStepRerun = (tradeDate: string, step: string, exchange: string = 'NSE') =>
+  apiPost<JobResponse>('/api/pipeline/run-step', { trade_date: tradeDate, step, exchange });
+
+export interface CoverageSummary {
+  trade_date: string;
+  overall: string;
+  steps: {
+    step: string;
+    label: string;
+    order: number;
+    exchange: string;
+    status: string;
+    rows_count: number | null;
+    rows_expected: number | null;
+    coverage_pct: number | null;
+    classification: string;
+    duration_ms: number | null;
+    error_msg: string | null;
+  }[];
+}
+
+export const fetchCoverageSummary = (tradeDate?: string) =>
+  apiGet<CoverageSummary>(`/api/pipeline/coverage-summary${tradeDate ? `?trade_date=${tradeDate}` : ''}`);
+
 // ── Direct DB reads (for history — doesn't need pipeline API) ────────────────
 
 export async function fetchPipelineRuns(days: number = 14): Promise<PipelineRun[]> {

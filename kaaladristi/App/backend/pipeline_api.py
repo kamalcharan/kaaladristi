@@ -1158,6 +1158,111 @@ def fix_dimension(req: FixRequest):
             'message': f'Job queued for {req.dimension}. Start worker: python worker.py --watch'}
 
 
+# ── Per-step re-run endpoint ────────────────────────────────────────────────
+
+class RunStepRequest(BaseModel):
+    trade_date: str
+    step: str
+    exchange: str = 'NSE'
+
+@app.post('/api/pipeline/run-step')
+def run_step(req: RunStepRequest):
+    """Queue a re-run of a specific pipeline step for a specific date.
+    Maps step names to fix: job types for the worker."""
+    STEP_TO_FIX = {
+        'indicators': 'fix:nse_equity_indicators' if req.exchange == 'NSE' else 'fix:bse_equity_indicators',
+        'index_indicators': 'fix:indicators',
+        'magic_rs': 'fix:magic_rs',
+        'flow_intelligence': 'fix:flow_intelligence',
+        'industry_composites': 'fix:industry_composites',
+        'market_breadth': 'fix:market_breadth',
+        'breadth_roc': 'fix:breadth_roc',
+    }
+    job_type = STEP_TO_FIX.get(req.step)
+    if not job_type:
+        raise HTTPException(400, f'Step "{req.step}" cannot be re-run individually')
+
+    # Check for already queued/running
+    existing = db.select('km_jobs', 'id,status',
+                         filters={'job_type': job_type},
+                         order='created_at.desc', limit=1)
+    if existing and existing[0].get('status') in ('queued', 'running'):
+        raise HTTPException(409, f'A {req.step} job is already queued/running')
+
+    record = {
+        'job_type': job_type,
+        'params': json.dumps({
+            'days': 60, 'strategy': 'smart',
+            'trade_date': req.trade_date, 'exchange': req.exchange,
+        }),
+        'status': 'queued',
+        'created_by': 'manual_step',
+    }
+    db.insert('km_jobs', record)
+
+    rows = db.select('km_jobs', 'id',
+                     filters={'job_type': job_type, 'status': 'queued'},
+                     order='created_at.desc', limit=1)
+    job_id = rows[0]['id'] if rows else None
+
+    return {'job_id': job_id, 'status': 'queued',
+            'message': f'Re-run queued for {req.step} ({req.exchange}, {req.trade_date})'}
+
+
+@app.get('/api/pipeline/coverage-summary')
+def coverage_summary(trade_date: str = None):
+    """Return per-step coverage for a date. Used by header status dot."""
+    if not trade_date:
+        from datetime import date as date_cls
+        trade_date = str(date_cls.today())
+
+    rows = db.select('km_pipeline_runs', '*',
+                     filters={'trade_date': trade_date},
+                     order='step_order')
+    if not rows:
+        return {'trade_date': trade_date, 'steps': [], 'overall': 'unknown'}
+
+    from config.pipeline_steps import STEP_BY_NAME, classify_coverage
+
+    steps = []
+    worst = 'healthy'
+    for r in rows:
+        step_name = r.get('step', '')
+        config = STEP_BY_NAME.get(step_name, {})
+        cov = r.get('coverage_pct')
+        status = r.get('status', 'unknown')
+
+        if status == 'failed':
+            classification = 'failed'
+        elif status == 'skipped':
+            classification = 'skipped'
+        elif cov is not None:
+            classification = classify_coverage(step_name, float(cov))
+        else:
+            classification = 'healthy' if status == 'completed' else 'unknown'
+
+        steps.append({
+            'step': step_name,
+            'label': config.get('label', step_name),
+            'order': config.get('order', 99),
+            'exchange': r.get('exchange'),
+            'status': status,
+            'rows_count': r.get('rows_count'),
+            'rows_expected': r.get('rows_expected'),
+            'coverage_pct': cov,
+            'classification': classification,
+            'duration_ms': r.get('duration_ms'),
+            'error_msg': r.get('error_msg'),
+        })
+
+        # Track worst classification
+        severity = {'failed': 4, 'partial': 3, 'warning': 2, 'healthy': 1, 'skipped': 0, 'unknown': 0}
+        if severity.get(classification, 0) > severity.get(worst, 0):
+            worst = classification
+
+    return {'trade_date': trade_date, 'steps': steps, 'overall': worst}
+
+
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
 
 # Per-day in-memory cache — insight for a given date never changes
