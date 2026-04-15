@@ -124,109 +124,101 @@ def _is_cancelled(db, job_id):
     return rows and rows[0].get('status') == 'cancelled'
 
 
+# ── Threshold: above this, use bulk RPC instead of per-symbol loop ───────────
+BULK_RPC_THRESHOLD = 100
+
+
 # ── Job Handlers ─────────────────────────────────────────────────────────────
 
 def handle_fix_indicators(db, job_id, params):
-    """Compute index indicators — only symbols with gaps in date range."""
-    days = params.get('days', 60)
-    cutoff = _get_cutoff_date()
-    from_dt = cutoff - timedelta(days=int(days * 1.5))
-
-    total = 0
-    for table, id_col, label in [
-        ('km_index_eod', 'index_id', 'Index'),
-    ]:
-        pending = _pending_symbols(db, table, id_col, 'indicators_computed_at', from_dt, cutoff)
-        log.info(f'{label} indicators: {len(pending)} symbols with gaps')
-        _update_job(db, job_id, progress=f'{label}: {len(pending)} symbols to compute')
-
-        for i, sid in enumerate(pending):
-            if _is_cancelled(db, job_id):
-                return total
-            if i % 10 == 0:
-                _update_job(db, job_id,
-                            progress=f'{label}: {i+1}/{len(pending)} symbols',
-                            progress_pct=int((i / max(len(pending), 1)) * 100))
-            try:
-                result = db.rpc('compute_indicators_batch', {
-                    'p_table': table, 'p_id_col': id_col,
-                    'p_symbol_id': sid, 'p_from_date': str(from_dt),
-                })
-                count = result[0].get('compute_indicators_batch', 0) if result else 0
-                total += count
-            except Exception as e:
-                log.error(f'{label} indicators sid={sid}: {e}')
-
+    """Compute index indicators — bulk RPC for large gaps, per-symbol for small."""
+    _update_job(db, job_id, progress='Computing index indicators...')
+    result = db.rpc('compute_all_pending_indicators', {
+        'p_table': 'km_index_eod', 'p_id_col': 'index_id',
+    })
+    total = sum(r.get('rows_updated', 0) for r in (result or []))
     log.info(f'Index indicators: {total} rows updated')
     return total
 
 
 def handle_fix_nse_equity_indicators(db, job_id, params):
-    """Compute NSE equity indicators — only symbols with gaps."""
+    """Compute NSE equity indicators — bulk RPC for speed."""
     days = params.get('days', 60)
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
     pending = _pending_symbols(db, 'km_equity_eod', 'equity_id', 'indicators_computed_at', from_dt, cutoff)
     log.info(f'NSE Equity indicators: {len(pending)} symbols with gaps')
-    _update_job(db, job_id, progress=f'{len(pending)} symbols to compute')
 
-    total = 0
-    for i, sid in enumerate(pending):
-        if _is_cancelled(db, job_id):
-            return total
-        if i % 20 == 0:
+    if len(pending) > BULK_RPC_THRESHOLD:
+        _update_job(db, job_id, progress=f'{len(pending)} symbols — using bulk RPC')
+        result = db.rpc('compute_all_pending_indicators', {
+            'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+        })
+        total = sum(r.get('rows_updated', 0) for r in (result or []))
+    else:
+        _update_job(db, job_id, progress=f'{len(pending)} symbols to compute')
+        total = 0
+        for i, sid in enumerate(pending):
+            if _is_cancelled(db, job_id):
+                return total
             _update_job(db, job_id,
                         progress=f'Equity: {i+1}/{len(pending)} symbols',
                         progress_pct=int((i / max(len(pending), 1)) * 100))
-        try:
-            result = db.rpc('compute_indicators_batch', {
-                'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
-                'p_symbol_id': sid, 'p_from_date': str(from_dt),
-            })
-            count = result[0].get('compute_indicators_batch', 0) if result else 0
-            total += count
-        except Exception as e:
-            log.error(f'NSE Equity indicators sid={sid}: {e}')
+            try:
+                result = db.rpc('compute_indicators_batch', {
+                    'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+                    'p_symbol_id': sid, 'p_from_date': str(from_dt),
+                })
+                count = result[0].get('compute_indicators_batch', 0) if result else 0
+                total += count
+            except Exception as e:
+                log.error(f'NSE Equity indicators sid={sid}: {e}')
 
     log.info(f'NSE Equity indicators: {total} rows updated')
     return total
 
 
 def handle_fix_bse_equity_indicators(db, job_id, params):
-    """Compute BSE equity indicators — only symbols with gaps."""
+    """Compute BSE equity indicators — bulk RPC for speed."""
     days = params.get('days', 60)
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
 
     pending = _pending_symbols(db, 'km_equity_eod', 'equity_id', 'indicators_computed_at', from_dt, cutoff)
     log.info(f'BSE Equity indicators: {len(pending)} symbols with gaps')
-    _update_job(db, job_id, progress=f'{len(pending)} symbols to compute')
 
-    total = 0
-    for i, sid in enumerate(pending):
-        if _is_cancelled(db, job_id):
-            return total
-        if i % 20 == 0:
+    if len(pending) > BULK_RPC_THRESHOLD:
+        _update_job(db, job_id, progress=f'{len(pending)} symbols — using bulk RPC')
+        result = db.rpc('compute_all_pending_indicators', {
+            'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+        })
+        total = sum(r.get('rows_updated', 0) for r in (result or []))
+    else:
+        _update_job(db, job_id, progress=f'{len(pending)} symbols to compute')
+        total = 0
+        for i, sid in enumerate(pending):
+            if _is_cancelled(db, job_id):
+                return total
             _update_job(db, job_id,
                         progress=f'Equity: {i+1}/{len(pending)} symbols',
                         progress_pct=int((i / max(len(pending), 1)) * 100))
-        try:
-            result = db.rpc('compute_indicators_batch', {
-                'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
-                'p_symbol_id': sid, 'p_from_date': str(from_dt),
-            })
-            count = result[0].get('compute_indicators_batch', 0) if result else 0
-            total += count
-        except Exception as e:
-            log.error(f'BSE Equity indicators sid={sid}: {e}')
+            try:
+                result = db.rpc('compute_indicators_batch', {
+                    'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+                    'p_symbol_id': sid, 'p_from_date': str(from_dt),
+                })
+                count = result[0].get('compute_indicators_batch', 0) if result else 0
+                total += count
+            except Exception as e:
+                log.error(f'BSE Equity indicators sid={sid}: {e}')
 
     log.info(f'BSE Equity indicators: {total} rows updated')
     return total
 
 
 def handle_fix_flow(db, job_id, params):
-    """Compute flow intelligence — only symbols with gaps in date range."""
+    """Compute flow intelligence — bulk RPC for large gaps, per-symbol for small."""
     days = params.get('days', 60)
     cutoff = _get_cutoff_date()
     from_dt = cutoff - timedelta(days=int(days * 1.5))
@@ -238,26 +230,34 @@ def handle_fix_flow(db, job_id, params):
     ]:
         pending = _pending_symbols(db, table, id_col, 'flow_type', from_dt, cutoff)
         log.info(f'{label} flow: {len(pending)} symbols with gaps')
-        _update_job(db, job_id, progress=f'{label}: {len(pending)} symbols to compute')
 
-        for i, sid in enumerate(pending):
-            if _is_cancelled(db, job_id):
-                return total
-            if i % 20 == 0:
-                _update_job(db, job_id,
-                            progress=f'{label} flow: {i+1}/{len(pending)} symbols',
-                            progress_pct=int((i / max(len(pending), 1)) * 100))
-            try:
-                result = db.rpc('compute_flow_intelligence', {
-                    'p_table': table, 'p_id_col': id_col,
-                    'p_symbol_id': sid, 'p_from_date': str(from_dt),
-                })
-                count = result if isinstance(result, int) else (
-                    result[0].get('compute_flow_intelligence', 0) if result else 0
-                )
-                total += count
-            except Exception as e:
-                log.error(f'{label} flow sid={sid}: {e}')
+        if len(pending) > BULK_RPC_THRESHOLD:
+            _update_job(db, job_id, progress=f'{label}: {len(pending)} symbols — using bulk RPC')
+            result = db.rpc('compute_all_flow_intelligence', {
+                'p_table': table, 'p_id_col': id_col,
+            })
+            count = sum(r.get('rows_updated', 0) for r in (result or []))
+            total += count
+        else:
+            _update_job(db, job_id, progress=f'{label}: {len(pending)} symbols to compute')
+            for i, sid in enumerate(pending):
+                if _is_cancelled(db, job_id):
+                    return total
+                if i % 20 == 0:
+                    _update_job(db, job_id,
+                                progress=f'{label} flow: {i+1}/{len(pending)} symbols',
+                                progress_pct=int((i / max(len(pending), 1)) * 100))
+                try:
+                    result = db.rpc('compute_flow_intelligence', {
+                        'p_table': table, 'p_id_col': id_col,
+                        'p_symbol_id': sid, 'p_from_date': str(from_dt),
+                    })
+                    count = result if isinstance(result, int) else (
+                        result[0].get('compute_flow_intelligence', 0) if result else 0
+                    )
+                    total += count
+                except Exception as e:
+                    log.error(f'{label} flow sid={sid}: {e}')
 
     log.info(f'Flow intelligence: {total} rows updated')
     return total
