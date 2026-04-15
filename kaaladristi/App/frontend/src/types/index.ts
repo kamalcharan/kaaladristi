@@ -408,6 +408,7 @@ export interface ScanStock {
   sniper_inst: number | null;
   accum_distrib: string | null;
   rss_value: number | null;
+  sma_150: number | null;
   volume_divergence_flag: string | null;
   has_recent_svd: boolean;
   has_recent_sbd: boolean;
@@ -418,6 +419,7 @@ export interface ScanDefinition {
   id: string;
   name: string;
   description: string;
+  tooltip?: string;
   limit: number;
 }
 

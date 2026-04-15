@@ -24,14 +24,16 @@ import type {
 export const SCAN_PRESETS: ScanDefinition[] = [
   {
     id: 'power_buy',
-    name: 'Power Buy Setups',
-    description: 'Strong momentum stocks in leading or rotating-in industries with accumulation signals',
+    name: 'Strength Confluence',
+    description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries',
+    tooltip: 'Stocks where multiple positive conditions are converging — strong relative strength, accumulation patterns, recent institutional fingerprints, in rotating-in or leading industries. Not a buy recommendation.',
     limit: 25,
   },
   {
     id: 'power_sell',
-    name: 'Power Sell Setups',
-    description: 'Weakening stocks in lagging industries with distribution warnings',
+    name: 'Weakness Confluence',
+    description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries',
+    tooltip: 'Stocks where multiple negative conditions are converging — weakness, distribution, selling pressure, in rotating-out industries. Not a sell recommendation.',
     limit: 25,
   },
   {
@@ -278,6 +280,7 @@ function buildScanStock(
     sniper_inst: eod.sniper_inst,
     accum_distrib: eod.accum_distrib,
     rss_value: eod.rss_value,
+    sma_150: eod.sma_150,
     volume_divergence_flag: eod.volume_divergence_flag,
     has_recent_svd: hasDotInHistory(history, 'svd', 5),
     has_recent_sbd: hasDotInHistory(history, 'sbd', 5),
@@ -287,7 +290,19 @@ function buildScanStock(
 
 // ── Scan Implementations ───────────────────────────────────────
 
-/** Scan 1: Power Buy Setups */
+// FILTER LOGIC NOTE:
+// accum_distrib captures classical Wyckoff accumulation (price below
+// Golden Line + 3x volume + bullish momentum). This signal is naturally
+// rare — typically 1-5% of stocks meet it on any given day.
+//
+// The OR clause captures the broader bullish confluence pattern that
+// traders also recognize as strength building: above Golden Line,
+// strong/mild bull RS zone, bullish flow type, elevated volume.
+//
+// Both paths surface stocks worth attention; the strict path is high
+// conviction, the confluence path is broader signal.
+
+/** Scan 1: Strength Confluence */
 function scanPowerBuy(bundle: ScanDataBundle): ScanStock[] {
   const { rotatingIn, leading } = getIndustryClassifications(bundle);
   const eligible = new Set([...rotatingIn, ...leading]);
@@ -296,10 +311,21 @@ function scanPowerBuy(bundle: ScanDataBundle): ScanStock[] {
   for (const [id] of bundle.latestEod) {
     const stock = buildScanStock(id, bundle);
     if (!stock || !stock.industry) continue;
+
+    // Industry gate (unchanged)
     if (!eligible.has(stock.industry)) continue;
-    if (stock.magic_rs_zone !== 'Strong Bull') continue;
-    if (stock.accum_distrib !== 'ACCUMULATION') continue;
-    if (!stock.has_recent_svd && !stock.has_recent_sbd) continue;
+
+    // Path 1: Strict Wyckoff accumulation (rare, high conviction)
+    const wyckoffAccumulation = stock.accum_distrib === 'ACCUMULATION';
+
+    // Path 2: Broader bullish confluence (common, also valid)
+    const bullishConfluence =
+      stock.sma_150 != null && stock.close > stock.sma_150 &&
+      ['Strong Bull', 'Mild Bull'].includes(stock.magic_rs_zone ?? '') &&
+      ['FRESH_LONGS', 'SHORT_COVERING'].includes(stock.flow_type ?? '') &&
+      (stock.rvol ?? 0) > 1.5;
+
+    if (!wyckoffAccumulation && !bullishConfluence) continue;
     results.push(stock);
   }
 
@@ -308,7 +334,12 @@ function scanPowerBuy(bundle: ScanDataBundle): ScanStock[] {
     .slice(0, 25);
 }
 
-/** Scan 2: Power Sell Setups */
+// FILTER LOGIC NOTE (mirror of Strength Confluence):
+// accum_distrib = 'DISTRIBUTION' captures classical Wyckoff distribution.
+// The OR clause captures broader bearish confluence: below Golden Line,
+// strong/mild bear RS zone, bearish flow type, elevated volume.
+
+/** Scan 2: Weakness Confluence */
 function scanPowerSell(bundle: ScanDataBundle): ScanStock[] {
   const { rotatingOut, lagging } = getIndustryClassifications(bundle);
   const eligible = new Set([...rotatingOut, ...lagging]);
@@ -317,10 +348,21 @@ function scanPowerSell(bundle: ScanDataBundle): ScanStock[] {
   for (const [id] of bundle.latestEod) {
     const stock = buildScanStock(id, bundle);
     if (!stock || !stock.industry) continue;
+
+    // Industry gate (unchanged)
     if (!eligible.has(stock.industry)) continue;
-    if (stock.magic_rs_zone !== 'Strong Bear') continue;
-    if (stock.accum_distrib !== 'DISTRIBUTION') continue;
-    if (!stock.has_recent_syd && stock.volume_divergence_flag !== 'VOLUME_DIV_DOWN') continue;
+
+    // Path 1: Strict Wyckoff distribution (rare, high conviction)
+    const wyckoffDistribution = stock.accum_distrib === 'DISTRIBUTION';
+
+    // Path 2: Broader bearish confluence (common, also valid)
+    const bearishConfluence =
+      stock.sma_150 != null && stock.close < stock.sma_150 &&
+      ['Strong Bear', 'Mild Bear'].includes(stock.magic_rs_zone ?? '') &&
+      ['FRESH_SHORTS', 'LONG_LIQUIDATION'].includes(stock.flow_type ?? '') &&
+      (stock.rvol ?? 0) > 1.5;
+
+    if (!wyckoffDistribution && !bearishConfluence) continue;
     results.push(stock);
   }
 
@@ -343,6 +385,13 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
     const stock = buildScanStock(id, bundle);
     if (!stock || !stock.industry) continue;
     if (!accumulatingIndustries.has(stock.industry)) continue;
+
+    // THRESHOLD CALIBRATION NOTE:
+    // sniper_inst ranges 0-40 in km_equity_eod (avg ~5.4 as of Apr 2026).
+    // Threshold 20 = top ~8% of the universe. The previous threshold of 50
+    // was theoretical (assumed 0-100 RSI scale) and never triggered with
+    // actual data.
+    if ((stock.sniper_inst ?? 0) <= 20) continue;
 
     // sniper_inst rising over last 5 bars
     const history = bundle.eodHistory.get(id) ?? [];

@@ -59,3 +59,27 @@ RLS policies must list every role the application uses, not just `anon` and `aut
 - **The silent failure is the worst part**: No error, no log, no exception. Just empty arrays that look like "no data" instead of "access denied."
 - **Fix**: Computed aggregate tables (km_industry_eod, km_market_breadth, km_breadth_roc) should not have RLS at all — they contain no user-specific data. RLS on pipeline-computed tables creates permission bugs with zero security benefit.
 - **Rule**: Always cross-check `pg_policies.roles` against the actual role used by every application component (PostgREST, Pipeline API, Worker). After any DDL change, run `NOTIFY pgrst, 'reload schema'`.
+
+## Scan Filter Calibration: Strict Signals vs Broader Confluence (2026-04-15)
+
+Function correctness ≠ scan usefulness. When a function produces a rare signal (like Wyckoff accumulation), filtering scans on that signal alone produces empty results. Combine strict signals with broader confluence patterns using OR logic. Ask: "what does a trader recognize as this state?" not "what does the textbook define as this state?"
+
+- `accum_distrib = 'ACCUMULATION'` is a strict Wyckoff signal — only 1-5% of stocks meet it on any given day. Filtering exclusively on it returned 4 results out of ~1,380 equities.
+- The OR path adds broader bullish confluence (above SMA-150, Strong/Mild Bull RS zone, bullish flow type, RVOL > 1.5) which captures the same intent with a wider net.
+- Same pattern applies to `accum_distrib = 'DISTRIBUTION'` on the bearish side.
+
+## KaalaDristi Voice: Observational, Never Directive (2026-04-15)
+
+KaalaDristi vocabulary is observational, never directive. Surface conditions, don't issue commands. "Strength Confluence" describes a state. "Power Buy" issues a trade signal. The first respects the trader's judgment; the second usurps it.
+
+- "Power Buy Setups" → "Strength Confluence"
+- "Power Sell Setups" → "Weakness Confluence"
+- Internal function names (`scanPowerBuy`, `power_buy` ID) stay as-is — only user-facing labels changed.
+
+## Data-Driven Threshold Calibration (2026-04-15)
+
+Threshold calibration must be data-driven. A theoretical threshold (`sniper_inst > 50` assuming 0-100 scale) failed silently when actual data ranged 0-40. Always check actual value distribution in production data before setting numeric thresholds.
+
+- `sniper_inst` ranges 0-40 in `km_equity_eod` (avg ~5.4 as of Apr 2026).
+- Threshold 20 = top ~8% of the universe. The previous threshold of 50 was theoretical and never triggered.
+- **Rule**: Before setting any numeric filter threshold, run `SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY col) FROM table` to understand the actual distribution.
