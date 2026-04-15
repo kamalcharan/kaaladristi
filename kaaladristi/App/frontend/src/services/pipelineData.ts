@@ -146,21 +146,37 @@ export const fetchCoverageSummary = (tradeDate?: string) =>
 
 // ── Direct DB reads (PostgREST — no Pipeline API dependency) ─────────────────
 
-/** Fetch pipeline runs for the latest available trade_date, grouped for matrix view */
+/** Fetch pipeline runs for the latest available trade_date, grouped for matrix view.
+ *  Skips dates that only have failed/skipped steps — finds the latest date
+ *  with at least one completed step. */
 export async function fetchLatestPipelineSteps(): Promise<{
   trade_date: string;
   steps: PipelineRun[];
 } | null> {
-  // Get the latest trade_date
+  // Get recent trade_dates (check a few in case latest is all-failed)
   const { data: dateRows, error: dateErr } = await from('km_pipeline_runs')
-    .select('trade_date')
+    .select('trade_date,status')
     .order('trade_date', { ascending: false })
-    .limit(1)
+    .limit(200)
     .execute();
 
   if (dateErr || !dateRows || dateRows.length === 0) return null;
 
-  const latestDate = (dateRows[0] as { trade_date: string }).trade_date;
+  // Find latest date with at least one completed step
+  const dateSet = new Map<string, boolean>();
+  for (const r of dateRows as { trade_date: string; status: string }[]) {
+    if (!dateSet.has(r.trade_date)) dateSet.set(r.trade_date, false);
+    if (r.status === 'completed') dateSet.set(r.trade_date, true);
+  }
+
+  let latestDate: string | null = null;
+  for (const [d, hasCompleted] of dateSet) {
+    if (hasCompleted) { latestDate = d; break; }
+  }
+  if (!latestDate) {
+    // Fallback: just use the most recent date
+    latestDate = (dateRows[0] as { trade_date: string }).trade_date;
+  }
 
   // Get all steps for that date
   const { data, error } = await from('km_pipeline_runs')
