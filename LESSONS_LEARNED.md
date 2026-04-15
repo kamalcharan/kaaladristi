@@ -83,3 +83,20 @@ Threshold calibration must be data-driven. A theoretical threshold (`sniper_inst
 - `sniper_inst` ranges 0-40 in `km_equity_eod` (avg ~5.4 as of Apr 2026).
 - Threshold 20 = top ~8% of the universe. The previous threshold of 50 was theoretical and never triggered.
 - **Rule**: Before setting any numeric filter threshold, run `SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY col) FROM table` to understand the actual distribution.
+
+## Safety Features vs Opportunity Features (2026-04-15)
+
+Pump/dump detection is a safety feature, not an opportunity feature. It must scan the entire universe regardless of industry rotation, because manipulation respects no industry boundary. It must explain itself in plain English ("Why Flagged" column), because surfacing a suspect stock without context is dangerous — a trader might mistake the signal for an opportunity. And it must use observational, educational language ("Manipulation Watch", "suspects"), not directive language ("Avoid these"), to maintain user agency while still warning clearly.
+
+- **No industry gate**: Unlike Scanner scans, manipulation filters scan all equities. Industry rotation is irrelevant to operator pumps.
+- **Why-flagged tags**: Every suspect row shows which conditions triggered it in plain English: "RSS overbought (78) + Spread broken (-2.3K) + Short covering + Volume diverging up".
+- **Separate navigation**: Manipulation Watch is a top-level page, not a Scanner tab. Mixing safety and opportunity features risks traders treating threats as opportunities.
+
+## Visual Treatment Carries Part of the Message (2026-04-15)
+
+A safety feature styled identically to opportunity features defeats its purpose. Distinct colors (amber/red), warning icons, and visual separation from neutral content are required, not decorative.
+
+- Pump suspect rows: amber background tint + amber left border + warning icon + amber symbol text.
+- Dump suspect rows: red background tint + red left border + warning icon + red symbol text.
+- Page header: amber/red gradient accent bar to visually distinguish from Scanner's neutral palette.
+- **Rule**: When a feature carries a different risk message than its neighbors, the visual treatment must make that difference obvious within 1 second of page load.

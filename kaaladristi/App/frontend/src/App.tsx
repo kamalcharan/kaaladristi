@@ -20,6 +20,7 @@ import DCCalendarView from '@/views/DCCalendarView';
 import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import ScanView from '@/views/ScanView';
+import ManipulationWatchView from '@/views/ManipulationWatchView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,6 +99,7 @@ function AppRoutes() {
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/scan" element={<ScanView />} />
+          <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Route>
       </Route>

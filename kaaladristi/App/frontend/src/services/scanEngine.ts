@@ -131,7 +131,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
 
     // Equity EOD for last 20 dates
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,sma_150,volume_divergence_flag')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
       .limit(30000)
@@ -280,6 +280,7 @@ function buildScanStock(
     sniper_inst: eod.sniper_inst,
     accum_distrib: eod.accum_distrib,
     rss_value: eod.rss_value,
+    rss_spread: eod.rss_spread,
     sma_150: eod.sma_150,
     volume_divergence_flag: eod.volume_divergence_flag,
     has_recent_svd: hasDotInHistory(history, 'svd', 5),
@@ -582,4 +583,106 @@ export async function executeScan(scanId: string, exchangeFilter: ExchangeFilter
 /** Invalidate scan data cache (call after data refresh) */
 export function invalidateScanCache(): void {
   _cachedBundle = null;
+}
+
+// ── Manipulation Watch ────────────────────────────────────────
+// Separate from scanner presets — safety feature, not opportunity.
+// No industry filter: manipulation can happen anywhere.
+// Returns enriched stocks with why-flagged tags for plain-English display.
+
+export interface ManipulationWatchStock extends ScanStock {
+  whyFlagged: string[];
+}
+
+export interface ManipulationWatchResult {
+  pumpSuspects: ManipulationWatchStock[];
+  dumpSuspects: ManipulationWatchStock[];
+  latestDate: string | null;
+}
+
+/** Pump Suspects — artificial price inflation signatures */
+function scanPumpSuspects(bundle: ScanDataBundle): ManipulationWatchStock[] {
+  const results: ManipulationWatchStock[] = [];
+
+  for (const [id] of bundle.latestEod) {
+    const stock = buildScanStock(id, bundle);
+    if (!stock) continue;
+
+    const rssVal = stock.rss_value ?? 0;
+    const rssSpread = stock.rss_spread ?? 0;
+
+    if (
+      rssVal > 75 &&
+      rssSpread < -200 &&
+      stock.flow_type === 'SHORT_COVERING' &&
+      stock.volume_divergence_flag === 'VOLUME_DIV_UP'
+    ) {
+      const tags: string[] = [
+        `RSS overbought (${Math.round(rssVal)})`,
+        `Spread broken (${rssSpread > -1000 ? rssSpread.toFixed(0) : (rssSpread / 1000).toFixed(1) + 'K'})`,
+        'Short covering',
+        'Volume diverging up',
+      ];
+      results.push({ ...stock, whyFlagged: tags });
+    }
+  }
+
+  return results
+    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
+    .slice(0, 25);
+}
+
+/** Dump Suspects — artificial price collapse signatures */
+function scanDumpSuspects(bundle: ScanDataBundle): ManipulationWatchStock[] {
+  const results: ManipulationWatchStock[] = [];
+
+  for (const [id] of bundle.latestEod) {
+    const stock = buildScanStock(id, bundle);
+    if (!stock) continue;
+
+    const rssVal = stock.rss_value ?? 100;
+
+    // sniper_inst slope over last 5 bars
+    const history = bundle.eodHistory.get(id) ?? [];
+    const sniperNow = history[0]?.sniper_inst ?? 0;
+    const sniper5 = history.length > 4 ? (history[4]?.sniper_inst ?? 0) : 0;
+    const sniperSlope5d = sniperNow - sniper5;
+
+    if (
+      rssVal < 25 &&
+      stock.flow_type === 'LONG_LIQUIDATION' &&
+      stock.volume_divergence_flag === 'VOLUME_DIV_DOWN' &&
+      sniperSlope5d < -2
+    ) {
+      const tags: string[] = [
+        `RSS oversold (${Math.round(rssVal)})`,
+        'Long liquidation',
+        'Volume diverging down',
+        'Smart money exiting',
+      ];
+      results.push({ ...stock, whyFlagged: tags });
+    }
+  }
+
+  return results
+    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
+    .slice(0, 25);
+}
+
+/** Execute Manipulation Watch — returns both pump and dump suspect lists (combined/deduped) */
+export async function executeManipulationWatch(): Promise<ManipulationWatchResult> {
+  const bundle = await loadScanData();
+
+  let pumpSuspects = scanPumpSuspects(bundle);
+  let dumpSuspects = scanDumpSuspects(bundle);
+
+  // Deduplicate by ISIN (combined view only for V1)
+  pumpSuspects = deduplicateByIsin(pumpSuspects, bundle.symbols) as ManipulationWatchStock[];
+  dumpSuspects = deduplicateByIsin(dumpSuspects, bundle.symbols) as ManipulationWatchStock[];
+
+  return {
+    pumpSuspects,
+    dumpSuspects,
+    latestDate: bundle.latestDate,
+  };
 }
