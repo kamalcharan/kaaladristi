@@ -192,7 +192,8 @@ function DayBox({ day, dimension, onMark }: {
 const FIXABLE_DIMENSIONS = new Set([
   'nse_equities', 'bse_equities', 'indicators',
   'nse_equity_indicators', 'bse_equity_indicators',
-  'flow_intelligence', 'market_breadth', 'breadth_roc', 'fii_dii',
+  'flow_intelligence', 'market_breadth', 'breadth_roc',
+  'industry_composites', 'fii_dii',
 ]);
 
 // ── Health row ───────────────────────────────────────────────────────────────
