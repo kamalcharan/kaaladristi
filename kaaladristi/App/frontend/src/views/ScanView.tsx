@@ -3,8 +3,14 @@ import { Loader2, X, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown }
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useScan } from '@/hooks/useScan';
-import { SCAN_PRESETS } from '@/services/scanEngine';
+import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import type { ScanStock } from '@/types';
+
+const EXCHANGE_TABS: { id: ExchangeFilter; label: string }[] = [
+  { id: 'combined', label: 'Combined' },
+  { id: 'NSE', label: 'NSE' },
+  { id: 'BSE', label: 'BSE' },
+];
 
 // ── Vocabulary mapping (KaalaDristi language) ──────────────────
 
@@ -24,6 +30,22 @@ const FLOW_LABELS: Record<string, { label: string; color: string }> = {
   LOW_VOLUME:       { label: 'Low Volume',        color: 'text-muted' },
   MIXED:            { label: 'Mixed',             color: 'text-muted' },
 };
+
+// ── Exchange badge ─────────────────────────────────────────────
+
+function ExchangeBadge({ exchange }: { exchange: string | null }) {
+  if (!exchange) return null;
+  return (
+    <span className={cn(
+      'text-[8px] font-bold px-1 py-0.5 rounded border',
+      exchange === 'NSE'
+        ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/5'
+        : 'text-risk-amber border-risk-amber/30 bg-risk-amber/5',
+    )}>
+      {exchange}
+    </span>
+  );
+}
 
 // ── Dot indicator ──────────────────────────────────────────────
 
@@ -227,6 +249,7 @@ function ScanResultsTable({
                 <td className="px-3 py-2.5">
                   <div>
                     <span className="font-mono font-bold text-accent-indigo">{stock.symbol}</span>
+                    {' '}<ExchangeBadge exchange={stock.exchange} />
                     <span className="block text-[10px] text-muted truncate max-w-[120px] sm:max-w-[180px]">
                       {stock.company_name}
                     </span>
@@ -287,6 +310,7 @@ function ScanResultsMobile({
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-mono font-bold text-accent-indigo text-sm">{stock.symbol}</span>
+              {' '}<ExchangeBadge exchange={stock.exchange} />
               <span className={cn('font-mono font-bold text-sm', (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                 {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(1)}%
               </span>
@@ -310,8 +334,9 @@ function ScanResultsMobile({
 
 export default function ScanView() {
   const [activeScan, setActiveScan] = useState(SCAN_PRESETS[0].id);
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const [selectedStock, setSelectedStock] = useState<ScanStock | null>(null);
-  const { data: stocks, isLoading, error } = useScan(activeScan);
+  const { data: stocks, isLoading, error } = useScan(activeScan, exchangeFilter);
 
   return (
     <div className="animate-fade-in">
@@ -344,10 +369,28 @@ export default function ScanView() {
         ))}
       </div>
 
-      {/* Scan Description */}
-      <p className="text-xs text-muted mb-4 pl-1">
-        {SCAN_PRESETS.find((s) => s.id === activeScan)?.description}
-      </p>
+      {/* Exchange Tabs + Scan Description */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-muted pl-1 flex-1">
+          {SCAN_PRESETS.find((s) => s.id === activeScan)?.description}
+        </p>
+        <div className="flex items-center gap-1 shrink-0 ml-4">
+          {EXCHANGE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setExchangeFilter(tab.id)}
+              className={cn(
+                'px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border',
+                exchangeFilter === tab.id
+                  ? 'bg-accent-indigo/15 text-accent-indigo border-accent-indigo/30'
+                  : 'text-muted border-transparent hover:text-[var(--text-secondary)]',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Results */}
       <Card rounded="xxl" className="overflow-hidden">

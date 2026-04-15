@@ -263,6 +263,62 @@ def handle_fix_flow(db, job_id, params):
     return total
 
 
+def handle_fix_magic_rs(db, job_id, params):
+    """Compute MagicRS for equities — only symbols with gaps."""
+    days = params.get('days', 60)
+    cutoff = _get_cutoff_date()
+    from_dt = cutoff - timedelta(days=int(days * 1.5))
+
+    total = 0
+    for table, id_col, label in [
+        ('km_index_eod', 'index_id', 'Index'),
+        ('km_equity_eod', 'equity_id', 'Equity'),
+    ]:
+        pending = _pending_symbols(db, table, id_col, 'magic_rs_zone', from_dt, cutoff)
+        log.info(f'{label} MagicRS: {len(pending)} symbols with gaps')
+        _update_job(db, job_id, progress=f'{label}: {len(pending)} symbols to compute')
+
+        for i, sid in enumerate(pending):
+            if _is_cancelled(db, job_id):
+                return total
+            if i % 20 == 0:
+                _update_job(db, job_id,
+                            progress=f'{label} MagicRS: {i+1}/{len(pending)} symbols',
+                            progress_pct=int((i / max(len(pending), 1)) * 100))
+            try:
+                rpc_params = {
+                    'p_table': table, 'p_id_col': id_col,
+                    'p_symbol_id': sid, 'p_from_date': str(from_dt),
+                }
+                # For equities, benchmark comes from km_index_eod
+                if table == 'km_equity_eod':
+                    rpc_params['p_bench_table'] = 'km_index_eod'
+                    rpc_params['p_bench_id_col'] = 'index_id'
+
+                # Find NIFTY 500 benchmark ID
+                import psycopg2.extras
+                conn = db._conn()
+                try:
+                    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                        cur.execute("SELECT id FROM km_index_symbols WHERE name = 'NIFTY 500' LIMIT 1")
+                        row = cur.fetchone()
+                        if not row:
+                            log.error('NIFTY 500 not found in km_index_symbols')
+                            return total
+                        rpc_params['p_benchmark_id'] = row['id']
+                finally:
+                    db._put(conn)
+
+                result = db.rpc('compute_magic_rs_batch', rpc_params)
+                count = result[0].get('compute_magic_rs_batch', 0) if result else 0
+                total += count
+            except Exception as e:
+                log.error(f'{label} MagicRS sid={sid}: {e}')
+
+    log.info(f'MagicRS: {total} rows updated')
+    return total
+
+
 def handle_fix_breadth(db, job_id, params):
     """Recompute market breadth."""
     _update_job(db, job_id, progress='Computing market breadth...')
@@ -523,6 +579,7 @@ HANDLERS = {
     'fix:nse_equity_indicators':   handle_fix_nse_equity_indicators,
     'fix:bse_equity_indicators':   handle_fix_bse_equity_indicators,
     'fix:flow_intelligence':       handle_fix_flow,
+    'fix:magic_rs':                handle_fix_magic_rs,
     'fix:market_breadth':          handle_fix_breadth,
     'fix:breadth_roc':             handle_fix_breadth_roc,
     'fix:industry_composites':     handle_fix_industry_composites,

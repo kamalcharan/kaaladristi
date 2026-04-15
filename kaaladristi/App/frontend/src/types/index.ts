@@ -375,6 +375,10 @@ export interface IndustryEodRow {
   pct_volume_div_up: number | null;
   pct_volume_div_down: number | null;
   industry_rank: number;
+  nse_as_of_date: string | null;
+  bse_as_of_date: string | null;
+  nse_stock_count: number | null;
+  bse_stock_count: number | null;
 }
 
 export type RotationCategory = 'rotating_in' | 'leading' | 'rotating_out';
@@ -387,11 +391,14 @@ export interface IndustryRotationItem extends IndustryEodRow {
 
 // ── Scan Engine Types ──
 
+export type ExchangeTab = 'combined' | 'NSE' | 'BSE';
+
 export interface ScanStock {
   equity_id: number;
   symbol: string;
   company_name: string | null;
   industry: string | null;
+  exchange: string | null;
   close: number;
   pct_chng: number | null;
   magic_rs: number | null;
@@ -419,6 +426,8 @@ export interface EquitySymbolRow {
   symbol: string;
   company_name: string | null;
   industry: string | null;
+  exchange: string | null;
+  isin: string | null;
   is_active: boolean;
 }
 

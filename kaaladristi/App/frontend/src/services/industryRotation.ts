@@ -58,13 +58,15 @@ export interface IndustryRotationData {
   leading: IndustryRotationItem[];
   rotatingOut: IndustryRotationItem[];
   latestDate: string | null;
+  nseAsOfDate: string | null;
+  bseAsOfDate: string | null;
 }
 
 export async function fetchIndustryRotation(): Promise<IndustryRotationData> {
   const dates = await fetchRecentTradeDates(INDUSTRY_ROTATION_LOOKBACK_DAYS + 1);
 
   if (dates.length === 0) {
-    return { rotatingIn: [], leading: [], rotatingOut: [], latestDate: null };
+    return { rotatingIn: [], leading: [], rotatingOut: [], latestDate: null, nseAsOfDate: null, bseAsOfDate: null };
   }
 
   const latestDate = dates[0];
@@ -125,7 +127,19 @@ export async function fetchIndustryRotation(): Promise<IndustryRotationData> {
     .sort((a, b) => a.industry_rank - b.industry_rank)
     .slice(0, 8);
 
-  return { rotatingIn, leading, rotatingOut, latestDate };
+  // Derive as-of dates from today's data (max across all industries)
+  let nseAsOfDate: string | null = null;
+  let bseAsOfDate: string | null = null;
+  for (const row of todayRows) {
+    if (row.nse_as_of_date && (!nseAsOfDate || row.nse_as_of_date > nseAsOfDate)) {
+      nseAsOfDate = row.nse_as_of_date;
+    }
+    if (row.bse_as_of_date && (!bseAsOfDate || row.bse_as_of_date > bseAsOfDate)) {
+      bseAsOfDate = row.bse_as_of_date;
+    }
+  }
+
+  return { rotatingIn, leading, rotatingOut, latestDate, nseAsOfDate, bseAsOfDate };
 }
 
 // ── Stock Expansion ────────────────────────────────────────────

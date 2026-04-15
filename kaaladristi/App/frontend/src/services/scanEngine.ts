@@ -120,11 +120,11 @@ async function loadScanData(): Promise<ScanDataBundle> {
       .limit(1000)
       .execute(),
 
-    // All active equity symbols
+    // All active equity symbols (include exchange + isin for dedup)
     from('km_equity_symbols')
-      .select('id,symbol,company_name,industry,is_active')
+      .select('id,symbol,company_name,industry,exchange,isin,is_active')
       .is('is_active', 'true')
-      .limit(2000)
+      .limit(8000)
       .execute(),
 
     // Equity EOD for last 20 dates
@@ -268,6 +268,7 @@ function buildScanStock(
     symbol: sym.symbol,
     company_name: sym.company_name,
     industry: sym.industry,
+    exchange: sym.exchange ?? null,
     close: eod.close,
     pct_chng: eod.pct_chng,
     magic_rs: eod.magic_rs,
@@ -487,12 +488,46 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   distribution_warning: scanDistributionWarning,
 };
 
-export async function executeScan(scanId: string): Promise<ScanStock[]> {
+/**
+ * Deduplicate scan results by ISIN (prefer NSE over BSE).
+ * For Combined mode, ensures one row per company.
+ */
+function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbolRow>): ScanStock[] {
+  const seen = new Map<string, ScanStock>();
+  for (const stock of stocks) {
+    const sym = symbols.get(stock.equity_id);
+    const isin = sym?.isin;
+    if (!isin) {
+      // No ISIN — keep as-is (won't deduplicate)
+      seen.set(`_noisn_${stock.equity_id}`, stock);
+      continue;
+    }
+    const existing = seen.get(isin);
+    if (!existing) {
+      seen.set(isin, stock);
+    } else if (stock.exchange === 'NSE' && existing.exchange !== 'NSE') {
+      seen.set(isin, stock); // NSE preferred
+    }
+  }
+  return [...seen.values()];
+}
+
+export type ExchangeFilter = 'combined' | 'NSE' | 'BSE';
+
+export async function executeScan(scanId: string, exchangeFilter: ExchangeFilter = 'combined'): Promise<ScanStock[]> {
   const fn = SCAN_FUNCTIONS[scanId];
   if (!fn) throw new Error(`Unknown scan: ${scanId}`);
 
   const bundle = await loadScanData();
-  return fn(bundle);
+  let results = fn(bundle);
+
+  if (exchangeFilter === 'combined') {
+    results = deduplicateByIsin(results, bundle.symbols);
+  } else {
+    results = results.filter((s) => s.exchange === exchangeFilter);
+  }
+
+  return results;
 }
 
 /** Invalidate scan data cache (call after data refresh) */

@@ -53,7 +53,7 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **033** (`km_migration_033_industry_eod.sql`)
+Latest migration: **034** (`km_migration_034_industry_hardening.sql`)
 
 | Table | Description |
 |---|---|
@@ -221,7 +221,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **034**.
+Next migration number: **035**.
 
 ---
 
@@ -238,8 +238,19 @@ Columns: `stock_count`, `avg_magic_rs`, `pct_strong_bull`, `pct_strong_bear`,
 `pct_volume_div_up`, `pct_volume_div_down`,
 `industry_rank`.
 
-**Pipeline integration**: Call `compute_all_industry_composites(trade_date)` after
-`compute_all_flow_intelligence()` in the daily pipeline.
+**Pipeline integration**: Already wired in `daily_pipeline.py`. Execution order:
+1. `compute_all_pending_indicators()` (indicators)
+2. `compute_all_magic_rs('km_index_eod', 'index_id')` (index MagicRS — existing)
+3. `compute_all_magic_rs('km_equity_eod', 'equity_id')` (equity MagicRS — migration 034)
+4. `compute_all_flow_intelligence()` (flow intelligence)
+5. `compute_all_industry_composites(trade_date)` (industry composites)
+
+**Deduplication**: `v_equity_eod_deduped` view (migration 034) deduplicates dual-listed
+stocks by ISIN, preferring NSE over BSE. ~1,628 dual-listed stocks reduced to one row
+per company per date. The compute function uses this view.
+
+**Per-exchange tracking**: `nse_as_of_date`, `bse_as_of_date`, `nse_stock_count`,
+`bse_stock_count` columns track which exchange data contributed to each row.
 
 ### Industry Rotation Panel
 

@@ -248,6 +248,19 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             except Exception as e2:
                 tracker.fail('indicators', str(e2))
 
+    # ── Step 6a: MagicRS for equities (benchmark = NIFTY 500 from km_index_eod) ──
+    if not skip_indicators:
+        try:
+            print(f'  [magic-rs] Computing equity MagicRS...')
+            result = db.rpc('compute_all_magic_rs', {
+                'p_table': 'km_equity_eod',
+                'p_id_col': 'equity_id',
+            })
+            mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            print(f'  [magic-rs] Updated {mrs_count} rows')
+        except Exception as e:
+            print(f'  [magic-rs] Skipped ({e})')
+
     # ── Step 6b: Flow Intelligence (derived indicators — runs after Step 6) ──
     if not skip_indicators:
         try:
@@ -260,6 +273,18 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             print(f'  [flow-intel] Updated {fi_count} rows')
         except Exception as e:
             print(f'  [flow-intel] Skipped ({e})')
+
+    # ── Step 6c: Industry Composites (after flow intelligence) ──
+    if not skip_indicators:
+        try:
+            print(f'  [industry] Computing industry composites...')
+            result = db.rpc('compute_all_industry_composites', {
+                'p_trade_date': str(trade_date),
+            })
+            ic_count = result[0].get('compute_all_industry_composites', 0) if result else 0
+            print(f'  [industry] {ic_count} industries computed')
+        except Exception as e:
+            print(f'  [industry] Skipped ({e})')
 
     # ── Step 7: Refresh views ──
     tracker.start('views')

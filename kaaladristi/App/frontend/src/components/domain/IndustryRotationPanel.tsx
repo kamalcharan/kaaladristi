@@ -58,41 +58,40 @@ function IndustryRow({
     <div className="border-b border-kd-border last:border-b-0">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-kd-elevated/30 transition-colors text-left group"
+        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-kd-elevated/30 transition-colors text-left group"
       >
-        {/* Rank + Change */}
-        <div className="w-8 text-center shrink-0">
-          <span className="text-xs font-mono font-bold text-muted">#{item.industry_rank}</span>
-        </div>
+        {/* Rank badge */}
+        <span className="text-[10px] font-mono font-bold text-muted shrink-0 w-6 text-right">
+          {item.industry_rank}
+        </span>
 
         {/* Rank change arrow */}
-        <div className="w-10 shrink-0 flex items-center justify-center">
-          {item.rank_change !== 0 && (
-            <span className={cn(
-              'text-[11px] font-bold flex items-center gap-0.5',
-              rankUp ? 'text-risk-green' : rankDown ? 'text-risk-red' : 'text-muted'
-            )}>
-              {rankUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-              {Math.abs(item.rank_change)}
-            </span>
-          )}
-        </div>
-
-        {/* Industry name */}
-        <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium text-[var(--text-primary)] truncate block">
-            {item.industry}
+        {item.rank_change !== 0 && (
+          <span className={cn(
+            'text-[10px] font-bold flex items-center gap-0.5 shrink-0 w-7',
+            rankUp ? 'text-risk-green' : rankDown ? 'text-risk-red' : 'text-muted'
+          )}>
+            {rankUp ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+            {Math.abs(item.rank_change)}
           </span>
-          <span className="text-[10px] text-muted">{item.stock_count} stocks</span>
+        )}
+        {item.rank_change === 0 && <span className="w-7 shrink-0" />}
+
+        {/* Industry name — min-width prevents collapse to 1-2 chars */}
+        <div className="flex-1 min-w-[100px]">
+          <span className="text-xs font-medium text-[var(--text-primary)] block leading-tight" title={item.industry}>
+            {item.industry.length > 28 ? item.industry.slice(0, 26) + '...' : item.industry}
+          </span>
+          <span className="text-[9px] text-muted leading-tight">{item.stock_count} stk</span>
         </div>
 
-        {/* Flow chip */}
-        <FlowChip flowType={item.dominant_flow_type} />
+        {/* Flow chip — hide on small screens to give name more room */}
+        <span className="hidden sm:inline-flex"><FlowChip flowType={item.dominant_flow_type} /></span>
 
         {/* Expand chevron */}
         {expanded
-          ? <ChevronUp className="w-3.5 h-3.5 text-muted shrink-0" />
-          : <ChevronDown className="w-3.5 h-3.5 text-muted shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+          ? <ChevronUp className="w-3 h-3 text-muted shrink-0" />
+          : <ChevronDown className="w-3 h-3 text-muted shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         }
       </button>
 
@@ -195,9 +194,14 @@ export default function IndustryRotationPanel() {
             <p className="text-[11px] text-muted mt-0.5">5-day rank change across market industries</p>
           </div>
           {data?.latestDate && (
-            <span className="text-[10px] font-mono text-muted bg-kd-elevated/40 px-2 py-1 rounded-lg border border-kd-border">
-              {data.latestDate}
-            </span>
+            <div className="text-right">
+              <span className="text-[10px] font-mono text-muted bg-kd-elevated/40 px-2 py-1 rounded-lg border border-kd-border">
+                NSE {data.nseAsOfDate ?? data.latestDate}
+                {data.bseAsOfDate && data.bseAsOfDate !== data.nseAsOfDate && (
+                  <span className="text-risk-amber"> · BSE {data.bseAsOfDate}</span>
+                )}
+              </span>
+            </div>
           )}
         </div>
       </div>
