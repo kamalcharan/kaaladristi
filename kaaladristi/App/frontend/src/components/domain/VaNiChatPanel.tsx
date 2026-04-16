@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Loader2, Sparkles, ChevronRight } from 'lucide-react';
+import { X, Loader2, Sparkles, ChevronRight, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
 import { getIntentsForPage } from '@/config/vaniIntents';
@@ -10,7 +10,6 @@ interface ChatMessage {
   id: string;
   type: 'intent' | 'response';
   intentId?: string;
-  label?: string;
   text: string;
   cached?: boolean;
   timestamp: number;
@@ -42,15 +41,13 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
   const handleAsk = (intentId: string, label: string) => {
     if (askMutation.isPending) return;
 
-    const questionMsg: ChatMessage = {
+    setMessages(prev => [...prev, {
       id: `q-${Date.now()}`,
       type: 'intent',
       intentId,
-      label,
       text: label,
       timestamp: Date.now(),
-    };
-    setMessages(prev => [...prev, questionMsg]);
+    }]);
     setActiveIntentId(intentId);
 
     const today = new Date().toISOString().slice(0, 10);
@@ -58,26 +55,24 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
       { intent_id: intentId, date: today },
       {
         onSuccess: (data: VaNiAskResponse) => {
-          const responseMsg: ChatMessage = {
+          setMessages(prev => [...prev, {
             id: `r-${Date.now()}`,
             type: 'response',
             intentId,
-            text: data.response || 'VaNi could not generate a response. AI may be disabled or data unavailable.',
+            text: data.response || 'VaNi could not generate a response right now.',
             cached: data.cached,
             timestamp: Date.now(),
-          };
-          setMessages(prev => [...prev, responseMsg]);
+          }]);
           setActiveIntentId(null);
         },
         onError: () => {
-          const errorMsg: ChatMessage = {
+          setMessages(prev => [...prev, {
             id: `e-${Date.now()}`,
             type: 'response',
             intentId,
             text: 'Connection to VaNi failed. Please check if the pipeline API is running.',
             timestamp: Date.now(),
-          };
-          setMessages(prev => [...prev, errorMsg]);
+          }]);
           setActiveIntentId(null);
         },
       },
@@ -87,73 +82,102 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
   const lastMessage = messages[messages.length - 1];
   const showFollowUp = lastMessage?.type === 'response' && !askMutation.isPending && remainingIntents.length > 0;
 
+  // ── Intent button (reused in empty state + follow-up) ──
+  const IntentButton = ({ intentId, label, variant }: { intentId: string; label: string; variant: 'primary' | 'secondary' }) => (
+    <button
+      onClick={() => handleAsk(intentId, label)}
+      disabled={askMutation.isPending}
+      className={cn(
+        'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all group',
+        variant === 'primary'
+          ? 'bg-[#1e1b4b]/60 border-2 border-[var(--accent-indigo)]/20 hover:border-[var(--accent-indigo)]/50 hover:bg-[#1e1b4b]/80'
+          : 'bg-[#1e1b4b]/30 border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 hover:bg-[#1e1b4b]/50',
+        askMutation.isPending && 'opacity-40 cursor-not-allowed',
+      )}
+    >
+      <div className={cn(
+        'w-6 h-6 rounded-lg flex items-center justify-center shrink-0',
+        'bg-[var(--accent-indigo)]/20 group-hover:bg-[var(--accent-indigo)]/30 transition-colors',
+      )}>
+        <MessageCircle className="w-3 h-3 text-[var(--accent-indigo)]" />
+      </div>
+      <span className={cn(
+        'text-xs font-medium leading-snug',
+        'text-[var(--text-secondary)] group-hover:text-[var(--accent-indigo)] transition-colors',
+      )}>
+        {label}
+      </span>
+      <ChevronRight className="w-3.5 h-3.5 ml-auto shrink-0 text-[var(--accent-indigo)]/30 group-hover:text-[var(--accent-indigo)]/60 transition-colors" />
+    </button>
+  );
+
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — always show, dims the page */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[200] lg:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-[3px] z-[200]"
           onClick={onClose}
         />
       )}
 
-      {/* Panel */}
+      {/* Panel — distinct dark background, strong border */}
       <div
         className={cn(
           'fixed top-0 right-0 h-full z-[201] flex flex-col',
-          'bg-kd-bg border-l border-kd-border shadow-2xl shadow-black/20',
+          'bg-[#0c0a1a] border-l-2 border-[var(--accent-indigo)]/30',
+          'shadow-[−8px_0_30px_rgba(99,102,241,0.15)]',
           'transition-transform duration-300 ease-out',
-          'w-full sm:w-[400px] lg:w-[380px]',
+          'w-full sm:w-[420px] lg:w-[400px]',
           open ? 'translate-x-0' : 'translate-x-full',
         )}
       >
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-kd-border shrink-0">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0">
-            <span className="text-white text-xs font-serif font-bold">V</span>
+        {/* ── Header ── */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[#0f0d22]">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
+            <span className="text-white text-sm font-serif font-bold">V</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-serif font-bold text-[var(--text-primary)] leading-tight">
-              VaNi <span className="font-normal text-[var(--text-muted)]">&middot; वाणी</span>
+            <div className="text-base font-serif font-bold text-white leading-tight">
+              VaNi <span className="font-normal text-[var(--accent-indigo)]/70">&middot; वाणी</span>
             </div>
-            <div className="text-[9px] font-mono text-[var(--text-muted)] tracking-wide uppercase">
-              {page.replace('_', ' ')} &middot; {intents.length} intents
+            <div className="text-[10px] font-mono text-[var(--accent-indigo)]/50 tracking-wide uppercase mt-0.5">
+              {page.replace(/_/g, ' ')} context &middot; {intents.length} questions
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-kd-elevated hover:text-[var(--text-primary)] transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Scrollable content */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {/* ── Chat area ── */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-          {/* Empty state — show all intents as starter chips */}
+          {/* Empty state */}
           {messages.length === 0 && (
-            <div className="py-4">
-              <div className="text-center mb-5">
-                <Sparkles className="w-8 h-8 mx-auto mb-3 text-[var(--accent-indigo)] opacity-40" />
-                <p className="text-xs text-[var(--text-muted)] leading-relaxed max-w-[240px] mx-auto">
-                  Ask VaNi about what you see on this page.
+            <div className="py-2">
+              <div className="text-center mb-6">
+                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[var(--accent-indigo)]/20 to-[var(--accent-violet)]/20 flex items-center justify-center border border-[var(--accent-indigo)]/20">
+                  <Sparkles className="w-6 h-6 text-[var(--accent-indigo)]" />
+                </div>
+                <p className="text-sm font-medium text-white/80 mb-1">
+                  What would you like to know?
+                </p>
+                <p className="text-[11px] text-white/30 max-w-[260px] mx-auto leading-relaxed">
+                  VaNi reads the live data on this page and answers your questions.
                 </p>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {intents.map(intent => (
-                  <button
+                  <IntentButton
                     key={intent.intentId}
-                    onClick={() => handleAsk(intent.intentId, intent.label)}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-all',
-                      'bg-kd-surface border border-kd-border',
-                      'text-[var(--text-secondary)] hover:border-[var(--accent-indigo)]/30 hover:text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/5',
-                    )}
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0 opacity-40" />
-                    <span className="text-xs font-medium leading-snug">{intent.label}</span>
-                  </button>
+                    intentId={intent.intentId}
+                    label={intent.label}
+                    variant="primary"
+                  />
                 ))}
               </div>
             </div>
@@ -163,26 +187,28 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
           {messages.map(msg => (
             <div key={msg.id}>
               {msg.type === 'intent' ? (
+                /* ── User question: right-aligned, bold accent ── */
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] px-3 py-2 rounded-xl rounded-tr-sm bg-[var(--accent-indigo)]/10 border border-[var(--accent-indigo)]/20">
-                    <p className="text-xs text-[var(--accent-indigo)] font-medium">{msg.text}</p>
+                  <div className="max-w-[85%] px-4 py-2.5 rounded-2xl rounded-tr-md bg-gradient-to-r from-[var(--accent-indigo)] to-[var(--accent-violet)] shadow-md shadow-indigo-500/10">
+                    <p className="text-xs font-semibold text-white">{msg.text}</p>
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-0.5">
-                    <span className="text-white text-[8px] font-serif font-bold">V</span>
+                /* ── VaNi response: left-aligned, card style ── */
+                <div className="flex gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-1 shadow shadow-indigo-500/20">
+                    <span className="text-white text-[9px] font-serif font-bold">V</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="px-3 py-2.5 rounded-xl rounded-tl-sm bg-kd-surface border border-kd-border">
-                      <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
+                    <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[#161233] border border-[var(--accent-indigo)]/15">
+                      <p className="text-[12px] text-white/80 leading-[1.7] whitespace-pre-wrap">
                         {msg.text}
                       </p>
                     </div>
                     {msg.cached && (
-                      <div className="mt-1 px-1">
-                        <span className="text-[8px] font-mono text-[var(--accent-indigo)]/60 uppercase tracking-wider">
-                          instant
+                      <div className="mt-1.5 px-2">
+                        <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
+                          instant response
                         </span>
                       </div>
                     )}
@@ -194,52 +220,52 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
 
           {/* Thinking indicator */}
           {askMutation.isPending && (
-            <div className="flex gap-2">
-              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-0.5">
-                <span className="text-white text-[8px] font-serif font-bold">V</span>
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-1 shadow shadow-indigo-500/20 animate-pulse">
+                <span className="text-white text-[9px] font-serif font-bold">V</span>
               </div>
-              <div className="px-3 py-2.5 rounded-xl rounded-tl-sm bg-kd-surface border border-kd-border">
-                <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span className="text-[10px]">VaNi is thinking...</span>
+              <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[#161233] border border-[var(--accent-indigo)]/15">
+                <div className="flex items-center gap-2.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-indigo)]" />
+                  <span className="text-[11px] text-white/40">VaNi is analysing...</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Follow-up intents — shown inline after last response */}
+          {/* Follow-up intents */}
           {showFollowUp && (
-            <div className="pt-2 pb-1">
-              <div className="flex items-center gap-1.5 mb-2 px-1">
-                <span className="text-[9px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-                  Also ask
+            <div className="pt-3">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
+                <span className="text-[9px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest px-2">
+                  also ask
                 </span>
+                <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {remainingIntents.map(intent => (
-                  <button
+                  <IntentButton
                     key={intent.intentId}
-                    onClick={() => handleAsk(intent.intentId, intent.label)}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all',
-                      'bg-kd-surface/60 border border-kd-border/60',
-                      'text-[var(--text-secondary)] hover:border-[var(--accent-indigo)]/30 hover:text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/5',
-                    )}
-                  >
-                    <ChevronRight className="w-3 h-3 shrink-0 opacity-40" />
-                    <span className="text-[10px] font-medium leading-snug">{intent.label}</span>
-                  </button>
+                    intentId={intent.intentId}
+                    label={intent.label}
+                    variant="secondary"
+                  />
                 ))}
               </div>
             </div>
           )}
 
-          {/* All intents asked */}
+          {/* All done */}
           {messages.length > 0 && remainingIntents.length === 0 && !askMutation.isPending && (
-            <div className="text-center py-3">
-              <p className="text-[10px] text-[var(--text-muted)]">
-                All questions answered for this page.
-              </p>
+            <div className="pt-3">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
+                <span className="text-[9px] font-mono text-[var(--accent-indigo)]/30 uppercase tracking-widest px-2">
+                  all answered
+                </span>
+                <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
+              </div>
             </div>
           )}
         </div>
