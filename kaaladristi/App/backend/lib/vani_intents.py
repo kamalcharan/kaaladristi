@@ -78,7 +78,7 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=400,
-        cache_ttl_hours=6,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 
@@ -106,7 +106,7 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=300,
-        cache_ttl_hours=6,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 
@@ -135,7 +135,7 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=350,
-        cache_ttl_hours=12,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 
@@ -164,7 +164,7 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=300,
-        cache_ttl_hours=6,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 
@@ -196,7 +196,7 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=400,
-        cache_ttl_hours=6,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 
@@ -260,7 +260,7 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=350,
-        cache_ttl_hours=6,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 
@@ -296,11 +296,9 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=350,
-        cache_ttl_hours=6,
+        cache_ttl_hours=24,
         complexity="low",
     ),
-}
-
 
     # ══════════════════════════════════════════════════════════════════════════
     # Astro Calendar Intents
@@ -360,7 +358,7 @@ INTENTS: dict[str, VaNiIntent] = {
             + _VANI_RULES
         ),
         max_tokens=350,
-        cache_ttl_hours=12,
+        cache_ttl_hours=24,
         complexity="low",
     ),
 
