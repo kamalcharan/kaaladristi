@@ -36,7 +36,7 @@ import SevenDayStrip from '@/components/domain/SevenDayStrip';
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 
 // Equity-specific pulse components
-import PumpDumpBanner from '@/components/domain/VisualPulse/equity/PumpDumpBanner';
+import PumpDumpBanner, { scanBarsForManipulation } from '@/components/domain/VisualPulse/equity/PumpDumpBanner';
 import ScanPresenceCard from '@/components/domain/VisualPulse/equity/ScanPresenceCard';
 import IndustryContextCard from '@/components/domain/VisualPulse/equity/IndustryContextCard';
 import MultiTimeframePills from '@/components/domain/VisualPulse/equity/MultiTimeframePills';
@@ -169,17 +169,11 @@ export default function ChartView() {
   const rsChange5d = useMemo(() => rsChangeLookback(pulseBars, pulseIdx, 5), [pulseBars, pulseIdx]);
   const rsChange20d = useMemo(() => rsChangeLookback(pulseBars, pulseIdx, 20), [pulseBars, pulseIdx]);
 
-  const pumpDumpProps = useMemo(() => {
-    if (!isEquity) return null;
-    const bar = pulseBars[pulseIdx];
-    if (!bar) return null;
-    return {
-      rssValue: bar.rss_value ?? null,
-      rssSpread: bar.rss_spread ?? null,
-      flowType: bar.flow_type ?? null,
-      volumeDivFlag: bar.volume_divergence_flag ?? null,
-    };
-  }, [isEquity, pulseBars, pulseIdx]);
+  // Scan all bars for pump/dump signals (not just current bar)
+  const pumpDumpResult = useMemo(() => {
+    if (!isEquity || pulseBars.length === 0) return null;
+    return scanBarsForManipulation(pulseBars, 30);
+  }, [isEquity, pulseBars]);
 
   const handleStyleChange = useCallback((style: TradingStyle) => {
     setSelectedStyle(style);
@@ -254,9 +248,9 @@ export default function ChartView() {
         </div>
 
         {/* ═══ Equity: Pump/Dump Banner + Magic RS Pills ═══ */}
-        {isEquity && pumpDumpProps && (
+        {isEquity && pumpDumpResult && (
           <div className="mb-2">
-            <PumpDumpBanner {...pumpDumpProps} />
+            <PumpDumpBanner result={pumpDumpResult} />
           </div>
         )}
         {isEquity && pulseBars.length > 0 && (

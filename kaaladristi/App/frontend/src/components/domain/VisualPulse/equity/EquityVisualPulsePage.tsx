@@ -38,7 +38,7 @@ import {
 import type { SmartMoneyBar } from '../SmartMoneyCard';
 import MagicRsSubchart from './MagicRsSubchart';
 import MultiTimeframePills from './MultiTimeframePills';
-import PumpDumpBanner from './PumpDumpBanner';
+import PumpDumpBanner, { scanBarsForManipulation } from './PumpDumpBanner';
 import ScanPresenceCard from './ScanPresenceCard';
 import IndustryContextCard from './IndustryContextCard';
 import { useScanPresence } from '@/hooks/useScanPresence';
@@ -158,15 +158,11 @@ export default function EquityVisualPulsePage() {
   const rsChange20d = useMemo(() => rsChangeLookback(bars, effectiveIdx, 20), [bars, effectiveIdx]);
 
   // Pump/dump banner props
-  const pumpDumpProps = useMemo(() => {
-    const bar = bars[effectiveIdx];
-    return {
-      rssValue: bar?.rss_value ?? null,
-      rssSpread: bar?.rss_spread ?? null,
-      flowType: bar?.flow_type ?? null,
-      volumeDivFlag: bar?.volume_divergence_flag ?? null,
-    };
-  }, [bars, effectiveIdx]);
+  // Scan all bars for pump/dump signals (not just current bar)
+  const pumpDumpResult = useMemo(() => {
+    if (bars.length === 0) return null;
+    return scanBarsForManipulation(bars, 30);
+  }, [bars]);
 
   // Slider change with fade animation
   const handleSliderChange = useCallback((idx: number) => {
@@ -287,7 +283,7 @@ export default function EquityVisualPulsePage() {
         </div>
 
         {/* Pump/Dump Banner */}
-        <PumpDumpBanner {...pumpDumpProps} />
+        {pumpDumpResult && <PumpDumpBanner result={pumpDumpResult} />}
 
         {/* Price Chart — uses shared VisualPulseChart */}
         <div className="flex-shrink-0 min-h-[180px] md:min-h-[220px] mt-1">
