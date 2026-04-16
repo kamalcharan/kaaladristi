@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Sun, Moon, Clock } from 'lucide-react';
-import VaNiInsight from './VaNiInsight';
 import { cn } from '@/lib/utils';
-import { usePanchang, usePanchangInsight } from '@/hooks';
+import { usePanchang } from '@/hooks';
 import type { DailyPanchang } from '@/types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -204,8 +203,6 @@ function nextDateStr(date: string): string {
 export default function PanchangamCard({ date }: { date: string }) {
   const { data, isLoading, isError } = usePanchang(date);
   const { data: nextData } = usePanchang(nextDateStr(date));
-  const { data: aiData, isLoading: aiLoading } = usePanchangInsight(date);
-
   // Live IST clock — ticks every second
   const [istTime, setIstTime] = useState(getISTTime);
   useEffect(() => {
@@ -235,7 +232,6 @@ export default function PanchangamCard({ date }: { date: string }) {
         <PanchangContent p={data} next={nextData} istTime={istTime} />
       )}
 
-      <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} />
     </div>
   );
 }

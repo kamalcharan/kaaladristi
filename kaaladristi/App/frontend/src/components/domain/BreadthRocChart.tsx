@@ -3,9 +3,8 @@ import {
   ComposedChart, Line, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
-import { useBreadthRoc, useBreadthRocInsight } from '@/hooks';
+import { useBreadthRoc } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
-import VaNiInsight from './VaNiInsight';
 import { cn } from '@/lib/utils';
 import type { BreadthRocDay } from '@/types';
 
@@ -75,8 +74,6 @@ export default function BreadthRocChart() {
   const days = PERIODS.find(p => p.label === period)!.days;
 
   const { data = [], isLoading, isError } = useBreadthRoc(days);
-  const { data: aiData } = useBreadthRocInsight();
-
   const latest = data[data.length - 1];
   const bullish = (latest?.roc_13 ?? 0) >= 0;
   const smaConfirms = (latest?.sma_breadth ?? 0) >= 0 === bullish;
@@ -275,7 +272,6 @@ export default function BreadthRocChart() {
         ))}
       </div>
 
-      <VaNiInsight insight={aiData?.insight} />
     </div>
   );
 }
