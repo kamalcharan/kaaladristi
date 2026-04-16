@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Loader2, Sparkles, MessageSquare } from 'lucide-react';
+import { X, Loader2, Sparkles, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
 import { getIntentsForPage } from '@/config/vaniIntents';
@@ -13,7 +13,6 @@ interface ChatMessage {
   label?: string;
   text: string;
   cached?: boolean;
-  provider?: string | null;
   timestamp: number;
 }
 
@@ -35,7 +34,10 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, askMutation.isPending]);
+
+  const askedIntents = new Set(messages.filter(m => m.type === 'intent').map(m => m.intentId));
+  const remainingIntents = intents.filter(i => !askedIntents.has(i.intentId));
 
   const handleAsk = (intentId: string, label: string) => {
     if (askMutation.isPending) return;
@@ -62,7 +64,6 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
             intentId,
             text: data.response || 'VaNi could not generate a response. AI may be disabled or data unavailable.',
             cached: data.cached,
-            provider: data.provider,
             timestamp: Date.now(),
           };
           setMessages(prev => [...prev, responseMsg]);
@@ -83,7 +84,8 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
     );
   };
 
-  const askedIntents = new Set(messages.filter(m => m.type === 'intent').map(m => m.intentId));
+  const lastMessage = messages[messages.length - 1];
+  const showFollowUp = lastMessage?.type === 'response' && !askMutation.isPending && remainingIntents.length > 0;
 
   return (
     <>
@@ -126,17 +128,38 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
           </button>
         </div>
 
-        {/* Messages */}
+        {/* Scrollable content */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+
+          {/* Empty state — show all intents as starter chips */}
           {messages.length === 0 && (
-            <div className="text-center py-8">
-              <Sparkles className="w-8 h-8 mx-auto mb-3 text-[var(--accent-indigo)] opacity-40" />
-              <p className="text-xs text-[var(--text-muted)] leading-relaxed max-w-[240px] mx-auto">
-                Ask VaNi about what you see on this page. Tap a question below to get started.
-              </p>
+            <div className="py-4">
+              <div className="text-center mb-5">
+                <Sparkles className="w-8 h-8 mx-auto mb-3 text-[var(--accent-indigo)] opacity-40" />
+                <p className="text-xs text-[var(--text-muted)] leading-relaxed max-w-[240px] mx-auto">
+                  Ask VaNi about what you see on this page.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                {intents.map(intent => (
+                  <button
+                    key={intent.intentId}
+                    onClick={() => handleAsk(intent.intentId, intent.label)}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-all',
+                      'bg-kd-surface border border-kd-border',
+                      'text-[var(--text-secondary)] hover:border-[var(--accent-indigo)]/30 hover:text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/5',
+                    )}
+                  >
+                    <ChevronRight className="w-3 h-3 shrink-0 opacity-40" />
+                    <span className="text-xs font-medium leading-snug">{intent.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
+          {/* Messages */}
           {messages.map(msg => (
             <div key={msg.id}>
               {msg.type === 'intent' ? (
@@ -157,7 +180,7 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
                       </p>
                     </div>
                     {msg.cached && (
-                      <div className="flex items-center gap-2 mt-1 px-1">
+                      <div className="mt-1 px-1">
                         <span className="text-[8px] font-mono text-[var(--accent-indigo)]/60 uppercase tracking-wider">
                           instant
                         </span>
@@ -183,41 +206,42 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
               </div>
             </div>
           )}
-        </div>
 
-        {/* Intent Chips */}
-        <div className="shrink-0 border-t border-kd-border px-4 py-3">
-          <div className="flex items-center gap-1.5 mb-2">
-            <MessageSquare className="w-3 h-3 text-[var(--text-muted)]" />
-            <span className="text-[9px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-              Questions
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto">
-            {intents.map(intent => {
-              const isAsked = askedIntents.has(intent.intentId);
-              const isActive = activeIntentId === intent.intentId;
-              return (
-                <button
-                  key={intent.intentId}
-                  onClick={() => handleAsk(intent.intentId, intent.label)}
-                  disabled={askMutation.isPending}
-                  className={cn(
-                    'px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all',
-                    'border leading-tight text-left',
-                    isActive
-                      ? 'bg-[var(--accent-indigo)]/15 border-[var(--accent-indigo)]/30 text-[var(--accent-indigo)]'
-                      : isAsked
-                        ? 'bg-kd-surface/50 border-kd-border/50 text-[var(--text-muted)]'
-                        : 'bg-kd-surface border-kd-border text-[var(--text-secondary)] hover:border-[var(--accent-indigo)]/30 hover:text-[var(--accent-indigo)]',
-                    askMutation.isPending && 'opacity-50 cursor-not-allowed',
-                  )}
-                >
-                  {intent.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Follow-up intents — shown inline after last response */}
+          {showFollowUp && (
+            <div className="pt-2 pb-1">
+              <div className="flex items-center gap-1.5 mb-2 px-1">
+                <span className="text-[9px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+                  Also ask
+                </span>
+              </div>
+              <div className="space-y-1">
+                {remainingIntents.map(intent => (
+                  <button
+                    key={intent.intentId}
+                    onClick={() => handleAsk(intent.intentId, intent.label)}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all',
+                      'bg-kd-surface/60 border border-kd-border/60',
+                      'text-[var(--text-secondary)] hover:border-[var(--accent-indigo)]/30 hover:text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/5',
+                    )}
+                  >
+                    <ChevronRight className="w-3 h-3 shrink-0 opacity-40" />
+                    <span className="text-[10px] font-medium leading-snug">{intent.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* All intents asked */}
+          {messages.length > 0 && remainingIntents.length === 0 && !askMutation.isPending && (
+            <div className="text-center py-3">
+              <p className="text-[10px] text-[var(--text-muted)]">
+                All questions answered for this page.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </>
