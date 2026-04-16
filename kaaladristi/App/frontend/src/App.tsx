@@ -19,6 +19,7 @@ import RuleEvalView from '@/views/RuleEvalView';
 import DCCalendarView from '@/views/DCCalendarView';
 import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
+import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
 import ScanView from '@/views/ScanView';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
@@ -99,6 +100,7 @@ function AppRoutes() {
           <Route path="/history" element={<BacktestView />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
+          <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />
           <Route path="/scan" element={<ScanView />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
           <Route path="/industry-transition" element={<IndustryTransitionView />} />

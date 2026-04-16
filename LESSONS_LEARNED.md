@@ -114,3 +114,18 @@ A safety feature styled identically to opportunity features defeats its purpose.
 The indicators step had a Python fallback (`from indicators.compute_engine import IndicatorEngine`) that activates when the PostgreSQL RPC fails. The fallback itself was broken (missing `calculators/` subpackage), so it always failed with "cannot import name". This replaced the real error ("numeric field overflow") with a misleading one, making diagnosis harder.
 
 - **Rule**: Either pass or fail. No fallback paths that haven't been tested and maintained. A broken fallback is worse than no fallback — it swallows the real error and substitutes a confusing one.
+
+## New Page with Shared Atoms Beats Conditional Rendering (2026-04-16)
+
+When two pages share 70% of components but have different layouts and information density, building a second page-level component (with shared atoms) is cheaper than conditional rendering inside one. The refactoring tax to extract atoms is paid once; the alternative of conditional soup compounds with every V2 feature.
+
+- **Applied**: Equity Visual Pulse (`EquityVisualPulsePage.tsx`) shares VisualPulseChart, AstroStrip, TimelineSlider, and all 4 sidebar cards with Index Visual Pulse — but composes them differently (added Magic RS subchart, multi-timeframe pills, pump/dump banner, scan presence, industry context).
+- **Alternative rejected**: Adding `if (isEquity)` branches inside `VisualPulsePage.tsx` would have required conditional props, optional renders, and equity-specific hooks interleaved with index logic.
+- **Rule**: When a new entity type shares atoms but adds its own layout and data sources, build a new page. When it's truly the same layout with minor data differences, use props.
+
+## URL Structure Should Disambiguate Entity Types (2026-04-16)
+
+`/pulse/index/:id` and `/pulse/equity/:id` prevent the bug surface of guessing whether `:id` is an index_id or equity_id. Worth the cost of a slightly longer URL to get unambiguous routing.
+
+- **Applied**: `/pulse/:indexId` (existing, unchanged) + `/pulse/equity/:equityId` (new). React Router matches the more specific `/pulse/equity/` prefix first, avoiding collisions.
+- **Pattern**: For any page that serves multiple entity types, encode the entity type in the URL path segment. Don't rely on query params or ID range conventions.
