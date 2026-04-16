@@ -1728,6 +1728,32 @@ def vani_debug():
     return diag
 
 
+@app.delete('/api/vani/cache')
+def vani_cache_clear(intent_id: str = None):
+    """Clear VaNi cache. Optional intent_id filter, otherwise clears all."""
+    try:
+        if intent_id:
+            rows = db.select('km_vani_cache', 'cache_key', limit=500)
+            deleted = 0
+            for r in (rows or []):
+                if r.get('cache_key', '').startswith(f'vani:{intent_id}:'):
+                    db.patch('km_vani_cache',
+                             filters={'cache_key': r['cache_key']},
+                             data={'expires_at': '2000-01-01T00:00:00Z'})
+                    deleted += 1
+            return {"cleared": deleted, "intent_id": intent_id}
+        else:
+            rows = db.select('km_vani_cache', 'cache_key', limit=500)
+            for r in (rows or []):
+                db.patch('km_vani_cache',
+                         filters={'cache_key': r['cache_key']},
+                         data={'expires_at': '2000-01-01T00:00:00Z'})
+            return {"cleared": len(rows or []), "intent_id": "all"}
+    except Exception as e:
+        log.error(f"[VaNi] cache clear failed: {e}")
+        return {"cleared": 0, "error": str(e)}
+
+
 @app.get('/api/vani/intents')
 def vani_intents(page: str = 'dashboard', entity: bool = False):
     """Return available VaNi intents for a given page.
