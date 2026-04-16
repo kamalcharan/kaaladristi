@@ -880,45 +880,48 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
         if ind in leading_names:
             industry_equity_ids.setdefault(ind, []).append(eq)
 
+    # Build a set of all equity IDs in leading industries
+    all_eq_map = {}
+    for ind in leading_names:
+        for eq in industry_equity_ids.get(ind, []):
+            all_eq_map[eq['id']] = {'symbol': eq.get('symbol', ''), 'industry': ind}
+
+    if not all_eq_map:
+        return []
+
+    # Fetch all EOD rows for the date (large fetch, filter client-side)
+    try:
+        eod_rows = db.select(
+            'km_equity_eod',
+            'equity_id,close,pct_chng,magic_rs,magic_rs_zone,rsi_14,rss_value,rvol,flow_type,dot_svd,dot_sbd,dot_syd',
+            filters={'trade_date': target_date},
+            order='magic_rs.desc',
+            limit=3000,
+        )
+    except Exception:
+        return []
+
     top_stocks = []
-    for ind in leading_names[:8]:
-        equities = industry_equity_ids.get(ind, [])
-        eq_ids = [e['id'] for e in equities[:50]]
-        if not eq_ids:
+    for row in (eod_rows or []):
+        eid = row.get('equity_id')
+        eq_info = all_eq_map.get(eid)
+        if not eq_info:
             continue
-
-        try:
-            eod_rows = db.select(
-                'km_equity_eod',
-                'equity_id,close,pct_chng,magic_rs,magic_rs_zone,rsi_14,rss_value,rvol,flow_type,dot_svd,dot_sbd,dot_syd',
-                filters={'trade_date': target_date},
-                order='magic_rs.desc',
-                limit=200,
-            )
-        except Exception:
-            continue
-
-        eq_map = {e['id']: e for e in equities}
-        for row in (eod_rows or []):
-            eid = row.get('equity_id')
-            if eid not in eq_map:
-                continue
-            eq = eq_map[eid]
-            top_stocks.append({
-                'symbol': eq.get('symbol', ''),
-                'industry': ind,
-                'close': _safe_float(row.get('close'), 0),
-                'pct_chng': round(_safe_float(row.get('pct_chng'), 0), 2),
-                'magic_rs': _safe_float(row.get('magic_rs')),
-                'magic_rs_zone': row.get('magic_rs_zone'),
-                'rsi_14': _safe_float(row.get('rsi_14')),
-                'rss_value': _safe_float(row.get('rss_value')),
-                'rvol': _safe_float(row.get('rvol')),
-                'flow_type': row.get('flow_type'),
-                'has_svd': bool(row.get('dot_svd')),
-                'has_sbd': bool(row.get('dot_sbd')),
-                'has_syd': bool(row.get('dot_syd')),
-            })
+        top_stocks.append({
+            'symbol': eq_info['symbol'],
+            'industry': eq_info['industry'],
+            'close': _safe_float(row.get('close'), 0),
+            'pct_chng': round(_safe_float(row.get('pct_chng'), 0), 2),
+            'magic_rs': _safe_float(row.get('magic_rs')),
+            'magic_rs_zone': row.get('magic_rs_zone'),
+            'rsi_14': _safe_float(row.get('rsi_14')),
+            'rss_value': _safe_float(row.get('rss_value')),
+            'rvol': _safe_float(row.get('rvol')),
+            'flow_type': row.get('flow_type'),
+            'has_svd': bool(row.get('dot_svd')),
+            'has_sbd': bool(row.get('dot_sbd')),
+            'has_syd': bool(row.get('dot_syd')),
+        })
 
     top_stocks.sort(key=lambda s: s.get('magic_rs') or 0, reverse=True)
     return top_stocks[:15]
