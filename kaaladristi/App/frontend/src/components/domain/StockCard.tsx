@@ -7,6 +7,8 @@
 
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui';
+import { Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
 
 // ── Vocabulary mapping (KaalaDristi language) ──────────────────
@@ -86,6 +88,7 @@ export function MetricPill({ label, value, color }: { label: string; value: stri
 // ── Stock Card ────────────────────────────────────────────────
 
 export function StockCard({ stock }: { stock: ScanStock }) {
+  const navigate = useNavigate();
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
@@ -94,7 +97,12 @@ export function StockCard({ stock }: { stock: ScanStock }) {
   const subName = isNumericSymbol ? null : stock.company_name;
 
   return (
-    <Card rounded="xxl" hover="lift" className="p-3 sm:p-4">
+    <Card
+      rounded="xxl"
+      hover="lift"
+      className="p-3 sm:p-4 cursor-pointer group"
+      onClick={() => navigate(`/pulse/equity/${stock.equity_id}`)}
+    >
       {/* Row 1: Script name + Price */}
       <div className="flex items-start justify-between mb-2">
         <div className="min-w-0 flex-1">
@@ -117,16 +125,19 @@ export function StockCard({ stock }: { stock: ScanStock }) {
             )}
           </div>
         </div>
-        <div className="text-right shrink-0 ml-3">
-          <p className="text-sm font-bold font-mono text-[var(--text-primary)] leading-tight">
-            {stock.close.toFixed(2)}
-          </p>
-          <p className={cn(
-            'text-[11px] font-bold font-mono',
-            (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
-          )}>
-            {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
-          </p>
+        <div className="flex items-start gap-2 shrink-0 ml-3">
+          <div className="text-right">
+            <p className="text-sm font-bold font-mono text-[var(--text-primary)] leading-tight">
+              {stock.close.toFixed(2)}
+            </p>
+            <p className={cn(
+              'text-[11px] font-bold font-mono',
+              (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
+            )}>
+              {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
+            </p>
+          </div>
+          <Eye className="w-3.5 h-3.5 text-muted mt-0.5 opacity-40 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
 
