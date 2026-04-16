@@ -193,7 +193,20 @@ export default function ChartView() {
           >
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
+          <span className={cn(
+            'text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
+            isIndex
+              ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/8'
+              : 'text-accent-violet border-accent-violet/30 bg-accent-violet/8',
+          )}>
+            {isIndex ? 'INDEX' : 'EQUITY'}
+          </span>
           <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
+          {isEquity && equityPulse.meta?.industry && (
+            <span className="text-[10px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
+              {equityPulse.meta.industry}
+            </span>
+          )}
           {!isLoading && latest && (
             <>
               <span className="text-xl font-bold mono text-[var(--text-primary)]">
