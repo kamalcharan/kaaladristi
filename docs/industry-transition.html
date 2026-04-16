@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>KaalaDristi · Industry Transition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#020917;
+    --bg-2:#06101f;
+    --card:#0b1221;
+    --card-2:#0e1628;
+    --border:#1a2740;
+    --border-2:#243352;
+    --ink:#e7ecf5;
+    --ink-2:#9aa6bd;
+    --ink-3:#67718a;
+    --gold:#c9a84c;
+    --gold-soft:rgba(201,168,76,.14);
+    --gold-line:rgba(201,168,76,.35);
+    --green:#10b981;
+    --green-soft:rgba(16,185,129,.12);
+    --green-line:rgba(16,185,129,.35);
+    --red:#ef4444;
+    --red-soft:rgba(239,68,68,.12);
+    --red-line:rgba(239,68,68,.35);
+    --amber:#f59e0b;
+    --display:'Playfair Display', Georgia, serif;
+    --body:'DM Sans', system-ui, sans-serif;
+    --mono:'DM Mono', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(201,168,76,.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(16,185,129,.04), transparent 60%),
+      var(--bg);
+    min-height:100vh;
+  }
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ── Top chrome ─────────────────────────────────── */
+  .chrome{
+    position:sticky;top:0;z-index:20;
+    backdrop-filter:blur(12px);
+    background:rgba(2,9,23,.78);
+    border-bottom:1px solid var(--border);
+  }
+  .chrome-inner{
+    max-width:1440px;margin:0 auto;padding:14px 28px;
+    display:flex;align-items:center;gap:24px;
+  }
+  .brand{
+    font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:.02em;
+    display:flex;align-items:center;gap:10px;
+  }
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 14px var(--gold)}
+  .brand .sans{font-family:var(--body);color:var(--ink-2);font-weight:400;font-size:13px;margin-left:6px;letter-spacing:.04em}
+  .switcher{
+    margin-left:auto;display:flex;background:var(--card);border:1px solid var(--border);border-radius:999px;padding:4px;
+  }
+  .switcher button{
+    background:transparent;border:0;color:var(--ink-2);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+    padding:8px 16px;border-radius:999px;transition:all .2s;
+  }
+  .switcher button.active{background:var(--gold);color:#1a1208;font-weight:600}
+
+  /* ── Layout ─────────────────────────────────────── */
+  .stage{max-width:1440px;margin:0 auto;padding:32px 28px 80px}
+
+  /* ── DASHBOARD VIEW ─────────────────────────────── */
+  .dash-grid{
+    display:grid;
+    grid-template-columns:1.4fr 1fr;
+    gap:24px;
+  }
+  @media (max-width:980px){.dash-grid{grid-template-columns:1fr}}
+
+  .panel{
+    background:linear-gradient(180deg, var(--card) 0%, var(--card-2) 100%);
+    border:1px solid var(--border);
+    border-radius:14px;
+    overflow:hidden;
+  }
+  .panel-head{
+    padding:18px 22px 14px;border-bottom:1px solid var(--border);
+    display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+  }
+  .panel-title{
+    font-family:var(--display);font-weight:600;font-size:22px;letter-spacing:.005em;
+    display:flex;align-items:center;gap:10px;
+  }
+  .panel-title .glyph{
+    width:22px;height:22px;border:1px solid var(--gold-line);border-radius:6px;
+    display:grid;place-items:center;color:var(--gold);font-size:11px;font-family:var(--mono);
+  }
+  .as-of{
+    font-family:var(--mono);font-size:11px;color:var(--ink-3);
+    display:flex;align-items:center;gap:8px;letter-spacing:.02em;
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 8px;border-radius:4px;border:1px solid var(--border-2);color:var(--ink-2);
+  }
+  .chip.nse{border-color:var(--green-line);color:var(--green)}
+  .chip.bse{border-color:var(--gold-line);color:var(--gold)}
+  .chip.bse.missing{border-color:rgba(245,158,11,.4);color:var(--amber)}
+  .chip .pulse{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+
+  /* Widget body — three sections */
+  .widget-body{padding:8px 0 4px}
+  .section{
+    padding:14px 22px 16px;
+    border-bottom:1px dashed var(--border);
+  }
+  .section:last-child{border-bottom:0}
+  .section-head{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .section-label{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+    display:flex;align-items:center;gap:8px;
+  }
+  .section-label .bar{width:18px;height:2px;border-radius:2px}
+  .sec-in .section-label{color:var(--green)} .sec-in .bar{background:var(--green)}
+  .sec-lead .section-label{color:var(--gold)} .sec-lead .bar{background:var(--gold)}
+  .sec-out .section-label{color:var(--red)} .sec-out .bar{background:var(--red)}
+
+  .section-meta{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);letter-spacing:.04em}
+
+  .row{
+    display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:14px;
+    padding:10px 10px;border-radius:8px;
+    transition:background .15s ease;cursor:pointer;
+    border:1px solid transparent;
+  }
+  .row + .row{margin-top:2px}
+  .row:hover{background:var(--bg-2);border-color:var(--border)}
+  .row .name{
+    font-family:var(--display);font-weight:500;font-size:15.5px;letter-spacing:.005em;
+    line-height:1.2;
+  }
+  .row .sub{
+    font-family:var(--body);font-size:11.5px;color:var(--ink-3);margin-top:3px;letter-spacing:.01em;
+  }
+  .row .pct{
+    font-family:var(--mono);font-size:14px;color:var(--ink);letter-spacing:.02em;text-align:right;min-width:60px;
+  }
+  .row .delta{
+    font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+    display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:4px;
+    min-width:96px;justify-content:center;
+  }
+  .delta.up{color:var(--green);background:var(--green-soft);border:1px solid var(--green-line)}
+  .delta.down{color:var(--red);background:var(--red-soft);border:1px solid var(--red-line)}
+  .delta.lead{color:var(--gold);background:var(--gold-soft);border:1px solid var(--gold-line)}
+  .delta .arrow{font-family:var(--body);font-size:13px;line-height:1}
+
+  .empty{
+    padding:14px 10px;font-size:13px;color:var(--ink-3);font-style:italic;
+    border:1px dashed var(--border);border-radius:8px;text-align:center;
+  }
+
+  /* Side panel — story / context */
+  .story-list{padding:6px 0}
+  .story{
+    padding:14px 22px;border-bottom:1px dashed var(--border);
+  }
+  .story:last-child{border-bottom:0}
+  .story-h{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);
+    margin-bottom:6px;
+  }
+  .story-b{
+    font-family:var(--display);font-weight:500;font-size:17px;line-height:1.35;
+  }
+  .story-b em{font-style:normal;color:var(--gold)}
+  .story-b .up{color:var(--green)}
+  .story-b .down{color:var(--red)}
+
+  /* ── DEDICATED PAGE VIEW ────────────────────────── */
+  .page-head{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+    margin-bottom:24px;flex-wrap:wrap;
+  }
+  .page-title{
+    font-family:var(--display);font-weight:600;font-size:38px;letter-spacing:-.005em;
+    line-height:1;margin:0 0 10px;
+  }
+  .page-sub{
+    font-family:var(--mono);font-size:12px;color:var(--ink-2);
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .controls{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .ctl{
+    background:var(--card);border:1px solid var(--border);border-radius:8px;
+    padding:8px 12px;font-family:var(--mono);font-size:12px;color:var(--ink);
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .ctl label{color:var(--ink-3);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em}
+  .ctl select, .ctl input[type="date"]{
+    background:transparent;border:0;color:var(--ink);font-family:var(--mono);font-size:12px;outline:none;
+  }
+  .seg{
+    display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;
+  }
+  .seg button{
+    background:transparent;border:0;color:var(--ink-2);
+    padding:8px 12px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  }
+  .seg button.active{background:var(--bg-2);color:var(--ink)}
+  .seg button + button{border-left:1px solid var(--border)}
+
+  .filters-bar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:14px 18px;background:var(--card);border:1px solid var(--border);border-radius:10px;
+    margin-bottom:18px;
+  }
+  .filters-bar .label{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
+  .filters-bar input[type="range"]{accent-color:var(--gold)}
+  .toggle{
+    display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);
+    cursor:pointer;
+  }
+  .toggle input{accent-color:var(--gold)}
+
+  .columns{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;
+  }
+  @media (max-width:1180px){.columns{grid-template-columns:1fr}}
+
+  .col{
+    background:linear-gradient(180deg,var(--card) 0%, var(--card-2) 100%);
+    border:1px solid var(--border);border-radius:14px;overflow:hidden;
+    display:flex;flex-direction:column;min-height:520px;
+  }
+  .col-head{
+    padding:18px 20px 14px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+  }
+  .col-head .title{
+    font-family:var(--display);font-weight:600;font-size:20px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .col-head .badge{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+    padding:3px 8px;border-radius:4px;
+  }
+  .col.in .badge{background:var(--green-soft);color:var(--green);border:1px solid var(--green-line)}
+  .col.lead .badge{background:var(--gold-soft);color:var(--gold);border:1px solid var(--gold-line)}
+  .col.out .badge{background:var(--red-soft);color:var(--red);border:1px solid var(--red-line)}
+  .col-head .accent{width:8px;height:8px;border-radius:50%}
+  .col.in .accent{background:var(--green);box-shadow:0 0 10px var(--green)}
+  .col.lead .accent{background:var(--gold);box-shadow:0 0 10px var(--gold)}
+  .col.out .accent{background:var(--red);box-shadow:0 0 10px var(--red)}
+  .col-head .count{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+
+  .col-body{padding:6px 10px 14px;overflow:auto;flex:1}
+  .ind{
+    border:1px solid transparent;border-radius:10px;padding:12px 12px;
+    transition:all .15s;cursor:pointer;
+  }
+  .ind:hover{background:var(--bg-2);border-color:var(--border)}
+  .ind.open{background:var(--bg-2);border-color:var(--border-2)}
+  .ind-top{
+    display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;
+  }
+  .ind-name{
+    font-family:var(--display);font-weight:500;font-size:16px;line-height:1.2;
+  }
+  .ind-meta{
+    font-family:var(--body);font-size:11.5px;color:var(--ink-3);margin-top:4px;
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .ind-meta .dotsep{width:3px;height:3px;border-radius:50%;background:var(--border-2)}
+  .ind-meta .flow{color:var(--ink-2)}
+  .ind-pct{
+    font-family:var(--mono);font-size:15px;color:var(--ink);text-align:right;min-width:60px;letter-spacing:.02em;
+  }
+  .ind-pct .change{
+    display:block;font-size:10.5px;color:var(--ink-3);margin-top:2px;
+  }
+  .ind-delta{min-width:104px}
+
+  /* sparkline */
+  .spark{height:18px;width:78px;display:block}
+
+  /* expanded stocks panel */
+  .stocks{
+    margin-top:12px;padding:12px;background:#060d1c;border:1px solid var(--border);border-radius:8px;
+    display:none;
+  }
+  .ind.open .stocks{display:block}
+  .stocks-h{
+    font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.12em;
+    margin-bottom:8px;display:flex;justify-content:space-between;
+  }
+  .stock-row{
+    display:grid;grid-template-columns:1.4fr auto auto auto;align-items:center;gap:12px;
+    padding:7px 4px;border-bottom:1px dashed var(--border);
+    font-family:var(--mono);font-size:12px;
+  }
+  .stock-row:last-child{border-bottom:0}
+  .stock-sym{font-weight:500;color:var(--ink)}
+  .stock-co{color:var(--ink-3);font-family:var(--body);font-size:11.5px;margin-left:6px}
+  .stock-rs{color:var(--gold)}
+  .stock-pr{color:var(--ink-2)}
+  .stock-acc{padding:2px 6px;border-radius:3px;font-size:10.5px}
+  .stock-acc.acc{background:var(--green-soft);color:var(--green)}
+  .stock-acc.dist{background:var(--red-soft);color:var(--red)}
+  .stock-acc.neu{background:rgba(154,166,189,.1);color:var(--ink-2)}
+
+  /* Stable bottom panel */
+  .stable{
+    margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:12px;
+  }
+  .stable-head{
+    padding:14px 20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+  }
+  .stable-h-l{display:flex;align-items:center;gap:12px}
+  .stable-h-l .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3)}
+  .stable-h-l .ttl{font-family:var(--display);font-size:16px;color:var(--ink-2)}
+  .stable-body{display:none;padding:8px 20px 18px;border-top:1px dashed var(--border)}
+  .stable.open .stable-body{display:block}
+  .stable-body .grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px;
+  }
+  .stable-cell{
+    border:1px solid var(--border);border-radius:8px;padding:10px 12px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .stable-cell .nm{font-family:var(--display);font-size:14px}
+  .stable-cell .pc{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+
+  /* CTA at bottom of widget */
+  .widget-cta{
+    padding:12px 22px 18px;display:flex;align-items:center;justify-content:space-between;
+    border-top:1px solid var(--border);
+  }
+  .widget-cta .hint{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.04em}
+  .widget-cta button{
+    background:transparent;border:1px solid var(--gold-line);color:var(--gold);
+    padding:7px 14px;border-radius:6px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  }
+  .widget-cta button:hover{background:var(--gold-soft)}
+
+  .new-badge{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--gold);
+    border:1px solid var(--gold-line);padding:1px 5px;border-radius:3px;margin-left:8px;text-transform:uppercase;
+  }
+
+  /* hide sections */
+  .view{display:none}
+  .view.active{display:block}
+
+  /* small utility */
+  .muted{color:var(--ink-3)}
+
+  /* scrollbar */
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--border-2)}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <div class="chrome-inner">
+    <div class="brand">
+      <span class="dot"></span>
+      KaalaDristi <span class="sans">कालदृष्टि · trader workspace</span>
+    </div>
+    <div class="switcher" role="tablist">
+      <button id="btn-dash" class="active" onclick="show('dash')">Dashboard</button>
+      <button id="btn-page" onclick="show('page')">Industry Transition · Full</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+
+<!-- ============ DASHBOARD VIEW ============ -->
+<section id="view-dash" class="view active">
+  <div class="dash-grid">
+
+    <!-- Widget -->
+    <div class="panel" aria-label="Industry Transition widget">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">
+            <span class="glyph">IT</span>
+            Industry Transition
+          </div>
+          <div class="as-of" style="margin-top:6px">
+            as of 15 Apr 2026 · 09:08 IST
+            <span class="chip nse"><span class="pulse"></span>NSE live</span>
+            <span class="chip bse">BSE 14 Apr</span>
+          </div>
+        </div>
+        <div class="as-of">5-day window</div>
+      </div>
+
+      <div class="widget-body">
+        <!-- Rotating In -->
+        <div class="section sec-in">
+          <div class="section-head">
+            <div class="section-label"><span class="bar"></span>Rotating In</div>
+            <div class="section-meta">3 of 14 movers</div>
+          </div>
+          <div id="w-in"></div>
+        </div>
+
+        <!-- Leading -->
+        <div class="section sec-lead">
+          <div class="section-head">
+            <div class="section-label"><span class="bar"></span>Leading</div>
+            <div class="section-meta">Top quartile · avg RS</div>
+          </div>
+          <div id="w-lead"></div>
+        </div>
+
+        <!-- Rotating Out -->
+        <div class="section sec-out">
+          <div class="section-head">
+            <div class="section-label"><span class="bar"></span>Rotating Out</div>
+            <div class="section-meta">3 of 9 fallers</div>
+          </div>
+          <div id="w-out"></div>
+        </div>
+      </div>
+
+      <div class="widget-cta">
+        <span class="hint">Tap any industry to drill in →</span>
+        <button onclick="show('page')">Open full view</button>
+      </div>
+    </div>
+
+    <!-- Side context panel — narrative summary -->
+    <div class="panel" aria-label="Today's rotation story">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title"><span class="glyph">TR</span>Today's Read</div>
+          <div class="as-of" style="margin-top:6px">3-line synthesis · auto-generated</div>
+        </div>
+      </div>
+
+      <div class="story-list">
+        <div class="story">
+          <div class="story-h">Headline</div>
+          <div class="story-b">Money is rotating into <em>Defence &amp; Capital Goods</em>, while <span class="down">IT Services</span> continues to bleed leadership for the 4th session.</div>
+        </div>
+        <div class="story">
+          <div class="story-h">Biggest single move</div>
+          <div class="story-b"><em>Realty</em> jumped from <span class="muted" style="font-family:var(--mono);font-size:14px">74%ile → 12%ile</span> in 5 sessions <span class="up">(↑62)</span> — strongest accumulation breadth in 6 weeks.</div>
+        </div>
+        <div class="story">
+          <div class="story-h">Quietly building</div>
+          <div class="story-b">Watch <em>Sugar &amp; Fertilisers</em> — both crossed into top quartile yesterday with rising volume but no headlines yet.</div>
+        </div>
+        <div class="story">
+          <div class="story-h">Heads-up</div>
+          <div class="story-b">BSE feed is one day behind — figures shown are NSE-only for today; combined view available on the full page.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEDICATED PAGE VIEW ============ -->
+<section id="view-page" class="view">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Industry Transition</h1>
+      <div class="page-sub">
+        <span class="chip nse"><span class="pulse"></span>NSE 15 Apr 2026</span>
+        <span class="chip bse">BSE 14 Apr 2026 · 1d delayed</span>
+        <span style="color:var(--ink-3)">·</span>
+        <span style="color:var(--ink-3)">5-day rotation window · 152 industries qualifying (≥5 stocks)</span>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="ctl"><label>Date</label><input type="date" value="2026-04-15" /></div>
+      <div class="seg" role="group" aria-label="Exchange">
+        <button class="active">Combined</button>
+        <button>NSE only</button>
+        <button>BSE only</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="filters-bar">
+    <span class="label">Filters</span>
+    <div class="ctl"><label>Min stocks</label><input id="f-min" type="range" min="5" max="20" value="5" oninput="document.getElementById('f-min-v').textContent=this.value" /><span id="f-min-v" style="font-family:var(--mono);font-size:12px;width:18px;text-align:right">5</span></div>
+    <div class="ctl"><label>Top N%</label><input type="range" min="0" max="50" value="0" /><span style="font-family:var(--mono);font-size:12px;color:var(--ink-3)">off</span></div>
+    <label class="toggle"><input type="checkbox" /> Hide industries with no NSE data</label>
+    <label class="toggle"><input type="checkbox" /> Hide industries with no BSE data</label>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-3)">Sort: by transition magnitude</span>
+  </div>
+
+  <div class="columns">
+    <div class="col in">
+      <div class="col-head">
+        <div class="title"><span class="accent"></span>Rotating In</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge">Δ ≥ +10%ile</span>
+          <span class="count">14 industries</span>
+        </div>
+      </div>
+      <div class="col-body" id="p-in"></div>
+    </div>
+
+    <div class="col lead">
+      <div class="col-head">
+        <div class="title"><span class="accent"></span>Leading</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge">Top 25% by RS</span>
+          <span class="count">38 industries</span>
+        </div>
+      </div>
+      <div class="col-body" id="p-lead"></div>
+    </div>
+
+    <div class="col out">
+      <div class="col-head">
+        <div class="title"><span class="accent"></span>Rotating Out</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge">Δ ≤ −10%ile</span>
+          <span class="count">9 industries</span>
+        </div>
+      </div>
+      <div class="col-body" id="p-out"></div>
+    </div>
+  </div>
+
+  <div class="stable" id="stable">
+    <div class="stable-head" onclick="document.getElementById('stable').classList.toggle('open')">
+      <div class="stable-h-l">
+        <span class="label">Stable</span>
+        <span class="ttl">91 industries unchanged this week</span>
+      </div>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">Expand ⌄</span>
+    </div>
+    <div class="stable-body">
+      <div style="font-size:12.5px;color:var(--ink-3);font-family:var(--mono)">|Δ%ile| &lt; 10 over last 5 sessions. Useful for spotting "what is NOT moving."</div>
+      <div class="grid" id="p-stable"></div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+/* ───────── Mock data — realistic NSE industries ───────── */
+
+const stocksByIndustry = {
+  "Realty": [
+    {sym:"DLF",      co:"DLF Ltd",                   pr:"₹ 892.40",  rs:"94.2", acc:"acc"},
+    {sym:"GODREJPROP",co:"Godrej Properties",        pr:"₹ 2,418.55",rs:"91.8", acc:"acc"},
+    {sym:"OBEROIRLTY",co:"Oberoi Realty",            pr:"₹ 1,684.20",rs:"88.1", acc:"acc"},
+    {sym:"PRESTIGE", co:"Prestige Estates",          pr:"₹ 1,572.85",rs:"86.4", acc:"acc"},
+    {sym:"BRIGADE",  co:"Brigade Enterprises",       pr:"₹ 1,194.30",rs:"82.0", acc:"neu"},
+  ],
+  "Defence": [
+    {sym:"HAL",      co:"Hindustan Aeronautics",     pr:"₹ 4,820.00",rs:"96.4", acc:"acc"},
+    {sym:"BEL",      co:"Bharat Electronics",        pr:"₹ 318.75",  rs:"93.1", acc:"acc"},
+    {sym:"BDL",      co:"Bharat Dynamics",           pr:"₹ 1,624.10",rs:"90.8", acc:"acc"},
+    {sym:"COCHINSHIP",co:"Cochin Shipyard",          pr:"₹ 1,840.50",rs:"87.2", acc:"acc"},
+    {sym:"MAZDOCK",  co:"Mazagon Dock",              pr:"₹ 4,210.00",rs:"85.6", acc:"neu"},
+  ],
+  "Capital Goods": [
+    {sym:"SIEMENS",  co:"Siemens Ltd",               pr:"₹ 6,245.00",rs:"89.4", acc:"acc"},
+    {sym:"ABB",      co:"ABB India",                 pr:"₹ 7,890.20",rs:"87.0", acc:"acc"},
+    {sym:"LT",       co:"Larsen & Toubro",           pr:"₹ 3,648.95",rs:"82.1", acc:"acc"},
+    {sym:"BHEL",     co:"BHEL",                      pr:"₹ 284.40",  rs:"79.8", acc:"acc"},
+    {sym:"CUMMINSIND",co:"Cummins India",            pr:"₹ 3,412.55",rs:"77.5", acc:"neu"},
+  ],
+  "Sugar": [
+    {sym:"BALRAMCHIN",co:"Balrampur Chini",          pr:"₹ 612.30",  rs:"81.4", acc:"acc"},
+    {sym:"DHAMPURSUG",co:"Dhampur Sugar",            pr:"₹ 248.10",  rs:"78.9", acc:"acc"},
+    {sym:"TRIVENI",  co:"Triveni Engineering",       pr:"₹ 432.85",  rs:"76.2", acc:"acc"},
+    {sym:"BAJAJHIND", co:"Bajaj Hindusthan",         pr:"₹ 38.40",   rs:"71.0", acc:"neu"},
+    {sym:"DCMSHRIRAM",co:"DCM Shriram",              pr:"₹ 1,142.60",rs:"68.5", acc:"neu"},
+  ],
+  "IT - Software": [
+    {sym:"TCS",      co:"Tata Consultancy",          pr:"₹ 3,612.45",rs:"31.2", acc:"dist"},
+    {sym:"INFY",     co:"Infosys",                   pr:"₹ 1,418.80",rs:"28.4", acc:"dist"},
+    {sym:"WIPRO",    co:"Wipro",                     pr:"₹ 248.55",  rs:"22.1", acc:"dist"},
+    {sym:"TECHM",    co:"Tech Mahindra",             pr:"₹ 1,484.20",rs:"24.6", acc:"dist"},
+    {sym:"LTIM",     co:"LTIMindtree",               pr:"₹ 4,210.30",rs:"26.8", acc:"dist"},
+  ],
+};
+
+// helper to make a sparkline svg
+function spark(values){
+  const w=78,h=18,p=2;
+  const min=Math.min(...values), max=Math.max(...values);
+  const range = max-min || 1;
+  const pts = values.map((v,i)=>{
+    const x = p + i*((w-2*p)/(values.length-1));
+    const y = h-p - ((v-min)/range)*(h-2*p);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const last = values[values.length-1], first = values[0];
+  const color = last < first ? 'var(--green)' : 'var(--red)'; // lower percentile = better rank
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// industries — percentile = lower is better (1 = top)
+const industries = {
+  in: [
+    {name:"Realty",                 cur:12, prior:74, n:22, flow:"Accumulation 73%", spark:[78,72,55,40,18,12]},
+    {name:"Defence",                cur:6,  prior:38, n:14, flow:"Accumulation 86%", spark:[42,35,24,15,9,6]},
+    {name:"Sugar",                  cur:18, prior:46, n:9,  flow:"Accumulation 67%", spark:[52,44,36,28,21,18], isNew:false},
+    {name:"Fertilisers",            cur:21, prior:48, n:12, flow:"Accumulation 58%", spark:[55,48,40,32,26,21]},
+    {name:"Capital Goods",          cur:9,  prior:31, n:28, flow:"Accumulation 71%", spark:[36,30,25,18,12,9]},
+    {name:"Power Generation",       cur:24, prior:51, n:18, flow:"Accumulation 61%", spark:[58,50,42,34,28,24]},
+    {name:"Shipping",               cur:14, prior:42, n:7,  flow:"Accumulation 71%", spark:[48,40,32,24,17,14]},
+    {name:"Hotels & Resorts",       cur:27, prior:49, n:16, flow:"Accumulation 56%", spark:[55,48,42,35,30,27]},
+    {name:"Diversified Financials", cur:32, prior:55, n:24, flow:"Accumulation 50%", spark:[60,54,46,40,35,32], isNew:true},
+    {name:"Auto Components",        cur:29, prior:48, n:31, flow:"Mixed",            spark:[52,46,40,35,32,29]},
+  ],
+  lead: [
+    {name:"Defence",                cur:6,  n:14, flow:"Accum 86%", acc:86, spark:[8,7,9,6,5,6]},
+    {name:"Capital Goods",          cur:9,  n:28, flow:"Accum 71%", acc:71, spark:[12,11,10,9,8,9]},
+    {name:"Realty",                 cur:12, n:22, flow:"Accum 73%", acc:73, spark:[18,15,14,12,11,12]},
+    {name:"Shipping",               cur:14, n:7,  flow:"Accum 71%", acc:71, spark:[16,15,15,14,13,14]},
+    {name:"Power Transmission",     cur:16, n:9,  flow:"Accum 67%", acc:67, spark:[20,19,17,16,15,16]},
+    {name:"Sugar",                  cur:18, n:9,  flow:"Accum 67%", acc:67, spark:[24,22,20,19,18,18]},
+    {name:"Pharma - Bulk Drugs",    cur:19, n:11, flow:"Accum 64%", acc:64, spark:[24,22,21,20,19,19]},
+    {name:"Fertilisers",            cur:21, n:12, flow:"Accum 58%", acc:58, spark:[26,24,23,22,21,21]},
+    {name:"Aerospace",              cur:23, n:5,  flow:"Accum 60%", acc:60, spark:[27,26,25,24,23,23]},
+    {name:"Power Generation",       cur:24, n:18, flow:"Accum 61%", acc:61, spark:[28,27,26,25,24,24]},
+  ],
+  out: [
+    {name:"IT - Software",          cur:78, prior:34, n:42, flow:"Distribution 64%", spark:[28,38,52,64,72,78]},
+    {name:"FMCG",                   cur:71, prior:28, n:24, flow:"Distribution 58%", spark:[24,32,46,58,66,71]},
+    {name:"Pharma - Formulations",  cur:68, prior:31, n:35, flow:"Distribution 51%", spark:[28,38,48,58,64,68]},
+    {name:"Telecom Services",       cur:74, prior:42, n:8,  flow:"Distribution 62%", spark:[40,48,58,66,72,74]},
+    {name:"Refineries",             cur:65, prior:38, n:6,  flow:"Distribution 50%", spark:[36,44,52,58,62,65]},
+    {name:"Cement",                 cur:69, prior:44, n:18, flow:"Distribution 56%", spark:[42,48,55,62,66,69]},
+    {name:"Tobacco",                cur:81, prior:52, n:5,  flow:"Distribution 80%", spark:[50,58,66,73,78,81]},
+    {name:"Consumer Durables",      cur:62, prior:38, n:14, flow:"Mixed",            spark:[36,42,49,55,59,62]},
+  ],
+  stable: [
+    {name:"Banks - Public Sector", cur:34}, {name:"Banks - Private Sector", cur:41},
+    {name:"NBFC", cur:38}, {name:"Insurance", cur:45}, {name:"Auto - 2 Wheelers", cur:52},
+    {name:"Auto - 4 Wheelers", cur:48}, {name:"Steel", cur:55}, {name:"Aluminium", cur:51},
+    {name:"Coal & Mining", cur:43}, {name:"Oil Exploration", cur:49}, {name:"Gas Distribution", cur:46},
+    {name:"Chemicals", cur:50}, {name:"Paints", cur:53}, {name:"Logistics", cur:47},
+    {name:"Media & Entertainment", cur:58}, {name:"Retail", cur:44}, {name:"Education", cur:56},
+    {name:"Healthcare Services", cur:42}, {name:"Textiles", cur:54}, {name:"Paper", cur:60},
+  ],
+};
+
+/* ───────── Render: dashboard widget ───────── */
+function row(d, kind){
+  let delta = '';
+  if (kind === 'in')   delta = `<span class="delta up"><span class="arrow">↑</span>from ${d.prior}%ile</span>`;
+  if (kind === 'out')  delta = `<span class="delta down"><span class="arrow">↓</span>from ${d.prior}%ile</span>`;
+  if (kind === 'lead') delta = `<span class="delta lead">★ Top quartile</span>`;
+  const newBadge = d.isNew ? `<span class="new-badge">New</span>` : '';
+  return `<div class="row" onclick="show('page')">
+    <div>
+      <div class="name">${d.name}${newBadge}</div>
+      <div class="sub">${d.n} stocks · ${d.flow}</div>
+    </div>
+    <div class="pct">${d.cur}%ile</div>
+    ${delta}
+  </div>`;
+}
+
+function renderWidget(){
+  document.getElementById('w-in').innerHTML   = industries.in.slice(0,3).map(d=>row(d,'in')).join('');
+  document.getElementById('w-lead').innerHTML = industries.lead.slice(0,3).map(d=>row(d,'lead')).join('');
+  document.getElementById('w-out').innerHTML  = industries.out.slice(0,3).map(d=>row(d,'out')).join('');
+}
+
+/* ───────── Render: dedicated page ───────── */
+function stocksHTML(industryName){
+  const list = stocksByIndustry[industryName];
+  if (!list) return `<div class="stocks-h"><span>Top stocks</span><span>Demo data not loaded for this industry</span></div>
+    <div style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);padding:6px 4px">Real data wires in from KD_industry_stocks.</div>`;
+  const accLabel = {acc:"Accum",dist:"Distrib",neu:"Neutral"};
+  return `<div class="stocks-h"><span>Top 5 stocks · by Magic RS</span><span>${list.length} shown</span></div>
+    ${list.map(s => `<div class="stock-row">
+      <div><span class="stock-sym">${s.sym}</span><span class="stock-co">${s.co}</span></div>
+      <div class="stock-pr">${s.pr}</div>
+      <div class="stock-rs">RS ${s.rs}</div>
+      <div class="stock-acc ${s.acc}">${accLabel[s.acc]}</div>
+    </div>`).join('')}`;
+}
+
+function pageRow(d, kind){
+  let delta='', changeBadge='';
+  if (kind==='in'){
+    delta = `<span class="delta up ind-delta"><span class="arrow">↑</span>+${d.prior - d.cur} %ile</span>`;
+    changeBadge = `<span class="change">from ${d.prior}%ile</span>`;
+  }
+  if (kind==='out'){
+    delta = `<span class="delta down ind-delta"><span class="arrow">↓</span>−${d.cur - d.prior} %ile</span>`;
+    changeBadge = `<span class="change">from ${d.prior}%ile</span>`;
+  }
+  if (kind==='lead'){
+    delta = `<span class="delta lead ind-delta">${d.acc}% accum</span>`;
+    changeBadge = `<span class="change">stable top</span>`;
+  }
+  const newB = d.isNew ? `<span class="new-badge">New</span>` : '';
+  return `<div class="ind" onclick="this.classList.toggle('open')">
+    <div class="ind-top">
+      <div>
+        <div class="ind-name">${d.name}${newB}</div>
+        <div class="ind-meta">
+          <span>${d.n} stocks</span><span class="dotsep"></span>
+          <span class="flow">${d.flow}</span><span class="dotsep"></span>
+          ${spark(d.spark)}
+        </div>
+      </div>
+      <div class="ind-pct">${d.cur}%ile${changeBadge}</div>
+      ${delta}
+    </div>
+    <div class="stocks">${stocksHTML(d.name)}</div>
+  </div>`;
+}
+
+function renderPage(){
+  document.getElementById('p-in').innerHTML   = industries.in.map(d=>pageRow(d,'in')).join('');
+  document.getElementById('p-lead').innerHTML = industries.lead.map(d=>pageRow(d,'lead')).join('');
+  document.getElementById('p-out').innerHTML  = industries.out.map(d=>pageRow(d,'out')).join('');
+  document.getElementById('p-stable').innerHTML = industries.stable.map(d => `
+    <div class="stable-cell"><span class="nm">${d.name}</span><span class="pc">${d.cur}%ile</span></div>
+  `).join('');
+}
+
+/* ───────── View switcher ───────── */
+function show(which){
+  document.getElementById('view-dash').classList.toggle('active', which==='dash');
+  document.getElementById('view-page').classList.toggle('active', which==='page');
+  document.getElementById('btn-dash').classList.toggle('active', which==='dash');
+  document.getElementById('btn-page').classList.toggle('active', which==='page');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+renderWidget();
+renderPage();
+</script>
+</body>
+</html>
