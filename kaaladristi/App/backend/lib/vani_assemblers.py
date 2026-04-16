@@ -850,13 +850,22 @@ def _fmt_astro_risk_days(ctx: dict) -> str:
 
 def assemble_industry_transition_context(db, target_date: str = None) -> dict | None:
     """Assemble context for industry transition intents."""
-    if not target_date:
-        try:
-            rows = db.select('km_industry_eod', 'trade_date',
-                             order='trade_date.desc', limit=1)
-            target_date = str(rows[0]['trade_date']) if rows else str(date.today())
-        except Exception:
-            target_date = str(date.today())
+    # Always resolve to latest available date in km_industry_eod
+    try:
+        rows = db.select('km_industry_eod', 'trade_date',
+                         order='trade_date.desc', limit=1)
+        latest_date = str(rows[0]['trade_date']) if rows else None
+    except Exception:
+        latest_date = None
+
+    if not latest_date:
+        return None
+
+    # Use the earlier of target_date and latest available
+    if target_date and target_date <= latest_date:
+        pass
+    else:
+        target_date = latest_date
 
     rotation = _fetch_industry_rotation(db, target_date)
 
