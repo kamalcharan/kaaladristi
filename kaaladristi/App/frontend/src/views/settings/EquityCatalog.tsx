@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { keepPreviousData } from '@tanstack/react-query';
 import {
   ArrowLeft, Search, ChevronLeft, ChevronRight,
-  Loader2, Power, BarChart3, Eye,
+  Loader2, Power, BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fetchEquityCatalog, toggleEquityActive } from '@/services/equityCatalog';
@@ -199,26 +199,17 @@ export default function EquityCatalog({ onBack }: { onBack: () => void }) {
                     : '—'}
                 </span>
 
-                {/* Pulse + Chart links */}
+                {/* Chart link */}
                 {item.record_count > 0 ? (
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      onClick={() => navigate(`/pulse/equity/${item.id}`)}
-                      title={`View ${item.symbol} pulse`}
-                      className="w-7 h-7 rounded-md flex items-center justify-center text-muted hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => navigate(`/chart/equity/${item.id}?name=${encodeURIComponent(item.symbol)}`)}
-                      title={`View ${item.symbol} chart`}
-                      className="w-7 h-7 rounded-md flex items-center justify-center text-muted hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
-                    >
-                      <BarChart3 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => navigate(`/chart/equity/${item.id}?name=${encodeURIComponent(item.symbol)}`)}
+                    title={`View ${item.symbol} chart`}
+                    className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-muted hover:text-accent-indigo hover:bg-accent-indigo/10 transition-all"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                  </button>
                 ) : (
-                  <div className="w-14 shrink-0" />
+                  <div className="w-7 shrink-0" />
                 )}
               </div>
             ))}

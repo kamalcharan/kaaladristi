@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, ShieldAlert, AlertTriangle, X, BookOpen, Eye } from 'lucide-react';
+import { Loader2, ShieldAlert, AlertTriangle, X, BookOpen, BarChart3 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useManipulationWatch } from '@/hooks/useManipulationWatch';
@@ -129,11 +129,11 @@ function StockDetailModal({
 
         {/* View Pulse link */}
         <button
-          onClick={() => { onClose(); navigate(`/pulse/equity/${stock.equity_id}`); }}
+          onClick={() => { onClose(); navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(stock.symbol)}`); }}
           className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent-indigo/10 border border-accent-indigo/30 text-accent-indigo text-xs font-bold hover:bg-accent-indigo/20 transition-all"
         >
-          <Eye className="w-3.5 h-3.5" />
-          View Equity Pulse
+          <BarChart3 className="w-3.5 h-3.5" />
+          View Chart
         </button>
       </Card>
     </div>
