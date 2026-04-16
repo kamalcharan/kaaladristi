@@ -245,8 +245,8 @@ export default function ChartView() {
               <InstrumentIntelligence id={numId} type={type ?? 'index'} />
             )}
 
-            {/* Astro Strip (above chart) — index only */}
-            {isIndex && (
+            {/* Astro Strip (above chart) — both index and equity */}
+            {showPulse && (
               <div className="mt-2">
                 <SevenDayStrip selectedDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? new Date().toISOString().split('T')[0]} />
               </div>
