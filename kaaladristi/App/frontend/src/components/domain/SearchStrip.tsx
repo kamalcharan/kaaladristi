@@ -1,0 +1,297 @@
+/**
+ * SearchStrip — Global instrument search with autocomplete
+ * ==========================================================
+ * Searches km_index_symbols and km_equity_symbols.
+ * Dropdown shows matching results as user types (min 2 chars).
+ * Selection navigates to the appropriate chart page:
+ *   Index  → /chart/index/:id?name=...
+ *   Equity → /chart/equity/:id?name=...
+ */
+
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Search, X, TrendingUp, BarChart3 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { from } from '@/services/postgrest';
+
+// ── Types ──────────────────────────────────────────────────────
+
+interface SearchItem {
+  id: number;
+  type: 'index' | 'equity';
+  name: string;          // display name (index name or company_name)
+  symbol: string;        // ticker / index name
+  exchange: string | null;
+  industry: string | null;
+}
+
+// ── Data fetching ──────────────────────────────────────────────
+
+async function fetchSearchIndex(): Promise<SearchItem[]> {
+  const [indexRes, equityRes] = await Promise.all([
+    from('km_index_symbols')
+      .select('id,name,category')
+      .is('is_active', 'true')
+      .order('name', { ascending: true })
+      .limit(200)
+      .execute(),
+
+    from('km_equity_symbols')
+      .select('id,symbol,company_name,exchange,industry')
+      .is('is_active', 'true')
+      .order('symbol', { ascending: true })
+      .limit(8000)
+      .execute(),
+  ]);
+
+  const items: SearchItem[] = [];
+
+  // Indices
+  for (const r of (indexRes.data ?? []) as { id: number; name: string; category: string | null }[]) {
+    items.push({
+      id: r.id,
+      type: 'index',
+      name: r.name,
+      symbol: r.name,
+      exchange: null,
+      industry: r.category,
+    });
+  }
+
+  // Equities — deduplicate by symbol (prefer NSE)
+  const seen = new Map<string, boolean>();
+  for (const r of (equityRes.data ?? []) as { id: number; symbol: string; company_name: string | null; exchange: string | null; industry: string | null }[]) {
+    const key = r.symbol + '_' + (r.exchange ?? '');
+    // If numeric BSE code, still include but don't deduplicate against NSE
+    const isNumeric = /^\d+$/.test(r.symbol);
+    if (!isNumeric && seen.has(r.symbol) && r.exchange !== 'NSE') continue;
+    if (!isNumeric) seen.set(r.symbol, true);
+
+    items.push({
+      id: r.id,
+      type: 'equity',
+      name: r.company_name ?? r.symbol,
+      symbol: r.symbol,
+      exchange: r.exchange,
+      industry: r.industry,
+    });
+  }
+
+  return items;
+}
+
+// ── Search logic ───────────────────────────────────────────────
+
+function matchScore(item: SearchItem, query: string): number {
+  const q = query.toLowerCase();
+  const sym = item.symbol.toLowerCase();
+  const name = item.name.toLowerCase();
+
+  // Exact symbol match → highest
+  if (sym === q) return 100;
+  // Symbol starts with query
+  if (sym.startsWith(q)) return 90;
+  // Name starts with query
+  if (name.startsWith(q)) return 80;
+  // Symbol contains query
+  if (sym.includes(q)) return 60;
+  // Name contains query
+  if (name.includes(q)) return 50;
+  // Industry match
+  if (item.industry?.toLowerCase().includes(q)) return 30;
+
+  return 0;
+}
+
+// ── Component ──────────────────────────────────────────────────
+
+export default function SearchStrip() {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch search index (cached 10 min)
+  const { data: searchIndex } = useQuery({
+    queryKey: ['search-index'],
+    queryFn: fetchSearchIndex,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Filter results
+  const results = useMemo(() => {
+    if (!searchIndex || query.length < 2) return [];
+
+    const scored = searchIndex
+      .map((item) => ({ item, score: matchScore(item, query) }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => {
+        // Indices first if query looks like an index name
+        if (a.item.type !== b.item.type) {
+          if (a.item.type === 'index') return -1;
+          if (b.item.type === 'index') return 1;
+        }
+        return b.score - a.score;
+      });
+
+    return scored.slice(0, 12).map((r) => r.item);
+  }, [searchIndex, query]);
+
+  // Reset selection on results change
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [results]);
+
+  // Navigate to selected item
+  const navigateTo = useCallback((item: SearchItem) => {
+    const displayName = /^\d+$/.test(item.symbol) ? item.name : item.symbol;
+    if (item.type === 'index') {
+      navigate(`/chart/index/${item.id}?name=${encodeURIComponent(item.name)}`);
+    } else {
+      navigate(`/chart/equity/${item.id}?name=${encodeURIComponent(displayName)}`);
+    }
+    setQuery('');
+    setIsOpen(false);
+    inputRef.current?.blur();
+  }, [navigate]);
+
+  // Keyboard handling
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIdx((i) => Math.min(i + 1, results.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && results[selectedIdx]) {
+      e.preventDefault();
+      navigateTo(results[selectedIdx]);
+    } else if (e.key === 'Escape') {
+      setQuery('');
+      setIsOpen(false);
+      inputRef.current?.blur();
+    }
+  }, [results, selectedIdx, navigateTo]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Global keyboard shortcut: Ctrl+K or / to focus search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      } else if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full max-w-md">
+      {/* Search input */}
+      <div className="relative flex items-center">
+        <Search className="absolute left-2.5 w-3.5 h-3.5 text-muted pointer-events-none" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
+          onFocus={() => { if (query.length >= 2) setIsOpen(true); }}
+          onKeyDown={handleKeyDown}
+          placeholder="Search index or stock...  ⌘K"
+          className="w-full pl-8 pr-8 py-1.5 text-xs bg-kd-elevated/60 border border-kd-border rounded-lg text-primary placeholder:text-muted/50 focus:outline-none focus:border-accent-indigo/40 focus:bg-kd-elevated transition-all"
+        />
+        {query && (
+          <button
+            onClick={() => { setQuery(''); setIsOpen(false); }}
+            className="absolute right-2 text-muted hover:text-primary transition-colors"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      {/* Dropdown results */}
+      {isOpen && results.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-kd-card border border-kd-border rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 max-h-[400px] overflow-y-auto">
+          {results.map((item, i) => (
+            <button
+              key={`${item.type}-${item.id}`}
+              onClick={() => navigateTo(item)}
+              onMouseEnter={() => setSelectedIdx(i)}
+              className={cn(
+                'w-full text-left px-3 py-2 flex items-center gap-3 transition-colors',
+                i === selectedIdx
+                  ? 'bg-accent-indigo/10'
+                  : 'hover:bg-kd-elevated/60',
+              )}
+            >
+              {/* Type icon */}
+              <div className={cn(
+                'w-6 h-6 rounded-md flex items-center justify-center shrink-0',
+                item.type === 'index'
+                  ? 'bg-accent-cyan/10 text-accent-cyan'
+                  : 'bg-accent-violet/10 text-accent-violet',
+              )}>
+                {item.type === 'index'
+                  ? <TrendingUp className="w-3 h-3" />
+                  : <BarChart3 className="w-3 h-3" />
+                }
+              </div>
+
+              {/* Name + metadata */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold font-mono text-primary truncate">
+                    {/^\d+$/.test(item.symbol) ? item.name : item.symbol}
+                  </span>
+                  <span className={cn(
+                    'text-[8px] font-bold px-1 py-0.5 rounded border shrink-0',
+                    item.type === 'index'
+                      ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/5'
+                      : item.exchange === 'NSE'
+                      ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/5'
+                      : 'text-risk-amber border-risk-amber/30 bg-risk-amber/5',
+                  )}>
+                    {item.type === 'index' ? 'INDEX' : item.exchange ?? 'EQ'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {item.type === 'equity' && !/^\d+$/.test(item.symbol) && (
+                    <span className="text-[10px] text-muted truncate">{item.name}</span>
+                  )}
+                  {item.industry && (
+                    <span className="text-[10px] text-muted truncate">{item.industry}</span>
+                  )}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* No results hint */}
+      {isOpen && query.length >= 2 && results.length === 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-kd-card border border-kd-border rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 px-4 py-6 text-center">
+          <p className="text-xs text-muted">No matches for &ldquo;{query}&rdquo;</p>
+        </div>
+      )}
+    </div>
+  );
+}
