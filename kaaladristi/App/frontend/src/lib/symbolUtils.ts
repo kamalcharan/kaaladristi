@@ -18,17 +18,20 @@ export function isNumericSymbol(symbol: string): boolean {
 
 /**
  * Derive a short readable name from company_name.
- * "R M Drip and Sprinklers Systems Limited" → "RM Drip"
+ * "R M Drip and Sprinklers Systems Limited" → "RM Drip Sprinklers"
  * "Reliance Industries Limited" → "Reliance Industries"
- * "Tata Consultancy Services Limited" → "Tata Consultancy"
+ * "Tata Consultancy Services Limited" → "Tata Consultancy Services"
+ * "ABC Pvt Ltd" → "ABC"
+ *
+ * Double-pass suffix strip handles "Pvt Ltd", "Private Limited" etc.
  */
 export function shortNameFromCompany(name: string): string {
-  return name
-    .replace(/\s+(Limited|Ltd|Pvt|Private|Corp|Corporation|Company|Co|Inc|Incorporated|LLP|PLC)\.?\s*$/i, '')
-    .replace(/\s+and\s+/gi, ' & ')
-    .trim()
+  const SUFFIXES = /\s+(Limited|Ltd|Pvt\.?|Private|Corp\.?|Corporation|Company|Industries|Enterprises|Systems|Co\.?|Inc\.?|Incorporated|LLP|PLC)\s*$/i;
+  let cleaned = name.replace(SUFFIXES, '').replace(SUFFIXES, '').trim();
+  if (!cleaned) return name.trim();
+  return cleaned
     .split(/\s+/)
-    .slice(0, 2)
+    .slice(0, 3)
     .join(' ');
 }
 

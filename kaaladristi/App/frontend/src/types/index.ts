@@ -458,4 +458,5 @@ export interface EquityEodSnapshot {
   rss_spread: number | null;
   sma_150: number | null;
   volume_divergence_flag: string | null;
+  value_cr: number | null;
 }
