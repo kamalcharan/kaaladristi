@@ -1,28 +1,22 @@
 import { useState, useMemo } from 'react';
-import { TrendingUp, TrendingDown, Crown, ChevronDown, ChevronUp, Loader2, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useIndustryTransition, useIndustryStocks } from '@/hooks/useIndustryRotation';
+import { StockCard, FLOW_LABELS } from '@/components/domain/StockCard';
 import type { IndustryTransitionItem } from '@/services/industryRotation';
+import type { ScanStock } from '@/types';
 
-// ── Reusable vocabulary (same as IndustryRotationPanel) ───────
+// ── Filter Tabs ───────────────────────────────────────────────
 
-const FLOW_LABELS: Record<string, { label: string; color: string }> = {
-  FRESH_LONGS:      { label: 'Fresh Longs',      color: 'text-risk-green bg-risk-green/10' },
-  FRESH_SHORTS:     { label: 'Fresh Shorts',     color: 'text-risk-red bg-risk-red/10' },
-  SHORT_COVERING:   { label: 'Short Covering',   color: 'text-risk-amber bg-risk-amber/10' },
-  LONG_LIQUIDATION: { label: 'Liquidation',      color: 'text-risk-red bg-risk-red/10' },
-  LOW_VOLUME:       { label: 'Low Volume',        color: 'text-muted bg-kd-elevated/30' },
-  MIXED:            { label: 'Mixed',             color: 'text-muted bg-kd-elevated/30' },
-};
+type FilterTab = 'all' | 'rotating_in' | 'leading' | 'rotating_out';
 
-const ZONE_COLORS: Record<string, string> = {
-  'Strong Bull': 'text-risk-green',
-  'Mild Bull':   'text-risk-green/70',
-  'Neutral':     'text-muted',
-  'Mild Bear':   'text-risk-red/70',
-  'Strong Bear': 'text-risk-red',
-};
+const FILTER_TABS: { id: FilterTab; label: string; color: string }[] = [
+  { id: 'all',          label: 'All',          color: 'text-accent-indigo border-accent-indigo/30 bg-accent-indigo/15' },
+  { id: 'rotating_in',  label: 'Rotating In',  color: 'text-risk-green border-risk-green/30 bg-risk-green/15' },
+  { id: 'leading',      label: 'Leading',      color: 'text-risk-amber border-risk-amber/30 bg-risk-amber/15' },
+  { id: 'rotating_out', label: 'Rotating Out',  color: 'text-risk-red border-risk-red/30 bg-risk-red/15' },
+];
 
 // ── Sparkline SVG ─────────────────────────────────────────────
 
@@ -37,7 +31,6 @@ function Sparkline({ values, improving }: { values: number[]; improving: boolean
     const y = h - p - ((v - min) / range) * (h - 2 * p);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-  // Lower percentile = better, so "improving" means line going down
   const color = improving ? 'var(--risk-green)' : 'var(--risk-red)';
   return (
     <svg className="w-[78px] h-[18px] shrink-0" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
@@ -46,53 +39,41 @@ function Sparkline({ values, improving }: { values: number[]; improving: boolean
   );
 }
 
-// ── Flow Chip ─────────────────────────────────────────────────
+// ── Convert IndustryStockRow to ScanStock for StockCard ────────
 
-function FlowChip({ flowType }: { flowType: string | null }) {
-  if (!flowType) return null;
-  const config = FLOW_LABELS[flowType] ?? { label: flowType, color: 'text-muted bg-kd-elevated/30' };
-  return (
-    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-md', config.color)}>
-      {config.label}
-    </span>
-  );
+function toScanStock(s: any, industry: string): ScanStock {
+  return {
+    equity_id: s.equity_id,
+    symbol: s.symbol,
+    company_name: s.company_name,
+    industry,
+    exchange: s.exchange ?? null,
+    close: s.close,
+    pct_chng: s.pct_chng,
+    rsi_14: s.rsi_14 ?? null,
+    magic_rs: s.magic_rs,
+    magic_rs_zone: s.magic_rs_zone,
+    flow_type: s.flow_type,
+    rvol: s.rvol,
+    sniper_inst: s.sniper_inst ?? null,
+    accum_distrib: null,
+    rss_value: s.rss_value ?? null,
+    rss_spread: s.rss_spread ?? null,
+    sma_150: s.sma_150 ?? null,
+    volume_divergence_flag: s.volume_divergence_flag ?? null,
+    has_recent_svd: false,
+    has_recent_sbd: false,
+    has_recent_syd: false,
+  };
 }
 
-// ── Delta Badge ───────────────────────────────────────────────
+// ── Industry Card (expandable, children = StockCards) ──────────
 
-function DeltaBadge({ item, variant }: { item: IndustryTransitionItem; variant: 'in' | 'lead' | 'out' }) {
-  if (variant === 'in') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-risk-green bg-risk-green/10 border border-risk-green/30 px-2 py-1 rounded">
-        <TrendingUp className="w-3 h-3" />
-        from {item.prevPercentile}%ile
-      </span>
-    );
-  }
-  if (variant === 'out') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-risk-red bg-risk-red/10 border border-risk-red/30 px-2 py-1 rounded">
-        <TrendingDown className="w-3 h-3" />
-        from {item.prevPercentile}%ile
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-risk-amber bg-risk-amber/10 border border-risk-amber/30 px-2 py-1 rounded">
-      Top quartile
-    </span>
-  );
-}
-
-// ── Industry Row (expandable, reuses useIndustryStocks) ───────
-
-function TransitionRow({
+function IndustryCard({
   item,
-  variant,
   latestDate,
 }: {
   item: IndustryTransitionItem;
-  variant: 'in' | 'lead' | 'out' | 'stable';
   latestDate: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -102,234 +83,132 @@ function TransitionRow({
   );
 
   const improving = item.percentileChange > 0;
+  const declining = item.percentileChange < 0;
+  const flowConfig = FLOW_LABELS[item.dominant_flow_type ?? ''];
 
   return (
-    <div className={cn(
-      'border border-transparent rounded-xl transition-all',
-      expanded ? 'bg-kd-bg/60 border-kd-border' : 'hover:bg-kd-bg/40 hover:border-kd-border',
-    )}>
+    <Card rounded="xxl" className="overflow-hidden">
+      {/* Industry header — clickable */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full text-left px-3 py-2.5 flex items-center gap-3"
+        className="w-full text-left p-3 sm:p-4 hover:bg-kd-elevated/20 transition-colors"
       >
-        {/* Industry name + meta */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-[var(--text-primary)] truncate leading-tight">
-            {item.industry}
-          </p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-[10px] text-muted font-mono">{item.stock_count} stocks</span>
-            <FlowChip flowType={item.dominant_flow_type} />
-            <Sparkline values={item.sparkline} improving={improving} />
+        {/* Row 1: Industry name + percentile */}
+        <div className="flex items-start justify-between mb-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-bold text-[var(--text-primary)]">{item.industry}</span>
+              {item.percentileChange >= 10 && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-risk-green bg-risk-green/10 border border-risk-green/30 px-1.5 py-0.5 rounded">
+                  <TrendingUp className="w-3 h-3" />
+                  +{item.percentileChange}
+                </span>
+              )}
+              {item.percentileChange <= -10 && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-risk-red bg-risk-red/10 border border-risk-red/30 px-1.5 py-0.5 rounded">
+                  <TrendingDown className="w-3 h-3" />
+                  {item.percentileChange}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-muted font-mono">{item.stock_count} stocks</span>
+              {flowConfig && (
+                <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
+                  {flowConfig.label}
+                </span>
+              )}
+              <Sparkline values={item.sparkline} improving={improving} />
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 ml-3">
+            <div className="text-right">
+              <span className="text-sm font-bold font-mono text-[var(--text-primary)]">
+                {item.percentile}%ile
+              </span>
+              {item.prevPercentile != null && (
+                <span className={cn(
+                  'block text-[10px] font-mono',
+                  improving ? 'text-risk-green' : declining ? 'text-risk-red' : 'text-muted',
+                )}>
+                  from {item.prevPercentile}%ile
+                </span>
+              )}
+            </div>
+            {expanded
+              ? <ChevronUp className="w-4 h-4 text-muted" />
+              : <ChevronDown className="w-4 h-4 text-muted" />
+            }
           </div>
         </div>
 
-        {/* Percentile */}
-        <div className="text-right shrink-0">
-          <span className="text-sm font-bold font-mono text-[var(--text-primary)]">
-            {item.percentile}%ile
-          </span>
-          {item.prevPercentile != null && (
-            <span className="block text-[10px] font-mono text-muted">
-              from {item.prevPercentile}%ile
+        {/* Row 2: Industry-level metric pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
+            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Avg RS</p>
+            <p className="text-xs font-bold font-mono leading-none text-[var(--text-primary)]">
+              {item.avg_magic_rs?.toFixed(1) ?? '—'}
+            </p>
+          </div>
+          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
+            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Bull %</p>
+            <p className="text-xs font-bold font-mono leading-none text-risk-green">
+              {item.pct_strong_bull?.toFixed(0) ?? '—'}%
+            </p>
+          </div>
+          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
+            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Accum</p>
+            <p className="text-xs font-bold font-mono leading-none text-risk-green">
+              {item.pct_accumulation?.toFixed(0) ?? '—'}%
+            </p>
+          </div>
+          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
+            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Smart $</p>
+            <p className="text-xs font-bold font-mono leading-none text-[var(--text-primary)]">
+              {item.avg_sniper_inst?.toFixed(1) ?? '—'}
+            </p>
+          </div>
+          {(item.pct_with_recent_svd ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-risk-green">
+              <span className="w-2.5 h-2.5 rounded-full bg-risk-green" />
+              SVD {item.pct_with_recent_svd?.toFixed(0)}%
+            </span>
+          )}
+          {(item.pct_with_recent_sbd ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-accent-cyan">
+              <span className="w-2.5 h-2.5 rounded-full bg-accent-cyan" />
+              SBD {item.pct_with_recent_sbd?.toFixed(0)}%
+            </span>
+          )}
+          {(item.pct_with_recent_syd ?? 0) > 0 && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-risk-red">
+              <span className="w-2.5 h-2.5 rounded-full bg-risk-red" />
+              SYD {item.pct_with_recent_syd?.toFixed(0)}%
             </span>
           )}
         </div>
-
-        {/* Delta badge */}
-        {variant !== 'stable' && (
-          <div className="shrink-0 hidden sm:block">
-            <DeltaBadge item={item} variant={variant === 'in' ? 'in' : variant === 'out' ? 'out' : 'lead'} />
-          </div>
-        )}
-
-        {/* Chevron */}
-        {expanded
-          ? <ChevronUp className="w-3.5 h-3.5 text-muted shrink-0" />
-          : <ChevronDown className="w-3.5 h-3.5 text-muted shrink-0 opacity-0 group-hover:opacity-100" />
-        }
       </button>
 
-      {/* Expanded: top stocks */}
+      {/* Expanded: child stock cards */}
       {expanded && (
-        <div className="mx-3 mb-3 bg-kd-bg/80 border border-kd-border rounded-lg overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-kd-border">
-            <span className="text-[10px] font-mono text-muted uppercase tracking-wider">Top stocks by Magic RS</span>
-            <span className="text-[10px] font-mono text-muted">{stocks?.length ?? 0} shown</span>
-          </div>
+        <div className="border-t border-kd-border bg-kd-bg/30 p-2 sm:p-3 space-y-2">
+          <p className="text-[10px] font-mono text-muted uppercase tracking-wider px-1 mb-1">
+            Top 10 stocks by Magic RS
+          </p>
           {stocksLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-4 h-4 animate-spin text-accent-indigo" />
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="w-4 h-4 animate-spin text-accent-indigo mr-2" />
+              <span className="text-xs text-muted">Loading stocks...</span>
             </div>
           ) : stocks && stocks.length > 0 ? (
-            <div className="divide-y divide-kd-border/50">
-              {stocks.map((s) => (
-                <div key={s.equity_id} className="flex items-center gap-3 px-3 py-2 text-xs">
-                  <span className="font-mono font-bold text-accent-indigo w-24 shrink-0 truncate">{s.symbol}</span>
-                  <span className="text-muted flex-1 truncate">{s.company_name}</span>
-                  <span className="font-mono font-bold text-[var(--text-primary)] w-16 text-right">{s.close?.toFixed(1)}</span>
-                  <span className={cn('font-mono font-bold w-14 text-right', (s.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
-                    {(s.pct_chng ?? 0) >= 0 ? '+' : ''}{(s.pct_chng ?? 0).toFixed(1)}%
-                  </span>
-                  <span className={cn('w-14 text-right font-mono', ZONE_COLORS[s.magic_rs_zone ?? ''] ?? 'text-muted')}>
-                    RS {s.magic_rs?.toFixed(1) ?? '—'}
-                  </span>
-                </div>
-              ))}
-            </div>
+            stocks.map((s) => (
+              <StockCard key={s.equity_id} stock={toScanStock(s, item.industry)} />
+            ))
           ) : (
-            <p className="text-xs text-muted py-3 text-center">No data available</p>
+            <p className="text-xs text-muted py-4 text-center">No stock data available</p>
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Column ────────────────────────────────────────────────────
-
-function TransitionColumn({
-  title,
-  accentColor,
-  badgeText,
-  items,
-  variant,
-  latestDate,
-}: {
-  title: string;
-  accentColor: string;
-  badgeText: string;
-  items: IndustryTransitionItem[];
-  variant: 'in' | 'lead' | 'out';
-  latestDate: string | null;
-}) {
-  return (
-    <Card rounded="xxl" className="flex flex-col min-h-[400px]">
-      {/* Column header */}
-      <div className="px-4 py-3 border-b border-kd-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={cn('w-2 h-2 rounded-full shadow-lg', accentColor)} />
-          <h3 className="text-sm font-bold text-[var(--text-primary)]">{title}</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={cn(
-            'text-[10px] font-mono font-bold px-2 py-0.5 rounded border',
-            variant === 'in' ? 'text-risk-green bg-risk-green/10 border-risk-green/30' :
-            variant === 'out' ? 'text-risk-red bg-risk-red/10 border-risk-red/30' :
-            'text-risk-amber bg-risk-amber/10 border-risk-amber/30',
-          )}>
-            {badgeText}
-          </span>
-          <span className="text-[10px] font-mono text-muted">{items.length}</span>
-        </div>
-      </div>
-
-      {/* Column body */}
-      <div className="flex-1 overflow-auto p-2 space-y-0.5">
-        {items.length > 0 ? (
-          items.map((item) => (
-            <TransitionRow key={item.industry} item={item} variant={variant} latestDate={latestDate} />
-          ))
-        ) : (
-          <p className="text-xs text-muted py-8 text-center italic">No industries in this category</p>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-// ── Stable Section (collapsible) ──────────────────────────────
-
-function StableSection({ items, latestDate }: { items: IndustryTransitionItem[]; latestDate: string | null }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Card rounded="xxl" className="mt-6">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-4 text-left"
-      >
-        <div className="flex items-center gap-3">
-          <Minus className="w-4 h-4 text-muted" />
-          <span className="text-sm font-bold text-muted">{items.length} industries unchanged this week</span>
-        </div>
-        <span className="text-[10px] font-mono text-muted">
-          {open ? 'Collapse' : 'Expand'} {open ? '▴' : '▾'}
-        </span>
-      </button>
-
-      {open && (
-        <div className="px-5 pb-5 border-t border-kd-border">
-          <p className="text-[11px] font-mono text-muted py-3">
-            |Δ%ile| &lt; 10 over last 5 sessions. Useful for spotting what is NOT moving.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-            {items.map((item) => (
-              <div
-                key={item.industry}
-                className="flex items-center justify-between px-3 py-2 border border-kd-border rounded-lg"
-              >
-                <span className="text-xs font-medium text-[var(--text-primary)] truncate">{item.industry}</span>
-                <span className="text-[11px] font-mono text-muted shrink-0 ml-2">{item.percentile}%ile</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ── Filters Bar ───────────────────────────────────────────────
-
-function FiltersBar({
-  minStocks,
-  onMinStocksChange,
-  exchangeFilter,
-  onExchangeChange,
-}: {
-  minStocks: number;
-  onMinStocksChange: (v: number) => void;
-  exchangeFilter: string;
-  onExchangeChange: (v: string) => void;
-}) {
-  return (
-    <Card rounded="xxl" className="px-4 py-3 mb-4 flex items-center gap-4 flex-wrap">
-      <span className="text-[10px] font-mono text-muted uppercase tracking-wider">Filters</span>
-
-      {/* Min stocks */}
-      <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-lg px-3 py-1.5">
-        <span className="text-[10px] text-muted uppercase tracking-wider">Min stocks</span>
-        <input
-          type="range"
-          min={5}
-          max={20}
-          value={minStocks}
-          onChange={(e) => onMinStocksChange(Number(e.target.value))}
-          className="w-16 accent-risk-amber"
-        />
-        <span className="text-xs font-mono text-[var(--text-primary)] w-4 text-right">{minStocks}</span>
-      </div>
-
-      {/* Exchange */}
-      <div className="flex bg-kd-bg/40 border border-kd-border rounded-lg overflow-hidden">
-        {['Combined', 'NSE', 'BSE'].map((ex) => (
-          <button
-            key={ex}
-            onClick={() => onExchangeChange(ex)}
-            className={cn(
-              'px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wider transition-colors',
-              exchangeFilter === ex
-                ? 'bg-kd-elevated text-[var(--text-primary)]'
-                : 'text-muted hover:text-[var(--text-secondary)]',
-            )}
-          >
-            {ex}
-          </button>
-        ))}
-      </div>
-
-      <span className="ml-auto text-[10px] font-mono text-muted">Sort: by transition magnitude</span>
     </Card>
   );
 }
@@ -338,27 +217,51 @@ function FiltersBar({
 
 export default function IndustryTransitionView() {
   const { data, isLoading, error } = useIndustryTransition();
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [minStocks, setMinStocks] = useState(5);
-  const [exchangeFilter, setExchangeFilter] = useState('Combined');
 
-  // Filter items by min stocks
   const filtered = useMemo(() => {
-    if (!data) return null;
-    const filter = (items: IndustryTransitionItem[]) =>
-      items.filter((i) => i.stock_count >= minStocks);
+    if (!data) return [];
+
+    let items: IndustryTransitionItem[];
+    switch (activeFilter) {
+      case 'rotating_in':
+        items = data.rotatingIn;
+        break;
+      case 'leading':
+        items = data.leading;
+        break;
+      case 'rotating_out':
+        items = data.rotatingOut;
+        break;
+      default:
+        // "All" — combine all categories sorted by transition magnitude
+        items = [
+          ...data.rotatingIn,
+          ...data.leading,
+          ...data.rotatingOut,
+          ...data.stable,
+        ].sort((a, b) => Math.abs(b.percentileChange) - Math.abs(a.percentileChange));
+    }
+
+    return items.filter((i) => i.stock_count >= minStocks);
+  }, [data, activeFilter, minStocks]);
+
+  // Counts per tab
+  const counts = useMemo(() => {
+    if (!data) return { all: 0, rotating_in: 0, leading: 0, rotating_out: 0 };
     return {
-      ...data,
-      rotatingIn: filter(data.rotatingIn),
-      leading: filter(data.leading),
-      rotatingOut: filter(data.rotatingOut),
-      stable: filter(data.stable),
+      all: data.rotatingIn.length + data.leading.length + data.rotatingOut.length + data.stable.length,
+      rotating_in: data.rotatingIn.length,
+      leading: data.leading.length,
+      rotating_out: data.rotatingOut.length,
     };
-  }, [data, minStocks]);
+  }, [data]);
 
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <header className="mb-6">
+      <header className="mb-4">
         <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">
           Industry Transition
         </h1>
@@ -380,19 +283,46 @@ export default function IndustryTransitionView() {
           )}
           {data && (
             <span className="text-[10px] text-muted font-mono">
-              5-day rotation window · {data.totalIndustries} industries qualifying
+              5-day window · {data.totalIndustries} industries
             </span>
           )}
         </div>
       </header>
 
-      {/* Filters */}
-      <FiltersBar
-        minStocks={minStocks}
-        onMinStocksChange={setMinStocks}
-        exchangeFilter={exchangeFilter}
-        onExchangeChange={setExchangeFilter}
-      />
+      {/* Filter tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar mb-3">
+        {FILTER_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveFilter(tab.id)}
+            className={cn(
+              'px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border',
+              activeFilter === tab.id
+                ? tab.color
+                : 'bg-kd-bg/40 text-muted border-kd-border hover:border-kd-border-active hover:text-[var(--text-secondary)]',
+            )}
+          >
+            {tab.label}
+            <span className="ml-1.5 text-[10px] opacity-70">
+              {counts[tab.id]}
+            </span>
+          </button>
+        ))}
+
+        {/* Min stocks filter */}
+        <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-xl px-3 py-1.5 ml-auto shrink-0">
+          <span className="text-[10px] text-muted uppercase tracking-wider">Min</span>
+          <input
+            type="range"
+            min={5}
+            max={20}
+            value={minStocks}
+            onChange={(e) => setMinStocks(Number(e.target.value))}
+            className="w-14 accent-risk-amber"
+          />
+          <span className="text-[10px] font-mono text-[var(--text-primary)] w-4 text-right">{minStocks}</span>
+        </div>
+      </div>
 
       {/* Loading */}
       {isLoading && (
@@ -409,41 +339,31 @@ export default function IndustryTransitionView() {
         </Card>
       )}
 
-      {/* 3-column layout */}
-      {filtered && !isLoading && (
+      {/* Industry cards */}
+      {!isLoading && !error && filtered.length > 0 && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <TransitionColumn
-              title="Rotating In"
-              accentColor="bg-risk-green shadow-risk-green/40"
-              badgeText="Δ ≥ +10%ile"
-              items={filtered.rotatingIn}
-              variant="in"
-              latestDate={data?.latestDate ?? null}
-            />
-            <TransitionColumn
-              title="Leading"
-              accentColor="bg-risk-amber shadow-risk-amber/40"
-              badgeText="Top 25% by RS"
-              items={filtered.leading}
-              variant="lead"
-              latestDate={data?.latestDate ?? null}
-            />
-            <TransitionColumn
-              title="Rotating Out"
-              accentColor="bg-risk-red shadow-risk-red/40"
-              badgeText="Δ ≤ −10%ile"
-              items={filtered.rotatingOut}
-              variant="out"
-              latestDate={data?.latestDate ?? null}
-            />
+          <div className="space-y-2">
+            {filtered.map((item) => (
+              <IndustryCard
+                key={item.industry}
+                item={item}
+                latestDate={data?.latestDate ?? null}
+              />
+            ))}
           </div>
-
-          {/* Stable section */}
-          {filtered.stable.length > 0 && (
-            <StableSection items={filtered.stable} latestDate={data?.latestDate ?? null} />
-          )}
+          <div className="mt-3 text-center">
+            <span className="text-[10px] text-muted font-mono">
+              {filtered.length} industr{filtered.length !== 1 ? 'ies' : 'y'}
+            </span>
+          </div>
         </>
+      )}
+
+      {!isLoading && !error && filtered.length === 0 && data && (
+        <Card rounded="xxl" className="py-16 text-center">
+          <p className="text-sm text-muted">No industries match the current filter</p>
+          <p className="text-xs text-muted mt-1">Try adjusting the min stocks threshold</p>
+        </Card>
       )}
     </div>
   );
