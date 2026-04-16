@@ -61,15 +61,28 @@ async function fetchSearchIndex(): Promise<SearchItem[]> {
     });
   }
 
-  // Equities — deduplicate by symbol (prefer NSE)
-  const seen = new Map<string, boolean>();
-  for (const r of (equityRes.data ?? []) as { id: number; symbol: string; company_name: string | null; exchange: string | null; industry: string | null; isin: string | null }[]) {
-    const key = r.symbol + '_' + (r.exchange ?? '');
-    // If numeric BSE code, still include but don't deduplicate against NSE
-    const isNumeric = /^\d+$/.test(r.symbol);
-    if (!isNumeric && seen.has(r.symbol) && r.exchange !== 'NSE') continue;
-    if (!isNumeric) seen.set(r.symbol, true);
+  // Equities — deduplicate by ISIN (prefer NSE over BSE)
+  // Pass 1: index all by ISIN, prefer NSE
+  type EqRow = { id: number; symbol: string; company_name: string | null; exchange: string | null; industry: string | null; isin: string | null };
+  const allEquities = (equityRes.data ?? []) as EqRow[];
+  const isinMap = new Map<string, EqRow>(); // ISIN → preferred row
+  const noIsin: EqRow[] = [];
 
+  for (const r of allEquities) {
+    if (!r.isin) {
+      noIsin.push(r);
+      continue;
+    }
+    const existing = isinMap.get(r.isin);
+    if (!existing) {
+      isinMap.set(r.isin, r);
+    } else if (r.exchange === 'NSE' && existing.exchange !== 'NSE') {
+      isinMap.set(r.isin, r); // NSE preferred
+    }
+  }
+
+  // Pass 2: build search items from deduplicated set
+  for (const r of [...isinMap.values(), ...noIsin]) {
     items.push({
       id: r.id,
       type: 'equity',
