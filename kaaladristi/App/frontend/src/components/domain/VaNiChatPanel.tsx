@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Loader2, Sparkles, ChevronRight, MessageCircle } from 'lucide-react';
+import { X, Loader2, Sparkles, ChevronRight, MessageCircle, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
 import { getIntentsForPage, getEquityIntents } from '@/config/vaniIntents';
@@ -166,13 +166,13 @@ export default function VaNiChatPanel() {
               {headerSubtext}
             </div>
           </div>
-          {entity && (
+          {(messages.length > 0 || entity) && (
             <button
-              onClick={clearEntity}
-              title="Clear stock context"
-              className="text-[9px] font-mono text-[var(--accent-indigo)]/40 hover:text-[var(--accent-indigo)] px-2 py-1 rounded border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 transition-colors"
+              onClick={() => { setMessages([]); clearEntity(); }}
+              title="Reset conversation"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-[var(--accent-indigo)] transition-colors"
             >
-              clear
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
           )}
           <button
