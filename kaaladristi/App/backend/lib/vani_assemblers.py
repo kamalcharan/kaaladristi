@@ -899,7 +899,7 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
 
     try:
         all_equities = db.select(
-            'km_equity_symbols', 'id,symbol,name_full,industry',
+            'km_equity_symbols', 'id,symbol,industry',
             limit=3000,
         )
         _log.info(f"[VaNi stocks] total equities={len(all_equities or [])}")
