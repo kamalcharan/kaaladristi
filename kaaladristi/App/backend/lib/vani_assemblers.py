@@ -893,7 +893,8 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
         if ind in leading_names:
             industry_equity_ids.setdefault(ind, []).append(eq)
 
-    _log.info(f"[VaNi stocks] matched industries={list(industry_equity_ids.keys())}, equity counts={{{k}: len(v) for k, v in industry_equity_ids.items()}}}")
+    eq_counts = {k: len(v) for k, v in industry_equity_ids.items()}
+    _log.info(f"[VaNi stocks] matched industries={list(industry_equity_ids.keys())}, equity counts={eq_counts}")
 
     all_eq_map = {}
     for ind in leading_names:
