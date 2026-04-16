@@ -21,6 +21,7 @@ import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import ScanView from '@/views/ScanView';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
+import IndustryTransitionView from '@/views/IndustryTransitionView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +101,7 @@ function AppRoutes() {
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/scan" element={<ScanView />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
+          <Route path="/industry-transition" element={<IndustryTransitionView />} />
           <Route path="/settings" element={<SettingsView />} />
         </Route>
       </Route>
