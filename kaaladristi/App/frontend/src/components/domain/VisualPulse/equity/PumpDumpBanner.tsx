@@ -1,75 +1,118 @@
 /**
  * PumpDumpBanner — Conditional manipulation warning
  * ===================================================
- * Shows amber (pump) or red (dump) banner if stock matches
- * Manipulation Watch conditions. Returns null if clean.
+ * Shows amber (pump) or red (dump) banner if stock was flagged
+ * in Manipulation Watch within the lookback period.
  *
- * Uses same thresholds as scanEngine.ts isPumpSignal / isDumpSignal.
+ * Accepts pre-computed flags — the caller scans across bar history,
+ * not just the latest bar. This ensures a stock flagged on day -15
+ * still shows the banner even if today's bar is clean.
  */
 
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import type { PulseBar } from '@/services/visualPulseEngine';
+
+export interface PumpDumpResult {
+  isPump: boolean;
+  isDump: boolean;
+  pumpReasons: string;
+  dumpReasons: string;
+  triggerCount: number;
+  latestTriggerDate: string | null;
+}
+
+/** Scan bars for pump/dump signals across a lookback window (default 30 bars) */
+export function scanBarsForManipulation(bars: PulseBar[], lookback = 30): PumpDumpResult {
+  const result: PumpDumpResult = {
+    isPump: false,
+    isDump: false,
+    pumpReasons: '',
+    dumpReasons: '',
+    triggerCount: 0,
+    latestTriggerDate: null,
+  };
+
+  // Scan the last N bars (most recent first)
+  const startIdx = Math.max(0, bars.length - lookback);
+  for (let i = bars.length - 1; i >= startIdx; i--) {
+    const bar = bars[i];
+
+    // Eligibility gate — manipulation requires operator capability
+    const turnoverCr = ((bar.volume ?? 0) * bar.close) / 1e7;
+    if (turnoverCr > 25 || turnoverCr < 1) continue;
+
+    // Pump check
+    if (
+      (bar.rss_value ?? 0) > 75 &&
+      (bar.rss_spread ?? 0) < -200 &&
+      bar.flow_type === 'SHORT_COVERING' &&
+      bar.volume_divergence_flag === 'VOLUME_DIV_UP'
+    ) {
+      if (!result.isPump) {
+        result.isPump = true;
+        result.pumpReasons = `RSS overbought (${Math.round(bar.rss_value ?? 0)}) + spread broken (${Math.round(bar.rss_spread ?? 0)}) + short covering on volume divergence.`;
+        result.latestTriggerDate = bar.trade_date;
+      }
+      result.triggerCount++;
+    }
+
+    // Dump check
+    if (
+      (bar.rss_value ?? 100) < 25 &&
+      bar.flow_type === 'LONG_LIQUIDATION' &&
+      bar.volume_divergence_flag === 'VOLUME_DIV_DOWN'
+    ) {
+      if (!result.isDump) {
+        result.isDump = true;
+        result.dumpReasons = `RSS oversold (${Math.round(bar.rss_value ?? 0)}) + long liquidation + volume diverging down.`;
+        if (!result.latestTriggerDate) result.latestTriggerDate = bar.trade_date;
+      }
+      result.triggerCount++;
+    }
+  }
+
+  return result;
+}
 
 interface PumpDumpBannerProps {
-  rssValue: number | null;
-  rssSpread: number | null;
-  flowType: string | null;
-  volumeDivFlag: string | null;
+  result: PumpDumpResult;
 }
 
-function isPumpSuspect(props: PumpDumpBannerProps): boolean {
-  return (
-    (props.rssValue ?? 0) > 75 &&
-    (props.rssSpread ?? 0) < -200 &&
-    props.flowType === 'SHORT_COVERING' &&
-    props.volumeDivFlag === 'VOLUME_DIV_UP'
-  );
-}
+export default function PumpDumpBanner({ result }: PumpDumpBannerProps) {
+  if (!result.isPump && !result.isDump) return null;
 
-function isDumpSuspect(props: PumpDumpBannerProps): boolean {
-  if ((props.rssValue ?? 100) >= 25) return false;
-  if (props.flowType !== 'LONG_LIQUIDATION') return false;
-  if (props.volumeDivFlag !== 'VOLUME_DIV_DOWN') return false;
-  return true;
-}
+  // Show pump if both (pump is more urgent)
+  const showPump = result.isPump;
+  const label = showPump ? 'PUMP SUSPECT' : 'DUMP SUSPECT';
+  const reasons = showPump ? result.pumpReasons : result.dumpReasons;
 
-function buildPumpReasons(props: PumpDumpBannerProps): string {
-  const rss = Math.round(props.rssValue ?? 0);
-  const spread = Math.round(props.rssSpread ?? 0);
-  return `RSS overbought (${rss}) + spread broken (${spread}) + short covering on volume divergence.`;
-}
-
-function buildDumpReasons(props: PumpDumpBannerProps): string {
-  const rss = Math.round(props.rssValue ?? 0);
-  return `RSS oversold (${rss}) + long liquidation + volume diverging down.`;
-}
-
-export default function PumpDumpBanner(props: PumpDumpBannerProps) {
-  const pump = isPumpSuspect(props);
-  const dump = isDumpSuspect(props);
-
-  if (!pump && !dump) return null;
-
-  const isPump = pump;
-  const label = isPump ? 'PUMP SUSPECT' : 'DUMP SUSPECT';
-  const reasons = isPump ? buildPumpReasons(props) : buildDumpReasons(props);
-
-  const borderColor = isPump ? 'border-risk-amber' : 'border-risk-red';
-  const bgColor = isPump ? 'bg-risk-amber/8' : 'bg-risk-red/8';
-  const textColor = isPump ? 'text-risk-amber' : 'text-risk-red';
-  const iconColor = isPump ? 'text-risk-amber' : 'text-risk-red';
+  const borderColor = showPump ? 'border-risk-amber' : 'border-risk-red';
+  const bgColor = showPump ? 'bg-risk-amber/8' : 'bg-risk-red/8';
+  const textColor = showPump ? 'text-risk-amber' : 'text-risk-red';
+  const iconColor = showPump ? 'text-risk-amber' : 'text-risk-red';
 
   return (
     <div className={`rounded-lg border-l-4 ${borderColor} ${bgColor} px-4 py-3`}>
       <div className="flex items-start gap-2.5">
         <AlertTriangle className={`w-4 h-4 ${iconColor} shrink-0 mt-0.5`} />
         <div className="flex-1 min-w-0">
-          <div className={`text-xs font-mono font-bold ${textColor} tracking-wide`}>
-            {label}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-mono font-bold ${textColor} tracking-wide`}>
+              {label}
+            </span>
+            {result.triggerCount > 1 && (
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${showPump ? 'bg-risk-amber/15 text-risk-amber' : 'bg-risk-red/15 text-risk-red'}`}>
+                {result.triggerCount}x in last 30 days
+              </span>
+            )}
           </div>
           <p className="text-[11px] text-secondary mt-1 leading-relaxed">
-            This stock is currently flagged in Manipulation Watch. {reasons}
+            Flagged in Manipulation Watch. {reasons}
+            {result.latestTriggerDate && (
+              <span className="text-muted"> Last triggered: {result.latestTriggerDate}</span>
+            )}
           </p>
           <Link
             to="/manipulation-watch"
