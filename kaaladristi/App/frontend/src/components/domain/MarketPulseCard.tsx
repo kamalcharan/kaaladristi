@@ -1,7 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Activity, TrendingUp, TrendingDown } from 'lucide-react';
-import { useMarketPulseInsight } from '@/hooks';
-import VaNiInsight from './VaNiInsight';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
@@ -139,8 +137,6 @@ interface MarketPulseCardProps {
 
 export default function MarketPulseCard({ date }: MarketPulseCardProps) {
   const { data: ctx, isLoading: ctxLoading } = useMarketPulseContext(date);
-  const { data: pulseData, isLoading: aiLoading } = useMarketPulseInsight(date);
-
   const indexes = ctx?.indexes ?? [];
   const astroDir = ctx?.astro?.direction ?? 'no_event';
   const astroCfg = ASTRO_CONFIG[astroDir] ?? ASTRO_CONFIG.no_event;
@@ -194,7 +190,6 @@ export default function MarketPulseCard({ date }: MarketPulseCardProps) {
         <div className="text-center py-6 text-xs text-muted">No index data available</div>
       )}
 
-      <VaNiInsight insight={pulseData?.insight} isLoading={aiLoading} />
     </Card>
   );
 }

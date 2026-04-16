@@ -3,9 +3,8 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
-import { useMarketBreadth, useBreadthInsight } from '@/hooks';
+import { useMarketBreadth } from '@/hooks';
 import { Loader2, AlertCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import VaNiInsight from './VaNiInsight';
 import { cn } from '@/lib/utils';
 import type { MarketBreadthDay } from '@/types';
 
@@ -97,8 +96,6 @@ export default function MarketBreadthChart() {
   const days = PERIODS.find(p => p.label === period)!.days;
 
   const { data = [], isLoading, isError } = useMarketBreadth(days);
-  const { data: aiData } = useBreadthInsight();
-
   const latest = data[data.length - 1];
   const prev   = data[data.length - 2];
   const r      = latest?.breadth_score != null ? regime(latest.breadth_score) : null;
@@ -260,7 +257,6 @@ export default function MarketBreadthChart() {
         ))}
       </div>
 
-      <VaNiInsight insight={aiData?.insight} />
     </div>
   );
 }
