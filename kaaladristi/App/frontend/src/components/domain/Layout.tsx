@@ -37,15 +37,16 @@ export default function Layout() {
               onClick={() => setVaniOpen(v => !v)}
               title="Ask VaNi"
               className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all',
-                'border',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                'border shadow-sm',
                 vaniOpen
-                  ? 'bg-[var(--accent-indigo)]/15 border-[var(--accent-indigo)]/30 text-[var(--accent-indigo)]'
-                  : 'bg-kd-surface border-kd-border text-[var(--text-muted)] hover:border-[var(--accent-indigo)]/30 hover:text-[var(--accent-indigo)]',
+                  ? 'bg-gradient-to-r from-[var(--accent-indigo)] to-[var(--accent-violet)] border-transparent text-white shadow-indigo-500/20'
+                  : 'bg-gradient-to-r from-[var(--accent-indigo)]/10 to-[var(--accent-violet)]/10 border-[var(--accent-indigo)]/25 text-[var(--accent-indigo)] hover:from-[var(--accent-indigo)]/20 hover:to-[var(--accent-violet)]/20',
               )}
             >
-              <Sparkles className="w-3 h-3" />
+              <Sparkles className="w-3.5 h-3.5" />
               <span>VaNi</span>
+              <span className="text-[9px] opacity-70 font-normal">· वाणी</span>
             </button>
             <DataFreshnessChip />
           </div>

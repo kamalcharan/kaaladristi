@@ -156,18 +156,11 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
                         {msg.text}
                       </p>
                     </div>
-                    {(msg.cached || msg.provider) && (
+                    {msg.cached && (
                       <div className="flex items-center gap-2 mt-1 px-1">
-                        {msg.cached && (
-                          <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-                            cached
-                          </span>
-                        )}
-                        {msg.provider && msg.provider !== 'cache' && (
-                          <span className="text-[8px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
-                            {msg.provider}
-                          </span>
-                        )}
+                        <span className="text-[8px] font-mono text-[var(--accent-indigo)]/60 uppercase tracking-wider">
+                          instant
+                        </span>
                       </div>
                     )}
                   </div>
