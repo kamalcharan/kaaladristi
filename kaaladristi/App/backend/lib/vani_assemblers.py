@@ -823,3 +823,199 @@ def _fmt_astro_risk_days(ctx: dict) -> str:
         f"\n{days_str}\n"
         f"\nWhich days have elevated risk and why?"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Industry Transition Assemblers
+# ══════════════════════════════════════════════════════════════════════════════
+
+def assemble_industry_transition_context(db, target_date: str = None) -> dict | None:
+    """Assemble context for industry transition intents."""
+    if not target_date:
+        try:
+            rows = db.select('km_industry_eod', 'trade_date',
+                             order='trade_date.desc', limit=1)
+            target_date = str(rows[0]['trade_date']) if rows else str(date.today())
+        except Exception:
+            target_date = str(date.today())
+
+    rotation = _fetch_industry_rotation(db, target_date)
+
+    # Fetch top stocks from leading industries
+    top_stocks = _fetch_top_stocks_in_leading(db, target_date, rotation.get('leading', []))
+
+    return {
+        'date': target_date,
+        'rotation_in': rotation['rotation_in'],
+        'rotation_out': rotation['rotation_out'],
+        'leading': rotation['leading'],
+        'top_stocks': top_stocks,
+        'summary': {
+            'rotating_in_count': len(rotation['rotation_in']),
+            'rotating_out_count': len(rotation['rotation_out']),
+            'leading_count': len(rotation['leading']),
+        },
+    }
+
+
+def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> list[dict]:
+    """Fetch top 15 stocks from leading industries by magic_rs."""
+    if not leading:
+        return []
+
+    leading_names = [e['industry'] for e in leading]
+
+    try:
+        all_equities = db.select(
+            'km_equity_symbols', 'id,symbol,name_full,industry',
+            limit=3000,
+        )
+    except Exception:
+        return []
+
+    industry_equity_ids = {}
+    for eq in (all_equities or []):
+        ind = eq.get('industry', '')
+        if ind in leading_names:
+            industry_equity_ids.setdefault(ind, []).append(eq)
+
+    top_stocks = []
+    for ind in leading_names[:8]:
+        equities = industry_equity_ids.get(ind, [])
+        eq_ids = [e['id'] for e in equities[:50]]
+        if not eq_ids:
+            continue
+
+        try:
+            eod_rows = db.select(
+                'km_equity_eod',
+                'equity_id,close,pct_chng,magic_rs,magic_rs_zone,rsi_14,rss_value,rvol,flow_type,dot_svd,dot_sbd,dot_syd',
+                filters={'trade_date': target_date},
+                order='magic_rs.desc',
+                limit=200,
+            )
+        except Exception:
+            continue
+
+        eq_map = {e['id']: e for e in equities}
+        for row in (eod_rows or []):
+            eid = row.get('equity_id')
+            if eid not in eq_map:
+                continue
+            eq = eq_map[eid]
+            top_stocks.append({
+                'symbol': eq.get('symbol', ''),
+                'industry': ind,
+                'close': _safe_float(row.get('close'), 0),
+                'pct_chng': round(_safe_float(row.get('pct_chng'), 0), 2),
+                'magic_rs': _safe_float(row.get('magic_rs')),
+                'magic_rs_zone': row.get('magic_rs_zone'),
+                'rsi_14': _safe_float(row.get('rsi_14')),
+                'rss_value': _safe_float(row.get('rss_value')),
+                'rvol': _safe_float(row.get('rvol')),
+                'flow_type': row.get('flow_type'),
+                'has_svd': bool(row.get('dot_svd')),
+                'has_sbd': bool(row.get('dot_sbd')),
+                'has_syd': bool(row.get('dot_syd')),
+            })
+
+    top_stocks.sort(key=lambda s: s.get('magic_rs') or 0, reverse=True)
+    return top_stocks[:15]
+
+
+def build_industry_cache_context(intent_id: str, ctx: dict) -> dict:
+    """Cache key for industry transition intents."""
+    return {
+        'date': ctx.get('date', ''),
+        'rot_in': ctx.get('summary', {}).get('rotating_in_count', 0),
+        'rot_out': ctx.get('summary', {}).get('rotating_out_count', 0),
+        'leading': ctx.get('summary', {}).get('leading_count', 0),
+    }
+
+
+def format_industry_user_message(intent_id: str, ctx: dict) -> str:
+    """Format industry transition context into user message."""
+    formatters = {
+        'industry_transition.rotation_picture': _fmt_ind_rotation_picture,
+        'industry_transition.gaining_momentum': _fmt_ind_gaining,
+        'industry_transition.losing_strength': _fmt_ind_losing,
+        'industry_transition.strongest_stocks': _fmt_ind_strongest,
+    }
+    formatter = formatters.get(intent_id)
+    if not formatter:
+        return f"Context for {intent_id}:\n{ctx}"
+    return formatter(ctx)
+
+
+def _fmt_industry_list(items: list[dict]) -> str:
+    if not items:
+        return '  None'
+    lines = []
+    for e in items[:10]:
+        lines.append(
+            f"  {e['industry']} — Rank #{e['rank']}, "
+            f"Avg Magic RS: {e['avg_magic_rs']}, "
+            f"Stocks: {e['stock_count']}, "
+            f"Dominant Flow: {e['dominant_flow']}"
+        )
+    return '\n'.join(lines)
+
+
+def _fmt_ind_rotation_picture(ctx: dict) -> str:
+    s = ctx.get('summary', {})
+    return (
+        f"Industry rotation as of {ctx['date']}:\n"
+        f"\nCounts: {s.get('rotating_in_count', 0)} rotating in, "
+        f"{s.get('leading_count', 0)} leading, "
+        f"{s.get('rotating_out_count', 0)} rotating out\n"
+        f"\n--- Rotating In ---\n{_fmt_industry_list(ctx.get('rotation_in', []))}\n"
+        f"\n--- Leading ---\n{_fmt_industry_list(ctx.get('leading', []))}\n"
+        f"\n--- Rotating Out ---\n{_fmt_industry_list(ctx.get('rotation_out', []))}\n"
+        f"\nWhat's the rotation picture today?"
+    )
+
+
+def _fmt_ind_gaining(ctx: dict) -> str:
+    return (
+        f"Industries gaining momentum as of {ctx['date']}:\n"
+        f"\n{_fmt_industry_list(ctx.get('rotation_in', []))}\n"
+        f"\nWhich industries are gaining momentum and why?"
+    )
+
+
+def _fmt_ind_losing(ctx: dict) -> str:
+    return (
+        f"Industries losing strength as of {ctx['date']}:\n"
+        f"\n{_fmt_industry_list(ctx.get('rotation_out', []))}\n"
+        f"\nWhich industries are losing strength and why?"
+    )
+
+
+def _fmt_ind_strongest(ctx: dict) -> str:
+    stocks = ctx.get('top_stocks', [])
+
+    stock_lines = []
+    for s in stocks[:15]:
+        dots = []
+        if s.get('has_svd'): dots.append('SVD')
+        if s.get('has_sbd'): dots.append('SBD')
+        if s.get('has_syd'): dots.append('SYD')
+        dots_str = ', '.join(dots) if dots else 'None'
+
+        stock_lines.append(
+            f"  {s['symbol']} ({s['industry']}) — "
+            f"Close: {s['close']:.2f} ({s['pct_chng']:+.2f}%), "
+            f"RS Zone: {s.get('magic_rs_zone', 'N/A')}, "
+            f"RSI: {s.get('rsi_14', 'N/A')}, "
+            f"RSS: {s.get('rss_value', 'N/A')}, "
+            f"RVOL: {s.get('rvol', 'N/A')}, "
+            f"Flow: {s.get('flow_type', 'N/A')}, "
+            f"Dots: {dots_str}"
+        )
+    stocks_str = '\n'.join(stock_lines) if stock_lines else '  No stocks found'
+
+    return (
+        f"Strongest stocks in leading industries as of {ctx['date']}:\n"
+        f"\n{stocks_str}\n"
+        f"\nWhat are the strongest stocks and why?"
+    )

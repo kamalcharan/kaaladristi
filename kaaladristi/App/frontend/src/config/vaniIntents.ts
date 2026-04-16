@@ -99,6 +99,31 @@ export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
     icon: 'alert-triangle',
     displayOrder: 4,
   },
+  // ── Industry Transition ──────────────────────────────────────────────────
+  'industry_transition.rotation_picture': {
+    label: "What's the rotation picture today?",
+    page: 'industry_transition',
+    icon: 'arrow-right-left',
+    displayOrder: 1,
+  },
+  'industry_transition.gaining_momentum': {
+    label: 'Which industries are gaining momentum?',
+    page: 'industry_transition',
+    icon: 'trending-up',
+    displayOrder: 2,
+  },
+  'industry_transition.losing_strength': {
+    label: 'Which industries are losing strength?',
+    page: 'industry_transition',
+    icon: 'trending-down',
+    displayOrder: 3,
+  },
+  'industry_transition.strongest_stocks': {
+    label: 'What are the strongest stocks in leading industries?',
+    page: 'industry_transition',
+    icon: 'star',
+    displayOrder: 4,
+  },
 } as const;
 
 export function getIntentsForPage(page: VaNiPage): Array<{ intentId: string } & VaNiIntentDef> {

@@ -416,6 +416,123 @@ INTENTS: dict[str, VaNiIntent] = {
         cache_ttl_hours=24,
         complexity="low",
     ),
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Industry Transition Intents
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── 13. Rotation Picture ──────────────────────────────────────────────────
+    "industry_transition.rotation_picture": VaNiIntent(
+        page="industry_transition",
+        label="What's the rotation picture today?",
+        required_context=["rotation_in", "rotation_out", "leading"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the Industry Transition page and wants an overview "
+            "of today's industry rotation. You will receive three lists: industries "
+            "rotating in (rank improving 5+ in last 5 trading days), leading "
+            "industries (top quartile by average Magic RS), and industries rotating "
+            "out (rank dropping 5+). Each entry has the industry name, rank, "
+            "average Magic RS, stock count, and dominant flow type. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) The big picture — how many industries are rotating in vs out? "
+            "Is rotation concentrated in a few sectors or broad-based? What does "
+            "the balance tell us about the market's character — cyclical shift, "
+            "defensive rotation, sector rotation within a trend?\n"
+            "(2) Notable patterns — any industries with unusually strong rotation "
+            "(high RS + institutional flow)? Any surprising entries in the rotating-out "
+            "list that were previously strong? What does the flow type distribution "
+            "across leading industries tell us about conviction?"
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 14. Gaining Momentum ──────────────────────────────────────────────────
+    "industry_transition.gaining_momentum": VaNiIntent(
+        page="industry_transition",
+        label="Which industries are gaining momentum?",
+        required_context=["rotation_in"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to understand which industries are gaining momentum "
+            "— the 'rotating in' group on the Industry Transition page. You will "
+            "receive the list of industries whose rank improved by 5 or more "
+            "positions in the last 5 trading days, each with average Magic RS, "
+            "stock count, and dominant flow type. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) Walk through the key industries rotating in — what's their "
+            "Magic RS telling us about relative strength? Is the flow type "
+            "FRESH_LONGS (real buying) or SHORT_COVERING (fragile)? How many "
+            "stocks are participating — is it broad-based or driven by a few names?\n"
+            "(2) Interpretation — is this rotation likely to sustain? Look for "
+            "confirmation signals: high RS + institutional flow = durable. "
+            "High RS + low volume or mixed flow = potentially fragile. What "
+            "does the pattern suggest about where smart money is positioning?"
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 15. Losing Strength ───────────────────────────────────────────────────
+    "industry_transition.losing_strength": VaNiIntent(
+        page="industry_transition",
+        label="Which industries are losing strength?",
+        required_context=["rotation_out"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to understand which industries are weakening — "
+            "the 'rotating out' group on the Industry Transition page. You will "
+            "receive the list of industries whose rank dropped by 5 or more "
+            "positions in the last 5 trading days. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) Walk through the key industries rotating out — what are their "
+            "Magic RS levels and flow types? Is the deterioration showing up as "
+            "FRESH_SHORTS (active selling) or LONG_LIQUIDATION (forced exits)? "
+            "Which industries were previously leading and are now fading?\n"
+            "(2) Risk context — for traders holding positions in these industries, "
+            "what does the rotation signal suggest? Is the weakness sector-specific "
+            "or part of a broader market de-risking?"
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 16. Strongest Stocks ──────────────────────────────────────────────────
+    "industry_transition.strongest_stocks": VaNiIntent(
+        page="industry_transition",
+        label="What are the strongest stocks in leading industries?",
+        required_context=["top_stocks"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to know which individual stocks stand out within "
+            "the leading industries. You will receive the top stocks sorted by "
+            "industry percentile, each with Magic RS zone, RSI, RSS, RVOL, "
+            "flow type, and signal dots (SVD/SBD/SYD). "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) Highlight the top 5-7 stocks — what makes them stand out? "
+            "Look for multi-factor confluence: Strong Bull RS zone + institutional "
+            "flow + high RVOL + recent SVD/SBD signals = strong positioning. "
+            "Name each stock and its key signals.\n"
+            "(2) Context — are these stocks clustered in one industry or spread "
+            "across multiple leading sectors? What does the flow type distribution "
+            "tell us about whether the strength is fresh buying or momentum-driven?"
+            + _VANI_RULES
+        ),
+        max_tokens=400,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
 }
 
 
