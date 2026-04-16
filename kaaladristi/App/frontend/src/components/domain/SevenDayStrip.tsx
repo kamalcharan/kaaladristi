@@ -97,7 +97,7 @@ function DayCell({ day, inferences }: { day: string; inferences: DcInference[] }
 
       {/* Rich tooltip */}
       {showTip && hasEvents && (
-        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-56 p-3 rounded-lg bg-kd-surface border border-kd-border shadow-xl"
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 p-3 rounded-lg bg-kd-surface border border-kd-border shadow-xl"
           style={{ pointerEvents: 'none' }}
         >
           <div className="text-[10px] font-bold mono text-[var(--text-primary)] mb-2">

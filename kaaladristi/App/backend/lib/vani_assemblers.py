@@ -128,6 +128,105 @@ def _fetch_industry_rotation(db, target_date: str) -> dict:
     return result
 
 
+# ── Panchangam + Breadth history helpers ──────────────────────────────────────
+
+def _fetch_panchang_outlook(db, target_date: str, days: int = 6) -> list[dict]:
+    """Fetch panchangam + astro events for today + next N-1 days."""
+    outlook = []
+    base = date.fromisoformat(target_date)
+
+    for i in range(days):
+        d = str(base + timedelta(days=i))
+        day_info = {'date': d, 'panchang': None, 'astro_events': [], 'day_score': 0.0, 'direction': 'no_event'}
+
+        try:
+            p_rows = db.select('km_daily_panchang', '*', filters={'date': d}, limit=1)
+            if p_rows:
+                p = p_rows[0]
+                special = [s for s in [
+                    'Purnima' if p.get('is_purnima') else '',
+                    'Amavasya' if p.get('is_amavasya') else '',
+                    'Ekadashi' if p.get('is_ekadashi') else '',
+                    'Sankranti' if p.get('is_sankranti') else '',
+                ] if s]
+                day_info['panchang'] = {
+                    'tithi': p.get('tithi_name', ''),
+                    'tithi_lord': p.get('tithi_lord', ''),
+                    'nakshatra': p.get('nakshatra_name', ''),
+                    'nakshatra_lord': p.get('nakshatra_lord', ''),
+                    'vara': p.get('vara', ''),
+                    'vara_lord': p.get('vara_lord', ''),
+                    'moon_sign': p.get('moon_sign_name', ''),
+                    'special': special or [],
+                }
+        except Exception:
+            pass
+
+        try:
+            all_inf = db.select('dc_inference', '*', order='start_date.asc', limit=500)
+            for inf in (all_inf or []):
+                start = str(inf.get('start_date', ''))
+                end = str(inf.get('end_date', '')) if inf.get('end_date') else start
+                if start <= d <= end:
+                    day_info['astro_events'].append({
+                        'event': inf.get('astro_event', ''),
+                        'impact': inf.get('market_impact', ''),
+                        'inference': inf.get('inference', ''),
+                    })
+            score = _day_score([{'market_impact': e['impact']} for e in day_info['astro_events']])
+            day_info['day_score'] = score
+            day_info['direction'] = _bucket_astro(score)
+        except Exception:
+            pass
+
+        outlook.append(day_info)
+
+    return outlook
+
+
+def _fetch_breadth_history(db, days: int = 3) -> list[dict]:
+    """Fetch last N trading days of market breadth."""
+    try:
+        rows = db.select('km_market_breadth', '*', order='trade_date.desc', limit=days)
+    except Exception:
+        return []
+
+    result = []
+    for r in reversed(rows):
+        score = _safe_float(r.get('breadth_score'), 0)
+        result.append({
+            'date': str(r.get('trade_date', '')),
+            'score': score,
+            'regime': _bucket_breadth_regime(score),
+            'pct_above_20': _safe_float(r.get('pct_above_20')),
+            'pct_above_50': _safe_float(r.get('pct_above_50')),
+            'pct_above_150': _safe_float(r.get('pct_above_150')),
+        })
+    return result
+
+
+def _fetch_breadth_roc_history(db, days: int = 3) -> list[dict]:
+    """Fetch last N trading days of breadth ROC."""
+    try:
+        rows = db.select('km_breadth_roc', '*', order='trade_date.desc', limit=days)
+    except Exception:
+        return []
+
+    result = []
+    for r in reversed(rows):
+        roc13 = _safe_float(r.get('roc_13'), 0)
+        roc55 = _safe_float(r.get('roc_55'), 0)
+        result.append({
+            'date': str(r.get('trade_date', '')),
+            'roc_13': roc13,
+            'roc_55': roc55,
+            'sma_breadth': _safe_float(r.get('sma_breadth'), 0),
+            'bias': _bucket_roc_bias(roc13),
+            'spread': round(roc13 - roc55, 6),
+        })
+    return result
+
+
 # ── Dashboard assemblers ──────────────────────────────────────────────────────
 
 def assemble_dashboard_context(db, target_date: str = None) -> dict | None:
@@ -143,6 +242,15 @@ def assemble_dashboard_context(db, target_date: str = None) -> dict | None:
     actual_date = pulse['date']
     rotation = _fetch_industry_rotation(db, actual_date)
 
+    # Panchangam: today + next 5 days
+    panchang_outlook = _fetch_panchang_outlook(db, actual_date, days=6)
+
+    # Breadth history: last 3 trading days
+    breadth_history = _fetch_breadth_history(db, days=3)
+
+    # Breadth ROC history: last 3 trading days
+    breadth_roc_history = _fetch_breadth_roc_history(db, days=3)
+
     manipulation_count = 0
     broken_signals_count = 0
 
@@ -151,8 +259,11 @@ def assemble_dashboard_context(db, target_date: str = None) -> dict | None:
         'indexes': pulse.get('indexes', []),
         'breadth': pulse.get('breadth'),
         'breadth_roc': pulse.get('breadth_roc'),
+        'breadth_history': breadth_history,
+        'breadth_roc_history': breadth_roc_history,
         'astro': pulse.get('astro', {}),
         'panchang': pulse.get('panchang'),
+        'panchang_outlook': panchang_outlook,
         'rotation_in': rotation['rotation_in'],
         'rotation_out': rotation['rotation_out'],
         'leading': rotation['leading'],
@@ -188,6 +299,18 @@ def build_cache_context(intent_id: str, ctx: dict) -> dict:
         base['manip_count'] = ctx.get('manipulation_count', 0)
         base['broken_count'] = ctx.get('broken_signals_count', 0)
 
+    if 'panchangam' in intent_id:
+        outlook = ctx.get('panchang_outlook', [])
+        base['outlook_days'] = len(outlook)
+        if outlook and outlook[0].get('panchang'):
+            base['tithi'] = outlook[0]['panchang'].get('tithi', '')
+
+    if 'breadth_trend' in intent_id or 'breadth_momentum' in intent_id:
+        hist = ctx.get('breadth_history', [])
+        if hist:
+            base['hist_start_regime'] = hist[0].get('regime', '')
+            base['hist_end_regime'] = hist[-1].get('regime', '')
+
     return base
 
 
@@ -199,6 +322,9 @@ def format_user_message(intent_id: str, ctx: dict) -> str:
         'dashboard.rotation_overview': _fmt_rotation_overview,
         'dashboard.warnings': _fmt_warnings,
         'dashboard.breadth_explain': _fmt_breadth_explain,
+        'dashboard.panchangam_outlook': _fmt_panchangam_outlook,
+        'dashboard.breadth_trend': _fmt_breadth_trend,
+        'dashboard.breadth_momentum': _fmt_breadth_momentum,
     }
     formatter = formatters.get(intent_id)
     if not formatter:
@@ -370,4 +496,124 @@ def _fmt_breadth_explain(ctx: dict) -> str:
         f"Fast/Slow spread: {spread:+.4f} "
         f"({'expanding' if spread > 0 else 'narrowing'})\n"
         f"\nExplain what the breadth data tells us."
+    )
+
+
+def _fmt_panchangam_outlook(ctx: dict) -> str:
+    outlook = ctx.get('panchang_outlook', [])
+    if not outlook:
+        return f"No panchangam data available for {ctx['date']}."
+
+    lines = []
+    for i, day in enumerate(outlook):
+        d = day['date']
+        p = day.get('panchang')
+        label = 'TODAY' if i == 0 else f'Day {i+1}'
+
+        if p:
+            special_str = ', '.join(p.get('special', [])) if p.get('special') else ''
+            p_line = (
+                f"  Tithi: {p['tithi']} (Lord: {p['tithi_lord']}), "
+                f"Nakshatra: {p['nakshatra']} (Lord: {p['nakshatra_lord']}), "
+                f"Vara: {p['vara']} (Lord: {p['vara_lord']}), "
+                f"Moon: {p.get('moon_sign', 'N/A')}"
+            )
+            if special_str:
+                p_line += f", Special: {special_str}"
+        else:
+            p_line = "  Panchangam data not available"
+
+        astro_events = day.get('astro_events', [])
+        if astro_events:
+            events_str = '; '.join(
+                f"{e['event']} ({e['impact']})" for e in astro_events[:3]
+            )
+        else:
+            events_str = 'No active events'
+
+        lines.append(
+            f"\n[{label}] {d} — Astro direction: {day['direction']} (score: {day['day_score']:+.1f})\n"
+            f"{p_line}\n"
+            f"  Planetary events: {events_str}"
+        )
+
+    return (
+        f"Panchangam & Planetary Outlook from {ctx['date']}:\n"
+        + '\n'.join(lines)
+        + "\n\nProvide today's panchangam reading and a day-by-day outlook."
+    )
+
+
+def _fmt_breadth_trend(ctx: dict) -> str:
+    history = ctx.get('breadth_history', [])
+    b = ctx.get('breadth') or {}
+    score = _safe_float(b.get('score'), 0)
+    regime = _bucket_breadth_regime(score)
+
+    hist_lines = []
+    for h in history:
+        hist_lines.append(
+            f"  {h['date']}: Score={h['score']:.1f} ({h['regime']}), "
+            f"Above 20 EMA: {h['pct_above_20']}%, "
+            f"50 EMA: {h['pct_above_50']}%, "
+            f"150 EMA: {h['pct_above_150']}%"
+        )
+    hist_str = '\n'.join(hist_lines) if hist_lines else '  No history available'
+
+    trend = 'stable'
+    if len(history) >= 2:
+        delta = history[-1]['score'] - history[0]['score']
+        if delta > 2:
+            trend = 'improving'
+        elif delta < -2:
+            trend = 'deteriorating'
+
+    return (
+        f"Market Breadth trend analysis as of {ctx['date']}:\n"
+        f"\n--- Current ---\n"
+        f"Score: {score:.1f} ({regime})\n"
+        f"Above 20 EMA: {b.get('pct_above_20', 'N/A')}%, "
+        f"50 EMA: {b.get('pct_above_50', 'N/A')}%, "
+        f"150 EMA: {b.get('pct_above_150', 'N/A')}%\n"
+        f"\n--- Last 3 Sessions ---\n{hist_str}\n"
+        f"\n3-day trend: {trend}\n"
+        f"\nExplain how market breadth has evolved over the last 2-3 days and what it means."
+    )
+
+
+def _fmt_breadth_momentum(ctx: dict) -> str:
+    roc = ctx.get('breadth_roc') or {}
+    roc13 = _safe_float(roc.get('roc_13'), 0)
+    roc55 = _safe_float(roc.get('roc_55'), 0)
+    sma = _safe_float(roc.get('sma_breadth'), 0)
+    spread = roc13 - roc55
+
+    history = ctx.get('breadth_roc_history', [])
+    hist_lines = []
+    for h in history:
+        hist_lines.append(
+            f"  {h['date']}: ROC_13={h['roc_13']:+.4f} ({h['bias']}), "
+            f"ROC_55={h['roc_55']:+.4f}, Spread={h['spread']:+.6f}"
+        )
+    hist_str = '\n'.join(hist_lines) if hist_lines else '  No history available'
+
+    roc_direction = 'strengthening'
+    if len(history) >= 2:
+        delta = history[-1]['roc_13'] - history[0]['roc_13']
+        if delta < -0.0002:
+            roc_direction = 'weakening'
+        elif abs(delta) <= 0.0002:
+            roc_direction = 'flat'
+
+    return (
+        f"Breadth Momentum analysis as of {ctx['date']}:\n"
+        f"\n--- Current ROC Readings ---\n"
+        f"ROC_13: {roc13:+.4f} ({'positive — bullish momentum breadth' if roc13 > 0 else 'negative — bearish momentum breadth'})\n"
+        f"ROC_55: {roc55:+.4f} ({'positive — longer-term bullish' if roc55 > 0 else 'negative — longer-term bearish'})\n"
+        f"SMA_BREADTH: {sma:+.4f} ({'confirming ROC_13' if (sma > 0) == (roc13 > 0) else 'diverging from ROC_13'})\n"
+        f"Fast/Slow spread: {spread:+.4f} ({'fast outpacing slow — expanding' if spread > 0 else 'fast lagging slow — narrowing'})\n"
+        f"\n--- Last 3 Sessions ---\n{hist_str}\n"
+        f"Momentum direction: {roc_direction}\n"
+        f"\nExplain why breadth momentum is {'positive' if roc13 > 0 else 'negative'} "
+        f"and what this means for existing long and short positions."
     )

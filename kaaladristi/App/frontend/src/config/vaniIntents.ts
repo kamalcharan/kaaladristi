@@ -55,6 +55,24 @@ export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
     icon: 'bar-chart-3',
     displayOrder: 5,
   },
+  'dashboard.panchangam_outlook': {
+    label: 'Panchangam outlook — next 6 days',
+    page: 'dashboard',
+    icon: 'calendar',
+    displayOrder: 6,
+  },
+  'dashboard.breadth_trend': {
+    label: 'How has breadth changed in the last 2-3 days?',
+    page: 'dashboard',
+    icon: 'trending-up',
+    displayOrder: 7,
+  },
+  'dashboard.breadth_momentum': {
+    label: 'Is momentum supporting longs or shorts?',
+    page: 'dashboard',
+    icon: 'zap',
+    displayOrder: 8,
+  },
 } as const;
 
 export function getIntentsForPage(page: VaNiPage): Array<{ intentId: string } & VaNiIntentDef> {
