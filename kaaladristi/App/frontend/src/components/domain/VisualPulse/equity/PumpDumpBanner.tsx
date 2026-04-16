@@ -16,8 +16,6 @@ interface PumpDumpBannerProps {
   rssSpread: number | null;
   flowType: string | null;
   volumeDivFlag: string | null;
-  sniperInst: number | null;
-  sniperInstPrev5: number | null; // sniper_inst from 5 bars ago
 }
 
 function isPumpSuspect(props: PumpDumpBannerProps): boolean {
@@ -33,8 +31,7 @@ function isDumpSuspect(props: PumpDumpBannerProps): boolean {
   if ((props.rssValue ?? 100) >= 25) return false;
   if (props.flowType !== 'LONG_LIQUIDATION') return false;
   if (props.volumeDivFlag !== 'VOLUME_DIV_DOWN') return false;
-  const sniperSlope = (props.sniperInst ?? 0) - (props.sniperInstPrev5 ?? 0);
-  return sniperSlope < -2;
+  return true;
 }
 
 function buildPumpReasons(props: PumpDumpBannerProps): string {
@@ -45,7 +42,7 @@ function buildPumpReasons(props: PumpDumpBannerProps): string {
 
 function buildDumpReasons(props: PumpDumpBannerProps): string {
   const rss = Math.round(props.rssValue ?? 0);
-  return `RSS oversold (${rss}) + long liquidation + volume diverging down + smart money exiting.`;
+  return `RSS oversold (${rss}) + long liquidation + volume diverging down.`;
 }
 
 export default function PumpDumpBanner(props: PumpDumpBannerProps) {
