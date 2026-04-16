@@ -22,3 +22,4 @@ export { default as IndustryRotationPanel } from './IndustryRotationPanel';
 export { default as SectorRotationStrip } from './SectorRotationStrip';
 export { default as IndexWatchlist } from './IndexWatchlist';
 export { default as MagicRsLeaderboard } from './MagicRsLeaderboard';
+export { default as VaNiChatPanel } from './VaNiChatPanel';
