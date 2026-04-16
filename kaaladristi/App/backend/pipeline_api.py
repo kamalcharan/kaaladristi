@@ -47,6 +47,7 @@ from lib.vani_cache import make_cache_key, get_cached, set_cached
 from lib.vani_assemblers import (
     assemble_dashboard_context, build_cache_context, format_user_message,
     assemble_astro_calendar_context, build_astro_cache_context, format_astro_user_message,
+    assemble_industry_transition_context, build_industry_cache_context, format_industry_user_message,
 )
 from pipeline.utils.trading_calendar import (
     is_weekend, is_trading_day, is_already_completed,
@@ -1774,6 +1775,8 @@ def vani_ask(payload: dict):
         ctx = assemble_dashboard_context(db, target_date)
     elif intent.page == 'astro_calendar':
         ctx = assemble_astro_calendar_context(db, target_date)
+    elif intent.page == 'industry_transition':
+        ctx = assemble_industry_transition_context(db, target_date)
     else:
         return {
             "intent_id": intent_id,
@@ -1797,6 +1800,8 @@ def vani_ask(payload: dict):
     # Build cache key from bucketed context (page-specific)
     if intent.page == 'astro_calendar':
         cache_ctx = build_astro_cache_context(intent_id, ctx)
+    elif intent.page == 'industry_transition':
+        cache_ctx = build_industry_cache_context(intent_id, ctx)
     else:
         cache_ctx = build_cache_context(intent_id, ctx)
     cache_key = make_cache_key(intent_id, cache_ctx)
@@ -1820,6 +1825,8 @@ def vani_ask(payload: dict):
     # Format user message and call LLM (page-specific)
     if intent.page == 'astro_calendar':
         user_msg = format_astro_user_message(intent_id, ctx)
+    elif intent.page == 'industry_transition':
+        user_msg = format_industry_user_message(intent_id, ctx)
     else:
         user_msg = format_user_message(intent_id, ctx)
     log.info(f"[VaNi] user_msg length={len(user_msg)}")
