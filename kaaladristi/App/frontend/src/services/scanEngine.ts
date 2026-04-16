@@ -131,7 +131,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
 
     // Equity EOD for last 20 dates
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
       .limit(30000)
@@ -637,7 +637,7 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
       .limit(lookbackDays * 8000) // ~8K equities × N days
@@ -669,15 +669,23 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
 /**
  * Eligibility gate — manipulation requires operator capability.
  * Large-caps with deep float can't be operator-pumped/dumped.
- * Uses volume × close as turnover proxy (value_cr not always populated).
+ *
+ * Uses value_cr (daily turnover in crores) when available (~50% populated).
+ * Falls back to volume × close proxy when value_cr is NULL.
+ *
  *   > 25 cr daily = too liquid for operator manipulation
- *   < 1 cr daily = untradeable (no real interest)
+ *   < 1 cr daily = untradeable noise
  */
 function isOperatorEligible(eod: EquityEodSnapshot): boolean {
-  const turnoverCr = ((eod.volume ?? 0) * eod.close) / 1e7; // ₹ cr
-  if (turnoverCr > 25) return false;  // too liquid
-  if (turnoverCr < 1) return false;   // untradeable
-  return true;
+  const turnover = eod.value_cr;
+
+  if (turnover != null && turnover > 0) {
+    return turnover >= 1 && turnover <= 25;
+  }
+
+  // Fallback: compute turnover proxy from volume × close
+  const proxyCr = ((eod.volume ?? 0) * eod.close) / 1e7;
+  return proxyCr >= 1 && proxyCr <= 25;
 }
 
 /** Check pump conditions for a single EOD snapshot */
