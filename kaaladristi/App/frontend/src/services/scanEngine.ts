@@ -131,7 +131,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
 
     // Equity EOD for last 20 dates
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
       .limit(30000)
@@ -637,7 +637,7 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
       .limit(lookbackDays * 8000) // ~8K equities × N days
@@ -666,8 +666,31 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
   return bundle;
 }
 
+/**
+ * Eligibility gate — manipulation requires operator capability.
+ * Large-caps with deep float can't be operator-pumped/dumped.
+ *
+ * Uses value_cr (daily turnover in crores) when available (~50% populated).
+ * Falls back to volume × close proxy when value_cr is NULL.
+ *
+ *   > 25 cr daily = too liquid for operator manipulation
+ *   < 1 cr daily = untradeable noise
+ */
+function isOperatorEligible(eod: EquityEodSnapshot): boolean {
+  const turnover = eod.value_cr;
+
+  if (turnover != null && turnover > 0) {
+    return turnover >= 1 && turnover <= 25;
+  }
+
+  // Fallback: compute turnover proxy from volume × close
+  const proxyCr = ((eod.volume ?? 0) * eod.close) / 1e7;
+  return proxyCr >= 1 && proxyCr <= 25;
+}
+
 /** Check pump conditions for a single EOD snapshot */
 function isPumpSignal(eod: EquityEodSnapshot): boolean {
+  if (!isOperatorEligible(eod)) return false;
   return (
     (eod.rss_value ?? 0) > 75 &&
     (eod.rss_spread ?? 0) < -200 &&
@@ -676,16 +699,15 @@ function isPumpSignal(eod: EquityEodSnapshot): boolean {
   );
 }
 
-/** Check dump conditions for a single EOD snapshot + history context */
-function isDumpSignal(eod: EquityEodSnapshot, history: EquityEodSnapshot[], dateIdx: number): boolean {
+/** Check dump conditions for a single EOD snapshot.
+ *  sniper_slope check removed — sniper_inst is structurally floored at 0
+ *  for oversold stocks (derived from RSI-9 above 61). See LESSONS_LEARNED. */
+function isDumpSignal(eod: EquityEodSnapshot): boolean {
+  if (!isOperatorEligible(eod)) return false;
   if ((eod.rss_value ?? 100) >= 25) return false;
   if (eod.flow_type !== 'LONG_LIQUIDATION') return false;
   if (eod.volume_divergence_flag !== 'VOLUME_DIV_DOWN') return false;
-
-  // sniper slope: need 5 bars after this date in history
-  const sniperNow = eod.sniper_inst ?? 0;
-  const sniper5 = (dateIdx + 5 < history.length) ? (history[dateIdx + 5]?.sniper_inst ?? 0) : 0;
-  return (sniperNow - sniper5) < -2;
+  return true;
 }
 
 /** Build why-flagged tags for a pump signal */
@@ -707,7 +729,6 @@ function buildDumpTags(eod: EquityEodSnapshot): string[] {
     `RSS oversold (${Math.round(rssVal)})`,
     'Long liquidation',
     'Volume diverging down',
-    'Smart money exiting',
   ];
 }
 
@@ -775,7 +796,7 @@ export async function executeManipulationWatch(lookbackDays: number = 30): Promi
       }
 
       // Check dump
-      if (isDumpSignal(eod, history, i)) {
+      if (isDumpSignal(eod)) {
         const existing = dumpMap.get(equityId);
         if (existing) {
           existing.dates.push(eod.trade_date);

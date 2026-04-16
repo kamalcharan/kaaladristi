@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from 'lucide-react';
+import { displaySymbol, displaySubName, navName as toNavName } from '@/lib/symbolUtils';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useIndustryTransitionStocks } from '@/hooks/useIndustryRotation';
@@ -55,15 +57,20 @@ function IndustryTag({ stock }: { stock: IndustryEnrichedStock }) {
 // ── Enriched Stock Card (reuses StockCard layout + adds industry tag) ──
 
 function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
+  const navigate = useNavigate();
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
-  const isNumericSymbol = /^\d+$/.test(stock.symbol);
-  const heroName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
-  const subName = isNumericSymbol ? null : stock.company_name;
+  const heroName = displaySymbol(stock);
+  const subName = displaySubName(stock);
 
   return (
-    <Card rounded="xxl" hover="lift" className="p-3 sm:p-4">
+    <Card
+      rounded="xxl"
+      hover="lift"
+      className="p-3 sm:p-4 cursor-pointer group"
+      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}`)}
+    >
       {/* Row 1: Script name + Industry tag + Price */}
       <div className="flex items-start justify-between mb-2">
         <div className="min-w-0 flex-1">
@@ -82,16 +89,19 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
             )}
           </div>
         </div>
-        <div className="text-right shrink-0 ml-3">
-          <p className="text-sm font-bold font-mono text-[var(--text-primary)] leading-tight">
-            {stock.close.toFixed(2)}
-          </p>
-          <p className={cn(
-            'text-[11px] font-bold font-mono',
-            (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
-          )}>
-            {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
-          </p>
+        <div className="flex items-start gap-2 shrink-0 ml-3">
+          <div className="text-right">
+            <p className="text-sm font-bold font-mono text-[var(--text-primary)] leading-tight">
+              {stock.close.toFixed(2)}
+            </p>
+            <p className={cn(
+              'text-[11px] font-bold font-mono',
+              (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
+            )}>
+              {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
+            </p>
+          </div>
+          <BarChart3 className="w-3.5 h-3.5 text-muted mt-0.5 opacity-40 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
 

@@ -108,8 +108,23 @@ BREEZE_SESSION_TOKEN=...
 
 - **Stack**: React 18, TypeScript, Vite, Tailwind CSS, React Query, Recharts, lightweight-charts
 - **Theme**: Driven by `VITE_THEME` env var — 3 themes in `src/config/theme/themes/`
-- **Routes/Views**: Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings
+- **Routes/Views**: Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings, Visual Pulse (Index), Visual Pulse (Equity), Manipulation Watch, Industry Transition
 - **Settings sub-pages**: Index Catalog, Equity Catalog, Commodity Catalog, Market Data Hub, Pipeline Dashboard
+
+### Equity Visual Pulse (`/pulse/equity/:equityId`)
+
+Equity-specific Visual Pulse page — separate from index VP (`/pulse/:indexId`).
+Shares atomic components (chart, astro strip, slider, 4 sidebar cards) but adds:
+- **Magic RS subchart** with zone bands (canvas-based, synced with price chart slider)
+- **Multi-timeframe pills** (1D/1W/1M RS change dots with all-green glow)
+- **Pump/Dump banner** (conditional, uses same thresholds as Manipulation Watch)
+- **Scan Presence card** (which of the 6 scanner presets include this stock)
+- **Industry Context card** (rotation status, percentile, rank within industry)
+- **Edge cases**: inactive/delisted badge, stale BSE data indicator, limited history overlay, missing RS placeholder
+
+Equity-only components: `components/domain/VisualPulse/equity/`
+Data hook: `hooks/useEquityVisualPulse.ts` (metadata + 130 bars + DC inferences + industry context)
+Scan check: `hooks/useScanPresence.ts` (runs all 6 scans to check membership)
 
 ### Running locally
 ```bash

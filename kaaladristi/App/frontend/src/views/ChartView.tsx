@@ -9,18 +9,19 @@ import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { TimeRange } from '@/types';
 
-// Visual Pulse imports
+// Visual Pulse imports (shared — index + equity)
 import { useVisualPulse } from '@/hooks/useVisualPulse';
+import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
+import { useScanPresence } from '@/hooks/useScanPresence';
 import {
   computePulseSnapshot,
   computeCorrHistory,
-  computeRssSignals,
-  computeSmartMoney,
   computeDots,
   type TradingStyle,
   type DotSignals,
   type CorrelationState,
   type PulseSnapshot,
+  type PulseBar,
 } from '@/services/visualPulseEngine';
 import {
   CorrelationCard,
@@ -34,13 +35,28 @@ import {
 import SevenDayStrip from '@/components/domain/SevenDayStrip';
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 
+// Equity-specific pulse components
+import PumpDumpBanner, { scanBarsForManipulation } from '@/components/domain/VisualPulse/equity/PumpDumpBanner';
+import ScanPresenceCard from '@/components/domain/VisualPulse/equity/ScanPresenceCard';
+import IndustryContextCard from '@/components/domain/VisualPulse/equity/IndustryContextCard';
+import MultiTimeframePills from '@/components/domain/VisualPulse/equity/MultiTimeframePills';
+
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
+
+/** Compute Magic RS change over N bars */
+function rsChangeLookback(bars: PulseBar[], idx: number, lookback: number): number | null {
+  if (idx < lookback) return null;
+  const current = bars[idx]?.magic_rs;
+  const prior = bars[idx - lookback]?.magic_rs;
+  if (current == null || prior == null) return null;
+  return current - prior;
+}
 
 /**
  * Generic chart page with Visual Pulse intelligence panel.
  * Routes:
  *   /chart/index/:id?name=NIFTY%2050
- *   /chart/equity/:id?name=RELIANCE  (future — no pulse panel)
+ *   /chart/equity/:id?name=RELIANCE
  */
 export default function ChartView() {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -51,22 +67,42 @@ export default function ChartView() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const numId = Number(id);
-  const name = searchParams.get('name') ?? `${type} #${id}`;
+  const rawName = searchParams.get('name') ?? `${type} #${id}`;
   const isIndex = type === 'index';
+  const isEquity = type === 'equity';
 
   // ── Chart data (full history for TradingChart) ──
   const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['chart', type, numId, range],
     queryFn: () =>
-      type === 'equity'
+      isEquity
         ? fetchEquityEodById(numId, range)
         : fetchIndicatorDataById(numId, range),
     staleTime: 120_000,
-    enabled: !!numId && (type === 'index' || type === 'equity'),
+    enabled: !!numId && (isIndex || isEquity),
   });
 
-  // ── Visual Pulse data (last 60 bars + dc_inference — index only) ──
-  const { bars: pulseBars, dcInferences } = useVisualPulse(isIndex ? numId : null);
+  // ── Visual Pulse data — index uses useVisualPulse, equity uses useEquityVisualPulse ──
+  const indexPulse = useVisualPulse(isIndex ? numId : null);
+  const equityPulse = useEquityVisualPulse(isEquity ? numId : null);
+  const scanPresence = useScanPresence(isEquity ? numId : null);
+
+  // Unify pulse bars + dc inferences for shared signal computation
+  const pulseBars: PulseBar[] = isIndex ? indexPulse.bars : (equityPulse.bars as PulseBar[]);
+  const dcInferences = isIndex ? indexPulse.dcInferences : equityPulse.dcInferences;
+
+  // Resolve display name — for BSE numeric symbols, prefer company_name from metadata
+  const name = useMemo(() => {
+    if (isEquity && equityPulse.meta) {
+      const sym = equityPulse.meta.symbol;
+      const co = equityPulse.meta.company_name;
+      // If the URL name is numeric (BSE code) or matches the raw symbol, show company name
+      if (/^\d+$/.test(rawName) && co) return co;
+      // If symbol is numeric, show company_name + symbol
+      if (/^\d+$/.test(sym) && co) return co;
+    }
+    return rawName;
+  }, [isEquity, equityPulse.meta, rawName]);
 
   // Stats from latest row
   const latest = rows.length > 0 ? rows[rows.length - 1] : null;
@@ -83,7 +119,7 @@ export default function ChartView() {
 
   const errorMsg = error instanceof Error ? error.message : '';
 
-  // ── Visual Pulse computations ──
+  // ── Visual Pulse computations (shared for both index + equity) ──
   const pulseIdx = activeIndex ?? (pulseBars.length > 0 ? pulseBars.length - 1 : 0);
 
   const snapshot: PulseSnapshot | null = useMemo(() => {
@@ -128,6 +164,17 @@ export default function ChartView() {
     return pulseBars.slice(start, pulseIdx + 1).map((b) => b.rsi_14 ?? 50);
   }, [pulseBars, pulseIdx]);
 
+  // ── Equity-specific computations ──
+  const rsChange1d = useMemo(() => rsChangeLookback(pulseBars, pulseIdx, 1), [pulseBars, pulseIdx]);
+  const rsChange5d = useMemo(() => rsChangeLookback(pulseBars, pulseIdx, 5), [pulseBars, pulseIdx]);
+  const rsChange20d = useMemo(() => rsChangeLookback(pulseBars, pulseIdx, 20), [pulseBars, pulseIdx]);
+
+  // Scan all bars for pump/dump signals (not just current bar)
+  const pumpDumpResult = useMemo(() => {
+    if (!isEquity || pulseBars.length === 0) return null;
+    return scanBarsForManipulation(pulseBars, 30);
+  }, [isEquity, pulseBars]);
+
   const handleStyleChange = useCallback((style: TradingStyle) => {
     setSelectedStyle(style);
   }, []);
@@ -136,8 +183,8 @@ export default function ChartView() {
     setActiveIndex(idx);
   }, []);
 
-  // Show pulse panel only for index with data
-  const showPulse = isIndex && pulseBars.length > 0 && snapshot != null;
+  // Show pulse panel for index or equity with data
+  const showPulse = pulseBars.length > 0 && snapshot != null;
 
   return (
     <ErrorBoundary>
@@ -150,7 +197,20 @@ export default function ChartView() {
           >
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
+          <span className={cn(
+            'text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
+            isIndex
+              ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/8'
+              : 'text-accent-violet border-accent-violet/30 bg-accent-violet/8',
+          )}>
+            {isIndex ? 'INDEX' : 'EQUITY'}
+          </span>
           <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
+          {isEquity && equityPulse.meta?.industry && (
+            <span className="text-[10px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
+              {equityPulse.meta.industry}
+            </span>
+          )}
           {!isLoading && latest && (
             <>
               <span className="text-xl font-bold mono text-[var(--text-primary)]">
@@ -168,14 +228,47 @@ export default function ChartView() {
                 {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
                 {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
               </div>
+              {/* Equity edge-case badges */}
+              {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
+                <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
+                  Inactive — last traded {latest.trade_date}
+                </span>
+              )}
+              {isEquity && (() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const daysSince = Math.round((new Date(todayStr).getTime() - new Date(latest.trade_date).getTime()) / 86400000);
+                return daysSince > 1 && equityPulse.meta?.is_active ? (
+                  <span className="text-[10px] font-mono text-muted">
+                    Last updated: {latest.trade_date} ({daysSince}d ago)
+                  </span>
+                ) : null;
+              })()}
             </>
           )}
         </div>
 
+        {/* ═══ Equity: Pump/Dump Banner + Magic RS Pills ═══ */}
+        {isEquity && pumpDumpResult && (
+          <div className="mb-2">
+            <PumpDumpBanner result={pumpDumpResult} />
+          </div>
+        )}
+        {isEquity && pulseBars.length > 0 && (
+          <div className="mb-3">
+            <MultiTimeframePills
+              rsChange1d={rsChange1d}
+              rsChange5d={rsChange5d}
+              rsChange20d={rsChange20d}
+              currentRs={pulseBars[pulseIdx]?.magic_rs ?? null}
+              benchmarkLabel="NIFTY 500"
+            />
+          </div>
+        )}
+
         {/* ═══ Main Grid: starts immediately after header ═══ */}
         <div className={cn(
           'gap-3',
-          showPulse ? 'grid grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px]' : '',
+          showPulse ? 'flex flex-col lg:grid lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px]' : '',
         )}>
           {/* ── Left Panel: Intelligence + Chart ── */}
           <div className="min-w-0">
@@ -184,8 +277,8 @@ export default function ChartView() {
               <InstrumentIntelligence id={numId} type={type ?? 'index'} />
             )}
 
-            {/* Astro Strip (above chart) — reuses existing SevenDayStrip */}
-            {isIndex && (
+            {/* Astro Strip (above chart) — both index and equity */}
+            {showPulse && (
               <div className="mt-2">
                 <SevenDayStrip selectedDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? new Date().toISOString().split('T')[0]} />
               </div>
@@ -253,10 +346,10 @@ export default function ChartView() {
 
           </div>
 
-          {/* ── Right Panel: Visual Pulse Cards (index only) ── */}
+          {/* ── Right Panel: Visual Pulse Cards ── */}
           {showPulse && snapshot && (
-            <div className="min-w-0 flex flex-col gap-2.5 overflow-y-auto pb-4"
-              style={{ maxHeight: 'calc(100vh - 80px)', scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
+            <div className="min-w-0 flex flex-col gap-2.5 overflow-y-auto pb-4 lg:max-h-[calc(100vh-80px)]"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
             >
               {/* VaNi Header */}
               <div className="glass-card rounded-xl p-2.5">
@@ -272,6 +365,20 @@ export default function ChartView() {
                 corrState={snapshot.corrState}
                 date={snapshot.bar.trade_date}
               />
+
+              {/* Equity-specific cards */}
+              {isEquity && (
+                <>
+                  <ScanPresenceCard
+                    stock={scanPresence.stock}
+                    matchedScans={scanPresence.matchedScans}
+                  />
+                  <IndustryContextCard
+                    industry={equityPulse.meta?.industry ?? null}
+                    context={equityPulse.industryContext}
+                  />
+                </>
+              )}
 
               {/* Correlation */}
               <CorrelationCard
@@ -309,7 +416,7 @@ export default function ChartView() {
           )}
         </div>
 
-        {/* ═══ Timeline Slider (full width, index only) ═══ */}
+        {/* ═══ Timeline Slider (full width) ═══ */}
         {showPulse && (
           <div className="mt-3 glass-card rounded-2xl overflow-hidden">
             <TimelineSlider
@@ -349,17 +456,17 @@ function buildFlowNarrative(snap: PulseSnapshot): string {
   const rvol = snap.bar.rvol ?? 0;
 
   if (ft === 'FRESH_LONGS') parts.push('Fresh capital entering.');
-  else if (ft === 'SHORT_COVERING') parts.push('Shorts unwinding — watch for confirmation.');
+  else if (ft === 'SHORT_COVERING') parts.push('Shorts unwinding \u2014 watch for confirmation.');
   else if (ft === 'FRESH_SHORTS') parts.push('Selling pressure building.');
-  else if (ft === 'LONG_LIQUIDATION') parts.push('Longs exiting — exhaustion watch.');
+  else if (ft === 'LONG_LIQUIDATION') parts.push('Longs exiting \u2014 exhaustion watch.');
   else if (ft === 'LOW_VOLUME') parts.push('Volume absent.');
   else parts.push('Mixed flow signals.');
 
   if (rvol > 2) parts.push(`High conviction volume (RVOL ${rvol.toFixed(1)}x).`);
-  else if (rvol < 0.5) parts.push('Thin volume — signals unreliable.');
+  else if (rvol < 0.5) parts.push('Thin volume \u2014 signals unreliable.');
 
-  if (snap.rss.zone === 'OVERBOUGHT') parts.push('RSS overbought — momentum stretched.');
-  else if (snap.rss.zone === 'OVERSOLD') parts.push('RSS at floor — reversal watch.');
+  if (snap.rss.zone === 'OVERBOUGHT') parts.push('RSS overbought \u2014 momentum stretched.');
+  else if (snap.rss.zone === 'OVERSOLD') parts.push('RSS at floor \u2014 reversal watch.');
   else if (snap.rss.spreadRepaired) parts.push('Structural spread positive.');
 
   return parts.join(' ');
@@ -370,15 +477,15 @@ function buildSmNarrative(snap: PulseSnapshot): string {
   const sm = snap.sm;
 
   if (sm.smTrending) parts.push('Smart money trending higher.');
-  else if (sm.smExiting) parts.push('Smart money declining — distribution risk.');
+  else if (sm.smExiting) parts.push('Smart money declining \u2014 distribution risk.');
   else parts.push('Smart money flat.');
 
-  if (sm.hasSVD5) parts.push('SVD signal in last 5 bars — institutional volume confirmed.');
-  if (sm.hasSYD) parts.push('SYD present — distribution caution.');
-  if (sm.pumpSignal) parts.push('Smart declining while fast rising — pump signature.');
+  if (sm.hasSVD5) parts.push('Volume Drive signal in last 5 bars \u2014 institutional volume confirmed.');
+  if (sm.hasSYD) parts.push('Distribution signal present \u2014 caution.');
+  if (sm.pumpSignal) parts.push('Smart declining while fast rising \u2014 pump signature.');
 
   if (sm.relationship === 'Aligned') parts.push('Both layers aligned.');
-  else if (sm.relationship === 'Diverging') parts.push('Layers diverging — elevated risk.');
+  else if (sm.relationship === 'Diverging') parts.push('Layers diverging \u2014 elevated risk.');
 
   return parts.join(' ');
 }

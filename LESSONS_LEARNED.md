@@ -114,3 +114,57 @@ A safety feature styled identically to opportunity features defeats its purpose.
 The indicators step had a Python fallback (`from indicators.compute_engine import IndicatorEngine`) that activates when the PostgreSQL RPC fails. The fallback itself was broken (missing `calculators/` subpackage), so it always failed with "cannot import name". This replaced the real error ("numeric field overflow") with a misleading one, making diagnosis harder.
 
 - **Rule**: Either pass or fail. No fallback paths that haven't been tested and maintained. A broken fallback is worse than no fallback — it swallows the real error and substitutes a confusing one.
+
+## New Page with Shared Atoms Beats Conditional Rendering (2026-04-16)
+
+When two pages share 70% of components but have different layouts and information density, building a second page-level component (with shared atoms) is cheaper than conditional rendering inside one. The refactoring tax to extract atoms is paid once; the alternative of conditional soup compounds with every V2 feature.
+
+- **Applied**: Equity Visual Pulse (`EquityVisualPulsePage.tsx`) shares VisualPulseChart, AstroStrip, TimelineSlider, and all 4 sidebar cards with Index Visual Pulse — but composes them differently (added Magic RS subchart, multi-timeframe pills, pump/dump banner, scan presence, industry context).
+- **Alternative rejected**: Adding `if (isEquity)` branches inside `VisualPulsePage.tsx` would have required conditional props, optional renders, and equity-specific hooks interleaved with index logic.
+- **Rule**: When a new entity type shares atoms but adds its own layout and data sources, build a new page. When it's truly the same layout with minor data differences, use props.
+
+## URL Structure Should Disambiguate Entity Types (2026-04-16)
+
+`/pulse/index/:id` and `/pulse/equity/:id` prevent the bug surface of guessing whether `:id` is an index_id or equity_id. Worth the cost of a slightly longer URL to get unambiguous routing.
+
+- **Applied**: `/pulse/:indexId` (existing, unchanged) + `/pulse/equity/:equityId` (new). React Router matches the more specific `/pulse/equity/` prefix first, avoiding collisions.
+- **Pattern**: For any page that serves multiple entity types, encode the entity type in the URL path segment. Don't rely on query params or ID range conventions.
+
+## Show, Don't Hide — Data Freshness Is Informational, Not a Feature Gate (2026-04-16)
+
+When today's pipeline hasn't completed, showing blank screens makes the system appear broken. Showing yesterday's data with clear "as on" labeling is industry standard (Zerodha, Groww, MoneyControl all do this). The global nav chip is the single source of truth — every page automatically benefits without per-page date labels.
+
+- **Applied**: `DataFreshnessChip` in global nav bar shows "Data as on: 15 Apr 2026" with green/amber/red status. Dashboard renders with fallback report when risk API is unavailable — widgets (breadth, sectors, leaderboards) fetch independently and work regardless.
+- **Anti-pattern**: Gating the entire dashboard on a single API response (`useDayRisk`). When that API fails, the user sees "Unable to load risk data" even though 6 other data sources are healthy.
+- **Rule**: Every page should render its independently-sourced widgets even when one data source fails. Use fallbacks, not gates.
+
+## Specific Empty States Beat Generic Ones (2026-04-16)
+
+"No results" alarms users. "No Weakness Confluence today — normal in recovery rallies" educates them. Empty states are an opportunity to teach the system's behavior, not just signal absence of data.
+
+- **Applied**: Each scanner preset has a specific empty message explaining whether zero results is normal or notable. Manipulation Watch distinguishes pump vs dump empty states.
+- **Pattern**: When a feature legitimately returns zero results under normal conditions, the empty state should say so. "Wyckoff signals are naturally rare (1-5% of trading days)" is more useful than "No results found."
+
+## Indicator Semantics Matter — Validate Against Actual Data (2026-04-16)
+
+`sniper_inst` was used as a "smart money / institutional flow" proxy in the dump filter, but it's actually `LEAST(50, GREATEST(0, 1.5 * (RSI_9 - 61)))` — an RSI-9 derivative clamped at 0. For oversold stocks (which are precisely the dump candidates with `rss_value < 25`), RSI-9 is well below 61, so `sniper_inst` is structurally pinned at 0 and cannot decline. The slope check `(sniper_inst_now - sniper_inst_5d_ago) < -2` was a no-op — both values are 0.
+
+- **Impact**: Dump filter showed 1 result in 60 days. After removing the sniper slope check, ~25-50 genuine dump suspects surface.
+- **Lesson**: Validate indicator semantics against actual data distributions before using them as filter conditions. The three remaining conditions (RSS oversold + LONG_LIQUIDATION + VOLUME_DIV_DOWN) constitute a strong dump signature without the false-precision of the sniper check.
+- **Rule**: When an indicator is derived from another (sniper_inst from RSI-9), check whether the derived value has useful range in your filter's operating region. If it's clamped/floored in precisely the region you're filtering, it adds zero signal.
+
+## Manipulation Requires Operator Capability, Not Just Price Action (2026-04-16)
+
+Mahanagar Gas (₹15,000 cr free float, ₹100 cr daily turnover) cannot be operator-dumped — float is too distributed, volumes too deep. Manipulation Watch must gate on low-float / thin-volume eligibility before applying pattern conditions. Use volume × close as turnover proxy.
+
+- **Gate**: 1-25 cr daily turnover. Below 1 cr = untradeable (no real interest). Above 25 cr = too liquid for operator manipulation.
+- **Impact**: Filters out large-caps that match the signal pattern but can't actually be manipulated. Dump suspects drop from ~50 to 5-25 genuinely small/mid-cap operator-driven cases.
+
+## BSE Uses Numeric Scrip Codes, Not Letter Symbols (2026-04-16)
+
+BSE stocks (6,504 of 7,884 = 82% of equity universe) have numeric symbols like `500325`, `544456`. Storing both NSE letter symbols and BSE numeric codes as-is in `km_equity_symbols.symbol` means BSE stocks are unsearchable and unrecognizable to users.
+
+- **Fix**: `displaySymbol()` in `lib/symbolUtils.ts` derives a human-readable display identifier from `company_name` when symbol is purely numeric. `shortNameFromCompany()` strips "Limited/Ltd/Pvt" suffixes and takes first 2 words.
+- **Tooltip**: BSE code + ISIN shown on hover for technical reference.
+- **Search**: ISIN-based dedup ensures dual-listed stocks appear once (NSE preferred). BSE-only stocks findable by company name or ISIN.
+- **Rule**: Always derive a human-readable display identifier from company_name when symbol is purely numeric. The technical scrip code stays as tooltip / metadata, not primary display.
