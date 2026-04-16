@@ -7,6 +7,7 @@
 
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui';
+import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
 
 // ── Vocabulary mapping (KaalaDristi language) ──────────────────
@@ -86,6 +87,7 @@ export function MetricPill({ label, value, color }: { label: string; value: stri
 // ── Stock Card ────────────────────────────────────────────────
 
 export function StockCard({ stock }: { stock: ScanStock }) {
+  const navigate = useNavigate();
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
@@ -94,7 +96,12 @@ export function StockCard({ stock }: { stock: ScanStock }) {
   const subName = isNumericSymbol ? null : stock.company_name;
 
   return (
-    <Card rounded="xxl" hover="lift" className="p-3 sm:p-4">
+    <Card
+      rounded="xxl"
+      hover="lift"
+      className="p-3 sm:p-4 cursor-pointer"
+      onClick={() => navigate(`/pulse/equity/${stock.equity_id}`)}
+    >
       {/* Row 1: Script name + Price */}
       <div className="flex items-start justify-between mb-2">
         <div className="min-w-0 flex-1">

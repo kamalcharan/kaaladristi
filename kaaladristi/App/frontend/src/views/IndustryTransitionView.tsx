@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -55,6 +56,7 @@ function IndustryTag({ stock }: { stock: IndustryEnrichedStock }) {
 // ── Enriched Stock Card (reuses StockCard layout + adds industry tag) ──
 
 function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
+  const navigate = useNavigate();
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
@@ -63,7 +65,12 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
   const subName = isNumericSymbol ? null : stock.company_name;
 
   return (
-    <Card rounded="xxl" hover="lift" className="p-3 sm:p-4">
+    <Card
+      rounded="xxl"
+      hover="lift"
+      className="p-3 sm:p-4 cursor-pointer"
+      onClick={() => navigate(`/pulse/equity/${stock.equity_id}`)}
+    >
       {/* Row 1: Script name + Industry tag + Price */}
       <div className="flex items-start justify-between mb-2">
         <div className="min-w-0 flex-1">

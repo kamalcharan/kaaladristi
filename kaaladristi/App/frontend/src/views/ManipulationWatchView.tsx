@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Loader2, ShieldAlert, AlertTriangle, X, BookOpen } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, ShieldAlert, AlertTriangle, X, BookOpen, Eye } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useManipulationWatch } from '@/hooks/useManipulationWatch';
@@ -62,6 +63,7 @@ function StockDetailModal({
   variant: 'pump' | 'dump';
   onClose: () => void;
 }) {
+  const navigate = useNavigate();
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: stock.magic_rs_zone ?? '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''] ?? { label: stock.flow_type ?? '—', color: 'text-muted' };
   const accentColor = variant === 'pump' ? 'text-risk-amber' : 'text-risk-red';
@@ -124,6 +126,15 @@ function StockDetailModal({
           <DetailRow label="RSS Spread" value={stock.rss_spread?.toFixed(0) ?? '—'} />
           <DetailRow label="Industry" value={stock.industry ?? '—'} />
         </div>
+
+        {/* View Pulse link */}
+        <button
+          onClick={() => { onClose(); navigate(`/pulse/equity/${stock.equity_id}`); }}
+          className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent-indigo/10 border border-accent-indigo/30 text-accent-indigo text-xs font-bold hover:bg-accent-indigo/20 transition-all"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          View Equity Pulse
+        </button>
       </Card>
     </div>
   );
