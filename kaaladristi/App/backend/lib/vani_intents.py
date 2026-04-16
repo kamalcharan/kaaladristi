@@ -302,6 +302,125 @@ INTENTS: dict[str, VaNiIntent] = {
 }
 
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # Astro Calendar Intents
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── 9. Monthly Planetary Outlook ──────────────────────────────────────────
+    "astro_calendar.month_outlook": VaNiIntent(
+        page="astro_calendar",
+        label="What's the planetary outlook this month?",
+        required_context=["month_events", "month_summary"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the Planetary Intelligence calendar and wants an "
+            "overview of this month's astrological landscape for Indian equity "
+            "markets. You will receive: total event count, positive/negative/peak "
+            "day counts, and the full list of planetary events with their market "
+            "impact ratings and date ranges. "
+            "\n\n"
+            "Write 3 short paragraphs:\n"
+            "(1) The month's character — is it dominated by favorable, adverse, "
+            "or mixed planetary energy? How many days carry positive vs negative "
+            "scores? Are there clusters of events or are they spread out?\n"
+            "(2) Key events — highlight the 2-3 most significant events by impact "
+            "rating. Explain what each conjunction/transit means in plain terms "
+            "and what it historically correlates with for markets.\n"
+            "(3) Practical context — which weeks or date ranges within the month "
+            "carry the most concentrated risk or opportunity? Where should traders "
+            "pay extra attention?"
+            + _VANI_RULES.replace("About 150 words.", "About 200 words.")
+        ),
+        max_tokens=450,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 10. This Week's Events ────────────────────────────────────────────────
+    "astro_calendar.week_events": VaNiIntent(
+        page="astro_calendar",
+        label="Explain this week's planetary events",
+        required_context=["week_events"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to understand the planetary events active this week "
+            "for Indian equity markets. You will receive the list of DC inference "
+            "events covering the current 7-day window, each with astro_event name, "
+            "market_impact rating, confidence, inference text, and date range. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) The week's planetary weather — walk through each active event in "
+            "chronological order, explaining what it is (conjunction, transit, "
+            "aspect) and what the market_impact rating suggests. Use plain language "
+            "— 'Saturn-Mars conjunction historically correlates with increased "
+            "volatility' not astrological jargon.\n"
+            "(2) The combined picture — when multiple events overlap, do they "
+            "reinforce each other or create mixed signals? What's the net energy "
+            "direction for the week?"
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=12,
+        complexity="low",
+    ),
+
+    # ── 11. Turning Dates ─────────────────────────────────────────────────────
+    "astro_calendar.turning_dates": VaNiIntent(
+        page="astro_calendar",
+        label="What are the turning dates this month?",
+        required_context=["turning_events"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to understand the 'turning dates' in this month's "
+            "planetary calendar. Turning dates are dates where DC inference text "
+            "mentions potential trend reversals or inflection points. You will "
+            "receive the filtered list of turning events with their details. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) List each turning date with its planetary event and explain "
+            "why it's flagged as a potential inflection point. What astronomical "
+            "configuration is triggering the turn signal?\n"
+            "(2) Context — are these turning dates clustered (suggesting a "
+            "major regime shift) or isolated? How should a trader interpret "
+            "turning dates — they mark windows of elevated probability for "
+            "direction changes, not guaranteed reversals."
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 12. High Risk Days ────────────────────────────────────────────────────
+    "astro_calendar.risk_days": VaNiIntent(
+        page="astro_calendar",
+        label="Which days have elevated risk this month?",
+        required_context=["risk_days"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to identify days with elevated risk in this month's "
+            "planetary calendar. You will receive days where the composite astro "
+            "score is negative (< -1), along with the events causing the negative "
+            "readings. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) Walk through each elevated-risk day — what date, what events "
+            "are active, what the negative score means in practical terms. "
+            "Explain each adverse event plainly (e.g., 'Mars-Rahu conjunction "
+            "historically correlates with sudden volatility spikes').\n"
+            "(2) Risk management context — are the risk days clustered into a "
+            "danger window or spread through the month? What does the overall "
+            "risk calendar look like — mostly clear with isolated risk pockets, "
+            "or an extended period of caution?"
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+}
+
+
 def get_intents_for_page(page: str) -> dict[str, VaNiIntent]:
     """Return all active intents for a given page."""
     return {k: v for k, v in INTENTS.items() if v.page == page}

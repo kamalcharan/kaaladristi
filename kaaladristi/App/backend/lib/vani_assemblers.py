@@ -617,3 +617,209 @@ def _fmt_breadth_momentum(ctx: dict) -> str:
         f"\nExplain why breadth momentum is {'positive' if roc13 > 0 else 'negative'} "
         f"and what this means for existing long and short positions."
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Astro Calendar Assemblers
+# ══════════════════════════════════════════════════════════════════════════════
+
+def assemble_astro_calendar_context(db, target_date: str = None) -> dict | None:
+    """Assemble context for astro calendar intents.
+
+    Uses the month containing target_date.
+    """
+    if not target_date:
+        target_date = str(date.today())
+
+    d = date.fromisoformat(target_date)
+    year, month = d.year, d.month
+    from calendar import monthrange
+    num_days = monthrange(year, month)[1]
+    month_start = f"{year}-{month:02d}-01"
+    month_end = f"{year}-{month:02d}-{num_days:02d}"
+
+    # Fetch all DC inferences
+    try:
+        all_inf = db.select('dc_inference', '*', order='start_date.asc', limit=500)
+    except Exception:
+        return None
+
+    # Filter events active within this month
+    month_events = []
+    for inf in (all_inf or []):
+        start = str(inf.get('start_date', ''))
+        end = str(inf.get('end_date', '')) if inf.get('end_date') else start
+        if end >= month_start and start <= month_end:
+            month_events.append({
+                'event': inf.get('astro_event', ''),
+                'impact': inf.get('market_impact', ''),
+                'confidence': inf.get('confidence'),
+                'inference': inf.get('inference', ''),
+                'start_date': start,
+                'end_date': end,
+            })
+
+    # Day-by-day scores for the month
+    day_scores = {}
+    for day_num in range(1, num_days + 1):
+        iso = f"{year}-{month:02d}-{day_num:02d}"
+        day_events = [e for e in month_events if e['start_date'] <= iso <= e['end_date']]
+        score = _day_score([{'market_impact': e['impact']} for e in day_events])
+        day_scores[iso] = {'score': score, 'events': day_events}
+
+    # Summary stats
+    pos_days = sum(1 for v in day_scores.values() if v['score'] > 1)
+    neg_days = sum(1 for v in day_scores.values() if v['score'] < -1)
+    peak_days = sum(1 for v in day_scores.values() if v['score'] >= 4)
+
+    # Week events (current week: today ± 3 days)
+    week_start = str(d - timedelta(days=d.weekday()))
+    week_end = str(d + timedelta(days=6 - d.weekday()))
+    week_events = [e for e in month_events if e['end_date'] >= week_start and e['start_date'] <= week_end]
+
+    # Turning dates
+    turning_events = [e for e in month_events if 'turning' in (e.get('inference') or '').lower()]
+
+    # Risk days (score < -1)
+    risk_days = [
+        {'date': iso, 'score': v['score'], 'events': v['events']}
+        for iso, v in sorted(day_scores.items())
+        if v['score'] < -1
+    ]
+
+    MONTH_NAMES = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
+    ]
+
+    return {
+        'date': target_date,
+        'year': year,
+        'month': month,
+        'month_name': MONTH_NAMES[month - 1],
+        'month_events': month_events,
+        'month_summary': {
+            'total_events': len(month_events),
+            'positive_days': pos_days,
+            'negative_days': neg_days,
+            'peak_days': peak_days,
+        },
+        'week_events': week_events,
+        'turning_events': turning_events,
+        'risk_days': risk_days,
+    }
+
+
+def build_astro_cache_context(intent_id: str, ctx: dict) -> dict:
+    """Cache key for astro calendar intents."""
+    base = {
+        'year': ctx.get('year'),
+        'month': ctx.get('month'),
+        'event_count': ctx.get('month_summary', {}).get('total_events', 0),
+    }
+    if 'week' in intent_id:
+        base['date'] = ctx.get('date', '')
+    return base
+
+
+def format_astro_user_message(intent_id: str, ctx: dict) -> str:
+    """Format astro calendar context into user message."""
+    formatters = {
+        'astro_calendar.month_outlook': _fmt_astro_month_outlook,
+        'astro_calendar.week_events': _fmt_astro_week_events,
+        'astro_calendar.turning_dates': _fmt_astro_turning_dates,
+        'astro_calendar.risk_days': _fmt_astro_risk_days,
+    }
+    formatter = formatters.get(intent_id)
+    if not formatter:
+        return f"Context for {intent_id}:\n{ctx}"
+    return formatter(ctx)
+
+
+def _fmt_astro_month_outlook(ctx: dict) -> str:
+    s = ctx.get('month_summary', {})
+    events = ctx.get('month_events', [])
+
+    event_lines = []
+    for e in events[:15]:
+        dates = e['start_date']
+        if e['end_date'] != e['start_date']:
+            dates += f" → {e['end_date']}"
+        event_lines.append(
+            f"  {dates}: {e['event']} ({e['impact']}, conf:{e['confidence']})"
+            f"\n    {e['inference']}"
+        )
+    events_str = '\n'.join(event_lines) if event_lines else '  No events'
+
+    return (
+        f"Planetary outlook for {ctx['month_name']} {ctx['year']}:\n"
+        f"\n--- Summary ---\n"
+        f"Total events: {s.get('total_events', 0)}\n"
+        f"Positive days (score > 1): {s.get('positive_days', 0)}\n"
+        f"Negative days (score < -1): {s.get('negative_days', 0)}\n"
+        f"Peak days (score >= 4): {s.get('peak_days', 0)}\n"
+        f"\n--- Events ---\n{events_str}\n"
+        f"\nWhat's the planetary outlook this month?"
+    )
+
+
+def _fmt_astro_week_events(ctx: dict) -> str:
+    events = ctx.get('week_events', [])
+
+    event_lines = []
+    for e in events:
+        dates = e['start_date']
+        if e['end_date'] != e['start_date']:
+            dates += f" → {e['end_date']}"
+        event_lines.append(
+            f"  {dates}: {e['event']} ({e['impact']}, conf:{e['confidence']})\n"
+            f"    {e['inference']}"
+        )
+    events_str = '\n'.join(event_lines) if event_lines else '  No active events this week'
+
+    return (
+        f"This week's planetary events (week of {ctx['date']}):\n"
+        f"\n{events_str}\n"
+        f"\nExplain this week's planetary events."
+    )
+
+
+def _fmt_astro_turning_dates(ctx: dict) -> str:
+    events = ctx.get('turning_events', [])
+
+    event_lines = []
+    for e in events:
+        dates = e['start_date']
+        if e['end_date'] != e['start_date']:
+            dates += f" → {e['end_date']}"
+        event_lines.append(
+            f"  {dates}: {e['event']} ({e['impact']})\n"
+            f"    {e['inference']}"
+        )
+    events_str = '\n'.join(event_lines) if event_lines else '  No turning dates identified this month'
+
+    return (
+        f"Turning dates in {ctx['month_name']} {ctx['year']}:\n"
+        f"\n{events_str}\n"
+        f"\nExplain the turning dates this month."
+    )
+
+
+def _fmt_astro_risk_days(ctx: dict) -> str:
+    risk_days = ctx.get('risk_days', [])
+
+    day_lines = []
+    for rd in risk_days:
+        events_str = ', '.join(
+            f"{e['event']} ({e['impact']})" for e in rd['events'][:3]
+        )
+        day_lines.append(
+            f"  {rd['date']}: Score {rd['score']:+.1f} — {events_str}"
+        )
+    days_str = '\n'.join(day_lines) if day_lines else '  No elevated-risk days this month'
+
+    return (
+        f"Elevated risk days in {ctx['month_name']} {ctx['year']}:\n"
+        f"\n{days_str}\n"
+        f"\nWhich days have elevated risk and why?"
+    )
