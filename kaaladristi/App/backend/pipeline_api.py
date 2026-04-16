@@ -1707,6 +1707,24 @@ def visual_pulse_insight(payload: dict):
 # ── VaNi Conversational Layer ────────────────────────────────────────────────
 
 
+@app.get('/api/vani/debug')
+def vani_debug():
+    """Diagnostic endpoint — check AI config and test Ollama connectivity."""
+    from lib.ai_client import AI_ENABLED, AI_PROVIDER, AI_MODEL, _API_KEY, _BASE_URL
+    diag = {
+        "ai_enabled": AI_ENABLED,
+        "provider": AI_PROVIDER,
+        "model": AI_MODEL,
+        "api_key_set": bool(_API_KEY),
+        "base_url": _BASE_URL or "(default)",
+    }
+    if AI_ENABLED:
+        test = _ai_complete(system="You are a test.", user="Say hello in one word.", max_tokens=20)
+        diag["test_response"] = test
+        diag["test_ok"] = test is not None
+    return diag
+
+
 @app.get('/api/vani/intents')
 def vani_intents(page: str = 'dashboard'):
     """Return available VaNi intents for a given page."""
@@ -1732,11 +1750,15 @@ def vani_ask(payload: dict):
     intent_id = payload.get('intent_id', '')
     target_date = payload.get('date')
 
+    log.info(f"[VaNi] ask: intent={intent_id}, date={target_date}")
+    log.info(f"[VaNi] AI_ENABLED={_AI_ENABLED}, provider={AI_PROVIDER}, model={AI_MODEL}")
+
     intent = _VANI_INTENTS.get(intent_id)
     if not intent:
         raise HTTPException(400, f"Unknown intent: {intent_id}")
 
     if not _AI_ENABLED:
+        log.warning("[VaNi] AI is disabled")
         return {
             "intent_id": intent_id,
             "response": None,
@@ -1748,6 +1770,7 @@ def vani_ask(payload: dict):
     # Assemble context (currently only dashboard intents)
     if intent.page == 'dashboard':
         ctx = assemble_dashboard_context(db, target_date)
+        log.info(f"[VaNi] context assembled: {bool(ctx)}, date={ctx.get('date') if ctx else 'N/A'}")
     else:
         return {
             "intent_id": intent_id,
@@ -1758,6 +1781,7 @@ def vani_ask(payload: dict):
         }
 
     if not ctx:
+        log.warning("[VaNi] context assembly returned None")
         return {
             "intent_id": intent_id,
             "response": None,
@@ -1768,10 +1792,12 @@ def vani_ask(payload: dict):
     # Build cache key from bucketed context
     cache_ctx = build_cache_context(intent_id, ctx)
     cache_key = make_cache_key(intent_id, cache_ctx)
+    log.info(f"[VaNi] cache_key={cache_key}")
 
     # Check persistent cache
     cached_response = get_cached(db, cache_key)
     if cached_response:
+        log.info("[VaNi] cache HIT")
         return {
             "intent_id": intent_id,
             "date": ctx['date'],
@@ -1781,13 +1807,17 @@ def vani_ask(payload: dict):
             "provider": "cache",
         }
 
+    log.info("[VaNi] cache MISS — calling LLM")
+
     # Format user message and call LLM
     user_msg = format_user_message(intent_id, ctx)
+    log.info(f"[VaNi] user_msg length={len(user_msg)}")
     response = _ai_complete(
         system=intent.system_prompt,
         user=user_msg,
         max_tokens=intent.max_tokens,
     )
+    log.info(f"[VaNi] LLM response: {bool(response)}, len={len(response) if response else 0}")
 
     if response:
         set_cached(
