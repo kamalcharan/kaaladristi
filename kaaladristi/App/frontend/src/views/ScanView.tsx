@@ -92,30 +92,42 @@ function StockCard({ stock }: { stock: ScanStock }) {
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
+  // BSE scrip codes are numeric (e.g., "531156") — not useful as display name.
+  // NSE tickers (e.g., "RELIANCE") are the script name traders recognise.
+  const isNumericSymbol = /^\d+$/.test(stock.symbol);
+  const heroName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
+  const subName = isNumericSymbol ? null : stock.company_name;
+
   return (
-    <div className="bg-kd-bg/40 border border-kd-border rounded-xl p-3 sm:p-4 hover:border-kd-border-active transition-colors">
-      {/* Row 1: Symbol + Company + Price + Change */}
-      <div className="flex items-start justify-between mb-2.5">
+    <Card rounded="xxl" hover="lift" className="p-3 sm:p-4">
+      {/* Row 1: Script name + Price */}
+      <div className="flex items-start justify-between mb-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm sm:text-base font-bold text-accent-indigo font-mono">{stock.symbol}</span>
+            <span className="text-sm font-bold text-accent-indigo font-mono truncate">{heroName}</span>
             <ExchangeBadge exchange={stock.exchange} />
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {subName && (
+              <span className="text-[10px] text-muted truncate">{subName}</span>
+            )}
+            {subName && stock.industry && <span className="text-[10px] text-muted">·</span>}
+            {stock.industry && (
+              <span className="text-[10px] text-muted">{stock.industry}</span>
+            )}
             {flowConfig && (
-              <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/30')}>
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
                 {flowConfig.label}
               </span>
             )}
           </div>
-          <p className="text-[11px] text-muted truncate">
-            {stock.company_name ?? '—'}{stock.industry ? ` · ${stock.industry}` : ''}
-          </p>
         </div>
         <div className="text-right shrink-0 ml-3">
-          <p className="text-sm sm:text-base font-bold font-mono text-[var(--text-primary)]">
+          <p className="text-sm font-bold font-mono text-[var(--text-primary)] leading-tight">
             {stock.close.toFixed(2)}
           </p>
           <p className={cn(
-            'text-xs font-bold font-mono',
+            'text-[11px] font-bold font-mono',
             (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
           )}>
             {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
@@ -123,10 +135,10 @@ function StockCard({ stock }: { stock: ScanStock }) {
         </div>
       </div>
 
-      {/* Row 2: Metric pills */}
-      <div className="flex gap-1.5 flex-wrap mb-2.5">
+      {/* Row 2: Metrics + Signals inline */}
+      <div className="flex items-center gap-1.5 flex-wrap">
         <MetricPill
-          label="Magic RS"
+          label="RS"
           value={stock.magic_rs != null ? `${stock.magic_rs.toFixed(1)} ${zoneConfig.label}` : '—'}
           color={zoneConfig.color}
         />
@@ -150,11 +162,9 @@ function StockCard({ stock }: { stock: ScanStock }) {
           value={stock.rvol?.toFixed(1) ?? '—'}
           color={(stock.rvol ?? 0) > 2 ? 'text-risk-green' : undefined}
         />
+        <SignalDots svd={stock.has_recent_svd} sbd={stock.has_recent_sbd} syd={stock.has_recent_syd} />
       </div>
-
-      {/* Row 3: Signal dots */}
-      <SignalDots svd={stock.has_recent_svd} sbd={stock.has_recent_sbd} syd={stock.has_recent_syd} />
-    </div>
+    </Card>
   );
 }
 
