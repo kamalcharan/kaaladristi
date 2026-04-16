@@ -13,6 +13,7 @@ minor numeric changes don't bust the cache.
 from datetime import date, timedelta
 from .data_assemblers import (
     assemble_market_pulse_context,
+    assemble_instrument_context,
     _safe_float,
     _day_score,
 )
@@ -1019,3 +1020,85 @@ def _fmt_ind_strongest(ctx: dict) -> str:
         f"\n{stocks_str}\n"
         f"\nWhat are the strongest stocks and why?"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Equity Assemblers (parameterized — entity-bound)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def assemble_equity_context(db, entity_id: int, page_context: str = None, target_date: str = None) -> dict | None:
+    """Assemble context for a specific equity using the existing instrument assembler."""
+    ctx = assemble_instrument_context(db, entity_id, 'equity', target_date)
+    if not ctx:
+        return None
+
+    ctx['page_context'] = page_context or 'direct'
+    return ctx
+
+
+def build_equity_cache_context(intent_id: str, ctx: dict) -> dict:
+    """Cache key for equity intents — includes entity + key signal buckets."""
+    return {
+        'date': ctx.get('date', ''),
+        'entity_id': ctx.get('instrument', {}).get('id', ''),
+        'rs_zone': ctx.get('relative_strength', {}).get('zone', ''),
+        'flow': ctx.get('flow', {}).get('type', ''),
+        'page_ctx': ctx.get('page_context', ''),
+    }
+
+
+def format_equity_user_message(intent_id: str, ctx: dict) -> str:
+    """Format equity context into user message."""
+    inst = ctx.get('instrument', {})
+    symbol = inst.get('name', 'Unknown')
+    p = ctx.get('price', {})
+    f = ctx.get('flow', {})
+    part = ctx.get('participation', {})
+    mom = ctx.get('momentum', {})
+    rs = ctx.get('relative_strength', {})
+    vol = ctx.get('volume', {})
+    dots = ctx.get('dots', {})
+    gl = ctx.get('golden_line', {})
+    astro = ctx.get('astro', {})
+    page_ctx = ctx.get('page_context', '')
+
+    dot_events = []
+    if dots.get('svd_recent'): dot_events.append('SVD (institutional accumulation)')
+    if dots.get('sbd_recent'): dot_events.append('SBD (strong accumulation)')
+    if dots.get('syd_recent'): dot_events.append('SYD (distribution)')
+    dot_str = ', '.join(dot_events) if dot_events else 'None'
+
+    astro_str = 'None active'
+    if astro.get('events'):
+        astro_str = '; '.join(f"{e['event']} ({e['impact']})" for e in astro['events'][:3])
+
+    base_msg = (
+        f"Stock: {symbol}\n"
+        f"Date: {ctx.get('date', '')}\n"
+        f"Price: {p.get('close', 0)} ({p.get('change_pct', 0):+.2f}%)\n"
+        f"\n--- Signals ---\n"
+        f"Flow: {f.get('type', 'N/A')}\n"
+        f"Vacuum: {f.get('vacuum', 'None')}\n"
+        f"Accum/Distrib: {f.get('accum_distrib', 'None')}\n"
+        f"Participation: {part.get('profile', 'unknown')} "
+        f"(Inst: {part.get('institution')}, Hot$: {part.get('hot_money')})\n"
+        f"RSI: {mom.get('rsi_14')}, MFI: {mom.get('mfi_14')}, "
+        f"Momentum: {mom.get('alignment')}\n"
+        f"Magic RS Zone: {rs.get('zone', 'N/A')} "
+        f"(RS={rs.get('magic_rs')}, MA={rs.get('magic_ma')})\n"
+        f"Volume: RVOL={vol.get('rvol')}, TVOL={vol.get('tvol')}, "
+        f"Character={vol.get('character')}\n"
+        f"Dot Signals (5 bars): {dot_str}\n"
+        f"SMA 150: {gl.get('sma_150')}, Bias={gl.get('bias')}\n"
+        f"Astro: {astro_str} (Score: {astro.get('day_score', 0):+.1f})\n"
+    )
+
+    if intent_id == 'equity.why_in_context' and page_ctx:
+        base_msg += f"\n--- Page Context ---\nViewed on: {page_ctx}\n"
+        base_msg += f"\nWhy does {symbol} appear in this context?"
+    elif intent_id == 'equity.risk_assessment':
+        base_msg += f"\nAssess the risk on {symbol}."
+    else:
+        base_msg += f"\nExplain {symbol}'s signals."
+
+    return base_msg

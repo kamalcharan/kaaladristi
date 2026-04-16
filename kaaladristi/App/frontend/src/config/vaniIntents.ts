@@ -126,9 +126,44 @@ export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
   },
 } as const;
 
+export interface EquityIntentDef {
+  labelTemplate: string;
+  icon: string;
+  displayOrder: number;
+}
+
+export const EQUITY_INTENTS: Record<string, EquityIntentDef> = {
+  'equity.explain_signals': {
+    labelTemplate: "Explain {symbol}'s signals",
+    icon: 'activity',
+    displayOrder: 1,
+  },
+  'equity.why_in_context': {
+    labelTemplate: 'Why is {symbol} here?',
+    icon: 'help-circle',
+    displayOrder: 2,
+  },
+  'equity.risk_assessment': {
+    labelTemplate: "What's the risk on {symbol}?",
+    icon: 'shield-alert',
+    displayOrder: 3,
+  },
+};
+
 export function getIntentsForPage(page: VaNiPage): Array<{ intentId: string } & VaNiIntentDef> {
   return Object.entries(VANI_INTENTS)
     .filter(([, def]) => def.page === page)
     .sort(([, a], [, b]) => a.displayOrder - b.displayOrder)
     .map(([id, def]) => ({ intentId: id, ...def }));
+}
+
+export function getEquityIntents(symbol: string): Array<{ intentId: string; label: string; icon: string; displayOrder: number }> {
+  return Object.entries(EQUITY_INTENTS)
+    .sort(([, a], [, b]) => a.displayOrder - b.displayOrder)
+    .map(([id, def]) => ({
+      intentId: id,
+      label: def.labelTemplate.replace('{symbol}', symbol),
+      icon: def.icon,
+      displayOrder: def.displayOrder,
+    }));
 }

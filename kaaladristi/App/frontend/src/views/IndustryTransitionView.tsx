@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from 'lucide-react';
 import { displaySymbol, displaySubName, navName as toNavName } from '@/lib/symbolUtils';
 import { Card } from '@/components/ui';
+import VaNiTrigger from '@/components/domain/VaNiTrigger';
 import { cn } from '@/lib/utils';
 import { useIndustryTransitionStocks } from '@/hooks/useIndustryRotation';
 import { StockCard, MetricPill, SignalDots, ExchangeBadge, ZONE_LABELS, FLOW_LABELS } from '@/components/domain/StockCard';
@@ -101,6 +102,14 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
               {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
             </p>
           </div>
+          <VaNiTrigger
+            entity={{
+              type: 'equity',
+              id: stock.equity_id,
+              symbol: heroName,
+              pageContext: `Industry Transition / ${stock.industryCategory === 'rotating_in' ? 'Rotating In' : stock.industryCategory === 'rotating_out' ? 'Rotating Out' : stock.industryCategory === 'leading' ? 'Leading' : 'All'} / ${stock.industry}`,
+            }}
+          />
           <BarChart3 className="w-3.5 h-3.5 text-muted mt-0.5 opacity-40 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>

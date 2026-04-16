@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Loader2, Sparkles, ChevronRight, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
-import { getIntentsForPage } from '@/config/vaniIntents';
+import { getIntentsForPage, getEquityIntents } from '@/config/vaniIntents';
 import { useVaNiAsk } from '@/hooks/useVaNiChat';
+import { useVaNiStore } from '@/stores/vaniStore';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
 
 interface ChatMessage {
@@ -15,19 +16,30 @@ interface ChatMessage {
   timestamp: number;
 }
 
-interface VaNiChatPanelProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
+export default function VaNiChatPanel() {
+  const { open, entity, close, clearEntity } = useVaNiStore();
   const { page } = usePageContext();
-  const intents = getIntentsForPage(page);
   const askMutation = useVaNiAsk();
+
+  const pageIntents = getIntentsForPage(page);
+  const equityIntents = entity ? getEquityIntents(entity.symbol) : [];
+  const allIntents = [
+    ...equityIntents.map(i => ({ intentId: i.intentId, label: i.label })),
+    ...pageIntents.map(i => ({ intentId: i.intentId, label: i.label })),
+  ];
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeIntentId, setActiveIntentId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Reset messages when entity changes
+  const prevEntityRef = useRef(entity?.id);
+  useEffect(() => {
+    if (entity?.id !== prevEntityRef.current) {
+      setMessages([]);
+      prevEntityRef.current = entity?.id;
+    }
+  }, [entity?.id]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -36,7 +48,7 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
   }, [messages, askMutation.isPending]);
 
   const askedIntents = new Set(messages.filter(m => m.type === 'intent').map(m => m.intentId));
-  const remainingIntents = intents.filter(i => !askedIntents.has(i.intentId));
+  const remainingIntents = allIntents.filter(i => !askedIntents.has(i.intentId));
 
   const handleAsk = (intentId: string, label: string) => {
     if (askMutation.isPending) return;
@@ -52,7 +64,15 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
 
     const today = new Date().toISOString().slice(0, 10);
     askMutation.mutate(
-      { intent_id: intentId, date: today },
+      {
+        intent_id: intentId,
+        date: today,
+        ...(entity && intentId.startsWith('equity.') ? {
+          entity_type: entity.type,
+          entity_id: entity.id,
+          page_context: entity.pageContext,
+        } : {}),
+      },
       {
         onSuccess: (data: VaNiAskResponse) => {
           setMessages(prev => [...prev, {
@@ -82,7 +102,10 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
   const lastMessage = messages[messages.length - 1];
   const showFollowUp = lastMessage?.type === 'response' && !askMutation.isPending && remainingIntents.length > 0;
 
-  // ── Intent button (reused in empty state + follow-up) ──
+  const headerSubtext = entity
+    ? `${entity.symbol} · ${page.replace(/_/g, ' ')}`
+    : `${page.replace(/_/g, ' ')} context · ${allIntents.length} questions`;
+
   const IntentButton = ({ intentId, label, variant }: { intentId: string; label: string; variant: 'primary' | 'secondary' }) => (
     <button
       onClick={() => handleAsk(intentId, label)}
@@ -113,15 +136,13 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
 
   return (
     <>
-      {/* Backdrop — always show, dims the page */}
       {open && (
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-[3px] z-[200]"
-          onClick={onClose}
+          onClick={close}
         />
       )}
 
-      {/* Panel — distinct dark background, strong border */}
       <div
         className={cn(
           'fixed top-0 right-0 h-full z-[201] flex flex-col',
@@ -132,7 +153,7 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
           open ? 'translate-x-0' : 'translate-x-full',
         )}
       >
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[#0f0d22]">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
             <span className="text-white text-sm font-serif font-bold">V</span>
@@ -142,18 +163,43 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
               VaNi <span className="font-normal text-[var(--accent-indigo)]/70">&middot; वाणी</span>
             </div>
             <div className="text-[10px] font-mono text-[var(--accent-indigo)]/50 tracking-wide uppercase mt-0.5">
-              {page.replace(/_/g, ' ')} context &middot; {intents.length} questions
+              {headerSubtext}
             </div>
           </div>
+          {entity && (
+            <button
+              onClick={clearEntity}
+              title="Clear stock context"
+              className="text-[9px] font-mono text-[var(--accent-indigo)]/40 hover:text-[var(--accent-indigo)] px-2 py-1 rounded border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 transition-colors"
+            >
+              clear
+            </button>
+          )}
           <button
-            onClick={onClose}
+            onClick={close}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* ── Chat area ── */}
+        {/* Entity banner */}
+        {entity && (
+          <div className="px-5 py-2 bg-[var(--accent-indigo)]/8 border-b border-[var(--accent-indigo)]/15">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold font-mono text-[var(--accent-indigo)]">
+                {entity.symbol}
+              </span>
+              {entity.pageContext && (
+                <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider">
+                  {entity.pageContext}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Chat area */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
           {/* Empty state */}
@@ -164,14 +210,16 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
                   <Sparkles className="w-6 h-6 text-[var(--accent-indigo)]" />
                 </div>
                 <p className="text-sm font-medium text-white/80 mb-1">
-                  What would you like to know?
+                  {entity ? `Ask about ${entity.symbol}` : 'What would you like to know?'}
                 </p>
                 <p className="text-[11px] text-white/30 max-w-[260px] mx-auto leading-relaxed">
-                  VaNi reads the live data on this page and answers your questions.
+                  {entity
+                    ? `VaNi will analyse ${entity.symbol}'s signals and context.`
+                    : 'VaNi reads the live data on this page and answers your questions.'}
                 </p>
               </div>
               <div className="space-y-2">
-                {intents.map(intent => (
+                {allIntents.map(intent => (
                   <IntentButton
                     key={intent.intentId}
                     intentId={intent.intentId}
@@ -187,14 +235,12 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
           {messages.map(msg => (
             <div key={msg.id}>
               {msg.type === 'intent' ? (
-                /* ── User question: right-aligned, bold accent ── */
                 <div className="flex justify-end">
                   <div className="max-w-[85%] px-4 py-2.5 rounded-2xl rounded-tr-md bg-gradient-to-r from-[var(--accent-indigo)] to-[var(--accent-violet)] shadow-md shadow-indigo-500/10">
                     <p className="text-xs font-semibold text-white">{msg.text}</p>
                   </div>
                 </div>
               ) : (
-                /* ── VaNi response: left-aligned, card style ── */
                 <div className="flex gap-3">
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-1 shadow shadow-indigo-500/20">
                     <span className="text-white text-[9px] font-serif font-bold">V</span>
@@ -218,7 +264,7 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
             </div>
           ))}
 
-          {/* Thinking indicator */}
+          {/* Thinking */}
           {askMutation.isPending && (
             <div className="flex gap-3">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-1 shadow shadow-indigo-500/20 animate-pulse">
@@ -233,7 +279,7 @@ export default function VaNiChatPanel({ open, onClose }: VaNiChatPanelProps) {
             </div>
           )}
 
-          {/* Follow-up intents */}
+          {/* Follow-up */}
           {showFollowUp && (
             <div className="pt-3">
               <div className="flex items-center gap-2 mb-3">

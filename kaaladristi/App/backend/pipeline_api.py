@@ -42,12 +42,13 @@ from lib.db_client import get_db
 from lib.breeze_client import init_breeze, get_login_url
 from lib.ai_prompts import SKILLS as _AI_SKILLS
 from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED, AI_PROVIDER, AI_MODEL
-from lib.vani_intents import INTENTS as _VANI_INTENTS, get_intents_for_page
+from lib.vani_intents import INTENTS as _VANI_INTENTS, get_intents_for_page, get_equity_intents
 from lib.vani_cache import make_cache_key, get_cached, set_cached
 from lib.vani_assemblers import (
     assemble_dashboard_context, build_cache_context, format_user_message,
     assemble_astro_calendar_context, build_astro_cache_context, format_astro_user_message,
     assemble_industry_transition_context, build_industry_cache_context, format_industry_user_message,
+    assemble_equity_context, build_equity_cache_context, format_equity_user_message,
 )
 from pipeline.utils.trading_calendar import (
     is_weekend, is_trading_day, is_already_completed,
@@ -1728,17 +1729,20 @@ def vani_debug():
 
 
 @app.get('/api/vani/intents')
-def vani_intents(page: str = 'dashboard'):
-    """Return available VaNi intents for a given page."""
+def vani_intents(page: str = 'dashboard', entity: bool = False):
+    """Return available VaNi intents for a given page.
+
+    If entity=true, also include equity intents (parameterized).
+    """
     intents = get_intents_for_page(page)
-    return [
-        {
-            'intent_id': k,
-            'label': v.label,
-            'page': v.page,
-        }
+    result = [
+        {'intent_id': k, 'label': v.label, 'page': v.page}
         for k, v in intents.items()
     ]
+    if entity:
+        for k, v in get_equity_intents().items():
+            result.append({'intent_id': k, 'label': v.label, 'page': v.page})
+    return result
 
 
 @app.post('/api/vani/ask')
@@ -1751,8 +1755,11 @@ def vani_ask(payload: dict):
     """
     intent_id = payload.get('intent_id', '')
     target_date = payload.get('date')
+    entity_type = payload.get('entity_type')
+    entity_id = payload.get('entity_id')
+    page_context = payload.get('page_context')
 
-    log.info(f"[VaNi] ask: intent={intent_id}, date={target_date}")
+    log.info(f"[VaNi] ask: intent={intent_id}, date={target_date}, entity={entity_type}:{entity_id}")
     log.info(f"[VaNi] AI_ENABLED={_AI_ENABLED}, provider={AI_PROVIDER}, model={AI_MODEL}")
 
     intent = _VANI_INTENTS.get(intent_id)
@@ -1777,6 +1784,10 @@ def vani_ask(payload: dict):
         ctx = assemble_astro_calendar_context(db, target_date)
     elif intent.page == 'industry_transition':
         ctx = assemble_industry_transition_context(db, target_date)
+    elif intent.page == '_equity':
+        if not entity_id:
+            raise HTTPException(400, "entity_id required for equity intents")
+        ctx = assemble_equity_context(db, int(entity_id), page_context, target_date)
     else:
         return {
             "intent_id": intent_id,
@@ -1802,6 +1813,8 @@ def vani_ask(payload: dict):
         cache_ctx = build_astro_cache_context(intent_id, ctx)
     elif intent.page == 'industry_transition':
         cache_ctx = build_industry_cache_context(intent_id, ctx)
+    elif intent.page == '_equity':
+        cache_ctx = build_equity_cache_context(intent_id, ctx)
     else:
         cache_ctx = build_cache_context(intent_id, ctx)
     cache_key = make_cache_key(intent_id, cache_ctx)
@@ -1827,6 +1840,8 @@ def vani_ask(payload: dict):
         user_msg = format_astro_user_message(intent_id, ctx)
     elif intent.page == 'industry_transition':
         user_msg = format_industry_user_message(intent_id, ctx)
+    elif intent.page == '_equity':
+        user_msg = format_equity_user_message(intent_id, ctx)
     else:
         user_msg = format_user_message(intent_id, ctx)
     log.info(f"[VaNi] user_msg length={len(user_msg)}")

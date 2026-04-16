@@ -23,3 +23,4 @@ export { default as SectorRotationStrip } from './SectorRotationStrip';
 export { default as IndexWatchlist } from './IndexWatchlist';
 export { default as MagicRsLeaderboard } from './MagicRsLeaderboard';
 export { default as VaNiChatPanel } from './VaNiChatPanel';
+export { default as VaNiTrigger } from './VaNiTrigger';
