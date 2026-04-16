@@ -152,3 +152,19 @@ When today's pipeline hasn't completed, showing blank screens makes the system a
 - **Impact**: Dump filter showed 1 result in 60 days. After removing the sniper slope check, ~25-50 genuine dump suspects surface.
 - **Lesson**: Validate indicator semantics against actual data distributions before using them as filter conditions. The three remaining conditions (RSS oversold + LONG_LIQUIDATION + VOLUME_DIV_DOWN) constitute a strong dump signature without the false-precision of the sniper check.
 - **Rule**: When an indicator is derived from another (sniper_inst from RSI-9), check whether the derived value has useful range in your filter's operating region. If it's clamped/floored in precisely the region you're filtering, it adds zero signal.
+
+## Manipulation Requires Operator Capability, Not Just Price Action (2026-04-16)
+
+Mahanagar Gas (₹15,000 cr free float, ₹100 cr daily turnover) cannot be operator-dumped — float is too distributed, volumes too deep. Manipulation Watch must gate on low-float / thin-volume eligibility before applying pattern conditions. Use volume × close as turnover proxy.
+
+- **Gate**: 1-25 cr daily turnover. Below 1 cr = untradeable (no real interest). Above 25 cr = too liquid for operator manipulation.
+- **Impact**: Filters out large-caps that match the signal pattern but can't actually be manipulated. Dump suspects drop from ~50 to 5-25 genuinely small/mid-cap operator-driven cases.
+
+## BSE Uses Numeric Scrip Codes, Not Letter Symbols (2026-04-16)
+
+BSE stocks (6,504 of 7,884 = 82% of equity universe) have numeric symbols like `500325`, `544456`. Storing both NSE letter symbols and BSE numeric codes as-is in `km_equity_symbols.symbol` means BSE stocks are unsearchable and unrecognizable to users.
+
+- **Fix**: `displaySymbol()` in `lib/symbolUtils.ts` derives a human-readable display identifier from `company_name` when symbol is purely numeric. `shortNameFromCompany()` strips "Limited/Ltd/Pvt" suffixes and takes first 2 words.
+- **Tooltip**: BSE code + ISIN shown on hover for technical reference.
+- **Search**: ISIN-based dedup ensures dual-listed stocks appear once (NSE preferred). BSE-only stocks findable by company name or ISIN.
+- **Rule**: Always derive a human-readable display identifier from company_name when symbol is purely numeric. The technical scrip code stays as tooltip / metadata, not primary display.

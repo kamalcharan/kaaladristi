@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, ShieldAlert, AlertTriangle, BarChart3, BookOpen } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
 import { useManipulationWatch } from '@/hooks/useManipulationWatch';
 import { ZONE_LABELS, FLOW_LABELS, ExchangeBadge, MetricPill } from '@/components/domain/StockCard';
 import type { ManipulationWatchStock } from '@/services/scanEngine';
@@ -14,10 +15,9 @@ function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; varian
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
-  const isNumericSymbol = /^\d+$/.test(stock.symbol);
-  const heroName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
-  const subName = isNumericSymbol ? null : stock.company_name;
-  const navName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
+  const heroName = displaySymbol(stock);
+  const subName = displaySubName(stock);
+  const tooltip = bseTooltip(stock);
 
   const accentColor = variant === 'pump' ? 'text-risk-amber' : 'text-risk-red';
   const borderColor = variant === 'pump' ? 'border-l-risk-amber' : 'border-l-risk-red';
@@ -27,7 +27,8 @@ function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; varian
       rounded="xxl"
       hover="lift"
       className={cn('p-3 sm:p-4 cursor-pointer group border-l-[3px]', borderColor)}
-      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(navName)}`)}
+      title={tooltip ?? undefined}
+      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}`)}
     >
       {/* Row 1: Name + trigger count + price + chart icon */}
       <div className="flex items-start justify-between mb-2">

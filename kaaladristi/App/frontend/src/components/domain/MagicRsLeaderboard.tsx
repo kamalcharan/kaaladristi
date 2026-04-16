@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { displaySymbol, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
 import { Card } from '@/components/ui';
 import { from } from '@/services/postgrest';
 
@@ -21,6 +22,7 @@ interface LeaderboardStock {
   equity_id: number;
   symbol: string;
   company_name: string | null;
+  exchange: string | null;
   magic_rs: number;
   magic_rs_zone: string | null;
   flow_type: string | null;
@@ -81,6 +83,7 @@ async function fetchLeaderboard(): Promise<{ top: LeaderboardStock[]; bottom: Le
       equity_id: r.equity_id,
       symbol: sym.symbol,
       company_name: sym.company_name,
+      exchange: sym.exchange ?? null,
       magic_rs: r.magic_rs,
       magic_rs_zone: r.magic_rs_zone,
       flow_type: r.flow_type,
@@ -120,16 +123,18 @@ function LeaderboardRow({ stock, rank, side }: { stock: LeaderboardStock; rank: 
   const zone = ZONE_BADGE[stock.magic_rs_zone ?? ''] ?? ZONE_BADGE.Neutral;
   const flow = FLOW_SHORT[stock.flow_type ?? ''];
   const rsColor = side === 'top' ? 'text-risk-green' : 'text-risk-red';
-  const displayName = /^\d+$/.test(stock.symbol) ? (stock.company_name ?? stock.symbol) : stock.symbol;
+  const heroName = displaySymbol(stock);
+  const tooltip = bseTooltip(stock);
 
   return (
     <button
-      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(displayName)}`)}
+      title={tooltip ?? undefined}
+      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}`)}
       className="w-full flex items-center gap-2 px-3 py-2 hover:bg-kd-elevated/40 transition-colors text-left border-b border-kd-border/30 last:border-b-0"
     >
       <span className="text-[10px] font-mono text-muted w-5 text-right shrink-0">{rank}</span>
       <span className="text-xs font-bold font-mono text-primary truncate min-w-[70px] max-w-[100px]">
-        {displayName}
+        {heroName}
       </span>
       <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider shrink-0', zone.color)}>
         {zone.label}

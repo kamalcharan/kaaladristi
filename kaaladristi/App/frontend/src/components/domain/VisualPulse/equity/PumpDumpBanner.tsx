@@ -39,6 +39,10 @@ export function scanBarsForManipulation(bars: PulseBar[], lookback = 30): PumpDu
   for (let i = bars.length - 1; i >= startIdx; i--) {
     const bar = bars[i];
 
+    // Eligibility gate — manipulation requires operator capability
+    const turnoverCr = ((bar.volume ?? 0) * bar.close) / 1e7;
+    if (turnoverCr > 25 || turnoverCr < 1) continue;
+
     // Pump check
     if (
       (bar.rss_value ?? 0) > 75 &&

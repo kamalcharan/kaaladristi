@@ -666,8 +666,23 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
   return bundle;
 }
 
+/**
+ * Eligibility gate — manipulation requires operator capability.
+ * Large-caps with deep float can't be operator-pumped/dumped.
+ * Uses volume × close as turnover proxy (value_cr not always populated).
+ *   > 25 cr daily = too liquid for operator manipulation
+ *   < 1 cr daily = untradeable (no real interest)
+ */
+function isOperatorEligible(eod: EquityEodSnapshot): boolean {
+  const turnoverCr = ((eod.volume ?? 0) * eod.close) / 1e7; // ₹ cr
+  if (turnoverCr > 25) return false;  // too liquid
+  if (turnoverCr < 1) return false;   // untradeable
+  return true;
+}
+
 /** Check pump conditions for a single EOD snapshot */
 function isPumpSignal(eod: EquityEodSnapshot): boolean {
+  if (!isOperatorEligible(eod)) return false;
   return (
     (eod.rss_value ?? 0) > 75 &&
     (eod.rss_spread ?? 0) < -200 &&
@@ -680,6 +695,7 @@ function isPumpSignal(eod: EquityEodSnapshot): boolean {
  *  sniper_slope check removed — sniper_inst is structurally floored at 0
  *  for oversold stocks (derived from RSI-9 above 61). See LESSONS_LEARNED. */
 function isDumpSignal(eod: EquityEodSnapshot): boolean {
+  if (!isOperatorEligible(eod)) return false;
   if ((eod.rss_value ?? 100) >= 25) return false;
   if (eod.flow_type !== 'LONG_LIQUIDATION') return false;
   if (eod.volume_divergence_flag !== 'VOLUME_DIV_DOWN') return false;

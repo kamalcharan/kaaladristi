@@ -6,6 +6,7 @@
  */
 
 import { cn } from '@/lib/utils';
+import { displaySymbol, displaySubName, navName as toNavName } from '@/lib/symbolUtils';
 import { Card } from '@/components/ui';
 import { BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -92,17 +93,15 @@ export function StockCard({ stock }: { stock: ScanStock }) {
   const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
   const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
-  const isNumericSymbol = /^\d+$/.test(stock.symbol);
-  const heroName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
-  const subName = isNumericSymbol ? null : stock.company_name;
-  const navName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
+  const heroName = displaySymbol(stock);
+  const subName = displaySubName(stock);
 
   return (
     <Card
       rounded="xxl"
       hover="lift"
       className="p-3 sm:p-4 cursor-pointer group"
-      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(navName)}`)}
+      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(toNavName(stock))}`)}
     >
       {/* Row 1: Script name + Price */}
       <div className="flex items-start justify-between mb-2">
