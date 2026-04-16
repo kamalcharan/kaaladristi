@@ -131,7 +131,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
 
     // Equity EOD for last 20 dates
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
       .limit(30000)
@@ -273,6 +273,7 @@ function buildScanStock(
     exchange: sym.exchange ?? null,
     close: eod.close,
     pct_chng: eod.pct_chng,
+    rsi_14: eod.rsi_14,
     magic_rs: eod.magic_rs,
     magic_rs_zone: eod.magic_rs_zone,
     flow_type: eod.flow_type,
@@ -636,7 +637,7 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
       .limit(lookbackDays * 8000) // ~8K equities × N days
@@ -725,6 +726,7 @@ function buildStockFromEod(
     exchange: sym.exchange ?? null,
     close: eod.close,
     pct_chng: eod.pct_chng,
+    rsi_14: eod.rsi_14,
     magic_rs: eod.magic_rs,
     magic_rs_zone: eod.magic_rs_zone,
     flow_type: eod.flow_type,

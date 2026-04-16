@@ -401,6 +401,7 @@ export interface ScanStock {
   exchange: string | null;
   close: number;
   pct_chng: number | null;
+  rsi_14: number | null;
   magic_rs: number | null;
   magic_rs_zone: string | null;
   flow_type: string | null;
@@ -446,6 +447,7 @@ export interface EquityEodSnapshot {
   volume: number | null;
   rvol: number | null;
   tvol: number | null;
+  rsi_14: number | null;
   magic_rs: number | null;
   magic_rs_zone: string | null;
   flow_type: string | null;
