@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Loader2, Sparkles, ChevronRight, MessageCircle, RotateCcw } from 'lucide-react';
+import { X, Loader2, Sparkles, ChevronRight, MessageCircle, RotateCcw, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
 import { getIntentsForPage, getEquityIntents } from '@/config/vaniIntents';
 import { useVaNiAsk } from '@/hooks/useVaNiChat';
 import { useVaNiStore } from '@/stores/vaniStore';
+import { useAuthStore } from '@/stores/authStore';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
+
+const pipelineUrl =
+  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
 
 interface ChatMessage {
   id: string;
@@ -19,7 +23,18 @@ interface ChatMessage {
 export default function VaNiChatPanel() {
   const { open, entity, close, clearEntity } = useVaNiStore();
   const { page } = usePageContext();
+  const { isAdmin } = useAuthStore();
   const askMutation = useVaNiAsk();
+  const [purging, setPurging] = useState(false);
+
+  const handlePurgeCache = async () => {
+    setPurging(true);
+    try {
+      await fetch(`${pipelineUrl}/api/vani/cache`, { method: 'DELETE' });
+      setMessages([]);
+    } catch { /* ignore */ }
+    setPurging(false);
+  };
 
   const pageIntents = getIntentsForPage(page);
   const equityIntents = entity ? getEquityIntents(entity.symbol) : [];
@@ -173,6 +188,20 @@ export default function VaNiChatPanel() {
               className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-[var(--accent-indigo)] transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={handlePurgeCache}
+              disabled={purging}
+              title="Purge VaNi cache (admin)"
+              className={cn(
+                'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
+                'text-risk-red/40 hover:bg-risk-red/10 hover:text-risk-red',
+                purging && 'animate-pulse',
+              )}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           )}
           <button
