@@ -203,3 +203,167 @@ export async function fetchIndustryStocks(
     };
   });
 }
+
+
+// ── Full Industry Transition (dedicated page) ─────────────────
+
+export interface IndustryTransitionItem extends IndustryRotationItem {
+  percentile: number;         // current percentile (1 = best, 100 = worst)
+  prevPercentile: number | null;
+  percentileChange: number;   // positive = improved (percentile decreased)
+  sparkline: number[];        // percentile values over last 6 dates (oldest first)
+}
+
+export type TransitionCategory = 'rotating_in' | 'leading' | 'rotating_out' | 'stable';
+
+export interface IndustryTransitionData {
+  rotatingIn: IndustryTransitionItem[];
+  leading: IndustryTransitionItem[];
+  rotatingOut: IndustryTransitionItem[];
+  stable: IndustryTransitionItem[];
+  latestDate: string | null;
+  nseAsOfDate: string | null;
+  bseAsOfDate: string | null;
+  totalIndustries: number;
+  tradeDates: string[];       // available dates for date picker
+}
+
+/** Fetch ALL industries with full transition data for the dedicated page */
+export async function fetchFullIndustryTransition(): Promise<IndustryTransitionData> {
+  // Fetch 6 recent dates for sparkline + transition detection
+  const dates = await fetchRecentTradeDates(6);
+
+  if (dates.length === 0) {
+    return {
+      rotatingIn: [], leading: [], rotatingOut: [], stable: [],
+      latestDate: null, nseAsOfDate: null, bseAsOfDate: null,
+      totalIndustries: 0, tradeDates: [],
+    };
+  }
+
+  const latestDate = dates[0];
+  const lookbackDate = dates[Math.min(INDUSTRY_ROTATION_LOOKBACK_DAYS, dates.length - 1)];
+
+  // Fetch all dates' data in parallel
+  const allDateRows = await Promise.all(dates.map((d) => fetchIndustryEodForDate(d)));
+
+  // Build history map: industry → { date → row }
+  const historyMap = new Map<string, Map<string, IndustryEodRow>>();
+  for (let di = 0; di < dates.length; di++) {
+    for (const row of allDateRows[di]) {
+      if (!historyMap.has(row.industry)) historyMap.set(row.industry, new Map());
+      historyMap.get(row.industry)!.set(dates[di], row);
+    }
+  }
+
+  const todayRows = allDateRows[0];
+  const totalIndustries = todayRows.length;
+  const topQuartileCutoff = Math.ceil(totalIndustries / 4);
+
+  // Build prev rank map from lookback date
+  const lookbackIdx = dates.indexOf(lookbackDate);
+  const lookbackRows = lookbackIdx >= 0 ? allDateRows[lookbackIdx] : [];
+  const prevRankMap = new Map<string, number>();
+  const prevTotalMap = new Map<string, number>();
+  for (const row of lookbackRows) {
+    prevRankMap.set(row.industry, row.industry_rank);
+  }
+  const prevTotal = lookbackRows.length || totalIndustries;
+
+  // As-of dates
+  let nseAsOfDate: string | null = null;
+  let bseAsOfDate: string | null = null;
+  for (const row of todayRows) {
+    if (row.nse_as_of_date && (!nseAsOfDate || row.nse_as_of_date > nseAsOfDate)) nseAsOfDate = row.nse_as_of_date;
+    if (row.bse_as_of_date && (!bseAsOfDate || row.bse_as_of_date > bseAsOfDate)) bseAsOfDate = row.bse_as_of_date;
+  }
+
+  // Build items with percentile + sparkline
+  const items: IndustryTransitionItem[] = todayRows.map((row) => {
+    const prevRank = prevRankMap.get(row.industry) ?? null;
+    const rankChange = prevRank !== null ? prevRank - row.industry_rank : 0;
+
+    // Percentile: 1 = best, 100 = worst
+    const percentile = Math.round((row.industry_rank / totalIndustries) * 100);
+    const prevPercentile = prevRank !== null ? Math.round((prevRank / prevTotal) * 100) : null;
+    const percentileChange = prevPercentile !== null ? prevPercentile - percentile : 0;
+
+    // Sparkline: percentile over each date (oldest first for left-to-right rendering)
+    const sparkline: number[] = [];
+    for (let di = dates.length - 1; di >= 0; di--) {
+      const dateRows = allDateRows[di];
+      const dateTotal = dateRows.length || 1;
+      const history = historyMap.get(row.industry);
+      const histRow = history?.get(dates[di]);
+      if (histRow) {
+        sparkline.push(Math.round((histRow.industry_rank / dateTotal) * 100));
+      }
+    }
+
+    // Category (same logic as dashboard but using percentile threshold)
+    let category: RotationCategory;
+    if (percentileChange >= 10) {
+      category = 'rotating_in';
+    } else if (percentileChange <= -10) {
+      category = 'rotating_out';
+    } else if (row.industry_rank <= topQuartileCutoff) {
+      category = 'leading';
+    } else {
+      category = 'leading'; // will be re-classified as stable below
+    }
+
+    return {
+      ...row,
+      category,
+      rank_change: rankChange,
+      prev_rank: prevRank,
+      percentile,
+      prevPercentile,
+      percentileChange,
+      sparkline,
+    };
+  });
+
+  // Classify into buckets
+  const rotatingIn = items
+    .filter((i) => i.percentileChange >= 10)
+    .sort((a, b) => b.percentileChange - a.percentileChange);
+
+  const rotatingInSet = new Set(rotatingIn.map((i) => i.industry));
+
+  const rotatingOut = items
+    .filter((i) => i.percentileChange <= -10)
+    .sort((a, b) => a.percentileChange - b.percentileChange);
+
+  const rotatingOutSet = new Set(rotatingOut.map((i) => i.industry));
+
+  const leading = items
+    .filter((i) =>
+      i.industry_rank <= topQuartileCutoff &&
+      !rotatingInSet.has(i.industry) &&
+      !rotatingOutSet.has(i.industry)
+    )
+    .sort((a, b) => a.industry_rank - b.industry_rank);
+
+  const leadingSet = new Set(leading.map((i) => i.industry));
+
+  const stable = items
+    .filter((i) =>
+      !rotatingInSet.has(i.industry) &&
+      !rotatingOutSet.has(i.industry) &&
+      !leadingSet.has(i.industry)
+    )
+    .sort((a, b) => a.percentile - b.percentile);
+
+  return {
+    rotatingIn,
+    leading,
+    rotatingOut,
+    stable,
+    latestDate,
+    nseAsOfDate,
+    bseAsOfDate,
+    totalIndustries,
+    tradeDates: dates,
+  };
+}
