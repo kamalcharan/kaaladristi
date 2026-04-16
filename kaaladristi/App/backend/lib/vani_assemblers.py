@@ -869,7 +869,7 @@ def assemble_industry_transition_context(db, target_date: str = None) -> dict | 
 def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> list[dict]:
     """Fetch top 15 stocks from leading industries by magic_rs."""
     import logging
-    _log = logging.getLogger(__name__)
+    _log = logging.getLogger('pipeline-api')
 
     _log.info(f"[VaNi stocks] leading count={len(leading)}, names={[e.get('industry') for e in leading[:5]]}")
     if not leading:
