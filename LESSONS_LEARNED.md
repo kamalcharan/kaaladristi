@@ -129,3 +129,18 @@ When two pages share 70% of components but have different layouts and informatio
 
 - **Applied**: `/pulse/:indexId` (existing, unchanged) + `/pulse/equity/:equityId` (new). React Router matches the more specific `/pulse/equity/` prefix first, avoiding collisions.
 - **Pattern**: For any page that serves multiple entity types, encode the entity type in the URL path segment. Don't rely on query params or ID range conventions.
+
+## Show, Don't Hide — Data Freshness Is Informational, Not a Feature Gate (2026-04-16)
+
+When today's pipeline hasn't completed, showing blank screens makes the system appear broken. Showing yesterday's data with clear "as on" labeling is industry standard (Zerodha, Groww, MoneyControl all do this). The global nav chip is the single source of truth — every page automatically benefits without per-page date labels.
+
+- **Applied**: `DataFreshnessChip` in global nav bar shows "Data as on: 15 Apr 2026" with green/amber/red status. Dashboard renders with fallback report when risk API is unavailable — widgets (breadth, sectors, leaderboards) fetch independently and work regardless.
+- **Anti-pattern**: Gating the entire dashboard on a single API response (`useDayRisk`). When that API fails, the user sees "Unable to load risk data" even though 6 other data sources are healthy.
+- **Rule**: Every page should render its independently-sourced widgets even when one data source fails. Use fallbacks, not gates.
+
+## Specific Empty States Beat Generic Ones (2026-04-16)
+
+"No results" alarms users. "No Weakness Confluence today — normal in recovery rallies" educates them. Empty states are an opportunity to teach the system's behavior, not just signal absence of data.
+
+- **Applied**: Each scanner preset has a specific empty message explaining whether zero results is normal or notable. Manipulation Watch distinguishes pump vs dump empty states.
+- **Pattern**: When a feature legitimately returns zero results under normal conditions, the empty state should say so. "Wyckoff signals are naturally rare (1-5% of trading days)" is more useful than "No results found."

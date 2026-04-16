@@ -283,7 +283,11 @@ function SuspectSection({
         </div>
       ) : (
         <div className="py-10 text-center">
-          <p className="text-sm text-muted">No suspect activity detected in the last {lookbackDays} trading days.</p>
+          <p className="text-sm text-muted">
+            {variant === 'pump'
+              ? 'No pump suspects detected in the last ' + lookbackDays + ' trading days.'
+              : 'No dump suspects detected in the last ' + lookbackDays + ' trading days.'}
+          </p>
         </div>
       )}
     </Card>
