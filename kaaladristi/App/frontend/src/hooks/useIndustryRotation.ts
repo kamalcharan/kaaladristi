@@ -2,8 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import {
   fetchIndustryRotation,
   fetchIndustryStocks,
+  fetchFullIndustryTransition,
+  fetchIndustryTransitionStocks,
   type IndustryRotationData,
   type IndustryStockRow,
+  type IndustryTransitionData,
+  type IndustryTransitionStocksResult,
 } from '@/services/industryRotation';
 
 export function useIndustryRotation() {
@@ -11,6 +15,24 @@ export function useIndustryRotation() {
     queryKey: ['industryRotation'],
     queryFn: fetchIndustryRotation,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+export function useIndustryTransition() {
+  return useQuery<IndustryTransitionData>({
+    queryKey: ['industryTransition'],
+    queryFn: fetchFullIndustryTransition,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+export function useIndustryTransitionStocks() {
+  return useQuery<IndustryTransitionStocksResult>({
+    queryKey: ['industryTransitionStocks'],
+    queryFn: fetchIndustryTransitionStocks,
+    staleTime: 3 * 60 * 1000,
     retry: 1,
   });
 }
