@@ -533,9 +533,113 @@ INTENTS: dict[str, VaNiIntent] = {
         cache_ttl_hours=24,
         complexity="low",
     ),
+    # ══════════════════════════════════════════════════════════════════════════
+    # Equity Intents (parameterized — entity_id injected at runtime)
+    # These appear on ANY page when a stock is selected via the VaNi trigger.
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── 17. Explain Signals ───────────────────────────────────────────────────
+    "equity.explain_signals": VaNiIntent(
+        page="_equity",
+        label="Explain this stock's signals",
+        required_context=["instrument_context"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user has selected a specific stock and wants to understand its "
+            "current signal profile. You will receive a full technical + astro "
+            "snapshot: flow type, participation (institutional vs hot money), "
+            "momentum (RSI, MFI), relative strength (Magic RS zone), volume "
+            "character, dot signals (SVD/SBD/SYD), Golden Line (SMA 150) position, "
+            "and any active planetary cycle events. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) The signal picture — what is the dominant signal? Is flow "
+            "confirming the RS zone? Is participation institutional or speculative? "
+            "Are dot signals present and what do they indicate? What does the "
+            "volume character say about conviction?\n"
+            "(2) The multi-factor read — do the signals align (confluence) or "
+            "conflict? A stock with Strong Bull RS + FRESH_LONGS + SVD + high "
+            "RVOL is in strong confluence. A stock with Strong Bull RS but "
+            "LONG_LIQUIDATION flow has conflicting signals. Describe which "
+            "situation this stock is in."
+            + _VANI_RULES
+        ),
+        max_tokens=400,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 18. Why Is This Stock Here? ───────────────────────────────────────────
+    "equity.why_in_context": VaNiIntent(
+        page="_equity",
+        label="Why is this stock here?",
+        required_context=["instrument_context", "page_context"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is looking at a specific stock on a KaalaDristi page "
+            "(Industry Transition, Scanner, or Manipulation Watch) and wants to "
+            "understand why it appears there. You will receive the stock's full "
+            "signal snapshot plus a page_context field explaining which page and "
+            "category the stock is in (e.g., 'Industry Transition / Rotating In' "
+            "or 'Scanner / Power Buy'). "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) Why it qualifies — map the stock's specific signal values to "
+            "the criteria for this category. For example, if it's in 'Rotating In', "
+            "explain that its industry rank improved 5+ positions and its RS/flow "
+            "confirm the rotation. Be specific about which numbers meet which "
+            "thresholds.\n"
+            "(2) Strength of the signal — is this a strong inclusion (multiple "
+            "confirming factors) or borderline (barely meets criteria)? What would "
+            "strengthen or weaken its position in this list?"
+            + _VANI_RULES
+        ),
+        max_tokens=400,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 19. Risk Assessment ───────────────────────────────────────────────────
+    "equity.risk_assessment": VaNiIntent(
+        page="_equity",
+        label="What's the risk on this stock?",
+        required_context=["instrument_context"],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants a risk assessment for a specific stock. You will "
+            "receive its full signal snapshot including flow type, volume, RS zone, "
+            "participation profile, dot signals, SMA 150 position, and any active "
+            "planetary cycle events. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) Risk factors — identify what could go wrong. Is it trading on "
+            "low volume (weak conviction)? Is flow type fragile (SHORT_COVERING, "
+            "LONG_LIQUIDATION)? Is there a vacuum flag? Any SYD (distribution) "
+            "signals? Is it below SMA 150 (structural weakness)? Are adverse "
+            "planetary events active?\n"
+            "(2) Risk level — synthesize into a plain-English risk characterization: "
+            "low risk (strong multi-factor support), moderate risk (mixed signals, "
+            "some concerns), or elevated risk (multiple warning signs). Explain "
+            "what would change the risk picture."
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
 }
+
+
+# Equity intents use a special page="_equity" marker — they're not page-bound
+# but entity-bound. The frontend triggers them from any page.
+EQUITY_INTENTS = {k: v for k, v in INTENTS.items() if v.page == '_equity'}
 
 
 def get_intents_for_page(page: str) -> dict[str, VaNiIntent]:
     """Return all active intents for a given page."""
     return {k: v for k, v in INTENTS.items() if v.page == page}
+
+
+def get_equity_intents() -> dict[str, VaNiIntent]:
+    """Return equity intents (parameterized, entity-bound)."""
+    return EQUITY_INTENTS

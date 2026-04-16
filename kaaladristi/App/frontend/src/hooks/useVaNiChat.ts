@@ -22,6 +22,9 @@ export interface VaNiIntentItem {
 export interface VaNiAskRequest {
   intent_id: string;
   date?: string;
+  entity_type?: 'equity' | 'index';
+  entity_id?: number;
+  page_context?: string;
 }
 
 export interface VaNiAskResponse {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useVaNiStore } from '@/stores/vaniStore';
 import Sidebar from './Sidebar';
 import DataFreshnessChip from './DataFreshnessChip';
 import SearchStrip from './SearchStrip';
@@ -11,7 +12,7 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('kd_sidebar_collapsed') === 'true'
   );
-  const [vaniOpen, setVaniOpen] = useState(false);
+  const { open: vaniOpen, toggle: toggleVani } = useVaNiStore();
   const location = useLocation();
 
   const toggle = () => setCollapsed(v => {
@@ -19,7 +20,6 @@ export default function Layout() {
     return !v;
   });
 
-  // Chart pages need full width for the side panel
   const isFullWidth = location.pathname.startsWith('/chart/') || location.pathname.startsWith('/pulse/');
 
   return (
@@ -34,7 +34,7 @@ export default function Layout() {
           <SearchStrip />
           <div className="ml-auto shrink-0 flex items-center gap-2">
             <button
-              onClick={() => setVaniOpen(v => !v)}
+              onClick={toggleVani}
               title="Ask VaNi"
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
@@ -57,7 +57,7 @@ export default function Layout() {
         </div>
       </main>
 
-      <VaNiChatPanel open={vaniOpen} onClose={() => setVaniOpen(false)} />
+      <VaNiChatPanel />
     </div>
   );
 }
