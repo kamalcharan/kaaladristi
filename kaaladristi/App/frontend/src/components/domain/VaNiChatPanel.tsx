@@ -256,25 +256,28 @@ export default function VaNiChatPanel() {
                         {msg.text}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 mt-1.5 px-2">
-                      {msg.cached && (
-                        <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
-                          instant response
-                        </span>
-                      )}
-                      {isAdmin && msg.intentId && (
-                        <button
-                          onClick={async () => {
-                            await fetch(`${pipelineUrl}/api/vani/cache?intent_id=${encodeURIComponent(msg.intentId!)}`, { method: 'DELETE' });
-                            setMessages(prev => prev.filter(m => m.id !== msg.id && !(m.type === 'intent' && m.intentId === msg.intentId)));
-                          }}
-                          title="Clear this intent's cache"
-                          className="ml-auto text-white/15 hover:text-risk-red/70 transition-colors"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
+                    {(msg.cached || isAdmin) && (
+                      <div className="flex items-center gap-2 mt-1.5 px-2">
+                        {msg.cached && (
+                          <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
+                            instant response
+                          </span>
+                        )}
+                        {isAdmin && msg.intentId && (
+                          <button
+                            onClick={async () => {
+                              await fetch(`${pipelineUrl}/api/vani/cache?intent_id=${encodeURIComponent(msg.intentId!)}`, { method: 'DELETE' });
+                              setMessages(prev => prev.filter(m => m.id !== msg.id && !(m.type === 'intent' && m.intentId === msg.intentId)));
+                            }}
+                            title="Clear this intent's cache"
+                            className="ml-auto flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>clear cache</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
