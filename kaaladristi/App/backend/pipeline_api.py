@@ -41,7 +41,12 @@ import pytz
 from lib.db_client import get_db
 from lib.breeze_client import init_breeze, get_login_url
 from lib.ai_prompts import SKILLS as _AI_SKILLS
-from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED
+from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED, AI_PROVIDER, AI_MODEL
+from lib.vani_intents import INTENTS as _VANI_INTENTS, get_intents_for_page
+from lib.vani_cache import make_cache_key, get_cached, set_cached
+from lib.vani_assemblers import (
+    assemble_dashboard_context, build_cache_context, format_user_message,
+)
 from pipeline.utils.trading_calendar import (
     is_weekend, is_trading_day, is_already_completed,
     mark_day_status, get_missing_dates, last_trading_day,
@@ -1696,6 +1701,113 @@ def visual_pulse_insight(payload: dict):
         _insight_cache[cache_key] = insight
     return {
         "date": trade_date, "insight": insight, "ai": insight is not None,
+    }
+
+
+# ── VaNi Conversational Layer ────────────────────────────────────────────────
+
+
+@app.get('/api/vani/intents')
+def vani_intents(page: str = 'dashboard'):
+    """Return available VaNi intents for a given page."""
+    intents = get_intents_for_page(page)
+    return [
+        {
+            'intent_id': k,
+            'label': v.label,
+            'page': v.page,
+        }
+        for k, v in intents.items()
+    ]
+
+
+@app.post('/api/vani/ask')
+def vani_ask(payload: dict):
+    """Answer a VaNi intent question.
+
+    Payload: { "intent_id": "dashboard.market_summary", "date": "2026-04-16" }
+
+    Flow: check cache → assemble context → render prompt → call LLM → cache → return.
+    """
+    intent_id = payload.get('intent_id', '')
+    target_date = payload.get('date')
+
+    intent = _VANI_INTENTS.get(intent_id)
+    if not intent:
+        raise HTTPException(400, f"Unknown intent: {intent_id}")
+
+    if not _AI_ENABLED:
+        return {
+            "intent_id": intent_id,
+            "response": None,
+            "ai": False,
+            "cached": False,
+            "provider": None,
+        }
+
+    # Assemble context (currently only dashboard intents)
+    if intent.page == 'dashboard':
+        ctx = assemble_dashboard_context(db, target_date)
+    else:
+        return {
+            "intent_id": intent_id,
+            "response": None,
+            "ai": False,
+            "cached": False,
+            "error": f"Page '{intent.page}' assembler not yet implemented",
+        }
+
+    if not ctx:
+        return {
+            "intent_id": intent_id,
+            "response": None,
+            "ai": False,
+            "cached": False,
+        }
+
+    # Build cache key from bucketed context
+    cache_ctx = build_cache_context(intent_id, ctx)
+    cache_key = make_cache_key(intent_id, cache_ctx)
+
+    # Check persistent cache
+    cached_response = get_cached(db, cache_key)
+    if cached_response:
+        return {
+            "intent_id": intent_id,
+            "date": ctx['date'],
+            "response": cached_response,
+            "ai": True,
+            "cached": True,
+            "provider": "cache",
+        }
+
+    # Format user message and call LLM
+    user_msg = format_user_message(intent_id, ctx)
+    response = _ai_complete(
+        system=intent.system_prompt,
+        user=user_msg,
+        max_tokens=intent.max_tokens,
+    )
+
+    if response:
+        set_cached(
+            db,
+            cache_key=cache_key,
+            intent_id=intent_id,
+            context_hash=cache_ctx.get('date', ''),
+            response_text=response,
+            ttl_hours=intent.cache_ttl_hours,
+            llm_provider=AI_PROVIDER,
+            llm_model=AI_MODEL,
+        )
+
+    return {
+        "intent_id": intent_id,
+        "date": ctx['date'],
+        "response": response,
+        "ai": response is not None,
+        "cached": False,
+        "provider": AI_PROVIDER if response else None,
     }
 
 

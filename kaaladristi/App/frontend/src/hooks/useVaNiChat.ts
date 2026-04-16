@@ -1,0 +1,75 @@
+/**
+ * VaNi Conversational Layer — React hooks
+ *
+ * useVaNiIntents(page)  — fetch available intents for the current page
+ * useVaNiAsk()          — mutation to ask a VaNi intent question
+ */
+
+import { useQuery, useMutation } from '@tanstack/react-query';
+import type { VaNiPage } from '@/config/vaniIntents';
+
+const pipelineUrl =
+  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export interface VaNiIntentItem {
+  intent_id: string;
+  label: string;
+  page: string;
+}
+
+export interface VaNiAskRequest {
+  intent_id: string;
+  date?: string;
+}
+
+export interface VaNiAskResponse {
+  intent_id: string;
+  date?: string;
+  response: string | null;
+  ai: boolean;
+  cached: boolean;
+  provider: string | null;
+  error?: string;
+}
+
+// ── Hooks ────────────────────────────────────────────────────────────────────
+
+export function useVaNiIntents(page: VaNiPage) {
+  return useQuery({
+    queryKey: ['vani_intents', page],
+    queryFn: async (): Promise<VaNiIntentItem[]> => {
+      const res = await fetch(
+        `${pipelineUrl}/api/vani/intents?page=${encodeURIComponent(page)}`,
+      );
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useVaNiAsk() {
+  return useMutation({
+    mutationFn: async (req: VaNiAskRequest): Promise<VaNiAskResponse> => {
+      const res = await fetch(`${pipelineUrl}/api/vani/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req),
+      });
+      if (!res.ok) {
+        return {
+          intent_id: req.intent_id,
+          response: null,
+          ai: false,
+          cached: false,
+          provider: null,
+          error: `HTTP ${res.status}`,
+        };
+      }
+      return res.json();
+    },
+  });
+}
