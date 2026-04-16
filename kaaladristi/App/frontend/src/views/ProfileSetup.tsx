@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 
 export default function ProfileSetup() {
   const navigate = useNavigate();
-  const { profile, refreshProfile } = useAuthStore();
+  const { profile, refreshProfile, setProfile } = useAuthStore();
 
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
@@ -27,7 +27,8 @@ export default function ProfileSetup() {
       await refreshProfile();
       navigate('/dashboard', { replace: true });
     } catch (err: any) {
-      setError(err.message || 'Failed to save profile');
+      console.error('[ProfileSetup] save failed:', err);
+      setError(err.message || 'Failed to save profile. You can skip for now.');
     } finally {
       setIsSubmitting(false);
     }
@@ -36,14 +37,21 @@ export default function ProfileSetup() {
   const handleSkip = async () => {
     setIsSubmitting(true);
     try {
-      await updateProfile({ onboarded: true });
-      await refreshProfile();
-      navigate('/dashboard', { replace: true });
+      if (profile) {
+        await updateProfile({ onboarded: true });
+        await refreshProfile();
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to save profile');
-    } finally {
-      setIsSubmitting(false);
+      // Skip should always work — if the DB update fails,
+      // force the local profile to onboarded so the user can proceed.
+      console.warn('[ProfileSetup] skip update failed, forcing local onboarded:', err);
     }
+    // Force local state regardless of DB result
+    if (profile) {
+      setProfile({ ...profile, onboarded: true });
+    }
+    navigate('/dashboard', { replace: true });
+    setIsSubmitting(false);
   };
 
   const inputClass =
