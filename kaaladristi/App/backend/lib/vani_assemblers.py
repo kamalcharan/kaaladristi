@@ -80,27 +80,34 @@ def _fetch_industry_rotation(db, target_date: str) -> dict:
     current_ranks = {r['industry']: r.get('industry_rank', 999) for r in rows}
     current_data = {r['industry']: r for r in rows}
 
-    lookback_date = str(
-        date.fromisoformat(target_date) - timedelta(days=INDUSTRY_ROTATION_LOOKBACK_DAYS + 5)
-    )
+    # Find the lookback date (~5 trading days ago)
+    # Fetch recent dates from km_industry_eod to find actual trading days
     try:
-        old_rows = db.select(
-            'km_industry_eod', 'industry,industry_rank',
-            order='industry_rank.asc',
+        date_rows = db.select(
+            'km_industry_eod', 'trade_date',
+            order='trade_date.desc',
             limit=200,
         )
-        old_rows = [
-            r for r in old_rows
-            if lookback_date <= str(r.get('trade_date', '')) < target_date
-        ]
+        unique_dates = sorted(set(str(r.get('trade_date', '')) for r in date_rows if str(r.get('trade_date', '')) < target_date), reverse=True)
+        lookback_trade_date = unique_dates[INDUSTRY_ROTATION_LOOKBACK_DAYS - 1] if len(unique_dates) >= INDUSTRY_ROTATION_LOOKBACK_DAYS else (unique_dates[-1] if unique_dates else None)
     except Exception:
-        old_rows = []
+        lookback_trade_date = None
 
     old_ranks = {}
-    for r in old_rows:
-        ind = r.get('industry')
-        if ind and ind not in old_ranks:
-            old_ranks[ind] = r.get('industry_rank', 999)
+    if lookback_trade_date:
+        try:
+            old_rows = db.select(
+                'km_industry_eod', 'industry,industry_rank',
+                filters={'trade_date': lookback_trade_date},
+                order='industry_rank.asc',
+                limit=200,
+            )
+            for r in (old_rows or []):
+                ind = r.get('industry')
+                if ind:
+                    old_ranks[ind] = r.get('industry_rank', 999)
+        except Exception:
+            pass
 
     for industry, rank in current_ranks.items():
         data = current_data.get(industry, {})
