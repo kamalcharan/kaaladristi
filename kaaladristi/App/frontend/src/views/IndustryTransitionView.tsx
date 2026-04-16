@@ -1,214 +1,129 @@
 import { useState, useMemo } from 'react';
-import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import { useIndustryTransition, useIndustryStocks } from '@/hooks/useIndustryRotation';
-import { StockCard, FLOW_LABELS } from '@/components/domain/StockCard';
-import type { IndustryTransitionItem } from '@/services/industryRotation';
-import type { ScanStock } from '@/types';
+import { useIndustryTransitionStocks } from '@/hooks/useIndustryRotation';
+import { StockCard, MetricPill, SignalDots, ExchangeBadge, ZONE_LABELS, FLOW_LABELS } from '@/components/domain/StockCard';
+import type { IndustryEnrichedStock } from '@/services/industryRotation';
 
 // ── Filter Tabs ───────────────────────────────────────────────
 
-type FilterTab = 'all' | 'rotating_in' | 'leading' | 'rotating_out';
+type CategoryFilter = 'all' | 'rotating_in' | 'leading' | 'rotating_out';
 
-const FILTER_TABS: { id: FilterTab; label: string; color: string }[] = [
-  { id: 'all',          label: 'All',          color: 'text-accent-indigo border-accent-indigo/30 bg-accent-indigo/15' },
-  { id: 'rotating_in',  label: 'Rotating In',  color: 'text-risk-green border-risk-green/30 bg-risk-green/15' },
-  { id: 'leading',      label: 'Leading',      color: 'text-risk-amber border-risk-amber/30 bg-risk-amber/15' },
-  { id: 'rotating_out', label: 'Rotating Out',  color: 'text-risk-red border-risk-red/30 bg-risk-red/15' },
+const CATEGORY_TABS: { id: CategoryFilter; label: string; activeClass: string }[] = [
+  { id: 'all',          label: 'All',          activeClass: 'bg-accent-indigo/15 text-accent-indigo border-accent-indigo/40' },
+  { id: 'rotating_in',  label: 'Rotating In',  activeClass: 'bg-risk-green/15 text-risk-green border-risk-green/40' },
+  { id: 'leading',      label: 'Leading',      activeClass: 'bg-risk-amber/15 text-risk-amber border-risk-amber/40' },
+  { id: 'rotating_out', label: 'Rotating Out',  activeClass: 'bg-risk-red/15 text-risk-red border-risk-red/40' },
 ];
 
-// ── Sparkline SVG ─────────────────────────────────────────────
+// ── Sort ──────────────────────────────────────────────────────
 
-function Sparkline({ values, improving }: { values: number[]; improving: boolean }) {
-  if (values.length < 2) return null;
-  const w = 78, h = 18, p = 2;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const pts = values.map((v, i) => {
-    const x = p + i * ((w - 2 * p) / (values.length - 1));
-    const y = h - p - ((v - min) / range) * (h - 2 * p);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  const color = improving ? 'var(--risk-green)' : 'var(--risk-red)';
+type SortKey = 'industryPercentile' | 'magic_rs' | 'rsi_14' | 'rss_value' | 'rvol' | 'pct_chng';
+type SortDir = 'asc' | 'desc';
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'industryPercentile', label: 'Industry %ile' },
+  { key: 'magic_rs',           label: 'Magic RS' },
+  { key: 'rsi_14',             label: 'RSI' },
+  { key: 'rss_value',          label: 'RSS' },
+  { key: 'rvol',               label: 'RVOL' },
+  { key: 'pct_chng',           label: '% Chg' },
+];
+
+// ── Industry Tag (shown on each stock card) ───────────────────
+
+function IndustryTag({ stock }: { stock: IndustryEnrichedStock }) {
+  const catColor = stock.industryCategory === 'rotating_in'
+    ? 'text-risk-green border-risk-green/30 bg-risk-green/10'
+    : stock.industryCategory === 'rotating_out'
+    ? 'text-risk-red border-risk-red/30 bg-risk-red/10'
+    : stock.industryCategory === 'leading'
+    ? 'text-risk-amber border-risk-amber/30 bg-risk-amber/10'
+    : 'text-muted border-kd-border bg-kd-elevated/30';
+
   return (
-    <svg className="w-[78px] h-[18px] shrink-0" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded border inline-flex items-center gap-1', catColor)}>
+      {stock.industry}
+      <span className="font-mono">{stock.industryPercentile}%ile</span>
+      {stock.industryPercentileChange > 0 && <TrendingUp className="w-2.5 h-2.5" />}
+      {stock.industryPercentileChange < 0 && <TrendingDown className="w-2.5 h-2.5" />}
+    </span>
   );
 }
 
-// ── Convert IndustryStockRow to ScanStock for StockCard ────────
+// ── Enriched Stock Card (reuses StockCard layout + adds industry tag) ──
 
-function toScanStock(s: any, industry: string): ScanStock {
-  return {
-    equity_id: s.equity_id,
-    symbol: s.symbol,
-    company_name: s.company_name,
-    industry,
-    exchange: s.exchange ?? null,
-    close: s.close,
-    pct_chng: s.pct_chng,
-    rsi_14: s.rsi_14 ?? null,
-    magic_rs: s.magic_rs,
-    magic_rs_zone: s.magic_rs_zone,
-    flow_type: s.flow_type,
-    rvol: s.rvol,
-    sniper_inst: s.sniper_inst ?? null,
-    accum_distrib: null,
-    rss_value: s.rss_value ?? null,
-    rss_spread: s.rss_spread ?? null,
-    sma_150: s.sma_150 ?? null,
-    volume_divergence_flag: s.volume_divergence_flag ?? null,
-    has_recent_svd: false,
-    has_recent_sbd: false,
-    has_recent_syd: false,
-  };
-}
+function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
+  const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
+  const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
 
-// ── Industry Card (expandable, children = StockCards) ──────────
-
-function IndustryCard({
-  item,
-  latestDate,
-}: {
-  item: IndustryTransitionItem;
-  latestDate: string | null;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const { data: stocks, isLoading: stocksLoading } = useIndustryStocks(
-    expanded ? item.industry : null,
-    latestDate,
-  );
-
-  const improving = item.percentileChange > 0;
-  const declining = item.percentileChange < 0;
-  const flowConfig = FLOW_LABELS[item.dominant_flow_type ?? ''];
+  const isNumericSymbol = /^\d+$/.test(stock.symbol);
+  const heroName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
+  const subName = isNumericSymbol ? null : stock.company_name;
 
   return (
-    <Card rounded="xxl" className="overflow-hidden">
-      {/* Industry header — clickable */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full text-left p-3 sm:p-4 hover:bg-kd-elevated/20 transition-colors"
-      >
-        {/* Row 1: Industry name + percentile */}
-        <div className="flex items-start justify-between mb-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-bold text-[var(--text-primary)]">{item.industry}</span>
-              {item.percentileChange >= 10 && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-risk-green bg-risk-green/10 border border-risk-green/30 px-1.5 py-0.5 rounded">
-                  <TrendingUp className="w-3 h-3" />
-                  +{item.percentileChange}
-                </span>
-              )}
-              {item.percentileChange <= -10 && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-risk-red bg-risk-red/10 border border-risk-red/30 px-1.5 py-0.5 rounded">
-                  <TrendingDown className="w-3 h-3" />
-                  {item.percentileChange}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] text-muted font-mono">{item.stock_count} stocks</span>
-              {flowConfig && (
-                <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
-                  {flowConfig.label}
-                </span>
-              )}
-              <Sparkline values={item.sparkline} improving={improving} />
-            </div>
+    <Card rounded="xxl" hover="lift" className="p-3 sm:p-4">
+      {/* Row 1: Script name + Industry tag + Price */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-sm font-bold text-accent-indigo font-mono truncate">{heroName}</span>
+            <ExchangeBadge exchange={stock.exchange} />
           </div>
-          <div className="flex items-center gap-3 shrink-0 ml-3">
-            <div className="text-right">
-              <span className="text-sm font-bold font-mono text-[var(--text-primary)]">
-                {item.percentile}%ile
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {subName && <span className="text-[10px] text-muted truncate">{subName}</span>}
+            {subName && <span className="text-[10px] text-muted">·</span>}
+            <IndustryTag stock={stock} />
+            {flowConfig && (
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
+                {flowConfig.label}
               </span>
-              {item.prevPercentile != null && (
-                <span className={cn(
-                  'block text-[10px] font-mono',
-                  improving ? 'text-risk-green' : declining ? 'text-risk-red' : 'text-muted',
-                )}>
-                  from {item.prevPercentile}%ile
-                </span>
-              )}
-            </div>
-            {expanded
-              ? <ChevronUp className="w-4 h-4 text-muted" />
-              : <ChevronDown className="w-4 h-4 text-muted" />
-            }
+            )}
           </div>
         </div>
-
-        {/* Row 2: Industry-level metric pills */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
-            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Avg RS</p>
-            <p className="text-xs font-bold font-mono leading-none text-[var(--text-primary)]">
-              {item.avg_magic_rs?.toFixed(1) ?? '—'}
-            </p>
-          </div>
-          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
-            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Bull %</p>
-            <p className="text-xs font-bold font-mono leading-none text-risk-green">
-              {item.pct_strong_bull?.toFixed(0) ?? '—'}%
-            </p>
-          </div>
-          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
-            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Accum</p>
-            <p className="text-xs font-bold font-mono leading-none text-risk-green">
-              {item.pct_accumulation?.toFixed(0) ?? '—'}%
-            </p>
-          </div>
-          <div className="bg-kd-bg/40 rounded-lg px-2 py-1.5 border border-kd-border min-w-[56px]">
-            <p className="text-[9px] text-muted uppercase tracking-wider leading-none mb-0.5">Smart $</p>
-            <p className="text-xs font-bold font-mono leading-none text-[var(--text-primary)]">
-              {item.avg_sniper_inst?.toFixed(1) ?? '—'}
-            </p>
-          </div>
-          {(item.pct_with_recent_svd ?? 0) > 0 && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-risk-green">
-              <span className="w-2.5 h-2.5 rounded-full bg-risk-green" />
-              SVD {item.pct_with_recent_svd?.toFixed(0)}%
-            </span>
-          )}
-          {(item.pct_with_recent_sbd ?? 0) > 0 && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-accent-cyan">
-              <span className="w-2.5 h-2.5 rounded-full bg-accent-cyan" />
-              SBD {item.pct_with_recent_sbd?.toFixed(0)}%
-            </span>
-          )}
-          {(item.pct_with_recent_syd ?? 0) > 0 && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-risk-red">
-              <span className="w-2.5 h-2.5 rounded-full bg-risk-red" />
-              SYD {item.pct_with_recent_syd?.toFixed(0)}%
-            </span>
-          )}
-        </div>
-      </button>
-
-      {/* Expanded: child stock cards */}
-      {expanded && (
-        <div className="border-t border-kd-border bg-kd-bg/30 p-2 sm:p-3 space-y-2">
-          <p className="text-[10px] font-mono text-muted uppercase tracking-wider px-1 mb-1">
-            Top 10 stocks by Magic RS
+        <div className="text-right shrink-0 ml-3">
+          <p className="text-sm font-bold font-mono text-[var(--text-primary)] leading-tight">
+            {stock.close.toFixed(2)}
           </p>
-          {stocksLoading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="w-4 h-4 animate-spin text-accent-indigo mr-2" />
-              <span className="text-xs text-muted">Loading stocks...</span>
-            </div>
-          ) : stocks && stocks.length > 0 ? (
-            stocks.map((s) => (
-              <StockCard key={s.equity_id} stock={toScanStock(s, item.industry)} />
-            ))
-          ) : (
-            <p className="text-xs text-muted py-4 text-center">No stock data available</p>
-          )}
+          <p className={cn(
+            'text-[11px] font-bold font-mono',
+            (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
+          )}>
+            {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
+          </p>
         </div>
-      )}
+      </div>
+
+      {/* Row 2: Metrics + Signals */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <MetricPill
+          label="RS"
+          value={stock.magic_rs != null ? `${stock.magic_rs.toFixed(1)} ${zoneConfig.label}` : '—'}
+          color={zoneConfig.color}
+        />
+        <MetricPill
+          label="RSI"
+          value={stock.rsi_14?.toFixed(0) ?? '—'}
+          color={(stock.rsi_14 ?? 50) > 70 ? 'text-risk-green' : (stock.rsi_14 ?? 50) < 30 ? 'text-risk-red' : undefined}
+        />
+        <MetricPill
+          label="RSS"
+          value={stock.rss_value != null ? stock.rss_value.toFixed(0) : '—'}
+          color={(stock.rss_value ?? 50) > 75 ? 'text-risk-green' : (stock.rss_value ?? 50) < 25 ? 'text-risk-red' : undefined}
+        />
+        <MetricPill
+          label="Spread"
+          value={stock.rss_spread != null ? stock.rss_spread.toFixed(0) : '—'}
+          color={(stock.rss_spread ?? 0) < -200 ? 'text-risk-red' : (stock.rss_spread ?? 0) > 0 ? 'text-risk-green' : undefined}
+        />
+        <MetricPill
+          label="RVOL"
+          value={stock.rvol?.toFixed(1) ?? '—'}
+          color={(stock.rvol ?? 0) > 2 ? 'text-risk-green' : undefined}
+        />
+        <SignalDots svd={stock.has_recent_svd} sbd={stock.has_recent_sbd} syd={stock.has_recent_syd} />
+      </div>
     </Card>
   );
 }
@@ -216,47 +131,53 @@ function IndustryCard({
 // ── Main View ─────────────────────────────────────────────────
 
 export default function IndustryTransitionView() {
-  const { data, isLoading, error } = useIndustryTransition();
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
-  const [minStocks, setMinStocks] = useState(5);
+  const { data, isLoading, error } = useIndustryTransitionStocks();
+
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('industryPercentile');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Metric filters
+  const [minPercentile, setMinPercentile] = useState(0);
+  const [minRsi, setMinRsi] = useState(0);
+  const [minRss, setMinRss] = useState(0);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
 
   const filtered = useMemo(() => {
     if (!data) return [];
 
-    let items: IndustryTransitionItem[];
-    switch (activeFilter) {
-      case 'rotating_in':
-        items = data.rotatingIn;
-        break;
-      case 'leading':
-        items = data.leading;
-        break;
-      case 'rotating_out':
-        items = data.rotatingOut;
-        break;
-      default:
-        // "All" — combine all categories sorted by transition magnitude
-        items = [
-          ...data.rotatingIn,
-          ...data.leading,
-          ...data.rotatingOut,
-          ...data.stable,
-        ].sort((a, b) => Math.abs(b.percentileChange) - Math.abs(a.percentileChange));
-    }
-
-    return items.filter((i) => i.stock_count >= minStocks);
-  }, [data, activeFilter, minStocks]);
-
-  // Counts per tab
-  const counts = useMemo(() => {
-    if (!data) return { all: 0, rotating_in: 0, leading: 0, rotating_out: 0 };
-    return {
-      all: data.rotatingIn.length + data.leading.length + data.rotatingOut.length + data.stable.length,
-      rotating_in: data.rotatingIn.length,
-      leading: data.leading.length,
-      rotating_out: data.rotatingOut.length,
-    };
-  }, [data]);
+    return data.stocks
+      .filter((s) => {
+        // Category filter
+        if (categoryFilter !== 'all' && s.industryCategory !== categoryFilter) return false;
+        // Metric filters
+        if (s.industryPercentile < minPercentile) return false;
+        if (minRsi > 0 && (s.rsi_14 ?? 0) < minRsi) return false;
+        if (minRss > 0 && (s.rss_value ?? 0) < minRss) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        let va: number = 0, vb: number = 0;
+        switch (sortKey) {
+          case 'industryPercentile': va = a.industryPercentile; vb = b.industryPercentile; break;
+          case 'magic_rs':  va = a.magic_rs ?? 0; vb = b.magic_rs ?? 0; break;
+          case 'rsi_14':    va = a.rsi_14 ?? 0; vb = b.rsi_14 ?? 0; break;
+          case 'rss_value': va = a.rss_value ?? 0; vb = b.rss_value ?? 0; break;
+          case 'rvol':      va = a.rvol ?? 0; vb = b.rvol ?? 0; break;
+          case 'pct_chng':  va = a.pct_chng ?? 0; vb = b.pct_chng ?? 0; break;
+        }
+        return sortDir === 'asc' ? va - vb : vb - va;
+      })
+      .slice(0, 100); // cap results for performance
+  }, [data, categoryFilter, sortKey, sortDir, minPercentile, minRsi, minRss]);
 
   return (
     <div className="animate-fade-in">
@@ -283,52 +204,102 @@ export default function IndustryTransitionView() {
           )}
           {data && (
             <span className="text-[10px] text-muted font-mono">
-              5-day window · {data.totalIndustries} industries
+              Stocks from {data.totalIndustries} qualifying industries · 5-day window
             </span>
           )}
         </div>
       </header>
 
-      {/* Filter tabs */}
+      {/* Category filter tabs */}
       <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar mb-3">
-        {FILTER_TABS.map((tab) => (
+        {CATEGORY_TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveFilter(tab.id)}
+            onClick={() => setCategoryFilter(tab.id)}
             className={cn(
               'px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border',
-              activeFilter === tab.id
-                ? tab.color
+              categoryFilter === tab.id
+                ? tab.activeClass
                 : 'bg-kd-bg/40 text-muted border-kd-border hover:border-kd-border-active hover:text-[var(--text-secondary)]',
             )}
           >
             {tab.label}
-            <span className="ml-1.5 text-[10px] opacity-70">
-              {counts[tab.id]}
-            </span>
+            {data && (
+              <span className="ml-1.5 text-[10px] opacity-70">
+                {data.industryCounts[tab.id === 'all' ? 'all' : tab.id]}
+              </span>
+            )}
           </button>
         ))}
-
-        {/* Min stocks filter */}
-        <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-xl px-3 py-1.5 ml-auto shrink-0">
-          <span className="text-[10px] text-muted uppercase tracking-wider">Min</span>
-          <input
-            type="range"
-            min={5}
-            max={20}
-            value={minStocks}
-            onChange={(e) => setMinStocks(Number(e.target.value))}
-            className="w-14 accent-risk-amber"
-          />
-          <span className="text-[10px] font-mono text-[var(--text-primary)] w-4 text-right">{minStocks}</span>
-        </div>
       </div>
+
+      {/* Metric filters + Sort */}
+      <Card rounded="xxl" className="px-4 py-3 mb-3 flex items-center gap-4 flex-wrap">
+        <span className="text-[10px] text-muted uppercase tracking-wider shrink-0">Filters</span>
+
+        {/* Percentile */}
+        <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-lg px-3 py-1.5">
+          <span className="text-[10px] text-muted uppercase tracking-wider">%ile &gt;</span>
+          <input type="range" min={0} max={90} step={10} value={minPercentile}
+            onChange={(e) => setMinPercentile(Number(e.target.value))}
+            className="w-14 accent-risk-amber" />
+          <span className="text-[10px] font-mono text-[var(--text-primary)] w-6 text-right">
+            {minPercentile || 'off'}
+          </span>
+        </div>
+
+        {/* RSI */}
+        <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-lg px-3 py-1.5">
+          <span className="text-[10px] text-muted uppercase tracking-wider">RSI &gt;</span>
+          <input type="range" min={0} max={80} step={10} value={minRsi}
+            onChange={(e) => setMinRsi(Number(e.target.value))}
+            className="w-14 accent-risk-amber" />
+          <span className="text-[10px] font-mono text-[var(--text-primary)] w-6 text-right">
+            {minRsi || 'off'}
+          </span>
+        </div>
+
+        {/* RSS */}
+        <div className="flex items-center gap-2 bg-kd-bg/40 border border-kd-border rounded-lg px-3 py-1.5">
+          <span className="text-[10px] text-muted uppercase tracking-wider">RSS &gt;</span>
+          <input type="range" min={0} max={80} step={10} value={minRss}
+            onChange={(e) => setMinRss(Number(e.target.value))}
+            className="w-14 accent-risk-amber" />
+          <span className="text-[10px] font-mono text-[var(--text-primary)] w-6 text-right">
+            {minRss || 'off'}
+          </span>
+        </div>
+
+        {/* Sort */}
+        <div className="flex items-center gap-1 ml-auto overflow-x-auto no-scrollbar">
+          <span className="text-[10px] text-muted uppercase tracking-wider shrink-0 mr-1">Sort</span>
+          {SORT_OPTIONS.map((opt) => {
+            const active = sortKey === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => toggleSort(opt.key)}
+                className={cn(
+                  'inline-flex items-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all border whitespace-nowrap',
+                  active
+                    ? 'bg-accent-indigo/15 text-accent-indigo border-accent-indigo/30'
+                    : 'text-muted border-transparent hover:text-[var(--text-secondary)]',
+                )}
+              >
+                {opt.label}
+                {active && (sortDir === 'asc' ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />)}
+                {!active && <ArrowUpDown className="w-2.5 h-2.5 opacity-30" />}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
 
       {/* Loading */}
       {isLoading && (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-5 h-5 animate-spin text-accent-indigo mr-2" />
-          <span className="text-sm text-muted">Loading industry data...</span>
+          <span className="text-sm text-muted">Loading stocks with industry context...</span>
         </div>
       )}
 
@@ -339,21 +310,18 @@ export default function IndustryTransitionView() {
         </Card>
       )}
 
-      {/* Industry cards */}
+      {/* Stock cards */}
       {!isLoading && !error && filtered.length > 0 && (
         <>
           <div className="space-y-2">
-            {filtered.map((item) => (
-              <IndustryCard
-                key={item.industry}
-                item={item}
-                latestDate={data?.latestDate ?? null}
-              />
+            {filtered.map((stock) => (
+              <EnrichedStockCard key={stock.equity_id} stock={stock} />
             ))}
           </div>
           <div className="mt-3 text-center">
             <span className="text-[10px] text-muted font-mono">
-              {filtered.length} industr{filtered.length !== 1 ? 'ies' : 'y'}
+              {filtered.length} stock{filtered.length !== 1 ? 's' : ''}
+              {filtered.length === 100 ? ' (showing top 100)' : ''}
             </span>
           </div>
         </>
@@ -361,8 +329,8 @@ export default function IndustryTransitionView() {
 
       {!isLoading && !error && filtered.length === 0 && data && (
         <Card rounded="xxl" className="py-16 text-center">
-          <p className="text-sm text-muted">No industries match the current filter</p>
-          <p className="text-xs text-muted mt-1">Try adjusting the min stocks threshold</p>
+          <p className="text-sm text-muted">No stocks match the current filters</p>
+          <p className="text-xs text-muted mt-1">Try relaxing the metric thresholds</p>
         </Card>
       )}
     </div>
