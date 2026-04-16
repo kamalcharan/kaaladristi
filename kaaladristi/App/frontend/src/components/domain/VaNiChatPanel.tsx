@@ -6,6 +6,7 @@ import { getIntentsForPage, getEquityIntents } from '@/config/vaniIntents';
 import { useVaNiAsk } from '@/hooks/useVaNiChat';
 import { useVaNiStore } from '@/stores/vaniStore';
 import { useAuthStore } from '@/stores/authStore';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
 
 const pipelineUrl =
@@ -24,6 +25,7 @@ export default function VaNiChatPanel() {
   const { open, entity, close, clearEntity } = useVaNiStore();
   const { page } = usePageContext();
   const { isAdmin } = useAuthStore();
+  const { latestDataDate } = usePipelineStatus();
   const askMutation = useVaNiAsk();
 
   const pageIntents = getIntentsForPage(page);
@@ -67,11 +69,11 @@ export default function VaNiChatPanel() {
     }]);
     setActiveIntentId(intentId);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const dataDate = latestDataDate || new Date().toISOString().slice(0, 10);
     askMutation.mutate(
       {
         intent_id: intentId,
-        date: today,
+        date: dataDate,
         ...(entity && intentId.startsWith('equity.') ? {
           entity_type: entity.type,
           entity_id: entity.id,
