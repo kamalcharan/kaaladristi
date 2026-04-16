@@ -125,7 +125,7 @@ def complete(system: str, user: str, max_tokens: int = 200) -> str | None:
 
     req = build(system, user, max_tokens)
     try:
-        resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=30)
+        resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=60)
         resp.raise_for_status()
         return parse(resp.json())
     except _requests.HTTPError as e:
