@@ -25,16 +25,6 @@ export default function VaNiChatPanel() {
   const { page } = usePageContext();
   const { isAdmin } = useAuthStore();
   const askMutation = useVaNiAsk();
-  const [purging, setPurging] = useState(false);
-
-  const handlePurgeCache = async () => {
-    setPurging(true);
-    try {
-      await fetch(`${pipelineUrl}/api/vani/cache`, { method: 'DELETE' });
-      setMessages([]);
-    } catch { /* ignore */ }
-    setPurging(false);
-  };
 
   const pageIntents = getIntentsForPage(page);
   const equityIntents = entity ? getEquityIntents(entity.symbol) : [];
@@ -190,20 +180,6 @@ export default function VaNiChatPanel() {
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           )}
-          {isAdmin && (
-            <button
-              onClick={handlePurgeCache}
-              disabled={purging}
-              title="Purge VaNi cache (admin)"
-              className={cn(
-                'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
-                'text-risk-red/40 hover:bg-risk-red/10 hover:text-risk-red',
-                purging && 'animate-pulse',
-              )}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
           <button
             onClick={close}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors"
@@ -280,13 +256,25 @@ export default function VaNiChatPanel() {
                         {msg.text}
                       </p>
                     </div>
-                    {msg.cached && (
-                      <div className="mt-1.5 px-2">
+                    <div className="flex items-center gap-2 mt-1.5 px-2">
+                      {msg.cached && (
                         <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
                           instant response
                         </span>
-                      </div>
-                    )}
+                      )}
+                      {isAdmin && msg.intentId && (
+                        <button
+                          onClick={async () => {
+                            await fetch(`${pipelineUrl}/api/vani/cache?intent_id=${encodeURIComponent(msg.intentId!)}`, { method: 'DELETE' });
+                            setMessages(prev => prev.filter(m => m.id !== msg.id && !(m.type === 'intent' && m.intentId === msg.intentId)));
+                          }}
+                          title="Clear this intent's cache"
+                          className="ml-auto text-white/15 hover:text-risk-red/70 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
