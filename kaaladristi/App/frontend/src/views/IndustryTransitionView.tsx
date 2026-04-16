@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, Eye } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useIndustryTransitionStocks } from '@/hooks/useIndustryRotation';
@@ -69,7 +69,7 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
       rounded="xxl"
       hover="lift"
       className="p-3 sm:p-4 cursor-pointer group"
-      onClick={() => navigate(`/pulse/equity/${stock.equity_id}`)}
+      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(stock.symbol)}`)}
     >
       {/* Row 1: Script name + Industry tag + Price */}
       <div className="flex items-start justify-between mb-2">
@@ -101,7 +101,7 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
               {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
             </p>
           </div>
-          <Eye className="w-3.5 h-3.5 text-muted mt-0.5 opacity-40 group-hover:opacity-100 transition-opacity" />
+          <BarChart3 className="w-3.5 h-3.5 text-muted mt-0.5 opacity-40 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
 
