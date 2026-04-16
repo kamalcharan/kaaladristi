@@ -1871,6 +1871,12 @@ def vani_ask(payload: dict):
     else:
         user_msg = format_user_message(intent_id, ctx)
     log.info(f"[VaNi] user_msg length={len(user_msg)}")
+    if 'top_stocks' in (ctx or {}):
+        log.info(f"[VaNi] top_stocks count={len(ctx.get('top_stocks', []))}")
+    if len(user_msg) < 500:
+        log.info(f"[VaNi] user_msg: {user_msg}")
+    else:
+        log.info(f"[VaNi] user_msg preview: {user_msg[:300]}...")
     response = _ai_complete(
         system=intent.system_prompt,
         user=user_msg,
