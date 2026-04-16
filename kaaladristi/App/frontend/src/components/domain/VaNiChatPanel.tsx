@@ -29,8 +29,17 @@ export default function VaNiChatPanel() {
 
   const handlePurgeCache = async () => {
     setPurging(true);
+    const asked = messages.filter(m => m.type === 'intent' && m.intentId).map(m => m.intentId!);
     try {
-      await fetch(`${pipelineUrl}/api/vani/cache`, { method: 'DELETE' });
+      if (asked.length > 0) {
+        await Promise.all(
+          asked.map(id =>
+            fetch(`${pipelineUrl}/api/vani/cache?intent_id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+          )
+        );
+      } else {
+        await fetch(`${pipelineUrl}/api/vani/cache`, { method: 'DELETE' });
+      }
       setMessages([]);
     } catch { /* ignore */ }
     setPurging(false);
