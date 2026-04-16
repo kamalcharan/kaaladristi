@@ -61,6 +61,9 @@ def _fetch_industry_rotation(db, target_date: str) -> dict:
         'rotation_out': [],
     }
 
+    import logging
+    _rlog = logging.getLogger('pipeline-api')
+
     try:
         rows = db.select(
             'km_industry_eod', '*',
@@ -68,10 +71,18 @@ def _fetch_industry_rotation(db, target_date: str) -> dict:
             order='industry_rank.asc',
             limit=200,
         )
-    except Exception:
+        _rlog.info(f"[VaNi rotation] km_industry_eod rows for {target_date}: {len(rows or [])}")
+    except Exception as ex:
+        _rlog.error(f"[VaNi rotation] query failed: {ex}")
         return result
 
     if not rows:
+        # Try to find the latest available date
+        try:
+            latest = db.select('km_industry_eod', 'trade_date', order='trade_date.desc', limit=1)
+            _rlog.warning(f"[VaNi rotation] no data for {target_date}, latest available: {latest[0]['trade_date'] if latest else 'none'}")
+        except Exception:
+            pass
         return result
 
     total = len(rows)
@@ -869,7 +880,7 @@ def assemble_industry_transition_context(db, target_date: str = None) -> dict | 
 def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> list[dict]:
     """Fetch top 15 stocks from leading industries by magic_rs."""
     import logging
-    _log = logging.getLogger(__name__)
+    _log = logging.getLogger('pipeline-api')
 
     _log.info(f"[VaNi stocks] leading count={len(leading)}, names={[e.get('industry') for e in leading[:5]]}")
     if not leading:
