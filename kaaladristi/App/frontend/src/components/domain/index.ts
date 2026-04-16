@@ -20,3 +20,5 @@ export { default as DataHealthGrid } from './DataHealthGrid';
 export { default as PipelineExecution } from './PipelineExecution';
 export { default as IndustryRotationPanel } from './IndustryRotationPanel';
 export { default as SectorRotationStrip } from './SectorRotationStrip';
+export { default as IndexWatchlist } from './IndexWatchlist';
+export { default as MagicRsLeaderboard } from './MagicRsLeaderboard';
