@@ -67,7 +67,7 @@ export default function ChartView() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const numId = Number(id);
-  const name = searchParams.get('name') ?? `${type} #${id}`;
+  const rawName = searchParams.get('name') ?? `${type} #${id}`;
   const isIndex = type === 'index';
   const isEquity = type === 'equity';
 
@@ -90,6 +90,19 @@ export default function ChartView() {
   // Unify pulse bars + dc inferences for shared signal computation
   const pulseBars: PulseBar[] = isIndex ? indexPulse.bars : (equityPulse.bars as PulseBar[]);
   const dcInferences = isIndex ? indexPulse.dcInferences : equityPulse.dcInferences;
+
+  // Resolve display name — for BSE numeric symbols, prefer company_name from metadata
+  const name = useMemo(() => {
+    if (isEquity && equityPulse.meta) {
+      const sym = equityPulse.meta.symbol;
+      const co = equityPulse.meta.company_name;
+      // If the URL name is numeric (BSE code) or matches the raw symbol, show company name
+      if (/^\d+$/.test(rawName) && co) return co;
+      // If symbol is numeric, show company_name + symbol
+      if (/^\d+$/.test(sym) && co) return co;
+    }
+    return rawName;
+  }, [isEquity, equityPulse.meta, rawName]);
 
   // Stats from latest row
   const latest = rows.length > 0 ? rows[rows.length - 1] : null;

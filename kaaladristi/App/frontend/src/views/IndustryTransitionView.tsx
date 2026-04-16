@@ -63,13 +63,14 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
   const isNumericSymbol = /^\d+$/.test(stock.symbol);
   const heroName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
   const subName = isNumericSymbol ? null : stock.company_name;
+  const navName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
 
   return (
     <Card
       rounded="xxl"
       hover="lift"
       className="p-3 sm:p-4 cursor-pointer group"
-      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(stock.symbol)}`)}
+      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(navName)}`)}
     >
       {/* Row 1: Script name + Industry tag + Price */}
       <div className="flex items-start justify-between mb-2">
