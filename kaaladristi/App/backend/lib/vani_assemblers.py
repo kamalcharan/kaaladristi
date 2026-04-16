@@ -868,6 +868,10 @@ def assemble_industry_transition_context(db, target_date: str = None) -> dict | 
 
 def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> list[dict]:
     """Fetch top 15 stocks from leading industries by magic_rs."""
+    import logging
+    _log = logging.getLogger(__name__)
+
+    _log.info(f"[VaNi stocks] leading count={len(leading)}, names={[e.get('industry') for e in leading[:5]]}")
     if not leading:
         return []
 
@@ -878,7 +882,9 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
             'km_equity_symbols', 'id,symbol,name_full,industry',
             limit=3000,
         )
-    except Exception:
+        _log.info(f"[VaNi stocks] total equities={len(all_equities or [])}")
+    except Exception as ex:
+        _log.error(f"[VaNi stocks] equity symbols fetch failed: {ex}")
         return []
 
     industry_equity_ids = {}
@@ -887,16 +893,17 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
         if ind in leading_names:
             industry_equity_ids.setdefault(ind, []).append(eq)
 
-    # Build a set of all equity IDs in leading industries
+    _log.info(f"[VaNi stocks] matched industries={list(industry_equity_ids.keys())}, equity counts={{{k}: len(v) for k, v in industry_equity_ids.items()}}}")
+
     all_eq_map = {}
     for ind in leading_names:
         for eq in industry_equity_ids.get(ind, []):
             all_eq_map[eq['id']] = {'symbol': eq.get('symbol', ''), 'industry': ind}
 
+    _log.info(f"[VaNi stocks] eq_map size={len(all_eq_map)}")
     if not all_eq_map:
         return []
 
-    # Fetch all EOD rows for the date (large fetch, filter client-side)
     try:
         eod_rows = db.select(
             'km_equity_eod',
@@ -905,7 +912,9 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
             order='magic_rs.desc',
             limit=3000,
         )
-    except Exception:
+        _log.info(f"[VaNi stocks] eod rows={len(eod_rows or [])} for date={target_date}")
+    except Exception as ex:
+        _log.error(f"[VaNi stocks] eod fetch failed: {ex}")
         return []
 
     top_stocks = []
