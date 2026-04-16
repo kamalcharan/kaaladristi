@@ -168,7 +168,7 @@ export default function VaNiChatPanel() {
               VaNi <span className="font-normal text-[var(--accent-indigo)]/70">&middot; वाणी</span>
             </div>
             <div className="text-[10px] font-mono text-[var(--accent-indigo)]/50 tracking-wide uppercase mt-0.5">
-              {headerSubtext}
+              {headerSubtext}{isAdmin ? ' · admin' : ''}
             </div>
           </div>
           {(messages.length > 0 || entity) && (
