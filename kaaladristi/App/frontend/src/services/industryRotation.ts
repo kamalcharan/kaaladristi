@@ -148,12 +148,19 @@ export interface IndustryStockRow {
   equity_id: number;
   symbol: string;
   company_name: string | null;
+  exchange: string | null;
   close: number;
   pct_chng: number | null;
+  rsi_14: number | null;
   magic_rs: number | null;
   magic_rs_zone: string | null;
   flow_type: string | null;
   rvol: number | null;
+  sniper_inst: number | null;
+  rss_value: number | null;
+  rss_spread: number | null;
+  sma_150: number | null;
+  volume_divergence_flag: string | null;
 }
 
 /** Fetch top 10 stocks for an industry by magic_rs */
@@ -163,23 +170,23 @@ export async function fetchIndustryStocks(
 ): Promise<IndustryStockRow[]> {
   // Step 1: Get equity IDs for this industry
   const { data: symbols, error: symErr } = await from('km_equity_symbols')
-    .select('id,symbol,company_name')
+    .select('id,symbol,company_name,exchange')
     .eq('industry', industry)
     .is('is_active', 'true')
     .execute();
 
   if (symErr || !symbols || symbols.length === 0) return [];
 
-  const symbolMap = new Map<number, { symbol: string; company_name: string | null }>();
+  const symbolMap = new Map<number, { symbol: string; company_name: string | null; exchange: string | null }>();
   const ids: number[] = [];
   for (const s of symbols as EquitySymbolRow[]) {
-    symbolMap.set(s.id, { symbol: s.symbol, company_name: s.company_name });
+    symbolMap.set(s.id, { symbol: s.symbol, company_name: s.company_name, exchange: s.exchange ?? null });
     ids.push(s.id);
   }
 
   // Step 2: Get EOD data for these equities on the trade date
   const { data: eodData, error: eodErr } = await from('km_equity_eod')
-    .select('equity_id,close,pct_chng,magic_rs,magic_rs_zone,flow_type,rvol')
+    .select('equity_id,close,pct_chng,rsi_14,magic_rs,magic_rs_zone,flow_type,rvol,sniper_inst,rss_value,rss_spread,sma_150,volume_divergence_flag')
     .in('equity_id', ids)
     .eq('trade_date', tradeDate)
     .order('magic_rs', { ascending: false })
@@ -194,12 +201,19 @@ export async function fetchIndustryStocks(
       equity_id: e.equity_id,
       symbol: sym?.symbol ?? '???',
       company_name: sym?.company_name ?? null,
+      exchange: sym?.exchange ?? null,
       close: e.close,
       pct_chng: e.pct_chng,
+      rsi_14: e.rsi_14,
       magic_rs: e.magic_rs,
       magic_rs_zone: e.magic_rs_zone,
       flow_type: e.flow_type,
       rvol: e.rvol,
+      sniper_inst: e.sniper_inst,
+      rss_value: e.rss_value,
+      rss_spread: e.rss_spread,
+      sma_150: e.sma_150,
+      volume_divergence_flag: e.volume_divergence_flag,
     };
   });
 }
