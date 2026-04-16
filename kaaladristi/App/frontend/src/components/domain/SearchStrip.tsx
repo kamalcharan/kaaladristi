@@ -22,6 +22,7 @@ interface SearchItem {
   type: 'index' | 'equity';
   name: string;          // display name (index name or company_name)
   symbol: string;        // ticker / index name
+  isin: string | null;   // ISIN code (equities only)
   exchange: string | null;
   industry: string | null;
 }
@@ -38,7 +39,7 @@ async function fetchSearchIndex(): Promise<SearchItem[]> {
       .execute(),
 
     from('km_equity_symbols')
-      .select('id,symbol,company_name,exchange,industry')
+      .select('id,symbol,company_name,exchange,industry,isin')
       .is('is_active', 'true')
       .order('symbol', { ascending: true })
       .limit(8000)
@@ -54,6 +55,7 @@ async function fetchSearchIndex(): Promise<SearchItem[]> {
       type: 'index',
       name: r.name,
       symbol: r.name,
+      isin: null,
       exchange: null,
       industry: r.category,
     });
@@ -61,7 +63,7 @@ async function fetchSearchIndex(): Promise<SearchItem[]> {
 
   // Equities — deduplicate by symbol (prefer NSE)
   const seen = new Map<string, boolean>();
-  for (const r of (equityRes.data ?? []) as { id: number; symbol: string; company_name: string | null; exchange: string | null; industry: string | null }[]) {
+  for (const r of (equityRes.data ?? []) as { id: number; symbol: string; company_name: string | null; exchange: string | null; industry: string | null; isin: string | null }[]) {
     const key = r.symbol + '_' + (r.exchange ?? '');
     // If numeric BSE code, still include but don't deduplicate against NSE
     const isNumeric = /^\d+$/.test(r.symbol);
@@ -73,6 +75,7 @@ async function fetchSearchIndex(): Promise<SearchItem[]> {
       type: 'equity',
       name: r.company_name ?? r.symbol,
       symbol: r.symbol,
+      isin: r.isin,
       exchange: r.exchange,
       industry: r.industry,
     });
@@ -87,9 +90,14 @@ function matchScore(item: SearchItem, query: string): number {
   const q = query.toLowerCase();
   const sym = item.symbol.toLowerCase();
   const name = item.name.toLowerCase();
+  const isin = item.isin?.toLowerCase() ?? '';
 
-  // Exact symbol match → highest
+  // Exact ISIN match → highest
+  if (isin && isin === q) return 100;
+  // Exact symbol match
   if (sym === q) return 100;
+  // ISIN starts with query (e.g. "INE009" matches INE009A01021)
+  if (isin && isin.startsWith(q)) return 95;
   // Symbol starts with query
   if (sym.startsWith(q)) return 90;
   // Name starts with query
@@ -98,6 +106,8 @@ function matchScore(item: SearchItem, query: string): number {
   if (sym.includes(q)) return 60;
   // Name contains query
   if (name.includes(q)) return 50;
+  // ISIN contains query
+  if (isin && isin.includes(q)) return 45;
   // Industry match
   if (item.industry?.toLowerCase().includes(q)) return 30;
 
