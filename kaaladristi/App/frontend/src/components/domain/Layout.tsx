@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import PipelineStatusDot from './PipelineStatusDot';
+import DataFreshnessChip from './DataFreshnessChip';
 import SearchStrip from './SearchStrip';
 
 export default function Layout() {
@@ -29,7 +29,7 @@ export default function Layout() {
         <div className="sticky top-0 z-40 flex items-center gap-3 px-4 py-1.5 bg-kd-bg/80 backdrop-blur-sm border-b border-kd-border/30">
           <SearchStrip />
           <div className="ml-auto shrink-0">
-            <PipelineStatusDot />
+            <DataFreshnessChip />
           </div>
         </div>
 

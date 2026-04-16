@@ -7,6 +7,15 @@ import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
 import type { ScanStock } from '@/types';
 
+const SCAN_EMPTY_MESSAGES: Record<string, string> = {
+  power_buy: 'No stocks meet Strength Confluence criteria today. This is rare \u2014 check back after market close.',
+  power_sell: 'No stocks meet Weakness Confluence criteria today. This is normal during recovery rallies.',
+  smart_money: 'No Smart Money Loading patterns detected today. Watch for institutional positioning changes.',
+  fresh_breakout: 'No fresh breakouts today. Markets may be consolidating.',
+  quiet_accumulation: 'No Quiet Accumulation patterns detected. Wyckoff signals are naturally rare (1-5% of trading days).',
+  distribution_warning: 'No Distribution Warnings today. Smart money holding positions.',
+};
+
 const EXCHANGE_TABS: { id: ExchangeFilter; label: string }[] = [
   { id: 'combined', label: 'Combined' },
   { id: 'NSE', label: 'NSE' },
@@ -194,8 +203,7 @@ export default function ScanView() {
         </>
       ) : (
         <Card rounded="xxl" className="py-16 text-center">
-          <p className="text-sm text-muted">No stocks match this scan criteria</p>
-          <p className="text-xs text-muted mt-1">Try a different scan or check data availability</p>
+          <p className="text-sm text-muted">{SCAN_EMPTY_MESSAGES[activeScan] ?? 'No stocks match this scan criteria today.'}</p>
         </Card>
       )}
     </div>

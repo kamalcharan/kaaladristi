@@ -49,7 +49,11 @@ function CategoryColumn({
           ))}
         </div>
       ) : (
-        <p className="text-[10px] text-muted italic">None</p>
+        <p className="text-[10px] text-muted italic">
+          {title === 'Rotating In' ? 'No significant rotation in. Markets stable.' :
+           title === 'Rotating Out' ? 'No significant rotation out. Markets stable.' :
+           'None currently'}
+        </p>
       )}
     </div>
   );
