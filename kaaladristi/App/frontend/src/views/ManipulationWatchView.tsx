@@ -129,7 +129,11 @@ function StockDetailModal({
 
         {/* View Pulse link */}
         <button
-          onClick={() => { onClose(); navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(stock.symbol)}`); }}
+          onClick={() => {
+            const displayName = /^\d+$/.test(stock.symbol) ? (stock.company_name ?? stock.symbol) : stock.symbol;
+            onClose();
+            navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(displayName)}`);
+          }}
           className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent-indigo/10 border border-accent-indigo/30 text-accent-indigo text-xs font-bold hover:bg-accent-indigo/20 transition-all"
         >
           <BarChart3 className="w-3.5 h-3.5" />
