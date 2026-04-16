@@ -199,6 +199,106 @@ INTENTS: dict[str, VaNiIntent] = {
         cache_ttl_hours=6,
         complexity="low",
     ),
+
+    # ── 6. Panchangam Outlook (6-day forecast) ───────────────────────────────
+    "dashboard.panchangam_outlook": VaNiIntent(
+        page="dashboard",
+        label="Panchangam outlook — next 6 days",
+        required_context=[
+            "date", "panchang_outlook",
+        ],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user is on the KaalaDristi dashboard and wants a panchangam "
+            "reading for today plus a day-by-day outlook for the next 5 days — "
+            "like a weather forecast but for planetary energy affecting markets. "
+            "You will receive the full panchangam (tithi, nakshatra, vara, lords, "
+            "moon sign, special events) plus active DC inference events for each day. "
+            "\n\n"
+            "Write a structured response:\n"
+            "(1) TODAY — explain today's panchangam in plain terms. What is the "
+            "tithi/nakshatra combination, who are the ruling lords, what energy "
+            "does this combination carry for markets? Mention any special events "
+            "(Purnima, Amavasya, Ekadashi, Sankranti).\n"
+            "(2) DAY-BY-DAY OUTLOOK — for each of the next 5 days, write 1-2 "
+            "sentences covering: the dominant planetary energy, the astro direction "
+            "(favorable/adverse/neutral), and any notable transitions or events. "
+            "Use simple labels like 'favorable for stability', 'elevated caution', "
+            "'mixed signals'. Think of it as a 6-day energy weather forecast.\n"
+            "(3) SUMMARY — one sentence on the overall character of the week ahead."
+            + _VANI_RULES.replace("About 150 words.", "About 250 words.")
+        ),
+        max_tokens=500,
+        cache_ttl_hours=24,
+        complexity="low",
+    ),
+
+    # ── 7. Breadth Trend (2-3 day evolution) ─────────────────────────────────
+    "dashboard.breadth_trend": VaNiIntent(
+        page="dashboard",
+        label="How has breadth changed in the last 2-3 days?",
+        required_context=[
+            "date", "breadth", "breadth_history",
+        ],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to understand how market breadth has evolved over "
+            "the last 2-3 trading sessions, not just today's snapshot. You will "
+            "receive the current breadth readings plus a day-by-day history showing "
+            "the breadth score, regime, and EMA percentages for each session. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) The trend — is breadth improving, deteriorating, or stable over "
+            "these sessions? Which EMA timeframe is driving the change (short-term "
+            "20 EMA shifting while long-term 150 EMA holds, or vice versa)? Is the "
+            "regime at risk of transitioning (e.g., Greed approaching 55, Fear "
+            "approaching 35)?\n"
+            "(2) The implication — what does this 2-3 day breadth trajectory mean "
+            "for market participation? Is the move broad-based and sustainable, or "
+            "is participation narrowing? Are longs being supported by breadth "
+            "expansion, or is the rally losing internal support?"
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=6,
+        complexity="low",
+    ),
+
+    # ── 8. Breadth Momentum (ROC + positioning) ──────────────────────────────
+    "dashboard.breadth_momentum": VaNiIntent(
+        page="dashboard",
+        label="Is momentum supporting longs or shorts?",
+        required_context=[
+            "date", "breadth_roc", "breadth_roc_history",
+        ],
+        system_prompt=(
+            _VANI_IDENTITY
+            + "The user wants to know whether the breadth momentum oscillator "
+            "supports existing long or short positions. You will receive the ROC "
+            "readings (ROC_13, ROC_55, SMA_BREADTH) plus a 3-day history. "
+            "\n\n"
+            "Write 2 short paragraphs:\n"
+            "(1) Why momentum is positive or negative — explain what the ROC_13 "
+            "sign and magnitude mean in plain terms. Is the average NSE stock "
+            "accelerating upward or decelerating? What does the ROC_13 vs ROC_55 "
+            "spread reveal — is short-term momentum outpacing long-term (fresh "
+            "thrust) or lagging (exhaustion)?\n"
+            "(2) What this means for positions — in observational terms, describe "
+            "whether the momentum backdrop favors holding long-side positions "
+            "(positive and expanding ROC), favors short-side exposure (negative "
+            "and deteriorating ROC), or is ambiguous (mixed signals, zero-crossing). "
+            "Reference the SMA_BREADTH direction as confirmation or divergence.\n"
+            "\n"
+            "IMPORTANT: Do NOT say 'you should hold longs' or 'sell your shorts'. "
+            "Instead say 'the momentum backdrop currently favors long-side exposure' "
+            "or 'conditions are more aligned with short-side positioning'. Keep it "
+            "observational — the trader decides, VaNi describes the environment."
+            + _VANI_RULES
+        ),
+        max_tokens=350,
+        cache_ttl_hours=6,
+        complexity="low",
+    ),
 }
 
 
