@@ -211,6 +211,21 @@ export default function ChartView() {
                 {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
                 {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
               </div>
+              {/* Equity edge-case badges */}
+              {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
+                <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
+                  Inactive — last traded {latest.trade_date}
+                </span>
+              )}
+              {isEquity && (() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const daysSince = Math.round((new Date(todayStr).getTime() - new Date(latest.trade_date).getTime()) / 86400000);
+                return daysSince > 1 && equityPulse.meta?.is_active ? (
+                  <span className="text-[10px] font-mono text-muted">
+                    Last updated: {latest.trade_date} ({daysSince}d ago)
+                  </span>
+                ) : null;
+              })()}
             </>
           )}
         </div>
@@ -236,7 +251,7 @@ export default function ChartView() {
         {/* ═══ Main Grid: starts immediately after header ═══ */}
         <div className={cn(
           'gap-3',
-          showPulse ? 'grid grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px]' : '',
+          showPulse ? 'flex flex-col lg:grid lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px]' : '',
         )}>
           {/* ── Left Panel: Intelligence + Chart ── */}
           <div className="min-w-0">
@@ -316,8 +331,8 @@ export default function ChartView() {
 
           {/* ── Right Panel: Visual Pulse Cards ── */}
           {showPulse && snapshot && (
-            <div className="min-w-0 flex flex-col gap-2.5 overflow-y-auto pb-4"
-              style={{ maxHeight: 'calc(100vh - 80px)', scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
+            <div className="min-w-0 flex flex-col gap-2.5 overflow-y-auto pb-4 lg:max-h-[calc(100vh-80px)]"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
             >
               {/* VaNi Header */}
               <div className="glass-card rounded-xl p-2.5">
