@@ -18,6 +18,7 @@ const PATH_MAP: Array<{ pattern: RegExp; page: VaNiPage; entityType?: PageContex
   { pattern: /^\/industry-transition/, page: 'industry_transition' },
   { pattern: /^\/scan/, page: 'scanner' },
   { pattern: /^\/manipulation-watch/, page: 'manipulation_watch' },
+  { pattern: /^\/astro-calendar/, page: 'astro_calendar' },
   { pattern: /^\/dashboard/, page: 'dashboard' },
 ];
 

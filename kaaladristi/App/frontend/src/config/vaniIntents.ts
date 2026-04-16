@@ -14,7 +14,8 @@ export type VaNiPage =
   | 'industry_transition'
   | 'scanner'
   | 'manipulation_watch'
-  | 'active_signals';
+  | 'active_signals'
+  | 'astro_calendar';
 
 export interface VaNiIntentDef {
   label: string;
@@ -72,6 +73,31 @@ export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
     page: 'dashboard',
     icon: 'zap',
     displayOrder: 8,
+  },
+  // ── Astro Calendar ────────────────────────────────────────────────────────
+  'astro_calendar.month_outlook': {
+    label: "What's the planetary outlook this month?",
+    page: 'astro_calendar',
+    icon: 'sparkles',
+    displayOrder: 1,
+  },
+  'astro_calendar.week_events': {
+    label: "Explain this week's planetary events",
+    page: 'astro_calendar',
+    icon: 'calendar',
+    displayOrder: 2,
+  },
+  'astro_calendar.turning_dates': {
+    label: 'What are the turning dates this month?',
+    page: 'astro_calendar',
+    icon: 'rotate-ccw',
+    displayOrder: 3,
+  },
+  'astro_calendar.risk_days': {
+    label: 'Which days have elevated risk?',
+    page: 'astro_calendar',
+    icon: 'alert-triangle',
+    displayOrder: 4,
   },
 } as const;
 
