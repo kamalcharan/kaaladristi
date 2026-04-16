@@ -144,3 +144,11 @@ When today's pipeline hasn't completed, showing blank screens makes the system a
 
 - **Applied**: Each scanner preset has a specific empty message explaining whether zero results is normal or notable. Manipulation Watch distinguishes pump vs dump empty states.
 - **Pattern**: When a feature legitimately returns zero results under normal conditions, the empty state should say so. "Wyckoff signals are naturally rare (1-5% of trading days)" is more useful than "No results found."
+
+## Indicator Semantics Matter — Validate Against Actual Data (2026-04-16)
+
+`sniper_inst` was used as a "smart money / institutional flow" proxy in the dump filter, but it's actually `LEAST(50, GREATEST(0, 1.5 * (RSI_9 - 61)))` — an RSI-9 derivative clamped at 0. For oversold stocks (which are precisely the dump candidates with `rss_value < 25`), RSI-9 is well below 61, so `sniper_inst` is structurally pinned at 0 and cannot decline. The slope check `(sniper_inst_now - sniper_inst_5d_ago) < -2` was a no-op — both values are 0.
+
+- **Impact**: Dump filter showed 1 result in 60 days. After removing the sniper slope check, ~25-50 genuine dump suspects surface.
+- **Lesson**: Validate indicator semantics against actual data distributions before using them as filter conditions. The three remaining conditions (RSS oversold + LONG_LIQUIDATION + VOLUME_DIV_DOWN) constitute a strong dump signature without the false-precision of the sniper check.
+- **Rule**: When an indicator is derived from another (sniper_inst from RSI-9), check whether the derived value has useful range in your filter's operating region. If it's clamped/floored in precisely the region you're filtering, it adds zero signal.

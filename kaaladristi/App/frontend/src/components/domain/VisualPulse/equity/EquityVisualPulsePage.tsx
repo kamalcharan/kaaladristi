@@ -160,14 +160,11 @@ export default function EquityVisualPulsePage() {
   // Pump/dump banner props
   const pumpDumpProps = useMemo(() => {
     const bar = bars[effectiveIdx];
-    const prev5 = effectiveIdx >= 5 ? bars[effectiveIdx - 5] : null;
     return {
       rssValue: bar?.rss_value ?? null,
       rssSpread: bar?.rss_spread ?? null,
       flowType: bar?.flow_type ?? null,
       volumeDivFlag: bar?.volume_divergence_flag ?? null,
-      sniperInst: bar?.sniper_inst ?? null,
-      sniperInstPrev5: prev5?.sniper_inst ?? null,
     };
   }, [bars, effectiveIdx]);
 

@@ -676,16 +676,14 @@ function isPumpSignal(eod: EquityEodSnapshot): boolean {
   );
 }
 
-/** Check dump conditions for a single EOD snapshot + history context */
-function isDumpSignal(eod: EquityEodSnapshot, history: EquityEodSnapshot[], dateIdx: number): boolean {
+/** Check dump conditions for a single EOD snapshot.
+ *  sniper_slope check removed — sniper_inst is structurally floored at 0
+ *  for oversold stocks (derived from RSI-9 above 61). See LESSONS_LEARNED. */
+function isDumpSignal(eod: EquityEodSnapshot): boolean {
   if ((eod.rss_value ?? 100) >= 25) return false;
   if (eod.flow_type !== 'LONG_LIQUIDATION') return false;
   if (eod.volume_divergence_flag !== 'VOLUME_DIV_DOWN') return false;
-
-  // sniper slope: need 5 bars after this date in history
-  const sniperNow = eod.sniper_inst ?? 0;
-  const sniper5 = (dateIdx + 5 < history.length) ? (history[dateIdx + 5]?.sniper_inst ?? 0) : 0;
-  return (sniperNow - sniper5) < -2;
+  return true;
 }
 
 /** Build why-flagged tags for a pump signal */
@@ -707,7 +705,6 @@ function buildDumpTags(eod: EquityEodSnapshot): string[] {
     `RSS oversold (${Math.round(rssVal)})`,
     'Long liquidation',
     'Volume diverging down',
-    'Smart money exiting',
   ];
 }
 
@@ -775,7 +772,7 @@ export async function executeManipulationWatch(lookbackDays: number = 30): Promi
       }
 
       // Check dump
-      if (isDumpSignal(eod, history, i)) {
+      if (isDumpSignal(eod)) {
         const existing = dumpMap.get(equityId);
         if (existing) {
           existing.dates.push(eod.trade_date);

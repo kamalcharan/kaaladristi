@@ -172,15 +172,12 @@ export default function ChartView() {
   const pumpDumpProps = useMemo(() => {
     if (!isEquity) return null;
     const bar = pulseBars[pulseIdx];
-    const prev5 = pulseIdx >= 5 ? pulseBars[pulseIdx - 5] : null;
     if (!bar) return null;
     return {
       rssValue: bar.rss_value ?? null,
       rssSpread: bar.rss_spread ?? null,
       flowType: bar.flow_type ?? null,
       volumeDivFlag: bar.volume_divergence_flag ?? null,
-      sniperInst: bar.sniper_inst ?? null,
-      sniperInstPrev5: prev5?.sniper_inst ?? null,
     };
   }, [isEquity, pulseBars, pulseIdx]);
 

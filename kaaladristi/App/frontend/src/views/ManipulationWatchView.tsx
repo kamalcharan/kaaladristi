@@ -1,295 +1,111 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, ShieldAlert, AlertTriangle, X, BookOpen, BarChart3 } from 'lucide-react';
+import { Loader2, ShieldAlert, AlertTriangle, BarChart3, BookOpen } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useManipulationWatch } from '@/hooks/useManipulationWatch';
+import { ZONE_LABELS, FLOW_LABELS, ExchangeBadge, MetricPill } from '@/components/domain/StockCard';
 import type { ManipulationWatchStock } from '@/services/scanEngine';
 
-// ── Vocabulary mapping (reused from ScanView) ────────────────
+// ── Suspect Card ─────────────────────────────────────────────
 
-const ZONE_LABELS: Record<string, { label: string; color: string }> = {
-  'Strong Bull': { label: 'Strong Bull', color: 'text-risk-green' },
-  'Mild Bull':   { label: 'Mild Bull',   color: 'text-risk-green/70' },
-  'Neutral':     { label: 'Neutral',     color: 'text-muted' },
-  'Mild Bear':   { label: 'Mild Bear',   color: 'text-risk-red/70' },
-  'Strong Bear': { label: 'Strong Bear', color: 'text-risk-red' },
-};
-
-const FLOW_LABELS: Record<string, { label: string; color: string }> = {
-  FRESH_LONGS:      { label: 'Fresh Longs',      color: 'text-risk-green' },
-  FRESH_SHORTS:     { label: 'Fresh Shorts',     color: 'text-risk-red' },
-  SHORT_COVERING:   { label: 'Short Covering',   color: 'text-risk-amber' },
-  LONG_LIQUIDATION: { label: 'Liquidation',      color: 'text-risk-red/80' },
-  LOW_VOLUME:       { label: 'Low Volume',        color: 'text-muted' },
-  MIXED:            { label: 'Mixed',             color: 'text-muted' },
-};
-
-// ── Exchange badge ────────────────────────────────────────────
-
-function ExchangeBadge({ exchange }: { exchange: string | null }) {
-  if (!exchange) return null;
-  return (
-    <span className={cn(
-      'text-[8px] font-bold px-1 py-0.5 rounded border',
-      exchange === 'NSE'
-        ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/5'
-        : 'text-risk-amber border-risk-amber/30 bg-risk-amber/5',
-    )}>
-      {exchange}
-    </span>
-  );
-}
-
-// ── Detail row (for modal) ────────────────────────────────────
-
-function DetailRow({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="bg-kd-bg/40 rounded-xl px-3 py-2 border border-kd-border">
-      <p className="text-[10px] text-muted uppercase tracking-wider mb-0.5">{label}</p>
-      <p className={cn('font-bold font-mono', color ?? 'text-[var(--text-primary)]')}>{value}</p>
-    </div>
-  );
-}
-
-// ── Stock Detail Modal ────────────────────────────────────────
-
-function StockDetailModal({
-  stock,
-  variant,
-  onClose,
-}: {
-  stock: ManipulationWatchStock;
-  variant: 'pump' | 'dump';
-  onClose: () => void;
-}) {
+function SuspectCard({ stock, variant }: { stock: ManipulationWatchStock; variant: 'pump' | 'dump' }) {
   const navigate = useNavigate();
-  const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: stock.magic_rs_zone ?? '—', color: 'text-muted' };
-  const flowConfig = FLOW_LABELS[stock.flow_type ?? ''] ?? { label: stock.flow_type ?? '—', color: 'text-muted' };
+  const zoneConfig = ZONE_LABELS[stock.magic_rs_zone ?? ''] ?? { label: '—', color: 'text-muted' };
+  const flowConfig = FLOW_LABELS[stock.flow_type ?? ''];
+
+  const isNumericSymbol = /^\d+$/.test(stock.symbol);
+  const heroName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
+  const subName = isNumericSymbol ? null : stock.company_name;
+  const navName = isNumericSymbol ? (stock.company_name ?? stock.symbol) : stock.symbol;
+
   const accentColor = variant === 'pump' ? 'text-risk-amber' : 'text-risk-red';
+  const borderColor = variant === 'pump' ? 'border-l-risk-amber' : 'border-l-risk-red';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <Card
-        rounded="xxl"
-        className="w-full max-w-md p-6 shadow-2xl animate-fade-in"
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className={cn('w-5 h-5 shrink-0', accentColor)} />
-            <div>
-              <h3 className={cn('text-lg font-bold font-mono', accentColor)}>{stock.symbol}</h3>
-              <p className="text-xs text-muted mt-0.5">{stock.company_name ?? stock.industry}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-kd-elevated text-muted hover:text-[var(--text-primary)] transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Price */}
-        <div className="flex items-baseline gap-3 mb-5">
-          <span className="text-3xl font-bold font-mono text-[var(--text-primary)]">
-            {stock.close.toFixed(2)}
-          </span>
-          <span className={cn(
-            'text-sm font-bold font-mono',
-            (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
-          )}>
-            {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
-          </span>
-        </div>
-
-        {/* Why Flagged */}
-        <div className={cn(
-          'rounded-xl px-3 py-2.5 mb-4 border',
-          variant === 'pump'
-            ? 'bg-risk-amber/5 border-risk-amber/20'
-            : 'bg-risk-red/5 border-risk-red/20',
-        )}>
-          <p className="text-[10px] text-muted uppercase tracking-wider mb-1">Why Flagged</p>
-          <p className={cn('text-xs font-medium', accentColor)}>
-            {stock.whyFlagged.join(' + ')}
-          </p>
-        </div>
-
-        {/* Grid */}
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <DetailRow label="Magic RS" value={stock.magic_rs?.toFixed(2) ?? '—'} color={zoneConfig.color} />
-          <DetailRow label="Zone" value={zoneConfig.label} color={zoneConfig.color} />
-          <DetailRow label="Flow Type" value={flowConfig.label} color={flowConfig.color} />
-          <DetailRow label="RVOL" value={stock.rvol?.toFixed(2) ?? '—'} color={(stock.rvol ?? 0) > 2 ? 'text-risk-green' : 'text-muted'} />
-          <DetailRow label="Smart Money" value={stock.sniper_inst?.toFixed(1) ?? '—'} />
-          <DetailRow label="RSS" value={stock.rss_value?.toFixed(1) ?? '—'} />
-          <DetailRow label="RSS Spread" value={stock.rss_spread?.toFixed(0) ?? '—'} />
-          <DetailRow label="Industry" value={stock.industry ?? '—'} />
-        </div>
-
-        {/* View Pulse link */}
-        <button
-          onClick={() => {
-            const displayName = /^\d+$/.test(stock.symbol) ? (stock.company_name ?? stock.symbol) : stock.symbol;
-            onClose();
-            navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(displayName)}`);
-          }}
-          className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-accent-indigo/10 border border-accent-indigo/30 text-accent-indigo text-xs font-bold hover:bg-accent-indigo/20 transition-all"
-        >
-          <BarChart3 className="w-3.5 h-3.5" />
-          View Chart
-        </button>
-      </Card>
-    </div>
-  );
-}
-
-// ── Suspect Stock Row ─────────────────────────────────────────
-
-function SuspectRow({
-  stock,
-  variant,
-  onSelect,
-}: {
-  stock: ManipulationWatchStock;
-  variant: 'pump' | 'dump';
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      onClick={onSelect}
-      className={cn(
-        'w-full text-left px-4 py-3 transition-colors border-l-[3px]',
-        variant === 'pump'
-          ? 'bg-risk-amber/[0.06] border-l-risk-amber hover:bg-risk-amber/10'
-          : 'bg-risk-red/[0.06] border-l-risk-red hover:bg-risk-red/10',
-      )}
+    <Card
+      rounded="xxl"
+      hover="lift"
+      className={cn('p-3 sm:p-4 cursor-pointer group border-l-[3px]', borderColor)}
+      onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(navName)}`)}
     >
-      {/* Top line: symbol + price + change */}
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className={cn(
-            'w-3.5 h-3.5 shrink-0',
-            variant === 'pump' ? 'text-risk-amber' : 'text-risk-red',
-          )} />
-          <span className={cn(
-            'font-mono font-bold text-sm',
-            variant === 'pump' ? 'text-risk-amber' : 'text-risk-red',
-          )}>
-            {stock.symbol}
-          </span>
-          <ExchangeBadge exchange={stock.exchange} />
+      {/* Row 1: Name + trigger count + price + chart icon */}
+      <div className="flex items-start justify-between mb-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-0.5">
+            <AlertTriangle className={cn('w-3.5 h-3.5 shrink-0', accentColor)} />
+            <span className={cn('text-sm font-bold font-mono truncate', accentColor)}>{heroName}</span>
+            <ExchangeBadge exchange={stock.exchange} />
+            {stock.triggerCount > 1 && (
+              <span className={cn(
+                'text-[9px] font-bold px-1.5 py-0.5 rounded',
+                variant === 'pump'
+                  ? 'bg-risk-amber/15 text-risk-amber'
+                  : 'bg-risk-red/15 text-risk-red',
+              )}>
+                {stock.triggerCount}x in range
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap pl-[22px]">
+            {subName && <span className="text-[10px] text-muted truncate">{subName}</span>}
+            {subName && stock.industry && <span className="text-[10px] text-muted">·</span>}
+            {stock.industry && <span className="text-[10px] text-muted">{stock.industry}</span>}
+            {flowConfig && (
+              <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', flowConfig.color, 'bg-kd-elevated/50')}>
+                {flowConfig.label}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono font-bold text-sm text-[var(--text-primary)]">
-            {stock.close.toFixed(2)}
-          </span>
-          <span className={cn(
-            'font-mono font-bold text-xs',
-            (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
-          )}>
-            {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(1)}%
-          </span>
-        </div>
-      </div>
-
-      {/* Industry + trigger info */}
-      <div className="flex items-center justify-between mb-1.5 pl-[22px]">
-        <p className="text-[11px] text-muted">
-          {stock.industry ?? 'Unknown industry'}
-        </p>
-        <div className="flex items-center gap-2 text-[10px] font-mono">
-          {stock.triggerCount > 1 && (
-            <span className={cn(
-              'px-1.5 py-0.5 rounded font-bold',
-              variant === 'pump'
-                ? 'bg-risk-amber/15 text-risk-amber'
-                : 'bg-risk-red/15 text-risk-red',
+        <div className="flex items-start gap-2 shrink-0 ml-3">
+          <div className="text-right">
+            <p className="text-sm font-bold font-mono text-primary leading-tight">
+              {stock.close.toFixed(2)}
+            </p>
+            <p className={cn(
+              'text-[11px] font-bold font-mono',
+              (stock.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red',
             )}>
-              {stock.triggerCount}x
-            </span>
-          )}
-          <span className="text-muted">
-            {stock.latestTrigger}
-          </span>
+              {(stock.pct_chng ?? 0) >= 0 ? '+' : ''}{(stock.pct_chng ?? 0).toFixed(2)}%
+            </p>
+          </div>
+          <BarChart3 className="w-3.5 h-3.5 text-muted mt-0.5 opacity-40 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
 
-      {/* Why flagged */}
-      <p className={cn(
-        'text-[11px] pl-[22px] leading-relaxed',
+      {/* Row 2: Why flagged */}
+      <div className={cn(
+        'text-[10px] leading-relaxed pl-[22px] mb-2',
         variant === 'pump' ? 'text-risk-amber/80' : 'text-risk-red/80',
       )}>
-        <span className="text-muted">Why flagged: </span>
         {stock.whyFlagged.join(' + ')}
-      </p>
-    </button>
-  );
-}
-
-// ── Section Component ─────────────────────────────────────────
-
-function SuspectSection({
-  title,
-  description,
-  stocks,
-  variant,
-  lookbackDays,
-  onSelect,
-}: {
-  title: string;
-  description: string;
-  stocks: ManipulationWatchStock[];
-  variant: 'pump' | 'dump';
-  lookbackDays: number;
-  onSelect: (stock: ManipulationWatchStock) => void;
-}) {
-  const accentColor = variant === 'pump' ? 'text-risk-amber' : 'text-risk-red';
-  const borderColor = variant === 'pump' ? 'border-risk-amber/30' : 'border-risk-red/30';
-
-  return (
-    <Card rounded="xxl" className={cn('overflow-hidden border', borderColor)}>
-      {/* Section header */}
-      <div className={cn(
-        'px-4 py-3 border-b',
-        borderColor,
-        variant === 'pump' ? 'bg-risk-amber/[0.04]' : 'bg-risk-red/[0.04]',
-      )}>
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className={cn('w-4 h-4', accentColor)} />
-            <h2 className={cn('text-sm font-bold uppercase tracking-wide', accentColor)}>
-              {title}
-            </h2>
-          </div>
-          <span className={cn('text-xs font-bold font-mono', accentColor)}>
-            {stocks.length} stock{stocks.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <p className="text-xs text-muted pl-6">{description}</p>
       </div>
 
-      {/* Stock list */}
-      {stocks.length > 0 ? (
-        <div className="divide-y divide-kd-border/50">
-          {stocks.map((stock) => (
-            <SuspectRow
-              key={stock.equity_id}
-              stock={stock}
-              variant={variant}
-              onSelect={() => onSelect(stock)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="py-10 text-center">
-          <p className="text-sm text-muted">
-            {variant === 'pump'
-              ? 'No pump suspects detected in the last ' + lookbackDays + ' trading days.'
-              : 'No dump suspects detected in the last ' + lookbackDays + ' trading days.'}
-          </p>
-        </div>
-      )}
+      {/* Row 3: Metrics */}
+      <div className="flex items-center gap-1.5 flex-wrap pl-[22px]">
+        <MetricPill
+          label="RS"
+          value={stock.magic_rs != null ? `${stock.magic_rs.toFixed(1)} ${zoneConfig.label}` : '—'}
+          color={zoneConfig.color}
+        />
+        <MetricPill
+          label="RSS"
+          value={stock.rss_value != null ? stock.rss_value.toFixed(0) : '—'}
+          color={(stock.rss_value ?? 50) > 75 ? 'text-risk-green' : (stock.rss_value ?? 50) < 25 ? 'text-risk-red' : undefined}
+        />
+        <MetricPill
+          label="Spread"
+          value={stock.rss_spread != null ? stock.rss_spread.toFixed(0) : '—'}
+          color={(stock.rss_spread ?? 0) < -200 ? 'text-risk-red' : (stock.rss_spread ?? 0) > 0 ? 'text-risk-green' : undefined}
+        />
+        <MetricPill
+          label="RVOL"
+          value={stock.rvol?.toFixed(1) ?? '—'}
+          color={(stock.rvol ?? 0) > 2 ? 'text-risk-green' : undefined}
+        />
+        <span className="text-[9px] font-mono text-muted ml-auto">{stock.latestTrigger}</span>
+      </div>
     </Card>
   );
 }
@@ -298,70 +114,34 @@ function SuspectSection({
 
 function EducationalFooter() {
   return (
-    <Card rounded="xxl" className="overflow-hidden border border-kd-border mt-6">
-      <div className="px-5 py-4 border-b border-kd-border bg-kd-elevated/30">
+    <Card rounded="xxl" className="overflow-hidden border border-kd-border mt-4">
+      <div className="px-5 py-3 border-b border-kd-border bg-kd-elevated/30">
         <div className="flex items-center gap-2">
           <BookOpen className="w-4 h-4 text-muted" />
-          <h2 className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-wide">
+          <h2 className="text-xs font-bold text-secondary uppercase tracking-wide">
             How to read these signals
           </h2>
         </div>
       </div>
-
-      <div className="px-5 py-4 text-xs text-[var(--text-secondary)] leading-relaxed space-y-4">
+      <div className="px-5 py-4 text-xs text-secondary leading-relaxed space-y-3">
         <p>
-          <strong className="text-risk-amber">Pump suspects</strong> show price moving up while
-          the underlying signals weaken: short covering instead of fresh longs, volume fading even
-          as price rises, RSS overbought beyond healthy structure. This pattern typically indicates
-          an operator inflating the price to attract retail buyers, who then become exit liquidity.
+          <strong className="text-risk-amber">Pump suspects</strong> show price rising while structure weakens:
+          RSS overbought beyond healthy levels, broken spread, short covering instead of fresh demand,
+          volume diverging up.
         </p>
-
         <p>
-          <strong className="text-risk-red">Dump suspects</strong> show the reverse: price
-          collapsing while smart money quietly exits and volume fades. The &quot;panic&quot; is often
-          manufactured to trigger retail stop losses, which the operator absorbs at a discount.
+          <strong className="text-risk-red">Dump suspects</strong> show price collapsing under distribution:
+          RSS oversold, long liquidation flow, volume diverging down.
         </p>
-
         <p className="text-muted italic">
-          These are not trade signals. Most retail traders should avoid both. Advanced traders may
-          use the dump pattern to short, but only with strict risk controls.
+          These are observational signals, not trade recommendations. Most retail traders should avoid both patterns.
         </p>
-
-        <div className="border-t border-kd-border pt-4">
-          <p className="font-bold text-[var(--text-secondary)] mb-2">The conditions detected here:</p>
-          <ul className="space-y-1.5 text-muted">
-            <li>
-              <strong className="text-[var(--text-secondary)]">RSS overbought / oversold:</strong>{' '}
-              Relative Strength Score above 75 or below 25 indicates extreme positioning
-            </li>
-            <li>
-              <strong className="text-[var(--text-secondary)]">Spread broken:</strong>{' '}
-              RSS spread below -200 means the underlying structure of the move is weak
-            </li>
-            <li>
-              <strong className="text-[var(--text-secondary)]">Volume divergence:</strong>{' '}
-              Price moving against declining volume — participation is fading even as price extends
-            </li>
-            <li>
-              <strong className="text-[var(--text-secondary)]">Short covering:</strong>{' '}
-              Buying that closes existing short positions rather than fresh demand
-            </li>
-            <li>
-              <strong className="text-[var(--text-secondary)]">Long liquidation:</strong>{' '}
-              Selling that closes existing long positions rather than fresh supply
-            </li>
-            <li>
-              <strong className="text-[var(--text-secondary)]">Smart money exiting:</strong>{' '}
-              Institutional indicator declining over multiple days
-            </li>
-          </ul>
-        </div>
       </div>
     </Card>
   );
 }
 
-// ── Main View ─────────────────────────────────────────────────
+// ── Lookback + Tab config ─────────────────────────────────────
 
 const LOOKBACK_OPTIONS = [
   { days: 7, label: '7d' },
@@ -370,57 +150,92 @@ const LOOKBACK_OPTIONS = [
   { days: 60, label: '60d' },
 ];
 
+type ActiveTab = 'pump' | 'dump';
+
+// ── Main View ─────────────────────────────────────────────────
+
 export default function ManipulationWatchView() {
   const [lookbackDays, setLookbackDays] = useState(30);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dump');
   const { data, isLoading, error } = useManipulationWatch(lookbackDays);
-  const [selectedStock, setSelectedStock] = useState<{ stock: ManipulationWatchStock; variant: 'pump' | 'dump' } | null>(null);
+
+  const pumpCount = data?.pumpSuspects.length ?? 0;
+  const dumpCount = data?.dumpSuspects.length ?? 0;
+  const stocks = activeTab === 'pump' ? (data?.pumpSuspects ?? []) : (data?.dumpSuspects ?? []);
 
   return (
     <div className="animate-fade-in">
-      {/* Header with warning accent */}
-      <header className="mb-6">
+      {/* Header */}
+      <header className="mb-4">
         <div className="flex items-center gap-3 mb-1">
           <div className="w-9 h-9 rounded-xl bg-risk-amber/10 border border-risk-amber/30 flex items-center justify-center">
             <ShieldAlert className="w-5 h-5 text-risk-amber" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)]">
+            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-primary">
               Manipulation Watch
             </h1>
           </div>
         </div>
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-secondary font-medium text-sm">
-            Stocks showing artificial price movement signatures
-          </p>
-          <div className="flex items-center gap-3 shrink-0">
-            {/* Lookback selector */}
-            <div className="flex items-center gap-1">
-              {LOOKBACK_OPTIONS.map((opt) => (
-                <button
-                  key={opt.days}
-                  onClick={() => setLookbackDays(opt.days)}
-                  className={cn(
-                    'px-2 py-1 rounded-lg text-[10px] font-bold transition-all border',
-                    lookbackDays === opt.days
-                      ? 'bg-risk-amber/15 text-risk-amber border-risk-amber/30'
-                      : 'text-muted border-transparent hover:text-[var(--text-secondary)]',
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {data?.latestDate && (
-              <span className="text-[10px] text-muted font-mono">
-                as of {data.latestDate}
-              </span>
-            )}
-          </div>
-        </div>
-        {/* Warning accent bar */}
-        <div className="mt-3 h-[2px] bg-gradient-to-r from-risk-amber/60 via-risk-red/40 to-transparent rounded-full" />
+        <p className="text-secondary font-medium text-sm mt-1">
+          Stocks showing artificial price movement signatures
+        </p>
+        <div className="mt-2 h-[2px] bg-gradient-to-r from-risk-amber/60 via-risk-red/40 to-transparent rounded-full" />
       </header>
+
+      {/* Controls: Tabs + Lookback */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        {/* Pump / Dump tabs */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setActiveTab('pump')}
+            className={cn(
+              'px-4 py-2 rounded-xl text-xs font-bold transition-all border',
+              activeTab === 'pump'
+                ? 'bg-risk-amber/15 text-risk-amber border-risk-amber/40'
+                : 'bg-kd-bg/40 text-muted border-kd-border hover:text-secondary',
+            )}
+          >
+            Pump Suspects
+            {!isLoading && <span className="ml-1.5 text-[10px] opacity-70">{pumpCount}</span>}
+          </button>
+          <button
+            onClick={() => setActiveTab('dump')}
+            className={cn(
+              'px-4 py-2 rounded-xl text-xs font-bold transition-all border',
+              activeTab === 'dump'
+                ? 'bg-risk-red/15 text-risk-red border-risk-red/40'
+                : 'bg-kd-bg/40 text-muted border-kd-border hover:text-secondary',
+            )}
+          >
+            Dump Suspects
+            {!isLoading && <span className="ml-1.5 text-[10px] opacity-70">{dumpCount}</span>}
+          </button>
+        </div>
+
+        {/* Lookback + date */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            {LOOKBACK_OPTIONS.map((opt) => (
+              <button
+                key={opt.days}
+                onClick={() => setLookbackDays(opt.days)}
+                className={cn(
+                  'px-2 py-1 rounded-lg text-[10px] font-bold transition-all border',
+                  lookbackDays === opt.days
+                    ? 'bg-risk-amber/15 text-risk-amber border-risk-amber/30'
+                    : 'text-muted border-transparent hover:text-secondary',
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {data?.latestDate && (
+            <span className="text-[10px] text-muted font-mono">as of {data.latestDate}</span>
+          )}
+        </div>
+      </div>
 
       {/* Loading */}
       {isLoading && (
@@ -438,37 +253,31 @@ export default function ManipulationWatchView() {
       )}
 
       {/* Results */}
-      {data && !isLoading && (
-        <div className="space-y-6">
-          <SuspectSection
-            title="Pump Suspects"
-            description="Stocks rising on operator activity. Price moves up but underlying volume and structure don't support it."
-            stocks={data.pumpSuspects}
-            variant="pump"
-            lookbackDays={lookbackDays}
-            onSelect={(stock) => setSelectedStock({ stock, variant: 'pump' })}
-          />
-
-          <SuspectSection
-            title="Dump Suspects"
-            description="Stocks collapsing with smart money exiting and weakening volume. Distribution disguised as panic selling."
-            stocks={data.dumpSuspects}
-            variant="dump"
-            lookbackDays={lookbackDays}
-            onSelect={(stock) => setSelectedStock({ stock, variant: 'dump' })}
-          />
+      {!isLoading && !error && data && (
+        <>
+          {stocks.length > 0 ? (
+            <div className="space-y-2">
+              {stocks.map((stock) => (
+                <SuspectCard key={stock.equity_id} stock={stock} variant={activeTab} />
+              ))}
+              <div className="mt-2 text-center">
+                <span className="text-[10px] text-muted font-mono">
+                  {stocks.length} suspect{stocks.length !== 1 ? 's' : ''} in last {lookbackDays} trading days
+                </span>
+              </div>
+            </div>
+          ) : (
+            <Card rounded="xxl" className="py-16 text-center">
+              <p className="text-sm text-muted">
+                {activeTab === 'pump'
+                  ? 'No pump suspects detected in the last ' + lookbackDays + ' trading days.'
+                  : 'No dump suspects detected in the last ' + lookbackDays + ' trading days.'}
+              </p>
+            </Card>
+          )}
 
           <EducationalFooter />
-        </div>
-      )}
-
-      {/* Stock Detail Modal */}
-      {selectedStock && (
-        <StockDetailModal
-          stock={selectedStock.stock}
-          variant={selectedStock.variant}
-          onClose={() => setSelectedStock(null)}
-        />
+        </>
       )}
     </div>
   );
