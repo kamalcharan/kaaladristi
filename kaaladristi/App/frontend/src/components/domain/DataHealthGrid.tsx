@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Database, Cpu, Wrench } from 'lucide-react';
+import { Loader2, Database, Cpu, Wrench, AlertTriangle } from 'lucide-react';
 import VaNiInsight from './VaNiInsight';
 import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
@@ -9,7 +9,10 @@ import { cn } from '@/lib/utils';
 
 interface DayStatus {
   date: string;
-  status: 'ok' | 'missing' | 'partial' | 'holiday' | 'future';
+  status: 'ok' | 'missing' | 'partial' | 'holiday' | 'no_data' | 'future';
+  error?: string | null;
+  last_run_status?: string | null;
+  coverage_pct?: number | null;
 }
 
 interface HealthRow {
@@ -19,6 +22,12 @@ interface HealthRow {
   latest_date: string | null;
   days: DayStatus[];
   error?: string;
+  last_error?: string | null;
+  last_error_date?: string | null;
+  last_job_status?: string | null;
+  last_job_error?: string | null;
+  last_job_rows_updated?: number | null;
+  last_job_completed_at?: string | null;
 }
 
 // ── Status colors ────────────────────────────────────────────────────────────
@@ -70,11 +79,28 @@ function getMonth(dateStr: string): string {
   return MONTHS[+m - 1];
 }
 
-function summaryStats(days: DayStatus[]): { ok: number; missing: number; total: number } {
+function summaryStats(days: DayStatus[]): { ok: number; gaps: number; total: number } {
   const ok = days.filter(d => d.status === 'ok').length;
-  const missing = days.filter(d => d.status === 'missing').length;
-  const total = days.filter(d => d.status !== 'future' && d.status !== 'holiday').length;
-  return { ok, missing, total };
+  // Gaps = missing OR partial. Green means fully complete only.
+  const gaps = days.filter(d => d.status === 'missing' || d.status === 'partial').length;
+  const total = days.filter(d => d.status !== 'future' && d.status !== 'holiday' && d.status !== 'no_data').length;
+  return { ok, gaps, total };
+}
+
+// A recent fix attempt that updated zero rows is the fingerprint of a silent
+// no-op — RPC returned success but the computed_at guard skipped every row.
+// Flag it amber on the row label so Charan can see "this fix did nothing".
+const ZERO_UPDATE_WARNING_HOURS = 48;
+
+function isRecentZeroUpdate(row: HealthRow): boolean {
+  if (row.last_job_status !== 'completed') return false;
+  if (row.last_job_rows_updated == null) return false;
+  if (row.last_job_rows_updated > 0) return false;
+  if (!row.last_job_completed_at) return false;
+  const completed = Date.parse(row.last_job_completed_at);
+  if (Number.isNaN(completed)) return false;
+  const ageHours = (Date.now() - completed) / 3_600_000;
+  return ageHours <= ZERO_UPDATE_WARNING_HOURS;
 }
 
 // ── Month markers ────────────────────────────────────────────────────────────
@@ -137,19 +163,41 @@ function DayBox({ day, dimension, onMark }: {
         <div className={cn(
           'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 rounded-lg',
           'bg-kd-card border border-kd-border shadow-xl',
-          'text-[9px] whitespace-nowrap z-50',
+          'text-[9px] z-50 max-w-[320px] whitespace-normal',
           'hidden group-hover:block',
         )}>
-          <div className="text-[var(--text-primary)] font-bold">{fmtFull(day.date)}</div>
-          <div className="text-[var(--text-secondary)] mt-0.5">{dimension}</div>
+          <div className="text-[var(--text-primary)] font-bold whitespace-nowrap">{fmtFull(day.date)}</div>
+          <div className="text-[var(--text-secondary)] mt-0.5 whitespace-nowrap">{dimension}</div>
           <div className={cn(
-            'font-bold uppercase tracking-wider mt-1',
+            'font-bold uppercase tracking-wider mt-1 whitespace-nowrap',
             day.status === 'ok' ? 'text-risk-green' :
             day.status === 'missing' ? 'text-risk-red' :
             day.status === 'partial' ? 'text-risk-amber' : 'text-muted',
           )}>
             {STATUS_LABELS[day.status] ?? day.status}
           </div>
+          {/* Reason for red/amber square: surface the actual error from
+              km_pipeline_runs, or a note when nothing was logged. */}
+          {(day.status === 'missing' || day.status === 'partial') && (
+            day.error ? (
+              <div className="mt-1.5 pt-1.5 border-t border-kd-border/50">
+                <div className="text-[8px] uppercase tracking-wider text-muted">Last run error</div>
+                <div className="text-[9px] text-risk-red mt-0.5 break-words">{day.error}</div>
+                {day.last_run_status && (
+                  <div className="text-[8px] text-muted mt-0.5">run status: {day.last_run_status}</div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[8px] text-muted whitespace-normal">
+                No error logged — likely upstream dependency missing or silent skip.
+              </div>
+            )
+          )}
+          {day.status === 'ok' && day.coverage_pct != null && day.coverage_pct < 95 && (
+            <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[8px] text-risk-amber">
+              Coverage {day.coverage_pct.toFixed(0)}% — partial run.
+            </div>
+          )}
           {canMark && (
             <div className="text-accent-indigo mt-1">Click to mark</div>
           )}
@@ -188,13 +236,35 @@ function DayBox({ day, dimension, onMark }: {
 }
 
 // ── Fixable dimensions ───────────────────────────────────────────────────────
+// These are the row ids the backend health_checks emits. Must stay in sync with
+// lib/health_checks.DIMENSION_META on the backend.
 
 const FIXABLE_DIMENSIONS = new Set([
-  'nse_equities', 'bse_equities', 'indicators',
+  'nse_equities', 'bse_equities', 'fii_dii',
+  'indicators',
   'nse_equity_indicators', 'bse_equity_indicators',
-  'flow_intelligence', 'magic_rs', 'market_breadth', 'breadth_roc',
-  'industry_composites', 'fii_dii',
+  'nse_magic_rs', 'bse_magic_rs',
+  'flow_intelligence', 'nse_flow_intelligence', 'bse_flow_intelligence',
+  'industry_composites', 'market_breadth', 'breadth_roc',
 ]);
+
+// The wrench POSTs to /api/pipeline/fix. Its FIX_DIMENSIONS allowlist
+// (pipeline_api.py:1127) only accepts BASE dimension keys — the underlying
+// RPCs are exchange-agnostic (compute_all_magic_rs / compute_all_flow_intelligence
+// run over the whole km_equity_eod). So when the user clicks the wrench on a
+// split row ("NSE Magic RS", "BSE Magic RS", "NSE/BSE Flow Intelligence"), we
+// map it back to the base key the API accepts. Wrench behaviour is unchanged;
+// Task 2 will make the worker actually target a specific exchange.
+const FIX_KEY_MAP: Record<string, string> = {
+  nse_magic_rs: 'magic_rs',
+  bse_magic_rs: 'magic_rs',
+  nse_flow_intelligence: 'flow_intelligence',
+  bse_flow_intelligence: 'flow_intelligence',
+};
+
+function toFixDimension(id: string): string {
+  return FIX_KEY_MAP[id] ?? id;
+}
 
 // ── Health row ───────────────────────────────────────────────────────────────
 
@@ -204,17 +274,37 @@ function HealthRowComponent({ row, period, onFix, onMark }: {
   onMark: (date: string, status: string) => void;
 }) {
   const stats = summaryStats(row.days);
-  const allGood = stats.missing === 0 && stats.total > 0;
-  const hasGaps = stats.missing > 0;
+  const allGood = stats.gaps === 0 && stats.total > 0;
+  const hasGaps = stats.gaps > 0;
   const canFix = FIXABLE_DIMENSIONS.has(row.id) && hasGaps;
+  const zeroUpdateWarning = isRecentZeroUpdate(row);
+
+  const zeroUpdateTooltip = zeroUpdateWarning
+    ? `Last fix attempt completed ${row.last_job_completed_at ? fmtShort(row.last_job_completed_at.slice(0, 10)) : 'recently'} with 0 rows updated — likely a silent no-op (computed_at guard skipped every row).`
+    : '';
 
   return (
     <div className="flex items-center gap-3 py-2">
       <div className="w-28 sm:w-36 shrink-0">
-        <div className="text-[11px] font-bold text-[var(--text-primary)] truncate">{row.label}</div>
+        <div className="flex items-center gap-1">
+          <div className="text-[11px] font-bold text-[var(--text-primary)] truncate">{row.label}</div>
+          {zeroUpdateWarning && (
+            <span
+              className="inline-flex items-center text-risk-amber"
+              title={zeroUpdateTooltip}
+            >
+              <AlertTriangle className="w-3 h-3" />
+            </span>
+          )}
+        </div>
         <div className="text-[9px] text-muted mono">
           {row.latest_date ? fmtShort(row.latest_date) : 'No data'}
         </div>
+        {zeroUpdateWarning && (
+          <div className="text-[8px] text-risk-amber mt-0.5 uppercase tracking-wider">
+            last fix: 0 rows updated
+          </div>
+        )}
       </div>
 
       <div className="flex-1 flex items-center gap-[2px] sm:gap-[3px] min-w-0 overflow-visible">
@@ -227,8 +317,11 @@ function HealthRowComponent({ row, period, onFix, onMark }: {
         {allGood ? (
           <span className="text-[9px] font-bold text-risk-green uppercase tracking-wider">Current</span>
         ) : hasGaps ? (
-          <span className="text-[9px] font-bold text-risk-red uppercase tracking-wider">
-            {stats.missing} gaps
+          <span
+            className="text-[9px] font-bold text-risk-red uppercase tracking-wider"
+            title={row.last_error ? `Most recent error (${row.last_error_date}): ${row.last_error}` : undefined}
+          >
+            {stats.gaps} gaps
           </span>
         ) : (
           <span className="text-[9px] text-muted">—</span>
@@ -290,6 +383,10 @@ function Legend() {
         <span>Present</span>
       </div>
       <div className="flex items-center gap-1">
+        <div className="w-2 h-2 rounded-sm bg-risk-amber opacity-90" />
+        <span>Partial</span>
+      </div>
+      <div className="flex items-center gap-1">
         <div className="w-2 h-2 rounded-sm bg-risk-red opacity-80" />
         <span>Missing</span>
       </div>
@@ -320,7 +417,7 @@ export default function DataHealthGrid() {
       const res = await fetch(`${pipelineUrl}/api/pipeline/fix`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dimension, days }),
+        body: JSON.stringify({ dimension: toFixDimension(dimension), days }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: 'Fix failed' }));
