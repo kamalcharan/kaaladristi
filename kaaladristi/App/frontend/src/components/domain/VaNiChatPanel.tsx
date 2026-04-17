@@ -5,6 +5,7 @@ import { usePageContext } from '@/hooks/usePageContext';
 import { getIntentsForPage, getEquityIntents } from '@/config/vaniIntents';
 import { useVaNiAsk } from '@/hooks/useVaNiChat';
 import { useVaNiStore } from '@/stores/vaniStore';
+import type { VaNiEntity } from '@/stores/vaniStore';
 import { useAuthStore } from '@/stores/authStore';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
@@ -22,11 +23,21 @@ interface ChatMessage {
 }
 
 export default function VaNiChatPanel() {
-  const { open, entity, close, clearEntity } = useVaNiStore();
-  const { page } = usePageContext();
+  const { open, entity: storeEntity, close, clearEntity } = useVaNiStore();
+  const { page, entityType, entityId } = usePageContext();
   const { isAdmin } = useAuthStore();
   const { latestDataDate } = usePipelineStatus();
   const askMutation = useVaNiAsk();
+
+  // Auto-detect entity from URL on chart/pulse pages
+  const urlEntity: VaNiEntity | null = (entityType && entityId) ? {
+    type: entityType === 'stock' ? 'equity' : 'index',
+    id: Number(entityId),
+    symbol: new URLSearchParams(window.location.search).get('name') || `#${entityId}`,
+    pageContext: page === 'equity_vp' ? 'Equity Chart' : page === 'index_vp' ? 'Index Chart' : undefined,
+  } : null;
+
+  const entity = storeEntity || urlEntity;
 
   const pageIntents = getIntentsForPage(page);
   const equityIntents = entity ? getEquityIntents(entity.symbol) : [];

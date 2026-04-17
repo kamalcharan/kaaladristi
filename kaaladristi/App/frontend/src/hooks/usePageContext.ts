@@ -13,6 +13,8 @@ export interface PageContext {
 }
 
 const PATH_MAP: Array<{ pattern: RegExp; page: VaNiPage; entityType?: PageContext['entityType'] }> = [
+  { pattern: /^\/chart\/equity\/(\d+)/, page: 'equity_vp', entityType: 'stock' },
+  { pattern: /^\/chart\/index\/(\d+)/, page: 'index_vp', entityType: 'index' },
   { pattern: /^\/pulse\/equity\/(\d+)/, page: 'equity_vp', entityType: 'stock' },
   { pattern: /^\/pulse\/(\d+)/, page: 'index_vp', entityType: 'index' },
   { pattern: /^\/industry-transition/, page: 'industry_transition' },
