@@ -1813,7 +1813,7 @@ def vani_ask(payload: dict):
     elif intent.page == '_equity':
         if not entity_id:
             raise HTTPException(400, "entity_id required for equity intents")
-        ctx = assemble_equity_context(db, int(entity_id), page_context, target_date)
+        ctx = assemble_equity_context(db, int(entity_id), page_context, target_date, entity_type or 'equity')
     else:
         return {
             "intent_id": intent_id,
