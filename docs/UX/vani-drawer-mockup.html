@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti — VaNi Drawer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1120;
+  --card: #131c31;
+  --card-soft: #182340;
+  --card-deep: #0d1528;
+  --border: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.14);
+  --border-indigo: rgba(129,140,248,0.28);
+  --border-gold: rgba(212,168,75,0.35);
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+
+  --gold: #d4a84b;
+  --gold-soft: #e6c167;
+  --gold-bg: rgba(212,168,75,0.1);
+  --indigo: #818cf8;
+  --indigo-strong: #a5b4fc;
+  --indigo-deep: #4f46e5;
+  --indigo-bg: rgba(129,140,248,0.12);
+  --indigo-glow: rgba(129,140,248,0.4);
+
+  --bull: #10b981;
+  --bull-bg: rgba(16,185,129,0.1);
+  --bear: #ef4444;
+  --bear-bg: rgba(239,68,68,0.1);
+  --caution: #f59e0b;
+  --caution-bg: rgba(245,158,11,0.1);
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text-primary);
+  line-height: 1.55;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  overflow: hidden;
+}
+
+/* ============ BACKDROP DASHBOARD (blurred) ============ */
+.dashboard-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  filter: blur(8px) saturate(0.7);
+  opacity: 0.35;
+  pointer-events: none;
+  overflow: hidden;
+}
+.dashboard-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 600px 400px at 20% 20%, rgba(245,158,11,0.15), transparent),
+    radial-gradient(ellipse 500px 400px at 70% 60%, rgba(16,185,129,0.08), transparent),
+    radial-gradient(ellipse 400px 300px at 85% 85%, rgba(212,168,75,0.1), transparent);
+}
+.dashboard-bg .block {
+  position: absolute;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.dashboard-bg .block.b1 { top: 90px; left: 260px; width: 580px; height: 220px; }
+.dashboard-bg .block.b2 { top: 90px; left: 860px; width: 320px; height: 220px; }
+.dashboard-bg .block.b3 { top: 340px; left: 260px; width: 920px; height: 110px; }
+.dashboard-bg .block.b4 { top: 470px; left: 260px; width: 920px; height: 180px; }
+.dashboard-bg .block.b5 { top: 670px; left: 260px; width: 920px; height: 180px; }
+.dashboard-bg .sidebar-bg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 220px;
+  height: 100vh;
+  background: rgba(11,17,32,0.6);
+  border-right: 1px solid var(--border);
+}
+.dashboard-bg .topbar-bg {
+  position: absolute;
+  top: 0; left: 220px; right: 0;
+  height: 68px;
+  background: rgba(11,17,32,0.75);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ============ BACKDROP OVERLAY ============ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 5;
+  backdrop-filter: blur(1px);
+}
+
+/* ============ DRAWER ============ */
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 460px;
+  background: linear-gradient(180deg, #0d1528 0%, #0b1120 100%);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -30px 0 80px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  animation: slideIn 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* ============ DRAWER HEADER ============ */
+.drawer-head {
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(129,140,248,0.04) 0%, transparent 100%);
+  flex-shrink: 0;
+}
+
+.vani-orb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, var(--indigo), var(--indigo-deep));
+  box-shadow: 0 0 20px var(--indigo-glow);
+  flex-shrink: 0;
+  animation: breathe 4s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%,100% { box-shadow: 0 0 16px var(--indigo-glow); transform: scale(1); }
+  50% { box-shadow: 0 0 24px var(--indigo-glow); transform: scale(1.05); }
+}
+
+.drawer-head-text { flex: 1; min-width: 0; }
+.drawer-head-name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--indigo);
+  line-height: 1.1;
+}
+.drawer-head-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.drawer-head-sub::before {
+  content: '';
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--indigo);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.drawer-head-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.18s;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+.icon-btn.close { font-size: 18px; }
+
+/* ============ CONTEXT BAR ============ */
+.context-bar {
+  padding: 10px 20px;
+  background: rgba(212,168,75,0.05);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.context-bar-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.context-bar-val {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.context-bar-val strong { color: var(--text-primary); }
+
+/* ============ MESSAGE AREA ============ */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.messages::-webkit-scrollbar { width: 6px; }
+.messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 6px; }
+
+/* VaNi's opening read */
+.msg-vani-open {
+  background: linear-gradient(135deg, rgba(129,140,248,0.07), rgba(129,140,248,0.01));
+  border: 1px solid var(--border-indigo);
+  border-radius: 12px;
+  padding: 16px 18px;
+  animation: fadeUp 0.4s ease-out;
+}
+.msg-vani-open-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--indigo);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.msg-vani-open-text {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+.msg-vani-open-text strong { color: var(--text-primary); font-weight: 600; font-style: normal; }
+
+/* Section between messages */
+.msg-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.msg-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.msg-divider-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* User message */
+.msg-user {
+  align-self: flex-end;
+  max-width: 85%;
+  background: var(--card-soft);
+  border: 1px solid var(--border);
+  border-radius: 14px 14px 4px 14px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  animation: fadeUp 0.3s ease-out;
+}
+.msg-user-meta {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+/* VaNi response */
+.msg-vani {
+  display: flex;
+  gap: 10px;
+  animation: fadeUp 0.35s ease-out;
+}
+.msg-vani-orb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, var(--indigo), var(--indigo-deep));
+  box-shadow: 0 0 10px var(--indigo-glow);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.msg-vani-body {
+  flex: 1;
+  min-width: 0;
+}
+.msg-vani-text {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin-bottom: 10px;
+}
+.msg-vani-text strong { color: var(--text-primary); font-weight: 600; }
+.msg-vani-text em {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--text-primary);
+}
+
+/* Inline data card inside VaNi response */
+.data-card {
+  background: var(--card-deep);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.data-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+.data-card-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.data-card-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  letter-spacing: 0.06em;
+}
+.tag-bear { background: var(--bear-bg); color: var(--bear); }
+.tag-bull { background: var(--bull-bg); color: var(--bull); }
+.tag-caution { background: var(--caution-bg); color: var(--caution); }
+
+.data-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.data-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  gap: 10px;
+}
+.data-card-label { color: var(--text-muted); }
+.data-card-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* Historical analog mini-chart */
+.analog-chart {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--card-deep);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.analog-chart-head {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.analog-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 50px;
+  margin-bottom: 6px;
+}
+.analog-bar {
+  flex: 1;
+  border-radius: 2px;
+  transition: opacity 0.2s;
+  cursor: help;
+  min-height: 4px;
+}
+.analog-bar:hover { opacity: 0.7; }
+.analog-footer {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+/* Logic chips in a response */
+.msg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.msg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  background: rgba(255,255,255,0.03);
+  color: var(--text-muted);
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.msg-chip::before { content: '◦'; color: var(--indigo); }
+.msg-chip:hover { background: var(--indigo-bg); color: var(--indigo-strong); border-color: var(--border-indigo); }
+
+/* Follow-up suggestions */
+.msg-followups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.msg-followups-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.msg-followup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(129,140,248,0.04);
+  border: 1px solid rgba(129,140,248,0.15);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--indigo);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-body);
+}
+.msg-followup:hover {
+  background: rgba(129,140,248,0.1);
+  color: var(--indigo-strong);
+  border-color: var(--border-indigo);
+}
+.msg-followup-arrow { color: var(--text-faint); font-size: 11px; }
+
+/* ============ INTENT HUB (shown when no active convo) ============ */
+.hub {
+  padding: 20px;
+}
+.hub-section {
+  margin-bottom: 18px;
+}
+.hub-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hub-label-glyph {
+  color: var(--indigo);
+  font-size: 11px;
+}
+.hub-intents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hub-intent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  font-family: var(--font-body);
+  width: 100%;
+}
+.hub-intent:hover {
+  background: var(--card-soft);
+  border-color: var(--border-indigo);
+  color: var(--text-primary);
+}
+.hub-intent-arrow {
+  color: var(--text-faint);
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.hub-intent:hover .hub-intent-arrow { color: var(--indigo); transform: translateX(2px); }
+.hub-intent-personal { border-left: 2px solid var(--gold); }
+
+/* ============ INPUT BAR ============ */
+.drawer-foot {
+  padding: 14px 16px 18px;
+  border-top: 1px solid var(--border);
+  background: rgba(11,17,32,0.85);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+
+.input-wrap {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px 42px;
+  transition: border-color 0.15s;
+}
+.input-wrap:focus-within { border-color: var(--border-indigo); }
+
+.input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: none;
+  min-height: 20px;
+}
+.input::placeholder { color: var(--text-faint); }
+
+.input-actions {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.input-action-left {
+  display: flex;
+  gap: 6px;
+}
+.input-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.input-tool:hover { background: var(--indigo-bg); color: var(--indigo-strong); border-color: var(--border-indigo); }
+
+.input-send {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--indigo);
+  border: none;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.input-send:hover { background: var(--indigo-strong); }
+
+.input-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 8px;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.input-hint .k {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-size: 9.5px;
+}
+
+/* ============ ANIMATIONS ============ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============ VIEW TOGGLE (hub vs conversation) ============ */
+.view-toggle {
+  position: fixed;
+  top: 80px;
+  left: 24px;
+  z-index: 100;
+  display: flex;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 100px;
+  padding: 4px;
+  gap: 2px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.view-toggle-btn {
+  padding: 8px 16px;
+  border-radius: 100px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.view-toggle-btn.active {
+  background: var(--gold);
+  color: #1a1410;
+}
+.view-toggle-label {
+  padding: 0 14px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  align-self: center;
+}
+
+/* ============ BADGE ON MESSAGE (demonstrates "job") ============ */
+.job-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  background: var(--gold-bg);
+  color: var(--gold);
+  border-radius: 100px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.job-badge::before { content: '◆'; font-size: 8px; }
+</style>
+</head>
+<body>
+
+<!-- Blurred Dashboard backdrop to show context -->
+<div class="dashboard-bg">
+  <div class="sidebar-bg"></div>
+  <div class="topbar-bg"></div>
+  <div class="block b1"></div>
+  <div class="block b2"></div>
+  <div class="block b3"></div>
+  <div class="block b4"></div>
+  <div class="block b5"></div>
+</div>
+
+<div class="overlay"></div>
+
+<!-- View toggle (for demo purposes — flip between hub and conversation) -->
+<div class="view-toggle">
+  <span class="view-toggle-label">Demo view</span>
+  <button class="view-toggle-btn" onclick="showView('hub')">Hub</button>
+  <button class="view-toggle-btn active" onclick="showView('convo')">Conversation</button>
+</div>
+
+<!-- ============ DRAWER ============ -->
+<aside class="drawer">
+
+  <!-- Header -->
+  <header class="drawer-head">
+    <div class="vani-orb"></div>
+    <div class="drawer-head-text">
+      <div class="drawer-head-name">VaNi</div>
+      <div class="drawer-head-sub">Reading the tape · Capital Protection day 3</div>
+    </div>
+    <div class="drawer-head-actions">
+      <button class="icon-btn" title="Reset conversation">↻</button>
+      <button class="icon-btn close" title="Close">×</button>
+    </div>
+  </header>
+
+  <!-- Context bar — shows what VaNi is currently scoped to -->
+  <div class="context-bar">
+    <span class="context-bar-label">Context</span>
+    <span class="context-bar-val"><strong>Dashboard</strong> · 17 Apr 2026 · your watchlist (4 names) · <strong>1 open position</strong></span>
+  </div>
+
+  <!-- ============ HUB VIEW (initial state) ============ -->
+  <div class="hub" id="hub-view" style="display:none; flex: 1; overflow-y: auto;">
+
+    <div class="hub-section">
+      <div class="hub-label">
+        <span class="hub-label-glyph">◆</span>
+        About your situation
+      </div>
+      <div class="hub-intents">
+        <button class="hub-intent hub-intent-personal">
+          <span>How does today's read affect my BAJFINANCE position?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+        <button class="hub-intent hub-intent-personal">
+          <span>Which of my watchlist names look most at risk next week?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+        <button class="hub-intent hub-intent-personal">
+          <span>What on today's dashboard is relevant to my thesis?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hub-section">
+      <div class="hub-label">
+        <span class="hub-label-glyph">◆</span>
+        Compare to the past
+      </div>
+      <div class="hub-intents">
+        <button class="hub-intent">
+          <span>When was the last Capital Protection regime, and how did it resolve?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+        <button class="hub-intent">
+          <span>Show me the last 3 Mars–Ketu conjunction windows</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+        <button class="hub-intent">
+          <span>How often does narrowing leadership precede a pullback?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hub-section">
+      <div class="hub-label">
+        <span class="hub-label-glyph">◆</span>
+        Go deeper on today
+      </div>
+      <div class="hub-intents">
+        <button class="hub-intent">
+          <span>Why is the regime being read as Capital Protection?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+        <button class="hub-intent">
+          <span>What's the causal story behind narrowing leadership?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+        <button class="hub-intent">
+          <span>Explain the Mars–Ketu conjunction in market terms</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hub-section">
+      <div class="hub-label">
+        <span class="hub-label-glyph">◆</span>
+        Learn the system
+      </div>
+      <div class="hub-intents">
+        <button class="hub-intent">
+          <span>Walk me through what RSS zones mean</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+        <button class="hub-intent">
+          <span>How do you decide when a regime changes?</span>
+          <span class="hub-intent-arrow">→</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ CONVERSATION VIEW (active exchange) ============ -->
+  <div class="messages" id="convo-view">
+
+    <!-- VaNi's opening proactive read — this is agentic: she speaks first -->
+    <div class="msg-vani-open">
+      <div class="msg-vani-open-label">VaNi's read, because you're here</div>
+      <div class="msg-vani-open-text">
+        You're looking at Dashboard during Capital Protection day 3 with an active Mars–Ketu window. Your <strong>one open position (BAJFINANCE)</strong> is in the weakness list today. If you want, I can reason through what that means specifically — or you can ask me anything else.
+      </div>
+    </div>
+
+    <div class="msg-divider">
+      <span class="msg-divider-line"></span>
+      <span class="msg-divider-label">Conversation</span>
+      <span class="msg-divider-line"></span>
+    </div>
+
+    <!-- User asks a personal-context question -->
+    <div class="msg-user">
+      <div class="msg-user-meta">You · 4:22 PM</div>
+      I'm long BAJFINANCE from 7,200. Does today's read change my plan?
+    </div>
+
+    <!-- VaNi's response: personal context reasoning — JOB A -->
+    <div class="msg-vani">
+      <div class="msg-vani-orb"></div>
+      <div class="msg-vani-body">
+        <span class="job-badge">Your context + system context</span>
+        <div class="msg-vani-text">
+          You're carrying <strong>BAJFINANCE at 7,200</strong>. Current spot is <strong>6,840</strong>, so you're <strong>−5.0%</strong>. A few things converge today that are worth being aware of:
+        </div>
+
+        <div class="data-card">
+          <div class="data-card-head">
+            <span class="data-card-title">BAJFINANCE · your position</span>
+            <span class="data-card-tag tag-bear">In weakness list</span>
+          </div>
+          <div class="data-card-rows">
+            <div class="data-card-row"><span class="data-card-label">Magic RS</span><span class="data-card-val">18.9 · bottom decile</span></div>
+            <div class="data-card-row"><span class="data-card-label">Sector</span><span class="data-card-val">Financial Conglomerates · rotating out</span></div>
+            <div class="data-card-row"><span class="data-card-label">Industry percentile change</span><span class="data-card-val" style="color:var(--bear)">−42 this week</span></div>
+            <div class="data-card-row"><span class="data-card-label">RSS zone</span><span class="data-card-val">Mild Bear</span></div>
+          </div>
+        </div>
+
+        <div class="msg-vani-text">
+          Three signals line up: it's in the weakness leaderboard, its sector is rotating out (−42), and the regime itself is Capital Protection which historically has been unkind to weak-RS names in rotating-out sectors. <em>None of this is a recommendation to act.</em> What it tells you: the environment today is consistent with continued relative pressure, and Thursday's Saturn–Mars event is a known volatility signal that could compound either way.
+        </div>
+
+        <div class="msg-chips">
+          <span class="msg-chip">Your position · book value 7,200</span>
+          <span class="msg-chip">Magic RS leaderboard</span>
+          <span class="msg-chip">km_industry_eod · Financial Conglomerates</span>
+          <span class="msg-chip">dc_inference · 2026-04-24</span>
+        </div>
+
+        <div class="msg-followups">
+          <div class="msg-followups-label">You might also ask</div>
+          <button class="msg-followup">
+            <span>What would need to change for the picture to improve?</span>
+            <span class="msg-followup-arrow">→</span>
+          </button>
+          <button class="msg-followup">
+            <span>Show me how weak-RS names in rotating-out sectors fared in past Capital Protection regimes</span>
+            <span class="msg-followup-arrow">→</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- User asks historical / compare-to question -->
+    <div class="msg-user">
+      <div class="msg-user-meta">You · 4:24 PM</div>
+      Show me how weak-RS names in rotating-out sectors fared in past Capital Protection regimes
+    </div>
+
+    <!-- VaNi's response: historical reasoning — JOB B -->
+    <div class="msg-vani">
+      <div class="msg-vani-orb"></div>
+      <div class="msg-vani-body">
+        <span class="job-badge">Reasoning across time</span>
+        <div class="msg-vani-text">
+          I found <strong>8 prior Capital Protection regimes</strong> in the EOD history. For each, I tracked stocks that started the regime in the bottom Magic RS decile <em>and</em> in a rotating-out industry. Here's what happened by the time those regimes ended:
+        </div>
+
+        <div class="analog-chart">
+          <div class="analog-chart-head">Returns by regime — bottom-decile × rotating-out</div>
+          <div class="analog-bars">
+            <div class="analog-bar" style="background: var(--bear); height: 78%;" title="Regime 1: −14.2%"></div>
+            <div class="analog-bar" style="background: var(--bear); height: 65%;" title="Regime 2: −11.8%"></div>
+            <div class="analog-bar" style="background: var(--caution); height: 22%;" title="Regime 3: −3.9%"></div>
+            <div class="analog-bar" style="background: var(--bear); height: 54%;" title="Regime 4: −9.7%"></div>
+            <div class="analog-bar" style="background: var(--bear); height: 82%;" title="Regime 5: −15.1%"></div>
+            <div class="analog-bar" style="background: var(--bull); height: 28%;" title="Regime 6: +4.2% (outlier — recovery rally)"></div>
+            <div class="analog-bar" style="background: var(--bear); height: 48%;" title="Regime 7: −8.4%"></div>
+            <div class="analog-bar" style="background: var(--bear); height: 60%;" title="Regime 8: −10.9%"></div>
+          </div>
+          <div class="analog-footer">
+            <span>Median: −10.3%</span>
+            <span>7 of 8 negative</span>
+          </div>
+        </div>
+
+        <div class="msg-vani-text">
+          <strong>7 of 8 closed negative</strong>, median −10.3%. The one positive occurrence (Regime 6) came when the regime ended in a sharp recovery rally — a 9-session window. This is base-rate data, not a forecast. Your BAJFINANCE is currently at −5.0% from your entry, which is inside the typical early-regime drawdown range for this profile.
+        </div>
+
+        <div class="msg-chips">
+          <span class="msg-chip">km_equity_eod · 2014–2026</span>
+          <span class="msg-chip">Regime classifier · Capital Protection windows</span>
+          <span class="msg-chip">Hover any bar for specific regime</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- User asks a "why" explainer -->
+    <div class="msg-user">
+      <div class="msg-user-meta">You · 4:27 PM</div>
+      Why does narrowing leadership matter so much under Capital Protection?
+    </div>
+
+    <!-- VaNi's response: explanatory deepening — JOB C -->
+    <div class="msg-vani">
+      <div class="msg-vani-orb"></div>
+      <div class="msg-vani-body">
+        <span class="job-badge">Explaining the explanation</span>
+        <div class="msg-vani-text">
+          Narrowing leadership is a <strong>participation signal</strong>. When only a few names are carrying the index higher, it means most stocks are already weakening — the index is being propped up by a small basket rather than broad demand. Historically, this is an <em>exhaustion pattern</em>: once the leaders wobble, there's no second tier ready to take over, and the index corrects quickly.
+        </div>
+        <div class="msg-vani-text">
+          Under Capital Protection specifically, this pattern is diagnostic rather than surprising — it's one of the inputs the regime classifier uses in the first place. So seeing narrowing leadership during Capital Protection isn't a new signal; it's confirmation that the regime read is holding.
+        </div>
+        <div class="msg-chips">
+          <span class="msg-chip">Leadership tracker · breadth math</span>
+          <span class="msg-chip">Regime classifier inputs</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Input bar -->
+  <footer class="drawer-foot">
+    <div class="input-wrap">
+      <textarea class="input" placeholder="Ask VaNi anything about today, your positions, or the past..." rows="1"></textarea>
+      <div class="input-actions">
+        <div class="input-action-left">
+          <span class="input-tool">@ scope</span>
+          <span class="input-tool">◆ my positions</span>
+          <span class="input-tool">⧖ history</span>
+        </div>
+        <button class="input-send" title="Send">↑</button>
+      </div>
+    </div>
+    <div class="input-hint">
+      VaNi reads conditions and explains data. She doesn't recommend trades. <span class="k">Enter</span> to send · <span class="k">⌘K</span> for hub
+    </div>
+  </footer>
+
+</aside>
+
+<script>
+function showView(which) {
+  const hub = document.getElementById('hub-view');
+  const convo = document.getElementById('convo-view');
+  const buttons = document.querySelectorAll('.view-toggle-btn');
+
+  buttons.forEach(b => b.classList.remove('active'));
+
+  if (which === 'hub') {
+    hub.style.display = 'block';
+    convo.style.display = 'none';
+    buttons[0].classList.add('active');
+  } else {
+    hub.style.display = 'flex';
+    convo.style.display = 'flex';
+    buttons[1].classList.add('active');
+  }
+}
+</script>
+
+</body>
+</html>

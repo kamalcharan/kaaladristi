@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti — Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1120;
+  --card: #131c31;
+  --card-soft: #182340;
+  --border: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.14);
+  --border-gold: rgba(212,168,75,0.35);
+  --border-indigo: rgba(129,140,248,0.28);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+  --gold: #d4a84b;
+  --gold-soft: #e6c167;
+  --gold-bg: rgba(212,168,75,0.1);
+  --indigo: #818cf8;
+  --indigo-strong: #a5b4fc;
+  --indigo-bg: rgba(129,140,248,0.12);
+  --bull: #10b981;
+  --bull-bg: rgba(16,185,129,0.1);
+  --bear: #ef4444;
+  --bear-bg: rgba(239,68,68,0.1);
+  --caution: #f59e0b;
+  --caution-bg: rgba(245,158,11,0.1);
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text-primary);
+  line-height: 1.55;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse 800px 500px at 80% 10%, rgba(245,158,11,0.04), transparent);
+  pointer-events: none; z-index: 0;
+}
+
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; position: relative; z-index: 1; }
+
+/* Sidebar */
+.sidebar {
+  background: rgba(11,17,32,0.6);
+  border-right: 1px solid var(--border);
+  padding: 28px 16px;
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column;
+}
+.brand { font-family: var(--font-display); font-size: 24px; font-weight: 500; padding: 0 12px 4px; letter-spacing: -0.02em; }
+.brand em { color: var(--gold); font-style: italic; font-weight: 400; }
+.brand-tag { padding: 0 12px; font-size: 11px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 32px; }
+.nav-group-label { padding: 0 12px 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 24px; }
+.nav-group-label:first-of-type { margin-top: 0; }
+.nav-item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 8px; color: var(--text-muted); font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all 0.18s; margin-bottom: 1px; }
+.nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text-secondary); }
+.nav-item.active { background: var(--gold-bg); color: var(--gold-soft); }
+.nav-item .glyph { font-family: var(--font-display); font-size: 14px; width: 16px; text-align: center; opacity: 0.75; }
+.sidebar-foot { margin-top: auto; padding: 14px 12px 4px; font-size: 11px; color: var(--text-faint); border-top: 1px solid var(--border); font-family: var(--font-mono); }
+
+/* Topbar */
+.main { overflow-x: hidden; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 40px; border-bottom: 1px solid var(--border); background: rgba(11,17,32,0.75); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 10; }
+.search { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 100px; font-size: 13px; color: var(--text-faint); width: 280px; }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.freshness { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--bull); padding: 5px 11px; background: var(--bull-bg); border-radius: 100px; }
+.freshness::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--bull); animation: pulse 2.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.vani-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--indigo-bg); border: 1px solid var(--border-indigo); color: var(--indigo); border-radius: 100px; font-size: 13px; font-weight: 500; cursor: pointer; }
+
+/* Content */
+.content { padding: 28px 40px 120px 40px; max-width: 1360px; margin: 0 auto; }
+
+/* Headline */
+.head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; flex-wrap: wrap; }
+.headline h1 { font-family: var(--font-display); font-weight: 500; font-size: 32px; letter-spacing: -0.02em; line-height: 1; margin-bottom: 6px; }
+.headline h1 em { color: var(--gold); font-style: italic; font-weight: 400; }
+.headline-sub { font-size: 13px; color: var(--text-muted); }
+
+/* Context strip */
+.context-strip { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; flex-wrap: wrap; }
+.ctx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px; border: 1px solid var(--border); background: var(--card); color: var(--text-secondary); }
+.ctx-chip.regime { border-color: var(--caution); color: var(--caution); background: var(--caution-bg); }
+.ctx-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+.ctx-sep { color: var(--text-faint); font-size: 10px; }
+
+/* Preset bar */
+.presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 20px; }
+.preset { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 14px 13px; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
+.preset:hover { background: var(--card-soft); border-color: var(--border-strong); }
+.preset.relevance-high { border-color: var(--border-gold); background: linear-gradient(180deg, var(--gold-bg) 0%, var(--card) 80%); }
+.preset.relevance-high .preset-name { color: var(--text-primary); }
+.preset.relevance-low { opacity: 0.55; }
+.preset.active { border-color: var(--indigo); background: var(--card-soft); box-shadow: 0 0 0 3px rgba(129,140,248,0.15); opacity: 1; }
+.preset-name { font-family: var(--font-display); font-size: 14.5px; font-weight: 500; color: var(--text-secondary); line-height: 1.15; margin-bottom: 8px; }
+.preset.active .preset-name { color: var(--text-primary); }
+.preset-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.preset-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.preset.active .preset-count { color: var(--indigo-strong); }
+.preset-bar { position: absolute; bottom: 0; left: 0; height: 2px; border-radius: 2px; }
+.rel-0 { width: 10%; background: var(--text-faint); opacity: 0.3; }
+.rel-1 { width: 30%; background: var(--text-muted); opacity: 0.4; }
+.rel-2 { width: 55%; background: var(--caution); opacity: 0.6; }
+.rel-3 { width: 80%; background: var(--gold); }
+.rel-4 { width: 100%; background: var(--gold); }
+
+/* Sub-filters */
+.subbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+.tabs { display: flex; gap: 2px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 100px; }
+.tab { padding: 6px 16px; border-radius: 100px; border: none; background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; font-family: var(--font-body); }
+.tab.active { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.sort-strip { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
+.sort-current { color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; }
+.sort-link { color: var(--indigo); cursor: pointer; font-size: 12px; }
+
+/* VaNi Opportunity filter toggle */
+.subbar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.opp-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid var(--border-gold);
+  color: var(--gold);
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.opp-filter:hover { background: var(--gold-bg); }
+.opp-filter.active {
+  background: var(--gold);
+  color: #1a1410;
+  box-shadow: 0 0 20px rgba(212,168,75,0.3);
+}
+.opp-filter .mark {
+  font-size: 11px;
+  line-height: 1;
+}
+.opp-filter .count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 100px;
+  margin-left: 2px;
+}
+.opp-filter.active .count { background: rgba(0,0,0,0.25); color: #1a1410; }
+
+/* Opportunity badge on row */
+.opp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border-radius: 5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  background: var(--gold);
+  color: #1a1410;
+  white-space: nowrap;
+}
+.opp-badge::before { content: '✦'; font-size: 10px; }
+
+/* Row enhancement when it carries Opportunity */
+.row.has-opp {
+  box-shadow: 0 0 0 1px rgba(212,168,75,0.2), 0 8px 20px rgba(0,0,0,0.15);
+}
+.row.has-opp:hover {
+  box-shadow: 0 0 0 1px var(--border-gold), 0 12px 28px rgba(0,0,0,0.25);
+}
+
+/* VaNi Watchlist filter button (sits next to Opportunity filter) */
+.watch-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid var(--border-indigo);
+  color: var(--indigo);
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.watch-filter:hover { background: var(--indigo-bg); }
+.watch-filter.active {
+  background: var(--indigo);
+  color: #0a0f1d;
+  box-shadow: 0 0 20px rgba(129,140,248,0.35);
+}
+.watch-filter .mark {
+  font-size: 11px;
+  line-height: 1;
+}
+.watch-filter .count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  background: rgba(0,0,0,0.22);
+  border-radius: 100px;
+  margin-left: 2px;
+}
+.watch-filter.active .count { background: rgba(0,0,0,0.3); color: #0a0f1d; }
+.watch-filter .ping-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--bull);
+  box-shadow: 0 0 6px var(--bull);
+  animation: pulse 1.5s infinite;
+  margin-left: 2px;
+}
+
+/* Row live state — pinged / warming / quiet (intraday) */
+.row.state-pinged {
+  border-left: 3px solid var(--bull);
+  background: linear-gradient(90deg, rgba(16,185,129,0.08) 0%, var(--card) 40%);
+}
+.row.state-pinged:hover {
+  background: linear-gradient(90deg, rgba(16,185,129,0.12) 0%, var(--card-soft) 40%);
+}
+.row.state-warming { border-left: 3px solid var(--indigo); opacity: 0.95; }
+.row.state-quiet { opacity: 0.55; }
+
+/* Live state chip on row */
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border-radius: 100px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.state-chip.pinged {
+  background: var(--bull);
+  color: #0a1f16;
+  animation: ping-pulse 1.8s infinite;
+}
+@keyframes ping-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.6); }
+  50% { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+}
+.state-chip.pinged::before { content: '●'; font-size: 8px; }
+.state-chip.warming {
+  background: var(--indigo-bg);
+  color: var(--indigo);
+  border: 1px solid var(--border-indigo);
+}
+.state-chip.warming::before { content: '◐'; font-size: 9px; }
+.state-chip.quiet {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+}
+.state-chip.quiet::before { content: '○'; font-size: 9px; }
+
+.show-quiet {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  margin-top: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  transition: all 0.15s;
+}
+.show-quiet:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+/* Stacks */
+.stack { margin-bottom: 28px; }
+.stack-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; padding: 0 4px; flex-wrap: wrap; gap: 10px; }
+.stack-title { font-family: var(--font-display); font-size: 18px; font-weight: 500; letter-spacing: -0.01em; display: flex; align-items: baseline; gap: 10px; }
+.stack-title em { font-style: italic; color: var(--text-muted); font-size: 13px; font-weight: 400; }
+.stack-glyph { font-family: var(--font-display); font-size: 18px; margin-right: 4px; }
+.stack-glyph.aligned { color: var(--bull); }
+.stack-glyph.fighting { color: var(--bear); }
+.stack-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.stack-vani { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; font-size: 11px; color: var(--indigo); background: var(--indigo-bg); border: 1px solid var(--border-indigo); border-radius: 100px; cursor: pointer; }
+.stack-vani::before { content: '✦'; font-size: 10px; }
+
+/* Row */
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: all 0.18s; position: relative; display: grid; grid-template-columns: 1fr 120px 100px; gap: 18px; align-items: center; }
+.row:hover { background: var(--card-soft); border-color: var(--border-strong); transform: translateY(-1px); }
+.row.watchlist { border-left: 3px solid var(--gold); background: linear-gradient(90deg, rgba(212,168,75,0.06) 0%, var(--card) 40%); }
+.row.watchlist:hover { background: linear-gradient(90deg, rgba(212,168,75,0.1) 0%, var(--card-soft) 40%); }
+.row.fighting { border-left: 3px solid var(--caution); opacity: 0.82; }
+.row.fighting:hover { opacity: 1; }
+
+.row-main { min-width: 0; }
+.row-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.sym { font-family: var(--font-mono); font-size: 14.5px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
+.exch { font-family: var(--font-mono); font-size: 9.5px; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.1em; font-weight: 600; }
+.exch.nse { background: rgba(6,182,212,0.12); color: #06b6d4; border: 1px solid rgba(6,182,212,0.25); }
+.exch.bse { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.watchlist-mark { font-size: 10px; color: var(--gold); letter-spacing: 0.1em; text-transform: uppercase; font-family: var(--font-mono); font-weight: 600; }
+.watchlist-mark::before { content: '★ '; }
+
+.company { font-size: 12px; color: var(--text-muted); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; }
+.company .ind { color: var(--text-faint); }
+.company .sep { color: var(--text-faint); margin: 0 6px; }
+
+.sigs { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.sig { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; font-family: var(--font-mono); font-size: 10.5px; border-radius: 5px; font-weight: 500; background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border); }
+.sig strong { color: var(--text-primary); font-weight: 600; }
+.sig.flow-long { background: var(--bull-bg); color: var(--bull); border-color: rgba(16,185,129,0.2); }
+.sig.accum { background: rgba(6,182,212,0.1); color: #06b6d4; border-color: rgba(6,182,212,0.2); }
+
+.align { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; font-family: var(--font-mono); font-size: 10px; border-radius: 100px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+.align.strong { background: var(--bull-bg); color: var(--bull); }
+.align.partial { background: var(--caution-bg); color: var(--caution); }
+.align.against { background: var(--bear-bg); color: var(--bear); }
+.align::before { content: '◆'; font-size: 9px; }
+
+.price-block { text-align: right; min-width: 0; }
+.price { font-family: var(--font-mono); font-size: 16px; font-weight: 500; color: var(--text-primary); letter-spacing: -0.01em; }
+.chg { font-family: var(--font-mono); font-size: 12px; margin-top: 2px; }
+.chg.up { color: var(--bull); }
+.chg.dn { color: var(--bear); }
+
+.action-block { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.rs-pill { font-family: var(--font-mono); font-size: 11px; padding: 4px 10px; border-radius: 100px; letter-spacing: 0.04em; font-weight: 600; }
+.rs-pill.mild-strong { background: rgba(16,185,129,0.06); color: rgba(16,185,129,0.75); }
+.rs-pill.neutral { background: rgba(255,255,255,0.04); color: var(--text-muted); }
+.vani-trig { width: 24px; height: 24px; border-radius: 50%; background: transparent; border: none; color: var(--text-faint); cursor: pointer; font-size: 12px; opacity: 0; transition: all 0.18s; display: flex; align-items: center; justify-content: center; }
+.row:hover .vani-trig { opacity: 1; color: var(--indigo); }
+.vani-trig:hover { background: var(--indigo-bg); color: var(--indigo-strong) !important; }
+
+.stack-collapse { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; color: var(--text-muted); font-size: 12px; font-family: var(--font-mono); letter-spacing: 0.06em; cursor: pointer; margin-top: 6px; border: 1px dashed var(--border); border-radius: 10px; transition: all 0.15s; }
+.stack-collapse:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+.island { position: fixed; bottom: 28px; left: 50%; transform: translateX(calc(-50% + 110px)); background: rgba(11,17,32,0.95); backdrop-filter: blur(12px); border: 1px solid var(--border-strong); border-radius: 100px; padding: 10px 14px 10px 22px; display: flex; align-items: center; gap: 18px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+.island-status { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+.island-status .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--indigo); animation: pulse 2s infinite; }
+.island-status em { font-style: italic; font-family: var(--font-display); color: var(--text-primary); font-weight: 500; }
+.island-divider { width: 1px; height: 18px; background: rgba(255,255,255,0.12); }
+.island-btn { font-size: 13px; padding: 7px 16px; background: var(--gold); color: #1a1410; border: none; border-radius: 100px; font-weight: 600; cursor: pointer; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.stack { animation: fadeUp 0.4s ease-out both; }
+.stack:nth-child(2) { animation-delay: 0.05s; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">Kāla-<em>Drishti</em></div>
+    <div class="brand-tag">Market Weather</div>
+    <div class="nav-group-label">View</div>
+    <div class="nav-item"><span class="glyph">◉</span> Dashboard</div>
+    <div class="nav-item active"><span class="glyph">⊙</span> Scanner</div>
+    <div class="nav-item"><span class="glyph">⇌</span> Industry Transition</div>
+    <div class="nav-item"><span class="glyph">☽</span> Planetary Intel</div>
+    <div class="nav-group-label">Author</div>
+    <div class="nav-item"><span class="glyph">✎</span> Inference DB</div>
+    <div class="sidebar-foot">Friday · 17 Apr 2026<br>Market closed · 4:15 PM</div>
+  </aside>
+
+  <main class="main">
+
+    <div class="topbar">
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        Search index or stock · ⌘K
+      </div>
+      <div class="topbar-right">
+        <div class="freshness">Data · 15 Apr 2026</div>
+        <button class="vani-btn">✦ Ask VaNi</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div class="head-row">
+        <div class="headline">
+          <h1>Scanner <em>· thesis search</em></h1>
+          <div class="headline-sub">Six condition-convergence presets, arranged against today's regime.</div>
+        </div>
+        <div class="context-strip">
+          <span class="ctx-chip regime"><span class="dot"></span>Capital Protection · day 3</span>
+          <span class="ctx-sep">·</span>
+          <span class="ctx-chip">Mars–Ketu window</span>
+          <span class="ctx-sep">·</span>
+          <span class="ctx-chip">★ 4 watchlist names</span>
+        </div>
+      </div>
+
+      <div class="presets">
+        <div class="preset relevance-low">
+          <div class="preset-name">Strength Confluence</div>
+          <div class="preset-meta"><span class="preset-count">18 matches</span></div>
+          <div class="preset-bar rel-1"></div>
+        </div>
+        <div class="preset relevance-low">
+          <div class="preset-name">Weakness Confluence</div>
+          <div class="preset-meta"><span class="preset-count">22 matches</span></div>
+          <div class="preset-bar rel-2"></div>
+        </div>
+        <div class="preset">
+          <div class="preset-name">Smart Money Loading</div>
+          <div class="preset-meta"><span class="preset-count">9 matches</span></div>
+          <div class="preset-bar rel-2"></div>
+        </div>
+        <div class="preset relevance-low">
+          <div class="preset-name">Fresh Breakouts</div>
+          <div class="preset-meta"><span class="preset-count">3 matches</span></div>
+          <div class="preset-bar rel-0"></div>
+        </div>
+        <div class="preset active relevance-high">
+          <div class="preset-name">Quiet Accumulation</div>
+          <div class="preset-meta"><span class="preset-count">7 matches · active</span></div>
+          <div class="preset-bar rel-4"></div>
+        </div>
+        <div class="preset relevance-high">
+          <div class="preset-name">Distribution Warnings</div>
+          <div class="preset-meta"><span class="preset-count">14 matches</span></div>
+          <div class="preset-bar rel-3"></div>
+        </div>
+      </div>
+
+      <div class="subbar">
+        <div class="subbar-left">
+          <div class="tabs">
+            <button class="tab active">Combined</button>
+            <button class="tab">NSE</button>
+            <button class="tab">BSE</button>
+          </div>
+          <button class="opp-filter" title="Show only fresh opportunities that pass today's policy">
+            <span class="mark">✦</span>
+            VaNi Opportunity
+            <span class="count">2</span>
+          </button>
+          <button class="watch-filter active" title="Show VaNi's watchlist — setups she's tracking intraday">
+            <span class="mark">◉</span>
+            VaNi Watchlist
+            <span class="count">8</span>
+            <span class="ping-dot" title="1 pinged"></span>
+          </button>
+        </div>
+        <div class="sort-strip">
+          <span>Sorted by <span class="sort-current">live state · pinged first</span></span>
+          <span class="sort-link">change →</span>
+        </div>
+      </div>
+
+
+      <div class="stack">
+        <div class="stack-head">
+          <div class="stack-title">
+            <span class="stack-glyph aligned">◎</span>
+            VaNi's Watchlist · live
+            <em>· 8 on list · 1 pinged · 2 warming</em>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span class="stack-count">15-min intraday · updated 2 min ago</span>
+            <span class="stack-vani">What's on this list?</span>
+          </div>
+        </div>
+        <div class="rows">
+
+          <!-- PINGED -->
+          <div class="row watchlist has-opp state-pinged">
+            <div class="row-main">
+              <div class="row-top">
+                <span class="sym">GRANULES</span>
+                <span class="exch nse">NSE</span>
+                <span class="state-chip pinged">Ready to cook</span>
+                <span class="opp-badge">VaNi Opportunity</span>
+              </div>
+              <div class="company">
+                Granules India Ltd
+                <span class="sep">·</span>
+                <span class="ind">Drug Manufacturers &mdash; Specialty &amp; Generic</span>
+              </div>
+              <div class="sigs">
+                <span class="align strong">Strong alignment</span>
+                <span class="sig accum">Accumulation</span>
+                <span class="sig">RSI ticked <strong>61 &rarr; 68</strong></span>
+                <span class="sig">RVOL <strong>2.3</strong></span>
+                <span class="sig flow-long">Fresh Longs</span>
+              </div>
+            </div>
+            <div class="price-block">
+              <div class="price">618.90</div>
+              <div class="chg up">&#9650; +1.8%</div>
+            </div>
+            <div class="action-block">
+              <span class="rs-pill mild-strong">RS 71.2</span>
+              <button class="vani-trig">&#10022;</button>
+            </div>
+          </div>
+
+          <!-- WARMING -->
+          <div class="row watchlist has-opp state-warming">
+            <div class="row-main">
+              <div class="row-top">
+                <span class="sym">CIPLA</span>
+                <span class="exch nse">NSE</span>
+                <span class="state-chip warming">Warming</span>
+                <span class="opp-badge">VaNi Opportunity</span>
+              </div>
+              <div class="company">
+                Cipla Ltd
+                <span class="sep">&middot;</span>
+                <span class="ind">Drug Manufacturers &mdash; General</span>
+              </div>
+              <div class="sigs">
+                <span class="align strong">Strong alignment</span>
+                <span class="sig accum">Accumulation</span>
+                <span class="sig">RSI <strong>54</strong></span>
+                <span class="sig">RVOL <strong>1.4</strong></span>
+              </div>
+            </div>
+            <div class="price-block">
+              <div class="price">1,491.50</div>
+              <div class="chg up">&#9650; +0.6%</div>
+            </div>
+            <div class="action-block">
+              <span class="rs-pill mild-strong">RS 87.6</span>
+              <button class="vani-trig">&#10022;</button>
+            </div>
+          </div>
+
+          <!-- WARMING #2 -->
+          <div class="row state-warming">
+            <div class="row-main">
+              <div class="row-top">
+                <span class="sym">COFORGE</span>
+                <span class="exch nse">NSE</span>
+                <span class="state-chip warming">Warming</span>
+              </div>
+              <div class="company">
+                Coforge Ltd
+                <span class="sep">&middot;</span>
+                <span class="ind">Information Technology Services</span>
+              </div>
+              <div class="sigs">
+                <span class="align strong">Strong alignment</span>
+                <span class="sig accum">Accumulation</span>
+                <span class="sig">Sniper <strong>+6</strong></span>
+                <span class="sig">RSS drifting up</span>
+              </div>
+            </div>
+            <div class="price-block">
+              <div class="price">8,952.80</div>
+              <div class="chg up">&#9650; +0.5%</div>
+            </div>
+            <div class="action-block">
+              <span class="rs-pill neutral">RS 58.4</span>
+              <button class="vani-trig">&#10022;</button>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="show-quiet">show 5 quiet names VaNi is also tracking &darr;</div>
+      </div>
+
+
+    </div>
+
+    <div class="island">
+      <div class="island-status">
+        <span class="live-dot"></span>
+        VaNi is watching 8 setups · <em>1 just pinged</em>
+      </div>
+      <div class="island-divider"></div>
+      <button class="island-btn">Review the ping</button>
+    </div>
+
+  </main>
+
+</div>
+
+</body>
+</html>

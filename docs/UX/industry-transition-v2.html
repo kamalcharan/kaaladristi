@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti — Industry Transition v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1120;
+  --card: #131c31;
+  --card-soft: #182340;
+  --card-deep: #0d1528;
+  --border: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.14);
+  --border-gold: rgba(212,168,75,0.35);
+  --border-indigo: rgba(129,140,248,0.28);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+  --gold: #d4a84b;
+  --gold-soft: #e6c167;
+  --gold-bg: rgba(212,168,75,0.1);
+  --indigo: #818cf8;
+  --indigo-strong: #a5b4fc;
+  --indigo-bg: rgba(129,140,248,0.12);
+  --bull: #10b981;
+  --bull-bg: rgba(16,185,129,0.1);
+  --bear: #ef4444;
+  --bear-bg: rgba(239,68,68,0.1);
+  --caution: #f59e0b;
+  --caution-bg: rgba(245,158,11,0.1);
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--bg); color: var(--text-primary); line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 800px 500px at 50% -5%, rgba(99,102,241,0.04), transparent); pointer-events: none; z-index: 0; }
+
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; position: relative; z-index: 1; }
+
+.sidebar { background: rgba(11,17,32,0.6); border-right: 1px solid var(--border); padding: 28px 16px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; }
+.brand { font-family: var(--font-display); font-size: 24px; font-weight: 500; padding: 0 12px 4px; letter-spacing: -0.02em; }
+.brand em { color: var(--gold); font-style: italic; font-weight: 400; }
+.brand-tag { padding: 0 12px; font-size: 11px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 32px; }
+.nav-group-label { padding: 0 12px 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 24px; }
+.nav-group-label:first-of-type { margin-top: 0; }
+.nav-item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 8px; color: var(--text-muted); font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all 0.18s; margin-bottom: 1px; }
+.nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text-secondary); }
+.nav-item.active { background: var(--gold-bg); color: var(--gold-soft); }
+.nav-item .glyph { font-family: var(--font-display); font-size: 14px; width: 16px; text-align: center; opacity: 0.75; }
+.sidebar-foot { margin-top: auto; padding: 14px 12px 4px; font-size: 11px; color: var(--text-faint); border-top: 1px solid var(--border); font-family: var(--font-mono); }
+
+.main { overflow-x: hidden; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 40px; border-bottom: 1px solid var(--border); background: rgba(11,17,32,0.75); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 10; }
+.search { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 100px; font-size: 13px; color: var(--text-faint); width: 280px; }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.freshness { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--bull); padding: 5px 11px; background: var(--bull-bg); border-radius: 100px; }
+.freshness::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--bull); animation: pulse 2.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.vani-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--indigo-bg); border: 1px solid var(--border-indigo); color: var(--indigo); border-radius: 100px; font-size: 13px; font-weight: 500; cursor: pointer; }
+
+.content { padding: 28px 40px 120px; max-width: 1360px; margin: 0 auto; }
+
+.head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; flex-wrap: wrap; }
+.headline h1 { font-family: var(--font-display); font-weight: 500; font-size: 32px; letter-spacing: -0.02em; line-height: 1; margin-bottom: 6px; }
+.headline h1 em { color: var(--gold); font-style: italic; font-weight: 400; }
+.headline-sub { font-size: 13px; color: var(--text-muted); }
+
+.context-strip { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; flex-wrap: wrap; }
+.ctx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px; border: 1px solid var(--border); background: var(--card); color: var(--text-secondary); }
+.ctx-chip.regime { border-color: var(--caution); color: var(--caution); background: var(--caution-bg); }
+.ctx-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+.ctx-sep { color: var(--text-faint); font-size: 10px; }
+
+/* Control bar: category tabs + benchmark selector + filters */
+.control-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.cats { display: flex; gap: 6px; padding: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 100px; }
+.cat { padding: 8px 14px; border-radius: 100px; border: none; background: transparent; color: var(--text-muted); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all 0.15s; font-family: var(--font-body); display: flex; align-items: center; gap: 6px; }
+.cat:hover { color: var(--text-secondary); }
+.cat.active { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.cat-count { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+.cat.active .cat-count { color: var(--indigo); }
+
+.ctrl-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.benchmark { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 100px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.benchmark-label { color: var(--text-muted); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; }
+.benchmark-val { color: var(--text-primary); font-weight: 600; font-family: var(--font-mono); font-size: 11.5px; }
+.benchmark-chev { color: var(--text-faint); font-size: 10px; }
+
+.opp-filter { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; background: transparent; border: 1px solid var(--border-gold); color: var(--gold); border-radius: 100px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font-body); }
+.opp-filter .count { font-family: var(--font-mono); font-size: 10.5px; padding: 2px 7px; background: rgba(0,0,0,0.22); border-radius: 100px; }
+
+/* Meta row */
+.meta-row { display: flex; justify-content: space-between; align-items: center; padding: 0 4px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.date-chips { display: flex; gap: 8px; }
+.date-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 100px; background: var(--bull-bg); color: var(--bull); border: 1px solid rgba(16,185,129,0.2); }
+.date-chip.lag { background: var(--caution-bg); color: var(--caution); border-color: rgba(245,158,11,0.25); }
+.date-chip::before { content: '●'; font-size: 8px; }
+
+/* ===== INDUSTRY CARD ===== */
+.industries { display: flex; flex-direction: column; gap: 12px; }
+
+.industry {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: all 0.2s;
+  overflow: hidden;
+}
+.industry:hover { border-color: var(--border-strong); }
+.industry.has-opp {
+  border-color: rgba(212,168,75,0.3);
+  box-shadow: 0 0 0 1px rgba(212,168,75,0.15);
+}
+
+.ind-card {
+  display: grid;
+  grid-template-columns: 1fr 200px 120px 44px;
+  align-items: stretch;
+  gap: 24px;
+  padding: 20px 22px;
+  cursor: pointer;
+}
+
+/* Left column: identity + headline + stats */
+.ind-left { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.ind-identity { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ind-name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.ind-meta-tags { display: flex; gap: 6px; align-items: center; }
+.ind-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.ind-pill.in { background: var(--bull-bg); color: var(--bull); }
+.ind-pill.lead { background: var(--gold-bg); color: var(--gold); }
+.ind-pill.out { background: var(--bear-bg); color: var(--bear); }
+.ind-pill.stable { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+.ind-stockcount {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* THE HEADLINE — the hero */
+.headline-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.headline-orb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, var(--indigo), #4f46e5);
+  box-shadow: 0 0 12px rgba(129,140,248,0.35);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.headline-body { flex: 1; min-width: 0; }
+.headline-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--indigo);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.industry.has-opp .headline-kicker { color: var(--gold); }
+.industry.has-opp .headline-orb { background: radial-gradient(circle at 30% 30%, var(--gold-soft), #a17524); box-shadow: 0 0 14px rgba(212,168,75,0.4); }
+.headline-text {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+  letter-spacing: -0.005em;
+}
+.headline-text strong { color: var(--gold-soft); font-weight: 600; }
+.industry.has-opp .headline-text strong { color: var(--gold); }
+.headline-text .secondary { color: var(--text-muted); font-weight: 400; }
+
+/* Stats strip — tight, no prose, evidence for the headline */
+.stats { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; padding-top: 4px; }
+.stat { display: flex; flex-direction: column; gap: 1px; }
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.stat-val {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.stat-val.up { color: var(--bull); }
+.stat-val.dn { color: var(--bear); }
+.stat-val.caut { color: var(--caution); }
+.stat-val .sm { font-size: 10px; color: var(--text-muted); font-weight: 400; margin-left: 2px; }
+
+/* Sparkline column */
+.ind-spark {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.spark-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.spark-svg { width: 100%; height: 50px; }
+.spark-svg svg { width: 100%; height: 100%; overflow: visible; }
+.spark-foot {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.spark-foot .now { color: var(--text-primary); font-weight: 600; }
+
+/* Score column */
+.ind-score {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 2px;
+}
+.score-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.score-val {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.score-change {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-top: 2px;
+}
+.score-change.up { color: var(--bull); }
+.score-change.dn { color: var(--bear); }
+
+.ind-expand { display: flex; align-items: center; justify-content: center; color: var(--text-faint); font-size: 18px; transition: transform 0.2s; }
+.ind-card:hover .ind-expand { color: var(--indigo); }
+
+/* Action island */
+.island { position: fixed; bottom: 28px; left: 50%; transform: translateX(calc(-50% + 110px)); background: rgba(11,17,32,0.95); backdrop-filter: blur(12px); border: 1px solid var(--border-strong); border-radius: 100px; padding: 10px 14px 10px 22px; display: flex; align-items: center; gap: 18px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); z-index: 20; }
+.island-status { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+.island-status .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--indigo); animation: pulse 2s infinite; }
+.island-status em { font-style: italic; font-family: var(--font-display); color: var(--text-primary); font-weight: 500; }
+.island-divider { width: 1px; height: 18px; background: rgba(255,255,255,0.12); }
+.island-btn { font-size: 13px; padding: 7px 16px; background: var(--gold); color: #1a1410; border: none; border-radius: 100px; font-weight: 600; cursor: pointer; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.industry { animation: fadeUp 0.3s ease-out both; }
+.industry:nth-child(2) { animation-delay: 0.05s; }
+.industry:nth-child(3) { animation-delay: 0.1s; }
+.industry:nth-child(4) { animation-delay: 0.15s; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">Kāla-<em>Drishti</em></div>
+    <div class="brand-tag">Market Weather</div>
+    <div class="nav-group-label">View</div>
+    <div class="nav-item"><span class="glyph">◉</span> Dashboard</div>
+    <div class="nav-item"><span class="glyph">⊙</span> Scanner</div>
+    <div class="nav-item active"><span class="glyph">⇌</span> Industry Transition</div>
+    <div class="nav-item"><span class="glyph">☽</span> Planetary Intel</div>
+    <div class="nav-group-label">Author</div>
+    <div class="nav-item"><span class="glyph">✎</span> Inference DB</div>
+    <div class="sidebar-foot">Friday · 17 Apr 2026<br>Market closed · 4:15 PM</div>
+  </aside>
+
+  <main class="main">
+
+    <div class="topbar">
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        Search index or stock · ⌘K
+      </div>
+      <div class="topbar-right">
+        <div class="freshness">Data · 15 Apr 2026</div>
+        <button class="vani-btn">✦ Ask VaNi</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <div class="head-row">
+        <div class="headline">
+          <h1>Industry <em>Transition</em></h1>
+          <div class="headline-sub">What each industry is actually doing right now.</div>
+        </div>
+        <div class="context-strip">
+          <span class="ctx-chip regime"><span class="dot"></span>Capital Protection · day 3</span>
+          <span class="ctx-sep">·</span>
+          <span class="ctx-chip">5-day lookback</span>
+        </div>
+      </div>
+
+      <!-- Control bar -->
+      <div class="control-bar">
+        <div class="cats">
+          <button class="cat">All <span class="cat-count">89</span></button>
+          <button class="cat active">Rotating In <span class="cat-count">6</span></button>
+          <button class="cat">Leading <span class="cat-count">18</span></button>
+          <button class="cat">Rotating Out <span class="cat-count">9</span></button>
+        </div>
+        <div class="ctrl-right">
+          <button class="benchmark">
+            <span class="benchmark-label">Compare vs</span>
+            <span class="benchmark-val">NIFTY 50</span>
+            <span class="benchmark-chev">▾</span>
+          </button>
+          <button class="opp-filter">
+            <span>✦</span> VaNi Opportunity
+            <span class="count">2</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="meta-row">
+        <div class="date-chips">
+          <span class="date-chip">NSE · 15 Apr</span>
+          <span class="date-chip lag">BSE · 14 Apr</span>
+        </div>
+        <div>6 industries rotating in · sorted by VaNi's attention score</div>
+      </div>
+
+      <!-- ========== INDUSTRIES ========== -->
+      <div class="industries">
+
+        <!-- 1. TEXTILES — "what is cooking" headline -->
+        <div class="industry has-opp">
+          <div class="ind-card">
+            <div class="ind-left">
+              <div class="ind-identity">
+                <span class="ind-name">Textiles &amp; Apparels</span>
+                <span class="ind-pill in">Rotating in</span>
+                <span class="ind-stockcount">6 stocks</span>
+              </div>
+
+              <div class="headline-line">
+                <div class="headline-orb"></div>
+                <div class="headline-body">
+                  <div class="headline-kicker">✦ Something is cooking</div>
+                  <div class="headline-text">
+                    <strong>3.4× delivery volume surge</strong> across member stocks over the last 5 days, <span class="secondary">price still quiet at +3.2%.</span> Classic accumulation footprint before a move.
+                  </div>
+                </div>
+              </div>
+
+              <div class="stats">
+                <div class="stat"><span class="stat-label">Score 5D</span><span class="stat-val">40.4</span></div>
+                <div class="stat"><span class="stat-label">vs 22D</span><span class="stat-val up">+27.9</span></div>
+                <div class="stat"><span class="stat-label">1D %</span><span class="stat-val up">+1.66</span></div>
+                <div class="stat"><span class="stat-label">5D %</span><span class="stat-val up">+3.16</span></div>
+                <div class="stat"><span class="stat-label">22D %</span><span class="stat-val up">+12.54</span></div>
+                <div class="stat"><span class="stat-label">vs N50 · 5D</span><span class="stat-val up">+1.90</span></div>
+                <div class="stat"><span class="stat-label">RSI 14</span><span class="stat-val">63</span></div>
+                <div class="stat"><span class="stat-label">EMA 20</span><span class="stat-val">above</span></div>
+              </div>
+            </div>
+
+            <div class="ind-spark">
+              <div class="spark-label">5-day rotation</div>
+              <div class="spark-svg">
+                <svg viewBox="0 0 200 50" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="g-tex" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
+                      <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M0,42 L40,40 L80,35 L120,24 L160,14 L200,8 L200,50 L0,50 Z" fill="url(#g-tex)"/>
+                  <path d="M0,42 L40,40 L80,35 L120,24 L160,14 L200,8" fill="none" stroke="#10b981" stroke-width="1.8"/>
+                  <circle cx="200" cy="8" r="3" fill="#10b981"/>
+                </svg>
+              </div>
+              <div class="spark-foot"><span>5d ago</span><span class="now">today</span></div>
+            </div>
+
+            <div class="ind-score">
+              <div class="score-label">%ile</div>
+              <div class="score-val">83</div>
+              <div class="score-change up">▲ +28 / 5d</div>
+            </div>
+
+            <div class="ind-expand">⌄</div>
+          </div>
+        </div>
+
+        <!-- 2. MINERALS & MINING — "fresh focus" headline -->
+        <div class="industry has-opp">
+          <div class="ind-card">
+            <div class="ind-left">
+              <div class="ind-identity">
+                <span class="ind-name">Minerals &amp; Mining</span>
+                <span class="ind-pill in">Rotating in</span>
+                <span class="ind-stockcount">4 stocks</span>
+              </div>
+
+              <div class="headline-line">
+                <div class="headline-orb"></div>
+                <div class="headline-body">
+                  <div class="headline-kicker">✦ Just came into focus</div>
+                  <div class="headline-text">
+                    Score <strong>jumped from 47 to 72</strong> in 5 days. <span class="secondary">Outperforming Nifty 50 by +8.94%, RSI 74 — momentum strong but approaching overbought.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stats">
+                <div class="stat"><span class="stat-label">Score 5D</span><span class="stat-val up">71.8</span></div>
+                <div class="stat"><span class="stat-label">vs 22D</span><span class="stat-val up">+23.9</span></div>
+                <div class="stat"><span class="stat-label">1D %</span><span class="stat-val up">+1.07</span></div>
+                <div class="stat"><span class="stat-label">5D %</span><span class="stat-val up">+10.20</span></div>
+                <div class="stat"><span class="stat-label">22D %</span><span class="stat-val up">+27.86</span></div>
+                <div class="stat"><span class="stat-label">vs N50 · 5D</span><span class="stat-val up">+8.94</span></div>
+                <div class="stat"><span class="stat-label">RSI 14</span><span class="stat-val caut">74</span></div>
+                <div class="stat"><span class="stat-label">EMA 20</span><span class="stat-val">above</span></div>
+              </div>
+            </div>
+
+            <div class="ind-spark">
+              <div class="spark-label">5-day rotation</div>
+              <div class="spark-svg">
+                <svg viewBox="0 0 200 50" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="g-min" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
+                      <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M0,30 L40,28 L80,22 L120,16 L160,10 L200,4 L200,50 L0,50 Z" fill="url(#g-min)"/>
+                  <path d="M0,30 L40,28 L80,22 L120,16 L160,10 L200,4" fill="none" stroke="#10b981" stroke-width="1.8"/>
+                  <circle cx="200" cy="4" r="3" fill="#10b981"/>
+                </svg>
+              </div>
+              <div class="spark-foot"><span>5d ago</span><span class="now">today</span></div>
+            </div>
+
+            <div class="ind-score">
+              <div class="score-label">%ile</div>
+              <div class="score-val">91</div>
+              <div class="score-change up">▲ +25 / 5d</div>
+            </div>
+
+            <div class="ind-expand">⌄</div>
+          </div>
+        </div>
+
+        <!-- 3. POWER — "mature leadership holding" -->
+        <div class="industry">
+          <div class="ind-card">
+            <div class="ind-left">
+              <div class="ind-identity">
+                <span class="ind-name">Power</span>
+                <span class="ind-pill in">Rotating in</span>
+                <span class="ind-stockcount">18 stocks</span>
+              </div>
+
+              <div class="headline-line">
+                <div class="headline-orb"></div>
+                <div class="headline-body">
+                  <div class="headline-kicker">Holding leadership</div>
+                  <div class="headline-text">
+                    Strong on <strong>all three horizons</strong> (1D, 5D, 22D). <span class="secondary">EMA 20/50 aligned, RSI 72 — trend is mature but not yet exhausted.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stats">
+                <div class="stat"><span class="stat-label">Score 5D</span><span class="stat-val">29.7</span></div>
+                <div class="stat"><span class="stat-label">vs 22D</span><span class="stat-val dn">−21.6</span></div>
+                <div class="stat"><span class="stat-label">1D %</span><span class="stat-val up">+2.24</span></div>
+                <div class="stat"><span class="stat-label">5D %</span><span class="stat-val up">+9.84</span></div>
+                <div class="stat"><span class="stat-label">22D %</span><span class="stat-val up">+17.44</span></div>
+                <div class="stat"><span class="stat-label">vs N50 · 5D</span><span class="stat-val up">+8.58</span></div>
+                <div class="stat"><span class="stat-label">RSI 14</span><span class="stat-val caut">72</span></div>
+                <div class="stat"><span class="stat-label">EMA 20/50</span><span class="stat-val">aligned</span></div>
+              </div>
+            </div>
+
+            <div class="ind-spark">
+              <div class="spark-label">5-day rotation</div>
+              <div class="spark-svg">
+                <svg viewBox="0 0 200 50" preserveAspectRatio="none">
+                  <path d="M0,18 L40,16 L80,20 L120,14 L160,12 L200,10" fill="none" stroke="#10b981" stroke-width="1.6" stroke-opacity="0.85"/>
+                  <circle cx="200" cy="10" r="3" fill="#10b981"/>
+                </svg>
+              </div>
+              <div class="spark-foot"><span>5d ago</span><span class="now">today</span></div>
+            </div>
+
+            <div class="ind-score">
+              <div class="score-label">%ile</div>
+              <div class="score-val">88</div>
+              <div class="score-change up">▲ +4 / 5d</div>
+            </div>
+
+            <div class="ind-expand">⌄</div>
+          </div>
+        </div>
+
+        <!-- 4. IT SERVICES — "early fatigue" divergence -->
+        <div class="industry">
+          <div class="ind-card">
+            <div class="ind-left">
+              <div class="ind-identity">
+                <span class="ind-name">IT — Services</span>
+                <span class="ind-pill in">Rotating in</span>
+                <span class="ind-stockcount">7 stocks</span>
+              </div>
+
+              <div class="headline-line">
+                <div class="headline-orb"></div>
+                <div class="headline-body">
+                  <div class="headline-kicker">Diverging — watch carefully</div>
+                  <div class="headline-text">
+                    5-day move positive <strong>(+4.14%)</strong>, but <strong>today's print is red</strong> while Nifty is green. <span class="secondary">Early sign of rotation losing steam.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stats">
+                <div class="stat"><span class="stat-label">Score 5D</span><span class="stat-val">27.9</span></div>
+                <div class="stat"><span class="stat-label">vs 22D</span><span class="stat-val up">+16.8</span></div>
+                <div class="stat"><span class="stat-label">1D %</span><span class="stat-val dn">−0.18</span></div>
+                <div class="stat"><span class="stat-label">5D %</span><span class="stat-val up">+4.14</span></div>
+                <div class="stat"><span class="stat-label">22D %</span><span class="stat-val up">+11.07</span></div>
+                <div class="stat"><span class="stat-label">vs N50 · 1D</span><span class="stat-val dn">−0.83</span></div>
+                <div class="stat"><span class="stat-label">RSI 14</span><span class="stat-val">61</span></div>
+                <div class="stat"><span class="stat-label">EMA 20</span><span class="stat-val">above</span></div>
+              </div>
+            </div>
+
+            <div class="ind-spark">
+              <div class="spark-label">5-day rotation</div>
+              <div class="spark-svg">
+                <svg viewBox="0 0 200 50" preserveAspectRatio="none">
+                  <path d="M0,32 L40,28 L80,22 L120,18 L160,14 L200,20" fill="none" stroke="#f59e0b" stroke-width="1.6"/>
+                  <circle cx="200" cy="20" r="3" fill="#f59e0b"/>
+                </svg>
+              </div>
+              <div class="spark-foot"><span>5d ago</span><span class="now">today</span></div>
+            </div>
+
+            <div class="ind-score">
+              <div class="score-label">%ile</div>
+              <div class="score-val">71</div>
+              <div class="score-change up">▲ +11 / 5d</div>
+            </div>
+
+            <div class="ind-expand">⌄</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="island">
+      <div class="island-status">
+        <span class="live-dot"></span>
+        VaNi is tracking 6 rotating industries · <em>2 with fresh opportunity signals</em>
+      </div>
+      <div class="island-divider"></div>
+      <button class="island-btn">See all opportunities</button>
+    </div>
+
+  </main>
+
+</div>
+
+</body>
+</html>

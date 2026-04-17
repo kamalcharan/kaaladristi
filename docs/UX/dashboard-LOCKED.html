@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kāla-Drishti — Dashboard v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1120;
+  --card: #131c31;
+  --card-soft: #182340;
+  --card-deep: #0d1528;
+  --border: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.14);
+  --border-gold: rgba(212,168,75,0.35);
+  --border-indigo: rgba(129,140,248,0.28);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+  --gold: #d4a84b;
+  --gold-soft: #e6c167;
+  --gold-bg: rgba(212,168,75,0.1);
+  --indigo: #818cf8;
+  --indigo-strong: #a5b4fc;
+  --indigo-bg: rgba(129,140,248,0.12);
+  --bull: #10b981;
+  --bull-bg: rgba(16,185,129,0.1);
+  --bear: #ef4444;
+  --bear-bg: rgba(239,68,68,0.1);
+  --caution: #f59e0b;
+  --caution-bg: rgba(245,158,11,0.1);
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-body); background: var(--bg); color: var(--text-primary); line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(212,168,75,0.04), transparent), radial-gradient(ellipse 600px 400px at 10% 80%, rgba(99,102,241,0.03), transparent); pointer-events: none; z-index: 0; }
+
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; position: relative; z-index: 1; }
+
+/* Sidebar */
+.sidebar { background: rgba(11,17,32,0.6); border-right: 1px solid var(--border); padding: 28px 16px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; }
+.brand { font-family: var(--font-display); font-size: 24px; font-weight: 500; padding: 0 12px 4px; letter-spacing: -0.02em; }
+.brand em { color: var(--gold); font-style: italic; font-weight: 400; }
+.brand-tag { padding: 0 12px; font-size: 11px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 32px; }
+.nav-group-label { padding: 0 12px 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 24px; }
+.nav-group-label:first-of-type { margin-top: 0; }
+.nav-item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 8px; color: var(--text-muted); font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all 0.18s; margin-bottom: 1px; }
+.nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text-secondary); }
+.nav-item.active { background: var(--gold-bg); color: var(--gold-soft); }
+.nav-item .glyph { font-family: var(--font-display); font-size: 14px; width: 16px; text-align: center; opacity: 0.75; }
+.sidebar-foot { margin-top: auto; padding: 14px 12px 4px; font-size: 11px; color: var(--text-faint); border-top: 1px solid var(--border); font-family: var(--font-mono); }
+
+.main { overflow-x: hidden; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 18px 40px; border-bottom: 1px solid var(--border); background: rgba(11,17,32,0.75); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 10; }
+.search { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 100px; font-size: 13px; color: var(--text-faint); width: 280px; }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.freshness { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--bull); padding: 5px 11px; background: var(--bull-bg); border-radius: 100px; }
+.freshness::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--bull); animation: pulse 2.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.vani-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--indigo-bg); border: 1px solid var(--border-indigo); color: var(--indigo); border-radius: 100px; font-size: 13px; font-weight: 500; cursor: pointer; }
+
+.content { padding: 36px 40px 140px; max-width: 1240px; margin: 0 auto; }
+
+/* ============ DAY HEADER ============ */
+.day-header { margin-bottom: 40px; }
+.day-caption { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 10px; }
+.day-title { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.day-title h1 { font-family: var(--font-display); font-weight: 500; font-size: 38px; letter-spacing: -0.02em; line-height: 1.05; }
+.day-title em { color: var(--gold); font-style: italic; font-weight: 400; }
+.day-regime-inline { display: inline-flex; align-items: center; gap: 8px; padding: 5px 13px; background: var(--caution-bg); border: 1px solid rgba(245,158,11,0.3); border-radius: 100px; font-family: var(--font-mono); font-size: 11px; color: var(--caution); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.day-regime-inline::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--caution); }
+.day-sub { font-family: var(--font-display); font-style: italic; font-size: 16px; color: var(--text-muted); font-weight: 400; }
+
+/* ============ TOP ACTIONABLE ITEMS ============ */
+.items-label { font-family: var(--font-mono); font-size: 10px; color: var(--gold); letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+.items-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(212,168,75,0.3), transparent); }
+
+.items { display: flex; flex-direction: column; gap: 14px; margin-bottom: 40px; }
+
+.item { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px 26px; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; display: grid; grid-template-columns: 36px 1fr 180px 80px; gap: 22px; align-items: center; }
+.item:hover { border-color: var(--border-strong); background: var(--card-soft); }
+.item.priority { border-color: rgba(212,168,75,0.3); box-shadow: 0 0 0 1px rgba(212,168,75,0.15); }
+.item.priority::before { content: ''; position: absolute; top: -50%; right: -10%; width: 400px; height: 400px; background: radial-gradient(circle, rgba(212,168,75,0.05), transparent 70%); pointer-events: none; }
+
+.item-orb { width: 28px; height: 28px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, var(--indigo), #4f46e5); box-shadow: 0 0 14px rgba(129,140,248,0.35); flex-shrink: 0; position: relative; z-index: 1; }
+.item.priority .item-orb { background: radial-gradient(circle at 30% 30%, var(--gold-soft), #a17524); box-shadow: 0 0 16px rgba(212,168,75,0.4); }
+
+.item-body { min-width: 0; position: relative; z-index: 1; }
+.item-kicker { font-family: var(--font-mono); font-size: 10px; color: var(--indigo); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.item.priority .item-kicker { color: var(--gold); }
+.item-kicker .tag { padding: 1px 7px; background: rgba(129,140,248,0.1); border-radius: 3px; }
+.item.priority .item-kicker .tag { background: var(--gold-bg); }
+
+.item-headline { font-family: var(--font-display); font-size: 19px; font-weight: 500; color: var(--text-primary); line-height: 1.4; letter-spacing: -0.005em; margin-bottom: 6px; }
+.item-headline strong { color: var(--gold-soft); font-weight: 600; }
+.item.priority .item-headline strong { color: var(--gold); }
+.item-headline .secondary { color: var(--text-muted); font-weight: 400; }
+
+.item-trail { display: flex; gap: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
+.item-trail .dot-sep { color: var(--text-faint); }
+.item-trail strong { color: var(--text-primary); font-weight: 500; }
+.item-trail .up { color: var(--bull); }
+.item-trail .dn { color: var(--bear); }
+.item-trail .caut { color: var(--caution); }
+
+/* Sparkline area */
+.item-spark { height: 50px; position: relative; z-index: 1; }
+.item-spark svg { width: 100%; height: 100%; overflow: visible; }
+
+/* Score/action area */
+.item-action { text-align: right; position: relative; z-index: 1; }
+.item-score { font-family: var(--font-mono); font-size: 28px; font-weight: 500; color: var(--text-primary); line-height: 1; letter-spacing: -0.02em; }
+.item-score-lbl { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; }
+
+/* ============ AT-A-GLANCE STRIP ============ */
+.glance-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+.glance-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+
+.glance { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 36px; }
+.glance-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; cursor: pointer; transition: all 0.18s; }
+.glance-card:hover { background: var(--card-soft); border-color: var(--border-strong); }
+
+.glance-kicker { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-faint); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 8px; }
+.glance-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.glance-value { font-family: var(--font-display); font-size: 22px; font-weight: 500; color: var(--text-primary); line-height: 1; letter-spacing: -0.01em; }
+.glance-value.bull { color: var(--bull); }
+.glance-value.caut { color: var(--caution); }
+.glance-value.bear { color: var(--bear); }
+.glance-subval { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.glance-subval.up { color: var(--bull); }
+.glance-subval.dn { color: var(--bear); }
+.glance-foot { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-family: var(--font-display); font-style: italic; }
+
+/* ============ SECONDARY STRIP ============ */
+.secondary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.sec-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; cursor: pointer; transition: all 0.18s; }
+.sec-card:hover { background: var(--card-soft); border-color: var(--border-strong); }
+.sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sec-title { font-family: var(--font-display); font-size: 15px; font-weight: 500; color: var(--text-primary); }
+.sec-title em { color: var(--text-muted); font-size: 12px; font-style: italic; font-weight: 400; margin-left: 6px; }
+.sec-link { font-family: var(--font-mono); font-size: 10.5px; color: var(--indigo); letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
+.sec-link:hover { color: var(--gold); }
+
+.six-days { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.six-day { text-align: center; padding: 10px 4px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; }
+.six-day:hover { background: rgba(255,255,255,0.03); border-color: var(--border); }
+.six-day.today { background: var(--gold-bg); border-color: var(--border-gold); }
+.six-day.caut { border-left: 2px solid var(--caution); }
+.six-day.bull { border-left: 2px solid var(--bull); }
+.six-day.bear { border-left: 2px solid var(--bear); }
+.sd-dow { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; }
+.sd-num { font-family: var(--font-display); font-size: 18px; font-weight: 500; color: var(--text-primary); line-height: 1; }
+.six-day.today .sd-num { color: var(--gold); }
+.sd-tone { font-family: var(--font-mono); font-size: 9.5px; margin-top: 5px; letter-spacing: 0.04em; }
+.sd-tone.b { color: var(--bull); }
+.sd-tone.c { color: var(--caution); }
+.sd-tone.r { color: var(--bear); }
+.sd-tone.n { color: var(--text-faint); }
+
+.panchang-rows { display: flex; flex-direction: column; gap: 6px; }
+.panchang-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.pr-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; }
+.pr-val { color: var(--text-secondary); }
+.pr-val strong { color: var(--text-primary); font-weight: 600; }
+.panchang-tagline { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-family: var(--font-display); font-style: italic; }
+
+/* Action island */
+.island { position: fixed; bottom: 28px; left: 50%; transform: translateX(calc(-50% + 110px)); background: rgba(11,17,32,0.95); backdrop-filter: blur(12px); border: 1px solid var(--border-strong); border-radius: 100px; padding: 10px 14px 10px 22px; display: flex; align-items: center; gap: 18px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); z-index: 20; }
+.island-status { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+.island-status .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--indigo); animation: pulse 2s infinite; }
+.island-status em { font-style: italic; font-family: var(--font-display); color: var(--text-primary); font-weight: 500; }
+.island-divider { width: 1px; height: 18px; background: rgba(255,255,255,0.12); }
+.island-btn { font-size: 13px; padding: 7px 16px; background: var(--gold); color: #1a1410; border: none; border-radius: 100px; font-weight: 600; cursor: pointer; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.item { animation: fadeUp 0.4s ease-out both; }
+.item:nth-child(2) { animation-delay: 0.06s; }
+.item:nth-child(3) { animation-delay: 0.12s; }
+.glance-card { animation: fadeUp 0.4s ease-out both; animation-delay: 0.18s; }
+.sec-card { animation: fadeUp 0.4s ease-out both; animation-delay: 0.22s; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">Kāla-<em>Drishti</em></div>
+    <div class="brand-tag">Market Weather</div>
+    <div class="nav-group-label">View</div>
+    <div class="nav-item active"><span class="glyph">◉</span> Dashboard</div>
+    <div class="nav-item"><span class="glyph">⊙</span> Scanner</div>
+    <div class="nav-item"><span class="glyph">⇌</span> Industry Transition</div>
+    <div class="nav-item"><span class="glyph">☽</span> Planetary Intel</div>
+    <div class="nav-group-label">Author</div>
+    <div class="nav-item"><span class="glyph">✎</span> Inference DB</div>
+    <div class="sidebar-foot">Friday · 17 Apr 2026<br>Market closed · 4:15 PM</div>
+  </aside>
+
+  <main class="main">
+
+    <div class="topbar">
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        Search index or stock · ⌘K
+      </div>
+      <div class="topbar-right">
+        <div class="freshness">Data · 15 Apr 2026</div>
+        <button class="vani-btn">✦ Ask VaNi</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- Day header -->
+      <div class="day-header">
+        <div class="day-caption">Friday · 17 April 2026 · End of Day</div>
+        <div class="day-title">
+          <h1>Today's <em>Read</em></h1>
+          <span class="day-regime-inline">● Capital Protection · day 3</span>
+        </div>
+        <div class="day-sub">Three things that stand out today.</div>
+      </div>
+
+      <!-- TOP 3 ACTIONABLE ITEMS -->
+      <div class="items-label">What stands out <span style="color: var(--text-faint); letter-spacing: 0.06em;">· VaNi's read of today</span></div>
+
+      <div class="items">
+
+        <!-- 1. TEXTILES volume surge — industry-level opportunity -->
+        <div class="item priority">
+          <div class="item-orb"></div>
+          <div class="item-body">
+            <div class="item-kicker">
+              <span>✦ Opportunity · industry</span>
+              <span class="tag">Textiles</span>
+            </div>
+            <div class="item-headline">
+              <strong>Something is cooking in Textiles &amp; Apparels.</strong>
+              <span class="secondary">3.4× delivery volume surge over 5 days, price still quiet at +3.2%. Classic accumulation footprint.</span>
+            </div>
+            <div class="item-trail">
+              <span>Score 5D · <strong>40.4</strong></span>
+              <span class="dot-sep">·</span>
+              <span>vs 22D <span class="up">+27.9</span></span>
+              <span class="dot-sep">·</span>
+              <span>6 stocks</span>
+              <span class="dot-sep">·</span>
+              <span class="up">+1.9% vs NIFTY50 · 5D</span>
+            </div>
+          </div>
+          <div class="item-spark">
+            <svg viewBox="0 0 180 50" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="s1" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#d4a84b" stop-opacity="0.35"/>
+                  <stop offset="100%" stop-color="#d4a84b" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,42 L36,40 L72,35 L108,24 L144,14 L180,8 L180,50 L0,50 Z" fill="url(#s1)"/>
+              <path d="M0,42 L36,40 L72,35 L108,24 L144,14 L180,8" fill="none" stroke="#d4a84b" stroke-width="1.8"/>
+              <circle cx="180" cy="8" r="3" fill="#d4a84b"/>
+            </svg>
+          </div>
+          <div class="item-action">
+            <div class="item-score">83</div>
+            <div class="item-score-lbl">%ile</div>
+          </div>
+        </div>
+
+        <!-- 2. GRANULES intraday ping — stock-level opportunity -->
+        <div class="item priority">
+          <div class="item-orb"></div>
+          <div class="item-body">
+            <div class="item-kicker">
+              <span>✦ Opportunity · stock</span>
+              <span class="tag">GRANULES</span>
+            </div>
+            <div class="item-headline">
+              <strong>GRANULES just pinged.</strong>
+              <span class="secondary">RSI ticked 61 → 68 intraday, RVOL 2.3×, Fresh Longs flow. On VaNi's watchlist since yesterday.</span>
+            </div>
+            <div class="item-trail">
+              <span>RS <strong>71.2</strong></span>
+              <span class="dot-sep">·</span>
+              <span class="up">+1.8% today</span>
+              <span class="dot-sep">·</span>
+              <span>Drug Manufacturers · rotating in</span>
+              <span class="dot-sep">·</span>
+              <span class="caut">Capital Protection in force</span>
+            </div>
+          </div>
+          <div class="item-spark">
+            <svg viewBox="0 0 180 50" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="s2" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/>
+                  <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,34 L36,36 L72,32 L108,28 L144,18 L180,8 L180,50 L0,50 Z" fill="url(#s2)"/>
+              <path d="M0,34 L36,36 L72,32 L108,28 L144,18 L180,8" fill="none" stroke="#10b981" stroke-width="1.8"/>
+              <circle cx="180" cy="8" r="3" fill="#10b981"/>
+            </svg>
+          </div>
+          <div class="item-action">
+            <div class="item-score">618</div>
+            <div class="item-score-lbl">now</div>
+          </div>
+        </div>
+
+        <!-- 3. Thursday turning point — forward-looking heads-up -->
+        <div class="item">
+          <div class="item-orb"></div>
+          <div class="item-body">
+            <div class="item-kicker">
+              <span>◆ Heads-up · 6 days ahead</span>
+              <span class="tag">Thursday 24 Apr</span>
+            </div>
+            <div class="item-headline">
+              <strong>Saturn square Mars exact at 14:22 IST Thursday.</strong>
+              <span class="secondary">6 of 8 historical occurrences closed negative; median −0.9%. Worth factoring into multi-day plans.</span>
+            </div>
+            <div class="item-trail">
+              <span>Confidence · <strong>8/10</strong></span>
+              <span class="dot-sep">·</span>
+              <span>Base rate · <span class="dn">75% down</span></span>
+              <span class="dot-sep">·</span>
+              <span>Technical alignment · 3/3</span>
+            </div>
+          </div>
+          <div class="item-spark">
+            <svg viewBox="0 0 180 50" preserveAspectRatio="none">
+              <rect x="0" y="38" width="16" height="6" fill="#ef4444" opacity="0.7"/>
+              <rect x="20" y="32" width="16" height="12" fill="#ef4444" opacity="0.8"/>
+              <rect x="40" y="20" width="16" height="24" fill="#10b981" opacity="0.5"/>
+              <rect x="60" y="36" width="16" height="8" fill="#ef4444" opacity="0.75"/>
+              <rect x="80" y="22" width="16" height="22" fill="#ef4444" opacity="0.85"/>
+              <rect x="100" y="28" width="16" height="16" fill="#ef4444" opacity="0.8"/>
+              <rect x="120" y="18" width="16" height="26" fill="#ef4444" opacity="0.9"/>
+              <rect x="140" y="24" width="16" height="20" fill="#ef4444" opacity="0.8"/>
+              <line x1="0" y1="22" x2="180" y2="22" stroke="rgba(255,255,255,0.1)" stroke-dasharray="2,3"/>
+            </svg>
+          </div>
+          <div class="item-action">
+            <div class="item-score">6/8</div>
+            <div class="item-score-lbl">past neg</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- AT-A-GLANCE CONTEXT -->
+      <div class="glance-label">Ambient context</div>
+      <div class="glance">
+
+        <div class="glance-card">
+          <div class="glance-kicker">Breadth score</div>
+          <div class="glance-head">
+            <div class="glance-value">60.1</div>
+            <div class="glance-subval">1,176 stocks</div>
+          </div>
+          <div class="glance-foot">Widening shallowly — top thin.</div>
+        </div>
+
+        <div class="glance-card">
+          <div class="glance-kicker">Breadth momentum</div>
+          <div class="glance-head">
+            <div class="glance-value caut">+0.91</div>
+            <div class="glance-subval dn">▼ flattening</div>
+          </div>
+          <div class="glance-foot">ROC rollover possible in 3–5 sessions.</div>
+        </div>
+
+        <div class="glance-card">
+          <div class="glance-kicker">Rotation</div>
+          <div class="glance-head">
+            <div class="glance-value bull">6</div>
+            <div class="glance-subval">rotating in</div>
+          </div>
+          <div class="glance-foot">Defensive concentration — Pharma, Commodities.</div>
+        </div>
+
+        <div class="glance-card">
+          <div class="glance-kicker">Leadership</div>
+          <div class="glance-head">
+            <div class="glance-value">4</div>
+            <div class="glance-subval dn">▼ from 12</div>
+          </div>
+          <div class="glance-foot">Narrowed — Capital Protection signature.</div>
+        </div>
+
+      </div>
+
+      <!-- SECONDARY ROW: six-day outlook + panchang -->
+      <div class="secondary-row">
+
+        <div class="sec-card">
+          <div class="sec-head">
+            <div class="sec-title">Six-day outlook <em>· forward read</em></div>
+            <span class="sec-link">Planetary Intel →</span>
+          </div>
+          <div class="six-days">
+            <div class="six-day today caut">
+              <div class="sd-dow">Fri</div>
+              <div class="sd-num">18</div>
+              <div class="sd-tone c">Caution</div>
+            </div>
+            <div class="six-day caut">
+              <div class="sd-dow">Mon</div>
+              <div class="sd-num">21</div>
+              <div class="sd-tone c">Caution</div>
+            </div>
+            <div class="six-day caut">
+              <div class="sd-dow">Tue</div>
+              <div class="sd-num">22</div>
+              <div class="sd-tone c">Caution</div>
+            </div>
+            <div class="six-day bull">
+              <div class="sd-dow">Wed</div>
+              <div class="sd-num">23</div>
+              <div class="sd-tone b">Positive</div>
+            </div>
+            <div class="six-day bear">
+              <div class="sd-dow">Thu</div>
+              <div class="sd-num">24</div>
+              <div class="sd-tone r">Negative</div>
+            </div>
+            <div class="six-day">
+              <div class="sd-dow">Fri</div>
+              <div class="sd-num">25</div>
+              <div class="sd-tone n">Neutral</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec-card">
+          <div class="sec-head">
+            <div class="sec-title">Panchangam <em>· 17 Apr</em></div>
+            <span class="sec-link">Details →</span>
+          </div>
+          <div class="panchang-rows">
+            <div class="panchang-row"><span class="pr-label">Vara</span><span class="pr-val"><strong>Friday</strong> · Venus</span></div>
+            <div class="panchang-row"><span class="pr-label">Tithi</span><span class="pr-val"><strong>Shukla Pratipada</strong> · Jupiter</span></div>
+            <div class="panchang-row"><span class="pr-label">Nakshatra</span><span class="pr-val"><strong>Ashwini Pada 4</strong> · Ketu</span></div>
+          </div>
+          <div class="panchang-tagline">Historically neutral for banking, mildly negative for IT.</div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="island">
+      <div class="island-status">
+        <span class="live-dot"></span>
+        VaNi is watching 8 setups · <em>1 just pinged</em>
+      </div>
+      <div class="island-divider"></div>
+      <button class="island-btn">Review the ping</button>
+    </div>
+
+  </main>
+
+</div>
+
+</body>
+</html>
