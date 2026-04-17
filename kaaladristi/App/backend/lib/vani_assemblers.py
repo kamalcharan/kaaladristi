@@ -21,6 +21,19 @@ from .data_assemblers import (
 
 # ── Bucketing helpers ─────────────────────────────────────────────────────────
 
+def _short_company_name(name: str) -> str:
+    """Derive short display name from company_name (mirrors frontend symbolUtils)."""
+    import re
+    if not name:
+        return ''
+    suffixes = r'\s+(Limited|Ltd|Pvt\.?|Private|Corp\.?|Corporation|Company|Industries|Enterprises|Systems|Co\.?|Inc\.?|Incorporated|LLP|PLC)\s*$'
+    cleaned = re.sub(suffixes, '', name, flags=re.IGNORECASE)
+    cleaned = re.sub(suffixes, '', cleaned, flags=re.IGNORECASE).strip()
+    if not cleaned:
+        return name.strip()
+    return ' '.join(cleaned.split()[:3])
+
+
 def _bucket_breadth_regime(score: float) -> str:
     if score > 55:
         return 'Greed'
@@ -899,7 +912,7 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
 
     try:
         all_equities = db.select(
-            'km_equity_symbols', 'id,symbol,industry',
+            'km_equity_symbols', 'id,symbol,company_name,industry',
             limit=3000,
         )
         _log.info(f"[VaNi stocks] total equities={len(all_equities or [])}")
@@ -919,7 +932,10 @@ def _fetch_top_stocks_in_leading(db, target_date: str, leading: list[dict]) -> l
     all_eq_map = {}
     for ind in leading_names:
         for eq in industry_equity_ids.get(ind, []):
-            all_eq_map[eq['id']] = {'symbol': eq.get('symbol', ''), 'industry': ind}
+            sym = eq.get('symbol', '')
+            company = eq.get('company_name', '')
+            display = sym if not sym.isdigit() else _short_company_name(company) or sym
+            all_eq_map[eq['id']] = {'symbol': display, 'industry': ind}
 
     _log.info(f"[VaNi stocks] eq_map size={len(all_eq_map)}")
     if not all_eq_map:
