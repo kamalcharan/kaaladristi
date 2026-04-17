@@ -1082,9 +1082,9 @@ def _fmt_ind_strongest(ctx: dict) -> str:
 # Equity Assemblers (parameterized — entity-bound)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def assemble_equity_context(db, entity_id: int, page_context: str = None, target_date: str = None) -> dict | None:
-    """Assemble context for a specific equity using the existing instrument assembler."""
-    ctx = assemble_instrument_context(db, entity_id, 'equity', target_date)
+def assemble_equity_context(db, entity_id: int, page_context: str = None, target_date: str = None, entity_type: str = 'equity') -> dict | None:
+    """Assemble context for a specific instrument using the existing assembler."""
+    ctx = assemble_instrument_context(db, entity_id, entity_type, target_date)
     if not ctx:
         return None
 
