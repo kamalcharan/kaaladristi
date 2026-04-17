@@ -13,6 +13,8 @@ interface DayStatus {
   error?: string | null;
   last_run_status?: string | null;
   coverage_pct?: number | null;
+  populated_rows?: number | null;
+  total_rows?: number | null;
 }
 
 interface HealthRow {
@@ -137,23 +139,30 @@ function MonthMarkers({ days }: { days: DayStatus[] }) {
 
 // ── Day box ──────────────────────────────────────────────────────────────────
 
-function DayBox({ day, dimension, onMark }: {
-  day: DayStatus; dimension: string;
+function DayBox({ day, dimension, dimensionId, onMark, onFixDay }: {
+  day: DayStatus;
+  dimension: string;
+  dimensionId: string;
   onMark?: (date: string, status: string) => void;
+  onFixDay?: (dimensionId: string, tradeDate: string, force: boolean) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
-  const canMark = day.status === 'missing' && onMark;
+  const [force, setForce] = useState(false);
+  const isProblem = day.status === 'missing' || day.status === 'partial';
+  const canMark = day.status === 'missing' && onMark !== undefined;
+  const canFix = isProblem && FIXABLE_DIMENSIONS.has(dimensionId) && onFixDay !== undefined;
+  const interactive = canMark || canFix;
 
   return (
     <div className="relative group">
       <div
-        onClick={() => canMark && setShowMenu(!showMenu)}
+        onClick={() => interactive && setShowMenu(!showMenu)}
         className={cn(
           'w-[8px] h-[8px] sm:w-[10px] sm:h-[10px] rounded-[2px] transition-all',
-          canMark && 'cursor-pointer',
+          interactive && 'cursor-pointer',
           STATUS_COLORS[day.status] ?? 'bg-kd-border',
           day.status === 'ok' && 'opacity-90 hover:opacity-100 hover:scale-150',
-          day.status === 'missing' && 'opacity-80 hover:opacity-100 hover:scale-150',
+          (day.status === 'missing' || day.status === 'partial') && 'opacity-80 hover:opacity-100 hover:scale-150',
           (day.status === 'holiday' || day.status === 'no_data') && 'opacity-60',
           day.status === 'future' && 'opacity-20',
         )}
@@ -193,38 +202,78 @@ function DayBox({ day, dimension, onMark }: {
               </div>
             )
           )}
-          {day.status === 'ok' && day.coverage_pct != null && day.coverage_pct < 95 && (
-            <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[8px] text-risk-amber">
-              Coverage {day.coverage_pct.toFixed(0)}% — partial run.
+          {day.coverage_pct != null && day.populated_rows != null && day.total_rows != null && day.total_rows > 0 && (
+            <div className="mt-1.5 pt-1.5 border-t border-kd-border/50 text-[8px] text-muted">
+              Column fill: {day.populated_rows}/{day.total_rows} ({day.coverage_pct.toFixed(0)}%)
             </div>
           )}
-          {canMark && (
-            <div className="text-accent-indigo mt-1">Click to mark</div>
+          {day.status === 'ok' && day.coverage_pct != null && day.coverage_pct < 95 && (
+            <div className="mt-0.5 text-[8px] text-risk-amber">
+              Below 95% threshold — partial run.
+            </div>
+          )}
+          {interactive && (
+            <div className="text-accent-indigo mt-1">Click for actions</div>
           )}
         </div>
       )}
-      {/* Mark menu (click) */}
+      {/* Action menu (click) */}
       {showMenu && (
         <div className={cn(
           'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 rounded-lg',
           'bg-kd-card border border-kd-border shadow-xl z-50',
-          'text-[9px] whitespace-nowrap',
+          'text-[9px] whitespace-nowrap min-w-[180px]',
         )}>
           <div className="text-[var(--text-primary)] font-bold mb-2">{fmtFull(day.date)}</div>
+          {canFix && (
+            <>
+              <button
+                onClick={() => { onFixDay?.(dimensionId, day.date, false); setShowMenu(false); setForce(false); }}
+                className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-[var(--text-primary)] transition-colors"
+              >
+                Fix this date
+              </button>
+              {force && (
+                <button
+                  onClick={() => { onFixDay?.(dimensionId, day.date, true); setShowMenu(false); setForce(false); }}
+                  className="block w-full text-left px-2 py-1 rounded hover:bg-risk-amber/10 text-risk-amber transition-colors font-bold"
+                >
+                  Force-recompute this date
+                </button>
+              )}
+              <label
+                className="flex items-center gap-1.5 px-2 py-1 cursor-pointer select-none"
+                title="Erase existing computation and recompute from scratch. Use when a day is marked done but data is wrong."
+              >
+                <input
+                  type="checkbox"
+                  checked={force}
+                  onChange={e => setForce(e.target.checked)}
+                  className="w-3 h-3 accent-risk-amber cursor-pointer"
+                />
+                <span className="text-[9px] text-[var(--text-secondary)]">Force recompute</span>
+              </label>
+              {canMark && <div className="border-t border-kd-border/50 my-1" />}
+            </>
+          )}
+          {canMark && (
+            <>
+              <button
+                onClick={() => { onMark?.(day.date, 'holiday'); setShowMenu(false); }}
+                className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-[var(--text-secondary)] transition-colors"
+              >
+                Mark as Holiday
+              </button>
+              <button
+                onClick={() => { onMark?.(day.date, 'no_data'); setShowMenu(false); }}
+                className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-[var(--text-secondary)] transition-colors"
+              >
+                Mark as No Data
+              </button>
+            </>
+          )}
           <button
-            onClick={() => { onMark?.(day.date, 'holiday'); setShowMenu(false); }}
-            className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-[var(--text-secondary)] transition-colors"
-          >
-            Mark as Holiday
-          </button>
-          <button
-            onClick={() => { onMark?.(day.date, 'no_data'); setShowMenu(false); }}
-            className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-[var(--text-secondary)] transition-colors"
-          >
-            Mark as No Data
-          </button>
-          <button
-            onClick={() => setShowMenu(false)}
+            onClick={() => { setShowMenu(false); setForce(false); }}
             className="block w-full text-left px-2 py-1 rounded hover:bg-kd-elevated text-muted transition-colors mt-1"
           >
             Cancel
@@ -266,12 +315,23 @@ function toFixDimension(id: string): string {
   return FIX_KEY_MAP[id] ?? id;
 }
 
+// Derive the exchange filter the backend worker needs for split rows.
+// nse_* and bse_* row ids map onto the underlying exchange-agnostic RPCs
+// by passing `exchange` in km_jobs.params (see handle_fix_magic_rs,
+// handle_fix_flow, handle_fix_*_equity_indicators).
+function dimensionExchange(id: string): 'NSE' | 'BSE' | undefined {
+  if (id.startsWith('nse_')) return 'NSE';
+  if (id.startsWith('bse_')) return 'BSE';
+  return undefined;
+}
+
 // ── Health row ───────────────────────────────────────────────────────────────
 
-function HealthRowComponent({ row, period, onFix, onMark }: {
+function HealthRowComponent({ row, period, onFix, onMark, onFixDay }: {
   row: HealthRow; period: number;
   onFix: (dimension: string, days: number) => void;
   onMark: (date: string, status: string) => void;
+  onFixDay: (dimensionId: string, tradeDate: string, force: boolean) => void;
 }) {
   const stats = summaryStats(row.days);
   const allGood = stats.gaps === 0 && stats.total > 0;
@@ -309,7 +369,14 @@ function HealthRowComponent({ row, period, onFix, onMark }: {
 
       <div className="flex-1 flex items-center gap-[2px] sm:gap-[3px] min-w-0 overflow-visible">
         {row.days.map(day => (
-          <DayBox key={day.date} day={day} dimension={row.label} onMark={onMark} />
+          <DayBox
+            key={day.date}
+            day={day}
+            dimension={row.label}
+            dimensionId={row.id}
+            onMark={onMark}
+            onFixDay={onFixDay}
+          />
         ))}
       </div>
 
@@ -448,6 +515,37 @@ export default function DataHealthGrid() {
     },
   });
 
+  // Day-level fix: submits one fix job scoped to a single trade_date.
+  // This is the canonical path for closing a specific red/amber square.
+  // Force = erase-and-recompute (NULL stamp columns or DELETE aggregate row).
+  const fixDayMutation = useMutation({
+    mutationFn: async ({
+      dimensionId, tradeDate, force,
+    }: { dimensionId: string; tradeDate: string; force: boolean }) => {
+      const body = {
+        dimension: toFixDimension(dimensionId),
+        trade_date: tradeDate,
+        exchange: dimensionExchange(dimensionId),
+        force,
+        days: period,
+      };
+      const res = await fetch(`${pipelineUrl}/api/pipeline/fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Fix failed' }));
+        throw new Error(err.detail || 'Fix failed');
+      }
+      return res.json();
+    },
+    onSettled: () => {
+      // Give the worker ~5s to pick up and start before refetching
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['health_checks'] }), 5000);
+    },
+  });
+
   const handleFix = (dimension: string, days: number) => {
     if (fixingId) return;
     fixMutation.mutate({ dimension, days });
@@ -455,6 +553,10 @@ export default function DataHealthGrid() {
 
   const handleMark = (date: string, status: string) => {
     markMutation.mutate({ date, status });
+  };
+
+  const handleFixDay = (dimensionId: string, tradeDate: string, force: boolean) => {
+    fixDayMutation.mutate({ dimensionId, tradeDate, force });
   };
 
   if (isLoading) {
@@ -527,7 +629,7 @@ export default function DataHealthGrid() {
             <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Downloads</span>
           </div>
           <div className="divide-y divide-kd-border/30">
-            {downloads.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} />)}
+            {downloads.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} onFixDay={handleFixDay} />)}
           </div>
         </div>
       )}
@@ -540,7 +642,7 @@ export default function DataHealthGrid() {
             <span className="text-[9px] font-bold uppercase tracking-widest text-muted">Computations</span>
           </div>
           <div className="divide-y divide-kd-border/30">
-            {snapshots.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} />)}
+            {snapshots.map(row => <HealthRowComponent key={row.id} row={row} period={period} onFix={handleFix} onMark={handleMark} onFixDay={handleFixDay} />)}
           </div>
         </div>
       )}

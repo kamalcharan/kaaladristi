@@ -156,17 +156,22 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.fail('index_indicators', str(e))
 
     # ── Step 0e: Index flow intelligence ──
+    # Previously ran without StepTracker — any failure surfaced only in stdout,
+    # leaving km_pipeline_runs empty and the health grid's Index Flow row
+    # permanently showing "no error logged" on red squares. Wrap it now.
     if not skip_indicators:
+        tracker.start('index_flow_intelligence')
         try:
             result = db.rpc('compute_all_flow_intelligence', {
                 'p_table': 'km_index_eod',
                 'p_id_col': 'index_id',
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            tracker.complete('index_flow_intelligence', rows=fi_count)
             if fi_count > 0:
                 print(f'  [flow-intel] Index: updated {fi_count} rows')
         except Exception as e:
-            print(f'  [flow-intel] Index: skipped ({e})')
+            tracker.fail('index_flow_intelligence', str(e))
 
     # ── Step 1: Download equity bhav copy ──
     tracker.start('download')
@@ -245,12 +250,15 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.fail('indicators', str(e))
 
     # ── Step 6a: MagicRS for equities ──
+    # Migration 038 made p_from_date required — pass trade_date explicitly
+    # so an older scheduler run doesn't silently clip to "last 90 days".
     if not skip_indicators:
         tracker.start('magic_rs')
         try:
             result = db.rpc('compute_all_magic_rs', {
                 'p_table': 'km_equity_eod',
                 'p_id_col': 'equity_id',
+                'p_from_date': str(trade_date),
             })
             mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
             actual, expected = get_step_coverage(db, 'magic_rs', trade_date, 'NSE')
