@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import {
   enqueueFix,
   enqueueDailyRun,
+  enqueueBackfill,
   fetchDimensions,
   fetchSchedulerInfo,
 } from '@/services/pipeline2';
@@ -15,10 +16,15 @@ interface Props {
   onEnqueued: () => void;
 }
 
-type Mode = 'fix' | 'daily_run';
+type Mode = 'fix' | 'daily_run' | 'backfill';
 
 function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function yesterdayIso(): string {
   const d = new Date();
+  d.setDate(d.getDate() - 1);
   return d.toISOString().slice(0, 10);
 }
 
@@ -26,6 +32,12 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
   const [mode, setMode] = useState<Mode>('fix');
   const [dimension, setDimension] = useState<string>('');
   const [tradeDate, setTradeDate] = useState<string>(todayIso());
+  // Backfill defaults: 30 days back → yesterday.
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [dateTo, setDateTo] = useState<string>(yesterdayIso());
   const [exchange, setExchange] = useState<string>('');
   const [force, setForce] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +56,8 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     refetchInterval: 60_000,
   });
 
+  const fixable = dims?.dimensions.filter(d => d.fixable) ?? [];
+
   // Apply selection from HealthGrid cell click.
   useEffect(() => {
     if (selection) {
@@ -58,17 +72,12 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     }
   }, [selection]);
 
-  const fixable = dims?.dimensions.filter(d => d.fixable) ?? [];
-
-  // Default-pick first FIXABLE dimension once list loads.
   useEffect(() => {
     if (!dimension && fixable.length > 0) {
       setDimension(fixable[0].key);
     }
   }, [fixable, dimension]);
 
-  // If a HealthGrid cell click selected a download dim, show a hint and
-  // let the user still submit (the API will 400 with the same message).
   const isDownload = Boolean(
     dimension && dims?.dimensions.find(d => d.key === dimension)?.group === 'download'
   );
@@ -87,9 +96,23 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
           force,
         });
         setOkMsg(`Queued fix job #${result.job_id}`);
-      } else {
+      } else if (mode === 'daily_run') {
         const result = await enqueueDailyRun({ trade_date: tradeDate, force });
         setOkMsg(`Queued daily_run job #${result.job_id}`);
+      } else {
+        if (!dimension) throw new Error('Pick a dimension');
+        if (!dateFrom || !dateTo) throw new Error('Pick a date range');
+        const result = await enqueueBackfill({
+          dimension,
+          date_from: dateFrom,
+          date_to: dateTo,
+          exchange: exchange || null,
+          force,
+        });
+        setOkMsg(
+          `Queued backfill — ${result.job_count} job${result.job_count === 1 ? '' : 's'} ` +
+          `(${result.batch_id})`
+        );
       }
       onEnqueued();
     } catch (e) {
@@ -99,16 +122,28 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     }
   };
 
+  // Disable rules per mode.
+  let disabled = submitting;
+  if (mode === 'fix') {
+    disabled = disabled || !dimension || !tradeDate || isDownload;
+  } else if (mode === 'daily_run') {
+    disabled = disabled || !tradeDate;
+  } else {
+    disabled = disabled || !dimension || !dateFrom || !dateTo ||
+               (dimension !== 'all' && isDownload);
+  }
+
   return (
     <div className="space-y-3 p-3 bg-kd-surface/30 rounded-lg border border-kd-border/30">
-      {/* Mode toggle */}
+      {/* Mode tabs */}
       <div className="flex gap-1 bg-kd-bg/60 rounded-md p-0.5 text-xs">
-        <ModeTab active={mode === 'fix'}       onClick={() => setMode('fix')}       label="Fix one dimension" />
-        <ModeTab active={mode === 'daily_run'} onClick={() => setMode('daily_run')} label="Daily run" />
+        <ModeTab active={mode === 'fix'}        onClick={() => setMode('fix')}        label="Fix" />
+        <ModeTab active={mode === 'daily_run'}  onClick={() => setMode('daily_run')}  label="Daily run" />
+        <ModeTab active={mode === 'backfill'}   onClick={() => setMode('backfill')}   label="Backfill" />
       </div>
 
-      {/* Dimension (fix only) */}
-      {mode === 'fix' && (
+      {/* Dimension — fix + backfill */}
+      {(mode === 'fix' || mode === 'backfill') && (
         <label className="block">
           <span className="text-[11px] text-muted">Dimension</span>
           <select
@@ -116,15 +151,16 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
             onChange={e => setDimension(e.target.value)}
             className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary"
           >
-            {/* Downloads appear but disabled — cell clicks on download rows
-                still populate the dim so user sees the "not implemented" hint. */}
+            {mode === 'backfill' && (
+              <option value="all">All dimensions (dependency order)</option>
+            )}
             {dims?.dimensions.map(d => (
               <option key={d.key} value={d.key} disabled={!d.fixable}>
                 {d.label}{!d.fixable ? '  (download — not fixable)' : ''}
               </option>
             ))}
           </select>
-          {isDownload && (
+          {isDownload && dimension !== 'all' && (
             <p className="mt-1 text-[10px] text-amber-300">
               Download fixes aren't implemented yet — run the daily pipeline manually.
             </p>
@@ -132,19 +168,45 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
         </label>
       )}
 
-      {/* Trade date */}
-      <label className="block">
-        <span className="text-[11px] text-muted">Trade date</span>
-        <input
-          type="date"
-          value={tradeDate}
-          onChange={e => setTradeDate(e.target.value)}
-          className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary mono"
-        />
-      </label>
+      {/* Single trade date — fix + daily_run */}
+      {(mode === 'fix' || mode === 'daily_run') && (
+        <label className="block">
+          <span className="text-[11px] text-muted">Trade date</span>
+          <input
+            type="date"
+            value={tradeDate}
+            onChange={e => setTradeDate(e.target.value)}
+            className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary mono"
+          />
+        </label>
+      )}
 
-      {/* Exchange (fix only, editable) */}
-      {mode === 'fix' && (
+      {/* Date range — backfill */}
+      {mode === 'backfill' && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-[11px] text-muted">From</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary mono"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] text-muted">To</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary mono"
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Exchange — fix + backfill */}
+      {(mode === 'fix' || mode === 'backfill') && (
         <label className="block">
           <span className="text-[11px] text-muted">Exchange (optional)</span>
           <select
@@ -173,11 +235,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       {/* Submit */}
       <button
         onClick={submit}
-        disabled={
-          submitting ||
-          !tradeDate ||
-          (mode === 'fix' && (!dimension || isDownload))
-        }
+        disabled={disabled}
         className={cn(
           'w-full flex items-center justify-center gap-2 py-2 rounded text-sm font-medium transition-all',
           'bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo',
@@ -186,10 +244,13 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       >
         {submitting
           ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Queuing…</>
-          : <><Play className="w-3.5 h-3.5" /> Queue {mode === 'fix' ? 'fix' : 'daily run'}</>}
+          : <><Play className="w-3.5 h-3.5" />
+              {mode === 'fix' && 'Queue fix'}
+              {mode === 'daily_run' && 'Queue daily run'}
+              {mode === 'backfill' && 'Queue backfill'}
+            </>}
       </button>
 
-      {/* Messages */}
       {err && (
         <div className="flex items-start gap-2 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded p-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -203,7 +264,6 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
         </div>
       )}
 
-      {/* Scheduler hint */}
       {sched && (
         <div className="text-[10px] text-muted pt-2 border-t border-kd-border/30">
           Scheduler: <span className={sched.active ? 'text-emerald-400' : 'text-rose-400'}>

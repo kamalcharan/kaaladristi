@@ -230,6 +230,167 @@ def _run_daily(conn, job: dict) -> None:
              f'({len(outcome.steps)} steps, {rows} rows)')
 
 
+# ── Backfill ──────────────────────────────────────────────────────────────
+
+def _trading_days_between(conn, from_d: date, to_d: date) -> list[date]:
+    """Weekdays between from_d..to_d inclusive, excluding holidays and
+    no_data dates from km_trading_calendar. Returns oldest-first."""
+    skips: set[str] = set()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT trade_date FROM km_trading_calendar "
+            "WHERE (is_holiday = TRUE OR status IN ('holiday','no_data','weekend')) "
+            "  AND trade_date BETWEEN %s AND %s",
+            [str(from_d), str(to_d)],
+        )
+        skips = {str(r[0]) for r in cur.fetchall()}
+    conn.commit()
+
+    out: list[date] = []
+    cursor = from_d
+    while cursor <= to_d:
+        if cursor.weekday() < 5 and str(cursor) not in skips:
+            out.append(cursor)
+        cursor += timedelta(days=1)
+    return out
+
+
+def _run_backfill(conn, job: dict) -> None:
+    """Execute a backfill job: loop trading days in [date_from, date_to]
+    and invoke the single-date handler for each.
+
+    Aggregates rows_affected across the range. Reports before = fill rate
+    on the first date and after = fill rate on the last date (individual
+    per-date fill rates are still visible via the progress text)."""
+    from . import handlers
+
+    job_id = job['id']
+    dim = job.get('dimension')
+    from_val = job.get('date_from')
+    to_val = job.get('date_to')
+    force = bool(job.get('force'))
+    exchange = job.get('exchange')
+
+    if not dim:
+        _update_job(conn, job_id, status='failed',
+                    error_msg='backfill job missing dimension',
+                    completed_at=datetime.utcnow())
+        return
+    if from_val is None or to_val is None:
+        _update_job(conn, job_id, status='failed',
+                    error_msg='backfill job missing date_from / date_to',
+                    completed_at=datetime.utcnow())
+        return
+
+    from_d = from_val if isinstance(from_val, date) else date.fromisoformat(str(from_val))
+    to_d   = to_val   if isinstance(to_val,   date) else date.fromisoformat(str(to_val))
+
+    # Safety-net: backfill handler refuses download dims (API rejects too).
+    from .health import DOWNLOAD_DIMENSIONS
+    if dim in DOWNLOAD_DIMENSIONS:
+        _update_job(conn, job_id, status='failed',
+                    error_msg='Download backfill not yet implemented',
+                    completed_at=datetime.utcnow())
+        return
+
+    try:
+        dates = _trading_days_between(conn, from_d, to_d)
+    except Exception as e:
+        conn.rollback()
+        _update_job(conn, job_id, status='failed',
+                    error_msg=f'failed to resolve trading days: {e}'[:500],
+                    completed_at=datetime.utcnow())
+        return
+
+    if not dates:
+        _update_job(conn, job_id, status='completed',
+                    progress_text=f'No trading days in {from_d}..{to_d}',
+                    progress_pct=100,
+                    rows_affected=0,
+                    completed_at=datetime.utcnow())
+        log.info(f'Job #{job_id}: backfill {dim} {from_d}..{to_d} — 0 trading days')
+        return
+
+    total = len(dates)
+    log.info(f'Job #{job_id}: backfill {dim} {from_d}..{to_d} — {total} trading days')
+
+    # before = fill rate on the earliest date (cheap one-shot read).
+    from .health import fill_rate
+    try:
+        before = fill_rate(conn, dim, dates[0])
+    except Exception as e:
+        log.warning(f'Job #{job_id}: before fill_rate read failed: {e}')
+        before = None
+
+    rows_total = 0
+    last_after: float | None = None
+    errors: list[str] = []
+    partial_count = 0
+
+    for i, td in enumerate(dates):
+        if _is_cancelled(conn, job_id):
+            log.info(f'Job #{job_id}: cancelled mid-backfill at {td} ({i+1}/{total})')
+            return
+
+        pct = int(i / total * 99)
+        _update_job(conn, job_id,
+                    progress_text=f'{i+1}/{total} · {td}: running…',
+                    progress_pct=pct)
+
+        try:
+            # Noop progress callback — per-date progress is captured via
+            # the progress_text update above. Avoids spamming the job row.
+            result = handlers.handle(
+                dim, conn, td, force, exchange, lambda _t, _p: None,
+            )
+        except Exception as e:
+            conn.rollback()
+            errors.append(f'{td}: {str(e)[:120]}')
+            log.error(f'Job #{job_id}: {dim} {td} failed — {e}')
+            continue
+
+        rows_total += int(result.rows_affected or 0)
+        last_after = result.fill_rate_after
+        if result.status == 'failed':
+            errors.append(f'{td}: {result.error_msg or "failed"}')
+        elif result.status == 'partial':
+            partial_count += 1
+
+        _update_job(conn, job_id,
+                    progress_text=f'{i+1}/{total} · {td}: '
+                                  f'{result.fill_rate_before:.1f}% → '
+                                  f'{result.fill_rate_after:.1f}% '
+                                  f'[{result.status}]',
+                    progress_pct=pct)
+
+    # Terminal status: failed > partial > completed.
+    if errors and not (total - len(errors)):
+        terminal = 'failed'
+    elif errors or partial_count:
+        terminal = 'partial'
+    else:
+        terminal = 'completed'
+
+    summary = (
+        f'{terminal}: {total} dates, {rows_total} rows'
+        + (f', {len(errors)} errors' if errors else '')
+        + (f', {partial_count} partial' if partial_count else '')
+    )
+
+    _update_job(
+        conn, job_id,
+        status=terminal,
+        fill_rate_before=before,
+        fill_rate_after=last_after,
+        rows_affected=rows_total,
+        error_msg='; '.join(errors[:3])[:500] if errors else None,
+        progress_text=summary,
+        progress_pct=100,
+        completed_at=datetime.utcnow(),
+    )
+    log.info(f'Job #{job_id}: {summary}')
+
+
 # ── Main loop ─────────────────────────────────────────────────────────────
 
 def process_one(conn) -> bool:
@@ -247,6 +408,8 @@ def process_one(conn) -> bool:
         _run_fix(conn, job)
     elif job_type == 'daily_run':
         _run_daily(conn, job)
+    elif job_type == 'backfill':
+        _run_backfill(conn, job)
     else:
         _update_job(conn, job_id, status='failed',
                     error_msg=f'Unknown job_type: {job_type}',
