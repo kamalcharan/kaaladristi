@@ -173,6 +173,13 @@ class PgClient:
     # ── RPC (call a PG function) ──────────────────────────────────────────
 
     def rpc(self, fn_name: str, params: dict = None) -> any:
+        # Many of our RPCs (compute_all_pending_indicators, compute_all_magic_rs,
+        # compute_all_flow_intelligence, …) perform UPDATEs inside PL/pgSQL.
+        # psycopg2 defaults to autocommit=False, so without an explicit commit
+        # the writes stay in an open transaction on the pooled connection and
+        # get rolled back by the next unrelated caller. Match upsert()/patch()/
+        # insert(): commit on success, rollback + re-raise on failure so
+        # callers' try/except (e.g. tracker.fail()) still captures the error.
         params = params or {}
         arg_list = ', '.join([f'%({k})s' for k in params.keys()])
         sql = f'SELECT * FROM {fn_name}({arg_list})'
@@ -182,7 +189,11 @@ class PgClient:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(sql, params)
                 rows = cur.fetchall()
+            conn.commit()
             return [dict(r) for r in rows]
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             self._put(conn)
 
