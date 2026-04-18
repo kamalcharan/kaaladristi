@@ -137,8 +137,17 @@ def _run_pipeline_dates(job_id: str, dates: list[date], exchange: str,
         _refresh_breadth_roc()
 
 
+def _tracker_for(trade_date_obj):
+    """Build a StepTracker for breadth/breadth_roc steps scoped to a date.
+    exchange='NSE' because breadth uses NSE-only equity data."""
+    from pipeline.utils.step_tracker import StepTracker
+    return StepTracker(db, trade_date_obj, exchange='NSE', triggered_by='scheduler')
+
+
 def _refresh_breadth_roc():
-    """Recompute ROC breadth for missing dates after EOD data loads."""
+    """Recompute ROC breadth for missing dates after EOD data loads.
+    Emits one km_pipeline_runs row per date upserted so per-day errors
+    surface in the health grid tooltip."""
     try:
         from compute_breadth_roc import load_closes, compute_roc, upsert
         import psycopg2 as _pg
@@ -156,8 +165,19 @@ def _refresh_breadth_roc():
             if df.empty:
                 log.info('breadth_roc: no new dates to compute')
                 return
-            n = upsert(conn, df, dry_run=False)
-            log.info(f'breadth_roc: {n} dates upserted')
+            # Per-date tracker events so a failed upsert leaves an error_msg
+            # on a specific (trade_date, 'breadth_roc') row instead of
+            # disappearing into a stdout log line.
+            for d in df.index:
+                tracker = _tracker_for(d)
+                tracker.start('breadth_roc')
+                try:
+                    one = df.loc[[d]]
+                    n = upsert(conn, one, dry_run=False)
+                    tracker.complete('breadth_roc', rows=int(n))
+                except Exception as e:
+                    tracker.fail('breadth_roc', str(e))
+            log.info(f'breadth_roc: {len(df)} dates processed')
         finally:
             conn.close()
     except Exception as e:
@@ -165,10 +185,7 @@ def _refresh_breadth_roc():
 
 
 def _refresh_market_breadth():
-    """
-    Recompute market breadth scores for any missing dates after EOD data loads.
-    Runs compute_market_breadth.py in-process (missing dates only — fast daily incremental).
-    """
+    """Recompute market breadth for missing dates. One tracker event per date."""
     try:
         from compute_market_breadth import load_closes, compute_breadth, upsert
         import psycopg2 as _pg
@@ -180,7 +197,6 @@ def _refresh_market_breadth():
         try:
             closes = load_closes(conn)
             df     = compute_breadth(closes)
-            # Missing dates only
             with conn.cursor() as cur:
                 cur.execute('SELECT trade_date FROM km_market_breadth')
                 existing = {str(r[0]) for r in cur.fetchall()}
@@ -188,8 +204,16 @@ def _refresh_market_breadth():
             if df.empty:
                 log.info('breadth: no new dates to compute')
                 return
-            n = upsert(conn, df, dry_run=False)
-            log.info(f'breadth: {n} dates upserted')
+            for d in df.index:
+                tracker = _tracker_for(d)
+                tracker.start('market_breadth')
+                try:
+                    one = df.loc[[d]]
+                    n = upsert(conn, one, dry_run=False)
+                    tracker.complete('market_breadth', rows=int(n))
+                except Exception as e:
+                    tracker.fail('market_breadth', str(e))
+            log.info(f'breadth: {len(df)} dates processed')
         finally:
             conn.close()
     except Exception as e:
@@ -722,9 +746,13 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
 # ── Per-dimension Fix Endpoint ────────────────────────────────────────────────
 
 class FixRequest(BaseModel):
-    dimension: str           # health check ID: nse_equities, indicators, etc.
-    days: int = 60           # how far back to look for gaps
-    strategy: str = 'smart'  # smart (skip existing) | force (redownload) | compute_only (no downloads)
+    dimension: str                       # base dimension key — see FIX_DIMENSIONS
+    days: int = 60                       # legacy sweep window (ignored when trade_date set)
+    strategy: str = 'smart'              # smart (skip existing) | force | compute_only
+    trade_date: Optional[str] = None     # YYYY-MM-DD — if set, worker scopes compute to this date only
+    exchange: Optional[str] = None       # 'NSE' | 'BSE' | None. Used by magic_rs + flow_intelligence
+                                         # which have one base key but two exchange-specific UI rows
+    force: bool = False                  # erase-and-recompute. Requires trade_date.
 
 
 # ── Cancel endpoint ───────────────────────────────────────────────────────────
@@ -1140,30 +1168,55 @@ def fix_dimension(req: FixRequest):
         raise HTTPException(400, f'Unknown dimension: {req.dimension}. '
                             f'Available: {", ".join(sorted(FIX_DIMENSIONS))}')
 
-    # Check for already queued/running jobs of same type
-    existing = db.select('km_jobs', 'id,status',
-                         filters={'job_type': f'fix:{req.dimension}'},
-                         order='created_at.desc', limit=1)
-    if existing and existing[0].get('status') in ('queued', 'running'):
-        raise HTTPException(409, f'A {req.dimension} job is already queued/running (#{existing[0]["id"]})')
+    # Force-recompute without a specific date is refused at the worker layer,
+    # but catch it early so the UI gets an actionable 400 instead of a
+    # job_id pointing at an immediately-failed job.
+    if req.force and not req.trade_date:
+        raise HTTPException(400, 'force=true requires trade_date — refusing '
+                            'to erase computation for the full legacy sweep window.')
 
-    # Insert job into queue
+    if req.exchange and req.exchange not in ('NSE', 'BSE'):
+        raise HTTPException(400, f'exchange must be NSE or BSE, got {req.exchange!r}')
+
+    # Check for already queued/running jobs of same type. Per-date jobs are
+    # allowed to stack (different dates are independent), so we only gate
+    # legacy sweep jobs here.
+    if not req.trade_date:
+        existing = db.select('km_jobs', 'id,status',
+                             filters={'job_type': f'fix:{req.dimension}'},
+                             order='created_at.desc', limit=1)
+        if existing and existing[0].get('status') in ('queued', 'running'):
+            raise HTTPException(409, f'A {req.dimension} job is already queued/running (#{existing[0]["id"]})')
+
+    params_dict = {'days': req.days, 'strategy': req.strategy}
+    if req.trade_date:
+        params_dict['trade_date'] = req.trade_date
+    if req.exchange:
+        params_dict['exchange'] = req.exchange
+    if req.force:
+        params_dict['force'] = True
+
     record = {
         'job_type': f'fix:{req.dimension}',
-        'params': json.dumps({'days': req.days, 'strategy': req.strategy}),
+        'params': json.dumps(params_dict),
         'status': 'queued',
         'created_by': 'ui',
     }
     db.insert('km_jobs', record)
 
-    # Get the inserted job ID
     rows = db.select('km_jobs', 'id',
                      filters={'job_type': f'fix:{req.dimension}', 'status': 'queued'},
                      order='created_at.desc', limit=1)
     job_id = rows[0]['id'] if rows else None
 
+    scope = f'{req.trade_date}' if req.trade_date else f'last {req.days}d'
+    bits = [scope]
+    if req.exchange:
+        bits.append(req.exchange)
+    if req.force:
+        bits.append('force')
     return {'job_id': job_id, 'status': 'queued',
-            'message': f'Job queued for {req.dimension}. Start worker: python worker.py --watch'}
+            'message': f'Job queued for {req.dimension} ({", ".join(bits)})'}
 
 
 # ── Per-step re-run endpoint ────────────────────────────────────────────────
@@ -1172,6 +1225,8 @@ class RunStepRequest(BaseModel):
     trade_date: str
     step: str
     exchange: str = 'NSE'
+    force: bool = False     # erase-and-recompute target date before running
+
 
 @app.post('/api/pipeline/run-step')
 def run_step(req: RunStepRequest):
@@ -1190,18 +1245,29 @@ def run_step(req: RunStepRequest):
     if not job_type:
         raise HTTPException(400, f'Step "{req.step}" cannot be re-run individually')
 
-    # Check for already queued/running
-    existing = db.select('km_jobs', 'id,status',
+    # Per-date jobs can stack. Only gate on true duplicates (same job_type +
+    # same trade_date) when already queued — different dates are independent.
+    existing = db.select('km_jobs', 'id,status,params',
                          filters={'job_type': job_type},
-                         order='created_at.desc', limit=1)
-    if existing and existing[0].get('status') in ('queued', 'running'):
-        raise HTTPException(409, f'A {req.step} job is already queued/running')
+                         order='created_at.desc', limit=5)
+    for e in existing or []:
+        if e.get('status') not in ('queued', 'running'):
+            continue
+        e_params = e.get('params') or {}
+        if isinstance(e_params, str):
+            try:
+                e_params = json.loads(e_params)
+            except Exception:
+                e_params = {}
+        if e_params.get('trade_date') == req.trade_date and e_params.get('exchange') == req.exchange:
+            raise HTTPException(409, f'A {req.step} job for {req.trade_date} ({req.exchange}) is already queued/running')
 
     record = {
         'job_type': job_type,
         'params': json.dumps({
             'days': 60, 'strategy': 'smart',
             'trade_date': req.trade_date, 'exchange': req.exchange,
+            'force': bool(req.force),
         }),
         'status': 'queued',
         'created_by': 'manual_step',
@@ -1213,8 +1279,9 @@ def run_step(req: RunStepRequest):
                      order='created_at.desc', limit=1)
     job_id = rows[0]['id'] if rows else None
 
+    suffix = ' [FORCE]' if req.force else ''
     return {'job_id': job_id, 'status': 'queued',
-            'message': f'Re-run queued for {req.step} ({req.exchange}, {req.trade_date})'}
+            'message': f'Re-run queued for {req.step} ({req.exchange}, {req.trade_date}){suffix}'}
 
 
 @app.get('/api/pipeline/coverage-summary')
