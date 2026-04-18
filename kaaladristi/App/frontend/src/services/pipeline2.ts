@@ -158,6 +158,21 @@ export const cancelJob = (jobId: number) =>
 export const cancelBatch = (batchId: string) =>
   apiPost<CancelResponse>('/api/pipeline2/cancel', { batch_id: batchId });
 
+export type CalendarMarkStatus = 'holiday' | 'no_data' | 'clear';
+
+export interface CalendarMarkResponse {
+  trade_date: string;
+  status: CalendarMarkStatus;
+  exchanges: string[];
+  rows_affected: number;
+}
+
+export const markCalendar = (tradeDate: string, status: CalendarMarkStatus) =>
+  apiPost<CalendarMarkResponse>('/api/pipeline2/calendar/mark', {
+    trade_date: tradeDate,
+    status,
+  });
+
 export const fetchDimensions = () =>
   apiGet<DimensionsList>('/api/pipeline2/dimensions');
 

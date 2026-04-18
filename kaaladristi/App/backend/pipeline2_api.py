@@ -135,6 +135,15 @@ class BackfillRequest(BaseModel):
     force: bool = False
 
 
+class CalendarMarkRequest(BaseModel):
+    """Manual override for km_trading_calendar. `status='clear'` removes
+    any existing holiday/no_data marking; status in {holiday, no_data}
+    upserts the row."""
+    trade_date: str               # YYYY-MM-DD
+    status: str                   # 'holiday' | 'no_data' | 'clear'
+    exchange: Optional[str] = None  # None → apply to both NSE and BSE
+
+
 # Dependency order for the 'all' backfill — downloads first (so EOD data
 # exists before any compute), then the compute DAG. 14 jobs total.
 BACKFILL_ALL_ORDER = [
@@ -161,9 +170,11 @@ BACKFILL_ALL_ORDER = [
 def get_health(days: int = 30):
     """Ground-truth fill-rate grid across all dimensions.
 
-    `days` is clamped to 7..90 to keep payloads predictable.
+    `days` is clamped to 7..120 to keep payloads predictable. The UI
+    toggles between 30/60/90/120; anything wider than 120 typically
+    belongs in an export, not the live grid.
     """
-    days = min(max(days, 7), 90)
+    days = min(max(days, 7), 120)
     conn = _conn()
     try:
         return {
@@ -413,6 +424,62 @@ def enqueue_backfill(req: BackfillRequest):
         'jobs': inserted,
         'status': 'queued',
     }
+
+
+@app.post('/api/pipeline2/calendar/mark')
+def mark_calendar(req: CalendarMarkRequest):
+    """Mark or unmark a trade_date in km_trading_calendar so the health
+    grid stops showing it as rose/missing. Applies to both NSE and BSE
+    unless an explicit exchange is provided.
+
+    status:
+      'holiday'  → upsert row with is_holiday=true, status='holiday'
+      'no_data'  → upsert row with is_holiday=false, status='no_data'
+      'clear'    → delete any existing holiday/no_data row(s) for the date
+    """
+    if req.status not in ('holiday', 'no_data', 'clear'):
+        raise HTTPException(400, "status must be holiday | no_data | clear")
+    try:
+        td = date.fromisoformat(req.trade_date)
+    except ValueError:
+        raise HTTPException(400, f'Invalid trade_date: {req.trade_date!r}')
+    if req.exchange and req.exchange not in ('NSE', 'BSE'):
+        raise HTTPException(400, 'exchange must be NSE or BSE or omitted')
+
+    exchanges = [req.exchange] if req.exchange else ['NSE', 'BSE']
+
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            affected = 0
+            for ex in exchanges:
+                if req.status == 'clear':
+                    cur.execute(
+                        "DELETE FROM km_trading_calendar "
+                        "WHERE trade_date = %s AND exchange = %s "
+                        "  AND status IN ('holiday', 'no_data')",
+                        [str(td), ex],
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO km_trading_calendar "
+                        "  (trade_date, exchange, status, is_holiday) "
+                        "VALUES (%s, %s, %s, %s) "
+                        "ON CONFLICT (trade_date, exchange) DO UPDATE "
+                        "  SET status = EXCLUDED.status, "
+                        "      is_holiday = EXCLUDED.is_holiday",
+                        [str(td), ex, req.status, req.status == 'holiday'],
+                    )
+                affected += cur.rowcount
+        conn.commit()
+        return {
+            'trade_date': str(td),
+            'status': req.status,
+            'exchanges': exchanges,
+            'rows_affected': affected,
+        }
+    finally:
+        conn.close()
 
 
 @app.post('/api/pipeline2/cancel')

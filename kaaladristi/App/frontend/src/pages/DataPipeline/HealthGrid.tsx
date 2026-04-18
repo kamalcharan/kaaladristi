@@ -1,13 +1,19 @@
-import { Fragment } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Fragment, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2, AlertTriangle, CalendarX, CalendarOff, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchHealthGrid, type DayCell, type DimensionHealth } from '@/services/pipeline2';
+import {
+  fetchHealthGrid, markCalendar,
+  type DayCell, type DimensionHealth, type CalendarMarkStatus,
+} from '@/services/pipeline2';
 import type { CellSelection } from './index';
 
 interface Props {
   onCellSelect: (selection: CellSelection) => void;
 }
+
+const DAY_CHOICES = [30, 60, 90, 120] as const;
+type DayChoice = typeof DAY_CHOICES[number];
 
 const STATUS_CLASSES: Record<DayCell['status'], string> = {
   ok:       'bg-emerald-500/70 hover:bg-emerald-400',
@@ -27,28 +33,114 @@ function cellTooltip(dim: DimensionHealth, cell: DayCell): string {
   return `${base} · ${cell.fill_rate.toFixed(1)}% (${cell.populated}/${cell.total}) · ${cell.status}`;
 }
 
+interface MenuState {
+  x: number;
+  y: number;
+  date: string;
+  currentStatus: DayCell['status'];
+}
+
 export default function HealthGrid({ onCellSelect }: Props) {
+  const [days, setDays] = useState<DayChoice>(30);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [markErr, setMarkErr] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['pipeline2', 'health', 30],
-    queryFn: () => fetchHealthGrid(30),
+    queryKey: ['pipeline2', 'health', days],
+    queryFn: () => fetchHealthGrid(days),
     refetchInterval: 30_000,
     staleTime: 25_000,
   });
 
+  // Close the context menu on any outside click / scroll / Escape.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
+
+  const handleCellContextMenu = (
+    e: React.MouseEvent, cell: DayCell,
+  ) => {
+    if (cell.status === 'future') return;
+    e.preventDefault();
+    setMarkErr(null);
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      date: cell.trade_date,
+      currentStatus: cell.status,
+    });
+  };
+
+  const handleMark = async (status: CalendarMarkStatus) => {
+    if (!menu) return;
+    const targetDate = menu.date;
+    setMenu(null);
+    setMarkErr(null);
+    try {
+      await markCalendar(targetDate, status);
+      queryClient.invalidateQueries({ queryKey: ['pipeline2', 'health'] });
+    } catch (e) {
+      setMarkErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const rangeToggle = (
+    <div className="flex items-center gap-1 text-[10px]">
+      <span className="text-muted mr-1">Range:</span>
+      {DAY_CHOICES.map(n => (
+        <button
+          key={n}
+          onClick={() => setDays(n)}
+          className={cn(
+            'px-2 py-0.5 rounded border transition-colors',
+            days === n
+              ? 'bg-accent-indigo/25 border-accent-indigo/40 text-accent-indigo'
+              : 'bg-kd-bg border-kd-border/40 text-muted hover:text-secondary',
+          )}
+        >
+          {n}d
+        </button>
+      ))}
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted p-4 bg-kd-surface/30 rounded-lg border border-kd-border/30">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading health grid…
+      <div className="bg-kd-surface/30 rounded-lg border border-kd-border/30">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-kd-border/30">
+          <span className="flex items-center gap-2 text-sm text-muted">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading health grid…
+          </span>
+          {rangeToggle}
+        </div>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="flex items-center gap-2 text-sm text-risk-amber p-4 bg-risk-amber/5 rounded-lg border border-risk-amber/30">
-        <AlertTriangle className="w-4 h-4" />
-        {error instanceof Error ? error.message : 'Failed to load'}
+      <div className="bg-risk-amber/5 rounded-lg border border-risk-amber/30">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="flex items-center gap-2 text-sm text-risk-amber">
+            <AlertTriangle className="w-4 h-4" />
+            {error instanceof Error ? error.message : 'Failed to load'}
+          </span>
+          {rangeToggle}
+        </div>
       </div>
     );
   }
@@ -61,7 +153,14 @@ export default function HealthGrid({ onCellSelect }: Props) {
   const headerDays = data.dimensions[0].days;
 
   return (
-    <div className="overflow-x-auto bg-kd-surface/30 rounded-lg border border-kd-border/30">
+    <div className="bg-kd-surface/30 rounded-lg border border-kd-border/30">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-kd-border/30">
+        <span className="text-[11px] text-muted">
+          {data.dimensions.length} dimensions · {headerDays.length} trading days
+        </span>
+        {rangeToggle}
+      </div>
+      <div className="overflow-x-auto">
       <table className="text-xs w-full border-separate" style={{ borderSpacing: '2px' }}>
         <thead>
           <tr>
@@ -108,6 +207,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
                             tradeDate: cell.trade_date,
                           })
                         }
+                        onContextMenu={(e) => handleCellContextMenu(e, cell)}
                         title={cellTooltip(dim, cell)}
                         className={cn(
                           'w-4 h-4 block rounded-[3px] transition-transform',
@@ -134,15 +234,115 @@ export default function HealthGrid({ onCellSelect }: Props) {
           })}
         </tbody>
       </table>
+      </div>
 
       <div className="flex items-center gap-4 text-[10px] text-muted p-2 border-t border-kd-border/30">
         <Legend color="bg-emerald-500/70" label="ok ≥ threshold" />
         <Legend color="bg-amber-500/70"   label="partial" />
         <Legend color="bg-rose-500/70"    label="missing" />
         <Legend color="bg-slate-700/50"   label="holiday / no_data" />
-        <span className="ml-auto">click any cell to pre-fill the fix form</span>
+        <span className="ml-auto">
+          click to pre-fill fix · right-click to mark day
+        </span>
       </div>
+      {markErr && (
+        <div className="text-[10px] text-rose-300 bg-rose-500/10 border-t border-rose-500/30 px-3 py-1">
+          Mark failed: {markErr}
+        </div>
+      )}
+      {menu && (
+        <CellContextMenu
+          state={menu}
+          onMark={handleMark}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
+  );
+}
+
+
+function CellContextMenu({ state, onMark, onClose }: {
+  state: MenuState;
+  onMark: (status: CalendarMarkStatus) => void;
+  onClose: () => void;
+}) {
+  // Stop the outer `window.click` listener from immediately closing us
+  // when the click that opened the menu propagates.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const isMarked =
+    state.currentStatus === 'holiday' || state.currentStatus === 'no_data';
+
+  return (
+    <div
+      onClick={stop}
+      className="fixed z-50 min-w-[180px] bg-kd-elevated border border-kd-border/60
+                 rounded-lg shadow-xl shadow-black/40 overflow-hidden text-xs"
+      style={{
+        // Anchor at the click position; nudge left if it would overflow viewport.
+        left: Math.min(state.x, window.innerWidth - 200),
+        top: Math.min(state.y, window.innerHeight - 160),
+      }}
+    >
+      <div className="px-3 py-1.5 bg-kd-bg/50 border-b border-kd-border/40 text-[10px]">
+        <span className="text-muted">Mark </span>
+        <span className="text-secondary mono">{state.date}</span>
+        <span className="text-muted"> as…</span>
+      </div>
+      <MenuItem
+        icon={<CalendarX className="w-3.5 h-3.5" />}
+        onClick={() => onMark('holiday')}
+        label="Mark holiday"
+        sub="Cells render slate (no fill expected)"
+      />
+      <MenuItem
+        icon={<CalendarOff className="w-3.5 h-3.5" />}
+        onClick={() => onMark('no_data')}
+        label="Mark no_data"
+        sub="Known downtime — no bhav published"
+      />
+      {isMarked && (
+        <MenuItem
+          icon={<RotateCcw className="w-3.5 h-3.5" />}
+          onClick={() => onMark('clear')}
+          label="Clear override"
+          sub="Restore to normal trading day"
+          danger
+        />
+      )}
+      <button
+        onClick={onClose}
+        className="w-full px-3 py-1.5 text-[10px] text-muted hover:bg-kd-bg/50
+                   border-t border-kd-border/30 text-left"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+
+function MenuItem({ icon, label, sub, onClick, danger }: {
+  icon: React.ReactNode;
+  label: string;
+  sub?: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'w-full flex items-start gap-2 px-3 py-2 hover:bg-accent-indigo/10 text-left',
+        danger && 'text-rose-300 hover:bg-rose-500/10',
+      )}
+    >
+      <span className="mt-0.5 text-muted">{icon}</span>
+      <span className="flex-1">
+        <span className="block text-secondary">{label}</span>
+        {sub && <span className="block text-[10px] text-muted">{sub}</span>}
+      </span>
+    </button>
   );
 }
 
