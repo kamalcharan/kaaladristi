@@ -80,7 +80,7 @@ async function fetchRecentDates(limit: number): Promise<string[]> {
   const { data, error } = await from('km_equity_eod')
     .select('trade_date')
     .order('trade_date', { ascending: false })
-    .limit(limit * 1500) // overfetch for dedup
+    .limit(limit * 6000) // overfetch for dedup
     .execute();
 
   if (error) throw new Error(error.message);
@@ -134,7 +134,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
       .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
       .gte('trade_date', oldestDate)
       .order('trade_date', { ascending: false })
-      .limit(30000)
+      .limit(120000)
       .execute(),
   ]);
 
