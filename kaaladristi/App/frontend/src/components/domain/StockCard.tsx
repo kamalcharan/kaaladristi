@@ -322,9 +322,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
           fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '5px',
           color: rewardColor,
         }}>
-          {stock.reward != null
-            ? `₹${Math.abs(stock.reward).toFixed(1)} ${stock.reward >= 0 ? 'reward' : 'risk'}`
-            : '— reward'}
+          {stock.reward != null ? `₹${stock.reward.toFixed(1)}` : '—'}
         </div>
       </div>
 
