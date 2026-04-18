@@ -285,13 +285,10 @@ def _run_backfill(conn, job: dict) -> None:
     from_d = from_val if isinstance(from_val, date) else date.fromisoformat(str(from_val))
     to_d   = to_val   if isinstance(to_val,   date) else date.fromisoformat(str(to_val))
 
-    # Safety-net: backfill handler refuses download dims (API rejects too).
-    from .health import DOWNLOAD_DIMENSIONS
-    if dim in DOWNLOAD_DIMENSIONS:
-        _update_job(conn, job_id, status='failed',
-                    error_msg='Download backfill not yet implemented',
-                    completed_at=datetime.utcnow())
-        return
+    # Download dims used to be rejected here as a safety-net while the
+    # handlers were unimplemented. They're wired now — fall through to the
+    # normal per-date dispatch via handlers.handle() which routes
+    # {index,nse,bse}_eod_download to the right handler.
 
     try:
         dates = _trading_days_between(conn, from_d, to_d)
