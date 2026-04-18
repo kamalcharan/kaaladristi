@@ -32,9 +32,11 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
   const [mode, setMode] = useState<Mode>('fix');
   const [dimension, setDimension] = useState<string>('');
   const [tradeDate, setTradeDate] = useState<string>(todayIso());
-  // Backfill defaults: 30 days back → yesterday.
+  // Backfill defaults: 7 days back → yesterday. A wider default invites
+  // hundreds of NSE/BSE HTTP hits and gets us rate-limited — keep it
+  // conservative and let the user widen it deliberately.
   const [dateFrom, setDateFrom] = useState<string>(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30);
+    const d = new Date(); d.setDate(d.getDate() - 7);
     return d.toISOString().slice(0, 10);
   });
   const [dateTo, setDateTo] = useState<string>(yesterdayIso());
@@ -78,12 +80,39 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     }
   }, [fixable, dimension]);
 
+  // Clear exchange when the selected dim has no exchange concept, so a
+  // stale 'NSE' from a previous equity dim selection doesn't end up on
+  // the job row (handler ignores it, but km_jobs.exchange would still
+  // store a misleading value).
+  useEffect(() => {
+    if (dimension && NO_EXCHANGE_DIMS.has(dimension) && exchange) {
+      setExchange('');
+    }
+    // NO_EXCHANGE_DIMS is a stable set literal — no need to memoise.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dimension]);
+
   // Kept for the (now informational) hint when a user targets a download
   // dim — the endpoint is functional, but the run will touch legacy NSE
   // infra so we surface that fact so the operator isn't surprised.
   const isDownload = Boolean(
     dimension && dims?.dimensions.find(d => d.key === dimension)?.group === 'download'
   );
+
+  // Dimensions that don't have an exchange concept — hiding the Exchange
+  // dropdown for these prevents setting e.g. exchange=NSE on an index
+  // download, which was misleading even though the handler ignored it.
+  const NO_EXCHANGE_DIMS = new Set([
+    'index_eod_download',
+    'index_indicators',
+    'index_flow',
+    'industry_composites',
+    'market_breadth',
+    'breadth_roc',
+  ]);
+  const showExchange = dimension !== '' &&
+                       dimension !== 'all' &&
+                       !NO_EXCHANGE_DIMS.has(dimension);
 
   const submit = async () => {
     setSubmitting(true);
@@ -209,8 +238,9 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
         </div>
       )}
 
-      {/* Exchange — fix + backfill */}
-      {(mode === 'fix' || mode === 'backfill') && (
+      {/* Exchange — only for dims that actually split by exchange (nse_* / bse_*).
+          Hidden for index_*, industry, breadth, and 'all' (those imply or span). */}
+      {(mode === 'fix' || mode === 'backfill') && showExchange && (
         <label className="block">
           <span className="text-[11px] text-muted">Exchange (optional)</span>
           <select
