@@ -121,7 +121,10 @@ class DailyRunRequest(BaseModel):
 
 
 class CancelRequest(BaseModel):
-    job_id: int
+    """Cancel one job by id OR every queued/running job in a batch.
+    Exactly one of job_id / batch_id must be set."""
+    job_id: Optional[int] = None
+    batch_id: Optional[str] = None
 
 
 class BackfillRequest(BaseModel):
@@ -132,10 +135,12 @@ class BackfillRequest(BaseModel):
     force: bool = False
 
 
-# Dependency order for the 'all' backfill. Matches DIMENSION_ORDER's
-# compute section so downstream dimensions (industry, breadth) run after
-# their upstream columns have been filled.
+# Dependency order for the 'all' backfill — downloads first (so EOD data
+# exists before any compute), then the compute DAG. 14 jobs total.
 BACKFILL_ALL_ORDER = [
+    'index_eod_download',
+    'nse_eod_download',
+    'bse_eod_download',
     'index_indicators',
     'nse_equity_indicators',
     'bse_equity_indicators',
@@ -259,11 +264,6 @@ def enqueue_fix(req: FixRequest):
             400,
             f'Unknown dimension {req.dimension!r}. Available: {", ".join(KNOWN_DIMENSIONS)}',
         )
-    if req.dimension in DOWNLOAD_DIMENSIONS:
-        raise HTTPException(
-            400,
-            'Download fix not yet implemented — run daily pipeline manually.',
-        )
     if req.dimension not in FIXABLE_DIMENSIONS:
         raise HTTPException(
             400,
@@ -377,12 +377,6 @@ def enqueue_backfill(req: BackfillRequest):
                 f'Unknown dimension {req.dimension!r}. Available: all, '
                 f'{", ".join(KNOWN_DIMENSIONS)}',
             )
-        if req.dimension in DOWNLOAD_DIMENSIONS:
-            raise HTTPException(
-                400,
-                'Download backfill not yet implemented — '
-                'run daily pipeline manually.',
-            )
         if req.dimension not in FIXABLE_DIMENSIONS:
             raise HTTPException(
                 400,
@@ -423,20 +417,44 @@ def enqueue_backfill(req: BackfillRequest):
 
 @app.post('/api/pipeline2/cancel')
 def cancel_job(req: CancelRequest):
-    """Mark a running/queued job cancelled. Worker will observe and stop."""
+    """Mark running/queued jobs cancelled. Worker's per-date check observes
+    the flag and stops at the next safe boundary (handler end for single
+    jobs, next-date iteration for backfills).
+
+    Accepts either a single job_id or a batch_id (cancels every still-
+    active member of that batch). Exactly one must be provided.
+    """
+    if (req.job_id is None) == (req.batch_id is None):
+        raise HTTPException(400, 'Provide exactly one of job_id or batch_id')
+
     conn = _conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE km_jobs SET status = 'cancelled', completed_at = now() "
-                "WHERE id = %s AND status IN ('queued', 'running') RETURNING id",
-                [req.job_id],
-            )
-            row = cur.fetchone()
+            if req.job_id is not None:
+                cur.execute(
+                    "UPDATE km_jobs SET status = 'cancelled', completed_at = now() "
+                    "WHERE id = %s AND status IN ('queued', 'running') RETURNING id",
+                    [req.job_id],
+                )
+            else:
+                cur.execute(
+                    "UPDATE km_jobs SET status = 'cancelled', completed_at = now() "
+                    "WHERE batch_id = %s AND status IN ('queued', 'running') "
+                    "RETURNING id",
+                    [req.batch_id],
+                )
+            cancelled_ids = [r[0] for r in cur.fetchall()]
         conn.commit()
-        if not row:
-            raise HTTPException(404, f'Job {req.job_id} not queued or running')
-        return {'job_id': req.job_id, 'status': 'cancelled'}
+
+        if not cancelled_ids:
+            target = f'job {req.job_id}' if req.job_id is not None else f'batch {req.batch_id!r}'
+            raise HTTPException(404, f'{target}: nothing to cancel (not queued or running)')
+
+        return {
+            'status': 'cancelled',
+            'count': len(cancelled_ids),
+            'cancelled_job_ids': cancelled_ids,
+        }
     finally:
         conn.close()
 

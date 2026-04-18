@@ -78,6 +78,9 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     }
   }, [fixable, dimension]);
 
+  // Kept for the (now informational) hint when a user targets a download
+  // dim — the endpoint is functional, but the run will touch legacy NSE
+  // infra so we surface that fact so the operator isn't surprised.
   const isDownload = Boolean(
     dimension && dims?.dimensions.find(d => d.key === dimension)?.group === 'download'
   );
@@ -122,15 +125,15 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     }
   };
 
-  // Disable rules per mode.
+  // Disable rules per mode. Downloads are now runnable — the old
+  // isDownload-blocks-submit check is gone.
   let disabled = submitting;
   if (mode === 'fix') {
-    disabled = disabled || !dimension || !tradeDate || isDownload;
+    disabled = disabled || !dimension || !tradeDate;
   } else if (mode === 'daily_run') {
     disabled = disabled || !tradeDate;
   } else {
-    disabled = disabled || !dimension || !dateFrom || !dateTo ||
-               (dimension !== 'all' && isDownload);
+    disabled = disabled || !dimension || !dateFrom || !dateTo;
   }
 
   return (
@@ -152,17 +155,18 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
             className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary"
           >
             {mode === 'backfill' && (
-              <option value="all">All dimensions (dependency order)</option>
+              <option value="all">All dimensions (14 jobs, dependency order)</option>
             )}
             {dims?.dimensions.map(d => (
               <option key={d.key} value={d.key} disabled={!d.fixable}>
-                {d.label}{!d.fixable ? '  (download — not fixable)' : ''}
+                {d.label}{!d.fixable ? '  (not fixable)' : ''}
               </option>
             ))}
           </select>
           {isDownload && dimension !== 'all' && (
             <p className="mt-1 text-[10px] text-amber-300">
-              Download fixes aren't implemented yet — run the daily pipeline manually.
+              Download runs hit NSE/BSE directly — expect 30–60s per date and don't
+              run multiple in parallel against the same source.
             </p>
           )}
         </label>
