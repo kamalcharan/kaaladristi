@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,9 @@ import type { CellSelection } from './index';
 interface Props {
   onCellSelect: (selection: CellSelection) => void;
 }
+
+const DAY_CHOICES = [30, 60, 90, 120] as const;
+type DayChoice = typeof DAY_CHOICES[number];
 
 const STATUS_CLASSES: Record<DayCell['status'], string> = {
   ok:       'bg-emerald-500/70 hover:bg-emerald-400',
@@ -28,27 +31,59 @@ function cellTooltip(dim: DimensionHealth, cell: DayCell): string {
 }
 
 export default function HealthGrid({ onCellSelect }: Props) {
+  const [days, setDays] = useState<DayChoice>(30);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['pipeline2', 'health', 30],
-    queryFn: () => fetchHealthGrid(30),
+    queryKey: ['pipeline2', 'health', days],
+    queryFn: () => fetchHealthGrid(days),
     refetchInterval: 30_000,
     staleTime: 25_000,
   });
 
+  const rangeToggle = (
+    <div className="flex items-center gap-1 text-[10px]">
+      <span className="text-muted mr-1">Range:</span>
+      {DAY_CHOICES.map(n => (
+        <button
+          key={n}
+          onClick={() => setDays(n)}
+          className={cn(
+            'px-2 py-0.5 rounded border transition-colors',
+            days === n
+              ? 'bg-accent-indigo/25 border-accent-indigo/40 text-accent-indigo'
+              : 'bg-kd-bg border-kd-border/40 text-muted hover:text-secondary',
+          )}
+        >
+          {n}d
+        </button>
+      ))}
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted p-4 bg-kd-surface/30 rounded-lg border border-kd-border/30">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading health grid…
+      <div className="bg-kd-surface/30 rounded-lg border border-kd-border/30">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-kd-border/30">
+          <span className="flex items-center gap-2 text-sm text-muted">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading health grid…
+          </span>
+          {rangeToggle}
+        </div>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="flex items-center gap-2 text-sm text-risk-amber p-4 bg-risk-amber/5 rounded-lg border border-risk-amber/30">
-        <AlertTriangle className="w-4 h-4" />
-        {error instanceof Error ? error.message : 'Failed to load'}
+      <div className="bg-risk-amber/5 rounded-lg border border-risk-amber/30">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="flex items-center gap-2 text-sm text-risk-amber">
+            <AlertTriangle className="w-4 h-4" />
+            {error instanceof Error ? error.message : 'Failed to load'}
+          </span>
+          {rangeToggle}
+        </div>
       </div>
     );
   }
@@ -61,7 +96,14 @@ export default function HealthGrid({ onCellSelect }: Props) {
   const headerDays = data.dimensions[0].days;
 
   return (
-    <div className="overflow-x-auto bg-kd-surface/30 rounded-lg border border-kd-border/30">
+    <div className="bg-kd-surface/30 rounded-lg border border-kd-border/30">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-kd-border/30">
+        <span className="text-[11px] text-muted">
+          {data.dimensions.length} dimensions · {headerDays.length} trading days
+        </span>
+        {rangeToggle}
+      </div>
+      <div className="overflow-x-auto">
       <table className="text-xs w-full border-separate" style={{ borderSpacing: '2px' }}>
         <thead>
           <tr>
@@ -134,6 +176,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
           })}
         </tbody>
       </table>
+      </div>
 
       <div className="flex items-center gap-4 text-[10px] text-muted p-2 border-t border-kd-border/30">
         <Legend color="bg-emerald-500/70" label="ok ≥ threshold" />

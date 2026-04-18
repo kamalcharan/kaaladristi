@@ -161,9 +161,11 @@ BACKFILL_ALL_ORDER = [
 def get_health(days: int = 30):
     """Ground-truth fill-rate grid across all dimensions.
 
-    `days` is clamped to 7..90 to keep payloads predictable.
+    `days` is clamped to 7..120 to keep payloads predictable. The UI
+    toggles between 30/60/90/120; anything wider than 120 typically
+    belongs in an export, not the live grid.
     """
-    days = min(max(days, 7), 90)
+    days = min(max(days, 7), 120)
     conn = _conn()
     try:
         return {
