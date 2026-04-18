@@ -58,12 +58,20 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     }
   }, [selection]);
 
-  // Default-pick first dimension once list loads.
+  const fixable = dims?.dimensions.filter(d => d.fixable) ?? [];
+
+  // Default-pick first FIXABLE dimension once list loads.
   useEffect(() => {
-    if (!dimension && dims && dims.dimensions.length > 0) {
-      setDimension(dims.dimensions[0].key);
+    if (!dimension && fixable.length > 0) {
+      setDimension(fixable[0].key);
     }
-  }, [dims, dimension]);
+  }, [fixable, dimension]);
+
+  // If a HealthGrid cell click selected a download dim, show a hint and
+  // let the user still submit (the API will 400 with the same message).
+  const isDownload = Boolean(
+    dimension && dims?.dimensions.find(d => d.key === dimension)?.group === 'download'
+  );
 
   const submit = async () => {
     setSubmitting(true);
@@ -108,10 +116,19 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
             onChange={e => setDimension(e.target.value)}
             className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary"
           >
+            {/* Downloads appear but disabled — cell clicks on download rows
+                still populate the dim so user sees the "not implemented" hint. */}
             {dims?.dimensions.map(d => (
-              <option key={d.key} value={d.key}>{d.label}</option>
+              <option key={d.key} value={d.key} disabled={!d.fixable}>
+                {d.label}{!d.fixable ? '  (download — not fixable)' : ''}
+              </option>
             ))}
           </select>
+          {isDownload && (
+            <p className="mt-1 text-[10px] text-amber-300">
+              Download fixes aren't implemented yet — run the daily pipeline manually.
+            </p>
+          )}
         </label>
       )}
 
@@ -156,7 +173,11 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       {/* Submit */}
       <button
         onClick={submit}
-        disabled={submitting || !tradeDate || (mode === 'fix' && !dimension)}
+        disabled={
+          submitting ||
+          !tradeDate ||
+          (mode === 'fix' && (!dimension || isDownload))
+        }
         className={cn(
           'w-full flex items-center justify-center gap-2 py-2 rounded text-sm font-medium transition-all',
           'bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo',

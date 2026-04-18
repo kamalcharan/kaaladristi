@@ -32,6 +32,12 @@ import psycopg2.extras
 #   ok_threshold: fraction (0..1) at/above which fill-rate is 'healthy'
 
 DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | None]] = {
+    # Download dimensions — row-count checks only. `columns` / `ok_threshold`
+    # are unused; expected row counts live in DOWNLOAD_EXPECTED below.
+    'index_eod_download':    ('km_index_eod',    'index_id',  None, None),
+    'nse_eod_download':      ('km_equity_eod',   'equity_id', None, None),
+    'bse_eod_download':      ('km_equity_eod',   'equity_id', None, None),
+
     # index_indicators samples sma_50 (not sma_55) to match the ground-truth
     # audit. Legacy rows stamped before sma_50 was added have sma_55 populated
     # but sma_50 NULL — using sma_55 would falsely report those as healthy.
@@ -49,9 +55,27 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
 }
 
 
+# Expected row counts per download dimension: (min_expected, max_expected).
+# status for downloads:
+#   ok      = actual >= min_expected
+#   partial = 1..(min_expected - 1)
+#   missing = 0
+# max_expected is informational — overshooting does NOT downgrade to partial.
+DOWNLOAD_EXPECTED: dict[str, tuple[int, int]] = {
+    'index_eod_download':  (80,   92),
+    'nse_eod_download':    (800,  900),
+    'bse_eod_download':    (3000, 4500),
+}
+
+DOWNLOAD_DIMENSIONS = set(DOWNLOAD_EXPECTED.keys())
+
+
 # Display labels — hand-curated so NSE/BSE/RS/ROC render with correct casing.
 # A generic title() would produce "Nse Equity Indicators" and "Bse Magic Rs".
 LABELS: dict[str, str] = {
+    'index_eod_download':    'Index EOD Download',
+    'nse_eod_download':      'NSE EOD Download',
+    'bse_eod_download':      'BSE EOD Download',
     'index_indicators':      'Index Indicators',
     'nse_equity_indicators': 'NSE Equity Indicators',
     'bse_equity_indicators': 'BSE Equity Indicators',
@@ -64,6 +88,11 @@ LABELS: dict[str, str] = {
     'market_breadth':        'Market Breadth',
     'breadth_roc':           'Breadth ROC',
 }
+
+
+def group_for(dim: str) -> str:
+    """UI group — 'download' or 'compute'. Used to draw a separator in the grid."""
+    return 'download' if dim in DOWNLOAD_DIMENSIONS else 'compute'
 
 
 def label_for(dim: str) -> str:
@@ -109,6 +138,7 @@ class DayStatus:
 class DimensionHealth:
     dimension: str
     label: str
+    group: str                      # 'download' | 'compute'
     latest_ok: str | None
     days: list[DayStatus]
 
@@ -116,6 +146,7 @@ class DimensionHealth:
         return {
             'dimension': self.dimension,
             'label': self.label,
+            'group': self.group,
             'latest_ok': self.latest_ok,
             'days': [d.to_dict() for d in self.days],
         }
@@ -173,6 +204,26 @@ def fill_rate(conn, dimension: str, trade_date: date) -> float:
     exchange = _exchange_for(dimension)
 
     with conn.cursor() as cur:
+        # Download dimensions — row count only, graded against min_expected.
+        if dimension in DOWNLOAD_EXPECTED:
+            min_expected, _max_expected = DOWNLOAD_EXPECTED[dimension]
+            if exchange and table == 'km_equity_eod':
+                cur.execute(
+                    "SELECT COUNT(*) FROM km_equity_eod e "
+                    "JOIN km_equity_symbols s ON s.id = e.equity_id "
+                    "WHERE s.exchange = %s AND e.trade_date = %s",
+                    [exchange, str(trade_date)],
+                )
+            else:
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE trade_date = %s",
+                            [str(trade_date)])
+            n = cur.fetchone()[0] or 0
+            if n <= 0:
+                return 0.0
+            if n >= min_expected:
+                return 100.0
+            return round(n / min_expected * 100.0, 2)
+
         if dimension == 'industry_composites':
             cur.execute(
                 "SELECT COUNT(*) FROM km_industry_eod WHERE trade_date = %s",
@@ -281,6 +332,24 @@ def _row_count_by_date(conn, table: str, from_dt: date, to_dt: date) -> dict[str
     return out
 
 
+def _equity_row_count_by_date(
+    conn, exchange: str, from_dt: date, to_dt: date,
+) -> dict[str, int]:
+    """Row count per date for km_equity_eod restricted to `exchange`."""
+    out: dict[str, int] = {}
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT e.trade_date, COUNT(*) "
+            "FROM km_equity_eod e JOIN km_equity_symbols s ON s.id = e.equity_id "
+            "WHERE s.exchange = %s AND e.trade_date BETWEEN %s AND %s "
+            "GROUP BY e.trade_date",
+            [exchange, str(from_dt), str(to_dt)],
+        )
+        for r in cur.fetchall():
+            out[str(r[0])] = int(r[1] or 0)
+    return out
+
+
 def _health_row(
     conn, dimension: str, trading_days: list[date], skip_dates: dict[str, str],
 ) -> DimensionHealth:
@@ -292,7 +361,36 @@ def _health_row(
     days: list[DayStatus] = []
     latest_ok: str | None = None
 
-    if dimension == 'industry_composites':
+    if dimension in DOWNLOAD_EXPECTED:
+        min_expected, _max_expected = DOWNLOAD_EXPECTED[dimension]
+        exchange = _exchange_for(dimension)
+        if exchange and table == 'km_equity_eod':
+            counts = _equity_row_count_by_date(conn, exchange, from_dt, to_dt)
+        else:
+            counts = _row_count_by_date(conn, table, from_dt, to_dt)
+        for d in trading_days:
+            ds = str(d)
+            if d > today:
+                days.append(DayStatus(ds, 'future'))
+                continue
+            if ds in skip_dates:
+                days.append(DayStatus(ds, skip_dates[ds]))
+                continue
+            n = counts.get(ds, 0)
+            if n >= min_expected:
+                status = 'ok'
+                fr = 100.0
+            elif n > 0:
+                status = 'partial'
+                fr = round(n / min_expected * 100.0, 2)
+            else:
+                status = 'missing'
+                fr = 0.0
+            days.append(DayStatus(ds, status, total=min_expected, populated=n, fill_rate=fr))
+            if status == 'ok':
+                latest_ok = ds
+
+    elif dimension == 'industry_composites':
         counts = _row_count_by_date(conn, 'km_industry_eod', from_dt, to_dt)
         for d in trading_days:
             ds = str(d)
@@ -355,13 +453,19 @@ def _health_row(
     return DimensionHealth(
         dimension=dimension,
         label=label_for(dimension),
+        group=group_for(dimension),
         latest_ok=latest_ok,
         days=days,
     )
 
 
-# Fixed dimension order for the grid — matches the compute DAG.
+# Fixed dimension order for the grid — downloads first, then the compute DAG.
 DIMENSION_ORDER = [
+    # ── Downloads (row-count check) ───────────────────────────────────
+    'index_eod_download',
+    'nse_eod_download',
+    'bse_eod_download',
+    # ── Compute ──────────────────────────────────────────────────────
     'index_indicators',
     'nse_equity_indicators',
     'bse_equity_indicators',
@@ -390,6 +494,7 @@ def health_grid(conn, days: int = 30) -> list[dict]:
             rows.append({
                 'dimension': dim,
                 'label': label_for(dim),
+                'group': group_for(dim),
                 'latest_ok': None,
                 'days': [],
                 'error': str(e),

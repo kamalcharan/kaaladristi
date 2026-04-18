@@ -33,8 +33,8 @@ from lib.config import DATABASE_URL  # noqa: E402
 
 from pipeline2 import health as v2_health  # noqa: E402
 from pipeline2 import scheduler as v2_scheduler  # noqa: E402
-from pipeline2.handlers import KNOWN_DIMENSIONS  # noqa: E402
-from pipeline2.health import label_for as _label_for  # noqa: E402
+from pipeline2.handlers import KNOWN_DIMENSIONS, FIXABLE_DIMENSIONS  # noqa: E402
+from pipeline2.health import label_for as _label_for, DOWNLOAD_DIMENSIONS  # noqa: E402
 
 
 logging.basicConfig(
@@ -227,6 +227,16 @@ def enqueue_fix(req: FixRequest):
             400,
             f'Unknown dimension {req.dimension!r}. Available: {", ".join(KNOWN_DIMENSIONS)}',
         )
+    if req.dimension in DOWNLOAD_DIMENSIONS:
+        raise HTTPException(
+            400,
+            'Download fix not yet implemented — run daily pipeline manually.',
+        )
+    if req.dimension not in FIXABLE_DIMENSIONS:
+        raise HTTPException(
+            400,
+            f'Dimension {req.dimension!r} is not fixable via this endpoint.',
+        )
     try:
         trade_date = date.fromisoformat(req.trade_date)
     except ValueError:
@@ -329,6 +339,8 @@ def list_dimensions():
             {
                 'key': dim,
                 'label': _label_for(dim),
+                'group': v2_health.group_for(dim),
+                'fixable': dim in FIXABLE_DIMENSIONS,
                 'ok_threshold': v2_health.ok_threshold_for(dim),
             }
             for dim in KNOWN_DIMENSIONS
