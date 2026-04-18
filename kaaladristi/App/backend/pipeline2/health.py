@@ -32,7 +32,10 @@ import psycopg2.extras
 #   ok_threshold: fraction (0..1) at/above which fill-rate is 'healthy'
 
 DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | None]] = {
-    'index_indicators':      ('km_index_eod',     'index_id',  ['rsi_14', 'sma_21', 'sma_55', 'atr_14', 'rvol'],           1.0),
+    # index_indicators samples sma_50 (not sma_55) to match the ground-truth
+    # audit. Legacy rows stamped before sma_50 was added have sma_55 populated
+    # but sma_50 NULL — using sma_55 would falsely report those as healthy.
+    'index_indicators':      ('km_index_eod',     'index_id',  ['rsi_14', 'sma_21', 'sma_50', 'atr_14', 'rvol'],           1.0),
     'nse_equity_indicators': ('km_equity_eod',    'equity_id', ['rsi_14', 'sma_21', 'sma_50', 'atr_14', 'rvol'],           0.95),
     'bse_equity_indicators': ('km_equity_eod',    'equity_id', ['rsi_14', 'sma_21', 'sma_50', 'atr_14', 'rvol'],           0.95),
     'index_flow':            ('km_index_eod',     'index_id',  ['flow_type'],                                              1.0),
@@ -217,9 +220,17 @@ def fill_rate(conn, dimension: str, trade_date: date) -> float:
 # ── Multi-day health grid ────────────────────────────────────────────────
 
 def _classify(frac: float, ok_threshold: float) -> str:
-    if frac >= ok_threshold:
+    """Classify a fill fraction against a threshold.
+
+    Compares at 1-decimal percent precision so the colour matches what the
+    tooltip shows (frontend uses `.toFixed(1)`). Otherwise 0.9495 reads as
+    "95.0%" in the UI but fails `0.9495 >= 0.95` and renders amber.
+    """
+    pct   = round(frac * 100.0, 1)
+    t_pct = round(ok_threshold * 100.0, 1)
+    if pct >= t_pct:
         return 'ok'
-    if frac >= 0.5:
+    if pct >= 50.0:
         return 'partial'
     return 'missing'
 

@@ -106,8 +106,14 @@ export default function HealthGrid({ onCellSelect }: Props) {
                   />
                 </td>
               ))}
-              <td className="px-2 py-1 text-muted whitespace-nowrap">
-                {dim.latest_ok ?? <span className="text-rose-400">never</span>}
+              <td className="px-2 py-1 whitespace-nowrap">
+                {dim.latest_ok ? (
+                  <span className="text-muted mono">{dim.latest_ok}</span>
+                ) : (
+                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-500/20 text-rose-300">
+                    never
+                  </span>
+                )}
               </td>
             </tr>
           ))}
