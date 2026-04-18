@@ -1,87 +1,83 @@
 import { useState, useMemo } from 'react';
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { cn } from '@/lib/utils';
-import { useScan } from '@/hooks/useScan';
+import { useScan, useAllScanCounts } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
 import type { ScanStock } from '@/types';
 
-const SCAN_EMPTY_MESSAGES: Record<string, string> = {
-  power_buy: 'No stocks meet Strength Confluence criteria today. This is rare \u2014 check back after market close.',
-  power_sell: 'No stocks meet Weakness Confluence criteria today. This is normal during recovery rallies.',
-  smart_money: 'No Smart Money Loading patterns detected today. Watch for institutional positioning changes.',
-  fresh_breakout: 'No fresh breakouts today. Markets may be consolidating.',
-  quiet_accumulation: 'No Quiet Accumulation patterns detected. Wyckoff signals are naturally rare (1-5% of trading days).',
-  distribution_warning: 'No Distribution Warnings today. Smart money holding positions.',
-};
+// ── Sort ──────────────────────────────────────────────────────
 
-const EXCHANGE_TABS: { id: ExchangeFilter; label: string }[] = [
-  { id: 'combined', label: 'Combined' },
-  { id: 'NSE', label: 'NSE' },
-  { id: 'BSE', label: 'BSE' },
-];
-
-// ── Sort Controls ─────────────────────────────────────────────
-
-type SortKey = 'symbol' | 'pct_chng' | 'magic_rs' | 'rsi_14' | 'rss_value' | 'rvol';
+type SortKey = 'magic_rs' | 'rsi_14' | 'rvol' | 'pct_chng' | 'reward' | 'symbol';
 type SortDir = 'asc' | 'desc';
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'magic_rs',  label: 'Magic RS' },
-  { key: 'rsi_14',    label: 'RSI' },
-  { key: 'rss_value', label: 'RSS' },
-  { key: 'rvol',      label: 'RVOL' },
-  { key: 'pct_chng',  label: '% Chg' },
-  { key: 'symbol',    label: 'Symbol' },
+  { key: 'magic_rs', label: 'RS' },
+  { key: 'rvol',     label: 'RVOL' },
+  { key: 'reward',   label: 'Reward' },
+  { key: 'pct_chng', label: '% Chg' },
+  { key: 'rsi_14',   label: 'RSI' },
+  { key: 'symbol',   label: 'Symbol' },
 ];
 
-function SortBar({
-  sortKey,
-  sortDir,
-  onSort,
-}: {
-  sortKey: SortKey;
-  sortDir: SortDir;
-  onSort: (key: SortKey) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-      <span className="text-[10px] text-muted uppercase tracking-wider shrink-0 mr-1">Sort</span>
-      {SORT_OPTIONS.map((opt) => {
-        const active = sortKey === opt.key;
-        return (
-          <button
-            key={opt.key}
-            onClick={() => onSort(opt.key)}
-            className={cn(
-              'inline-flex items-center gap-0.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all border whitespace-nowrap',
-              active
-                ? 'bg-accent-indigo/15 text-accent-indigo border-accent-indigo/30'
-                : 'text-muted border-transparent hover:text-[var(--text-secondary)]',
-            )}
-          >
-            {opt.label}
-            {active && (sortDir === 'asc'
-              ? <ArrowUp className="w-2.5 h-2.5" />
-              : <ArrowDown className="w-2.5 h-2.5" />
-            )}
-            {!active && <ArrowUpDown className="w-2.5 h-2.5 opacity-30" />}
-          </button>
-        );
-      })}
-    </div>
-  );
+function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[] {
+  const arr = [...stocks];
+  arr.sort((a, b) => {
+    let va: string | number = 0;
+    let vb: string | number = 0;
+    switch (key) {
+      case 'symbol':   va = a.symbol;          vb = b.symbol;          break;
+      case 'pct_chng': va = a.pct_chng ?? 0;   vb = b.pct_chng ?? 0;   break;
+      case 'magic_rs': va = a.magic_rs ?? 0;   vb = b.magic_rs ?? 0;   break;
+      case 'rsi_14':   va = a.rsi_14 ?? 0;     vb = b.rsi_14 ?? 0;     break;
+      case 'rvol':     va = a.rvol ?? 0;       vb = b.rvol ?? 0;       break;
+      case 'reward':   va = a.rewardPct ?? -99; vb = b.rewardPct ?? -99; break;
+    }
+    if (typeof va === 'string') {
+      return dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
+    }
+    return dir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number);
+  });
+  return arr;
 }
 
-// ── Main Scan View ─────────────────────────────────────────────
+// ── Relevance bar from count ──────────────────────────────────
+
+function getRelevance(count: number): 0 | 1 | 2 | 3 | 4 {
+  if (count === 0) return 0;
+  if (count <= 5) return 1;
+  if (count <= 14) return 2;
+  if (count <= 20) return 3;
+  return 4;
+}
+
+const REL_BAR: Record<number, { width: string; color: string }> = {
+  0: { width: '10%', color: 'var(--text-faint)' },
+  1: { width: '30%', color: 'var(--text-muted)' },
+  2: { width: '55%', color: 'var(--caution)' },
+  3: { width: '80%', color: 'var(--gold)' },
+  4: { width: '100%', color: 'var(--gold)' },
+};
+
+// ── Main View ─────────────────────────────────────────────────
 
 export default function ScanView() {
   const [activeScan, setActiveScan] = useState(SCAN_PRESETS[0].id);
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const [sortKey, setSortKey] = useState<SortKey>('magic_rs');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [oppFilter, setOppFilter] = useState(false);
+
   const { data: stocks, isLoading, error } = useScan(activeScan, exchangeFilter);
+  const { data: allCounts } = useAllScanCounts(exchangeFilter);
+
+  const oppCount = useMemo(() => (stocks ?? []).filter((s) => s.vaniOpportunity).length, [stocks]);
+
+  const sorted = useMemo(() => {
+    let arr = stocks ?? [];
+    if (oppFilter) arr = arr.filter((s) => s.vaniOpportunity);
+    return sortStocks(arr, sortKey, sortDir);
+  }, [stocks, sortKey, sortDir, oppFilter]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -92,120 +88,251 @@ export default function ScanView() {
     }
   };
 
-  const sorted = useMemo(() => {
-    if (!stocks) return [];
-    const arr = [...stocks];
-    arr.sort((a, b) => {
-      let va: string | number = 0;
-      let vb: string | number = 0;
-
-      switch (sortKey) {
-        case 'symbol':    va = a.symbol; vb = b.symbol; break;
-        case 'pct_chng':  va = a.pct_chng ?? 0; vb = b.pct_chng ?? 0; break;
-        case 'magic_rs':  va = a.magic_rs ?? 0; vb = b.magic_rs ?? 0; break;
-        case 'rsi_14':    va = a.rsi_14 ?? 0; vb = b.rsi_14 ?? 0; break;
-        case 'rss_value': va = a.rss_value ?? 0; vb = b.rss_value ?? 0; break;
-        case 'rvol':      va = a.rvol ?? 0; vb = b.rvol ?? 0; break;
-      }
-
-      if (typeof va === 'string') {
-        return sortDir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
-      }
-      return sortDir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number);
-    });
-    return arr;
-  }, [stocks, sortKey, sortDir]);
-
   return (
-    <div className="animate-fade-in">
+    <div style={{ paddingBottom: '100px' }}>
       {/* Header */}
-      <header className="mb-4">
-        <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-1">
-          Market Scanner
+      <div style={{ marginBottom: '22px' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px', color: 'var(--text-primary)' }}>
+          Scanner <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>· thesis search</em>
         </h1>
-        <p className="text-secondary font-medium text-sm">
-          Identify high-probability setups across{' '}
-          <span className="text-accent-indigo font-bold">industry rotation</span>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          Six condition-convergence presets, arranged against today's market structure.
         </p>
-      </header>
-
-      {/* Scan Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar mb-4">
-        {SCAN_PRESETS.map((scan) => (
-          <button
-            key={scan.id}
-            onClick={() => setActiveScan(scan.id)}
-            title={scan.tooltip}
-            className={cn(
-              'px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border',
-              activeScan === scan.id
-                ? 'bg-accent-indigo/15 text-accent-indigo border-accent-indigo/40'
-                : 'bg-kd-bg/40 text-muted border-kd-border hover:border-kd-border-active hover:text-[var(--text-secondary)]',
-            )}
-          >
-            {scan.name}
-          </button>
-        ))}
       </div>
 
-      {/* Description + Exchange Tabs */}
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-muted pl-1 flex-1">
-          {SCAN_PRESETS.find((s) => s.id === activeScan)?.description}
-        </p>
-        <div className="flex items-center gap-1 shrink-0 ml-4">
-          {EXCHANGE_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setExchangeFilter(tab.id)}
-              className={cn(
-                'px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border',
-                exchangeFilter === tab.id
-                  ? 'bg-accent-indigo/15 text-accent-indigo border-accent-indigo/30'
-                  : 'text-muted border-transparent hover:text-[var(--text-secondary)]',
-              )}
+      {/* Preset tile grid — 3 columns */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '16px',
+        marginBottom: '20px',
+      }}>
+        {SCAN_PRESETS.map((preset) => {
+          const count = allCounts?.[preset.id] ?? null;
+          const rel = count != null ? getRelevance(count) : 1;
+          const bar = REL_BAR[rel];
+          const isActive = activeScan === preset.id;
+          const isHighRelevance = rel >= 3;
+          const isLowRelevance = rel === 0;
+
+          return (
+            <div
+              key={preset.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveScan(preset.id)}
+              onKeyDown={(e) => e.key === 'Enter' && setActiveScan(preset.id)}
+              title={preset.tooltip}
+              style={{
+                background: isHighRelevance && !isActive
+                  ? `linear-gradient(180deg, var(--gold-bg) 0%, var(--card) 80%)`
+                  : 'var(--card)',
+                border: `1px solid ${isActive ? 'var(--indigo)' : isHighRelevance ? 'var(--border-gold)' : 'var(--border)'}`,
+                borderRadius: '12px',
+                padding: '14px 14px 13px',
+                cursor: 'pointer',
+                position: 'relative',
+                overflow: 'hidden',
+                opacity: isLowRelevance && !isActive ? 0.55 : 1,
+                boxShadow: isActive ? '0 0 0 3px rgba(129,140,248,0.15)' : undefined,
+                transition: 'all 0.2s',
+              }}
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+              <div style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '14.5px',
+                fontWeight: 500,
+                color: isActive || isHighRelevance ? 'var(--text-primary)' : 'var(--text-secondary)',
+                lineHeight: 1.15,
+                marginBottom: '8px',
+              }}>
+                {preset.name}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  color: isActive ? 'var(--indigo-strong)' : 'var(--text-muted)',
+                }}>
+                  {count != null ? `${count} match${count !== 1 ? 'es' : ''}` : '…'}
+                  {isActive && ' · active'}
+                </span>
+              </div>
+              {/* Relevance bar */}
+              <div style={{
+                position: 'absolute', bottom: 0, left: 0,
+                width: bar.width, height: '2px',
+                borderRadius: '2px',
+                background: bar.color,
+                opacity: rel === 0 ? 0.3 : rel === 1 ? 0.4 : rel === 2 ? 0.6 : 1,
+              }} />
+            </div>
+          );
+        })}
       </div>
 
-      {/* Sort Controls */}
-      {stocks && stocks.length > 0 && (
-        <div className="mb-3">
-          <SortBar sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+      {/* Sub-bar: exchange tabs + opp filter + sort */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Exchange tabs */}
+          <div style={{
+            display: 'flex', gap: '2px', padding: '4px',
+            background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '100px',
+          }}>
+            {(['combined', 'NSE', 'BSE'] as ExchangeFilter[]).map((ex) => (
+              <button
+                key={ex}
+                onClick={() => setExchangeFilter(ex)}
+                style={{
+                  padding: '6px 16px', borderRadius: '100px', border: 'none',
+                  background: exchangeFilter === ex ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  color: exchangeFilter === ex ? 'var(--text-primary)' : 'var(--text-muted)',
+                  fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+                  fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+                }}
+              >
+                {ex === 'combined' ? 'Combined' : ex}
+              </button>
+            ))}
+          </div>
+
+          {/* VaNi Opportunity filter */}
+          <button
+            onClick={() => setOppFilter((f) => !f)}
+            title="Show only setups that pass today's VaNi opportunity policy"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '7px 14px',
+              background: oppFilter ? 'var(--gold)' : 'transparent',
+              border: `1px solid var(--border-gold)`,
+              color: oppFilter ? '#1a1410' : 'var(--gold)',
+              borderRadius: '100px',
+              fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'var(--font-body)', transition: 'all 0.2s',
+              boxShadow: oppFilter ? '0 0 20px rgba(212,168,75,0.3)' : undefined,
+            }}
+          >
+            <span style={{ fontSize: '11px', lineHeight: 1 }}>✦</span>
+            VaNi Opportunity
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: '10.5px',
+              padding: '2px 7px',
+              background: 'rgba(0,0,0,0.2)',
+              borderRadius: '100px', marginLeft: '2px',
+              color: oppFilter ? '#1a1410' : undefined,
+            }}>
+              {oppCount}
+            </span>
+          </button>
         </div>
-      )}
+
+        {/* Sort strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>Sort</span>
+          {SORT_OPTIONS.map((opt) => {
+            const active = sortKey === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => toggleSort(opt.key)}
+                style={{
+                  padding: '5px 12px', borderRadius: '100px', border: 'none',
+                  background: active ? 'var(--indigo-bg)' : 'transparent',
+                  color: active ? 'var(--indigo)' : 'var(--text-muted)',
+                  fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+                  fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                  outline: active ? '1px solid var(--border-indigo)' : undefined,
+                }}
+              >
+                {opt.label}
+                {active && (sortDir === 'asc' ? ' ↑' : ' ↓')}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Results */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-5 h-5 animate-spin text-accent-indigo mr-2" />
-          <span className="text-sm text-muted">Scanning market...</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
+          <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
+          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Scanning market…</span>
         </div>
       ) : error ? (
         <Card rounded="xxl" className="py-12 text-center">
-          <p className="text-xs text-risk-red">Failed to run scan. Check data connection.</p>
+          <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>
         </Card>
       ) : sorted.length > 0 ? (
         <>
-          <div className="space-y-2">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {sorted.map((stock) => (
               <StockCard key={stock.equity_id} stock={stock} />
             ))}
           </div>
-          <div className="mt-3 text-center">
-            <span className="text-[10px] text-muted font-mono">
+          <div style={{ marginTop: '12px', textAlign: 'center' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
+              {oppFilter && ` · VaNi Opportunity filter active`}
             </span>
           </div>
         </>
       ) : (
-        <Card rounded="xxl" className="py-16 text-center">
-          <p className="text-sm text-muted">{SCAN_EMPTY_MESSAGES[activeScan] ?? 'No stocks match this scan criteria today.'}</p>
-        </Card>
+        <div style={{
+          padding: '64px 24px', textAlign: 'center',
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: '16px',
+        }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+            {oppFilter
+              ? 'No VaNi Opportunity setups in this scan today.'
+              : 'No stocks match this scan criteria today.'}
+          </p>
+        </div>
       )}
+
+      {/* Action Island */}
+      <div style={{
+        position: 'fixed',
+        bottom: '28px',
+        left: '50%',
+        transform: 'translateX(calc(-50% + 110px))',
+        background: 'rgba(11,17,32,0.95)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid var(--border-strong)',
+        borderRadius: '100px',
+        padding: '10px 14px 10px 22px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '18px',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
+        zIndex: 50,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--indigo)', animation: 'pulse 2s infinite', flexShrink: 0 }} />
+          VaNi is watching{' '}
+          <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
+            {stocks?.length ?? 0} setup{(stocks?.length ?? 0) !== 1 ? 's' : ''}
+          </em>
+        </div>
+        {oppCount > 0 && (
+          <>
+            <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)' }} />
+            <button
+              onClick={() => setOppFilter(true)}
+              style={{
+                fontSize: '13px', padding: '7px 16px',
+                background: 'var(--gold)', color: '#1a1410',
+                border: 'none', borderRadius: '100px',
+                fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+              }}
+            >
+              {oppCount} opportunit{oppCount !== 1 ? 'ies' : 'y'}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

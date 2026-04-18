@@ -415,6 +415,16 @@ export interface ScanStock {
   has_recent_svd: boolean;
   has_recent_sbd: boolean;
   has_recent_syd: boolean;
+  // Migration 042 additions
+  ema_20: number | null;
+  atr_14: number | null;
+  delivery_pct: number | null;
+  w52_high: number | null;
+  // Computed fields
+  reward: number | null;
+  rewardPct: number | null;
+  pctBelow52wHigh: number | null;
+  vaniOpportunity: boolean;
 }
 
 export interface ScanDefinition {
@@ -459,4 +469,10 @@ export interface EquityEodSnapshot {
   sma_150: number | null;
   volume_divergence_flag: string | null;
   value_cr: number | null;
+  // Migration 042 additions
+  ema_20: number | null;
+  atr_14: number | null;
+  delivery_pct: number | null;
+  delivery_qty: number | null;
+  w52_high: number | null;
 }
