@@ -328,6 +328,12 @@ function buildScanStock(
     ? ((eod.w52_high - eod.close) / eod.w52_high) * 100
     : null;
 
+  const magicRsTrend: (boolean | null)[] = history.slice(0, 5).map((h, i) =>
+    h.magic_rs != null && (history[i + 1]?.magic_rs ?? null) != null
+      ? h.magic_rs > history[i + 1].magic_rs!
+      : null,
+  );
+
   const partial: Omit<ScanStock, 'vaniOpportunity'> = {
     equity_id: equityId,
     symbol: sym.symbol,
@@ -342,6 +348,7 @@ function buildScanStock(
     flow_type: eod.flow_type,
     rvol: eod.rvol,
     sniper_inst: eod.sniper_inst,
+    sniper_hot: eod.sniper_hot ?? null,
     accum_distrib: eod.accum_distrib,
     rss_value: eod.rss_value,
     rss_spread: eod.rss_spread,
@@ -354,6 +361,7 @@ function buildScanStock(
     atr_14: atr14,
     delivery_pct: eod.delivery_pct ?? null,
     w52_high: eod.w52_high ?? null,
+    magicRsTrend,
     reward,
     rewardPct,
     pctBelow52wHigh,
@@ -658,8 +666,13 @@ export function invalidateScanCache(): void {
   _cachedBundle = null;
 }
 
+export interface ScanCountsResult {
+  counts: Record<string, number>;
+  latestDate: string | null;
+}
+
 /** Return result counts for all 6 scans — uses shared cached data */
-export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combined'): Promise<Record<string, number>> {
+export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combined'): Promise<ScanCountsResult> {
   const bundle = await loadScanData();
   const counts: Record<string, number> = {};
   for (const [id, fn] of Object.entries(SCAN_FUNCTIONS)) {
@@ -671,7 +684,7 @@ export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combine
     }
     counts[id] = results.length;
   }
-  return counts;
+  return { counts, latestDate: bundle.latestDate };
 }
 
 // ── Manipulation Watch ────────────────────────────────────────
@@ -849,10 +862,12 @@ function buildStockFromEod(
     has_recent_svd: false,
     has_recent_sbd: false,
     has_recent_syd: false,
+    sniper_hot: null,
     ema_20: null,
     atr_14: null,
     delivery_pct: null,
     w52_high: null,
+    magicRsTrend: [],
     reward: null,
     rewardPct: null,
     pctBelow52wHigh: null,

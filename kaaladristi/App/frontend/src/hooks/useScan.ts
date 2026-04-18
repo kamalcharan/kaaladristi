@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { executeScan, getAllScanCounts, type ExchangeFilter } from '@/services/scanEngine';
+import { executeScan, getAllScanCounts, type ExchangeFilter, type ScanCountsResult } from '@/services/scanEngine';
 import type { ScanStock } from '@/types';
 
 export function useScan(scanId: string, exchangeFilter: ExchangeFilter = 'combined') {
@@ -12,7 +12,7 @@ export function useScan(scanId: string, exchangeFilter: ExchangeFilter = 'combin
 }
 
 export function useAllScanCounts(exchangeFilter: ExchangeFilter = 'combined') {
-  return useQuery<Record<string, number>>({
+  return useQuery<ScanCountsResult>({
     queryKey: ['scan_counts', exchangeFilter],
     queryFn: () => getAllScanCounts(exchangeFilter),
     staleTime: 3 * 60 * 1000,
