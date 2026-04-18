@@ -619,10 +619,17 @@ def handle_fix_magic_rs(db, job_id, params):
                             progress=f'{label} MagicRS: {i+1}/{len(pending)} symbols',
                             progress_pct=int((i / max(len(pending), 1)) * 100))
             try:
+                # Dict insertion order MUST match the function's declared
+                # parameter order — PgClient.rpc builds positional SQL from
+                # the keys. compute_magic_rs_batch (migration 034) is:
+                #   (p_table, p_id_col, p_symbol_id, p_benchmark_id,
+                #    p_from_date, p_bench_table, p_bench_id_col)
                 rpc_params = {
-                    'p_table': table, 'p_id_col': id_col,
-                    'p_symbol_id': sid, 'p_from_date': p_from_date,
+                    'p_table': table,
+                    'p_id_col': id_col,
+                    'p_symbol_id': sid,
                     'p_benchmark_id': benchmark_id,
+                    'p_from_date': p_from_date,
                 }
                 if table == 'km_equity_eod':
                     rpc_params['p_bench_table'] = 'km_index_eod'

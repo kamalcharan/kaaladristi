@@ -173,8 +173,19 @@ class PgClient:
     # ── RPC (call a PG function) ──────────────────────────────────────────
 
     def rpc(self, fn_name: str, params: dict = None) -> any:
+        """Call a PostgreSQL function with named arguments.
+
+        Uses `fn_name(key => %(key)s, ...)` SQL so that dict insertion order
+        does NOT have to match the function's declared parameter order.
+        Previously this built positional SQL from dict.keys(), which made a
+        mismatched dict order fail with "function does not exist" and was
+        easy to get wrong (see magic_rs dict ordering bug fix).
+        """
         params = params or {}
-        arg_list = ', '.join([f'%({k})s' for k in params.keys()])
+        if params:
+            arg_list = ', '.join(f'{k} => %({k})s' for k in params.keys())
+        else:
+            arg_list = ''
         sql = f'SELECT * FROM {fn_name}({arg_list})'
 
         conn = self._conn()
