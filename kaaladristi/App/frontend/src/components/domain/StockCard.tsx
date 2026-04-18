@@ -167,6 +167,11 @@ export function StockCard({ stock }: { stock: ScanStock }) {
   const pct = stock.pct_chng ?? 0;
   const isUp = pct >= 0;
 
+  const ema20 = stock.ema_20;
+  const ema20Color = ema20 == null
+    ? 'var(--text-faint)'
+    : stock.close >= ema20 ? 'var(--bull)' : 'var(--bear)';
+
   const rp = stock.rewardPct;
   const rewardColor = rp == null
     ? 'var(--text-faint)'
@@ -317,7 +322,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         )}
       </div>
 
-      {/* Zone 2: Price + % change + Reward */}
+      {/* Zone 2: Price + % change + EMA 20 */}
       <div style={{ textAlign: 'right', minWidth: 0 }}>
         <div style={{
           fontFamily: 'var(--font-mono)', fontSize: '16px', fontWeight: 500,
@@ -335,9 +340,15 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         </div>
         <div style={{
           fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '5px',
+          color: ema20Color,
+        }}>
+          EMA20 {ema20 != null ? ema20.toFixed(2) : '—'}
+        </div>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '3px',
           color: rewardColor,
         }}>
-          {stock.reward != null ? `₹${stock.reward.toFixed(1)}` : '—'}
+          Reward {stock.reward != null ? `₹${stock.reward.toFixed(1)}` : '—'}
         </div>
       </div>
 
