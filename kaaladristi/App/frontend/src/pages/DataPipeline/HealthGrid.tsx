@@ -160,8 +160,11 @@ export default function HealthGrid({ onCellSelect }: Props) {
         </span>
         {rangeToggle}
       </div>
+      {/* Horizontal scroll: w-full would compress the 30/60/90/120 day
+          columns to fit the container — dropping it lets the table grow to
+          its intrinsic width and `overflow-x-auto` gives a real scrollbar. */}
       <div className="overflow-x-auto">
-      <table className="text-xs w-full border-separate" style={{ borderSpacing: '2px' }}>
+      <table className="text-xs border-separate" style={{ borderSpacing: '2px' }}>
         <thead>
           <tr>
             <th className="text-left font-normal text-muted px-2 py-1 sticky left-0 bg-kd-surface/60 z-10">
@@ -243,6 +246,7 @@ export default function HealthGrid({ onCellSelect }: Props) {
         <Legend color="bg-slate-700/50"   label="holiday / no_data" />
         <span className="ml-auto">
           click to pre-fill fix · right-click to mark day
+          {days > 30 && ' · scroll sideways for full range'}
         </span>
       </div>
       {markErr && (
