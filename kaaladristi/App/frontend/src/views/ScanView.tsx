@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Loader2, ChevronLeft } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useScan, useAllScanCounts } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
@@ -26,12 +27,12 @@ function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[
     let va: string | number = 0;
     let vb: string | number = 0;
     switch (key) {
-      case 'symbol':   va = a.symbol;          vb = b.symbol;          break;
-      case 'pct_chng': va = a.pct_chng ?? 0;   vb = b.pct_chng ?? 0;   break;
-      case 'magic_rs': va = a.magic_rs ?? 0;   vb = b.magic_rs ?? 0;   break;
-      case 'rsi_14':   va = a.rsi_14 ?? 0;     vb = b.rsi_14 ?? 0;     break;
-      case 'rvol':     va = a.rvol ?? 0;       vb = b.rvol ?? 0;       break;
-      case 'reward':   va = a.rewardPct ?? -99; vb = b.rewardPct ?? -99; break;
+      case 'symbol':   va = a.symbol;           vb = b.symbol;           break;
+      case 'pct_chng': va = a.pct_chng ?? 0;    vb = b.pct_chng ?? 0;    break;
+      case 'magic_rs': va = a.magic_rs ?? 0;    vb = b.magic_rs ?? 0;    break;
+      case 'rsi_14':   va = a.rsi_14 ?? 0;      vb = b.rsi_14 ?? 0;      break;
+      case 'rvol':     va = a.rvol ?? 0;        vb = b.rvol ?? 0;        break;
+      case 'reward':   va = a.rewardPct ?? -99;  vb = b.rewardPct ?? -99; break;
     }
     if (typeof va === 'string') {
       return dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
@@ -41,7 +42,7 @@ function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[
   return arr;
 }
 
-// ── Relevance bar from count ──────────────────────────────────
+// ── Relevance bar ─────────────────────────────────────────────
 
 function getRelevance(count: number): 0 | 1 | 2 | 3 | 4 {
   if (count === 0) return 0;
@@ -51,27 +52,251 @@ function getRelevance(count: number): 0 | 1 | 2 | 3 | 4 {
   return 4;
 }
 
-const REL_BAR: Record<number, { width: string; color: string }> = {
-  0: { width: '10%', color: 'var(--text-faint)' },
-  1: { width: '30%', color: 'var(--text-muted)' },
-  2: { width: '55%', color: 'var(--caution)' },
-  3: { width: '80%', color: 'var(--gold)' },
-  4: { width: '100%', color: 'var(--gold)' },
+const REL_BAR: Record<number, { width: string; color: string; opacity: number }> = {
+  0: { width: '10%',  color: 'var(--text-faint)', opacity: 0.3 },
+  1: { width: '30%',  color: 'var(--text-muted)', opacity: 0.4 },
+  2: { width: '55%',  color: 'var(--caution)',    opacity: 0.6 },
+  3: { width: '80%',  color: 'var(--gold)',       opacity: 1   },
+  4: { width: '100%', color: 'var(--gold)',       opacity: 1   },
 };
 
-// ── Main View ─────────────────────────────────────────────────
+// ── Action Island (shared shell) ──────────────────────────────
 
-export default function ScanView() {
-  const [activeScan, setActiveScan] = useState(SCAN_PRESETS[0].id);
+function ActionIsland({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: '28px',
+      left: '50%',
+      transform: 'translateX(calc(-50% + 110px))',
+      background: 'rgba(11,17,32,0.95)',
+      backdropFilter: 'blur(12px)',
+      border: '1px solid var(--border-strong)',
+      borderRadius: '100px',
+      padding: '10px 18px 10px 22px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '14px',
+      boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
+      zIndex: 50,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+// ── Screen 1: Landing grid ─────────────────────────────────────
+
+function ScannerLanding() {
+  const navigate = useNavigate();
+  const { data: allCounts } = useAllScanCounts('combined');
+
+  const totalSetups = useMemo(
+    () => Object.values(allCounts ?? {}).reduce((s, n) => s + n, 0),
+    [allCounts],
+  );
+  const activePresets = useMemo(
+    () => Object.values(allCounts ?? {}).filter((n) => n > 0).length,
+    [allCounts],
+  );
+
+  return (
+    <div style={{ paddingBottom: '100px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '32px' }}>
+        <h1 style={{
+          fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 500,
+          letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '8px',
+          color: 'var(--text-primary)',
+        }}>
+          Scanner{' '}
+          <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
+            · thesis search
+          </em>
+        </h1>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          Six condition-convergence presets, arranged against today's market structure.
+        </p>
+      </div>
+
+      {/* Preset grid — 3 columns, taller cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+        {SCAN_PRESETS.map((preset) => {
+          const count = allCounts?.[preset.id] ?? null;
+          const rel = count != null ? getRelevance(count) : 1;
+          const bar = REL_BAR[rel];
+          const isHighRelevance = rel >= 3;
+          const isLowRelevance = rel === 0;
+          const hasResults = (count ?? 0) > 0;
+
+          return (
+            <div
+              key={preset.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(`/scanner/${preset.id}`)}
+              onKeyDown={(e) => e.key === 'Enter' && navigate(`/scanner/${preset.id}`)}
+              title={preset.tooltip}
+              style={{
+                background: isHighRelevance
+                  ? 'linear-gradient(180deg, var(--gold-bg) 0%, var(--card) 80%)'
+                  : 'var(--card)',
+                border: `1px solid ${isHighRelevance ? 'var(--border-gold)' : 'var(--border)'}`,
+                borderRadius: '14px',
+                padding: '22px 18px 18px',
+                cursor: 'pointer',
+                position: 'relative',
+                overflow: 'hidden',
+                opacity: isLowRelevance ? 0.55 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              {/* Preset name — 18px Fraunces */}
+              <div style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '18px',
+                fontWeight: 500,
+                color: isHighRelevance ? 'var(--text-primary)' : 'var(--text-secondary)',
+                lineHeight: 1.2,
+                marginBottom: '10px',
+              }}>
+                {preset.name}
+              </div>
+
+              {/* Description */}
+              <div style={{
+                fontSize: '13px',
+                color: 'var(--text-muted)',
+                lineHeight: 1.5,
+                marginBottom: '16px',
+              }}>
+                {preset.description}
+              </div>
+
+              {/* Match count */}
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '13px',
+                color: hasResults ? 'var(--text-secondary)' : 'var(--text-faint)',
+                marginBottom: '14px',
+              }}>
+                {count != null ? `${count} setup${count !== 1 ? 's' : ''} today` : '…'}
+              </div>
+
+              {/* D / W / M dot row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                {/* D — Daily: clickable, gold if has results */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigate(`/scanner/${preset.id}`); }}
+                  title="Daily"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  }}
+                >
+                  <span style={{
+                    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
+                    background: hasResults ? 'var(--gold)' : 'var(--text-faint)',
+                    opacity: hasResults ? 1 : 0.35,
+                  }} />
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600,
+                    color: hasResults ? 'var(--gold)' : 'var(--text-faint)',
+                    opacity: hasResults ? 1 : 0.5,
+                  }}>
+                    D
+                  </span>
+                </button>
+
+                {/* W — Weekly: coming soon */}
+                <span
+                  title="Weekly · coming soon"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}
+                >
+                  <span style={{
+                    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
+                    background: 'transparent',
+                    border: '1px solid var(--border-strong)',
+                    opacity: 0.35,
+                  }} />
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600,
+                    color: 'var(--text-faint)', opacity: 0.4,
+                  }}>
+                    W
+                  </span>
+                </span>
+
+                {/* M — Monthly: coming soon */}
+                <span
+                  title="Monthly · coming soon"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}
+                >
+                  <span style={{
+                    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
+                    background: 'transparent',
+                    border: '1px solid var(--border-strong)',
+                    opacity: 0.35,
+                  }} />
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600,
+                    color: 'var(--text-faint)', opacity: 0.4,
+                  }}>
+                    M
+                  </span>
+                </span>
+              </div>
+
+              {/* Relevance bar */}
+              <div style={{
+                position: 'absolute', bottom: 0, left: 0,
+                width: bar.width, height: '2px', borderRadius: '2px',
+                background: bar.color, opacity: bar.opacity,
+              }} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Action Island */}
+      <ActionIsland>
+        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0 }} />
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          VaNi is watching{' '}
+          <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
+            {allCounts ? totalSetups : '…'} setup{totalSetups !== 1 ? 's' : ''}
+          </em>
+          {' '}across{' '}
+          <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
+            {activePresets}
+          </em>
+          {' '}preset{activePresets !== 1 ? 's' : ''} today
+        </span>
+      </ActionIsland>
+    </div>
+  );
+}
+
+// ── Screen 2: Results ──────────────────────────────────────────
+
+function ScannerResults({ presetId }: { presetId: string }) {
+  const navigate = useNavigate();
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const [sortKey, setSortKey] = useState<SortKey>('magic_rs');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [oppFilter, setOppFilter] = useState(false);
 
-  const { data: stocks, isLoading, error } = useScan(activeScan, exchangeFilter);
-  const { data: allCounts } = useAllScanCounts(exchangeFilter);
+  const preset = SCAN_PRESETS.find((p) => p.id === presetId);
 
-  const oppCount = useMemo(() => (stocks ?? []).filter((s) => s.vaniOpportunity).length, [stocks]);
+  const { data: stocks, isLoading, error } = useScan(
+    preset ? presetId : SCAN_PRESETS[0].id,
+    exchangeFilter,
+  );
+
+  const oppCount = useMemo(
+    () => (stocks ?? []).filter((s) => s.vaniOpportunity).length,
+    [stocks],
+  );
 
   const sorted = useMemo(() => {
     let arr = stocks ?? [];
@@ -88,91 +313,53 @@ export default function ScanView() {
     }
   };
 
+  // Redirect to landing if presetId is not recognized
+  useEffect(() => {
+    if (!preset) navigate('/scanner', { replace: true });
+  }, [preset, navigate]);
+
+  if (!preset) return null;
+
   return (
     <div style={{ paddingBottom: '100px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '22px' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px', color: 'var(--text-primary)' }}>
-          Scanner <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>· thesis search</em>
+      {/* Breadcrumb */}
+      <div style={{ marginBottom: '20px' }}>
+        <button
+          onClick={() => navigate('/scanner')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            color: 'var(--text-muted)', fontSize: '13px',
+            fontFamily: 'var(--font-body)', transition: 'color 0.15s',
+          }}
+        >
+          <ChevronLeft style={{ width: '14px', height: '14px' }} />
+          Scanner
+        </button>
+      </div>
+
+      {/* Heading */}
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{
+          fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
+          letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px',
+          color: 'var(--text-primary)',
+        }}>
+          {preset.name}{' '}
+          <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
+            · Daily
+          </em>
         </h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          Six condition-convergence presets, arranged against today's market structure.
+          {preset.description}
         </p>
       </div>
 
-      {/* Preset tile grid — 3 columns */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '16px',
-        marginBottom: '20px',
-      }}>
-        {SCAN_PRESETS.map((preset) => {
-          const count = allCounts?.[preset.id] ?? null;
-          const rel = count != null ? getRelevance(count) : 1;
-          const bar = REL_BAR[rel];
-          const isActive = activeScan === preset.id;
-          const isHighRelevance = rel >= 3;
-          const isLowRelevance = rel === 0;
-
-          return (
-            <div
-              key={preset.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setActiveScan(preset.id)}
-              onKeyDown={(e) => e.key === 'Enter' && setActiveScan(preset.id)}
-              title={preset.tooltip}
-              style={{
-                background: isHighRelevance && !isActive
-                  ? `linear-gradient(180deg, var(--gold-bg) 0%, var(--card) 80%)`
-                  : 'var(--card)',
-                border: `1px solid ${isActive ? 'var(--indigo)' : isHighRelevance ? 'var(--border-gold)' : 'var(--border)'}`,
-                borderRadius: '12px',
-                padding: '14px 14px 13px',
-                cursor: 'pointer',
-                position: 'relative',
-                overflow: 'hidden',
-                opacity: isLowRelevance && !isActive ? 0.55 : 1,
-                boxShadow: isActive ? '0 0 0 3px rgba(129,140,248,0.15)' : undefined,
-                transition: 'all 0.2s',
-              }}
-            >
-              <div style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '14.5px',
-                fontWeight: 500,
-                color: isActive || isHighRelevance ? 'var(--text-primary)' : 'var(--text-secondary)',
-                lineHeight: 1.15,
-                marginBottom: '8px',
-              }}>
-                {preset.name}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
-                  color: isActive ? 'var(--indigo-strong)' : 'var(--text-muted)',
-                }}>
-                  {count != null ? `${count} match${count !== 1 ? 'es' : ''}` : '…'}
-                  {isActive && ' · active'}
-                </span>
-              </div>
-              {/* Relevance bar */}
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0,
-                width: bar.width, height: '2px',
-                borderRadius: '2px',
-                background: bar.color,
-                opacity: rel === 0 ? 0.3 : rel === 1 ? 0.4 : rel === 2 ? 0.6 : 1,
-              }} />
-            </div>
-          );
-        })}
-      </div>
-
       {/* Sub-bar: exchange tabs + opp filter + sort */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', gap: '16px', flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: '20px', gap: '16px', flexWrap: 'wrap',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {/* Exchange tabs */}
           <div style={{
@@ -204,7 +391,7 @@ export default function ScanView() {
               display: 'inline-flex', alignItems: 'center', gap: '8px',
               padding: '7px 14px',
               background: oppFilter ? 'var(--gold)' : 'transparent',
-              border: `1px solid var(--border-gold)`,
+              border: '1px solid var(--border-gold)',
               color: oppFilter ? '#1a1410' : 'var(--gold)',
               borderRadius: '100px',
               fontSize: '12px', fontWeight: 600, cursor: 'pointer',
@@ -216,9 +403,8 @@ export default function ScanView() {
             VaNi Opportunity
             <span style={{
               fontFamily: 'var(--font-mono)', fontSize: '10.5px',
-              padding: '2px 7px',
+              padding: '2px 7px', borderRadius: '100px', marginLeft: '2px',
               background: 'rgba(0,0,0,0.2)',
-              borderRadius: '100px', marginLeft: '2px',
               color: oppFilter ? '#1a1410' : undefined,
             }}>
               {oppCount}
@@ -227,8 +413,13 @@ export default function ScanView() {
         </div>
 
         {/* Sort strip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>Sort</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-faint)',
+            textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap',
+          }}>
+            Sort
+          </span>
           {SORT_OPTIONS.map((opt) => {
             const active = sortKey === opt.key;
             return (
@@ -245,8 +436,7 @@ export default function ScanView() {
                   outline: active ? '1px solid var(--border-indigo)' : undefined,
                 }}
               >
-                {opt.label}
-                {active && (sortDir === 'asc' ? ' ↑' : ' ↓')}
+                {opt.label}{active && (sortDir === 'asc' ? ' ↑' : ' ↓')}
               </button>
             );
           })}
@@ -273,15 +463,14 @@ export default function ScanView() {
           <div style={{ marginTop: '12px', textAlign: 'center' }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>
               {sorted.length} result{sorted.length !== 1 ? 's' : ''}
-              {oppFilter && ` · VaNi Opportunity filter active`}
+              {oppFilter && ' · VaNi Opportunity filter active'}
             </span>
           </div>
         </>
       ) : (
         <div style={{
           padding: '64px 24px', textAlign: 'center',
-          background: 'var(--card)', border: '1px solid var(--border)',
-          borderRadius: '16px',
+          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
         }}>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
             {oppFilter
@@ -292,32 +481,18 @@ export default function ScanView() {
       )}
 
       {/* Action Island */}
-      <div style={{
-        position: 'fixed',
-        bottom: '28px',
-        left: '50%',
-        transform: 'translateX(calc(-50% + 110px))',
-        background: 'rgba(11,17,32,0.95)',
-        backdropFilter: 'blur(12px)',
-        border: '1px solid var(--border-strong)',
-        borderRadius: '100px',
-        padding: '10px 14px 10px 22px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '18px',
-        boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-        zIndex: 50,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--indigo)', animation: 'pulse 2s infinite', flexShrink: 0 }} />
-          VaNi is watching{' '}
+      <ActionIsland>
+        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0 }} />
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          Showing{' '}
           <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
-            {stocks?.length ?? 0} setup{(stocks?.length ?? 0) !== 1 ? 's' : ''}
+            {stocks?.length ?? 0}
           </em>
-        </div>
+          {' '}{preset.name} setup{(stocks?.length ?? 0) !== 1 ? 's' : ''}
+        </span>
         {oppCount > 0 && (
           <>
-            <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)' }} />
+            <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
             <button
               onClick={() => setOppFilter(true)}
               style={{
@@ -326,13 +501,24 @@ export default function ScanView() {
                 border: 'none', borderRadius: '100px',
                 fontWeight: 600, cursor: 'pointer',
                 fontFamily: 'var(--font-body)',
+                whiteSpace: 'nowrap',
               }}
             >
               {oppCount} opportunit{oppCount !== 1 ? 'ies' : 'y'}
             </button>
           </>
         )}
-      </div>
+      </ActionIsland>
     </div>
   );
+}
+
+// ── Router dispatch ───────────────────────────────────────────
+
+import React from 'react';
+
+export default function ScanView() {
+  const { presetId } = useParams<{ presetId?: string }>();
+  if (!presetId) return <ScannerLanding />;
+  return <ScannerResults presetId={presetId} />;
 }
