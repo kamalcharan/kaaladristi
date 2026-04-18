@@ -272,8 +272,23 @@ export function StockCard({ stock }: { stock: ScanStock }) {
               bear={stock.magic_rs_zone === 'Strong Bear' || stock.magic_rs_zone === 'Mild Bear'}
             />
           )}
-          {stock.rsi_14 != null && (stock.rsi_14 > 60 || stock.rsi_14 < 40) && (
-            <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} bull={stock.rsi_14 > 60} bear={stock.rsi_14 < 40} />
+          {stock.rsi_14 != null && stock.rsi_14 > 70 && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '3px 9px',
+              fontFamily: 'var(--font-mono)', fontSize: '10px',
+              borderRadius: '5px', letterSpacing: '0.06em',
+              textTransform: 'uppercase', fontWeight: 700,
+              background: 'var(--bull)', color: '#0a1f16', whiteSpace: 'nowrap',
+            }}>
+              RSI {stock.rsi_14.toFixed(0)}
+            </span>
+          )}
+          {stock.rsi_14 != null && stock.rsi_14 > 60 && stock.rsi_14 <= 70 && (
+            <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} bull />
+          )}
+          {stock.rsi_14 != null && stock.rsi_14 < 40 && (
+            <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} bear />
           )}
           {(stock.sniper_inst ?? 0) > 15 && (
             <SigPill label={`Smart Money +${stock.sniper_inst!.toFixed(0)}`} />
