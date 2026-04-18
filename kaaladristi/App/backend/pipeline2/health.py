@@ -32,7 +32,10 @@ import psycopg2.extras
 #   ok_threshold: fraction (0..1) at/above which fill-rate is 'healthy'
 
 DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | None]] = {
-    'index_indicators':      ('km_index_eod',     'index_id',  ['rsi_14', 'sma_21', 'sma_55', 'atr_14', 'rvol'],           1.0),
+    # index_indicators samples sma_50 (not sma_55) to match the ground-truth
+    # audit. Legacy rows stamped before sma_50 was added have sma_55 populated
+    # but sma_50 NULL — using sma_55 would falsely report those as healthy.
+    'index_indicators':      ('km_index_eod',     'index_id',  ['rsi_14', 'sma_21', 'sma_50', 'atr_14', 'rvol'],           1.0),
     'nse_equity_indicators': ('km_equity_eod',    'equity_id', ['rsi_14', 'sma_21', 'sma_50', 'atr_14', 'rvol'],           0.95),
     'bse_equity_indicators': ('km_equity_eod',    'equity_id', ['rsi_14', 'sma_21', 'sma_50', 'atr_14', 'rvol'],           0.95),
     'index_flow':            ('km_index_eod',     'index_id',  ['flow_type'],                                              1.0),
@@ -44,6 +47,28 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     'market_breadth':        ('km_market_breadth', None,       None,                                                       None),
     'breadth_roc':           ('km_breadth_roc',   None,        None,                                                       None),
 }
+
+
+# Display labels — hand-curated so NSE/BSE/RS/ROC render with correct casing.
+# A generic title() would produce "Nse Equity Indicators" and "Bse Magic Rs".
+LABELS: dict[str, str] = {
+    'index_indicators':      'Index Indicators',
+    'nse_equity_indicators': 'NSE Equity Indicators',
+    'bse_equity_indicators': 'BSE Equity Indicators',
+    'index_flow':            'Index Flow',
+    'nse_flow':              'NSE Flow',
+    'bse_flow':              'BSE Flow',
+    'nse_magic_rs':          'NSE Magic RS',
+    'bse_magic_rs':          'BSE Magic RS',
+    'industry_composites':   'Industry Composites',
+    'market_breadth':        'Market Breadth',
+    'breadth_roc':           'Breadth ROC',
+}
+
+
+def label_for(dim: str) -> str:
+    """Display label for a dimension. Falls back to a prettified key."""
+    return LABELS.get(dim, dim.replace('_', ' ').title())
 
 # Exchange filter inferred from dimension key prefix.
 def _exchange_for(dim: str) -> str | None:
@@ -195,9 +220,17 @@ def fill_rate(conn, dimension: str, trade_date: date) -> float:
 # ── Multi-day health grid ────────────────────────────────────────────────
 
 def _classify(frac: float, ok_threshold: float) -> str:
-    if frac >= ok_threshold:
+    """Classify a fill fraction against a threshold.
+
+    Compares at 1-decimal percent precision so the colour matches what the
+    tooltip shows (frontend uses `.toFixed(1)`). Otherwise 0.9495 reads as
+    "95.0%" in the UI but fails `0.9495 >= 0.95` and renders amber.
+    """
+    pct   = round(frac * 100.0, 1)
+    t_pct = round(ok_threshold * 100.0, 1)
+    if pct >= t_pct:
         return 'ok'
-    if frac >= 0.5:
+    if pct >= 50.0:
         return 'partial'
     return 'missing'
 
@@ -321,7 +354,7 @@ def _health_row(
 
     return DimensionHealth(
         dimension=dimension,
-        label=dimension.replace('_', ' ').title(),
+        label=label_for(dimension),
         latest_ok=latest_ok,
         days=days,
     )
@@ -356,7 +389,7 @@ def health_grid(conn, days: int = 30) -> list[dict]:
         except Exception as e:
             rows.append({
                 'dimension': dim,
-                'label': dim.replace('_', ' ').title(),
+                'label': label_for(dim),
                 'latest_ok': None,
                 'days': [],
                 'error': str(e),
