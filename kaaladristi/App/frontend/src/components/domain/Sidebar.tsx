@@ -1,66 +1,42 @@
-import {
-  LayoutDashboard,
-  Globe,
-  Calendar as CalendarIcon,
-  CalendarDays,
-  Zap,
-  History as HistoryIcon,
-  Settings as SettingsIcon,
-  LogOut,
-  Shield,
-  Sparkles,
-  Activity,
-  Eye,
-  ChevronLeft,
-  ScanSearch,
-  ShieldAlert,
-  ArrowRightLeft,
-} from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { LogOut, Shield, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { signOut } from '@/services/auth';
 
-type NavItem = {
-  to: string;
-  icon: React.ElementType;
-  label: string;
-};
-
-type NavSection = {
-  heading?: string;
-  items: NavItem[];
-};
+// ── Nav definition ──────────────────────────────────────────────────────────
+// Glyphs are Fraunces/Unicode characters, matching dashboard-LOCKED.html
+type NavItem = { to: string; glyph: string; label: string };
+type NavSection = { heading: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
+    heading: 'View',
     items: [
-      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/markets',   icon: Globe,           label: 'Markets' },
+      { to: '/dashboard',           glyph: '◉', label: 'Dashboard' },
+      { to: '/markets',             glyph: '◎', label: 'Markets' },
+      { to: '/scan',                glyph: '⊙', label: 'Scanner' },
+      { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition' },
+      { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch' },
+      { to: '/astro-calendar',      glyph: '☽', label: 'Planetary Intel' },
+      { to: '/pulse/1',             glyph: '◌', label: 'Visual Pulse' },
     ],
   },
   {
-    heading: 'ANALYSIS',
+    heading: 'Author',
     items: [
-      { to: '/astro-calendar', icon: CalendarDays, label: 'Planetary Intel' },
-      { to: '/inference',      icon: Sparkles,     label: 'Inference DB' },
-      { to: '/rule-eval',      icon: Activity,     label: 'Rule Eval'    },
-      { to: '/pulse/1',         icon: Eye,          label: 'Visual Pulse' },
-      { to: '/scan',            icon: ScanSearch,   label: 'Scanner' },
-      { to: '/industry-transition', icon: ArrowRightLeft, label: 'Industry Transition' },
-      { to: '/manipulation-watch', icon: ShieldAlert, label: 'Manipulation Watch' },
-      { to: '/calendar',       icon: CalendarIcon, label: 'Risk Calendar' },
-      { to: '/transmission',   icon: Zap,          label: 'Risk Transmission' },
-    ],
-  },
-  {
-    heading: 'RESEARCH',
-    items: [
-      { to: '/history',   icon: HistoryIcon,  label: 'Backtest' },
-      { to: '/settings',  icon: SettingsIcon, label: 'Settings' },
+      { to: '/inference',    glyph: '✎', label: 'Inference DB' },
+      { to: '/rule-eval',    glyph: '⊛', label: 'Rule Eval' },
+      { to: '/calendar',     glyph: '◷', label: 'Risk Calendar' },
+      { to: '/transmission', glyph: '⇝', label: 'Risk Transmission' },
+      { to: '/history',      glyph: '↺', label: 'Backtest' },
+      { to: '/settings',     glyph: '◈', label: 'Settings' },
+      { to: '/data-pipeline',glyph: '▦', label: 'Data Pipeline' },
     ],
   },
 ];
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function getInitials(profile: { full_name?: string | null; display_name?: string | null; email?: string | null }): string {
   const name = profile.display_name || profile.full_name || profile.email || '?';
@@ -68,6 +44,30 @@ function getInitials(profile: { full_name?: string | null; display_name?: string
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
 }
+
+function formatFooterDate(): string {
+  const now = new Date();
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${days[now.getDay()]} · ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+function marketStatus(): string {
+  // NSE: Mon–Fri 09:15–15:30 IST (UTC+5:30)
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const ist = new Date(now.getTime() + istOffset);
+  const day = ist.getUTCDay();
+  const h = ist.getUTCHours();
+  const m = ist.getUTCMinutes();
+  const mins = h * 60 + m;
+  if (day === 0 || day === 6) return 'Market closed · Weekend';
+  if (mins < 9 * 60 + 15) return 'Pre-market';
+  if (mins <= 15 * 60 + 30) return 'Market open';
+  return 'Market closed';
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
   collapsed: boolean;
@@ -87,82 +87,159 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <nav
       className={cn(
-        'bg-kd-bg/80 backdrop-blur-2xl border-r border-kd-border fixed h-full z-[100] flex flex-col py-4 overflow-hidden transition-all duration-300',
-        collapsed ? 'w-[52px]' : 'w-[220px]'
+        'fixed h-full z-[100] flex flex-col overflow-hidden transition-all duration-300',
       )}
+      style={{
+        width: collapsed ? '52px' : '220px',
+        background: 'rgba(11,17,32,0.6)',
+        borderRight: '1px solid var(--border)',
+        padding: collapsed ? '28px 8px' : '28px 16px',
+      }}
     >
-      {/* ── Logo + Collapse Toggle ── */}
-      <div className={cn('flex items-center mb-5 shrink-0 px-3', collapsed ? 'justify-center' : 'gap-2')}>
-        <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-accent-indigo to-accent-violet rounded-[10px] flex items-center justify-center text-base shadow-lg shadow-indigo-500/20">
-          &#x27E1;
-        </div>
-        {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight text-[var(--text-primary)] leading-tight flex-1 truncate">
-            Kāla-Drishti
-          </span>
-        )}
-        <button
-          onClick={onToggle}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={cn(
-            'w-6 h-6 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-kd-elevated hover:text-[var(--text-secondary)] transition-all shrink-0',
-            collapsed && 'hidden'
-          )}
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Expand button (only visible when collapsed) */}
-      {collapsed && (
+      {/* ── Brand ── */}
+      {!collapsed ? (
+        <>
+          <div
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '24px',
+              fontWeight: 500,
+              padding: '0 12px 4px',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.2,
+            }}
+          >
+            Kāla-<em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Drishti</em>
+          </div>
+          <div
+            style={{
+              padding: '0 12px',
+              fontSize: '11px',
+              color: 'var(--text-faint)',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              fontFamily: 'var(--font-mono)',
+              marginBottom: '28px',
+            }}
+          >
+            Market Weather
+          </div>
+        </>
+      ) : (
+        /* Collapsed: show expand chevron */
         <button
           onClick={onToggle}
           title="Expand sidebar"
-          className="mx-auto mb-2 w-8 h-5 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-kd-elevated hover:text-[var(--text-secondary)] transition-all"
+          className="mx-auto mb-6 flex items-center justify-center transition-colors"
+          style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '6px',
+            color: 'var(--text-faint)',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}
         >
-          <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
+          <ChevronRight className="w-4 h-4" />
         </button>
       )}
 
-      {/* ── Nav Sections ── */}
-      <div className="flex flex-col flex-1 overflow-y-auto no-scrollbar gap-0.5">
+      {/* ── Collapse toggle (visible when expanded) ── */}
+      {!collapsed && (
+        <button
+          onClick={onToggle}
+          title="Collapse sidebar"
+          className="absolute top-[28px] right-[12px] flex items-center justify-center transition-colors"
+          style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '4px',
+            color: 'var(--text-faint)',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-faint)')}
+        >
+          {/* ‹ chevron pointing left */}
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M8 2L4 6l4 4" />
+          </svg>
+        </button>
+      )}
+
+      {/* ── Nav sections ── */}
+      <div className="flex flex-col flex-1 overflow-y-auto no-scrollbar" style={{ gap: '0' }}>
         {navSections.map((section, si) => (
-          <div key={si}>
-            {si > 0 && (
-              <div className="mt-2 mb-0.5">
-                <div className="mx-3 border-t border-kd-border mb-1.5" />
-                {section.heading && !collapsed && (
-                  <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--text-muted)] font-bold px-4 py-0.5">
-                    {section.heading}
-                  </p>
-                )}
+          <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
+            {/* Section heading */}
+            {!collapsed && (
+              <div
+                style={{
+                  padding: '0 12px 8px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  color: 'var(--text-faint)',
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {section.heading}
               </div>
             )}
 
-            {section.items.map((item) => (
+            {/* Nav items */}
+            {section.items.map(item => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 title={item.label}
-                className={({ isActive }) =>
-                  cn(
-                    'group relative flex items-center mx-2 px-2 py-2 rounded-lg transition-all duration-150 text-sm',
-                    collapsed ? 'justify-center' : 'gap-3',
-                    isActive
-                      ? 'bg-accent-indigo/10 text-accent-indigo border-l-[3px] border-accent-indigo'
-                      : 'text-[var(--text-muted)] hover:bg-kd-elevated hover:text-[var(--text-secondary)] border-l-[3px] border-transparent'
-                  )
-                }
+                style={({ isActive }) => ({
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: collapsed ? 0 : '11px',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  padding: collapsed ? '9px 0' : '9px 12px',
+                  borderRadius: '8px',
+                  color: isActive ? 'var(--gold-soft)' : 'var(--text-muted)',
+                  fontSize: '13.5px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.18s',
+                  marginBottom: '1px',
+                  background: isActive ? 'var(--gold-bg)' : 'transparent',
+                  textDecoration: 'none',
+                })}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  if (!el.dataset.active) {
+                    el.style.background = 'rgba(255,255,255,0.04)';
+                    el.style.color = 'var(--text-secondary)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  if (!el.dataset.active) {
+                    el.style.background = el.getAttribute('data-isactive') === 'true' ? 'var(--gold-bg)' : 'transparent';
+                    el.style.color = el.getAttribute('data-isactive') === 'true' ? 'var(--gold-soft)' : 'var(--text-muted)';
+                  }
+                }}
               >
                 {({ isActive }) => (
                   <>
-                    <item.icon
-                      className={cn(
-                        'w-[18px] h-[18px] shrink-0',
-                        isActive ? 'text-accent-indigo' : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'
-                      )}
-                    />
-                    {!collapsed && <span className="truncate leading-none">{item.label}</span>}
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: '14px',
+                        width: '16px',
+                        textAlign: 'center',
+                        opacity: isActive ? 1 : 0.75,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.glyph}
+                    </span>
+                    {!collapsed && (
+                      <span className="truncate leading-none">{item.label}</span>
+                    )}
                   </>
                 )}
               </NavLink>
@@ -171,37 +248,83 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         ))}
       </div>
 
-      {/* ── User Section ── */}
-      <div className="mt-auto pt-3 border-t border-kd-border shrink-0">
-        <div className={cn('flex items-center px-3 py-1.5', collapsed ? 'flex-col gap-2' : 'gap-3')}>
-          <div
-            className="relative shrink-0"
-            title={profile?.display_name || profile?.full_name || profile?.email || 'User'}
-          >
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-cyan to-accent-indigo flex items-center justify-center font-bold text-[10px] text-[var(--text-primary)]">
+      {/* ── Footer: user + date ── */}
+      <div
+        style={{
+          marginTop: 'auto',
+          paddingTop: '14px',
+          paddingBottom: '4px',
+          paddingLeft: collapsed ? '0' : '12px',
+          paddingRight: collapsed ? '0' : '12px',
+          borderTop: '1px solid var(--border)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          color: 'var(--text-faint)',
+        }}
+      >
+        {collapsed ? (
+          /* Collapsed footer: just sign-out icon */
+          <div className="flex flex-col items-center gap-2">
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center"
+              style={{ background: 'var(--gold-bg)', color: 'var(--gold-soft)', fontSize: '10px', fontWeight: 700 }}
+              title={profile?.display_name || profile?.full_name || profile?.email || 'User'}
+            >
               {profile ? getInitials(profile) : '?'}
             </div>
-            {isAdmin && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent-violet rounded-full flex items-center justify-center" title="Admin">
-                <Shield className="w-1.5 h-1.5 text-white" />
-              </div>
-            )}
+            <button
+              onClick={handleSignOut}
+              title="Sign out"
+              className="flex items-center justify-center transition-colors"
+              style={{ color: 'var(--text-faint)', width: '20px', height: '20px' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-primary)')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-faint)')}
+            >
+              <LogOut className="w-3 h-3" />
+            </button>
           </div>
-
-          {!collapsed && (
-            <span className="flex-1 text-xs text-[var(--text-secondary)] truncate leading-none">
-              {profile?.display_name || profile?.full_name || profile?.email || 'User'}
-            </span>
-          )}
-
-          <button
-            onClick={handleSignOut}
-            title="Sign out"
-            className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:bg-kd-elevated hover:text-[var(--text-primary)] transition-all shrink-0"
-          >
-            <LogOut className="w-[13px] h-[13px]" />
-          </button>
-        </div>
+        ) : (
+          /* Expanded footer: user row + date line */
+          <>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="relative shrink-0">
+                <div
+                  className="w-6 h-6 rounded-md flex items-center justify-center"
+                  style={{ background: 'var(--gold-bg)', color: 'var(--gold-soft)', fontSize: '10px', fontWeight: 700 }}
+                  title={profile?.display_name || profile?.full_name || profile?.email || 'User'}
+                >
+                  {profile ? getInitials(profile) : '?'}
+                </div>
+                {isAdmin && (
+                  <div
+                    className="absolute -top-1 -right-1 w-3 h-3 rounded-full flex items-center justify-center"
+                    style={{ background: 'var(--indigo)' }}
+                    title="Admin"
+                  >
+                    <Shield className="w-1.5 h-1.5 text-white" />
+                  </div>
+                )}
+              </div>
+              <span className="flex-1 truncate" style={{ color: 'var(--text-faint)', fontSize: '11px' }}>
+                {profile?.display_name || profile?.full_name || profile?.email || 'User'}
+              </span>
+              <button
+                onClick={handleSignOut}
+                title="Sign out"
+                className="flex items-center justify-center transition-colors shrink-0"
+                style={{ color: 'var(--text-faint)', width: '20px', height: '20px' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-primary)')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-faint)')}
+              >
+                <LogOut className="w-3 h-3" />
+              </button>
+            </div>
+            <div style={{ lineHeight: 1.5 }}>
+              {formatFooterDate()}<br />
+              {marketStatus()}
+            </div>
+          </>
+        )}
       </div>
     </nav>
   );

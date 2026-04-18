@@ -299,12 +299,20 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
       )}
 
       {sched && (
-        <div className="text-[10px] text-muted pt-2 border-t border-kd-border/30">
-          Scheduler: <span className={sched.active ? 'text-emerald-400' : 'text-rose-400'}>
-            {sched.active ? 'active' : 'inactive'}
-          </span>
-          {' · '}next: <span className="mono">{sched.next_run ?? '—'}</span>
-          {' · '}{sched.trigger}
+        <div className="text-[10px] text-muted pt-2 border-t border-kd-border/30 space-y-0.5">
+          <div>
+            Scheduler: <span className={sched.active ? 'text-emerald-400' : 'text-rose-400'}>
+              {sched.active ? 'active' : 'inactive'}
+            </span>
+          </div>
+          <div>
+            Daily run: <span className="mono">{sched.daily_run?.next ?? '—'}</span>
+            {' · '}{sched.daily_run?.trigger}
+          </div>
+          <div>
+            Gap sweep: <span className="mono">{sched.gap_sweep?.next ?? '—'}</span>
+            {' · '}{sched.gap_sweep?.trigger}
+          </div>
         </div>
       )}
     </div>

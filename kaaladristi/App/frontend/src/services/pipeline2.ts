@@ -176,7 +176,16 @@ export const markCalendar = (tradeDate: string, status: CalendarMarkStatus) =>
 export const fetchDimensions = () =>
   apiGet<DimensionsList>('/api/pipeline2/dimensions');
 
+export interface SchedulerJobInfo {
+  next: string | null;
+  trigger: string;
+}
+
+export interface SchedulerInfo {
+  active: boolean;
+  daily_run: SchedulerJobInfo;
+  gap_sweep: SchedulerJobInfo;
+}
+
 export const fetchSchedulerInfo = () =>
-  apiGet<{ active: boolean; next_run: string | null; trigger: string }>(
-    '/api/pipeline2/scheduler'
-  );
+  apiGet<SchedulerInfo>('/api/pipeline2/scheduler');

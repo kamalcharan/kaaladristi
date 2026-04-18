@@ -7,30 +7,48 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* ── Primary palette (new flat tokens → mockup CSS vars) ── */
+        'kd-bg':           'var(--bg)',
+        'kd-card':         'var(--card)',
+        'kd-card-soft':    'var(--card-soft)',
+        'kd-card-deep':    'var(--card-deep)',
+        'kd-border':       'var(--border)',
+        'kd-gold':         'var(--gold)',
+        'kd-gold-soft':    'var(--gold-soft)',
+        'kd-indigo':       'var(--indigo)',
+        'kd-bull':         'var(--bull)',
+        'kd-bear':         'var(--bear)',
+        'kd-caution':      'var(--caution)',
+        'kd-text-primary':   'var(--text-primary)',
+        'kd-text-secondary': 'var(--text-secondary)',
+        'kd-text-muted':     'var(--text-muted)',
+        'kd-text-faint':     'var(--text-faint)',
+
+        /* ── Legacy nested aliases (backward compat) ── */
         kd: {
-          bg:        'var(--kd-bg)',
-          surface:   'var(--kd-surface)',
-          card:      'var(--kd-card)',
-          elevated:  'var(--kd-elevated)',
-          border:    'var(--kd-border)',
-          'border-active': 'var(--kd-border-active)',
+          bg:             'var(--bg)',
+          surface:        'var(--card)',
+          card:           'var(--card)',
+          elevated:       'var(--card-soft)',
+          border:         'var(--border)',
+          'border-active': 'var(--border-indigo)',
         },
         accent: {
-          indigo:  'var(--accent-indigo)',
+          indigo:  'var(--indigo)',
           violet:  'var(--accent-violet)',
           cyan:    'var(--accent-cyan)',
-          gold:    'var(--accent-gold)',
+          gold:    'var(--gold)',
         },
         risk: {
-          green:  'var(--risk-green)',
-          amber:  'var(--risk-amber)',
-          red:    'var(--risk-red)',
+          green:  'var(--bull)',
+          amber:  'var(--caution)',
+          red:    'var(--bear)',
         },
       },
       fontFamily: {
         sans:    ['Inter', 'system-ui', 'sans-serif'],
-        mono:    ['JetBrains Mono', 'monospace'],
-        display: ['Playfair Display', 'Georgia', 'serif'],
+        mono:    ['Geist Mono', 'monospace'],
+        display: ['Fraunces', 'Georgia', 'serif'],
       },
       borderRadius: {
         '2xl': '1rem',
