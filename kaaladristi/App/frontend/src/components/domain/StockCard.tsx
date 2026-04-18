@@ -318,14 +318,14 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         }}>
           {isUp ? '▲' : '▼'} {isUp ? '+' : ''}{pct.toFixed(2)}%
         </div>
-        {stock.reward != null && (
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '5px',
-            color: rewardColor,
-          }}>
-            ₹{Math.abs(stock.reward).toFixed(1)} {stock.reward >= 0 ? 'reward' : 'risk'}
-          </div>
-        )}
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '5px',
+          color: rewardColor,
+        }}>
+          {stock.reward != null
+            ? `₹${Math.abs(stock.reward).toFixed(1)} ${stock.reward >= 0 ? 'reward' : 'risk'}`
+            : '— reward'}
+        </div>
       </div>
 
       {/* Zone 3: RS zone pill + 52W% */}
