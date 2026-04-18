@@ -15,7 +15,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/dashboard',           glyph: '◉', label: 'Dashboard' },
       { to: '/markets',             glyph: '◎', label: 'Markets' },
-      { to: '/scan',                glyph: '⊙', label: 'Scanner' },
+      { to: '/scanner',             glyph: '⊙', label: 'Scanner' },
       { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition' },
       { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch' },
       { to: '/astro-calendar',      glyph: '☽', label: 'Planetary Intel' },
