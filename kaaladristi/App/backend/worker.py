@@ -256,24 +256,41 @@ def _force_delete(db, table: str, trade_date) -> int:
 def handle_fix_indicators(db, job_id, params):
     """Compute index indicators. Respects params.trade_date and params.force.
 
-    Single-date mode: loops every index_id and calls compute_indicators_batch
-    with p_from_date = trade_date. Honours force by NULLing indicators_computed_at
-    on km_index_eod for that date first.
+    Single-date + force: NULL indicators_computed_at on km_index_eod for the
+    target date, then invoke the bulk RPC scoped to that one date. All the
+    per-symbol work happens inside one Postgres call — no HTTP round-trip
+    per index.
 
-    Legacy sweep: bulk RPC over the last 90 days, same as before.
+    Single-date without force: per-symbol loop (respects the IS-NULL stamp,
+    so already-computed rows aren't reprocessed).
+
+    Legacy sweep: bulk RPC with the 90-day default window, same as before.
     """
+    import time as _time
     trade_date, from_dt, to_dt, force, _ = _parse_job_window(params)
 
-    if trade_date is not None:
-        if force:
-            _update_job(db, job_id, progress=f'{trade_date}: force-resetting stamps...')
-            _force_null(db, 'indicators', 'km_index_eod', trade_date)
+    if trade_date is not None and force:
+        _update_job(db, job_id, progress=f'{trade_date}: force-resetting stamps...')
+        _force_null(db, 'indicators', 'km_index_eod', trade_date)
+        _update_job(db, job_id, progress=f'{trade_date}: bulk recompute...')
+        t0 = _time.time()
+        result = db.rpc('compute_all_pending_indicators', {
+            'p_table': 'km_index_eod', 'p_id_col': 'index_id',
+            'p_from_date': str(trade_date), 'p_to_date': str(trade_date),
+        })
+        elapsed = _time.time() - t0
+        total = sum(r.get('rows_updated', 0) for r in (result or []))
+        log.info(f'[bulk] index indicators {trade_date} force=True: {total} rows in {elapsed:.2f}s')
+        return total
 
+    if trade_date is not None:
+        # Respect existing stamps — only compute missing rows for the date.
         pending = _pending_symbols(db, 'km_index_eod', 'index_id',
                                    'indicators_computed_at', from_dt, to_dt)
         log.info(f'Index indicators {trade_date}: {len(pending)} indices to compute')
         _update_job(db, job_id, progress=f'{trade_date}: {len(pending)} indices to compute')
 
+        t0 = _time.time()
         total = 0
         for i, sid in enumerate(pending):
             if _is_cancelled(db, job_id):
@@ -291,40 +308,59 @@ def handle_fix_indicators(db, job_id, params):
                 total += count
             except Exception as e:
                 log.error(f'Index indicators sid={sid} {trade_date}: {e}')
-        log.info(f'Index indicators {trade_date}: {total} rows updated')
+        log.info(f'Index indicators {trade_date}: {total} rows in {_time.time()-t0:.2f}s')
         return total
 
     _update_job(db, job_id, progress='Computing index indicators (sweep)...')
+    t0 = _time.time()
     result = db.rpc('compute_all_pending_indicators', {
         'p_table': 'km_index_eod', 'p_id_col': 'index_id',
     })
     total = sum(r.get('rows_updated', 0) for r in (result or []))
-    log.info(f'Index indicators: {total} rows updated')
+    log.info(f'[sweep] index indicators: {total} rows in {_time.time()-t0:.2f}s')
     return total
 
 
 def _handle_fix_equity_indicators(db, job_id, params, exchange: str):
     """Shared implementation for NSE / BSE equity indicators.
 
-    Single-date mode: always per-symbol with p_from_date = trade_date.
-    The bulk RPC is avoided in single-date mode because it has a 90-day
-    clamp (migration 025:304) that would silently widen the scope.
+    Single-date + force: NULL stamps for the exchange on target date, then
+    one bulk RPC call scoped to that date. Because we only NULLed the
+    target-date rows for the target exchange, the RPC's
+    `indicators_computed_at IS NULL` filter naturally picks up only those
+    rows — no exchange argument on the RPC needed.
 
-    Legacy sweep: same as before — bulk RPC when pending > 100, else per-symbol.
+    Single-date without force: per-symbol loop. Not used via the bulk path
+    because the stamp filter would match nothing (everything is already
+    stamped).
+
+    Legacy sweep: bulk RPC when >100 symbols pending, else per-symbol.
     """
+    import time as _time
     trade_date, from_dt, to_dt, force, _ = _parse_job_window(params)
 
-    if trade_date is not None:
-        if force:
-            _update_job(db, job_id, progress=f'{trade_date}: force-resetting stamps...')
-            _force_null(db, 'indicators', 'km_equity_eod', trade_date, exchange=exchange)
+    if trade_date is not None and force:
+        _update_job(db, job_id, progress=f'{trade_date}: force-resetting {exchange} stamps...')
+        _force_null(db, 'indicators', 'km_equity_eod', trade_date, exchange=exchange)
+        _update_job(db, job_id, progress=f'{trade_date} {exchange}: bulk recompute...')
+        t0 = _time.time()
+        result = db.rpc('compute_all_pending_indicators', {
+            'p_table': 'km_equity_eod', 'p_id_col': 'equity_id',
+            'p_from_date': str(trade_date), 'p_to_date': str(trade_date),
+        })
+        elapsed = _time.time() - t0
+        total = sum(r.get('rows_updated', 0) for r in (result or []))
+        log.info(f'[bulk] {exchange} equity indicators {trade_date} force=True: {total} rows in {elapsed:.2f}s')
+        return total
 
+    if trade_date is not None:
         pending = _pending_symbols(db, 'km_equity_eod', 'equity_id',
                                    'indicators_computed_at', trade_date, trade_date,
                                    exchange=exchange)
         log.info(f'{exchange} Equity indicators {trade_date}: {len(pending)} symbols to compute')
         _update_job(db, job_id, progress=f'{trade_date}: {len(pending)} symbols to compute')
 
+        t0 = _time.time()
         total = 0
         for i, sid in enumerate(pending):
             if _is_cancelled(db, job_id):
@@ -342,7 +378,7 @@ def _handle_fix_equity_indicators(db, job_id, params, exchange: str):
                 total += count
             except Exception as e:
                 log.error(f'{exchange} Equity indicators sid={sid} {trade_date}: {e}')
-        log.info(f'{exchange} Equity indicators {trade_date}: {total} rows updated')
+        log.info(f'{exchange} Equity indicators {trade_date}: {total} rows in {_time.time()-t0:.2f}s')
         return total
 
     # Legacy sweep mode
@@ -396,6 +432,7 @@ def handle_fix_flow(db, job_id, params):
     that exchange; indices are always included unless exchange is set (they
     don't belong to an exchange).
     """
+    import time as _time
     trade_date, from_dt, to_dt, force, exchange = _parse_job_window(params)
 
     # Determine which tables to process. If exchange is set, user is asking
@@ -410,19 +447,34 @@ def handle_fix_flow(db, job_id, params):
 
     total = 0
     for table, id_col, label, table_exchange in tables:
-        if trade_date is not None:
-            if force:
-                _update_job(db, job_id,
-                            progress=f'{label} {trade_date}: force-resetting flow columns...')
-                _force_null(db, 'flow_intelligence', table, trade_date,
-                            exchange=table_exchange)
+        if trade_date is not None and force:
+            _update_job(db, job_id,
+                        progress=f'{label} {trade_date}: force-resetting flow columns...')
+            _force_null(db, 'flow_intelligence', table, trade_date,
+                        exchange=table_exchange)
+            _update_job(db, job_id, progress=f'{label} {trade_date}: bulk recompute...')
+            t0 = _time.time()
+            # Migration 039 added p_from_date/p_to_date to this RPC.
+            # Scoping to the single target date — per-symbol work stays
+            # inside one Postgres call.
+            result = db.rpc('compute_all_flow_intelligence', {
+                'p_table': table, 'p_id_col': id_col,
+                'p_from_date': str(trade_date), 'p_to_date': str(trade_date),
+            })
+            count = sum(r.get('rows_updated', 0) for r in (result or []))
+            elapsed = _time.time() - t0
+            log.info(f'[bulk] {label} flow {trade_date} force=True: {count} rows in {elapsed:.2f}s')
+            total += count
+            continue
 
+        if trade_date is not None:
             pending = _pending_symbols(db, table, id_col, 'flow_type',
                                        trade_date, trade_date,
                                        exchange=table_exchange)
             log.info(f'{label} flow {trade_date}: {len(pending)} symbols to compute')
             _update_job(db, job_id,
                         progress=f'{label} {trade_date}: {len(pending)} symbols')
+            t0 = _time.time()
             for i, sid in enumerate(pending):
                 if _is_cancelled(db, job_id):
                     return total
@@ -441,6 +493,7 @@ def handle_fix_flow(db, job_id, params):
                     total += count
                 except Exception as e:
                     log.error(f'{label} flow sid={sid} {trade_date}: {e}')
+            log.info(f'{label} flow {trade_date}: rows in {_time.time()-t0:.2f}s')
             continue
 
         # Legacy sweep
@@ -496,11 +549,19 @@ def _get_nifty500_id(db) -> int | None:
 def handle_fix_magic_rs(db, job_id, params):
     """Compute MagicRS for indices and/or equities.
 
-    Respects params.trade_date, params.force, and params.exchange. The RPC
-    compute_magic_rs_batch now requires p_from_date (migration 038) — we
-    always pass it, scoping to trade_date in single-date mode or to the
-    legacy sweep window otherwise.
+    Respects params.trade_date, params.force, and params.exchange.
+
+    Single-date + force: NULL the 4 magic_rs columns for the exchange on
+    target date, then call compute_all_magic_rs scoped to that date. Post
+    migration 039 the RPC has correct cross-table benchmark routing for
+    equities (migration 038 accidentally regressed that).
+
+    Single-date without force: per-symbol loop scoped to the date — respects
+    the magic_rs_zone IS NULL filter so already-computed rows are skipped.
+
+    Legacy sweep: per-symbol loop over the 90-day window (same as before).
     """
+    import time as _time
     trade_date, from_dt, to_dt, force, exchange = _parse_job_window(params)
 
     benchmark_id = _get_nifty500_id(db)
@@ -516,15 +577,28 @@ def handle_fix_magic_rs(db, job_id, params):
             ('km_equity_eod', 'equity_id', 'Equity', None),
         ]
 
-    p_from_date = str(trade_date) if trade_date is not None else str(from_dt)
-
     total = 0
     for table, id_col, label, table_exchange in tables:
         if trade_date is not None and force:
             _update_job(db, job_id,
                         progress=f'{label} {trade_date}: force-resetting magic_rs columns...')
             _force_null(db, 'magic_rs', table, trade_date, exchange=table_exchange)
+            _update_job(db, job_id, progress=f'{label} {trade_date}: bulk recompute...')
+            t0 = _time.time()
+            result = db.rpc('compute_all_magic_rs', {
+                'p_table': table, 'p_id_col': id_col,
+                'p_benchmark_id': benchmark_id,
+                'p_from_date': str(trade_date),
+            })
+            count = sum(r.get('rows_updated', 0) for r in (result or []))
+            elapsed = _time.time() - t0
+            log.info(f'[bulk] {label} MagicRS {trade_date} force=True: {count} rows in {elapsed:.2f}s')
+            total += count
+            continue
 
+        # Non-force paths: per-symbol. Either single-date (trade_date set) or
+        # legacy 90-day sweep.
+        p_from_date = str(trade_date) if trade_date is not None else str(from_dt)
         if trade_date is not None:
             pending = _pending_symbols(db, table, id_col, 'magic_rs_zone',
                                        trade_date, trade_date,
@@ -536,6 +610,7 @@ def handle_fix_magic_rs(db, job_id, params):
         log.info(f'{label} MagicRS: {len(pending)} symbols with gaps')
         _update_job(db, job_id, progress=f'{label}: {len(pending)} symbols to compute')
 
+        t0 = _time.time()
         for i, sid in enumerate(pending):
             if _is_cancelled(db, job_id):
                 return total
@@ -549,9 +624,6 @@ def handle_fix_magic_rs(db, job_id, params):
                     'p_symbol_id': sid, 'p_from_date': p_from_date,
                     'p_benchmark_id': benchmark_id,
                 }
-                # Equity rows live in km_equity_eod but the benchmark (NIFTY
-                # 500) lives in km_index_eod. Migration 034 patched
-                # compute_magic_rs_batch to accept cross-table benchmark args.
                 if table == 'km_equity_eod':
                     rpc_params['p_bench_table'] = 'km_index_eod'
                     rpc_params['p_bench_id_col'] = 'index_id'
@@ -560,6 +632,7 @@ def handle_fix_magic_rs(db, job_id, params):
                 total += count
             except Exception as e:
                 log.error(f'{label} MagicRS sid={sid}: {e}')
+        log.info(f'{label} MagicRS: {_time.time()-t0:.2f}s')
 
     log.info(f'MagicRS: {total} rows updated')
     return total
