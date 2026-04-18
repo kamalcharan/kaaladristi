@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -80,43 +81,57 @@ export default function HealthGrid({ onCellSelect }: Props) {
           </tr>
         </thead>
         <tbody>
-          {data.dimensions.map(dim => (
-            <tr key={dim.dimension}>
-              <td className="px-2 py-1 whitespace-nowrap sticky left-0 bg-kd-surface/60 z-10 text-secondary">
-                {dim.label}
-              </td>
-              {dim.days.map(cell => (
-                <td key={cell.trade_date} className="p-0">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onCellSelect({
-                        dimension: dim.dimension,
-                        tradeDate: cell.trade_date,
-                      })
-                    }
-                    title={cellTooltip(dim, cell)}
-                    className={cn(
-                      'w-4 h-4 block rounded-[3px] transition-transform',
-                      'hover:scale-125 hover:z-10 relative',
-                      STATUS_CLASSES[cell.status],
-                      cell.status === 'future' && 'cursor-default',
-                    )}
-                    disabled={cell.status === 'future'}
-                  />
-                </td>
-              ))}
-              <td className="px-2 py-1 whitespace-nowrap">
-                {dim.latest_ok ? (
-                  <span className="text-muted mono">{dim.latest_ok}</span>
-                ) : (
-                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-500/20 text-rose-300">
-                    never
-                  </span>
+          {data.dimensions.map((dim, idx) => {
+            const prevGroup = idx > 0 ? data.dimensions[idx - 1].group : null;
+            const needsSeparator = prevGroup && prevGroup !== dim.group;
+            const colSpan = headerDays.length + 2;
+            return (
+              <Fragment key={dim.dimension}>
+                {needsSeparator && (
+                  <tr aria-hidden="true">
+                    <td colSpan={colSpan} className="h-3 p-0">
+                      <div className="border-t border-kd-border/40 my-1" />
+                    </td>
+                  </tr>
                 )}
-              </td>
-            </tr>
-          ))}
+                <tr>
+                  <td className="px-2 py-1 whitespace-nowrap sticky left-0 bg-kd-surface/60 z-10 text-secondary">
+                    {dim.label}
+                  </td>
+                  {dim.days.map(cell => (
+                    <td key={cell.trade_date} className="p-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onCellSelect({
+                            dimension: dim.dimension,
+                            tradeDate: cell.trade_date,
+                          })
+                        }
+                        title={cellTooltip(dim, cell)}
+                        className={cn(
+                          'w-4 h-4 block rounded-[3px] transition-transform',
+                          'hover:scale-125 hover:z-10 relative',
+                          STATUS_CLASSES[cell.status],
+                          cell.status === 'future' && 'cursor-default',
+                        )}
+                        disabled={cell.status === 'future'}
+                      />
+                    </td>
+                  ))}
+                  <td className="px-2 py-1 whitespace-nowrap">
+                    {dim.latest_ok ? (
+                      <span className="text-muted mono">{dim.latest_ok}</span>
+                    ) : (
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-500/20 text-rose-300">
+                        never
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
 

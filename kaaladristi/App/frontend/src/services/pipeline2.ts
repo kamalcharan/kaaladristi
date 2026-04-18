@@ -41,9 +41,12 @@ export interface DayCell {
   fill_rate: number | null;
 }
 
+export type DimensionGroup = 'download' | 'compute';
+
 export interface DimensionHealth {
   dimension: string;
   label: string;
+  group: DimensionGroup;
   latest_ok: string | null;
   days: DayCell[];
   error?: string;
@@ -86,6 +89,8 @@ export interface JobsResponse {
 export interface DimensionInfo {
   key: string;
   label: string;
+  group: DimensionGroup;
+  fixable: boolean;
   ok_threshold: number | null;
 }
 

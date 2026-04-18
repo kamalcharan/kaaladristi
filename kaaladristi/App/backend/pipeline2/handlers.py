@@ -29,9 +29,22 @@ import psycopg2.extras
 
 from .health import (
     DIMENSION_HEALTH,
+    DOWNLOAD_DIMENSIONS,
     fill_rate,
     ok_threshold_for,
 )
+
+
+# Download dims are surfaced in the grid / dimensions list but have no
+# fix handler yet (no RPC equivalent of re-running a bhav download).
+# The API layer returns 400 before enqueuing; this set is the canonical
+# "is this dimension fixable?" check used by both API and worker.
+FIXABLE_DIMENSIONS = frozenset({
+    'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
+    'index_flow', 'nse_flow', 'bse_flow',
+    'nse_magic_rs', 'bse_magic_rs',
+    'industry_composites', 'market_breadth', 'breadth_roc',
+})
 
 
 ProgressFn = Callable[[str, int], None]
@@ -309,6 +322,13 @@ def handle_breadth_roc(conn, trade_date: date, force: bool,
 def handle(dimension: str, conn, trade_date: date, force: bool,
            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Dispatch a fix to the right per-dimension handler."""
+    if dimension in DOWNLOAD_DIMENSIONS:
+        # The API layer rejects these with 400 before enqueuing, but guard
+        # here too in case a job leaks through (e.g. manually inserted row).
+        raise ValueError(
+            f'Download fix not yet implemented for {dimension!r} — '
+            'run daily pipeline manually.'
+        )
     if dimension in (
         'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
         'index_flow', 'nse_flow', 'bse_flow',
@@ -324,8 +344,11 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
     raise ValueError(f'Unknown dimension: {dimension}')
 
 
-# List exposed to the UI (kept in compute-DAG order).
+# All dimensions the UI knows about — downloads + compute, in display order.
 KNOWN_DIMENSIONS = [
+    'index_eod_download',
+    'nse_eod_download',
+    'bse_eod_download',
     'index_indicators',
     'nse_equity_indicators',
     'bse_equity_indicators',
