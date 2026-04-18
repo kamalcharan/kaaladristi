@@ -34,6 +34,7 @@ from lib.config import DATABASE_URL  # noqa: E402
 from pipeline2 import health as v2_health  # noqa: E402
 from pipeline2 import scheduler as v2_scheduler  # noqa: E402
 from pipeline2.handlers import KNOWN_DIMENSIONS  # noqa: E402
+from pipeline2.health import label_for as _label_for  # noqa: E402
 
 
 logging.basicConfig(
@@ -327,7 +328,7 @@ def list_dimensions():
         'dimensions': [
             {
                 'key': dim,
-                'label': dim.replace('_', ' ').title(),
+                'label': _label_for(dim),
                 'ok_threshold': v2_health.ok_threshold_for(dim),
             }
             for dim in KNOWN_DIMENSIONS

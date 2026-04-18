@@ -45,6 +45,28 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     'breadth_roc':           ('km_breadth_roc',   None,        None,                                                       None),
 }
 
+
+# Display labels — hand-curated so NSE/BSE/RS/ROC render with correct casing.
+# A generic title() would produce "Nse Equity Indicators" and "Bse Magic Rs".
+LABELS: dict[str, str] = {
+    'index_indicators':      'Index Indicators',
+    'nse_equity_indicators': 'NSE Equity Indicators',
+    'bse_equity_indicators': 'BSE Equity Indicators',
+    'index_flow':            'Index Flow',
+    'nse_flow':              'NSE Flow',
+    'bse_flow':              'BSE Flow',
+    'nse_magic_rs':          'NSE Magic RS',
+    'bse_magic_rs':          'BSE Magic RS',
+    'industry_composites':   'Industry Composites',
+    'market_breadth':        'Market Breadth',
+    'breadth_roc':           'Breadth ROC',
+}
+
+
+def label_for(dim: str) -> str:
+    """Display label for a dimension. Falls back to a prettified key."""
+    return LABELS.get(dim, dim.replace('_', ' ').title())
+
 # Exchange filter inferred from dimension key prefix.
 def _exchange_for(dim: str) -> str | None:
     if dim.startswith('nse_'):
@@ -321,7 +343,7 @@ def _health_row(
 
     return DimensionHealth(
         dimension=dimension,
-        label=dimension.replace('_', ' ').title(),
+        label=label_for(dimension),
         latest_ok=latest_ok,
         days=days,
     )
@@ -356,7 +378,7 @@ def health_grid(conn, days: int = 30) -> list[dict]:
         except Exception as e:
             rows.append({
                 'dimension': dim,
-                'label': dim.replace('_', ' ').title(),
+                'label': label_for(dim),
                 'latest_ok': None,
                 'days': [],
                 'error': str(e),
