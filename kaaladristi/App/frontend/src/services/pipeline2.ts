@@ -61,11 +61,16 @@ export interface HealthGrid {
 export type JobStatus =
   | 'queued' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled';
 
+export type JobType = 'daily_run' | 'fix' | 'backfill';
+
 export interface Job {
   id: number;
-  job_type: 'daily_run' | 'fix';
+  job_type: JobType;
   dimension: string | null;
   trade_date: string | null;
+  date_from: string | null;
+  date_to: string | null;
+  batch_id: string | null;
   exchange: string | null;
   force: boolean;
   status: JobStatus;
@@ -79,6 +84,13 @@ export interface Job {
   started_at: string | null;
   completed_at: string | null;
   created_by: string | null;
+}
+
+export interface BackfillResponse {
+  batch_id: string;
+  job_count: number;
+  jobs: { job_id: number; dimension: string }[];
+  status: string;
 }
 
 export interface JobsResponse {
@@ -125,6 +137,14 @@ export const enqueueDailyRun = (body: {
   force?: boolean;
 } = {}) =>
   apiPost<{ job_id: number; status: string }>('/api/pipeline2/daily-run', body);
+
+export const enqueueBackfill = (body: {
+  dimension: string;        // dim key or 'all'
+  date_from: string;
+  date_to: string;
+  exchange?: string | null;
+  force?: boolean;
+}) => apiPost<BackfillResponse>('/api/pipeline2/backfill', body);
 
 export const cancelJob = (jobId: number) =>
   apiPost<{ job_id: number; status: string }>('/api/pipeline2/cancel', { job_id: jobId });

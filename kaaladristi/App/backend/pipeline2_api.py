@@ -14,8 +14,9 @@ import logging
 import os
 import subprocess
 import sys
+import uuid
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import psycopg2
@@ -123,6 +124,32 @@ class CancelRequest(BaseModel):
     job_id: int
 
 
+class BackfillRequest(BaseModel):
+    dimension: str                # dim key or 'all'
+    date_from: str                # YYYY-MM-DD
+    date_to: str                  # YYYY-MM-DD
+    exchange: Optional[str] = None
+    force: bool = False
+
+
+# Dependency order for the 'all' backfill. Matches DIMENSION_ORDER's
+# compute section so downstream dimensions (industry, breadth) run after
+# their upstream columns have been filled.
+BACKFILL_ALL_ORDER = [
+    'index_indicators',
+    'nse_equity_indicators',
+    'bse_equity_indicators',
+    'index_flow',
+    'nse_flow',
+    'bse_flow',
+    'nse_magic_rs',
+    'bse_magic_rs',
+    'industry_composites',
+    'market_breadth',
+    'breadth_roc',
+]
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
 @app.get('/api/pipeline2/health')
@@ -164,9 +191,10 @@ def list_jobs(limit: int = 20, dimension: Optional[str] = None, status: Optional
                 f"SELECT id, job_type, dimension, trade_date, exchange, force, "
                 f"       status, progress_text, progress_pct, rows_affected, "
                 f"       fill_rate_before, fill_rate_after, error_msg, "
-                f"       created_at, started_at, completed_at, created_by "
+                f"       created_at, started_at, completed_at, created_by, "
+                f"       date_from, date_to, batch_id "
                 f"FROM km_jobs {where_sql} "
-                f"ORDER BY created_at DESC LIMIT %s",
+                f"ORDER BY created_at DESC, id DESC LIMIT %s",
                 params,
             )
             rows = cur.fetchall()
@@ -177,6 +205,9 @@ def list_jobs(limit: int = 20, dimension: Optional[str] = None, status: Optional
                 'job_type': r['job_type'],
                 'dimension': r['dimension'],
                 'trade_date': str(r['trade_date']) if r['trade_date'] else None,
+                'date_from': str(r['date_from']) if r['date_from'] else None,
+                'date_to': str(r['date_to']) if r['date_to'] else None,
+                'batch_id': r['batch_id'],
                 'exchange': r['exchange'],
                 'force': r['force'],
                 'status': r['status'],
@@ -209,8 +240,9 @@ def get_job(job_id: int):
         for k in ('created_at', 'started_at', 'completed_at'):
             if j.get(k):
                 j[k] = j[k].isoformat()
-        if j.get('trade_date'):
-            j['trade_date'] = str(j['trade_date'])
+        for k in ('trade_date', 'date_from', 'date_to'):
+            if j.get(k):
+                j[k] = str(j[k])
         for k in ('fill_rate_before', 'fill_rate_after'):
             if j.get(k) is not None:
                 j[k] = float(j[k])
@@ -309,6 +341,84 @@ def enqueue_daily_run(req: DailyRunRequest):
         return {'job_id': new_id, 'status': 'queued'}
     finally:
         conn.close()
+
+
+@app.post('/api/pipeline2/backfill')
+def enqueue_backfill(req: BackfillRequest):
+    """Queue a multi-date backfill, one job per dimension.
+
+    dimension='all' expands to BACKFILL_ALL_ORDER (11 compute dimensions
+    in dependency order). All inserted jobs share a batch_id so the UI
+    can render them as a group.
+    """
+    # ── Validate dates ──────────────────────────────────────────────
+    try:
+        from_d = date.fromisoformat(req.date_from)
+        to_d = date.fromisoformat(req.date_to)
+    except ValueError as e:
+        raise HTTPException(400, f'Invalid date: {e}')
+    today_d = date.today()
+    if from_d > to_d:
+        raise HTTPException(400, 'date_from must be <= date_to')
+    if to_d > today_d:
+        raise HTTPException(400, 'date_to cannot be in the future')
+    if (today_d - from_d).days > 365:
+        raise HTTPException(400, 'date_from cannot be more than 365 days ago')
+    if req.exchange and req.exchange not in ('NSE', 'BSE'):
+        raise HTTPException(400, 'exchange must be NSE or BSE or omitted')
+
+    # ── Resolve dimension list ──────────────────────────────────────
+    if req.dimension == 'all':
+        dims_to_run = list(BACKFILL_ALL_ORDER)
+    else:
+        if req.dimension not in KNOWN_DIMENSIONS:
+            raise HTTPException(
+                400,
+                f'Unknown dimension {req.dimension!r}. Available: all, '
+                f'{", ".join(KNOWN_DIMENSIONS)}',
+            )
+        if req.dimension in DOWNLOAD_DIMENSIONS:
+            raise HTTPException(
+                400,
+                'Download backfill not yet implemented — '
+                'run daily pipeline manually.',
+            )
+        if req.dimension not in FIXABLE_DIMENSIONS:
+            raise HTTPException(
+                400,
+                f'Dimension {req.dimension!r} is not fixable via this endpoint.',
+            )
+        dims_to_run = [req.dimension]
+
+    batch_id = f'backfill-{from_d}-{to_d}-{uuid.uuid4().hex[:6]}'
+
+    conn = _conn()
+    inserted: list[dict] = []
+    try:
+        with conn.cursor() as cur:
+            # Insert in order. The worker is single-threaded and claims
+            # oldest-created first, so insertion order == execution order.
+            for dim in dims_to_run:
+                cur.execute(
+                    "INSERT INTO km_jobs "
+                    "  (job_type, dimension, date_from, date_to, "
+                    "   exchange, force, batch_id, created_by) "
+                    "VALUES ('backfill', %s, %s, %s, %s, %s, %s, 'ui') "
+                    "RETURNING id",
+                    [dim, str(from_d), str(to_d), req.exchange, req.force, batch_id],
+                )
+                new_id = cur.fetchone()[0]
+                inserted.append({'job_id': new_id, 'dimension': dim})
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        'batch_id': batch_id,
+        'job_count': len(inserted),
+        'jobs': inserted,
+        'status': 'queued',
+    }
 
 
 @app.post('/api/pipeline2/cancel')
