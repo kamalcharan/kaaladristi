@@ -1,0 +1,133 @@
+// Pipeline v2 API client.
+// All endpoints under /api/pipeline2. Runs on a separate uvicorn process;
+// nginx proxies /api/pipeline2/ to pipeline-api2:8101.
+
+const PIPELINE_API = (
+  import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101'
+);
+
+async function apiGet<T>(path: string): Promise<T> {
+  const resp = await fetch(`${PIPELINE_API}${path}`);
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.detail || `API error ${resp.status}`);
+  }
+  return resp.json();
+}
+
+async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const resp = await fetch(`${PIPELINE_API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.detail || `API error ${resp.status}`);
+  }
+  return resp.json();
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export type DayCellStatus =
+  | 'ok' | 'partial' | 'missing' | 'holiday' | 'no_data' | 'future';
+
+export interface DayCell {
+  trade_date: string;
+  status: DayCellStatus;
+  total: number;
+  populated: number;
+  fill_rate: number | null;
+}
+
+export interface DimensionHealth {
+  dimension: string;
+  label: string;
+  latest_ok: string | null;
+  days: DayCell[];
+  error?: string;
+}
+
+export interface HealthGrid {
+  days: number;
+  dimensions: DimensionHealth[];
+  generated_at: string;
+}
+
+export type JobStatus =
+  | 'queued' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled';
+
+export interface Job {
+  id: number;
+  job_type: 'daily_run' | 'fix';
+  dimension: string | null;
+  trade_date: string | null;
+  exchange: string | null;
+  force: boolean;
+  status: JobStatus;
+  progress_text: string | null;
+  progress_pct: number | null;
+  rows_affected: number | null;
+  fill_rate_before: number | null;
+  fill_rate_after: number | null;
+  error_msg: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_by: string | null;
+}
+
+export interface JobsResponse {
+  jobs: Job[];
+  count: number;
+}
+
+export interface DimensionInfo {
+  key: string;
+  label: string;
+  ok_threshold: number | null;
+}
+
+export interface DimensionsList {
+  dimensions: DimensionInfo[];
+}
+
+// ── Endpoints ──────────────────────────────────────────────────────────────
+
+export const fetchHealthGrid = (days = 30) =>
+  apiGet<HealthGrid>(`/api/pipeline2/health?days=${days}`);
+
+export const fetchJobs = (limit = 20, dimension?: string, status?: string) => {
+  const qs = new URLSearchParams({ limit: String(limit) });
+  if (dimension) qs.set('dimension', dimension);
+  if (status) qs.set('status', status);
+  return apiGet<JobsResponse>(`/api/pipeline2/jobs?${qs.toString()}`);
+};
+
+export const fetchJob = (id: number) =>
+  apiGet<Job>(`/api/pipeline2/jobs/${id}`);
+
+export const enqueueFix = (body: {
+  dimension: string;
+  trade_date: string;
+  exchange?: string | null;
+  force?: boolean;
+}) => apiPost<{ job_id: number; status: string }>('/api/pipeline2/fix', body);
+
+export const enqueueDailyRun = (body: {
+  trade_date?: string;
+  force?: boolean;
+} = {}) =>
+  apiPost<{ job_id: number; status: string }>('/api/pipeline2/daily-run', body);
+
+export const cancelJob = (jobId: number) =>
+  apiPost<{ job_id: number; status: string }>('/api/pipeline2/cancel', { job_id: jobId });
+
+export const fetchDimensions = () =>
+  apiGet<DimensionsList>('/api/pipeline2/dimensions');
+
+export const fetchSchedulerInfo = () =>
+  apiGet<{ active: boolean; next_run: string | null; trigger: string }>(
+    '/api/pipeline2/scheduler'
+  );
