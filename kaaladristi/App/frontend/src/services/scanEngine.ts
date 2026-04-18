@@ -64,6 +64,22 @@ export const SCAN_PRESETS: ScanDefinition[] = [
 
 // ── Data Loading ───────────────────────────────────────────────
 
+interface OppConfig {
+  ema_atr_band: number;
+  reward_min_atr_multiple: number;
+  magic_rs_zones: string[];
+  flow_types: string[];
+  rvol_min: number;
+}
+
+const DEFAULT_OPP_CONFIG: OppConfig = {
+  ema_atr_band: 1.0,
+  reward_min_atr_multiple: 0.0,
+  magic_rs_zones: ['Strong Bull', 'Mild Bull'],
+  flow_types: ['FRESH_LONGS', 'SHORT_COVERING'],
+  rvol_min: 1.2,
+};
+
 interface ScanDataBundle {
   industries: IndustryEodRow[];
   industriesHistory: Map<string, IndustryEodRow[]>; // industry → rows by date desc
@@ -71,23 +87,24 @@ interface ScanDataBundle {
   latestEod: Map<number, EquityEodSnapshot>;
   eodHistory: Map<number, EquityEodSnapshot[]>; // equity_id → rows by date desc
   latestDate: string | null;
+  oppConfig: OppConfig;
 }
 
 let _cachedBundle: { data: ScanDataBundle; fetchedAt: number } | null = null;
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
 
+// 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
 async function fetchRecentDates(limit: number): Promise<string[]> {
-  const { data, error } = await from('km_equity_eod')
+  const { data } = await from('km_trading_calendar')
     .select('trade_date')
+    .eq('status', 'completed')
+    .eq('exchange', 'NSE')
     .order('trade_date', { ascending: false })
-    .limit(limit * 6000) // overfetch for dedup
+    .limit(limit)
     .execute();
 
-  if (error) throw new Error(error.message);
   const rows = (data ?? []) as { trade_date: string }[];
-  const unique = [...new Set(rows.map((r) => r.trade_date))];
-  unique.sort((a: string, b: string) => b.localeCompare(a));
-  return unique.slice(0, limit);
+  return rows.map((r) => r.trade_date).sort((a, b) => b.localeCompare(a));
 }
 
 async function loadScanData(): Promise<ScanDataBundle> {
@@ -105,6 +122,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
       latestEod: new Map(),
       eodHistory: new Map(),
       latestDate: null,
+      oppConfig: DEFAULT_OPP_CONFIG,
     };
     return empty;
   }
@@ -112,9 +130,9 @@ async function loadScanData(): Promise<ScanDataBundle> {
   const latestDate = dates[0];
   const oldestDate = dates[dates.length - 1];
 
-  // Parallel fetches
-  const [industryRes, symbolRes, eodRes] = await Promise.all([
-    // Industry EOD for last 10 days
+  // 3a/3b/3c: Parallel fetches — calendar-anchored dates, extended select, config
+  const [industryRes, symbolRes, eodRes, configRes] = await Promise.all([
+    // Industry EOD for last 11 dates
     from('km_industry_eod')
       .select('*')
       .gte('trade_date', dates[Math.min(10, dates.length - 1)])
@@ -122,19 +140,27 @@ async function loadScanData(): Promise<ScanDataBundle> {
       .limit(1000)
       .execute(),
 
-    // All active equity symbols (include exchange + isin for dedup)
+    // All active equity symbols
     from('km_equity_symbols')
       .select('id,symbol,company_name,industry,exchange,isin,is_active')
       .is('is_active', 'true')
       .limit(8000)
       .execute(),
 
-    // Equity EOD for last 20 dates
+    // 3a: Equity EOD — use explicit date list (.in) + extended select with ema_20/atr_14/delivery_pct/w52_high
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
-      .gte('trade_date', oldestDate)
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high')
+      .in('trade_date', dates)
       .order('trade_date', { ascending: false })
       .limit(120000)
+      .execute(),
+
+    // 3c: VaNi opportunity config
+    from('km_vani_opportunity_config')
+      .select('ema_atr_band,reward_min_atr_multiple,magic_rs_zones,flow_types,rvol_min')
+      .eq('is_active', 'true')
+      .order('id', { ascending: false })
+      .limit(1)
       .execute(),
   ]);
 
@@ -166,6 +192,18 @@ async function loadScanData(): Promise<ScanDataBundle> {
     }
   }
 
+  // 3c: Resolve opportunity config — fall back to defaults if table not yet applied
+  const rawConfig = ((configRes.data ?? []) as OppConfig[])[0];
+  const oppConfig: OppConfig = rawConfig
+    ? {
+        ema_atr_band: Number(rawConfig.ema_atr_band),
+        reward_min_atr_multiple: Number(rawConfig.reward_min_atr_multiple),
+        magic_rs_zones: rawConfig.magic_rs_zones ?? DEFAULT_OPP_CONFIG.magic_rs_zones,
+        flow_types: rawConfig.flow_types ?? DEFAULT_OPP_CONFIG.flow_types,
+        rvol_min: Number(rawConfig.rvol_min),
+      }
+    : DEFAULT_OPP_CONFIG;
+
   const bundle: ScanDataBundle = {
     industries,
     industriesHistory,
@@ -173,10 +211,26 @@ async function loadScanData(): Promise<ScanDataBundle> {
     latestEod,
     eodHistory,
     latestDate,
+    oppConfig,
   };
 
   _cachedBundle = { data: bundle, fetchedAt: Date.now() };
   return bundle;
+}
+
+// ── 3c: VaNi Opportunity evaluation ───────────────────────────
+
+function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: OppConfig): boolean {
+  if (!stock.ema_20 || !stock.atr_14 || stock.atr_14 <= 0) return false;
+  const withinBand =
+    stock.close >= stock.ema_20 - config.ema_atr_band * stock.atr_14 &&
+    stock.close <= stock.ema_20 + config.ema_atr_band * stock.atr_14;
+  const reward = (stock.ema_20 + stock.atr_14) - stock.close;
+  const hasReward = reward > config.reward_min_atr_multiple * stock.atr_14;
+  const zoneOk = config.magic_rs_zones.includes(stock.magic_rs_zone ?? '');
+  const flowOk = config.flow_types.includes(stock.flow_type ?? '');
+  const rvolOk = (stock.rvol ?? 0) >= config.rvol_min;
+  return withinBand && hasReward && zoneOk && flowOk && rvolOk;
 }
 
 // ── Helper: DOT detection in history ───────────────────────────
@@ -265,7 +319,16 @@ function buildScanStock(
 
   const history = bundle.eodHistory.get(equityId) ?? [];
 
-  return {
+  // 3c: Computed financial fields
+  const ema20 = eod.ema_20 ?? null;
+  const atr14 = eod.atr_14 ?? null;
+  const reward = (ema20 && atr14) ? (ema20 + atr14) - eod.close : null;
+  const rewardPct = (ema20 && atr14 && atr14 > 0) ? ((ema20 + atr14) - eod.close) / atr14 : null;
+  const pctBelow52wHigh = (eod.w52_high && eod.w52_high > 0)
+    ? ((eod.w52_high - eod.close) / eod.w52_high) * 100
+    : null;
+
+  const partial: Omit<ScanStock, 'vaniOpportunity'> = {
     equity_id: equityId,
     symbol: sym.symbol,
     company_name: sym.company_name,
@@ -287,7 +350,16 @@ function buildScanStock(
     has_recent_svd: hasDotInHistory(history, 'svd', 5),
     has_recent_sbd: hasDotInHistory(history, 'sbd', 5),
     has_recent_syd: hasDotInHistory(history, 'syd', 5),
+    ema_20: ema20,
+    atr_14: atr14,
+    delivery_pct: eod.delivery_pct ?? null,
+    w52_high: eod.w52_high ?? null,
+    reward,
+    rewardPct,
+    pctBelow52wHigh,
   };
+
+  return { ...partial, vaniOpportunity: evaluateOpportunity(partial, bundle.oppConfig) };
 }
 
 // ── Scan Implementations ───────────────────────────────────────
@@ -586,6 +658,22 @@ export function invalidateScanCache(): void {
   _cachedBundle = null;
 }
 
+/** Return result counts for all 6 scans — uses shared cached data */
+export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combined'): Promise<Record<string, number>> {
+  const bundle = await loadScanData();
+  const counts: Record<string, number> = {};
+  for (const [id, fn] of Object.entries(SCAN_FUNCTIONS)) {
+    let results = fn(bundle);
+    if (exchangeFilter === 'combined') {
+      results = deduplicateByIsin(results, bundle.symbols);
+    } else {
+      results = results.filter((s) => s.exchange === exchangeFilter);
+    }
+    counts[id] = results.length;
+  }
+  return counts;
+}
+
 // ── Manipulation Watch ────────────────────────────────────────
 // Separate from scanner presets — safety feature, not opportunity.
 // No industry filter: manipulation can happen anywhere.
@@ -758,9 +846,17 @@ function buildStockFromEod(
     rss_spread: eod.rss_spread,
     sma_150: eod.sma_150,
     volume_divergence_flag: eod.volume_divergence_flag,
-    has_recent_svd: false, // not needed for manipulation watch
+    has_recent_svd: false,
     has_recent_sbd: false,
     has_recent_syd: false,
+    ema_20: null,
+    atr_14: null,
+    delivery_pct: null,
+    w52_high: null,
+    reward: null,
+    rewardPct: null,
+    pctBelow52wHigh: null,
+    vaniOpportunity: false,
   };
 }
 
