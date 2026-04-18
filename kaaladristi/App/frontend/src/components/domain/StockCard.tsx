@@ -10,6 +10,7 @@ import { displaySymbol, displaySubName, navName as toNavName } from '@/lib/symbo
 import { Card } from '@/components/ui';
 import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
+import React from 'react';
 
 // ── Vocabulary mapping (kept for backward compat with IndustryTransitionView, ManipulationWatchView) ──
 
@@ -85,7 +86,7 @@ export function MetricPill({ label, value, color }: { label: string; value: stri
   );
 }
 
-// ── Internal helpers for new StockCard ───────────────────────
+// ── Internal helpers ──────────────────────────────────────────
 
 const FLOW_DISPLAY: Record<string, { label: string; bull: boolean }> = {
   FRESH_LONGS:      { label: 'Fresh Longs',   bull: true },
@@ -120,21 +121,13 @@ function zonePillStyle(zone: string | null): React.CSSProperties {
   };
 }
 
-function SigPill({
-  label, bull, bear,
-}: {
-  label: string;
-  bull?: boolean;
-  bear?: boolean;
-}) {
+function SigPill({ label, bull, bear }: { label: string; bull?: boolean; bear?: boolean }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
       padding: '3px 8px',
-      fontFamily: 'var(--font-mono)',
-      fontSize: '10.5px',
-      borderRadius: '5px',
-      fontWeight: 500,
+      fontFamily: 'var(--font-mono)', fontSize: '10.5px',
+      borderRadius: '5px', fontWeight: 500,
       background: bull ? 'var(--bull-bg)' : bear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
       color: bull ? 'var(--bull)' : bear ? 'var(--bear)' : 'var(--text-muted)',
       border: `1px solid ${bull ? 'rgba(16,185,129,0.2)' : bear ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
@@ -153,9 +146,84 @@ function DotTag({ label, color }: { label: string; color: string }) {
   );
 }
 
-// ── Stock Card — 3-zone grid layout ──────────────────────────
+// Fix 2/3 — Signal tower for sniper scores (0–50 scale)
+function SignalTower({ score, label, tooltip }: { score: number; label: string; tooltip: string }) {
+  const filled = score > 45 ? 5 : score > 35 ? 4 : score > 25 ? 3 : score > 10 ? 2 : 1;
+  const barColor = filled === 5 ? 'var(--gold)'
+    : filled >= 3 ? 'var(--bull)'
+    : filled === 2 ? 'var(--caution)'
+    : 'var(--text-faint)';
+  const heights = [3, 5, 7, 9, 11];
 
-import React from 'react';
+  return (
+    <span
+      title={tooltip}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '5px',
+        padding: '3px 8px',
+        fontFamily: 'var(--font-mono)', fontSize: '10.5px',
+        borderRadius: '5px', fontWeight: 500,
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid var(--border)',
+        cursor: 'default',
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'flex-end', gap: '2px' }}>
+        {heights.map((h, i) => (
+          <span key={i} style={{
+            width: '3px', height: `${h}px`, borderRadius: '1px',
+            background: i < filled ? barColor : 'var(--border-strong)',
+          }} />
+        ))}
+      </span>
+      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+    </span>
+  );
+}
+
+// Fix 1 — MRS pill with 5-day direction bars
+function MrsPill({
+  value, zone, trend,
+}: {
+  value: number;
+  zone: string | null;
+  trend: (boolean | null)[];
+}) {
+  const isBull = zone === 'Strong Bull' || zone === 'Mild Bull';
+  const isBear = zone === 'Strong Bear' || zone === 'Mild Bear';
+
+  // Show most-recent on right → reverse so oldest is leftmost
+  const bars = [...trend].reverse();
+
+  return (
+    <span
+      title="Magic RS vs Nifty 500 · 144-period"
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '5px',
+        padding: '3px 8px',
+        fontFamily: 'var(--font-mono)', fontSize: '10.5px',
+        borderRadius: '5px', fontWeight: 500,
+        background: isBull ? 'var(--bull-bg)' : isBear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
+        color: isBull ? 'var(--bull)' : isBear ? 'var(--bear)' : 'var(--text-muted)',
+        border: `1px solid ${isBull ? 'rgba(16,185,129,0.2)' : isBear ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
+        cursor: 'default',
+      }}
+    >
+      MRS {value.toFixed(1)}
+      <span style={{ display: 'flex', alignItems: 'center', gap: '1.5px', marginLeft: '2px' }}>
+        {bars.map((up, i) => (
+          <span key={i} style={{
+            width: '3px', height: '10px', borderRadius: '1.5px',
+            background: up === true ? 'var(--bull)' : up === false ? 'var(--bear)' : 'var(--border-strong)',
+            opacity: up == null ? 0.4 : 1,
+          }} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+// ── Stock Card — 3-zone grid layout ──────────────────────────
 
 export function StockCard({ stock }: { stock: ScanStock }) {
   const navigate = useNavigate();
@@ -167,14 +235,19 @@ export function StockCard({ stock }: { stock: ScanStock }) {
   const pct = stock.pct_chng ?? 0;
   const isUp = pct >= 0;
 
+  // Fix 5 — EMA20 distance %
   const ema20 = stock.ema_20;
-  const ema20Color = ema20 == null
-    ? 'var(--text-faint)'
-    : stock.close >= ema20 ? 'var(--bull)' : 'var(--bear)';
+  const ema20Dist = ema20 != null ? ((stock.close - ema20) / ema20) * 100 : null;
+  const ema20Label = ema20Dist == null ? '—'
+    : Math.abs(ema20Dist) < 0.3 ? '≈0'
+    : `${ema20Dist >= 0 ? '+' : ''}${ema20Dist.toFixed(1)}%`;
+  const ema20Color = ema20Dist == null ? 'var(--text-faint)'
+    : Math.abs(ema20Dist) < 0.3 ? 'var(--text-muted)'
+    : ema20Dist > 0 ? 'var(--bull)' : 'var(--bear)';
 
+  // Fix 4 — Reward color
   const rp = stock.rewardPct;
-  const rewardColor = rp == null
-    ? 'var(--text-faint)'
+  const rewardColor = rp == null ? 'var(--text-faint)'
     : rp >= 0.7 ? 'var(--bull)'
     : rp >= 0.3 ? 'var(--caution)'
     : 'var(--bear)';
@@ -210,11 +283,8 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         {/* Symbol + badges */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
           <span style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '15px',
-            fontWeight: 500,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.01em',
+            fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 500,
+            color: 'var(--text-primary)', letterSpacing: '-0.01em',
           }}>
             {heroName}
           </span>
@@ -243,11 +313,9 @@ export function StockCard({ stock }: { stock: ScanStock }) {
           {stock.vaniOpportunity && (
             <span style={{
               display: 'inline-flex', alignItems: 'center',
-              padding: '2px 8px',
-              fontFamily: 'var(--font-mono)', fontSize: '9.5px',
-              borderRadius: '5px', letterSpacing: '0.06em',
-              textTransform: 'uppercase', fontWeight: 700,
-              background: 'var(--gold)', color: '#1a1410', whiteSpace: 'nowrap',
+              padding: '2px 8px', fontFamily: 'var(--font-mono)', fontSize: '9.5px',
+              borderRadius: '5px', letterSpacing: '0.06em', textTransform: 'uppercase',
+              fontWeight: 700, background: 'var(--gold)', color: '#1a1410', whiteSpace: 'nowrap',
             }}>
               ✦ Opportunity
             </span>
@@ -260,31 +328,29 @@ export function StockCard({ stock }: { stock: ScanStock }) {
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {subName}
-          {subName && stock.industry && (
-            <span style={{ color: 'var(--text-faint)', margin: '0 5px' }}>·</span>
-          )}
-          {stock.industry && (
-            <span style={{ color: 'var(--text-faint)' }}>{stock.industry}</span>
-          )}
+          {subName && stock.industry && <span style={{ color: 'var(--text-faint)', margin: '0 5px' }}>·</span>}
+          {stock.industry && <span style={{ color: 'var(--text-faint)' }}>{stock.industry}</span>}
         </div>
 
-        {/* Evidence strip — selective signals */}
+        {/* Evidence strip */}
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
+
+          {/* Fix 1 — MRS pill with direction bars */}
           {stock.magic_rs != null && (
-            <SigPill
-              label={`RS ${stock.magic_rs.toFixed(1)}`}
-              bull={stock.magic_rs_zone === 'Strong Bull' || stock.magic_rs_zone === 'Mild Bull'}
-              bear={stock.magic_rs_zone === 'Strong Bear' || stock.magic_rs_zone === 'Mild Bear'}
+            <MrsPill
+              value={stock.magic_rs}
+              zone={stock.magic_rs_zone}
+              trend={stock.magicRsTrend ?? []}
             />
           )}
+
+          {/* RSI — badge if >70, pill if 61-70, red pill if <40 */}
           {stock.rsi_14 != null && stock.rsi_14 > 70 && (
             <span style={{
               display: 'inline-flex', alignItems: 'center',
-              padding: '3px 9px',
-              fontFamily: 'var(--font-mono)', fontSize: '10px',
-              borderRadius: '5px', letterSpacing: '0.06em',
-              textTransform: 'uppercase', fontWeight: 700,
-              background: 'var(--bull)', color: '#0a1f16', whiteSpace: 'nowrap',
+              padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: '10px',
+              borderRadius: '5px', letterSpacing: '0.06em', textTransform: 'uppercase',
+              fontWeight: 700, background: 'var(--bull)', color: '#0a1f16', whiteSpace: 'nowrap',
             }}>
               RSI {stock.rsi_14.toFixed(0)}
             </span>
@@ -295,24 +361,41 @@ export function StockCard({ stock }: { stock: ScanStock }) {
           {stock.rsi_14 != null && stock.rsi_14 < 40 && (
             <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} bear />
           )}
+
+          {/* Fix 2 — Smart Money signal tower */}
           {(stock.sniper_inst ?? 0) > 15 && (
-            <SigPill label={`Smart Money +${stock.sniper_inst!.toFixed(0)}`} />
+            <SignalTower
+              score={stock.sniper_inst!}
+              label="Institution"
+              tooltip={`Smart Money ${stock.sniper_inst!.toFixed(0)}/50 · Institutional RSI`}
+            />
           )}
-          {stock.accum_distrib === 'ACCUMULATION' && (
-            <SigPill label="Accumulation" bull />
+
+          {/* Fix 3 — Fast Money signal tower */}
+          {(stock.sniper_hot ?? 0) > 15 && (
+            <SignalTower
+              score={stock.sniper_hot!}
+              label="Fast Money"
+              tooltip={`Fast Money ${stock.sniper_hot!.toFixed(0)}/50 · Hot Money RSI`}
+            />
           )}
-          {stock.accum_distrib === 'DISTRIBUTION' && (
-            <SigPill label="Distribution" bear />
-          )}
+
+          {/* Accum / Distrib */}
+          {stock.accum_distrib === 'ACCUMULATION' && <SigPill label="Accumulation" bull />}
+          {stock.accum_distrib === 'DISTRIBUTION' && <SigPill label="Distribution" bear />}
+
+          {/* RVOL */}
           {stock.rvol != null && (
             <SigPill label={`RVOL ${stock.rvol.toFixed(1)}`} bull={stock.rvol >= 1.5} />
           )}
+
+          {/* Delivery */}
           {(stock.delivery_pct ?? 0) > 60 && (
             <SigPill label={`Delivery ${stock.delivery_pct!.toFixed(0)}%`} bull />
           )}
         </div>
 
-        {/* Signal dots — only if any present */}
+        {/* Signal dots */}
         {(stock.has_recent_svd || stock.has_recent_sbd || stock.has_recent_syd) && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '7px' }}>
             {stock.has_recent_svd && <DotTag label="Volume Drive" color="var(--bull)" />}
@@ -322,7 +405,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         )}
       </div>
 
-      {/* Zone 2: Price + % change + EMA 20 */}
+      {/* Zone 2: Price + % change + Fix 5 EMA20 dist + Fix 4 Reward+ATR */}
       <div style={{ textAlign: 'right', minWidth: 0 }}>
         <div style={{
           fontFamily: 'var(--font-mono)', fontSize: '16px', fontWeight: 500,
@@ -338,17 +421,26 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         }}>
           {isUp ? '▲' : '▼'} {isUp ? '+' : ''}{pct.toFixed(2)}%
         </div>
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '5px',
-          color: ema20Color,
-        }}>
-          EMA20 {ema20 != null ? ema20.toFixed(2) : '—'}
+
+        {/* Fix 5 — EMA20 distance % */}
+        <div
+          title="Distance from EMA 20 · Positive = price above EMA"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '5px', color: ema20Color }}
+        >
+          EMA20 {ema20Label}
         </div>
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '3px',
-          color: rewardColor,
-        }}>
+
+        {/* Fix 4 — Reward + ATR context */}
+        <div
+          title="Reward = (EMA 20 + ATR 14) − Close · Higher = more runway"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '3px', color: rewardColor }}
+        >
           Reward {stock.reward != null ? `₹${stock.reward.toFixed(1)}` : '—'}
+          {stock.atr_14 != null && (
+            <span style={{ color: 'var(--text-faint)', marginLeft: '5px' }}>
+              ATR ₹{stock.atr_14.toFixed(1)}
+            </span>
+          )}
         </div>
       </div>
 

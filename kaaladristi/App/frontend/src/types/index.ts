@@ -407,6 +407,7 @@ export interface ScanStock {
   flow_type: string | null;
   rvol: number | null;
   sniper_inst: number | null;
+  sniper_hot: number | null;
   accum_distrib: string | null;
   rss_value: number | null;
   rss_spread: number | null;
@@ -421,6 +422,7 @@ export interface ScanStock {
   delivery_pct: number | null;
   w52_high: number | null;
   // Computed fields
+  magicRsTrend: (boolean | null)[];
   reward: number | null;
   rewardPct: number | null;
   pctBelow52wHigh: number | null;

@@ -89,7 +89,9 @@ function ActionIsland({ children }: { children: React.ReactNode }) {
 
 function ScannerLanding() {
   const navigate = useNavigate();
-  const { data: allCounts } = useAllScanCounts('combined');
+  const { data: allCountsData } = useAllScanCounts('combined');
+  const allCounts = allCountsData?.counts;
+  const latestDate = allCountsData?.latestDate ?? null;
 
   const totalSetups = useMemo(
     () => Object.values(allCounts ?? {}).reduce((s, n) => s + n, 0),
@@ -188,7 +190,7 @@ function ScannerLanding() {
                 {/* D — Daily: clickable, gold if has results */}
                 <button
                   onClick={(e) => { e.stopPropagation(); navigate(`/scanner/${preset.id}`); }}
-                  title="Daily"
+                  title={`Daily · ${count ?? 0} setup${(count ?? 0) !== 1 ? 's' : ''} as of ${latestDate ?? '…'}`}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                     background: 'none', border: 'none', cursor: 'pointer', padding: 0,
