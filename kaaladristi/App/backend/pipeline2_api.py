@@ -545,11 +545,18 @@ def list_dimensions():
 
 @app.get('/api/pipeline2/scheduler')
 def scheduler_info():
-    """Next scheduled daily_run time."""
+    """Next scheduled runs for both APScheduler jobs."""
+    active = _scheduler is not None and _scheduler.running
     return {
-        'active': _scheduler is not None and _scheduler.running,
-        'next_run': v2_scheduler.next_run_time(_scheduler),
-        'trigger': '18:00 IST (Mon-Fri)',
+        'active': active,
+        'daily_run': {
+            'next': v2_scheduler.next_run_time(_scheduler, 'pipeline2_daily_run'),
+            'trigger': '18:00 IST (Mon-Fri)',
+        },
+        'gap_sweep': {
+            'next': v2_scheduler.next_run_time(_scheduler, 'pipeline2_gap_sweep'),
+            'trigger': '19:30 IST (Mon-Fri) — last 3 days',
+        },
     }
 
 

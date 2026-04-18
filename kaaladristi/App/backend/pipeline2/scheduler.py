@@ -56,9 +56,94 @@ def _enqueue_daily_run(dsn: str) -> None:
         conn.close()
 
 
+def _daily_gap_sweep(dsn: str) -> None:
+    """Runs at 19:30 IST — 90 min after the 18:00 daily run. Looks at the
+    last 3 trading days and enqueues a fix job for every (dimension, date)
+    still sitting at missing or partial.
+
+    Rules:
+      * Only enqueues job_type='fix' — never backfill, never daily_run.
+      * Skips *_eod_download dims (download failures need human attention).
+      * Skips (dim, date) pairs that already have a queued or running job
+        so we don't double-book the worker.
+      * created_by = 'gap_sweep' so the operator can spot the source in
+        Panel B.
+    """
+    # Lazy imports — avoid running health-grid queries at scheduler-start time.
+    from .health import health_grid, DOWNLOAD_DIMENSIONS
+
+    try:
+        conn = psycopg2.connect(dsn)
+    except Exception as e:
+        log.error(f'gap sweep: could not connect to DB: {e}')
+        return
+
+    enqueued = 0
+    skipped_existing = 0
+
+    try:
+        try:
+            grid = health_grid(conn, days=3)
+        except Exception as e:
+            log.error(f'gap sweep: health_grid failed — aborting: {e}')
+            return
+
+        with conn.cursor() as cur:
+            for dim_row in grid:
+                dim_key = dim_row.get('dimension')
+                if not dim_key or dim_key in DOWNLOAD_DIMENSIONS:
+                    continue
+
+                for day in dim_row.get('days') or []:
+                    if day.get('status') not in ('missing', 'partial'):
+                        continue
+                    td = day.get('trade_date')
+                    if not td:
+                        continue
+
+                    # De-dupe: skip if the worker already has this claim.
+                    cur.execute(
+                        "SELECT id FROM km_jobs "
+                        "WHERE job_type = 'fix' "
+                        "  AND dimension = %s AND trade_date = %s "
+                        "  AND status IN ('queued', 'running') LIMIT 1",
+                        [dim_key, td],
+                    )
+                    if cur.fetchone():
+                        skipped_existing += 1
+                        continue
+
+                    cur.execute(
+                        "INSERT INTO km_jobs "
+                        "  (job_type, dimension, trade_date, created_by) "
+                        "VALUES ('fix', %s, %s, 'gap_sweep')",
+                        [dim_key, td],
+                    )
+                    enqueued += 1
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        log.error(f'gap sweep: unexpected error — {e}')
+        return
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    log.info(
+        f'Gap sweep complete — {enqueued} fix job(s) enqueued, '
+        f'{skipped_existing} already queued/running'
+    )
+
+
 def start_scheduler(dsn: str) -> BackgroundScheduler:
-    """Start APScheduler with the 18:00 IST cron trigger."""
+    """Start APScheduler with the 18:00 IST daily run and 19:30 IST gap sweep."""
     sched = BackgroundScheduler(timezone=IST)
+
     sched.add_job(
         _enqueue_daily_run,
         trigger=CronTrigger(hour=18, minute=0, day_of_week='mon-fri', timezone=IST),
@@ -67,15 +152,28 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
         args=[dsn],
         replace_existing=True,
     )
+
+    # 19:30 gives the 18:00 daily run 90 minutes to complete. Anything still
+    # missing / partial after that window is fair game for auto-retry.
+    sched.add_job(
+        _daily_gap_sweep,
+        trigger=CronTrigger(hour=19, minute=30, day_of_week='mon-fri', timezone=IST),
+        id='pipeline2_gap_sweep',
+        name='Pipeline v2 gap sweep (19:30 IST, Mon-Fri) — last 3 days',
+        args=[dsn],
+        replace_existing=True,
+    )
+
     sched.start()
-    log.info('pipeline2 scheduler started (18:00 IST, Mon-Fri)')
+    log.info('pipeline2 scheduler started (daily_run 18:00 IST, gap_sweep 19:30 IST, Mon-Fri)')
     return sched
 
 
-def next_run_time(sched: BackgroundScheduler | None) -> str | None:
+def next_run_time(sched: BackgroundScheduler | None,
+                  job_id: str = 'pipeline2_daily_run') -> str | None:
     if not sched:
         return None
-    job = sched.get_job('pipeline2_daily_run')
+    job = sched.get_job(job_id)
     if not job or not job.next_run_time:
         return None
     return job.next_run_time.isoformat()
