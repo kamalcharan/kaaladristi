@@ -146,8 +146,17 @@ export const enqueueBackfill = (body: {
   force?: boolean;
 }) => apiPost<BackfillResponse>('/api/pipeline2/backfill', body);
 
+export interface CancelResponse {
+  status: string;
+  count: number;
+  cancelled_job_ids: number[];
+}
+
 export const cancelJob = (jobId: number) =>
-  apiPost<{ job_id: number; status: string }>('/api/pipeline2/cancel', { job_id: jobId });
+  apiPost<CancelResponse>('/api/pipeline2/cancel', { job_id: jobId });
+
+export const cancelBatch = (batchId: string) =>
+  apiPost<CancelResponse>('/api/pipeline2/cancel', { batch_id: batchId });
 
 export const fetchDimensions = () =>
   apiGet<DimensionsList>('/api/pipeline2/dimensions');

@@ -35,11 +35,11 @@ from .health import (
 )
 
 
-# Download dims are surfaced in the grid / dimensions list but have no
-# fix handler yet (no RPC equivalent of re-running a bhav download).
-# The API layer returns 400 before enqueuing; this set is the canonical
-# "is this dimension fixable?" check used by both API and worker.
+# Download dims are now fixable too (handle_{index,nse,bse}_eod_download
+# below). Kept as a frozenset so callers can check cheaply; the API layer
+# uses it to decide whether a job is runnable at all.
 FIXABLE_DIMENSIONS = frozenset({
+    'index_eod_download', 'nse_eod_download', 'bse_eod_download',
     'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
     'index_flow', 'nse_flow', 'bse_flow',
     'nse_magic_rs', 'bse_magic_rs',
@@ -317,18 +317,173 @@ def handle_breadth_roc(conn, trade_date: date, force: bool,
     return HandlerResult(status, before, after, n)
 
 
+# ── Download handlers ───────────────────────────────────────────────────
+#
+# These drive the legacy download code under pipeline/ (not touched by v2
+# rebuild) with skip_indicators=True so only the fetch / parse / insert
+# steps run — compute is handled by subsequent jobs in the backfill batch.
+#
+# The legacy runners expect a PgClient-style db, not a raw psycopg2
+# connection. We open a PgClient via lib.db_client.get_db() — it uses its
+# own pool, separate from the worker's single connection, so the two
+# don't fight over locks.
+
+def _eod_row_count(conn, table: str, trade_date: date,
+                   exchange: Optional[str] = None) -> int:
+    """Ground-truth row count for a download dimension on a single date."""
+    with conn.cursor() as cur:
+        if exchange and table == 'km_equity_eod':
+            cur.execute(
+                "SELECT COUNT(*) FROM km_equity_eod e "
+                "JOIN km_equity_symbols s ON s.id = e.equity_id "
+                "WHERE s.exchange = %s AND e.trade_date = %s",
+                [exchange, str(trade_date)],
+            )
+        else:
+            cur.execute(f"SELECT COUNT(*) FROM {table} WHERE trade_date = %s",
+                        [str(trade_date)])
+        n = cur.fetchone()[0] or 0
+    conn.commit()
+    return n
+
+
+def handle_index_eod_download(conn, trade_date: date, force: bool,
+                              exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Download NSE index bhav + TRI for `trade_date` and upsert into
+    km_index_eod. No compute. force is currently a no-op (upserts are
+    idempotent)."""
+    from pipeline.downloaders.nse_index_bhav import (
+        download_nse_index_bhav, download_nse_tri,
+        parse_nse_index_bhav, parse_nse_tri,
+        IndexMatcher, upsert_index_eod,
+    )
+    from pipeline.utils.nse_session import NseSession
+    from lib.db_client import get_db
+
+    before = fill_rate(conn, 'index_eod_download', trade_date)
+    before_rows = _eod_row_count(conn, 'km_index_eod', trade_date)
+    on_progress(f'before: {before_rows} rows ({before:.1f}%)', 5)
+
+    db = get_db()
+    nse = NseSession()
+
+    idx_count = 0
+    tri_count = 0
+
+    try:
+        on_progress(f'{trade_date}: downloading index bhav', 20)
+        idx_csv = download_nse_index_bhav(trade_date, session=nse)
+        if idx_csv is None:
+            # No data for this date (likely holiday / not yet published).
+            after = fill_rate(conn, 'index_eod_download', trade_date)
+            return HandlerResult(
+                'failed' if before_rows == 0 else 'partial',
+                before, after, 0,
+                error_msg='No index bhav available (holiday or not yet published)',
+            )
+        records = parse_nse_index_bhav(idx_csv, trade_date)
+        matcher = IndexMatcher(db)
+        matched, _unmatched = matcher.match_records(records)
+        idx_count = upsert_index_eod(db, matched)
+        on_progress(f'{trade_date}: {idx_count} index rows upserted', 55)
+    except Exception as e:
+        return HandlerResult('failed', before, before, 0, error_msg=str(e)[:500])
+
+    # TRI is optional — its URL schema has been known to break. Don't fail
+    # the whole download if TRI alone is unavailable.
+    try:
+        on_progress(f'{trade_date}: downloading TRI', 70)
+        tri_csv = download_nse_tri(trade_date, session=nse)
+        if tri_csv:
+            tri_records = parse_nse_tri(tri_csv, trade_date)
+            tri_matched, _tri_unmatched = matcher.match_records(tri_records, is_tri=True)
+            tri_count = upsert_index_eod(db, tri_matched)
+    except Exception as e:
+        on_progress(f'{trade_date}: TRI skipped ({e})', 85)
+
+    on_progress('measuring post-download fill_rate', 95)
+    after = fill_rate(conn, 'index_eod_download', trade_date)
+    after_rows = _eod_row_count(conn, 'km_index_eod', trade_date)
+    rows_added = max(0, after_rows - before_rows)
+
+    if after >= 100.0:
+        status = 'completed'
+    elif after_rows > 0:
+        status = 'partial'
+    else:
+        status = 'failed'
+    return HandlerResult(status, before, after, rows_added)
+
+
+def _run_exchange_download(
+    conn, trade_date: date, force: bool, on_progress: ProgressFn,
+    exchange: str, dim: str,
+) -> HandlerResult:
+    """Shared NSE/BSE equity download driver. Calls the legacy
+    run_{nse,bse}_pipeline with skip_indicators=True."""
+    from lib.db_client import get_db
+    if exchange == 'NSE':
+        from daily_pipeline import run_nse_pipeline as run_pipeline
+    else:
+        from daily_pipeline import run_bse_pipeline as run_pipeline
+
+    before = fill_rate(conn, dim, trade_date)
+    before_rows = _eod_row_count(conn, 'km_equity_eod', trade_date, exchange)
+    on_progress(f'before: {before_rows} rows ({before:.1f}%)', 5)
+
+    db = get_db()
+    on_progress(f'{trade_date}: downloading {exchange} bhav (skip_indicators=True)', 20)
+    ok = False
+    err: Optional[str] = None
+    try:
+        ok = run_pipeline(db, trade_date, skip_indicators=True, force=force)
+    except Exception as e:
+        err = str(e)[:500]
+
+    on_progress('measuring post-download fill_rate', 90)
+    after = fill_rate(conn, dim, trade_date)
+    after_rows = _eod_row_count(conn, 'km_equity_eod', trade_date, exchange)
+    rows_added = max(0, after_rows - before_rows)
+
+    # Classify on ground truth row count, not the pipeline's True/False.
+    # run_nse_pipeline can return False for "already completed" days while
+    # the rows are in fact present — trust the row count.
+    if after >= 100.0:
+        status = 'completed'
+    elif after_rows > 0:
+        status = 'partial'
+    else:
+        status = 'failed'
+
+    if status == 'failed' and err is None:
+        err = 'No rows written (bhav may not be available for this date)'
+
+    return HandlerResult(status, before, after, rows_added, error_msg=err if status != 'completed' else None)
+
+
+def handle_nse_eod_download(conn, trade_date: date, force: bool,
+                            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    return _run_exchange_download(conn, trade_date, force, on_progress,
+                                  exchange='NSE', dim='nse_eod_download')
+
+
+def handle_bse_eod_download(conn, trade_date: date, force: bool,
+                            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    return _run_exchange_download(conn, trade_date, force, on_progress,
+                                  exchange='BSE', dim='bse_eod_download')
+
+
 # ── Handler registry ─────────────────────────────────────────────────────
 
 def handle(dimension: str, conn, trade_date: date, force: bool,
            exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Dispatch a fix to the right per-dimension handler."""
-    if dimension in DOWNLOAD_DIMENSIONS:
-        # The API layer rejects these with 400 before enqueuing, but guard
-        # here too in case a job leaks through (e.g. manually inserted row).
-        raise ValueError(
-            f'Download fix not yet implemented for {dimension!r} — '
-            'run daily pipeline manually.'
-        )
+    if dimension == 'index_eod_download':
+        return handle_index_eod_download(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'nse_eod_download':
+        return handle_nse_eod_download(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'bse_eod_download':
+        return handle_bse_eod_download(conn, trade_date, force, exchange, on_progress)
     if dimension in (
         'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
         'index_flow', 'nse_flow', 'bse_flow',

@@ -2,7 +2,14 @@ import { Fragment, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, X, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchJobs, cancelJob, type Job, type JobStatus } from '@/services/pipeline2';
+import {
+  fetchJobs,
+  cancelJob,
+  cancelBatch,
+  type Job,
+  type JobStatus,
+  type JobsResponse,
+} from '@/services/pipeline2';
 
 interface Props {
   refreshKey?: number;
@@ -122,12 +129,45 @@ export default function JobQueue({ refreshKey }: Props) {
 
   const groups = useMemo(() => (data ? groupJobs(data.jobs) : []), [data]);
 
+  // Optimistic local patch — flips the given ids to 'cancelled' in every
+  // cached jobs query so the UI updates instantly. React Query's next
+  // refetch will replace these with the authoritative row.
+  const optimisticallyCancel = (ids: Set<number>) => {
+    queryClient.setQueriesData<JobsResponse | undefined>(
+      { queryKey: ['pipeline2', 'jobs'] },
+      (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          jobs: old.jobs.map(j =>
+            ids.has(j.id) && (j.status === 'queued' || j.status === 'running')
+              ? { ...j, status: 'cancelled' as const }
+              : j
+          ),
+        };
+      },
+    );
+  };
+
   const onCancel = async (jobId: number) => {
+    optimisticallyCancel(new Set([jobId]));
     try {
       await cancelJob(jobId);
-      queryClient.invalidateQueries({ queryKey: ['pipeline2', 'jobs'] });
     } catch (e) {
       console.error('cancel failed', e);
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ['pipeline2', 'jobs'] });
+    }
+  };
+
+  const onCancelBatch = async (batchId: string, activeIds: number[]) => {
+    optimisticallyCancel(new Set(activeIds));
+    try {
+      await cancelBatch(batchId);
+    } catch (e) {
+      console.error('cancel batch failed', e);
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ['pipeline2', 'jobs'] });
     }
   };
 
@@ -188,6 +228,9 @@ export default function JobQueue({ refreshKey }: Props) {
               group.jobs[0]?.date_from && group.jobs[0]?.date_to
                 ? `${group.jobs[0].date_from} → ${group.jobs[0].date_to}`
                 : '';
+            const activeIds = group.jobs
+              .filter(j => j.status === 'queued' || j.status === 'running')
+              .map(j => j.id);
             return (
               <Fragment key={group.batchId}>
                 <tr className="bg-kd-elevated/30 border-t border-kd-border/40">
@@ -220,6 +263,17 @@ export default function JobQueue({ refreshKey }: Props) {
                           style={{ width: `${headerPct}%` }}
                         />
                       </div>
+                      {activeIds.length > 0 && (
+                        <button
+                          onClick={() => onCancelBatch(group.batchId, activeIds)}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-medium
+                                     bg-rose-500/10 border border-rose-500/30 text-rose-300
+                                     hover:bg-rose-500/20 transition-colors"
+                          title={`Cancel ${activeIds.length} active job(s) in this batch`}
+                        >
+                          Cancel batch ({activeIds.length})
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
