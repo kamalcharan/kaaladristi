@@ -668,6 +668,160 @@ def vani_opportunity_config():
         conn.close()
 
 
+# ── Shared helper ─────────────────────────────────────────────────────────
+
+def _db_query(sql: str, params: tuple = ()) -> list[dict]:
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def _stringify_dates(row: dict) -> dict:
+    return {k: (v.isoformat() if hasattr(v, 'isoformat') else v) for k, v in row.items()}
+
+
+# ── Panchangam ────────────────────────────────────────────────────────────
+
+_panchang_cache: dict[str, dict] = {}
+
+_PANCHANG_SQL = """
+    SELECT
+        today.*,
+        tomorrow.tithi_name      AS tithi_next_name,
+        tomorrow.nakshatra_name  AS nakshatra_next_name,
+        tomorrow.karana_name     AS karana_next_name
+    FROM km_daily_panchang today
+    LEFT JOIN km_daily_panchang tomorrow
+        ON tomorrow.date = today.date + INTERVAL '1 day'
+    WHERE today.date = %s
+"""
+
+
+@app.get('/api/panchang/daily')
+def panchang_daily(date: str = None):
+    if not date:
+        date = datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d')
+    if date in _panchang_cache:
+        return _panchang_cache[date]
+    try:
+        rows = _db_query(_PANCHANG_SQL, (date,))
+    except Exception as e:
+        log.error(f'panchang_daily error for {date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    if not rows:
+        raise HTTPException(status_code=404, detail=f'No panchang data for {date}')
+    row = _stringify_dates(rows[0])
+    _panchang_cache[date] = row
+    return row
+
+
+# ── Astro Market-Book ─────────────────────────────────────────────────────
+
+_astro_cache: dict[str, object] = {}
+
+_ASTRO_SIGNAL_SQL = """
+    SELECT
+        s.*,
+        COALESCE(
+            json_agg(
+                json_build_object('id', e.id, 'display_name', e.display_name,
+                                  'market_impact', e.market_impact,
+                                  'start_date', e.start_date, 'end_date', e.end_date)
+                ORDER BY e.market_impact
+            ) FILTER (WHERE e.id IS NOT NULL),
+            '[]'
+        ) AS active_events
+    FROM km_astro_daily_signal s
+    LEFT JOIN km_astro_calendar_2026 e ON e.id = ANY(s.active_event_ids)
+    WHERE s.trade_date = %s
+    GROUP BY s.trade_date
+"""
+
+_ASTRO_RANGE_SQL = """
+    SELECT
+        s.trade_date, s.net_signal, s.net_score,
+        s.active_event_count, s.turning_date,
+        s.strong_bullish_count, s.bullish_count, s.minor_bullish_count,
+        s.neutral_count, s.minor_bearish_count, s.bearish_count, s.strong_bearish_count,
+        s.primary_event, s.secondary_event
+    FROM km_astro_daily_signal s
+    WHERE s.trade_date BETWEEN %s AND %s
+    ORDER BY s.trade_date
+"""
+
+
+@app.get('/api/astro/daily-signal')
+def astro_daily_signal(date: str = None):
+    if not date:
+        date = datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d')
+    if date in _astro_cache:
+        return _astro_cache[date]
+    try:
+        rows = _db_query(_ASTRO_SIGNAL_SQL, (date,))
+    except Exception as e:
+        log.error(f'astro_daily_signal error for {date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    if not rows:
+        raise HTTPException(status_code=404, detail=f'No astro signal for {date}')
+    row = _stringify_dates(rows[0])
+    _astro_cache[date] = row
+    return row
+
+
+@app.get('/api/astro/signals')
+def astro_signals(from_date: str = None, to_date: str = None):
+    today = datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).date()
+    if not from_date:
+        from_date = today.strftime('%Y-%m-%d')
+    if not to_date:
+        to_date = (today + timedelta(days=30)).strftime('%Y-%m-%d')
+    try:
+        d_from = date.fromisoformat(from_date)
+        d_to   = date.fromisoformat(to_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f'Invalid date format: {e}')
+    if (d_to - d_from).days > 90:
+        raise HTTPException(status_code=400, detail='Range exceeds 90-day maximum')
+    try:
+        rows = _db_query(_ASTRO_RANGE_SQL, (from_date, to_date))
+    except Exception as e:
+        log.error(f'astro_signals error {from_date}→{to_date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    return [_stringify_dates(r) for r in rows]
+
+
+@app.get('/api/astro/transits')
+def astro_transits(from_date: str = None, to_date: str = None):
+    today = datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).date()
+    if not from_date:
+        from_date = today.strftime('%Y-%m-%d')
+    if not to_date:
+        to_date = (today + timedelta(days=6)).strftime('%Y-%m-%d')
+    cache_key = f'transits_{from_date}_{to_date}'
+    if cache_key in _astro_cache:
+        return _astro_cache[cache_key]
+    sql = """
+        SELECT id, display_name, start_date, end_date, market_impact, inference
+        FROM km_astro_calendar_2026
+        WHERE is_transit = true
+          AND start_date <= %s
+          AND (end_date IS NULL OR end_date >= %s)
+        ORDER BY start_date
+    """
+    try:
+        rows = _db_query(sql, (to_date, from_date))
+    except Exception as e:
+        log.error(f'astro_transits error {from_date}→{to_date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    result = [_stringify_dates(r) for r in rows]
+    _astro_cache[cache_key] = result
+    return result
+
+
 @app.get('/api/pipeline2/ping')
 def ping():
     """Minimal liveness check for nginx / docker healthcheck."""
