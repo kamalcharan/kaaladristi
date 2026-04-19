@@ -76,11 +76,11 @@ interface OppConfig {
 }
 
 const DEFAULT_OPP_CONFIG: OppConfig = {
-  ema_atr_band: 1.0,
+  ema_atr_band: 2.5,  // raised from 1.0 — catches trending stocks up to 2.5×ATR above EMA20
   reward_min_atr_multiple: 0.0,
   magic_rs_zones: ['Strong Bull', 'Mild Bull'],
   flow_types: ['FRESH_LONGS', 'SHORT_COVERING'],
-  rvol_min: 0.5,  // lowered from 1.2 — volume scale discontinuity bug suppresses rvol artificially
+  rvol_min: 0.3,  // lowered — volume scale discontinuity bug suppresses rvol artificially
 };
 
 interface ScanDataBundle {
@@ -249,11 +249,11 @@ function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: 
   const withinBand =
     stock.close >= stock.ema_20 - config.ema_atr_band * stock.atr_14 &&
     stock.close <= stock.ema_20 + config.ema_atr_band * stock.atr_14;
-  // Bullish: upside runway = (ema20 + atr14) - close
-  // Bearish: downside runway = close - (ema20 - atr14)
+  // Bullish: upside runway to the top of the band (ema20 + band×atr14)
+  // Bearish: downside runway to the bottom of the band (ema20 - band×atr14)
   const runway = isBearish
-    ? stock.close - (stock.ema_20 - stock.atr_14)
-    : (stock.ema_20 + stock.atr_14) - stock.close;
+    ? stock.close - (stock.ema_20 - config.ema_atr_band * stock.atr_14)
+    : (stock.ema_20 + config.ema_atr_band * stock.atr_14) - stock.close;
   const hasReward = runway > config.reward_min_atr_multiple * stock.atr_14;
   const zoneOk = config.magic_rs_zones.includes(stock.magic_rs_zone ?? '');
   // LOW_VOLUME is an artifact of the volume scale discontinuity bug (CLAUDE.md § Known Issues).
