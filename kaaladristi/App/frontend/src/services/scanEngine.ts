@@ -17,7 +17,10 @@ import type {
   IndustryEodRow,
   EquitySymbolRow,
   EquityEodSnapshot,
+  VaniOpportunityConfig,
 } from '@/types';
+
+const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
 
 // ── Scan Definitions ───────────────────────────────────────────
 
@@ -93,6 +96,30 @@ interface ScanDataBundle {
 let _cachedBundle: { data: ScanDataBundle; fetchedAt: number } | null = null;
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
 
+// Session-level config cache — fetched once per page load, never invalidated.
+let _oppConfigCache: OppConfig | null = null;
+
+async function fetchOpportunityConfig(): Promise<OppConfig> {
+  if (_oppConfigCache) return _oppConfigCache;
+  try {
+    const res = await fetch(`${PIPELINE_URL}/api/vani-opportunity/config`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as VaniOpportunityConfig;
+    const p = data.parameters;
+    _oppConfigCache = {
+      ema_atr_band: Number(p.atr_multiplier),
+      reward_min_atr_multiple: Number(p.min_reward_atr_multiple),
+      magic_rs_zones: Array.isArray(p.rs_zones) ? p.rs_zones : DEFAULT_OPP_CONFIG.magic_rs_zones,
+      flow_types: Array.isArray(p.flow_types) ? p.flow_types : DEFAULT_OPP_CONFIG.flow_types,
+      rvol_min: Number(p.min_rvol),
+    };
+  } catch (e) {
+    console.warn('[scanEngine] config fetch failed, using defaults:', e);
+    _oppConfigCache = { ...DEFAULT_OPP_CONFIG };
+  }
+  return _oppConfigCache!;
+}
+
 // 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
 async function fetchRecentDates(limit: number): Promise<string[]> {
   const { data } = await from('km_trading_calendar')
@@ -130,8 +157,8 @@ async function loadScanData(): Promise<ScanDataBundle> {
   const latestDate = dates[0];
   const oldestDate = dates[dates.length - 1];
 
-  // 3a/3b/3c: Parallel fetches — calendar-anchored dates, extended select, config
-  const [industryRes, symbolRes, eodRes, configRes] = await Promise.all([
+  // Parallel fetches — market data + session-cached opportunity config
+  const [industryRes, symbolRes, eodRes, oppConfig] = await Promise.all([
     // Industry EOD for last 11 dates
     from('km_industry_eod')
       .select('*')
@@ -147,7 +174,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
       .limit(8000)
       .execute(),
 
-    // 3a: Equity EOD — use explicit date list (.in) + extended select with ema_20/atr_14/delivery_pct/w52_high
+    // Equity EOD — explicit date list + extended select with ema_20/atr_14/delivery_pct/w52_high
     from('km_equity_eod')
       .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high')
       .in('trade_date', dates)
@@ -155,13 +182,8 @@ async function loadScanData(): Promise<ScanDataBundle> {
       .limit(120000)
       .execute(),
 
-    // 3c: VaNi opportunity config
-    from('km_vani_opportunity_config')
-      .select('ema_atr_band,reward_min_atr_multiple,magic_rs_zones,flow_types,rvol_min')
-      .eq('is_active', 'true')
-      .order('id', { ascending: false })
-      .limit(1)
-      .execute(),
+    // VaNi opportunity config — session-cached, fetched from pipeline API
+    fetchOpportunityConfig(),
   ]);
 
   // Process industries
@@ -191,18 +213,6 @@ async function loadScanData(): Promise<ScanDataBundle> {
       latestEod.set(r.equity_id, r);
     }
   }
-
-  // 3c: Resolve opportunity config — fall back to defaults if table not yet applied
-  const rawConfig = ((configRes.data ?? []) as OppConfig[])[0];
-  const oppConfig: OppConfig = rawConfig
-    ? {
-        ema_atr_band: Number(rawConfig.ema_atr_band),
-        reward_min_atr_multiple: Number(rawConfig.reward_min_atr_multiple),
-        magic_rs_zones: rawConfig.magic_rs_zones ?? DEFAULT_OPP_CONFIG.magic_rs_zones,
-        flow_types: rawConfig.flow_types ?? DEFAULT_OPP_CONFIG.flow_types,
-        rvol_min: Number(rawConfig.rvol_min),
-      }
-    : DEFAULT_OPP_CONFIG;
 
   const bundle: ScanDataBundle = {
     industries,
