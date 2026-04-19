@@ -80,7 +80,7 @@ const DEFAULT_OPP_CONFIG: OppConfig = {
   reward_min_atr_multiple: 0.0,
   magic_rs_zones: ['Strong Bull', 'Mild Bull'],
   flow_types: ['FRESH_LONGS', 'SHORT_COVERING'],
-  rvol_min: 1.2,
+  rvol_min: 0.5,  // lowered from 1.2 — volume scale discontinuity bug suppresses rvol artificially
 };
 
 interface ScanDataBundle {
@@ -256,7 +256,11 @@ function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: 
     : (stock.ema_20 + stock.atr_14) - stock.close;
   const hasReward = runway > config.reward_min_atr_multiple * stock.atr_14;
   const zoneOk = config.magic_rs_zones.includes(stock.magic_rs_zone ?? '');
-  const flowOk = config.flow_types.includes(stock.flow_type ?? '');
+  // LOW_VOLUME is an artifact of the volume scale discontinuity bug (CLAUDE.md § Known Issues).
+  // It is computed from artificially suppressed rvol — treat as neutral for bullish configs.
+  const flowOk = stock.flow_type === 'LOW_VOLUME' && !isBearish
+    ? true
+    : config.flow_types.includes(stock.flow_type ?? '');
   const rvolOk = (stock.rvol ?? 0) >= config.rvol_min;
   const result = withinBand && hasReward && zoneOk && flowOk && rvolOk;
   if (!isBearish && !result && _oppDiagCount < 5) {
