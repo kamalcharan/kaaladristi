@@ -500,3 +500,23 @@ export interface EquityEodSnapshot {
   delivery_qty: number | null;
   w52_high: number | null;
 }
+
+// ── Astro Daily Signal (from km_astro_daily_signal) ──
+
+export interface AstroSignal {
+  trade_date: string;
+  net_signal: string;
+  net_score: number;
+  primary_event: string | null;
+  secondary_event: string | null;
+  active_event_count: number;
+  turning_date: boolean;
+  strong_bullish_count: number;
+  bullish_count: number;
+  minor_bullish_count: number;
+  neutral_count: number;
+  minor_bearish_count: number;
+  bearish_count: number;
+  strong_bearish_count: number;
+  sector_signals: Record<string, unknown> | null;
+}

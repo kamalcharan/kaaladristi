@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc } from '@/services/panchang';
+import { fetchAstroSignal, fetchAstroWeek } from '@/services/astro';
 import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
 import type { IndexCatalogItem } from '@/types';
@@ -123,6 +124,29 @@ export function useOutlookInferences(fromDate: string) {
     queryKey: ['outlook_inferences', fromDate],
     queryFn: () => fetchInferencesForRange(start, end),
     staleTime: 30 * 60 * 1000,
+    enabled: !!fromDate,
+  });
+}
+
+export function useAstroSignal(date: string) {
+  return useQuery({
+    queryKey: ['astro_signal', date],
+    queryFn: () => fetchAstroSignal(date),
+    staleTime: 24 * 60 * 60 * 1000,
+    enabled: !!date,
+  });
+}
+
+export function useAstroWeek(fromDate: string) {
+  const toDate = (() => {
+    if (!fromDate) return '';
+    const [y, m, d] = fromDate.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + 7)).toISOString().slice(0, 10);
+  })();
+  return useQuery({
+    queryKey: ['astro_week', fromDate],
+    queryFn: () => fetchAstroWeek(fromDate, toDate),
+    staleTime: 24 * 60 * 60 * 1000,
     enabled: !!fromDate,
   });
 }
