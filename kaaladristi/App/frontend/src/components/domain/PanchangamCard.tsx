@@ -12,13 +12,12 @@ function toSeconds(t: string): number {
 }
 
 function getISTTime(): string {
-  return new Date().toLocaleTimeString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
+  const now = new Date();
+  const ist = new Date(now.getTime() + (5 * 60 + 30) * 60 * 1000);
+  const h = ist.getUTCHours().toString().padStart(2, '0');
+  const m = ist.getUTCMinutes().toString().padStart(2, '0');
+  const s = ist.getUTCSeconds().toString().padStart(2, '0');
+  return `${h}:${m}:${s}`;
 }
 
 function dayProgress(sunrise: string, sunset: string, now: string): number {
@@ -108,7 +107,7 @@ function Row({
 
 // ── Content ───────────────────────────────────────────────────────────────────
 
-function PanchangContent({ p, next, istTime }: { p: DailyPanchang; next: DailyPanchang | null | undefined; istTime: string }) {
+function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) {
   const nowSec = toSeconds(istTime);
   const paksha = p.paksha === 'shukla' ? 'Shukla' : 'Krishna';
 
@@ -168,7 +167,7 @@ function PanchangContent({ p, next, istTime }: { p: DailyPanchang; next: DailyPa
       <Row
         label="Tithi"
         value={`${p.tithi_num}. ${p.tithi_name}${p.tithi_lord ? ` · ${p.tithi_lord}` : ''}`}
-        nextValue={next ? `${next.tithi_num}. ${next.tithi_name}${next.tithi_lord ? ` · ${next.tithi_lord}` : ''}` : null}
+        nextValue={p.tithi_next_name ?? null}
         endTime={p.tithi_end_ist}
         endNextDay={p.tithi_end_next_day}
         nowSec={nowSec}
@@ -176,7 +175,7 @@ function PanchangContent({ p, next, istTime }: { p: DailyPanchang; next: DailyPa
       <Row
         label="Nakshatra"
         value={`${p.nakshatra_name}${p.nakshatra_pada ? ` Pada ${p.nakshatra_pada}` : ''}${p.nakshatra_lord ? ` · ${p.nakshatra_lord}` : ''}`}
-        nextValue={next ? `${next.nakshatra_name}${next.nakshatra_pada ? ` Pada ${next.nakshatra_pada}` : ''}${next.nakshatra_lord ? ` · ${next.nakshatra_lord}` : ''}` : null}
+        nextValue={p.nakshatra_next_name ?? null}
         endTime={p.nakshatra_end_ist}
         endNextDay={p.nakshatra_end_next_day}
         nowSec={nowSec}
@@ -195,14 +194,8 @@ function PanchangContent({ p, next, istTime }: { p: DailyPanchang; next: DailyPa
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 
-function nextDateStr(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-}
-
 export default function PanchangamCard({ date }: { date: string }) {
   const { data, isLoading, isError } = usePanchang(date);
-  const { data: nextData } = usePanchang(nextDateStr(date));
   // Live IST clock — ticks every second
   const [istTime, setIstTime] = useState(getISTTime);
   useEffect(() => {
@@ -229,7 +222,7 @@ export default function PanchangamCard({ date }: { date: string }) {
           {isError ? 'Failed to load panchang data' : `No panchang data for ${date}`}
         </p>
       ) : (
-        <PanchangContent p={data} next={nextData} istTime={istTime} />
+        <PanchangContent p={data} istTime={istTime} />
       )}
 
     </div>

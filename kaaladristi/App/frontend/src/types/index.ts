@@ -259,6 +259,10 @@ export interface DailyPanchang {
   tithi_end_next_day: boolean | null;
   nakshatra_end_ist: string | null;
   nakshatra_end_next_day: boolean | null;
+  // Next-day values joined from tomorrow's row (via /api/panchang/daily)
+  tithi_next_name: string | null;
+  nakshatra_next_name: string | null;
+  karana_next_name: string | null;
 }
 
 // ── Market Breadth (from km_market_breadth) ──

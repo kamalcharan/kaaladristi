@@ -1357,6 +1357,63 @@ def coverage_summary(trade_date: str = None):
     return {'trade_date': trade_date, 'steps': steps, 'overall': worst}
 
 
+# ── Panchang Endpoints ────────────────────────────────────────────────────────
+
+# Static per-date — panchang never changes once populated
+_panchang_cache: dict[str, dict] = {}
+
+_PANCHANG_SQL = """
+    SELECT
+        today.*,
+        tomorrow.tithi_name     AS tithi_next_name,
+        tomorrow.nakshatra_name AS nakshatra_next_name,
+        tomorrow.karana_name    AS karana_next_name
+    FROM km_daily_panchang today
+    LEFT JOIN km_daily_panchang tomorrow
+        ON tomorrow.date = today.date + INTERVAL '1 day'
+    WHERE today.date = %s
+"""
+
+
+@app.get('/api/panchang/daily')
+def panchang_daily(date: str = None):
+    """Today's panchangam with next-day names for mid-day transition display."""
+    if not date:
+        date = datetime.now(IST).strftime('%Y-%m-%d')
+
+    if date in _panchang_cache:
+        return _panchang_cache[date]
+
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(_PANCHANG_SQL, (date,))
+        else:
+            # PostgREST fallback — two selects merged
+            rows = db.select('km_daily_panchang', '*', filters={'date': date}, limit=1)
+            if rows:
+                next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                nxt = db.select('km_daily_panchang', 'tithi_name,nakshatra_name,karana_name',
+                                filters={'date': next_date}, limit=1)
+                rows[0]['tithi_next_name'] = nxt[0].get('tithi_name') if nxt else None
+                rows[0]['nakshatra_next_name'] = nxt[0].get('nakshatra_name') if nxt else None
+                rows[0]['karana_next_name'] = nxt[0].get('karana_name') if nxt else None
+    except Exception as e:
+        log.error(f"panchang_daily error for {date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f'No panchang data for {date}')
+
+    row = dict(rows[0])
+    # Stringify any date/time objects psycopg2 returns as Python types
+    for k, v in row.items():
+        if hasattr(v, 'isoformat'):
+            row[k] = v.isoformat()
+
+    _panchang_cache[date] = row
+    return row
+
+
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
 
 # Per-day in-memory cache — insight for a given date never changes

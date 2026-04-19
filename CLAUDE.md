@@ -12,7 +12,7 @@ kaaladristi/
 │   ├── backend/           # Python — data pipeline + FastAPI sidecar
 │   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger
 │   │   ├── pipeline/      # Downloaders (NSE/BSE bhav, FII/DII), processors, utils
-│   │   ├── pipeline_api.py  # FastAPI sidecar — port 8100
+│   │   ├── pipeline_api.py  # FastAPI sidecar — port 8101
 │   │   ├── breeze_downloader.py  # Unified EOD downloader (ICICI Breeze)
 │   │   ├── daily_pipeline.py     # Orchestrator for daily market data sync
 │   │   └── requirements.txt
@@ -32,7 +32,7 @@ kaaladristi/
 
 ## Database (Self-hosted PostgreSQL + PostgREST)
 
-- **DB**: `ki_prime_db` on VPS, accessed via `DB_PRIMARY` env var
+- **DB**: `kaala_dristi_db` on VPS, accessed via `DB_PRIMARY` env var
 - **API layer**: PostgREST on port 3000 (JWT-secured)
 - **Python backend**: direct psycopg2 via `lib/db_client.py`
 - **Frontend**: PostgREST REST API via `services/postgrest.ts`
@@ -95,7 +95,7 @@ See `App/frontend/.env.example` for the full template.
 DB_PRIMARY=postgresql://...          # Python backend only
 JWT_SECRET=...                       # matches PostgreSQL app.jwt_secret
 VITE_POSTGREST_URL=http://VPS:3000   # frontend
-VITE_PIPELINE_API_URL=http://...:8100
+VITE_PIPELINE_API_URL=http://...:8101
 VITE_THEME=kaaladristi               # or tech-ai or jade-thorn
 BREEZE_API_KEY=...
 BREEZE_API_SECRET=...
@@ -139,7 +139,7 @@ npm run dev
 
 - **Language**: Python 3.11+
 - **Data sources**: NSE bhav copy, BSE bhav copy, ICICI Breeze API, Yahoo Finance (fallback), NSE FII/DII
-- **Pipeline API**: `uvicorn pipeline_api:app --host 0.0.0.0 --port 8100`
+- **Pipeline API**: `uvicorn pipeline_api:app --host 0.0.0.0 --port 8101`
 - **Health endpoint**: `GET /api/pipeline/health`
 
 ### Running locally
@@ -147,7 +147,7 @@ npm run dev
 cd App/backend
 pip install -r requirements.txt
 # Set DB_PRIMARY + BREEZE_* in App/.env
-uvicorn pipeline_api:app --port 8100
+uvicorn pipeline_api:app --port 8101
 ```
 
 ---
@@ -159,7 +159,7 @@ uvicorn pipeline_api:app --port 8100
 docker-compose up --build
 ```
 
-Services: `frontend` (port 3001), `backend` (port 8100), `nginx` (port 80 reverse proxy).
+Services: `frontend` (port 3001), `backend` (port 8101), `nginx` (port 80 reverse proxy).
 
 ---
 

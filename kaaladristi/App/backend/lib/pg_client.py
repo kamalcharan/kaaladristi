@@ -197,6 +197,18 @@ class PgClient:
         finally:
             self._put(conn)
 
+    # ── RAW EXECUTE ───────────────────────────────────────────────────────
+
+    def execute(self, sql: str, params=None) -> list:
+        conn = self._conn()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, params or ())
+                rows = cur.fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            self._put(conn)
+
     # ── PING ──────────────────────────────────────────────────────────────
 
     def ping(self) -> bool:
