@@ -20,10 +20,13 @@ CREATE TABLE IF NOT EXISTS kd_vani_opportunity_config (
     is_active       boolean DEFAULT false,
     parameters      jsonb NOT NULL,
     created_at      timestamptz DEFAULT now(),
-    updated_at      timestamptz DEFAULT now(),
-    CONSTRAINT one_active_config_per_type
-        UNIQUE (is_active) WHERE (is_active = true)
+    updated_at      timestamptz DEFAULT now()
 );
+
+-- Only one active config allowed at a time (partial index, not inline constraint)
+CREATE UNIQUE INDEX IF NOT EXISTS kd_vani_opp_config_one_active
+    ON kd_vani_opportunity_config (is_active)
+    WHERE (is_active = true);
 
 INSERT INTO kd_vani_opportunity_config
     (config_name, description, is_active, parameters)
