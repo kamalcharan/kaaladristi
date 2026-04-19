@@ -31,6 +31,22 @@ if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
 from lib.config import DATABASE_URL  # noqa: E402
+from lib.db_client import get_db as _get_db  # noqa: E402
+
+# Optional AI / assembler modules — gracefully absent if not installed
+try:
+    from lib.ai_prompts import SKILLS as _AI_SKILLS          # noqa: E402
+    from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED  # noqa: E402
+    from lib.data_assemblers import (                         # noqa: E402
+        assemble_instrument_context,
+        assemble_market_pulse_context,
+    )
+    _AI_OPTIONAL_OK = True
+except ImportError:
+    _AI_SKILLS = {}
+    _ai_complete = lambda **_: None  # noqa: E731
+    _AI_ENABLED = False
+    _AI_OPTIONAL_OK = False
 
 from pipeline2 import health as v2_health  # noqa: E402
 from pipeline2 import scheduler as v2_scheduler  # noqa: E402
@@ -820,6 +836,198 @@ def astro_transits(from_date: str = None, to_date: str = None):
     result = [_stringify_dates(r) for r in rows]
     _astro_cache[cache_key] = result
     return result
+
+
+# ── VaNi AI Endpoints ─────────────────────────────────────────────────────
+
+_insight_cache: dict[str, object] = {}
+_db_singleton = None
+
+
+def _db():
+    global _db_singleton
+    if _db_singleton is None:
+        _db_singleton = _get_db()
+    return _db_singleton
+
+
+def _IST():
+    import zoneinfo
+    return datetime.now(tz=zoneinfo.ZoneInfo('Asia/Kolkata'))
+
+
+@app.get('/api/ai/panchang-insight')
+def panchang_insight(date: str):
+    if not _AI_ENABLED:
+        return {"date": date, "insight": None, "ai": False}
+    if date in _insight_cache:
+        return {"date": date, "insight": _insight_cache[date], "ai": True}
+    try:
+        rows = _db().select('km_daily_panchang', '*', filters={'date': date}, limit=1)
+    except Exception as e:
+        log.error(f'panchang_insight error for {date}: {e}')
+        return {"date": date, "insight": None, "ai": False}
+    if not rows:
+        return {"date": date, "insight": None, "ai": False}
+    p = rows[0]
+    special = ", ".join(filter(None, [
+        "Purnima"   if p.get("is_purnima")   else "",
+        "Amavasya"  if p.get("is_amavasya")  else "",
+        "Ekadashi"  if p.get("is_ekadashi")  else "",
+        "Sankranti" if p.get("is_sankranti") else "",
+    ])) or "None"
+    user_msg = (
+        f"Panchangam for {date}:\n"
+        f"Tithi: {p.get('tithi_num', '')}. {p.get('tithi_name', '')} (Lord: {p.get('tithi_lord', '')})\n"
+        f"Nakshatra: {p.get('nakshatra_name', '')} Pada {p.get('nakshatra_pada', '')} (Lord: {p.get('nakshatra_lord', '')})\n"
+        f"Yoga: {p.get('yoga_name', '')}\n"
+        f"Vara: {p.get('vara', '')} (Lord: {p.get('vara_lord', '')})\n"
+        f"Moon Sign: {p.get('moon_sign_name', p.get('moon_sign', ''))}\n"
+        f"Special Events: {special}\n"
+        f"What is today's market risk context?"
+    )
+    skill = _AI_SKILLS.get("panchang_insight")
+    if not skill:
+        return {"date": date, "insight": None, "ai": False}
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[date] = insight
+    return {"date": date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/breadth-insight')
+def breadth_insight(date: str = None):
+    if not _AI_ENABLED:
+        return {"date": date, "insight": None, "ai": False}
+    cache_key = f"breadth:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"date": date, "insight": _insight_cache[cache_key], "ai": True}
+    try:
+        if date:
+            rows = _db().select('km_market_breadth', '*', filters={'trade_date': date}, limit=1)
+        else:
+            rows = _db().select('km_market_breadth', '*', order='trade_date.desc', limit=2)
+    except Exception as e:
+        log.error(f'breadth_insight error: {e}')
+        return {"date": date, "insight": None, "ai": False}
+    if not rows:
+        return {"date": date, "insight": None, "ai": False}
+    latest = rows[0]
+    prev   = rows[1] if len(rows) > 1 else None
+    target_date = str(latest.get('trade_date', date or ''))
+    score  = float(latest.get('breadth_score') or 0)
+    regime = 'Greed' if score > 55 else ('Fear' if score < 35 else 'Neutral')
+    trend  = 'stable'
+    if prev and prev.get('breadth_score') is not None:
+        delta = score - float(prev['breadth_score'])
+        trend = 'improving' if delta > 1.5 else ('deteriorating' if delta < -1.5 else 'stable')
+    user_msg = (
+        f"Market Breadth snapshot as of {target_date}:\n"
+        f"Regime: {regime} (Breadth Score: {score:.1f})\n"
+        f"% Stocks above 20-day EMA : {latest.get('pct_above_20', 'N/A')}%\n"
+        f"% Stocks above 50-day EMA : {latest.get('pct_above_50', 'N/A')}%\n"
+        f"% Stocks above 150-day EMA: {latest.get('pct_above_150', 'N/A')}%\n"
+        f"Stock universe size: {latest.get('stock_count', 'N/A')} NSE equities\n"
+        f"Breadth trend (vs previous session): {trend}\n"
+        f"\nProvide your structural market breadth insight."
+    )
+    skill = _AI_SKILLS.get("breadth_insight")
+    if not skill:
+        return {"date": target_date, "insight": None, "ai": False}
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"date": target_date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/breadth-roc-insight')
+def breadth_roc_insight():
+    if not _AI_ENABLED:
+        return {"date": None, "insight": None, "ai": False}
+    cache_key = "breadth_roc:latest"
+    if cache_key in _insight_cache:
+        return {"date": None, "insight": _insight_cache[cache_key], "ai": True}
+    try:
+        rows = _db().select('km_breadth_roc', '*', order='trade_date.desc', limit=2)
+    except Exception as e:
+        log.error(f'breadth_roc_insight error: {e}')
+        return {"date": None, "insight": None, "ai": False}
+    if not rows:
+        return {"date": None, "insight": None, "ai": False}
+    latest     = rows[0]
+    prev       = rows[1] if len(rows) > 1 else None
+    target_date = str(latest.get('trade_date', ''))
+    roc13 = float(latest.get('roc_13') or 0)
+    roc55 = float(latest.get('roc_55') or 0)
+    sma   = float(latest.get('sma_breadth') or 0)
+    trend = 'stable'
+    if prev and prev.get('roc_13') is not None:
+        delta = roc13 - float(prev['roc_13'])
+        trend = 'strengthening' if delta > 0.0002 else ('weakening' if delta < -0.0002 else 'stable')
+    user_msg = (
+        f"ROC Breadth Oscillator snapshot as of {target_date}:\n"
+        f"ROC_13: {roc13:+.4f} ({'positive (bullish)' if roc13 > 0 else 'negative (bearish)'})\n"
+        f"ROC_55: {roc55:+.4f} ({'positive' if roc55 > 0 else 'negative'})\n"
+        f"SMA_BREADTH: {sma:+.4f} ({'above zero (confirming)' if sma > 0 else 'below zero (diverging)'})\n"
+        f"Fast vs slow spread: {'expanding' if roc13 > roc55 else 'narrowing'}\n"
+        f"Momentum trend vs prior session: {trend}\n"
+        f"Stock universe: {latest.get('stock_count', 'N/A')} NSE equities\n"
+        f"\nProvide your ROC breadth oscillator insight."
+    )
+    skill = _AI_SKILLS.get("breadth_roc_insight")
+    if not skill:
+        return {"date": target_date, "insight": None, "ai": False}
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    return {"date": target_date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/instrument-insight')
+def instrument_insight(id: int, type: str = 'index', date: str = None):
+    if not _AI_ENABLED or not _AI_OPTIONAL_OK:
+        return {"id": id, "type": type, "date": date, "insight": None, "ai": False, "alignment": ""}
+    cache_key = f"instrument:{type}:{id}:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"id": id, "type": type, "date": date,
+                "insight": _insight_cache[cache_key], "ai": True, "alignment": ""}
+    ctx = assemble_instrument_context(_db(), id, type, date)
+    if not ctx:
+        return {"id": id, "type": type, "date": date, "insight": None, "ai": False, "alignment": ""}
+    skill = _AI_SKILLS.get("instrument_insight")
+    if not skill:
+        return {"id": id, "type": type, "date": date, "insight": None, "ai": False, "alignment": ""}
+    from pipeline_api import _fmt_instrument_msg  # reuse formatting helper
+    user_msg = _fmt_instrument_msg(ctx)
+    insight  = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    alignment = ctx.get('alignment', {}).get('status', '')
+    return {"id": id, "type": type, "date": ctx.get('date', date),
+            "insight": insight, "ai": insight is not None, "alignment": alignment}
+
+
+@app.get('/api/ai/market-pulse-insight')
+def market_pulse_insight(date: str = None):
+    if not _AI_ENABLED or not _AI_OPTIONAL_OK:
+        return {"date": date, "insight": None, "ai": False, "astro_direction": ""}
+    cache_key = f"market_pulse:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"date": date, "insight": _insight_cache[cache_key], "ai": True, "astro_direction": ""}
+    ctx = assemble_market_pulse_context(_db(), date)
+    if not ctx:
+        return {"date": date, "insight": None, "ai": False, "astro_direction": ""}
+    skill = _AI_SKILLS.get("market_pulse_insight")
+    if not skill:
+        return {"date": date, "insight": None, "ai": False, "astro_direction": ""}
+    from pipeline_api import _fmt_market_pulse_msg  # reuse formatting helper
+    user_msg      = _fmt_market_pulse_msg(ctx)
+    insight       = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    if insight:
+        _insight_cache[cache_key] = insight
+    astro_dir = ctx.get('astro', {}).get('direction', '')
+    return {"date": ctx.get('date', date), "insight": insight,
+            "ai": insight is not None, "astro_direction": astro_dir}
 
 
 @app.get('/api/pipeline2/ping')
