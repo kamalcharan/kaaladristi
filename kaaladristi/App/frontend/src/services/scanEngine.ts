@@ -662,7 +662,7 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
 };
 
 /**
- * Deduplicate scan results by ISIN (prefer NSE over BSE).
+ * Deduplicate scan results by ISIN (prefer VaNi opportunity, then NSE over BSE).
  * For Combined mode, ensures one row per company.
  */
 function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbolRow>): ScanStock[] {
@@ -671,15 +671,17 @@ function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbo
     const sym = symbols.get(stock.equity_id);
     const isin = sym?.isin;
     if (!isin) {
-      // No ISIN — keep as-is (won't deduplicate)
       seen.set(`_noisn_${stock.equity_id}`, stock);
       continue;
     }
     const existing = seen.get(isin);
     if (!existing) {
       seen.set(isin, stock);
-    } else if (stock.exchange === 'NSE' && existing.exchange !== 'NSE') {
-      seen.set(isin, stock); // NSE preferred
+    } else {
+      // Prefer VaNi opportunity first; fall back to NSE preference for ties
+      const stockWins = stock.vaniOpportunity && !existing.vaniOpportunity
+        || (!stock.vaniOpportunity === !existing.vaniOpportunity && stock.exchange === 'NSE' && existing.exchange !== 'NSE');
+      if (stockWins) seen.set(isin, stock);
     }
   }
   return [...seen.values()];
