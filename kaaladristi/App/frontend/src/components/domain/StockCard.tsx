@@ -237,13 +237,10 @@ export function StockCard({ stock }: { stock: ScanStock }) {
 
   // Fix 5 — EMA20 distance %
   const ema20 = stock.ema_20;
-  const ema20Dist = ema20 != null ? ((stock.close - ema20) / ema20) * 100 : null;
-  const ema20Label = ema20Dist == null ? '—'
-    : Math.abs(ema20Dist) < 0.3 ? '≈0'
-    : `${ema20Dist >= 0 ? '+' : ''}${ema20Dist.toFixed(1)}%`;
-  const ema20Color = ema20Dist == null ? 'var(--text-faint)'
-    : Math.abs(ema20Dist) < 0.3 ? 'var(--text-muted)'
-    : ema20Dist > 0 ? 'var(--bull)' : 'var(--bear)';
+  const ema20Label = ema20 == null ? '—'
+    : ema20 >= 1000
+      ? ema20.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+      : ema20.toFixed(2);
 
   // Fix 4 — Reward color
   const rp = stock.rewardPct;
@@ -422,22 +419,24 @@ export function StockCard({ stock }: { stock: ScanStock }) {
           {isUp ? '▲' : '▼'} {isUp ? '+' : ''}{pct.toFixed(2)}%
         </div>
 
-        {/* Fix 5 — EMA20 distance % */}
+        {/* EMA20 price */}
         <div
-          title="Distance from EMA 20 · Positive = price above EMA"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '5px', color: ema20Color }}
+          title="20-day EMA price"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', marginTop: '5px', color: 'var(--text-muted)' }}
         >
           EMA20 {ema20Label}
         </div>
 
-        {/* Fix 4 — Reward + ATR context */}
+        {/* Reward + ATR — single line */}
         <div
-          title="Reward = (EMA 20 + ATR 14) − Close · Higher = more runway"
-          style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', marginTop: '3px', color: rewardColor }}
+          title="Reward = (EMA 20 + ATR 14) − Close · ATR = 14-day Average True Range"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', marginTop: '3px', color: 'var(--text-muted)' }}
         >
-          Reward {stock.reward != null ? `₹${stock.reward.toFixed(1)}` : '—'}
+          <span style={{ color: rewardColor }}>
+            {stock.reward != null ? `₹${stock.reward.toFixed(1)}` : '—'}
+          </span>
           {stock.atr_14 != null && (
-            <span style={{ color: 'var(--text-faint)', marginLeft: '5px' }}>
+            <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>
               ATR ₹{stock.atr_14.toFixed(1)}
             </span>
           )}
