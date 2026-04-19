@@ -59,11 +59,34 @@ def _conn():
     return psycopg2.connect(DATABASE_URL)
 
 
+def _reset_stale_jobs():
+    """On startup, reset any jobs stuck in 'running' back to 'queued'.
+    These are orphaned from a previous worker that was killed mid-job.
+    Handlers are designed to be re-entrant (force=False skips done work)."""
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE km_jobs SET status = 'queued', started_at = NULL "
+                "WHERE status = 'running'",
+            )
+            count = cur.rowcount
+        conn.commit()
+        conn.close()
+        if count:
+            log.info(f'Reset {count} stale running job(s) to queued on startup')
+    except Exception as e:
+        log.warning(f'Could not reset stale jobs: {e}')
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _scheduler, _worker_process
 
     log.info('pipeline2 API starting')
+
+    # Reset any jobs orphaned by a previous process kill
+    _reset_stale_jobs()
 
     # Start worker subprocess
     worker_cmd = [sys.executable, '-m', 'pipeline2.worker', '--watch']

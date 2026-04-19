@@ -414,6 +414,31 @@ def process_one(conn) -> bool:
     return True
 
 
+def _reconnect(conn, retries: int = 5, base_delay: float = 2.0):
+    """Close broken connection and return a fresh one. Retries with backoff."""
+    try:
+        conn.close()
+    except Exception:
+        pass
+    last_err: Exception | None = None
+    for attempt in range(retries):
+        delay = base_delay * (2 ** attempt)
+        try:
+            new_conn = _connect()
+            log.info('Reconnected to DB')
+            return new_conn
+        except Exception as e:
+            last_err = e
+            log.warning(f'Reconnect attempt {attempt + 1}/{retries} failed: {e}. Retrying in {delay:.0f}s')
+            time.sleep(delay)
+    raise RuntimeError(f'Could not reconnect to DB after {retries} attempts: {last_err}')
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    import psycopg2
+    return isinstance(exc, (psycopg2.OperationalError, psycopg2.InterfaceError))
+
+
 def main():
     parser = argparse.ArgumentParser(description='Kāla-Drishti pipeline v2 worker')
     parser.add_argument('--watch', nargs='?', const=3, type=int,
@@ -430,10 +455,18 @@ def main():
                     processed = process_one(conn)
                 except Exception as loop_err:
                     log.error(f'Loop error: {loop_err}')
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
+                    if _is_connection_error(loop_err):
+                        log.warning('DB connection lost — reconnecting…')
+                        try:
+                            conn = _reconnect(conn)
+                        except RuntimeError as reconnect_err:
+                            log.error(f'Fatal reconnect failure: {reconnect_err}')
+                            raise SystemExit(1)
+                    else:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
                     time.sleep(interval)
                     continue
                 if not processed:
