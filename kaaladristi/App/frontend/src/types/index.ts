@@ -437,6 +437,23 @@ export interface ScanDefinition {
   limit: number;
 }
 
+export interface VaniOpportunityConfig {
+  id: number;
+  config_name: string;
+  description?: string;
+  is_active: boolean;
+  parameters: {
+    atr_multiplier: number;
+    min_rvol: number;
+    rs_zones: string[];
+    flow_types: string[];
+    min_reward_atr_multiple: number;
+    [key: string]: unknown;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EquitySymbolRow {
   id: number;
   symbol: string;

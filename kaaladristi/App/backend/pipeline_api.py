@@ -351,6 +351,21 @@ def data_health_insight(days: int = 60):
     return {"insight": insight, "ai": insight is not None}
 
 
+@app.get('/api/vani-opportunity/config')
+def vani_opportunity_config():
+    """Return the single active VaNi Opportunity config row."""
+    rows = db.select(
+        'kd_vani_opportunity_config',
+        'id,config_name,description,is_active,parameters,created_at,updated_at',
+        filters={'is_active': 'true'},
+        order='id.desc',
+        limit=1,
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail='No active VaNi Opportunity config found')
+    return rows[0]
+
+
 @app.get('/api/pipeline/health')
 def health():
     """Overall pipeline health check."""
