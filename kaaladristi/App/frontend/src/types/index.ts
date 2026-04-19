@@ -442,6 +442,7 @@ export interface VaniOpportunityConfig {
   config_name: string;
   description?: string;
   is_active: boolean;
+  applies_to_presets: string[];
   parameters: {
     atr_multiplier: number;
     min_rvol: number;

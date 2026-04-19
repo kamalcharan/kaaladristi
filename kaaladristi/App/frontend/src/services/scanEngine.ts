@@ -90,34 +90,43 @@ interface ScanDataBundle {
   latestEod: Map<number, EquityEodSnapshot>;
   eodHistory: Map<number, EquityEodSnapshot[]>; // equity_id → rows by date desc
   latestDate: string | null;
-  oppConfig: OppConfig;
+  oppConfigMap: Map<string, OppConfig>; // presetId → config
 }
 
 let _cachedBundle: { data: ScanDataBundle; fetchedAt: number } | null = null;
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
 
-// Session-level config cache — fetched once per page load, never invalidated.
-let _oppConfigCache: OppConfig | null = null;
+// Session-level config cache — presetId → OppConfig, fetched once per page load.
+let _oppConfigCache: Map<string, OppConfig> | null = null;
 
-async function fetchOpportunityConfig(): Promise<OppConfig> {
+async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
   if (_oppConfigCache) return _oppConfigCache;
+  const map = new Map<string, OppConfig>();
   try {
     const res = await fetch(`${PIPELINE_URL}/api/vani-opportunity/config`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as VaniOpportunityConfig;
-    const p = data.parameters;
-    _oppConfigCache = {
-      ema_atr_band: Number(p.atr_multiplier),
-      reward_min_atr_multiple: Number(p.min_reward_atr_multiple),
-      magic_rs_zones: Array.isArray(p.rs_zones) ? p.rs_zones : DEFAULT_OPP_CONFIG.magic_rs_zones,
-      flow_types: Array.isArray(p.flow_types) ? p.flow_types : DEFAULT_OPP_CONFIG.flow_types,
-      rvol_min: Number(p.min_rvol),
-    };
+    const configs = (await res.json()) as VaniOpportunityConfig[];
+    for (const cfg of configs) {
+      const p = cfg.parameters;
+      const opp: OppConfig = {
+        ema_atr_band: Number(p.atr_multiplier),
+        reward_min_atr_multiple: Number(p.min_reward_atr_multiple),
+        magic_rs_zones: Array.isArray(p.rs_zones) ? p.rs_zones : DEFAULT_OPP_CONFIG.magic_rs_zones,
+        flow_types: Array.isArray(p.flow_types) ? p.flow_types : DEFAULT_OPP_CONFIG.flow_types,
+        rvol_min: Number(p.min_rvol),
+      };
+      for (const presetId of cfg.applies_to_presets) {
+        map.set(presetId, opp);
+      }
+    }
   } catch (e) {
     console.warn('[scanEngine] config fetch failed, using defaults:', e);
-    _oppConfigCache = { ...DEFAULT_OPP_CONFIG };
+    for (const preset of SCAN_PRESETS) {
+      map.set(preset.id, { ...DEFAULT_OPP_CONFIG });
+    }
   }
-  return _oppConfigCache!;
+  _oppConfigCache = map;
+  return map;
 }
 
 // 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
@@ -149,7 +158,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
       latestEod: new Map(),
       eodHistory: new Map(),
       latestDate: null,
-      oppConfig: DEFAULT_OPP_CONFIG,
+      oppConfigMap: new Map(),
     };
     return empty;
   }
@@ -157,8 +166,8 @@ async function loadScanData(): Promise<ScanDataBundle> {
   const latestDate = dates[0];
   const oldestDate = dates[dates.length - 1];
 
-  // Parallel fetches — market data + session-cached opportunity config
-  const [industryRes, symbolRes, eodRes, oppConfig] = await Promise.all([
+  // Parallel fetches — market data + session-cached opportunity config map
+  const [industryRes, symbolRes, eodRes, oppConfigMap] = await Promise.all([
     // Industry EOD for last 11 dates
     from('km_industry_eod')
       .select('*')
@@ -221,7 +230,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
     latestEod,
     eodHistory,
     latestDate,
-    oppConfig,
+    oppConfigMap,
   };
 
   _cachedBundle = { data: bundle, fetchedAt: Date.now() };
@@ -232,11 +241,16 @@ async function loadScanData(): Promise<ScanDataBundle> {
 
 function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: OppConfig): boolean {
   if (!stock.ema_20 || !stock.atr_14 || stock.atr_14 <= 0) return false;
+  const isBearish = config.flow_types.some(f => f === 'FRESH_SHORTS' || f === 'LONG_LIQUIDATION');
   const withinBand =
     stock.close >= stock.ema_20 - config.ema_atr_band * stock.atr_14 &&
     stock.close <= stock.ema_20 + config.ema_atr_band * stock.atr_14;
-  const reward = (stock.ema_20 + stock.atr_14) - stock.close;
-  const hasReward = reward > config.reward_min_atr_multiple * stock.atr_14;
+  // Bullish: upside runway = (ema20 + atr14) - close
+  // Bearish: downside runway = close - (ema20 - atr14)
+  const runway = isBearish
+    ? stock.close - (stock.ema_20 - stock.atr_14)
+    : (stock.ema_20 + stock.atr_14) - stock.close;
+  const hasReward = runway > config.reward_min_atr_multiple * stock.atr_14;
   const zoneOk = config.magic_rs_zones.includes(stock.magic_rs_zone ?? '');
   const flowOk = config.flow_types.includes(stock.flow_type ?? '');
   const rvolOk = (stock.rvol ?? 0) >= config.rvol_min;
@@ -322,6 +336,7 @@ function getIndustryClassifications(bundle: ScanDataBundle) {
 function buildScanStock(
   equityId: number,
   bundle: ScanDataBundle,
+  presetId: string,
 ): ScanStock | null {
   const eod = bundle.latestEod.get(equityId);
   const sym = bundle.symbols.get(equityId);
@@ -377,7 +392,8 @@ function buildScanStock(
     pctBelow52wHigh,
   };
 
-  return { ...partial, vaniOpportunity: evaluateOpportunity(partial, bundle.oppConfig) };
+  const presetCfg = bundle.oppConfigMap.get(presetId) ?? null;
+  return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
 }
 
 // ── Scan Implementations ───────────────────────────────────────
@@ -401,7 +417,7 @@ function scanPowerBuy(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'power_buy');
     if (!stock || !stock.industry) continue;
 
     // Industry gate (unchanged)
@@ -438,7 +454,7 @@ function scanPowerSell(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'power_sell');
     if (!stock || !stock.industry) continue;
 
     // Industry gate (unchanged)
@@ -474,7 +490,7 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'smart_money');
     if (!stock || !stock.industry) continue;
     if (!accumulatingIndustries.has(stock.industry)) continue;
 
@@ -513,7 +529,7 @@ function scanFreshBreakout(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'fresh_breakout');
     if (!stock || !stock.industry) continue;
     if (!leading.has(stock.industry)) continue;
     if ((stock.rvol ?? 0) <= 2) continue;
@@ -556,7 +572,7 @@ function scanQuietAccumulation(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'quiet_accumulation');
     if (!stock || !stock.industry) continue;
     if (!eligibleIndustries.has(stock.industry)) continue;
     if (stock.accum_distrib !== 'ACCUMULATION') continue;
@@ -581,7 +597,7 @@ function scanDistributionWarning(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
 
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'distribution_warning');
     if (!stock) continue;
 
     // Current zone NOT Strong Bull (degraded)
@@ -674,6 +690,7 @@ export async function executeScan(scanId: string, exchangeFilter: ExchangeFilter
 /** Invalidate scan data cache (call after data refresh) */
 export function invalidateScanCache(): void {
   _cachedBundle = null;
+  _oppConfigCache = null;
 }
 
 export interface ScanCountsResult {
