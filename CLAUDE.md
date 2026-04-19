@@ -53,7 +53,7 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **035** (`km_migration_035_pipeline_coverage.sql`)
+Latest migration: **050** (`km_migration_050_migrate_dc_inference.sql`)
 
 | Table | Description |
 |---|---|
@@ -61,6 +61,9 @@ Latest migration: **035** (`km_migration_035_pipeline_coverage.sql`)
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
 | `km_index_constituents` | Index→Equity mapping with sector/weight (migration 022, FK → `km_index_symbols`) |
 | `km_industry_eod` | Daily industry-level aggregation from equity EOD (migration 033, PK: trade_date + industry) |
+| `km_astro_rule_master` | Timeless Vedic astro-market rule registry (migration 047) |
+| `km_astro_calendar_2026` | 2026 event instances with market_impact (migration 048) |
+| `km_astro_daily_signal` | Computed net astro signal per date (migration 049) |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -236,7 +239,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **038**.
+Next migration number: **051**.
 
 ---
 
@@ -392,3 +395,25 @@ Detailed spec for each milestone: see `docs/visual-pulse-spec.md`
 VP-1 (RSI Signal Tower) must go through **multiple design iterations** until the
 visual language feels right. Only then proceed to VP-2. Once one metaphor works,
 the pattern applies to all others.
+
+---
+
+## Astro Market-Book 2026
+
+Three new tables as of migrations 047-050:
+- `km_astro_rule_master` — timeless rule registry (600+ rules planned)
+- `km_astro_calendar_2026` — 2026 event instances with market_impact
+- `km_astro_daily_signal` — computed net signal per date
+
+Scoring: strong_bull=+3, bull=+2, minor_bull=+1, neutral=0,
+         minor_bear=-1, bear=-2, strong_bear=-3
+Turning date flagged regardless of score.
+
+Recompute signals after any calendar insert/update:
+```sql
+SELECT compute_astro_daily_signals('2026-01-01', '2026-12-31');
+```
+
+API endpoints:
+- `GET /api/astro/daily-signal?date=YYYY-MM-DD` — single date, includes active_events array
+- `GET /api/astro/signals?from=YYYY-MM-DD&to=YYYY-MM-DD` — range, max 90 days, used by calendar view

@@ -4,23 +4,10 @@ import type { DailyPanchang, MarketBreadthDay, BreadthRocDay } from '@/types';
 const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
 
 export async function fetchPanchang(date: string): Promise<DailyPanchang | null> {
-  // Try the JOIN endpoint on the pipeline API first (provides _next_name fields).
-  // Fall back to PostgREST on any failure so the card always renders.
-  try {
-    const res = await fetch(`${PIPELINE_API}/api/panchang/daily?date=${encodeURIComponent(date)}`);
-    if (res.ok) return res.json() as Promise<DailyPanchang>;
-    // non-ok (404 route-missing, 500, etc.) → fall through to PostgREST
-  } catch {
-    // network error → fall through to PostgREST
-  }
-
-  const { data, error } = await from('km_daily_panchang')
-    .select('*')
-    .eq('date', date)
-    .maybeSingle()
-    .execute();
-  if (error) throw new Error(`[km_daily_panchang] ${error.message}`);
-  return data as DailyPanchang | null;
+  const res = await fetch(`${PIPELINE_API}/api/panchang/daily?date=${encodeURIComponent(date)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`[panchang] HTTP ${res.status}`);
+  return res.json() as Promise<DailyPanchang>;
 }
 
 export async function fetchMarketBreadth(days = 66): Promise<MarketBreadthDay[]> {

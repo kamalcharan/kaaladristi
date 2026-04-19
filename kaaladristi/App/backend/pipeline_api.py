@@ -1414,6 +1414,110 @@ def panchang_daily(date: str = None):
     return row
 
 
+# ── Astro Market-Book Endpoints ───────────────────────────────────────────────
+
+_astro_signal_cache: dict[str, dict] = {}
+
+_ASTRO_SIGNAL_SQL = """
+    SELECT
+        s.*,
+        COALESCE(
+            json_agg(
+                json_build_object('id', e.id, 'display_name', e.display_name,
+                                  'market_impact', e.market_impact,
+                                  'start_date', e.start_date, 'end_date', e.end_date)
+                ORDER BY e.market_impact
+            ) FILTER (WHERE e.id IS NOT NULL),
+            '[]'
+        ) AS active_events
+    FROM km_astro_daily_signal s
+    LEFT JOIN km_astro_calendar_2026 e ON e.id = ANY(s.active_event_ids)
+    WHERE s.trade_date = %s
+    GROUP BY s.trade_date
+"""
+
+_ASTRO_RANGE_SQL = """
+    SELECT
+        s.trade_date, s.net_signal, s.net_score,
+        s.active_event_count, s.turning_date,
+        s.strong_bullish_count, s.bullish_count, s.minor_bullish_count,
+        s.neutral_count, s.minor_bearish_count, s.bearish_count, s.strong_bearish_count,
+        s.primary_event, s.secondary_event
+    FROM km_astro_daily_signal s
+    WHERE s.trade_date BETWEEN %s AND %s
+    ORDER BY s.trade_date
+"""
+
+
+@app.get('/api/astro/daily-signal')
+def astro_daily_signal(date: str = None):
+    """Net astro signal for a single date with active event details."""
+    if not date:
+        date = datetime.now(IST).strftime('%Y-%m-%d')
+
+    if date in _astro_signal_cache:
+        return _astro_signal_cache[date]
+
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(_ASTRO_SIGNAL_SQL, (date,))
+        else:
+            rows = db.select('km_astro_daily_signal', '*', filters={'trade_date': date}, limit=1)
+    except Exception as e:
+        log.error(f"astro_daily_signal error for {date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f'No astro signal for {date}')
+
+    row = dict(rows[0])
+    for k, v in row.items():
+        if hasattr(v, 'isoformat'):
+            row[k] = v.isoformat()
+
+    _astro_signal_cache[date] = row
+    return row
+
+
+@app.get('/api/astro/signals')
+def astro_signals(from_date: str = None, to_date: str = None):
+    """Net astro signals for a date range (max 90 days). Used by calendar view."""
+    today = datetime.now(IST).date()
+    if not from_date:
+        from_date = today.strftime('%Y-%m-%d')
+    if not to_date:
+        to_date = (today + timedelta(days=30)).strftime('%Y-%m-%d')
+
+    # Clamp to 90-day window
+    try:
+        d_from = date.fromisoformat(from_date)
+        d_to = date.fromisoformat(to_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f'Invalid date format: {e}')
+
+    if (d_to - d_from).days > 90:
+        raise HTTPException(status_code=400, detail='Range exceeds 90-day maximum')
+
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(_ASTRO_RANGE_SQL, (from_date, to_date))
+        else:
+            rows = db.select('km_astro_daily_signal', '*',
+                             order='trade_date.asc', limit=91)
+    except Exception as e:
+        log.error(f"astro_signals error {from_date}→{to_date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    result = []
+    for row in rows:
+        r = dict(row)
+        for k, v in r.items():
+            if hasattr(v, 'isoformat'):
+                r[k] = v.isoformat()
+        result.append(r)
+    return result
+
+
 # ── AI Endpoints ──────────────────────────────────────────────────────────────
 
 # Per-day in-memory cache — insight for a given date never changes
