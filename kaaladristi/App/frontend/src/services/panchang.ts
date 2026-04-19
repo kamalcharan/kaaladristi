@@ -5,13 +5,13 @@ const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://l
 
 export async function fetchPanchang(date: string): Promise<DailyPanchang | null> {
   // Try the JOIN endpoint on the pipeline API first (provides _next_name fields).
-  // Fall back to PostgREST if the pipeline API is unreachable or missing the route.
+  // Fall back to PostgREST on any failure so the card always renders.
   try {
     const res = await fetch(`${PIPELINE_API}/api/panchang/daily?date=${encodeURIComponent(date)}`);
-    if (res.status === 404) return null;
     if (res.ok) return res.json() as Promise<DailyPanchang>;
+    // non-ok (404 route-missing, 500, etc.) → fall through to PostgREST
   } catch {
-    // pipeline API offline — fall through to PostgREST
+    // network error → fall through to PostgREST
   }
 
   const { data, error } = await from('km_daily_panchang')
