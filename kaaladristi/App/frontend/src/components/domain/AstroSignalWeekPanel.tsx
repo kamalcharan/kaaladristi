@@ -5,6 +5,26 @@ import { from } from '@/services/postgrest';
 import { signalColor, signalLabel, addDays, daysBetween } from '@/lib/astroSignalUtils';
 import type { AstroSignal } from '@/types';
 
+// ── CSS keyframes injected once ───────────────────────────────────────────────
+
+const STYLES = `
+@keyframes pulse-ring {
+  0%   { transform: translate(-50%,-50%) scale(1);   opacity: 0.7; }
+  100% { transform: translate(-50%,-50%) scale(1.9); opacity: 0; }
+}
+@keyframes flicker {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.astro-pulse-ring {
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+.astro-flicker {
+  display: inline-block;
+  animation: flicker 1.4s ease-in-out infinite;
+}
+`;
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface TransitEvent {
@@ -38,39 +58,68 @@ function fmtShort(d: string) {
   return utcDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-// ── Transit bar layer ──────────────────────────────────────────────────────────
+/** Glow color based on market_impact category — overrides signalColor for bars */
+function transitGlow(impact: string): { color: string; shadow: string } {
+  if (['strong_bullish', 'bullish', 'minor_bullish'].includes(impact))
+    return { color: '#1a8a4a', shadow: '0 0 6px #1a8a4a' };
+  if (['strong_bearish', 'bearish', 'minor_bearish'].includes(impact))
+    return { color: '#c0392b', shadow: '0 0 6px #c0392b' };
+  return { color: '#f0a500', shadow: '0 0 6px #f0a500' };
+}
 
-function TransitBar({ event, today }: { event: TransitEvent; today: string }) {
-  const color = signalColor(event.market_impact);
+// ── Transit bar ───────────────────────────────────────────────────────────────
 
-  // 7-day grid: today = col 0, today+6 = col 6
+const DOT = 12;
+const ROW_H = 36; // px per bar row (label above + bar + dots)
+
+function TransitBar({ event, today, showRightPulse }: {
+  event: TransitEvent; today: string; showRightPulse: boolean;
+}) {
+  const glow = transitGlow(event.market_impact);
+
   const startOffset = daysBetween(today, event.start_date);
   const endOffset   = event.end_date ? daysBetween(today, event.end_date) : 6;
 
   const gridStart = Math.max(0, startOffset);
   const gridEnd   = Math.min(6, endOffset);
 
-  // left% = left edge of starting column, right% = right edge of ending column
   const leftPct  = (gridStart / 7) * 100;
   const rightPct = ((gridEnd + 1) / 7) * 100;
   const widthPct = rightPct - leftPct;
 
   const label = `${event.display_name} — ${fmtShort(event.start_date)} → ${event.end_date ? fmtShort(event.end_date) : '…'}`;
 
-  const DOT = 12; // px
-
   return (
-    <div className="relative w-full" style={{ height: '20px' }}>
-      {/* Bar */}
+    <div className="relative w-full" style={{ height: `${ROW_H}px` }}>
+      {/* Label — sits above bar */}
+      <span
+        className="absolute truncate select-none pointer-events-none"
+        style={{
+          left: `calc(${leftPct}% + ${DOT / 2}px)`,
+          width: `calc(${widthPct}% - ${DOT}px)`,
+          top: 0,
+          textAlign: 'center',
+          fontSize: '11px',
+          fontWeight: 600,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          color: glow.color,
+          lineHeight: '14px',
+        }}
+      >
+        {label}
+      </span>
+
+      {/* Bar — sits in lower half */}
       <div
         className="absolute"
         style={{
           left: `${leftPct}%`,
           width: `${widthPct}%`,
-          top: '50%',
+          bottom: `${DOT / 2 - 1.5}px`,
           height: '3px',
-          backgroundColor: color.bg,
-          transform: 'translateY(-50%)',
+          backgroundColor: glow.color,
+          boxShadow: glow.shadow,
           borderRadius: '2px',
         }}
       />
@@ -80,13 +129,13 @@ function TransitBar({ event, today }: { event: TransitEvent; today: string }) {
         className="absolute"
         style={{
           left: `${leftPct}%`,
-          top: '50%',
+          bottom: 0,
           width: `${DOT}px`,
           height: `${DOT}px`,
           borderRadius: '50%',
-          backgroundColor: color.bg,
-          transform: 'translate(-50%, -50%)',
-          zIndex: 1,
+          backgroundColor: glow.color,
+          transform: 'translateX(-50%)',
+          zIndex: 2,
         }}
       />
 
@@ -95,78 +144,139 @@ function TransitBar({ event, today }: { event: TransitEvent; today: string }) {
         className="absolute"
         style={{
           left: `${rightPct}%`,
-          top: '50%',
+          bottom: 0,
           width: `${DOT}px`,
           height: `${DOT}px`,
           borderRadius: '50%',
-          backgroundColor: color.bg,
-          transform: 'translate(-50%, -50%)',
-          zIndex: 1,
+          backgroundColor: glow.color,
+          transform: 'translateX(-50%)',
+          zIndex: 2,
         }}
       />
 
-      {/* Centered label */}
-      <span
-        className="absolute top-1/2 text-[8px] font-semibold truncate select-none pointer-events-none"
-        style={{
-          left: `calc(${leftPct}% + ${DOT / 2}px)`,
-          width: `calc(${widthPct}% - ${DOT}px)`,
-          textAlign: 'center',
-          transform: 'translateY(-50%)',
-          color: color.text,
-          lineHeight: 1,
-        }}
-      >
-        {label}
-      </span>
+      {/* Pulsing ring on right dot — only if transit end is in the future */}
+      {showRightPulse && (
+        <div
+          className="absolute astro-pulse-ring"
+          style={{
+            left: `${rightPct}%`,
+            bottom: `${DOT / 2}px`,
+            width: `${DOT}px`,
+            height: `${DOT}px`,
+            borderRadius: '50%',
+            border: `2px solid ${glow.color}`,
+            zIndex: 1,
+          }}
+        />
+      )}
     </div>
   );
 }
 
-// ── Day card ───────────────────────────────────────────────────────────────────
+// ── Day card ──────────────────────────────────────────────────────────────────
 
-function DayCard({
-  signal, isToday,
-}: { signal: AstroSignal; isToday: boolean }) {
+function DayCard({ signal, isToday }: { signal: AstroSignal; isToday: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const color = signalColor(signal.net_signal);
   const score = signal.net_score > 0 ? `+${signal.net_score}` : `${signal.net_score}`;
 
+  const topBorder  = `2px solid ${color.bg}`;
+  const glowShadow = isToday ? `0 0 12px ${color.bg}4d` : undefined; // 4d = 30% alpha
+
   return (
     <button
       onClick={() => setExpanded(v => !v)}
-      className={[
-        'flex flex-col items-center text-center rounded-xl px-2 py-2.5 flex-1 min-w-0 transition-colors',
-        isToday
-          ? 'border-2 border-accent-indigo/70 bg-accent-indigo/5'
-          : 'border border-kd-border hover:bg-kd-elevated/40',
-      ].join(' ')}
+      className="flex flex-col items-center text-center flex-1 min-w-0 transition-all"
+      style={{
+        borderRadius: '12px',
+        borderTop: topBorder,
+        border: isToday ? `2px solid ${color.bg}` : `1px solid rgba(255,255,255,0.07)`,
+        borderTopWidth: '2px',
+        borderTopColor: color.bg,
+        boxShadow: glowShadow,
+        padding: '10px 8px 12px',
+        backgroundColor: isToday ? 'rgba(99,102,241,0.05)' : 'transparent',
+      }}
     >
-      <span className={['text-[10px] font-bold uppercase tracking-widest leading-tight', isToday ? 'text-accent-indigo' : 'text-muted'].join(' ')}>
+      <span
+        style={{
+          fontSize: '10px',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          color: isToday ? 'var(--accent-indigo, #6366f1)' : 'var(--text-muted, #6b7280)',
+          lineHeight: 1.2,
+        }}
+      >
         {dayName(signal.trade_date)}
       </span>
-      <span className="text-[9px] text-muted leading-tight mb-1">
+
+      <span
+        style={{
+          fontSize: '13px',
+          fontWeight: 500,
+          color: 'var(--text-secondary, #9ca3af)',
+          lineHeight: 1.3,
+          marginBottom: '8px',
+        }}
+      >
         {dayDateLabel(signal.trade_date)}
       </span>
+
       <span
-        className="px-2 py-0.5 rounded text-[9px] font-bold w-full leading-tight"
-        style={{ backgroundColor: color.bg, color: color.text }}
+        style={{
+          display: 'block',
+          width: '100%',
+          padding: '3px 6px',
+          borderRadius: '6px',
+          fontSize: '10px',
+          fontWeight: 700,
+          textAlign: 'center',
+          backgroundColor: color.bg,
+          color: color.text,
+          lineHeight: 1.4,
+        }}
       >
-        {signal.turning_date ? '⚡ ' : ''}{signalLabel(signal.net_signal)}
+        {signal.turning_date
+          ? <><span className="astro-flicker">⚡</span> {signalLabel(signal.net_signal)}</>
+          : signalLabel(signal.net_signal)
+        }
       </span>
-      <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] mt-1">
+
+      <span
+        style={{
+          fontSize: '20px',
+          fontWeight: 700,
+          color: 'var(--text-secondary, #9ca3af)',
+          marginTop: '6px',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1,
+        }}
+      >
         {score}
       </span>
 
       {expanded && (
-        <div className="mt-2 pt-2 border-t border-kd-border w-full text-left flex flex-col gap-0.5">
+        <div
+          style={{
+            marginTop: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            width: '100%',
+            textAlign: 'left',
+          }}
+        >
           {signal.primary_event && (
-            <p className="text-[9px] text-[var(--text-primary)] leading-snug">{signal.primary_event}</p>
+            <p style={{ fontSize: '9px', color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: '2px' }}>
+              {signal.primary_event}
+            </p>
           )}
           {signal.secondary_event && (
-            <p className="text-[9px] text-muted leading-snug">{signal.secondary_event}</p>
+            <p style={{ fontSize: '9px', color: 'var(--text-muted, #6b7280)', lineHeight: 1.4, marginBottom: '2px' }}>
+              {signal.secondary_event}
+            </p>
           )}
-          <p className="text-[8px] text-muted mt-0.5">
+          <p style={{ fontSize: '8px', color: 'var(--text-muted, #6b7280)', marginTop: '2px' }}>
             {signal.active_event_count} event{signal.active_event_count !== 1 ? 's' : ''}
           </p>
         </div>
@@ -175,16 +285,14 @@ function DayCard({
   );
 }
 
-// ── Main panel ─────────────────────────────────────────────────────────────────
+// ── Main panel ────────────────────────────────────────────────────────────────
 
 export default function AstroSignalWeekPanel({ date }: { date: string }) {
-  const weekEnd = addDays(date, 7); // exclusive
+  const weekEnd = addDays(date, 7);
 
-  // Daily signals — 7 days, filter weekends in JS
   const { data: allSignals = [], isLoading, isError } = useAstroWeek(date);
   const signals = allSignals.filter(s => !isWeekend(s.trade_date));
 
-  // Transit bars — multi-day spanning events via PostgREST
   const { data: transits = [] } = useQuery({
     queryKey: ['astro_transits_db', date],
     queryFn: async (): Promise<TransitEvent[]> => {
@@ -197,9 +305,7 @@ export default function AstroSignalWeekPanel({ date }: { date: string }) {
       const rows = (data ?? []) as TransitEvent[];
       const today = date;
       return rows.filter(r => {
-        // multi-day only — skip single-day events
         if (!r.end_date || r.end_date === r.start_date) return false;
-        // must overlap the week: end_date >= today
         return r.end_date >= today;
       });
     },
@@ -208,41 +314,76 @@ export default function AstroSignalWeekPanel({ date }: { date: string }) {
   });
 
   return (
-    <div className="glass-card rounded-2xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-base">🔭</span>
-        <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Astro Signal — Week Ahead</h3>
+    <>
+      {/* Inject keyframes once */}
+      <style>{STYLES}</style>
+
+      <div
+        style={{
+          backgroundColor: '#0d1117',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: '16px',
+          backgroundImage: [
+            'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)',
+            'linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+          ].join(','),
+          backgroundSize: '20px 20px',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Title */}
+        <div style={{ padding: '16px 20px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '16px' }}>🔭</span>
+          <h3 style={{
+            fontSize: '13px',
+            fontWeight: 700,
+            letterSpacing: '0.03em',
+            color: 'var(--text-primary, #f3f4f6)',
+            margin: 0,
+          }}>
+            Astro Signal — Week Ahead
+          </h3>
+        </div>
+
+        {/* Layer 1 — Transit bars */}
+        {transits.length > 0 && (
+          <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            {transits.map((t, i) => (
+              <TransitBar
+                key={i}
+                event={t}
+                today={date}
+                showRightPulse={!!t.end_date && t.end_date > date}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Layer 2 — Weekday signal cards */}
+        <div style={{ padding: transits.length > 0 ? '24px 20px 20px' : '16px 20px 20px' }}>
+          {isLoading ? (
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} style={{ flex: 1, height: '96px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.04)' }} />
+              ))}
+            </div>
+          ) : isError ? (
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>
+              Astro data unavailable
+            </p>
+          ) : (
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {signals.map(signal => (
+                <DayCard
+                  key={signal.trade_date}
+                  signal={signal}
+                  isToday={signal.trade_date === date}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Layer 1 — Transit bars */}
-      {transits.length > 0 && (
-        <div className="flex flex-col gap-1 mb-4 px-1">
-          {transits.map((t, i) => (
-            <TransitBar key={i} event={t} today={date} />
-          ))}
-        </div>
-      )}
-
-      {/* Layer 2 — Weekday signal cards */}
-      {isLoading ? (
-        <div className="flex gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex-1 h-20 bg-kd-elevated rounded-xl animate-pulse" />
-          ))}
-        </div>
-      ) : isError ? (
-        <p className="text-[11px] text-muted text-center py-4">Astro data unavailable</p>
-      ) : (
-        <div className="flex gap-2">
-          {signals.map(signal => (
-            <DayCard
-              key={signal.trade_date}
-              signal={signal}
-              isToday={signal.trade_date === date}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
