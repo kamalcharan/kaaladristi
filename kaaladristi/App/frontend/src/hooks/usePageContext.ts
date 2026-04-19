@@ -18,7 +18,7 @@ const PATH_MAP: Array<{ pattern: RegExp; page: VaNiPage; entityType?: PageContex
   { pattern: /^\/pulse\/equity\/(\d+)/, page: 'equity_vp', entityType: 'stock' },
   { pattern: /^\/pulse\/(\d+)/, page: 'index_vp', entityType: 'index' },
   { pattern: /^\/industry-transition/, page: 'industry_transition' },
-  { pattern: /^\/scan/, page: 'scanner' },
+  { pattern: /^\/scanner/, page: 'scanner' },
   { pattern: /^\/manipulation-watch/, page: 'manipulation_watch' },
   { pattern: /^\/astro-calendar/, page: 'astro_calendar' },
   { pattern: /^\/dashboard/, page: 'dashboard' },

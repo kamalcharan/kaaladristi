@@ -407,6 +407,7 @@ export interface ScanStock {
   flow_type: string | null;
   rvol: number | null;
   sniper_inst: number | null;
+  sniper_hot: number | null;
   accum_distrib: string | null;
   rss_value: number | null;
   rss_spread: number | null;
@@ -415,6 +416,17 @@ export interface ScanStock {
   has_recent_svd: boolean;
   has_recent_sbd: boolean;
   has_recent_syd: boolean;
+  // Migration 042 additions
+  ema_20: number | null;
+  atr_14: number | null;
+  delivery_pct: number | null;
+  w52_high: number | null;
+  // Computed fields
+  magicRsTrend: (boolean | null)[];
+  reward: number | null;
+  rewardPct: number | null;
+  pctBelow52wHigh: number | null;
+  vaniOpportunity: boolean;
 }
 
 export interface ScanDefinition {
@@ -423,6 +435,24 @@ export interface ScanDefinition {
   description: string;
   tooltip?: string;
   limit: number;
+}
+
+export interface VaniOpportunityConfig {
+  id: number;
+  config_name: string;
+  description?: string;
+  is_active: boolean;
+  applies_to_presets: string[];
+  parameters: {
+    atr_multiplier: number;
+    min_rvol: number;
+    rs_zones: string[];
+    flow_types: string[];
+    min_reward_atr_multiple: number;
+    [key: string]: unknown;
+  };
+  created_at: string;
+  updated_at: string;
 }
 
 export interface EquitySymbolRow {
@@ -459,4 +489,10 @@ export interface EquityEodSnapshot {
   sma_150: number | null;
   volume_divergence_flag: string | null;
   value_cr: number | null;
+  // Migration 042 additions
+  ema_20: number | null;
+  atr_14: number | null;
+  delivery_pct: number | null;
+  delivery_qty: number | null;
+  w52_high: number | null;
 }

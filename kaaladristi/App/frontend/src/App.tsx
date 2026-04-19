@@ -23,6 +23,7 @@ import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
 import ScanView from '@/views/ScanView';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
+import DataPipelinePage from '@/pages/DataPipeline';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,10 +102,13 @@ function AppRoutes() {
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />
-          <Route path="/scan" element={<ScanView />} />
+          <Route path="/scan" element={<Navigate to="/scanner" replace />} />
+          <Route path="/scanner" element={<ScanView />} />
+          <Route path="/scanner/:presetId" element={<ScanView />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
           <Route path="/industry-transition" element={<IndustryTransitionView />} />
           <Route path="/settings" element={<SettingsView />} />
+          <Route path="/data-pipeline" element={<DataPipelinePage />} />
         </Route>
       </Route>
 

@@ -71,13 +71,16 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   };
 
   // ── Backgrounds ──
+  set('--bg',               c.utility.primaryBackground);
+  set('--card',             c.utility.secondaryBackground ?? c.utility.primaryBackground);
+  set('--card-soft',        c.surface.glassStrong);
   set('--kd-bg',            c.utility.primaryBackground);
   set('--kd-surface',       c.utility.secondaryBackground ?? c.utility.primaryBackground);
   set('--kd-card',          c.surface.glass);
   set('--kd-elevated',      c.surface.glassStrong);
   set('--kd-border',        c.surface.glassBorder);
   set('--kd-border-active', hexToRgba(
-    c.brand.primary.startsWith('#') ? c.brand.primary : '#6366f1', 0.4
+    c.brand.primary.startsWith('#') ? c.brand.primary : '#818cf8', 0.28
   ));
 
   // ── Text ──
@@ -85,11 +88,18 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--text-secondary', c.utility.secondaryText);
   set('--text-muted', c.utility.placeholder ?? deriveTextMuted(c.utility.secondaryText));
 
-  // ── Accents (brand slots → accent CSS vars) ──
-  set('--accent-indigo', c.brand.primary);    // primary interactive accent
-  set('--accent-violet', c.brand.tertiary);   // tertiary accent
-  set('--accent-gold',   c.brand.secondary);  // secondary / highlight
-  // info colour is semantically closest to cyan; fall back to alternate
+  // ── Accents — new semantic vars ──
+  set('--indigo',        c.brand.primary);
+  set('--gold',          c.brand.secondary);
+  set('--gold-soft',     c.brand.secondary);   // themes can override with a lighter shade
+  set('--bull',          c.semantic.success);
+  set('--bear',          c.semantic.error);
+  set('--caution',       c.semantic.warning);
+
+  // ── Accents — legacy vars (kept for backward compat) ──
+  set('--accent-indigo', c.brand.primary);
+  set('--accent-violet', c.brand.tertiary);
+  set('--accent-gold',   c.brand.secondary);
   set('--accent-cyan', c.semantic.info ?? c.brand.alternate);
 
   // ── Semantic / risk ──
