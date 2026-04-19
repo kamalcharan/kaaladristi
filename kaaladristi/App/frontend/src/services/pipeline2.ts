@@ -1,12 +1,6 @@
-// Pipeline v2 API client.
-// All endpoints under /api/pipeline2. Runs on a separate uvicorn process;
-// nginx proxies /api/pipeline2/ to pipeline-api2:8101.
+// Pipeline API client — /api/pipeline2/* routes on pipeline2_api.py.
 
-const PIPELINE_API = (
-  import.meta.env.VITE_PIPELINE2_API_URL?.trim() ||
-  import.meta.env.VITE_PIPELINE_API_URL?.trim() ||
-  'http://localhost:8101'
-);
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
 
 async function apiGet<T>(path: string): Promise<T> {
   const resp = await fetch(`${PIPELINE_API}${path}`);

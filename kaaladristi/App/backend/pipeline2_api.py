@@ -21,7 +21,7 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -581,6 +581,75 @@ def scheduler_info():
             'trigger': '19:30 IST (Mon-Fri) — last 3 days',
         },
     }
+
+
+def _refresh_market_breadth():
+    """Recompute EMA market breadth for missing dates."""
+    try:
+        from compute_market_breadth import load_closes, compute_breadth, upsert
+        import psycopg2 as _pg
+        if not DATABASE_URL:
+            log.warning('breadth refresh skipped — DATABASE_URL not set')
+            return
+        conn = _pg.connect(DATABASE_URL)
+        try:
+            closes = load_closes(conn)
+            df = compute_breadth(closes)
+            with conn.cursor() as cur:
+                cur.execute('SELECT trade_date FROM km_market_breadth')
+                existing = {str(r[0]) for r in cur.fetchall()}
+            df = df[[str(d) not in existing for d in df.index]]
+            if df.empty:
+                log.info('breadth: no new dates to compute')
+                return
+            for d in df.index:
+                upsert(conn, df.loc[[d]], dry_run=False)
+            log.info(f'breadth: {len(df)} dates processed')
+        finally:
+            conn.close()
+    except Exception as e:
+        log.warning(f'breadth refresh failed: {e}')
+
+
+def _refresh_breadth_roc():
+    """Recompute ROC breadth oscillator for missing dates."""
+    try:
+        from compute_breadth_roc import load_closes, compute_roc, upsert
+        import psycopg2 as _pg
+        if not DATABASE_URL:
+            return
+        conn = _pg.connect(DATABASE_URL)
+        try:
+            closes = load_closes(conn)
+            df = compute_roc(closes)
+            with conn.cursor() as cur:
+                cur.execute('SELECT trade_date FROM km_breadth_roc')
+                existing = {str(r[0]) for r in cur.fetchall()}
+            df = df[[str(d) not in existing for d in df.index]]
+            if df.empty:
+                log.info('breadth_roc: no new dates to compute')
+                return
+            for d in df.index:
+                upsert(conn, df.loc[[d]], dry_run=False)
+            log.info(f'breadth_roc: {len(df)} dates processed')
+        finally:
+            conn.close()
+    except Exception as e:
+        log.warning(f'breadth_roc refresh failed: {e}')
+
+
+@app.post('/api/pipeline/refresh-breadth')
+def refresh_breadth(background_tasks: BackgroundTasks):
+    """Recompute EMA market breadth scores for missing dates."""
+    background_tasks.add_task(_refresh_market_breadth)
+    return {'status': 'queued', 'message': 'Breadth recompute queued'}
+
+
+@app.post('/api/pipeline/refresh-breadth-roc')
+def refresh_breadth_roc(background_tasks: BackgroundTasks):
+    """Recompute ROC breadth oscillator for missing dates."""
+    background_tasks.add_task(_refresh_breadth_roc)
+    return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
 
 
 @app.get('/api/vani-opportunity/config')
