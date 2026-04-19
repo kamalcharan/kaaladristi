@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import { useAstroWeek } from '@/hooks';
-import { signalColor, signalLabel, formatScore } from '@/lib/astroSignalUtils';
-import type { AstroSignal } from '@/types';
+import { useAstroWeek, useAstroTransits } from '@/hooks';
+import { signalColor, signalLabel, addDays, daysBetween } from '@/lib/astroSignalUtils';
+import type { AstroSignal, AstroTransit } from '@/types';
 
 function dayName(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -13,95 +12,115 @@ function dayDate(dateStr: string): string {
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
-function BullBearBar({ s }: { s: AstroSignal }) {
-  const bull  = s.strong_bullish_count + s.bullish_count + s.minor_bullish_count;
-  const bear  = s.minor_bearish_count + s.bearish_count + s.strong_bearish_count;
-  const total = bull + bear + s.neutral_count;
-  const bullPct = total > 0 ? (bull / total) * 100 : 50;
-  const neutPct = total > 0 ? (s.neutral_count / total) * 100 : 0;
-  const bearPct = 100 - bullPct - neutPct;
+function TransitBar({ transit, weekStart }: { transit: AstroTransit; weekStart: string }) {
+  const weekEnd = addDays(weekStart, 6);
+  const color = signalColor(transit.market_impact);
+
+  const startOffset = daysBetween(weekStart, transit.start_date);
+  const endOffset   = transit.end_date ? daysBetween(weekStart, transit.end_date) : 6;
+
+  const clampedStart = Math.max(0, startOffset);
+  const clampedEnd   = Math.min(6, endOffset);
+  const leftPct  = (clampedStart / 7) * 100;
+  const widthPct = ((clampedEnd - clampedStart + 1) / 7) * 100;
+
+  const showLeftDot  = startOffset >= 0 && startOffset <= 6;
+  const showRightDot = !!transit.end_date && endOffset >= 0 && endOffset <= 6;
+
   return (
-    <div className="w-full h-1 rounded-full overflow-hidden flex mt-0.5">
-      <div style={{ width: `${bullPct}%`, backgroundColor: '#1a8a4a' }} />
-      <div style={{ width: `${neutPct}%`, backgroundColor: '#6c757d' }} />
-      <div style={{ width: `${bearPct}%`, backgroundColor: '#c0392b' }} />
+    <div
+      className="relative h-5 w-full"
+      title={transit.inference ? `${transit.display_name}: ${transit.inference}` : transit.display_name}
+    >
+      {/* bar track */}
+      <div
+        className="absolute top-1/2 h-[7px] rounded-full"
+        style={{
+          left: `${leftPct}%`,
+          width: `${widthPct}%`,
+          backgroundColor: color.bg,
+          opacity: 0.72,
+          transform: 'translateY(-50%)',
+        }}
+      />
+
+      {/* label inside bar */}
+      <span
+        className="absolute top-1/2 text-[8px] font-semibold truncate pointer-events-none select-none"
+        style={{
+          left: `calc(${leftPct}% + 6px)`,
+          maxWidth: `calc(${widthPct}% - 12px)`,
+          transform: 'translateY(-50%)',
+          color: color.text,
+        }}
+      >
+        {transit.display_name}
+      </span>
+
+      {/* start dot */}
+      {showLeftDot && (
+        <div
+          className="absolute w-2.5 h-2.5 rounded-full z-10"
+          style={{
+            left: `${leftPct}%`,
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: color.bg,
+            boxShadow: `0 0 0 1.5px var(--bg-primary, #0c0e14)`,
+          }}
+        />
+      )}
+
+      {/* end dot */}
+      {showRightDot && (
+        <div
+          className="absolute w-2.5 h-2.5 rounded-full z-10"
+          style={{
+            left: `${leftPct + widthPct}%`,
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: color.bg,
+            boxShadow: `0 0 0 1.5px var(--bg-primary, #0c0e14)`,
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function DayColumn({
-  signal,
-  isToday,
-  isExpanded,
-  onToggle,
-}: {
-  signal: AstroSignal;
-  isToday: boolean;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
+function DayCard({ signal, isToday }: { signal: AstroSignal; isToday: boolean }) {
   const color = signalColor(signal.net_signal);
-  const label = signalLabel(signal.net_signal);
-  const score = formatScore(Number(signal.net_score));
+  const score = signal.net_score > 0 ? `+${signal.net_score}` : `${signal.net_score}`;
 
   return (
-    <button
-      onClick={onToggle}
+    <div
       className={[
-        'flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl transition-colors text-center',
-        'min-w-[80px] flex-1',
+        'flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg flex-1 text-center min-w-[52px]',
         isToday
           ? 'border-2 border-accent-indigo/60 bg-accent-indigo/5'
-          : 'border border-kd-border hover:bg-kd-elevated/40',
+          : 'border border-kd-border',
       ].join(' ')}
     >
-      <span className={[
-        'text-[10px] font-bold uppercase tracking-widest',
-        isToday ? 'text-accent-indigo' : 'text-muted',
-      ].join(' ')}>
+      <span className={['text-[10px] font-bold uppercase tracking-widest leading-tight', isToday ? 'text-accent-indigo' : 'text-muted'].join(' ')}>
         {dayName(signal.trade_date)}
       </span>
-
-      <span className="text-[10px] text-muted">
-        {dayDate(signal.trade_date)}
-      </span>
-
+      <span className="text-[9px] text-muted leading-tight">{dayDate(signal.trade_date)}</span>
       <span
-        className="px-1.5 py-0.5 rounded text-[9px] font-bold w-full text-center leading-tight"
+        className="mt-0.5 px-1 py-0.5 rounded text-[9px] font-bold w-full text-center leading-tight"
         style={{ backgroundColor: color.bg, color: color.text }}
       >
-        {signal.turning_date ? '⚡ ' : ''}{label}
+        {signal.turning_date ? '↕' : signalLabel(signal.net_signal)}
       </span>
-
-      <span className="text-[11px] font-mono font-semibold text-[var(--text-secondary)]">
-        {score}
-      </span>
-
-      {isExpanded && (
-        <div className="flex flex-col gap-1 w-full pt-2 border-t border-kd-border">
-          {signal.primary_event && (
-            <p className="text-[9px] text-[var(--text-primary)] leading-tight">
-              {signal.primary_event}
-            </p>
-          )}
-          {signal.secondary_event && (
-            <p className="text-[9px] text-muted leading-tight">{signal.secondary_event}</p>
-          )}
-          <BullBearBar s={signal} />
-          <span className="text-[9px] text-muted">
-            {signal.active_event_count} event{signal.active_event_count !== 1 ? 's' : ''}
-          </span>
-        </div>
-      )}
-    </button>
+      <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)]">{score}</span>
+    </div>
   );
 }
 
 export default function AstroSignalWeekPanel({ date }: { date: string }) {
-  const { data: signals = [], isLoading, isError } = useAstroWeek(date);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const weekEnd = addDays(date, 6);
 
-  const toggle = (d: string) => setExpandedDate(prev => (prev === d ? null : d));
+  const { data: signals = [], isLoading, isError } = useAstroWeek(date);
+  const { data: transits = [] } = useAstroTransits(date, weekEnd);
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -110,24 +129,32 @@ export default function AstroSignalWeekPanel({ date }: { date: string }) {
         <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Astro Signal — Week Ahead</h3>
       </div>
 
+      {/* Transit bars */}
+      {transits.length > 0 && (
+        <div className="flex flex-col gap-0.5 mb-2 px-0.5">
+          {transits.map(t => (
+            <TransitBar key={t.id} transit={t} weekStart={date} />
+          ))}
+        </div>
+      )}
+
+      {/* Day cards */}
       {isLoading ? (
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           {Array.from({ length: 7 }).map((_, i) => (
-            <div key={i} className="flex-1 min-w-[80px] h-24 bg-kd-elevated rounded-xl animate-pulse" />
+            <div key={i} className="flex-1 h-20 bg-kd-elevated rounded-lg animate-pulse" />
           ))}
         </div>
       ) : isError ? (
         <p className="text-[11px] text-muted text-center py-4">Astro data unavailable</p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
+          <div className="flex gap-1.5 min-w-max sm:min-w-0">
             {signals.map(signal => (
-              <DayColumn
+              <DayCard
                 key={signal.trade_date}
                 signal={signal}
                 isToday={signal.trade_date === date}
-                isExpanded={expandedDate === signal.trade_date}
-                onToggle={() => toggle(signal.trade_date)}
               />
             ))}
           </div>

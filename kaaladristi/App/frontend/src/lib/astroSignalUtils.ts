@@ -43,3 +43,15 @@ export function signalColor(netSignal: string): { bg: string; text: string } {
 export function signalLabel(netSignal: string): string {
   return SIGNAL_LABELS[netSignal as NetSignal] ?? netSignal;
 }
+
+export function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+export function daysBetween(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+

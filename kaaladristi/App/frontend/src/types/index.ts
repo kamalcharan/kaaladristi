@@ -520,3 +520,14 @@ export interface AstroSignal {
   strong_bearish_count: number;
   sector_signals: Record<string, unknown> | null;
 }
+
+// ── Astro Transit (from km_astro_calendar_2026 where is_transit = true) ──
+
+export interface AstroTransit {
+  id: number;
+  display_name: string;
+  start_date: string;
+  end_date: string | null;
+  market_impact: string;
+  inference: string | null;
+}

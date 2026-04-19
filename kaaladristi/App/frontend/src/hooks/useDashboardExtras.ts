@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc } from '@/services/panchang';
-import { fetchAstroSignal, fetchAstroWeek } from '@/services/astro';
+import { fetchAstroSignal, fetchAstroWeek, fetchAstroTransits } from '@/services/astro';
 import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
 import type { IndexCatalogItem } from '@/types';
@@ -134,6 +134,15 @@ export function useAstroSignal(date: string) {
     queryFn: () => fetchAstroSignal(date),
     staleTime: 24 * 60 * 60 * 1000,
     enabled: !!date,
+  });
+}
+
+export function useAstroTransits(from: string, to: string) {
+  return useQuery({
+    queryKey: ['astro_transits', from, to],
+    queryFn: () => fetchAstroTransits(from, to),
+    staleTime: 24 * 60 * 60 * 1000,
+    enabled: !!from && !!to,
   });
 }
 

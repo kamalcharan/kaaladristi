@@ -1479,6 +1479,50 @@ def astro_daily_signal(date: str = None):
     return row
 
 
+@app.get('/api/astro/transits')
+def astro_transits(from_date: str = None, to_date: str = None):
+    """Active transits/conjunctions overlapping the given date range."""
+    today = datetime.now(IST).date()
+    if not from_date:
+        from_date = today.strftime('%Y-%m-%d')
+    if not to_date:
+        to_date = (today + timedelta(days=6)).strftime('%Y-%m-%d')
+
+    cache_key = f"transits_{from_date}_{to_date}"
+    if cache_key in _astro_signal_cache:
+        return _astro_signal_cache[cache_key]
+
+    sql = """
+        SELECT id, display_name, start_date, end_date, market_impact, inference
+        FROM km_astro_calendar_2026
+        WHERE is_transit = true
+          AND start_date <= %s
+          AND (end_date IS NULL OR end_date >= %s)
+        ORDER BY start_date
+    """
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(sql, (to_date, from_date))
+        else:
+            rows = db.select('km_astro_calendar_2026',
+                             'id,display_name,start_date,end_date,market_impact,inference',
+                             filters={'is_transit': 'true'}, order='start_date.asc')
+    except Exception as e:
+        log.error(f"astro_transits error {from_date}→{to_date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    result = []
+    for row in rows:
+        r = dict(row)
+        for k, v in r.items():
+            if hasattr(v, 'isoformat'):
+                r[k] = v.isoformat()
+        result.append(r)
+
+    _astro_signal_cache[cache_key] = result
+    return result
+
+
 @app.get('/api/astro/signals')
 def astro_signals(from_date: str = None, to_date: str = None):
     """Net astro signals for a date range (max 90 days). Used by calendar view."""
