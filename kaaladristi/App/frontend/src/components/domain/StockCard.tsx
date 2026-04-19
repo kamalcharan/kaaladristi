@@ -371,12 +371,12 @@ export function StockCard({ stock }: { stock: ScanStock }) {
             />
           )}
 
-          {/* Fix 3 — Fast Money signal tower */}
+          {/* Fix 3 — Momentum signal tower */}
           {(stock.sniper_hot ?? 0) > 15 && (
             <SignalTower
               score={stock.sniper_hot!}
-              label="Fast Money"
-              tooltip={`Fast Money ${stock.sniper_hot!.toFixed(0)}/50 · Hot Money RSI`}
+              label="Momentum"
+              tooltip={`Momentum ${stock.sniper_hot!.toFixed(0)}/50 · Hot Money RSI`}
             />
           )}
 
