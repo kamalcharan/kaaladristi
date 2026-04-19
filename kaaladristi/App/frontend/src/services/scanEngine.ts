@@ -106,6 +106,7 @@ async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
     const res = await fetch(`${PIPELINE_URL}/api/vani-opportunity/config`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const configs = (await res.json()) as VaniOpportunityConfig[];
+    console.log('[scanEngine] raw API configs:', configs.map(c => ({ name: c.config_name, presets: c.applies_to_presets })));
     for (const cfg of configs) {
       const p = cfg.parameters;
       const opp: OppConfig = {
@@ -119,6 +120,7 @@ async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
         map.set(presetId, opp);
       }
     }
+    console.log('[scanEngine] oppConfig map keys:', [...map.keys()]);
   } catch (e) {
     console.warn('[scanEngine] config fetch failed, using defaults:', e);
     for (const preset of SCAN_PRESETS) {
@@ -239,6 +241,8 @@ async function loadScanData(): Promise<ScanDataBundle> {
 
 // ── 3c: VaNi Opportunity evaluation ───────────────────────────
 
+let _oppDiagCount = 0;
+
 function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: OppConfig): boolean {
   if (!stock.ema_20 || !stock.atr_14 || stock.atr_14 <= 0) return false;
   const isBearish = config.flow_types.some(f => f === 'FRESH_SHORTS' || f === 'LONG_LIQUIDATION');
@@ -254,7 +258,12 @@ function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: 
   const zoneOk = config.magic_rs_zones.includes(stock.magic_rs_zone ?? '');
   const flowOk = config.flow_types.includes(stock.flow_type ?? '');
   const rvolOk = (stock.rvol ?? 0) >= config.rvol_min;
-  return withinBand && hasReward && zoneOk && flowOk && rvolOk;
+  const result = withinBand && hasReward && zoneOk && flowOk && rvolOk;
+  if (!isBearish && !result && _oppDiagCount < 5) {
+    _oppDiagCount++;
+    console.log(`[scanEngine] VaNi miss (${stock.symbol}): band=${withinBand} reward=${hasReward} zone=${zoneOk}(${stock.magic_rs_zone}) flow=${flowOk}(${stock.flow_type}) rvol=${rvolOk}(${stock.rvol?.toFixed(2)}) ema=${stock.ema_20?.toFixed(1)} atr=${stock.atr_14?.toFixed(1)}`);
+  }
+  return result;
 }
 
 // ── Helper: DOT detection in history ───────────────────────────
@@ -393,6 +402,9 @@ function buildScanStock(
   };
 
   const presetCfg = bundle.oppConfigMap.get(presetId) ?? null;
+  if (!presetCfg) {
+    console.warn(`[scanEngine] no OppConfig for presetId="${presetId}" — map keys: [${[...bundle.oppConfigMap.keys()].join(', ')}]`);
+  }
   return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
 }
 
@@ -691,6 +703,7 @@ export async function executeScan(scanId: string, exchangeFilter: ExchangeFilter
 export function invalidateScanCache(): void {
   _cachedBundle = null;
   _oppConfigCache = null;
+  _oppDiagCount = 0;
 }
 
 export interface ScanCountsResult {
