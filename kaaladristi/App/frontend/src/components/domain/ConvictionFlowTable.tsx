@@ -1,4 +1,4 @@
-import type { ConvictionFlowStock } from '@/types';
+import type { ScanStock } from '@/types';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ const TH_LEFT: React.CSSProperties = { ...TH_STYLE, textAlign: 'left' };
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function FlowRow({ stock, isVani }: { stock: ConvictionFlowStock; isVani: boolean }) {
+function FlowRow({ stock, isVani }: { stock: ScanStock; isVani: boolean }) {
   const rowStyle: React.CSSProperties = {
     borderLeft: isVani ? '2px solid var(--gold)' : '2px solid transparent',
     background: isVani ? 'var(--gold-bg)' : 'transparent',
@@ -136,7 +136,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 // ── Table shell ───────────────────────────────────────────────────────────────
 
-function TableShell({ stocks, isVani }: { stocks: ConvictionFlowStock[]; isVani: boolean }) {
+function TableShell({ stocks, isVani }: { stocks: ScanStock[]; isVani: boolean }) {
   if (stocks.length === 0) return null;
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -164,7 +164,7 @@ function TableShell({ stocks, isVani }: { stocks: ConvictionFlowStock[]; isVani:
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export default function ConvictionFlowTable({ stocks }: { stocks: ConvictionFlowStock[] }) {
+export default function ConvictionFlowTable({ stocks }: { stocks: ScanStock[] }) {
   const vani = stocks.filter((s) => s.is_vani_opportunity);
   const rest  = stocks.filter((s) => !s.is_vani_opportunity);
 

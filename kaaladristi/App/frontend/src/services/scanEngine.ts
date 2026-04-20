@@ -11,7 +11,6 @@
  */
 
 import { from } from './postgrest';
-import { fetchConvictionFlow } from './convictionFlow';
 import type {
   ScanStock,
   ScanDefinition,
@@ -158,8 +157,8 @@ async function loadScanData(): Promise<ScanDataBundle> {
     return _cachedBundle.data;
   }
 
-  // Get last 20 trade dates (enough for all scan lookbacks)
-  const dates = await fetchRecentDates(21);
+  // 23 dates: 22 for conviction_flow rolling average + 1 buffer
+  const dates = await fetchRecentDates(23);
   if (dates.length === 0) {
     const empty: ScanDataBundle = {
       industries: [],
@@ -658,6 +657,58 @@ function scanDistributionWarning(bundle: ScanDataBundle): ScanStock[] {
     .slice(0, 25);
 }
 
+/** Scan 7: Conviction Flow */
+function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
+  const results: ScanStock[] = [];
+
+  for (const [id] of bundle.latestEod) {
+    const eod = bundle.latestEod.get(id);
+    if (!eod || !eod.ema_20 || eod.ema_20 <= 0) continue;
+
+    const history = bundle.eodHistory.get(id) ?? [];
+    if (history.length < 22) continue; // need full 22-bar window
+
+    // deliv_value_cr per bar = delivery_qty × close / 10,000,000
+    const delivBars = history.slice(0, 22).map(
+      (h) => (h.delivery_qty ?? 0) * h.close / 10_000_000,
+    );
+
+    const avg_amt_5d  = delivBars.slice(0, 5).reduce((s, v) => s + v, 0) / 5;
+    const avg_amt_22d = delivBars.reduce((s, v) => s + v, 0) / 22;
+
+    if (avg_amt_22d <= 1.5) continue;
+
+    const delivery_surge_x = avg_amt_5d / avg_amt_22d;
+    if (delivery_surge_x <= 1.5) continue;
+
+    const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
+    if (d_pct < -8 || d_pct > 8) continue;
+
+    const stock = buildScanStock(id, bundle, 'conviction_flow');
+    if (!stock) continue;
+
+    const is_vani =
+      delivery_surge_x > 2 &&
+      d_pct >= -3 && d_pct <= 5 &&
+      eod.close > 100 &&
+      avg_amt_22d > 2;
+
+    results.push({
+      ...stock,
+      vaniOpportunity: is_vani,
+      avg_amt_5d:       Math.round(avg_amt_5d       * 100) / 100,
+      avg_amt_22d:      Math.round(avg_amt_22d      * 100) / 100,
+      deliv_value_cr:   Math.round(delivBars[0]     * 100) / 100,
+      delivery_surge_x: Math.round(delivery_surge_x * 10000) / 10000,
+      d_pct:            Math.round(d_pct            * 100) / 100,
+    });
+  }
+
+  return results
+    .sort((a, b) => (b.delivery_surge_x ?? 0) - (a.delivery_surge_x ?? 0))
+    .slice(0, 50);
+}
+
 // ── Public API ─────────────────────────────────────────────────
 
 const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
@@ -667,6 +718,7 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   fresh_breakout: scanFreshBreakout,
   quiet_accumulation: scanQuietAccumulation,
   distribution_warning: scanDistributionWarning,
+  conviction_flow: scanConvictionFlow,
 };
 
 /**
@@ -727,10 +779,7 @@ export interface ScanCountsResult {
 
 /** Return result counts for all 7 scans — uses shared cached data */
 export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combined'): Promise<ScanCountsResult> {
-  const [bundle, cfData] = await Promise.all([
-    loadScanData(),
-    fetchConvictionFlow().catch(() => []),
-  ]);
+  const bundle = await loadScanData();
   const counts: Record<string, number> = {};
   for (const [id, fn] of Object.entries(SCAN_FUNCTIONS)) {
     let results = fn(bundle);
@@ -741,7 +790,6 @@ export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combine
     }
     counts[id] = results.length;
   }
-  counts['conviction_flow'] = cfData.length;
   return { counts, latestDate: bundle.latestDate };
 }
 

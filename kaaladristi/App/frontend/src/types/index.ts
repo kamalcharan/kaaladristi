@@ -431,6 +431,12 @@ export interface ScanStock {
   rewardPct: number | null;
   pctBelow52wHigh: number | null;
   vaniOpportunity: boolean;
+  // Conviction Flow computed fields (null for all other scans)
+  avg_amt_5d?: number | null;
+  avg_amt_22d?: number | null;
+  deliv_value_cr?: number | null;
+  delivery_surge_x?: number | null;
+  d_pct?: number | null;
 }
 
 export interface ScanDefinition {

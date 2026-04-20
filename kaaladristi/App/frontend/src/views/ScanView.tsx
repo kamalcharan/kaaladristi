@@ -2,11 +2,11 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, ChevronLeft } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useScan, useAllScanCounts, useConvictionFlow } from '@/hooks/useScan';
+import { useScan, useAllScanCounts } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
 import ConvictionFlowTable from '@/components/domain/ConvictionFlowTable';
-import type { ScanStock, ScanDefinition } from '@/types';
+import type { ScanDefinition } from '@/types';
 
 // ── Sort ──────────────────────────────────────────────────────
 
@@ -283,7 +283,7 @@ function ScannerLanding() {
 // ── Conviction Flow results (server-side RPC, different columns) ───────────
 
 function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
-  const { data: stocks = [], isLoading, error } = useConvictionFlow();
+  const { data: stocks = [], isLoading, error } = useScan('conviction_flow');
   const vaniCount = useMemo(() => stocks.filter((s) => s.is_vani_opportunity).length, [stocks]);
 
   return (
