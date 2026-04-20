@@ -2,10 +2,11 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, ChevronLeft } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useScan, useAllScanCounts } from '@/hooks/useScan';
+import { useScan, useAllScanCounts, useConvictionFlow } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
-import type { ScanStock } from '@/types';
+import ConvictionFlowTable from '@/components/domain/ConvictionFlowTable';
+import type { ScanStock, ScanDefinition } from '@/types';
 
 // ── Sort ──────────────────────────────────────────────────────
 
@@ -117,7 +118,7 @@ function ScannerLanding() {
           </em>
         </h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          Six condition-convergence presets, arranged against today's market structure.
+          Seven condition-convergence presets, arranged against today's market structure.
         </p>
       </div>
 
@@ -279,6 +280,91 @@ function ScannerLanding() {
   );
 }
 
+// ── Conviction Flow results (server-side RPC, different columns) ───────────
+
+function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
+  const { data: stocks = [], isLoading, error } = useConvictionFlow();
+  const vaniCount = useMemo(() => stocks.filter((s) => s.is_vani_opportunity).length, [stocks]);
+
+  return (
+    <>
+      {/* Sub-bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: '20px', gap: '16px', flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '11px',
+            color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.07em',
+          }}>
+            Server-side · delivery value surge · all exchanges
+          </span>
+        </div>
+        {vaniCount > 0 && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            padding: '7px 14px',
+            background: 'var(--gold-bg)',
+            border: '1px solid var(--border-gold)',
+            color: 'var(--gold)',
+            borderRadius: '100px',
+            fontSize: '12px', fontWeight: 600,
+          }}>
+            <span style={{ fontSize: '11px' }}>✦</span>
+            VaNi Opportunity
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: '10.5px',
+              padding: '2px 7px', borderRadius: '100px',
+              background: 'rgba(0,0,0,0.2)',
+            }}>
+              {vaniCount}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Results */}
+      {isLoading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
+          <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
+          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Running conviction flow scan…</span>
+        </div>
+      ) : error ? (
+        <Card rounded="xxl" className="py-12 text-center">
+          <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>
+        </Card>
+      ) : (
+        <ConvictionFlowTable stocks={stocks} />
+      )}
+
+      {/* Action Island */}
+      <ActionIsland>
+        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0 }} />
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          Showing{' '}
+          <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
+            {stocks.length}
+          </em>
+          {' '}Conviction Flow setup{stocks.length !== 1 ? 's' : ''}
+        </span>
+        {vaniCount > 0 && (
+          <>
+            <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+            <span style={{
+              fontSize: '13px', padding: '7px 16px',
+              background: 'var(--gold)', color: '#1a1410',
+              borderRadius: '100px', fontWeight: 600,
+            }}>
+              {vaniCount} opportunit{vaniCount !== 1 ? 'ies' : 'y'}
+            </span>
+          </>
+        )}
+      </ActionIsland>
+    </>
+  );
+}
+
 // ── Screen 2: Results ──────────────────────────────────────────
 
 function ScannerResults({ presetId }: { presetId: string }) {
@@ -321,6 +407,52 @@ function ScannerResults({ presetId }: { presetId: string }) {
   }, [preset, navigate]);
 
   if (!preset) return null;
+
+  // Shared header block reused for all presets including conviction_flow
+  const header = (
+    <div style={{ paddingBottom: '0' }}>
+      {/* Breadcrumb */}
+      <div style={{ marginBottom: '20px' }}>
+        <button
+          onClick={() => navigate('/scanner')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            color: 'var(--text-muted)', fontSize: '13px',
+            fontFamily: 'var(--font-body)', transition: 'color 0.15s',
+          }}
+        >
+          <ChevronLeft style={{ width: '14px', height: '14px' }} />
+          Scanner
+        </button>
+      </div>
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{
+          fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
+          letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px',
+          color: 'var(--text-primary)',
+        }}>
+          {preset.name}{' '}
+          <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
+            · Daily
+          </em>
+        </h1>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          {preset.description}
+        </p>
+      </div>
+    </div>
+  );
+
+  // Conviction Flow uses server-side RPC + its own table layout
+  if (presetId === 'conviction_flow') {
+    return (
+      <div style={{ paddingBottom: '100px' }}>
+        {header}
+        <ConvictionFlowResults preset={preset} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ paddingBottom: '100px' }}>

@@ -459,6 +459,20 @@ export interface VaniOpportunityConfig {
   updated_at: string;
 }
 
+export interface ConvictionFlowStock {
+  equity_id: number;
+  symbol: string;
+  trade_date: string;
+  close: number;
+  ema_20: number;
+  d_pct: number;
+  avg_amt_5d: number;
+  avg_amt_22d: number;
+  deliv_value_cr: number;
+  delivery_surge_x: number;
+  is_vani_opportunity: boolean;
+}
+
 export interface EquitySymbolRow {
   id: number;
   symbol: string;

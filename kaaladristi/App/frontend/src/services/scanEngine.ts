@@ -11,6 +11,7 @@
  */
 
 import { from } from './postgrest';
+import { fetchConvictionFlow } from './convictionFlow';
 import type {
   ScanStock,
   ScanDefinition,
@@ -62,6 +63,13 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     name: 'Distribution Warnings',
     description: 'Previously strong stocks showing signs of institutional exit',
     limit: 25,
+  },
+  {
+    id: 'conviction_flow',
+    name: 'Conviction Flow',
+    description: 'Stocks where 5-day delivery value is outpacing the 22-day norm — rising institutional commitment',
+    tooltip: 'delivery_surge_x = avg_amt_5d / avg_amt_22d. Surge > 1.5× means recent delivery is accelerating vs baseline. VaNi gate: surge > 2×, price near EMA20, avg_amt_22d > 2 Cr.',
+    limit: 50,
   },
 ];
 
@@ -717,9 +725,12 @@ export interface ScanCountsResult {
   latestDate: string | null;
 }
 
-/** Return result counts for all 6 scans — uses shared cached data */
+/** Return result counts for all 7 scans — uses shared cached data */
 export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combined'): Promise<ScanCountsResult> {
-  const bundle = await loadScanData();
+  const [bundle, cfData] = await Promise.all([
+    loadScanData(),
+    fetchConvictionFlow().catch(() => []),
+  ]);
   const counts: Record<string, number> = {};
   for (const [id, fn] of Object.entries(SCAN_FUNCTIONS)) {
     let results = fn(bundle);
@@ -730,6 +741,7 @@ export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combine
     }
     counts[id] = results.length;
   }
+  counts['conviction_flow'] = cfData.length;
   return { counts, latestDate: bundle.latestDate };
 }
 
