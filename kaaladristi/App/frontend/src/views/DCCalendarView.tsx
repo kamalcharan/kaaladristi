@@ -3,34 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, LayoutGrid, AlignLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary } from '@/components/ui';
-import { fetchInferencesForMonth } from '@/services/dcInference';
-import { MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
+import { fetchMonthEvents, fetchMonthSignals, fetchKeyEvents } from '@/services/astroCalendar';
+import type { AstroCalendarEvent, AstroDailySignal } from '@/services/astroCalendar';
+import { ASTRO_SIGNAL_CLASSES, ASTRO_SIGNAL_LABELS, impactToColor } from '@/constants/astroSignals';
+import { fetchInferencesForMonth } from '@/services/dcInference'; // removed in 2b
+import { MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus'; // removed in 2b
 import {
   MONTH_ABBR, MONTH_FULL, DAY_ABBR,
   getDaysInMonth, getFirstWeekdayOffset, toIso, todayIso, fmtDate,
 } from '@/lib/dateUtils';
-import type { DcInference } from '@/types';
+import type { DcInference } from '@/types'; // removed in 2b
 
-// ── Sentiment scoring ─────────────────────────────────────────────────────────
-
-const IMPACT_WEIGHT: Record<string, number> = {
-  major_positive:  3,
-  bullish:         2,
-  minor_positive:  1,
-  consolidation:   0,
-  neutral:         0,
-  mixed:           0,
-  cautious:       -0.5,
-  volatile:       -1,
-  highly_volatile:-1.5,
-  minor_negative: -1,
-  bearish:        -2,
-  major_negative: -3,
-};
-
-function dayScore(events: DcInference[]): number {
-  return events.reduce((s, e) => s + (IMPACT_WEIGHT[e.market_impact ?? ''] ?? 0), 0);
-}
+// ── Score → visual meta ───────────────────────────────────────────────────────
 
 interface DayMeta {
   borderClass: string;
@@ -52,35 +36,30 @@ function scoreMeta(score: number): DayMeta {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getActiveEventsForDay(dayIso: string, events: DcInference[]): DcInference[] {
+function getActiveEventsForDay(dayIso: string, events: AstroCalendarEvent[]): AstroCalendarEvent[] {
   return events.filter(e => {
     if (!e.end_date) return e.start_date === dayIso;
     return dayIso >= e.start_date && dayIso <= e.end_date;
   });
 }
 
-function isMultiDay(e: DcInference): boolean {
+function isSpanning(e: AstroCalendarEvent): boolean {
   return !!e.end_date && e.end_date !== e.start_date;
-}
-
-function isTurningDate(e: DcInference): boolean {
-  return (e.inference ?? '').toLowerCase().includes('turning');
 }
 
 // ── Event pill ────────────────────────────────────────────────────────────────
 
-function EventPill({ event }: { event: DcInference }) {
-  const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
-  const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
-  const multi = isMultiDay(event);
+function EventPill({ event, muted = false }: { event: AstroCalendarEvent; muted?: boolean }) {
+  const c = ASTRO_SIGNAL_CLASSES[impactToColor(event.market_impact)];
 
   return (
     <div className={cn(
       'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium truncate border',
       c.bg, c.text, c.border,
+      muted && 'opacity-50',
     )}>
-      {multi && <span className="opacity-60 shrink-0">↔</span>}
-      <span className="truncate">{event.astro_event}</span>
+      {isSpanning(event) && <span className="opacity-60 shrink-0">—</span>}
+      <span className="truncate">{event.display_name}</span>
     </div>
   );
 }
@@ -91,18 +70,25 @@ interface DayCellProps {
   dayIso: string;
   dayNum: number;
   weekday: string;
-  events: DcInference[];
+  events: AstroCalendarEvent[];
+  signal?: AstroDailySignal;
   isToday: boolean;
   isCurrentMonth: boolean;
+  isWeekend: boolean;
 }
 
-function DayCell({ dayIso, dayNum, weekday, events, isToday, isCurrentMonth }: DayCellProps) {
-  const score   = dayScore(events);
-  const meta    = scoreMeta(score);
-  const turning = events.some(isTurningDate);
-  const hasMajor = events.some(e => e.market_impact === 'major_positive' || e.market_impact === 'major_negative');
-  const maxShow = 4;
-  const overflow = Math.max(0, events.length - maxShow);
+function DayCell({ dayIso, dayNum, weekday, events, signal, isToday, isCurrentMonth, isWeekend }: DayCellProps) {
+  const score    = signal?.net_score ?? 0;
+  const meta     = scoreMeta(score);
+  const turning  = signal?.turning_date ?? false;
+  const hasMajor = events.some(e => e.market_impact === 'strong_bullish' || e.market_impact === 'strong_bearish');
+
+  const singleDay  = events.filter(e => !isSpanning(e));
+  const spanning   = events.filter(isSpanning);
+  const maxSingle  = 3;
+  const maxSpan    = 2;
+  const singleOver = Math.max(0, singleDay.length - maxSingle);
+  const spanOver   = Math.max(0, spanning.length - maxSpan);
 
   return (
     <div className={cn(
@@ -110,6 +96,7 @@ function DayCell({ dayIso, dayNum, weekday, events, isToday, isCurrentMonth }: D
       meta.borderClass, meta.bgClass,
       isToday && 'ring-2 ring-accent-indigo/70 ring-offset-1 ring-offset-kd-bg',
       !isCurrentMonth && 'opacity-25',
+      isWeekend && 'opacity-50',
       meta.glowClass && `shadow-lg ${meta.glowClass}`,
     )}>
       {/* Date header */}
@@ -130,24 +117,44 @@ function DayCell({ dayIso, dayNum, weekday, events, isToday, isCurrentMonth }: D
           )}
           {events.length > 0 && (
             <span className={cn('text-[11px] font-bold mono', meta.scoreColor)}>
-              {score > 0 ? '+' : ''}{Math.round(score * 10) / 10}
+              {score > 0 ? '+' : ''}{score}
             </span>
           )}
         </div>
       </div>
 
-      {/* Events */}
+      {/* Single-day events — prominent */}
       <div className="flex flex-col gap-0.5 flex-1">
-        {events.slice(0, maxShow).map(e => (
+        {singleDay.slice(0, maxSingle).map(e => (
           <EventPill key={e.id} event={e} />
         ))}
-        {overflow > 0 && (
-          <span className="text-[10px] text-muted pl-1">+{overflow} more</span>
+        {singleOver > 0 && (
+          <span className="text-[10px] text-muted pl-1">+{singleOver} more</span>
         )}
+
+        {/* Spanning transit events — muted at bottom */}
+        {spanning.length > 0 && (
+          <div className={cn('flex flex-col gap-0.5 mt-auto', singleDay.length > 0 && 'mt-1')}>
+            {spanning.slice(0, maxSpan).map(e => (
+              <EventPill key={e.id} event={e} muted />
+            ))}
+            {spanOver > 0 && (
+              <span className="text-[10px] text-muted pl-1">+{spanOver} transit</span>
+            )}
+          </div>
+        )}
+
         {events.length === 0 && (
           <span className="text-[10px] text-muted mt-auto">—</span>
         )}
       </div>
+
+      {/* Weekend closed label */}
+      {isWeekend && (
+        <span className="absolute bottom-1 right-1.5 text-[9px] uppercase tracking-wider text-muted/60">
+          Closed
+        </span>
+      )}
     </div>
   );
 }
