@@ -5,7 +5,7 @@ import {
   RegimeBadge,
   PanchangamCard, MarketBreadthChart, BreadthRocChart, SevenDayStrip,
   SectorRotationStrip, IndexWatchlist, MagicRsLeaderboard,
-  AstroSignalBadge, AstroSignalWeekPanel,
+  AstroSignalBadge, AstroSignalWeekPanel, AstroIntelligencePanel,
 } from '@/components/domain';
 
 interface DashboardViewProps {
@@ -46,6 +46,11 @@ export default function DashboardView({ report }: DashboardViewProps) {
       {/* ═══ Row 1b: Astro Signal — Week Ahead (full width) ═══ */}
       <div className="mb-5">
         <AstroSignalWeekPanel date={report.date} />
+      </div>
+
+      {/* ═══ Row 1c: Astro Intelligence — transits + 7-day outlook (full width) ═══ */}
+      <div className="mb-5">
+        <AstroIntelligencePanel date={report.date} />
       </div>
 
       {/* ═══ Row 2: Index Watchlist (full width) ═══ */}
