@@ -10,13 +10,13 @@ import LandingPage from '@/views/LandingPage';
 import ProfileSetup from '@/views/ProfileSetup';
 import DashboardPage from '@/views/DashboardPage';
 import MarketsView from '@/views/MarketsView';
-import CalendarView from '@/views/CalendarView';
+
 import TransmissionView from '@/views/TransmissionView';
 import BacktestView from '@/views/BacktestView';
 import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
 import RuleEvalView from '@/views/RuleEvalView';
-import DCCalendarView from '@/views/DCCalendarView';
+import CalendarView from '@/views/CalendarView';
 import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
@@ -93,11 +93,11 @@ function AppRoutes() {
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/markets" element={<MarketsView />} />
-          <Route path="/calendar" element={<CalendarView />} />
+
           <Route path="/transmission" element={<TransmissionView />} />
           <Route path="/inference" element={<InferenceView />} />
           <Route path="/rule-eval" element={<RuleEvalView />} />
-          <Route path="/astro-calendar" element={<DCCalendarView />} />
+          <Route path="/astro-calendar" element={<CalendarView />} />
           <Route path="/history" element={<BacktestView />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />

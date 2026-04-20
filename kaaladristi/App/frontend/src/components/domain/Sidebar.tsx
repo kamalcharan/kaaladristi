@@ -27,7 +27,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/inference',    glyph: '✎', label: 'Inference DB' },
       { to: '/rule-eval',    glyph: '⊛', label: 'Rule Eval' },
-      { to: '/calendar',     glyph: '◷', label: 'Risk Calendar' },
+
       { to: '/transmission', glyph: '⇝', label: 'Risk Transmission' },
       { to: '/history',      glyph: '↺', label: 'Backtest' },
       { to: '/settings',     glyph: '◈', label: 'Settings' },
