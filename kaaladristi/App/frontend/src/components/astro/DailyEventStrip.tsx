@@ -152,12 +152,10 @@ function DayCell({ day, events, isToday }: {
                   {e.start_date}
                   <span className={cn('ml-1 uppercase', c.text)}>· {label}</span>
                 </div>
-                {e.inference ? (
+                {e.inference && (
                   <div className="text-[8px] text-[var(--accent-gold)] italic mt-1">
                     "{e.inference}"
                   </div>
-                ) : (
-                  <div className="text-[8px] text-muted mt-1">No inference recorded</div>
                 )}
               </div>
             );
