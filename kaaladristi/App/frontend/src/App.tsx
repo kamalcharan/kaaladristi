@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useMidnightDateRefresh } from '@/stores/appStore';
 import { ErrorBoundary } from '@/components/ui';
 import Layout from '@/components/domain/Layout';
 import ProtectedRoute from '@/components/domain/ProtectedRoute';
@@ -36,6 +37,7 @@ const queryClient = new QueryClient({
 
 function AppRoutes() {
   const { isLoading, authError, initialize } = useAuthStore();
+  useMidnightDateRefresh();
 
   useEffect(() => {
     initialize().catch((err) => {
