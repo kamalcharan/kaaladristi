@@ -6,13 +6,10 @@ import { ErrorBoundary } from '@/components/ui';
 import { fetchMonthEvents, fetchMonthSignals, fetchKeyEvents } from '@/services/astroCalendar';
 import type { AstroCalendarEvent, AstroDailySignal } from '@/services/astroCalendar';
 import { ASTRO_SIGNAL_CLASSES, ASTRO_SIGNAL_LABELS, impactToColor } from '@/constants/astroSignals';
-import { fetchInferencesForMonth } from '@/services/dcInference'; // removed in 2b
-import { MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus'; // removed in 2b
 import {
   MONTH_ABBR, MONTH_FULL, DAY_ABBR,
   getDaysInMonth, getFirstWeekdayOffset, toIso, todayIso, fmtDate,
 } from '@/lib/dateUtils';
-import type { DcInference } from '@/types'; // removed in 2b
 
 // ── Score → visual meta ───────────────────────────────────────────────────────
 
@@ -161,47 +158,42 @@ function DayCell({ dayIso, dayNum, weekday, events, signal, isToday, isCurrentMo
 
 // ── Month summary strip ───────────────────────────────────────────────────────
 
-function MonthSummary({ events, year, month }: { events: DcInference[]; year: number; month: number }) {
-  const days = getDaysInMonth(year, month);
-  let posCount = 0, negCount = 0, strongPos = 0;
-
-  for (let d = 1; d <= days; d++) {
-    const iso = toIso(year, month, d);
-    const dayEvents = getActiveEventsForDay(iso, events);
-    const score = dayScore(dayEvents);
-    if (score > 1)  posCount++;
-    if (score < -1) negCount++;
-    if (score >= 4) strongPos++;
-  }
-
-  const highlights = events
-    .filter(e => e.market_impact === 'major_positive' || e.market_impact === 'bullish' || isTurningDate(e))
-    .slice(0, 4);
+function MonthSummary({
+  events,
+  signals,
+  keyEvents,
+}: {
+  events: AstroCalendarEvent[];
+  signals: AstroDailySignal[];
+  keyEvents: AstroCalendarEvent[];
+}) {
+  const posCount    = signals.filter(s => s.net_score > 0).length;
+  const cautionCount = signals.filter(s => s.net_signal === 'turning').length;
+  const peakCount   = signals.filter(s => s.net_signal === 'strong_bullish' || s.net_signal === 'strong_bearish').length;
 
   return (
     <div className="glass-card rounded-2xl p-5 mb-6">
       <div className="flex flex-wrap items-start gap-6">
         {/* Stats */}
         <div className="flex gap-4">
-          <Stat value={posCount} label="Positive Days" color="text-emerald-400" />
-          <Stat value={negCount} label="Caution Days"  color="text-red-400" />
-          <Stat value={strongPos} label="Peak Days"    color="text-accent-gold" />
-          <Stat value={events.length} label="Total Events" color="text-accent-indigo" />
+          <Stat value={posCount}      label="Positive Days" color="text-emerald-400" />
+          <Stat value={cautionCount}  label="Caution Days"  color="text-risk-amber" />
+          <Stat value={peakCount}     label="Peak Days"     color="text-accent-gold" />
+          <Stat value={events.length} label="Total Events"  color="text-accent-indigo" />
         </div>
 
         {/* Key events */}
-        {highlights.length > 0 && (
+        {keyEvents.length > 0 && (
           <div className="flex-1 min-w-0">
             <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-2">Key Events</p>
             <div className="flex flex-wrap gap-2">
-              {highlights.map(e => {
-                const s = MARKET_STATUS_MAP.get(e.market_impact ?? '');
-                const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+              {keyEvents.map(e => {
+                const c = ASTRO_SIGNAL_CLASSES[impactToColor(e.market_impact)];
                 return (
                   <div key={e.id} className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px]', c.bg, c.border)}>
                     <span className={cn('font-bold', c.text)}>{fmtDate(e.start_date)}</span>
-                    <span className="text-[var(--text-secondary)]">{e.astro_event}</span>
-                    {isTurningDate(e) && <span className="text-risk-amber">◈</span>}
+                    <span className="text-[var(--text-secondary)]">{e.display_name}</span>
+                    {e.market_impact === 'turning' && <span className="text-risk-amber">◈</span>}
                   </div>
                 );
               })}
@@ -249,11 +241,11 @@ function Legend() {
       </div>
       <div className="flex items-center gap-1.5">
         <span className="text-accent-gold text-sm">✦</span>
-        <span className="text-[11px] text-slate-400">Major Event</span>
+        <span className="text-[11px] text-slate-400">Major Event (Strong Signal)</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] text-muted">↔</span>
-        <span className="text-[11px] text-slate-400">Multi-day event</span>
+        <span className="text-[11px] text-muted">—</span>
+        <span className="text-[11px] text-slate-400">Transit (background)</span>
       </div>
     </div>
   );
@@ -267,17 +259,15 @@ interface HoverState {
   cy:     number; // clientY
 }
 
-/** Clamp ISO date to the visible month; return day-of-month integer */
-function clampDay(iso: string, monthPrefix: string, numDays: number, side: 'start' | 'end'): number {
+function clampDay(iso: string, monthPrefix: string, numDays: number): number {
   if (iso.slice(0, 7) < monthPrefix) return 1;
   if (iso.slice(0, 7) > monthPrefix) return numDays;
   return parseInt(iso.split('-')[2], 10);
 }
 
-/** Greedy track assignment for bars within a single week row */
 function assignWeekTracks(
-  items: { event: DcInference; cs: number; ce: number }[],
-): { event: DcInference; cs: number; ce: number; track: number }[] {
+  items: { event: AstroCalendarEvent; cs: number; ce: number }[],
+): { event: AstroCalendarEvent; cs: number; ce: number; track: number }[] {
   const trackEnds: number[] = [];
   return items.map(item => {
     let t = trackEnds.findIndex(e => e < item.cs);
@@ -287,7 +277,7 @@ function assignWeekTracks(
   });
 }
 
-function TimelineView({ events, year, month }: { events: DcInference[]; year: number; month: number }) {
+function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; year: number; month: number }) {
   const numDays     = getDaysInMonth(year, month);
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
   const [hovered, setHovered] = useState<HoverState | null>(null);
@@ -303,8 +293,8 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
   // Pre-compute event day-range once
   const eventDays = useMemo(() => new Map(
     events.map(e => [e.id, {
-      sd: clampDay(e.start_date, monthPrefix, numDays, 'start'),
-      ed: clampDay(e.end_date ?? e.start_date, monthPrefix, numDays, 'end'),
+      sd: clampDay(e.start_date, monthPrefix, numDays),
+      ed: clampDay(e.end_date ?? e.start_date, monthPrefix, numDays),
     }])
   ), [events, monthPrefix, numDays]);
 
@@ -324,7 +314,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
     const numT = Math.max(1, multiItems.reduce((m, i) => Math.max(m, i.track + 1), 0));
 
     // Single-day → stacked column bars grouped by day
-    const singleDayMap = new Map<number, DcInference[]>();
+    const singleDayMap = new Map<number, AstroCalendarEvent[]>();
     for (const { event, cs, ce } of all) {
       if (cs === ce) {
         if (!singleDayMap.has(cs)) singleDayMap.set(cs, []);
@@ -345,7 +335,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
   // Find hovered event details
   const hoveredEvent = hovered ? events.find(e => e.id === hovered.id) ?? null : null;
 
-  function onEnter(e: DcInference, ev: React.MouseEvent) {
+  function onEnter(e: AstroCalendarEvent, ev: React.MouseEvent) {
     if (hideTimer.current) clearTimeout(hideTimer.current);
     setHovered({ id: e.id, cx: ev.clientX, cy: ev.clientY });
   }
@@ -432,12 +422,11 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                     />
                   )}
 
-                  {/* Multi-day horizontal bars (show inference text) */}
+                  {/* Multi-day horizontal bars */}
                   {multiItems.map(({ event, cs, ce, track }) => {
                     const leftPct  = ((cs - wStart) / wDays) * 100;
                     const widthPct = ((ce - cs + 1) / wDays) * 100;
-                    const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
-                    const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+                    const c = ASTRO_SIGNAL_CLASSES[impactToColor(event.market_impact)];
                     return (
                       <div
                         key={`${event.id}-w${wStart}`}
@@ -457,7 +446,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                         onMouseLeave={onLeave}
                       >
                         <span className={cn('text-[11px] font-medium truncate leading-tight', c.text)}>
-                          {event.inference ?? ''}
+                          {event.inference ?? event.display_name}
                         </span>
                       </div>
                     );
@@ -480,8 +469,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                         }}
                       >
                         {dayEvents.map(event => {
-                          const s = MARKET_STATUS_MAP.get(event.market_impact ?? '');
-                          const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+                          const c = ASTRO_SIGNAL_CLASSES[impactToColor(event.market_impact)];
                           return (
                             <div
                               key={event.id}
@@ -490,7 +478,7 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
                                 c.bg,
                                 hovered?.id === event.id && 'brightness-125 ring-1 ring-inset ring-white/30 z-20',
                               )}
-                              title={s?.label}
+                              title={ASTRO_SIGNAL_LABELS[event.market_impact] ?? event.market_impact}
                               onMouseEnter={ev => onEnter(event, ev)}
                               onMouseLeave={onLeave}
                             />
@@ -515,8 +503,8 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
 
       {/* Tooltip — fixed to viewport */}
       {hovered && hoveredEvent && (() => {
-        const s = MARKET_STATUS_MAP.get(hoveredEvent.market_impact ?? '');
-        const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+        const c = ASTRO_SIGNAL_CLASSES[impactToColor(hoveredEvent.market_impact)];
+        const label = ASTRO_SIGNAL_LABELS[hoveredEvent.market_impact] ?? hoveredEvent.market_impact;
         const tooltipW = 300;
         const left = Math.min(hovered.cx + 14, window.innerWidth - tooltipW - 16);
         const top  = hovered.cy - 10;
@@ -531,34 +519,18 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
             onMouseLeave={onLeave}
           >
             <div className="p-3.5">
-              {/* Impact badge */}
-              {s && (
-                <span className={cn('inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border mb-2', c.bg, c.text, c.border)}>
-                  {s.label}
-                </span>
-              )}
-              {/* Inference */}
+              <span className={cn('inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border mb-2', c.bg, c.text, c.border)}>
+                {label}
+              </span>
               <p className="text-[12px] text-[var(--text-primary)] leading-relaxed mb-2.5">
-                {hoveredEvent.inference ?? '—'}
+                {hoveredEvent.inference ?? hoveredEvent.display_name}
               </p>
-              {/* Date + confidence */}
-              <div className="flex items-center justify-between pt-2 border-t border-kd-border">
+              <div className="pt-2 border-t border-kd-border">
                 <span className="text-[10px] font-mono text-muted">
                   {fmtDate(hoveredEvent.start_date)}
                   {hoveredEvent.end_date && hoveredEvent.end_date !== hoveredEvent.start_date
                     ? ` → ${fmtDate(hoveredEvent.end_date)}` : ''}
                 </span>
-                {hoveredEvent.confidence !== null && (
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: 10 }, (_, i) => (
-                      <div
-                        key={i}
-                        className={cn('w-1.5 h-2.5 rounded-sm', i < (hoveredEvent.confidence ?? 0) ? c.bg.replace('/10', '/80') : 'bg-white/5')}
-                      />
-                    ))}
-                    <span className={cn('text-[10px] font-mono ml-1', c.text)}>{hoveredEvent.confidence}/10</span>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -568,12 +540,12 @@ function TimelineView({ events, year, month }: { events: DcInference[]; year: nu
       {/* Impact legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-6 pt-4 border-t border-kd-border">
         <span className="text-[10px] uppercase tracking-widest font-bold text-muted self-center">Legend</span>
-        {Array.from(MARKET_STATUS_MAP.values()).map(s => {
-          const c = STATUS_COLOR_CLASSES[s.color];
+        {Object.entries(ASTRO_SIGNAL_LABELS).map(([key, label]) => {
+          const c = ASTRO_SIGNAL_CLASSES[impactToColor(key)];
           return (
-            <div key={s.value} className="flex items-center gap-1.5">
+            <div key={key} className="flex items-center gap-1.5">
               <div className={cn('w-3 h-3 rounded-sm border', c.bg, c.border)} />
-              <span className="text-[11px] text-[var(--text-secondary)]">{s.label}</span>
+              <span className="text-[11px] text-[var(--text-secondary)]">{label}</span>
             </div>
           );
         })}
@@ -590,11 +562,30 @@ export default function DCCalendarView() {
   const [month, setMonth] = useState(4);
   const [view,  setView]  = useState<'calendar' | 'timeline'>('calendar');
 
-  const { data: events = [], isLoading, isError, error } = useQuery({
-    queryKey: ['dc_inference_calendar', year, month],
-    queryFn:  () => fetchInferencesForMonth(year, month),
+  const { data: events = [], isLoading: eventsLoading, isError: eventsError, error: eventsErr } = useQuery({
+    queryKey: ['astro_calendar_events', year, month],
+    queryFn:  () => fetchMonthEvents(year, month),
     staleTime: 60_000,
   });
+
+  const { data: signals = [], isLoading: signalsLoading, isError: signalsError } = useQuery({
+    queryKey: ['astro_daily_signals', year, month],
+    queryFn:  () => fetchMonthSignals(year, month),
+    staleTime: 60_000,
+  });
+
+  const { data: keyEvents = [] } = useQuery({
+    queryKey: ['astro_key_events', year, month],
+    queryFn:  () => fetchKeyEvents(year, month),
+    staleTime: 60_000,
+  });
+
+  const isLoading = eventsLoading || signalsLoading;
+  const isError   = eventsError || signalsError;
+
+  const signalMap = useMemo(() => new Map(
+    signals.map(s => [s.trade_date, s])
+  ), [signals]);
 
   // Calendar grid: 7 cols, up to 6 rows
   const offset   = getFirstWeekdayOffset(year, month);
@@ -605,14 +596,17 @@ export default function DCCalendarView() {
     const dayNum = i - offset + 1;
     if (dayNum < 1 || dayNum > numDays) return null;
     const iso = toIso(year, month, dayNum);
+    const dow = new Date(year, month - 1, dayNum).getDay();
     return {
       dayNum,
       iso,
       weekday: DAY_ABBR[i % 7],
-      events: getActiveEventsForDay(iso, events),
+      events:  getActiveEventsForDay(iso, events),
+      signal:  signalMap.get(iso),
       isToday: iso === today,
+      isWeekend: dow === 0 || dow === 6,
     };
-  }), [offset, numDays, totalCells, year, month, events, today]);
+  }), [offset, numDays, totalCells, year, month, events, signalMap, today]);
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
@@ -687,13 +681,13 @@ export default function DCCalendarView() {
         ) : isError ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <AlertCircle className="w-8 h-8 text-risk-red mb-4" />
-            <p className="text-sm text-muted">{error instanceof Error ? error.message : 'Failed to load'}</p>
+            <p className="text-sm text-muted">{eventsErr instanceof Error ? eventsErr.message : 'Failed to load'}</p>
           </div>
         ) : (
           <>
             {/* Summary strip */}
             {events.length > 0 && (
-              <MonthSummary events={events} year={year} month={month} />
+              <MonthSummary events={events} signals={signals} keyEvents={keyEvents} />
             )}
 
             {view === 'calendar' ? (
@@ -719,8 +713,10 @@ export default function DCCalendarView() {
                           dayNum={cell.dayNum}
                           weekday={cell.weekday}
                           events={cell.events}
+                          signal={cell.signal}
                           isToday={cell.isToday}
                           isCurrentMonth
+                          isWeekend={cell.isWeekend}
                         />
                       ) : (
                         <div key={`empty-${i}`} className="min-h-[130px]" />
