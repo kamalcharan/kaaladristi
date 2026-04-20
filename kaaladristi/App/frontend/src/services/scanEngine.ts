@@ -666,19 +666,22 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     if (!eod || !eod.ema_20 || eod.ema_20 <= 0) continue;
 
     const history = bundle.eodHistory.get(id) ?? [];
-    if (history.length < 22) continue; // need full 22-bar window
+    if (history.length < 5) continue; // need at least 5 bars for 5D average
+
+    // Use available window up to 22/5 bars — matches SQL AVG behaviour
+    const w22 = history.slice(0, Math.min(history.length, 22));
+    const w5  = history.slice(0, Math.min(history.length, 5));
 
     // deliv_value_cr per bar = delivery_qty × close / 10,000,000
-    const delivBars = history.slice(0, 22).map(
-      (h) => (h.delivery_qty ?? 0) * h.close / 10_000_000,
-    );
+    const delivW22 = w22.map((h) => (h.delivery_qty ?? 0) * h.close / 10_000_000);
+    const delivW5  = w5.map((h)  => (h.delivery_qty ?? 0) * h.close / 10_000_000);
 
-    const avg_amt_5d  = delivBars.slice(0, 5).reduce((s, v) => s + v, 0) / 5;
-    const avg_amt_22d = delivBars.reduce((s, v) => s + v, 0) / 22;
+    const avg_amt_5d  = delivW5.reduce((s, v) => s + v, 0) / w5.length;
+    const avg_amt_22d = delivW22.reduce((s, v) => s + v, 0) / w22.length;
 
     if (avg_amt_22d <= 1.5) continue;
 
-    const delivery_surge_x = avg_amt_5d / avg_amt_22d;
+    const delivery_surge_x = avg_amt_22d > 0 ? avg_amt_5d / avg_amt_22d : 0;
     if (delivery_surge_x <= 1.5) continue;
 
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
@@ -698,7 +701,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
       vaniOpportunity: is_vani,
       avg_amt_5d:       Math.round(avg_amt_5d       * 100) / 100,
       avg_amt_22d:      Math.round(avg_amt_22d      * 100) / 100,
-      deliv_value_cr:   Math.round(delivBars[0]     * 100) / 100,
+      deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
       delivery_surge_x: Math.round(delivery_surge_x * 10000) / 10000,
       d_pct:            Math.round(d_pct            * 100) / 100,
     });
