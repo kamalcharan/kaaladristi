@@ -259,6 +259,10 @@ export interface DailyPanchang {
   tithi_end_next_day: boolean | null;
   nakshatra_end_ist: string | null;
   nakshatra_end_next_day: boolean | null;
+  // Next-day values joined from tomorrow's row (via /api/panchang/daily)
+  tithi_next_name: string | null;
+  nakshatra_next_name: string | null;
+  karana_next_name: string | null;
 }
 
 // ── Market Breadth (from km_market_breadth) ──
@@ -495,4 +499,35 @@ export interface EquityEodSnapshot {
   delivery_pct: number | null;
   delivery_qty: number | null;
   w52_high: number | null;
+}
+
+// ── Astro Daily Signal (from km_astro_daily_signal) ──
+
+export interface AstroSignal {
+  trade_date: string;
+  net_signal: string;
+  net_score: number;
+  primary_event: string | null;
+  secondary_event: string | null;
+  active_event_count: number;
+  turning_date: boolean;
+  strong_bullish_count: number;
+  bullish_count: number;
+  minor_bullish_count: number;
+  neutral_count: number;
+  minor_bearish_count: number;
+  bearish_count: number;
+  strong_bearish_count: number;
+  sector_signals: Record<string, unknown> | null;
+}
+
+// ── Astro Transit (from km_astro_calendar_2026 where is_transit = true) ──
+
+export interface AstroTransit {
+  id: number;
+  display_name: string;
+  start_date: string;
+  end_date: string | null;
+  market_impact: string;
+  inference: string | null;
 }

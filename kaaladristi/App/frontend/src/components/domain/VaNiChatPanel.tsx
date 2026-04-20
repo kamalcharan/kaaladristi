@@ -11,7 +11,7 @@ import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
 
 const pipelineUrl =
-  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
 
 interface ChatMessage {
   id: string;

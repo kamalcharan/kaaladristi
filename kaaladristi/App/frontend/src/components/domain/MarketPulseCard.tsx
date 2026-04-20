@@ -115,7 +115,7 @@ interface MarketPulseContext {
 }
 
 function useMarketPulseContext(date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
   return useQuery({
     queryKey: ['market_pulse_ctx', date],
     queryFn: async (): Promise<MarketPulseContext | null> => {
