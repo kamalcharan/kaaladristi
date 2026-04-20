@@ -36,10 +36,9 @@ function dayDiff(a: string, b: string): number {
   return Math.round((parseUtc(b).getTime() - parseUtc(a).getTime()) / 86_400_000);
 }
 
-function getNextTradingDays(fromDate: string, count: number): string[] {
+function getTradingDays(fromDate: string, count: number): string[] {
   const days: string[] = [];
   const dt = parseUtc(fromDate);
-  dt.setUTCDate(dt.getUTCDate() + 1);
   while (days.length < count) {
     const dow = dt.getUTCDay();
     if (dow !== 0 && dow !== 6) days.push(formatUtc(dt));
@@ -153,10 +152,12 @@ function DayCell({ day, events, isToday }: {
                   {e.start_date}
                   <span className={cn('ml-1 uppercase', c.text)}>· {label}</span>
                 </div>
-                {e.inference && (
+                {e.inference ? (
                   <div className="text-[8px] text-[var(--accent-gold)] italic mt-1">
                     "{e.inference}"
                   </div>
+                ) : (
+                  <div className="text-[8px] text-muted mt-1">No inference recorded</div>
                 )}
               </div>
             );
@@ -196,7 +197,7 @@ function Legend({ events }: { events: AstroEvent[] }) {
 // ── Strip ─────────────────────────────────────────────────────────────────────
 
 export default function DailyEventStrip({ selectedDate }: { selectedDate: string }) {
-  const tradingDays = getNextTradingDays(selectedDate, 7);
+  const tradingDays = getTradingDays(selectedDate, 7);
   const today       = todayIso();
   const lastDay     = tradingDays[tradingDays.length - 1];
 
