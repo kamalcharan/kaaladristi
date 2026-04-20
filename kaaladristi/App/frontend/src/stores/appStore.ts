@@ -2,8 +2,11 @@ import { create } from 'zustand';
 import { useEffect } from 'react';
 import type { MarketSymbol } from '@/types';
 
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000; // UTC+5:30
+
 function todayIso(): string {
-  return new Date().toISOString().split('T')[0];
+  const istNow = new Date(Date.now() + IST_OFFSET_MS);
+  return istNow.toISOString().slice(0, 10);
 }
 
 interface AppState {
@@ -26,14 +29,18 @@ export function useMidnightDateRefresh() {
 
   useEffect(() => {
     function scheduleNext() {
-      const now = new Date();
-      const msUntilMidnight =
-        new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+      const now = Date.now();
+      const istNow = new Date(now + IST_OFFSET_MS);
+      // Next IST midnight in UTC
+      const nextISTMidnightUTC =
+        Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate() + 1)
+        - IST_OFFSET_MS;
+      const msUntil = nextISTMidnightUTC - now;
 
       const id = setTimeout(() => {
         setDate(todayIso());
         scheduleNext();
-      }, msUntilMidnight);
+      }, msUntil);
 
       return id;
     }
