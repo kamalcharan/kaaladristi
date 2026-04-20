@@ -3,13 +3,10 @@ import type { DayRiskReport, HistoricalProof } from '@/types';
 import { Card } from '@/components/ui';
 import {
   RegimeBadge,
-  PanchangamCard, MarketBreadthChart, BreadthRocChart,
+  PanchangamCard, MarketBreadthChart, BreadthRocChart, SevenDayStrip,
   SectorRotationStrip, IndexWatchlist, MagicRsLeaderboard,
   AstroSignalBadge, AstroSignalWeekPanel,
 } from '@/components/domain';
-import MajorTransitBanner from '@/components/astro/MajorTransitBanner';
-import MinorTransitBar    from '@/components/astro/MinorTransitBar';
-import DailyEventStrip    from '@/components/astro/DailyEventStrip';
 
 interface DashboardViewProps {
   report: DayRiskReport;
@@ -51,22 +48,14 @@ export default function DashboardView({ report }: DashboardViewProps) {
         <AstroSignalWeekPanel date={report.date} />
       </div>
 
-      {/* ═══ Row 1c: Major transits (>30 days) — only renders if active ═══ */}
-      <MajorTransitBanner />
-
-      {/* ═══ Row 1d: Minor transits (1–30 days) — only renders if active ═══ */}
-      <div className="mb-5">
-        <MinorTransitBar />
-      </div>
-
       {/* ═══ Row 2: Index Watchlist (full width) ═══ */}
       <div className="mb-5">
         <IndexWatchlist />
       </div>
 
-      {/* ═══ Row 3: 7-Day Outlook (full width) ═══ */}
+      {/* ═══ Row 3: 6-Day Outlook (full width) ═══ */}
       <div className="mb-5">
-        <DailyEventStrip selectedDate={report.date} />
+        <SevenDayStrip selectedDate={report.date} />
       </div>
 
       {/* ═══ Row 4: Sector Rotation (full width) ═══ */}
