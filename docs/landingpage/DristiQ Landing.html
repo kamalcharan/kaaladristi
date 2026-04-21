@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DristiQ — We read the sky. You read the market.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400;1,500&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #07070c;
+    --bg-1: #0a0a12;
+    --bg-2: #0d0d1a;
+    --ink-1: #f4ecd6;
+    --ink-2: #d9cfb6;
+    --ink-3: #8a8372;
+    --ink-4: #50493c;
+    --gold-1: #e2b96f;
+    --gold-2: #c9a84c;
+    --gold-3: #8a6f28;
+    --gold-glow: rgba(226,185,111,.28);
+    --indigo-1: #1a1040;
+    --indigo-2: #2d1b69;
+    --rule: rgba(226,185,111,.18);
+    --rule-soft: rgba(226,185,111,.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg-0); color: var(--ink-2); }
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .serif { font-family: 'Cormorant Garamond', 'Playfair Display', serif; font-weight: 400; letter-spacing: -0.01em; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .gold { color: var(--gold-1); }
+  .muted { color: var(--ink-3); }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+
+  /* cosmic bg layering */
+  .cosmic {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(1200px 700px at 70% -10%, rgba(45,27,105,.25), transparent 60%),
+      radial-gradient(900px 600px at 10% 30%, rgba(226,185,111,.05), transparent 65%),
+      radial-gradient(1400px 900px at 50% 110%, rgba(26,16,64,.35), transparent 60%),
+      var(--bg-0);
+  }
+  #starfield {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: .85;
+  }
+  main { position: relative; z-index: 2; }
+
+  /* universal container / rule */
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 40px; }
+  @media (max-width: 720px) { .wrap { padding: 0 20px; } }
+  .hair { height: 1px; background: var(--rule); border: 0; margin: 0; }
+  .hair-soft { height: 1px; background: var(--rule-soft); border: 0; margin: 0; }
+
+  .tick-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--gold-2);
+  }
+
+  /* section chrome */
+  section { position: relative; padding: 120px 0; }
+  @media (max-width: 720px) { section { padding: 80px 0; } }
+  .section-label {
+    display: flex; align-items: center; gap: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--gold-2); margin-bottom: 28px;
+  }
+  .section-label::before {
+    content: ""; display: block; width: 28px; height: 1px; background: var(--gold-2);
+  }
+  .section-label .idx { color: var(--ink-4); }
+  h1.display {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: clamp(42px, 6.4vw, 92px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    color: var(--ink-1);
+    margin: 0;
+    text-wrap: balance;
+  }
+  h2.display {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 400;
+    font-size: clamp(32px, 4.2vw, 56px);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    color: var(--ink-1);
+    margin: 0 0 20px 0;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 17px; line-height: 1.6; color: var(--ink-2);
+    max-width: 62ch;
+  }
+
+  /* buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 13px 22px;
+    border: 1px solid var(--gold-2);
+    color: var(--gold-1);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; letter-spacing: .14em; text-transform: uppercase;
+    transition: all .25s ease;
+    background: transparent;
+    position: relative;
+  }
+  .btn:hover {
+    background: rgba(226,185,111,.08);
+    box-shadow: 0 0 32px var(--gold-glow), inset 0 0 16px rgba(226,185,111,.06);
+    color: #fff4d9;
+  }
+  .btn.filled {
+    background: linear-gradient(180deg, rgba(226,185,111,.92), rgba(201,168,76,.92));
+    color: #0a0a12;
+    border-color: var(--gold-1);
+  }
+  .btn.filled:hover {
+    box-shadow: 0 0 40px var(--gold-glow);
+    background: linear-gradient(180deg, rgba(240,205,135,1), rgba(226,185,111,1));
+  }
+  .btn .arrow { transition: transform .25s ease; }
+  .btn:hover .arrow { transform: translateX(4px); }
+
+  /* glass card */
+  .glass {
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.005));
+    border: 1px solid var(--rule);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .glass:hover { border-color: rgba(226,185,111,.35); }
+
+  /* fade-up utility */
+  .fade-up { opacity: 0; transform: translateY(24px); transition: opacity .9s ease, transform .9s ease; }
+  .fade-up.in { opacity: 1; transform: translateY(0); }
+
+  /* keyframes */
+  @keyframes slowspin { to { transform: rotate(360deg); } }
+  @keyframes slowspinrev { to { transform: rotate(-360deg); } }
+  @keyframes breathe { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.04); } }
+  @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 24px var(--gold-glow); } 50% { box-shadow: 0 0 48px var(--gold-glow); } }
+  @keyframes twinkle { 0%,100% { opacity: .2; } 50% { opacity: .9; } }
+
+  /* tweaks panel */
+  #tweaks-panel {
+    position: fixed; right: 20px; bottom: 20px; z-index: 100;
+    width: 320px;
+    background: rgba(10,10,18,.92);
+    border: 1px solid var(--rule);
+    backdrop-filter: blur(12px);
+    padding: 20px;
+    font-size: 12px;
+    color: var(--ink-2);
+    display: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  #tweaks-panel.open { display: block; }
+  #tweaks-panel .tweak-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--gold-2); margin-bottom: 16px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #tweaks-panel .tweak-row { margin-bottom: 14px; }
+  #tweaks-panel label {
+    display: block; font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 6px;
+  }
+  #tweaks-panel .seg {
+    display: flex; gap: 4px; border: 1px solid var(--rule);
+  }
+  #tweaks-panel .seg button {
+    flex: 1; padding: 6px 0; font-size: 11px; color: var(--ink-3);
+    background: transparent;
+  }
+  #tweaks-panel .seg button.active { background: rgba(226,185,111,.12); color: var(--gold-1); }
+  #tweaks-panel .toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; border: 1px solid var(--rule);
+  }
+  #tweaks-panel .toggle.on { border-color: var(--gold-2); color: var(--gold-1); }
+</style>
+</head>
+<body>
+
+<div class="cosmic"></div>
+<svg id="starfield" preserveAspectRatio="xMidYMid slice"></svg>
+
+<main id="root"></main>
+
+<div id="tweaks-panel">
+  <div class="tweak-title"><span>// Tweaks</span><span class="muted mono">DristiQ</span></div>
+  <div class="tweak-row">
+    <label>Gold intensity</label>
+    <div class="seg" data-tweak="gold">
+      <button data-v="refined">Refined</button>
+      <button data-v="balanced">Balanced</button>
+      <button data-v="maximal">Maximal</button>
+    </div>
+  </div>
+  <div class="tweak-row">
+    <label>Density</label>
+    <div class="seg" data-tweak="density">
+      <button data-v="editorial">Editorial</button>
+      <button data-v="observatory">Observatory</button>
+      <button data-v="terminal">Terminal</button>
+    </div>
+  </div>
+  <div class="tweak-row">
+    <label>Hero composition</label>
+    <div class="seg" data-tweak="hero">
+      <button data-v="merged">Merged</button>
+      <button data-v="mandala">Mandala-led</button>
+      <button data-v="chart">Chart-led</button>
+    </div>
+  </div>
+  <div class="tweak-row">
+    <label>Starfield</label>
+    <div class="toggle" data-tweak="stars" id="tweak-stars">
+      <span>Background stars</span><span class="state">ON</span>
+    </div>
+  </div>
+  <div class="tweak-row">
+    <label>Atmospheric preview</label>
+    <div class="seg" data-tweak="atmo">
+      <button data-v="calm">Calm</button>
+      <button data-v="charged">Charged</button>
+      <button data-v="volatile">Volatile</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script>
+/* starfield */
+(function(){
+  const svg = document.getElementById('starfield');
+  const W = window.innerWidth, H = Math.max(window.innerHeight, document.body.scrollHeight || window.innerHeight);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  const N = 220;
+  let s = '';
+  for (let i=0;i<N;i++){
+    const x = Math.random()*W, y = Math.random()*H;
+    const r = Math.random()*1.1 + 0.2;
+    const op = (Math.random()*0.6 + 0.2).toFixed(2);
+    const dur = (Math.random()*4 + 3).toFixed(1);
+    const del = (Math.random()*4).toFixed(1);
+    const fill = Math.random() > .85 ? '#e2b96f' : '#f4ecd6';
+    s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="${fill}" opacity="${op}"><animate attributeName="opacity" values="${op};${(op*0.2).toFixed(2)};${op}" dur="${dur}s" begin="${del}s" repeatCount="indefinite"/></circle>`;
+  }
+  svg.innerHTML = s;
+})();
+</script>
+
+<script type="text/babel" data-presets="env,react" src="mandala.jsx"></script>
+<script type="text/babel" data-presets="env,react" src="components.jsx"></script>
+<script type="text/babel" data-presets="env,react" src="sections.jsx"></script>
+<script type="text/babel" data-presets="env,react" src="sections2.jsx"></script>
+<script type="text/babel" data-presets="env,react" src="app.jsx"></script>
+
+<script>
+/* tweaks host bridge */
+(function(){
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "gold": "balanced",
+    "density": "observatory",
+    "hero": "merged",
+    "stars": true,
+    "atmo": "charged"
+  }/*EDITMODE-END*/;
+
+  window.__tweaks = { ...TWEAK_DEFAULTS };
+  const panel = document.getElementById('tweaks-panel');
+
+  function apply(){
+    document.documentElement.dataset.gold = window.__tweaks.gold;
+    document.documentElement.dataset.density = window.__tweaks.density;
+    document.documentElement.dataset.hero = window.__tweaks.hero;
+    document.documentElement.dataset.atmo = window.__tweaks.atmo;
+    document.getElementById('starfield').style.display = window.__tweaks.stars ? '' : 'none';
+    // update seg buttons
+    panel.querySelectorAll('.seg').forEach(seg => {
+      const key = seg.dataset.tweak;
+      seg.querySelectorAll('button').forEach(b => {
+        b.classList.toggle('active', b.dataset.v === window.__tweaks[key]);
+      });
+    });
+    const starsEl = document.getElementById('tweak-stars');
+    starsEl.classList.toggle('on', !!window.__tweaks.stars);
+    starsEl.querySelector('.state').textContent = window.__tweaks.stars ? 'ON' : 'OFF';
+    window.dispatchEvent(new CustomEvent('tweaks-changed', { detail: window.__tweaks }));
+  }
+
+  function persist(edits){
+    try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*'); } catch(e){}
+  }
+
+  panel.querySelectorAll('.seg').forEach(seg => {
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      const key = seg.dataset.tweak;
+      window.__tweaks[key] = b.dataset.v;
+      apply(); persist({ [key]: b.dataset.v });
+    });
+  });
+  document.getElementById('tweak-stars').addEventListener('click', () => {
+    window.__tweaks.stars = !window.__tweaks.stars;
+    apply(); persist({ stars: window.__tweaks.stars });
+  });
+
+  window.addEventListener('message', (e) => {
+    const d = e.data || {};
+    if (d.type === '__activate_edit_mode') panel.classList.add('open');
+    else if (d.type === '__deactivate_edit_mode') panel.classList.remove('open');
+  });
+  try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch(e){}
+
+  apply();
+})();
+</script>
+
+</body>
+</html>
