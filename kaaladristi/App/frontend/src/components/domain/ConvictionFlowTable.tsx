@@ -238,23 +238,19 @@ function FlowCard({ stock }: { stock: ScanStock }) {
           )}
         </div>
 
-        {/* Row 2 — Price · Momentum */}
+        {/* Row 2 — Price + Delivery combined */}
         <DataRow items={[
-          { label: 'Close', value: fmt2(stock.close) },
-          { label: 'D%',    value: fmtPct(stock.d_pct),  color: pctColor(stock.d_pct, 1.5) },
-          { label: 'EMA20', value: fmt2(stock.ema_20) },
-          { label: 'RSI',   value: fmt2(stock.rsi_14),   color: rsiColor(stock.rsi_14) },
-          { label: 'RSS',   value: fmt2(stock.rss_value), color: rssColor(stock.rss_value) },
-        ]} />
-
-        {/* Row 3 — Delivery */}
-        <DataRow items={[
-          { label: '5D Avg',      value: fmtCr(stock.avg_amt_5d) },
-          { label: '22D Avg',     value: fmtCr(stock.avg_amt_22d) },
+          { label: 'Close',      value: fmt2(stock.close) },
+          { label: 'D%',         value: fmtPct(stock.d_pct),        color: pctColor(stock.d_pct, 1.5) },
+          { label: 'EMA20',      value: fmt2(stock.ema_20) },
+          { label: 'RSI',        value: fmt2(stock.rsi_14),          color: rsiColor(stock.rsi_14) },
+          { label: 'RSS',        value: fmt2(stock.rss_value),       color: rssColor(stock.rss_value) },
+          { label: '5D Avg',     value: fmtCr(stock.avg_amt_5d) },
+          { label: '22D Avg',    value: fmtCr(stock.avg_amt_22d) },
           { label: 'Today Deliv', value: fmtCr(stock.deliv_value_cr) },
         ]} />
 
-        {/* Row 4 — 52w · Returns */}
+        {/* Row 3 — Levels + Returns */}
         <DataRow items={[
           { label: '52w',  value: fmt2(stock.w52_high) },
           { label: 'Dist', value: fmtDistFromHigh(stock.pctBelow52wHigh), color: distColor(stock.pctBelow52wHigh) },
@@ -344,7 +340,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
               — surge &gt; 2× · near EMA20 · avg 22D &gt; 2 Cr
             </span>
           </SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '24px' }}>
             {vani.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
           </div>
         </>
@@ -355,7 +351,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
           <SectionLabel>
             All Results · {stocks.length} stock{stocks.length !== 1 ? 's' : ''} · sorted by Surge ↓
           </SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
             {rest.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
           </div>
         </>
