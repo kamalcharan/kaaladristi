@@ -145,25 +145,12 @@ async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
   return map;
 }
 
-// 3b: Fetch trading dates capped to actual latest data date (matches DataFreshnessChip)
+// 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
 async function fetchRecentDates(limit: number): Promise<string[]> {
-  // Use km_industry_eod as the authoritative "as on date" — same source as the navbar chip.
-  // km_trading_calendar can have today marked "completed" before equity data is loaded,
-  // which would produce an empty latestEod map and zero scan results.
-  const { data: latestRes } = await from('km_industry_eod')
-    .select('trade_date')
-    .order('trade_date', { ascending: false })
-    .limit(1)
-    .execute();
-
-  const asOnDate = (latestRes?.[0] as { trade_date: string } | undefined)?.trade_date ?? null;
-  if (!asOnDate) return [];
-
   const { data } = await from('km_trading_calendar')
     .select('trade_date')
     .eq('status', 'completed')
     .eq('exchange', 'NSE')
-    .lte('trade_date', asOnDate)
     .order('trade_date', { ascending: false })
     .limit(limit)
     .execute();
@@ -192,7 +179,6 @@ async function loadScanData(): Promise<ScanDataBundle> {
     return empty;
   }
 
-  const latestDate = dates[0];
   const oldestDate = dates[dates.length - 1];
 
   // Parallel fetches — market data + session-cached opportunity config map
@@ -224,6 +210,24 @@ async function loadScanData(): Promise<ScanDataBundle> {
     fetchOpportunityConfig(),
   ]);
 
+  // Derive latestDate from actual loaded equity rows (not dates[0]).
+  // km_trading_calendar can have today marked "completed" before km_equity_eod
+  // data arrives, which would leave latestEod empty and all scans returning 0.
+  const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
+  const latestDate: string | null = allEodRows.length > 0 ? allEodRows[0].trade_date : null;
+
+  if (!latestDate) {
+    return {
+      industries: [],
+      industriesHistory: new Map(),
+      symbols: new Map(),
+      latestEod: new Map(),
+      eodHistory: new Map(),
+      latestDate: null,
+      oppConfigMap: new Map(),
+    };
+  }
+
   // Process industries
   const allIndustryRows = (industryRes.data ?? []) as IndustryEodRow[];
   const industries = allIndustryRows.filter((r) => r.trade_date === latestDate);
@@ -243,7 +247,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
   // Process EOD
   const latestEod = new Map<number, EquityEodSnapshot>();
   const eodHistory = new Map<number, EquityEodSnapshot[]>();
-  for (const r of (eodRes.data ?? []) as EquityEodSnapshot[]) {
+  for (const r of allEodRows) {
     const arr = eodHistory.get(r.equity_id) ?? [];
     arr.push(r);
     eodHistory.set(r.equity_id, arr);
