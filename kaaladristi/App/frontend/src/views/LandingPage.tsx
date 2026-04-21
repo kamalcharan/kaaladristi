@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Starfield, Navbar } from './landing/shared';
 import { Hero } from './landing/Hero';
+import { InsightSection } from './landing/Insight';
+import { Pillars } from './landing/Pillars';
+import { VaNiSection } from './landing/VaNi';
 import { useTodayAtmo } from './landing/AtmosphericCard';
 import { C } from './landing/tokens';
 
@@ -50,6 +53,24 @@ const LANDING_CSS = `
     .dq-atmo-card { position:relative !important; left:auto !important; bottom:auto !important; margin:24px auto !important; width:100% !important; max-width:420px; }
   }
 
+  .dq-insight-grid { display:grid; grid-template-columns:repeat(2,1fr); }
+  @media(max-width:820px){ .dq-insight-grid{ grid-template-columns:1fr !important; } }
+
+  .dq-compare-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:40px; align-items:stretch; }
+  @media(max-width:820px){ .dq-compare-grid{ grid-template-columns:1fr !important; } }
+
+  .dq-two-lenses { display:grid; grid-template-columns:auto 1fr auto; gap:48px; align-items:center; }
+  @media(max-width:900px){ .dq-two-lenses{ grid-template-columns:1fr !important; gap:24px !important; padding:32px 28px !important; } }
+
+  .dq-pillar-grid { display:grid; grid-template-columns:1fr 1fr; }
+  @media(max-width:820px){ .dq-pillar-grid{ grid-template-columns:1fr !important; } }
+
+  .dq-pillar-card { background:#0a0a12; transition:background .3s ease; }
+  .dq-pillar-card:hover { background:linear-gradient(180deg,#0d0d1a,#0a0a12) !important; }
+
+  .dq-vani-grid { display:grid; grid-template-columns:1fr 1fr; gap:80px; align-items:center; }
+  @media(max-width:900px){ .dq-vani-grid{ grid-template-columns:1fr !important; gap:48px !important; } }
+
   @keyframes slowspin    { to { transform:rotate(360deg); } }
   @keyframes slowspinrev { to { transform:rotate(-360deg); } }
   @keyframes breathe     { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:1;transform:scale(1.04)} }
@@ -86,7 +107,9 @@ export default function LandingPage() {
         <Navbar/>
         <main>
           <Hero atmo={atmo} loading={loading}/>
-          {/* Part 2: InsightSection, Pillars, VaNiSection */}
+          <InsightSection/>
+          <Pillars/>
+          <VaNiSection/>
           {/* Part 3: Personas, OriginCTA, Footer */}
         </main>
       </div>
