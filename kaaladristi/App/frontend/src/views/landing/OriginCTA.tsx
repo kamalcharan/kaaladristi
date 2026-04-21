@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { C, SERIF, MONO, SANS } from './tokens';
 import { FadeUp, LogoMark } from './shared';
 
 export function OriginCTA() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
 
@@ -10,7 +12,7 @@ export function OriginCTA() {
     e.preventDefault();
     if (!email.includes('@')) return;
     setSent(true);
-    setTimeout(() => { setSent(false); setEmail(''); }, 4000);
+    setTimeout(() => { navigate('/login'); }, 800);
   };
 
   return (

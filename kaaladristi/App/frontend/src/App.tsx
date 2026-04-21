@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ui';
 import Layout from '@/components/domain/Layout';
 import ProtectedRoute from '@/components/domain/ProtectedRoute';
 import LandingPage from '@/views/LandingPage';
+import LoginPage from '@/views/LoginPage';
 import ProfileSetup from '@/views/ProfileSetup';
 import DashboardPage from '@/views/DashboardPage';
 import MarketsView from '@/views/MarketsView';
@@ -84,6 +85,7 @@ function AppRoutes() {
     <Routes>
       {/* Public: Landing / Auth */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
 
       {/* Authenticated but not yet onboarded */}
       <Route element={<ProtectedRoute requireOnboarded={false} />}>

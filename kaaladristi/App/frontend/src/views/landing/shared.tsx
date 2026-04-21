@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { C, SERIF, MONO, SANS, polar } from './tokens';
 
 // ── FadeUp (intersection observer) ───────────────────────────────────────
@@ -63,6 +64,7 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 // ── Navbar ────────────────────────────────────────────────────────────────
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const navigate = useNavigate();
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 24);
     window.addEventListener('scroll', fn, { passive: true });
@@ -102,9 +104,9 @@ export function Navbar() {
               <a key={id} href={`#${id}`} onClick={smooth(id)} className="dq-navlink">{label}</a>
             ))}
           </div>
-          <a href="#beta" onClick={smooth('beta')} className="dq-btn" style={{ padding:'10px 18px', fontSize:11 }}>
+          <button onClick={() => navigate('/login')} className="dq-btn" style={{ padding:'10px 18px', fontSize:11 }}>
             Explore Beta <span className="dq-arrow">→</span>
-          </a>
+          </button>
         </div>
       </div>
     </nav>

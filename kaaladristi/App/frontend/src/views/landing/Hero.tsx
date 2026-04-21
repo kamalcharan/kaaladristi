@@ -1,9 +1,11 @@
+import { useNavigate } from 'react-router-dom';
 import { C, SERIF, MONO, SANS } from './tokens';
 import { FadeUp, Hair } from './shared';
 import { PanchangamMandala } from './Mandala';
 import { AtmosphericCard, type Atmo } from './AtmosphericCard';
 
 export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean }) {
+  const navigate = useNavigate();
   const sakaYear = new Date().getFullYear() - 78;
   const tithiLabel = !loading && atmo ? atmo.tithi.split('—')[0].trim() : '—';
 
@@ -57,7 +59,7 @@ export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean })
             </FadeUp>
             <FadeUp delay={340}>
               <div style={{ display:'flex', gap:16, marginTop:40, flexWrap:'wrap' }}>
-                <a href="#beta" onClick={smooth('beta')} className="dq-btn dq-btn-filled">Explore Beta <span className="dq-arrow">→</span></a>
+                <button onClick={() => navigate('/login')} className="dq-btn dq-btn-filled">Explore Beta <span className="dq-arrow">→</span></button>
                 <a href="#insight" onClick={smooth('insight')} className="dq-btn">Read the thesis</a>
               </div>
             </FadeUp>
