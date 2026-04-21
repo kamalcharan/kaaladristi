@@ -6,6 +6,9 @@ import { Hero } from './landing/Hero';
 import { InsightSection } from './landing/Insight';
 import { Pillars } from './landing/Pillars';
 import { VaNiSection } from './landing/VaNi';
+import { Personas } from './landing/Personas';
+import { OriginCTA } from './landing/OriginCTA';
+import { Footer } from './landing/Footer';
 import { useTodayAtmo } from './landing/AtmosphericCard';
 import { C } from './landing/tokens';
 
@@ -71,6 +74,30 @@ const LANDING_CSS = `
   .dq-vani-grid { display:grid; grid-template-columns:1fr 1fr; gap:80px; align-items:center; }
   @media(max-width:900px){ .dq-vani-grid{ grid-template-columns:1fr !important; gap:48px !important; } }
 
+  .dq-persona-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
+  @media(max-width:820px){ .dq-persona-grid{ grid-template-columns:1fr !important; } }
+
+  .dq-glass {
+    background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.005));
+    border:1px solid rgba(226,185,111,.18);
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
+    transition:border-color .25s ease;
+  }
+  .dq-glass:hover { border-color:rgba(226,185,111,.35); }
+
+  .dq-origin-grid { display:grid; grid-template-columns:auto 1fr; gap:60px; align-items:start; }
+  @media(max-width:820px){ .dq-origin-grid{ grid-template-columns:1fr !important; gap:32px !important; } }
+
+  .dq-beta-form { display:flex; }
+  @media(max-width:600px){ .dq-beta-form{ flex-direction:column !important; } .dq-beta-form button{ border-left:none !important; border-top:1px solid #8a6f28 !important; } }
+
+  .dq-footer-grid { display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:48px; }
+  @media(max-width:820px){ .dq-footer-grid{ grid-template-columns:1fr 1fr !important; } }
+  @media(max-width:520px){ .dq-footer-grid{ grid-template-columns:1fr !important; } }
+
+  .dq-footer-link:hover { color:#e2b96f !important; }
+
   @keyframes slowspin    { to { transform:rotate(360deg); } }
   @keyframes slowspinrev { to { transform:rotate(-360deg); } }
   @keyframes breathe     { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:1;transform:scale(1.04)} }
@@ -110,7 +137,9 @@ export default function LandingPage() {
           <InsightSection/>
           <Pillars/>
           <VaNiSection/>
-          {/* Part 3: Personas, OriginCTA, Footer */}
+          <Personas/>
+          <OriginCTA/>
+          <Footer/>
         </main>
       </div>
     </div>
