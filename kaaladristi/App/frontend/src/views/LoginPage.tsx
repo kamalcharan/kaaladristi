@@ -1,66 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { getRiskHex } from '@/lib/utils';
 import { signIn, signUp, forgotPassword } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';
+import { LogoMark, Starfield } from './landing/shared';
 
-// ── Star Field ──
-function StarField() {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    for (let i = 0; i < 200; i++) {
-      const star = document.createElement('div');
-      star.className = 'absolute w-[2px] h-[2px] rounded-full opacity-0';
-      star.style.backgroundColor = 'var(--text-primary)';
-      star.style.left = `${Math.random() * 100}%`;
-      star.style.top = `${Math.random() * 100}%`;
-      const dur = 2 + Math.random() * 4;
-      const delay = Math.random() * 5;
-      const opacity = 0.2 + Math.random() * 0.6;
-      star.style.animation = `twinkle ${dur}s ${delay}s ease-in-out infinite`;
-      star.style.setProperty('--tw-opacity', String(opacity));
-      el.appendChild(star);
-    }
-    return () => { el.innerHTML = ''; };
-  }, []);
-  return <div ref={ref} className="fixed inset-0 pointer-events-none z-0" />;
-}
-
-// ── Animated Logo ──
-function AnimatedLogo() {
-  return (
-    <div className="w-12 h-12 relative">
-      <div className="absolute inset-0 border-2 border-accent-indigo/60 rounded-full animate-[orbit_15s_linear_infinite]" />
-      <div className="absolute inset-[15%] border-2 border-accent-violet/50 rounded-full animate-[orbit_10s_linear_infinite_reverse]" />
-      <div className="absolute inset-[30%] border-2 border-accent-cyan/60 rounded-full animate-[orbit_8s_linear_infinite]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-gradient-to-br from-accent-indigo to-accent-violet rounded-full shadow-[0_0_20px_var(--accent-indigo)]" />
-    </div>
-  );
-}
-
-// ── Mini Risk Gauge ──
-function MiniGauge({ score }: { score: number }) {
-  const circumference = 2 * Math.PI * 22;
-  const offset = circumference - (score / 100) * circumference;
-  const color = getRiskHex(score);
-  return (
-    <div className="w-14 h-14 relative">
-      <svg width="56" height="56" viewBox="0 0 56 56" className="-rotate-90">
-        <circle cx="28" cy="28" r="22" fill="none" stroke="color-mix(in srgb, var(--text-primary) 10%, transparent)" strokeWidth="6" />
-        <circle cx="28" cy="28" r="22" fill="none" stroke={color} strokeWidth="6" strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={offset} className="transition-all duration-1000" />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="font-mono text-base font-semibold" style={{ color }}>{score}</span>
-      </div>
-    </div>
-  );
-}
-
-const inputClass = 'px-4 py-3.5 bg-kd-elevated border border-kd-border rounded-xl text-[15px] text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)] transition-all w-full';
+// Design tokens matching DristiQ landing page
+const C = {
+  bg:    '#07070c',
+  card:  '#0d0d1a',
+  ink1:  '#f4ecd6',
+  ink2:  '#d9cfb6',
+  ink3:  '#8a8372',
+  ink4:  '#50493c',
+  g1:    '#e2b96f',
+  g2:    '#c9a84c',
+  g3:    '#8a6f28',
+  rule:  'rgba(226,185,111,.18)',
+  rs:    'rgba(226,185,111,.08)',
+  glow:  'rgba(226,185,111,.22)',
+};
+const SERIF = "'Cormorant Garamond','Playfair Display',serif";
+const MONO  = "'JetBrains Mono','Geist Mono',ui-monospace,monospace";
+const SANS  = "'DM Sans','Inter',system-ui,sans-serif";
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
@@ -80,16 +42,16 @@ export default function LoginPage() {
     if (user) navigate('/dashboard', { replace: true });
   }, [user, navigate]);
 
+  const reset = (mode: AuthMode) => { setAuthMode(mode); setError(''); setSuccess(''); };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-    setIsSubmitting(true);
+    setError(''); setSuccess(''); setIsSubmitting(true);
     try {
       if (authMode === 'forgot') {
-        const message = await forgotPassword(email);
-        setSuccess(message || 'If that email exists, a reset link has been sent.');
-        setAuthMode('login');
+        const msg = await forgotPassword(email);
+        setSuccess(msg || 'If that email exists, a reset link has been sent.');
+        reset('login');
       } else if (authMode === 'register') {
         if (!fullName.trim()) { setError('Please enter your full name'); setIsSubmitting(false); return; }
         await signUp(email, password, fullName.trim());
@@ -105,194 +67,171 @@ export default function LoginPage() {
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '13px 16px',
+    background: 'rgba(10,10,18,0.8)',
+    border: `1px solid ${C.rule}`,
+    outline: 'none', color: C.ink1,
+    fontFamily: SANS, fontSize: 14,
+    transition: 'border-color .2s ease',
+  };
+
   return (
-    <div className="min-h-screen bg-kd-bg text-[var(--text-primary)] overflow-hidden">
-      <StarField />
-      <div className="fixed w-[800px] h-[800px] rounded-full top-[-300px] left-1/2 -translate-x-1/2 blur-[100px] pointer-events-none z-0 animate-[orbit1_30s_linear_infinite]"
-        style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-indigo) 25%, transparent) 0%, transparent 70%)' }} />
-      <div className="fixed w-[600px] h-[600px] rounded-full bottom-[-200px] right-[-200px] blur-[100px] pointer-events-none z-0 animate-[orbit2_25s_linear_infinite]"
-        style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-violet) 20%, transparent) 0%, transparent 70%)' }} />
-      <div className="fixed w-[400px] h-[400px] rounded-full top-[40%] left-[-100px] blur-[100px] pointer-events-none z-0 animate-[orbit3_20s_linear_infinite]"
-        style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-cyan) 15%, transparent) 0%, transparent 70%)' }} />
-      <div className="fixed inset-0 pointer-events-none z-0"
-        style={{ backgroundImage: 'linear-gradient(color-mix(in srgb, var(--accent-indigo) 3%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--accent-indigo) 3%, transparent) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+    <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden' }}>
+      {/* Background layers */}
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
+        background: `radial-gradient(900px 600px at 50% 0%,rgba(45,27,105,.3),transparent 60%),radial-gradient(700px 500px at 80% 80%,rgba(226,185,111,.05),transparent 65%),${C.bg}`,
+      }}/>
+      <Starfield/>
 
-      <div className="relative z-10 min-h-screen flex flex-col lg:flex-row">
+      {/* Top nav */}
+      <nav style={{ position: 'relative', zIndex: 10, padding: '20px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <LogoMark size={24}/>
+          <span style={{ fontFamily: SERIF, fontSize: 20, color: C.ink1, letterSpacing: '-0.01em' }}>
+            Dristi<span style={{ color: C.g1 }}>Q</span>
+          </span>
+        </Link>
+        <Link to="/" style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: C.ink3, textDecoration: 'none', transition: 'color .2s ease' }}
+          onMouseEnter={e => (e.currentTarget.style.color = C.g1)}
+          onMouseLeave={e => (e.currentTarget.style.color = C.ink3)}>
+          ← Back to home
+        </Link>
+      </nav>
 
-        {/* Left: Brand Panel */}
-        <div className="flex-1 flex flex-col justify-center px-6 sm:px-10 lg:px-20 py-10 sm:py-16 relative">
-          <nav className="absolute top-10 left-10 lg:left-20 right-10 lg:right-20 flex justify-between items-center">
-            <Link to="/" className="flex items-center gap-3 no-underline">
-              <AnimatedLogo />
-              <span className="font-display text-2xl font-medium tracking-wide text-[var(--text-primary)]">DristiQ</span>
-            </Link>
-            <Link to="/" className="text-sm text-secondary hover:text-[var(--text-primary)] transition-colors">
-              ← Back to home
-            </Link>
-          </nav>
+      {/* Centered auth card */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', position: 'relative', zIndex: 10 }}>
+        <div style={{ width: '100%', maxWidth: 420 }}>
 
-          <div className="max-w-[600px]">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-accent-indigo/10 border border-accent-indigo/20 rounded-full text-[13px] text-accent-indigo mb-8">
-              <div className="w-2 h-2 bg-accent-indigo rounded-full animate-pulse" />
-              Panchāṅgam Intelligence for Indian Markets
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <LogoMark size={48}/>
             </div>
-
-            <h1 className="font-display text-[28px] sm:text-[44px] lg:text-[56px] font-semibold leading-[1.15] mb-6 tracking-tight">
-              Where the ancient sky<br />
-              <span className="bg-gradient-to-r from-accent-indigo via-accent-violet to-accent-cyan bg-clip-text text-transparent">
-                meets modern markets
-              </span>
+            <h1 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 36, color: C.ink1, letterSpacing: '-0.02em', margin: '0 0 8px', lineHeight: 1.1 }}>
+              {authMode === 'forgot' ? 'Reset Password' : authMode === 'login' ? 'Welcome back.' : 'Create account.'}
             </h1>
-
-            <p className="text-lg text-secondary leading-relaxed mb-10">
-              DristiQ fuses Vedic astronomical cycles with classical market technicals — revealing the atmospheric conditions before they play out.
+            <p style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: C.ink3, margin: 0 }}>
+              {authMode === 'forgot' ? 'Enter your email for a reset link' : authMode === 'login' ? 'Sign in to your DristiQ dashboard' : 'Join the DristiQ beta cohort'}
             </p>
-
-            <div className="flex flex-wrap gap-3 mb-12">
-              {[
-                { label: 'Panchāṅgam Cycles' },
-                { label: 'Atmospheric Intelligence' },
-                { label: 'Market Breadth' },
-                { label: 'Time-Cycle Confluence' },
-              ].map((f) => (
-                <div key={f.label} className="flex items-center gap-2 px-4 py-2.5 glass-card rounded-full text-[13px] text-secondary">
-                  {f.label}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-6 pt-8 border-t border-kd-border">
-              {['Data Platform Only', 'No Buy/Sell Tips', 'Educational Intelligence'].map((t) => (
-                <div key={t} className="flex items-center gap-2 text-[13px] text-muted">
-                  <svg className="text-risk-green" width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
-                  </svg>
-                  {t}
-                </div>
-              ))}
-            </div>
           </div>
-        </div>
 
-        {/* Right: Auth Panel */}
-        <div className="w-full lg:w-[480px] bg-kd-surface backdrop-blur-xl lg:border-l border-t lg:border-t-0 border-kd-border flex flex-col justify-center px-6 sm:px-10 lg:px-[60px] py-10 sm:py-16">
-          <div className="max-w-[360px] mx-auto w-full">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-semibold mb-2">
-                {authMode === 'forgot' ? 'Reset Password' : authMode === 'login' ? 'Welcome Back' : 'Get Started'}
-              </h2>
-              <p className="text-sm text-muted">
-                {authMode === 'forgot'
-                  ? 'Enter your email to receive a reset link'
-                  : authMode === 'login'
-                  ? 'Sign in to access your dashboard'
-                  : 'Create your account to begin'}
-              </p>
-            </div>
+          {/* Card */}
+          <div style={{
+            background: C.card,
+            border: `1px solid ${C.rule}`,
+            padding: '36px 36px',
+          }}>
 
-            {/* Tabs */}
-            <div className="flex gap-1 bg-kd-elevated rounded-xl p-1 mb-7">
-              <button
-                onClick={() => { setAuthMode('login'); setError(''); setSuccess(''); }}
-                className={`flex-1 py-3 rounded-[10px] text-sm font-medium transition-all ${
-                  authMode === 'login' ? 'bg-kd-surface text-[var(--text-primary)] shadow-lg' : 'text-secondary hover:text-[var(--text-primary)]'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => { setAuthMode('register'); setError(''); setSuccess(''); }}
-                className={`flex-1 py-3 rounded-[10px] text-sm font-medium transition-all ${
-                  authMode === 'register' ? 'bg-kd-surface text-[var(--text-primary)] shadow-lg' : 'text-secondary hover:text-[var(--text-primary)]'
-                }`}
-              >
-                Create Account
-              </button>
-            </div>
+            {/* Mode tabs */}
+            {authMode !== 'forgot' && (
+              <div style={{ display: 'flex', gap: 0, marginBottom: 28, border: `1px solid ${C.rule}` }}>
+                {(['login', 'register'] as AuthMode[]).map((m, i) => (
+                  <button key={m} onClick={() => reset(m)} style={{
+                    flex: 1, padding: '11px 0',
+                    background: authMode === m ? C.rs : 'transparent',
+                    border: 'none', borderRight: i === 0 ? `1px solid ${C.rule}` : 'none',
+                    color: authMode === m ? C.g1 : C.ink3,
+                    fontFamily: MONO, fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
+                    cursor: 'pointer', transition: 'all .2s ease',
+                  }}>
+                    {m === 'login' ? 'Sign In' : 'Register'}
+                  </button>
+                ))}
+              </div>
+            )}
 
+            {/* Messages */}
             {error && (
-              <div className="mb-4 px-4 py-3 bg-risk-red/10 border border-risk-red/30 rounded-xl text-sm text-risk-red">{error}</div>
+              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', color: '#ef4444', fontFamily: SANS, fontSize: 13 }}>
+                {error}
+              </div>
             )}
             {success && (
-              <div className="mb-4 px-4 py-3 bg-risk-green/10 border border-risk-green/30 rounded-xl text-sm text-risk-green">{success}</div>
+              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.3)', color: '#10b981', fontFamily: SANS, fontSize: 13 }}>
+                {success}
+              </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            {/* Form */}
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {authMode === 'register' && (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-medium text-secondary">Full Name</label>
-                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Rajesh Kumar" required className={inputClass} />
+                <div>
+                  <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Full Name</label>
+                  <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
+                    placeholder="Rajesh Kumar" required style={inputStyle}
+                    onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
+                    onBlur={e => (e.currentTarget.style.borderColor = C.rule)}/>
                 </div>
               )}
 
-              <div className="flex flex-col gap-2">
-                <label className="text-[13px] font-medium text-secondary">Email Address</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com" required className={inputClass} />
+              <div>
+                <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Email</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com" required style={inputStyle}
+                  onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
+                  onBlur={e => (e.currentTarget.style.borderColor = C.rule)}/>
               </div>
 
               {authMode !== 'forgot' && (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-medium text-secondary">Password</label>
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••" required minLength={6} className={inputClass} />
+                <div>
+                  <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>Password</label>
+                  <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                    placeholder="••••••••" required minLength={6} style={inputStyle}
+                    onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
+                    onBlur={e => (e.currentTarget.style.borderColor = C.rule)}/>
                   {authMode === 'register' && (
-                    <p className="text-[11px] text-muted">Minimum 6 characters</p>
+                    <p style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.14em', color: C.ink4, margin: '6px 0 0' }}>Minimum 6 characters</p>
                   )}
                 </div>
               )}
 
               {authMode === 'login' && (
-                <div className="flex justify-end">
-                  <button type="button"
-                    onClick={() => { setAuthMode('forgot'); setError(''); setSuccess(''); }}
-                    className="text-[13px] text-accent-indigo hover:opacity-80 transition-opacity">
+                <div style={{ textAlign: 'right', marginTop: -6 }}>
+                  <button type="button" onClick={() => reset('forgot')} style={{ background: 'none', border: 'none', fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink3, cursor: 'pointer', transition: 'color .2s ease' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = C.g1)}
+                    onMouseLeave={e => (e.currentTarget.style.color = C.ink3)}>
                     Forgot password?
                   </button>
                 </div>
               )}
               {authMode === 'forgot' && (
-                <div className="flex justify-end">
-                  <button type="button"
-                    onClick={() => { setAuthMode('login'); setError(''); setSuccess(''); }}
-                    className="text-[13px] text-accent-indigo hover:opacity-80 transition-opacity">
-                    Back to Sign In
+                <div style={{ textAlign: 'right', marginTop: -6 }}>
+                  <button type="button" onClick={() => reset('login')} style={{ background: 'none', border: 'none', fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink3, cursor: 'pointer', transition: 'color .2s ease' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = C.g1)}
+                    onMouseLeave={e => (e.currentTarget.style.color = C.ink3)}>
+                    ← Back to sign in
                   </button>
                 </div>
               )}
 
-              <button
-                type="submit" disabled={isSubmitting}
-                className="py-4 bg-gradient-to-r from-accent-indigo to-accent-violet rounded-xl text-[15px] font-semibold text-[var(--text-primary)] shadow-[0_4px_20px_color-mix(in_srgb,var(--accent-indigo)_30%,transparent)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_color-mix(in_srgb,var(--accent-indigo)_40%,transparent)] transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
-              >
-                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              <button type="submit" disabled={isSubmitting} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '14px 0', marginTop: 4,
+                background: isSubmitting ? 'rgba(226,185,111,.3)' : `linear-gradient(180deg,rgba(226,185,111,.92),rgba(201,168,76,.92))`,
+                border: `1px solid ${C.g2}`,
+                color: '#0a0a12', fontFamily: SANS, fontSize: 13, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer', transition: 'all .25s ease',
+              }}
+                onMouseEnter={e => { if (!isSubmitting) e.currentTarget.style.boxShadow = `0 0 32px ${C.glow}`; }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}>
+                {isSubmitting && <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }}/>}
                 {authMode === 'forgot' ? 'Send Reset Link' : authMode === 'login' ? 'Sign In' : 'Create Account'}
               </button>
             </form>
+          </div>
 
-            {/* Live Preview */}
-            <div className="mt-8 p-5 bg-kd-elevated border border-kd-border rounded-2xl">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-xs text-muted uppercase tracking-wider">Today's Atmosphere Preview</span>
-                <span className="flex items-center gap-1.5 text-[11px] text-risk-green">
-                  <span className="w-1.5 h-1.5 bg-risk-green rounded-full animate-pulse" />
-                  LIVE
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <MiniGauge score={68} />
-                <div>
-                  <div className="text-xs text-muted mb-0.5">Atmospheric Condition</div>
-                  <div className="text-sm font-medium text-risk-amber">CHARGED · Elevated Attention</div>
-                </div>
-              </div>
-            </div>
-
-            <p className="mt-8 text-center text-xs text-muted">
-              By continuing, you agree to our{' '}
-              <a href="#" className="text-accent-indigo">Terms</a> and{' '}
-              <a href="#" className="text-accent-indigo">Privacy Policy</a>
+          {/* Footer note */}
+          <div style={{ textAlign: 'center', marginTop: 24 }}>
+            <p style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase', color: C.ink4, margin: 0, lineHeight: 1.8 }}>
+              Data platform only · Not investment advice<br/>
+              <span style={{ color: C.ink3 }}>
+                By continuing you agree to our{' '}
+                <a href="#" style={{ color: C.g3, textDecoration: 'none' }}>Terms</a>
+                {' '}and{' '}
+                <a href="#" style={{ color: C.g3, textDecoration: 'none' }}>Privacy Policy</a>
+              </span>
             </p>
           </div>
         </div>
