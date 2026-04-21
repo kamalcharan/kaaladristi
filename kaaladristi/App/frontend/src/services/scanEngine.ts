@@ -748,7 +748,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 /** Scan 8: Breakout Surge */
 function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
-  const dbg = { total: 0, noSym: 0, notNse: 0, noEma: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
+  const dbg = { total: 0, noSym: 0, notNse: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
@@ -756,9 +756,8 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     dbg.total++;
     if (!eod || !sym) { dbg.noSym++; continue; }
 
-    // Universe: NSE only, ema_20 required
+    // Universe: NSE only
     if (sym.exchange !== 'NSE') { dbg.notNse++; continue; }
-    if (!eod.ema_20 || Number(eod.ema_20) <= 0) { dbg.noEma++; continue; }
 
     const history = bundle.eodHistory.get(id) ?? [];
     if (history.length < 21) { dbg.shortHist++; continue; }
@@ -775,11 +774,11 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     if ((Number(eod.rvol) || 0) <= 2) { dbg.lowRvol++; continue; }
 
     const close      = Number(eod.close);
-    const ema20      = Number(eod.ema_20);
+    const ema20      = (eod.ema_20 != null && Number(eod.ema_20) > 0) ? Number(eod.ema_20) : null;
     const rvol       = Number(eod.rvol) || 0;
     const rsi14      = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
     const pct_from_breakout = ((close - breakout_level) / breakout_level) * 100;
-    const d_pct = ((close - ema20) / ema20) * 100;
+    const d_pct = ema20 != null ? ((close - ema20) / ema20) * 100 : null;
     const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
 
@@ -791,12 +790,12 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
       pct_from_breakout >= 0 &&
       pct_from_breakout <= 5 &&
       (rsi14 ?? 100) < 75 &&
-      d_pct < 15;
+      d_pct != null && d_pct < 15;
 
     results.push({
       ...stock,
       vaniOpportunity: is_vani,
-      d_pct:            Math.round(d_pct            * 100) / 100,
+      d_pct:            d_pct != null ? Math.round(d_pct * 100) / 100 : null,
       breakout_level:   Math.round(breakout_level   * 100) / 100,
       pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
       ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
