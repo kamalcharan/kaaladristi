@@ -1,6 +1,4 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
 import { Starfield, Navbar } from './landing/shared';
 import { Hero } from './landing/Hero';
 import { InsightSection } from './landing/Insight';
@@ -104,12 +102,7 @@ const LANDING_CSS = `
 `;
 
 export default function LandingPage() {
-  const navigate = useNavigate();
-  const { user }  = useAuthStore();
   const { atmo, loading } = useTodayAtmo();
-
-  // Redirect authenticated users
-  useEffect(() => { if (user) navigate('/dashboard', { replace:true }); }, [user, navigate]);
 
   // Inject scoped CSS on mount
   useEffect(() => {
