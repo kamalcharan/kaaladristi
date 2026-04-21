@@ -748,42 +748,49 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 /** Scan 8: Breakout Surge */
 function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
+  const dbg = { total: 0, noSym: 0, notNse: 0, noEma: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
     const sym = bundle.symbols.get(id);
-    if (!eod || !sym) continue;
+    dbg.total++;
+    if (!eod || !sym) { dbg.noSym++; continue; }
 
     // Universe: NSE only, ema_20 required
-    if (sym.exchange !== 'NSE') continue;
-    if (!eod.ema_20 || eod.ema_20 <= 0) continue;
+    if (sym.exchange !== 'NSE') { dbg.notNse++; continue; }
+    if (!eod.ema_20 || Number(eod.ema_20) <= 0) { dbg.noEma++; continue; }
 
     const history = bundle.eodHistory.get(id) ?? [];
-    if (history.length < 21) continue; // need today + 20 prior bars
+    if (history.length < 21) { dbg.shortHist++; continue; }
 
     // breakout_level = MAX(close) over prior 20 bars (history[1..20], skip today at [0])
     let breakout_level = 0;
     for (let i = 1; i <= 20; i++) {
-      if (history[i].close > breakout_level) breakout_level = history[i].close;
+      const c = Number(history[i].close);
+      if (c > breakout_level) breakout_level = c;
     }
 
-    if (eod.close <= breakout_level) continue;
-    if (eod.close <= 100) continue;
-    if ((eod.rvol ?? 0) <= 2) continue;
+    if (Number(eod.close) <= breakout_level) { dbg.belowBrk++; continue; }
+    if (Number(eod.close) <= 100) { dbg.below100++; continue; }
+    if ((Number(eod.rvol) || 0) <= 2) { dbg.lowRvol++; continue; }
 
-    const pct_from_breakout = ((eod.close - breakout_level) / breakout_level) * 100;
-    const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
-    const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
-    const ret_22d = history.length > 22 ? ((eod.close - history[22].close) / history[22].close) * 100 : null;
+    const close      = Number(eod.close);
+    const ema20      = Number(eod.ema_20);
+    const rvol       = Number(eod.rvol) || 0;
+    const rsi14      = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
+    const pct_from_breakout = ((close - breakout_level) / breakout_level) * 100;
+    const d_pct = ((close - ema20) / ema20) * 100;
+    const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
+    const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
 
     const stock = buildScanStock(id, bundle, 'breakout_surge');
     if (!stock) continue;
 
     const is_vani =
-      (eod.rvol ?? 0) > 5 &&
+      rvol > 5 &&
       pct_from_breakout >= 0 &&
       pct_from_breakout <= 5 &&
-      (eod.rsi_14 ?? 100) < 75 &&
+      (rsi14 ?? 100) < 75 &&
       d_pct < 15;
 
     results.push({
@@ -796,6 +803,8 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
     });
   }
+
+  console.log('[breakout_surge] latestDate:', bundle.latestDate, '| filters:', dbg, '| results:', results.length);
 
   return results
     .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
