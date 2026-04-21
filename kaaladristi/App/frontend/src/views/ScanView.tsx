@@ -6,20 +6,21 @@ import { useScan, useAllScanCounts } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
-import type { ScanDefinition } from '@/types';
+import type { ScanDefinition, ScanStock } from '@/types';
 
 // ── Sort ──────────────────────────────────────────────────────
 
-type SortKey = 'magic_rs' | 'rsi_14' | 'rvol' | 'pct_chng' | 'reward' | 'symbol';
+type SortKey = 'magic_rs' | 'rsi_14' | 'rvol' | 'pct_chng' | 'reward' | 'symbol' | 'vaniOpportunity';
 type SortDir = 'asc' | 'desc';
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'magic_rs', label: 'RS' },
-  { key: 'rvol',     label: 'RVOL' },
-  { key: 'reward',   label: 'Reward' },
-  { key: 'pct_chng', label: '% Chg' },
-  { key: 'rsi_14',   label: 'RSI' },
-  { key: 'symbol',   label: 'Symbol' },
+  { key: 'vaniOpportunity', label: '✦ VaNi' },
+  { key: 'magic_rs',        label: 'RS' },
+  { key: 'rvol',            label: 'RVOL' },
+  { key: 'reward',          label: 'Reward' },
+  { key: 'pct_chng',        label: '% Chg' },
+  { key: 'rsi_14',          label: 'RSI' },
+  { key: 'symbol',          label: 'Symbol' },
 ];
 
 function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[] {
@@ -28,12 +29,13 @@ function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[
     let va: string | number = 0;
     let vb: string | number = 0;
     switch (key) {
-      case 'symbol':   va = a.symbol;           vb = b.symbol;           break;
-      case 'pct_chng': va = a.pct_chng ?? 0;    vb = b.pct_chng ?? 0;    break;
-      case 'magic_rs': va = a.magic_rs ?? 0;    vb = b.magic_rs ?? 0;    break;
-      case 'rsi_14':   va = a.rsi_14 ?? 0;      vb = b.rsi_14 ?? 0;      break;
-      case 'rvol':     va = a.rvol ?? 0;        vb = b.rvol ?? 0;        break;
-      case 'reward':   va = a.rewardPct ?? -99;  vb = b.rewardPct ?? -99; break;
+      case 'symbol':          va = a.symbol;                    vb = b.symbol;                    break;
+      case 'pct_chng':        va = a.pct_chng ?? 0;             vb = b.pct_chng ?? 0;             break;
+      case 'magic_rs':        va = a.magic_rs ?? 0;             vb = b.magic_rs ?? 0;             break;
+      case 'rsi_14':          va = a.rsi_14 ?? 0;               vb = b.rsi_14 ?? 0;               break;
+      case 'rvol':            va = a.rvol ?? 0;                 vb = b.rvol ?? 0;                 break;
+      case 'reward':          va = a.rewardPct ?? -99;           vb = b.rewardPct ?? -99;           break;
+      case 'vaniOpportunity': va = a.vaniOpportunity ? 1 : 0;  vb = b.vaniOpportunity ? 1 : 0;  break;
     }
     if (typeof va === 'string') {
       return dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
@@ -280,48 +282,139 @@ function ScannerLanding() {
   );
 }
 
+// ── Conviction Flow sort ───────────────────────────────────────
+
+type CFSortKey = 'delivery_surge_x' | 'avg_amt_5d' | 'avg_amt_22d' | 'close' | 'd_pct' | 'rsi_14' | 'ret_5d' | 'ret_22d' | 'ret_66d' | 'symbol';
+
+const CF_SORT_OPTIONS: { key: CFSortKey; label: string }[] = [
+  { key: 'delivery_surge_x', label: 'Surge' },
+  { key: 'avg_amt_5d',       label: '5D Avg' },
+  { key: 'avg_amt_22d',      label: '22D Avg' },
+  { key: 'close',            label: 'Close' },
+  { key: 'd_pct',            label: 'D%' },
+  { key: 'rsi_14',           label: 'RSI' },
+  { key: 'ret_5d',           label: '5D%' },
+  { key: 'ret_22d',          label: '22D%' },
+  { key: 'ret_66d',          label: '66D%' },
+  { key: 'symbol',           label: 'Symbol' },
+];
+
+function sortCFStocks(stocks: ScanStock[], key: CFSortKey, dir: SortDir): ScanStock[] {
+  return [...stocks].sort((a, b) => {
+    let va: string | number;
+    let vb: string | number;
+    switch (key) {
+      case 'symbol':           va = a.symbol;                    vb = b.symbol;                    break;
+      case 'delivery_surge_x': va = a.delivery_surge_x ?? 0;     vb = b.delivery_surge_x ?? 0;     break;
+      case 'avg_amt_5d':       va = a.avg_amt_5d ?? 0;           vb = b.avg_amt_5d ?? 0;           break;
+      case 'avg_amt_22d':      va = a.avg_amt_22d ?? 0;          vb = b.avg_amt_22d ?? 0;          break;
+      case 'close':            va = a.close;                     vb = b.close;                     break;
+      case 'd_pct':            va = a.d_pct ?? 0;                vb = b.d_pct ?? 0;                break;
+      case 'rsi_14':           va = a.rsi_14 ?? 0;               vb = b.rsi_14 ?? 0;               break;
+      case 'ret_5d':           va = a.ret_5d ?? -999;            vb = b.ret_5d ?? -999;            break;
+      case 'ret_22d':          va = a.ret_22d ?? -999;           vb = b.ret_22d ?? -999;           break;
+      case 'ret_66d':          va = a.ret_66d ?? -999;           vb = b.ret_66d ?? -999;           break;
+      default:                 va = 0;                           vb = 0;
+    }
+    if (typeof va === 'string') {
+      return dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
+    }
+    return dir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number);
+  });
+}
+
 // ── Conviction Flow results (server-side RPC, different columns) ───────────
 
 function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
   const { data: stocks = [], isLoading, error } = useScan('conviction_flow');
+  const [sortKey, setSortKey] = useState<CFSortKey>('delivery_surge_x');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [vaniOnly, setVaniOnly] = useState(false);
+
   const vaniCount = useMemo(() => stocks.filter((s) => s.vaniOpportunity).length, [stocks]);
+
+  const sorted = useMemo(() => {
+    let arr = vaniOnly ? stocks.filter((s) => s.vaniOpportunity) : stocks;
+    return sortCFStocks(arr, sortKey, sortDir);
+  }, [stocks, sortKey, sortDir, vaniOnly]);
+
+  const toggleSort = (key: CFSortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('desc'); }
+  };
 
   return (
     <>
-      {/* Sub-bar */}
+      {/* Sub-bar: sort + filters */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: '20px', gap: '16px', flexWrap: 'wrap',
+        marginBottom: '20px', gap: '12px', flexWrap: 'wrap',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Left: VaNi toggle + label */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => setVaniOnly((f) => !f)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '6px 12px',
+              background: vaniOnly ? 'var(--gold)' : 'transparent',
+              border: '1px solid var(--border-gold)',
+              color: vaniOnly ? '#1a1410' : 'var(--gold)',
+              borderRadius: '100px',
+              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'var(--font-body)', transition: 'all 0.2s',
+              boxShadow: vaniOnly ? '0 0 16px rgba(212,168,75,0.3)' : undefined,
+            }}
+          >
+            <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
+            VaNi only
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: '10px',
+              padding: '1px 6px', borderRadius: '100px',
+              background: 'rgba(0,0,0,0.2)',
+              color: vaniOnly ? '#1a1410' : undefined,
+            }}>
+              {vaniCount}
+            </span>
+          </button>
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: '11px',
+            fontFamily: 'var(--font-mono)', fontSize: '10px',
             color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.07em',
           }}>
             Delivery value surge · all exchanges
           </span>
         </div>
-        {vaniCount > 0 && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '8px',
-            padding: '7px 14px',
-            background: 'var(--gold-bg)',
-            border: '1px solid var(--border-gold)',
-            color: 'var(--gold)',
-            borderRadius: '100px',
-            fontSize: '12px', fontWeight: 600,
+
+        {/* Right: sort strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '10px',
+            color: 'var(--text-faint)', textTransform: 'uppercase',
+            letterSpacing: '0.08em', whiteSpace: 'nowrap',
           }}>
-            <span style={{ fontSize: '11px' }}>✦</span>
-            VaNi Opportunity
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '10.5px',
-              padding: '2px 7px', borderRadius: '100px',
-              background: 'rgba(0,0,0,0.2)',
-            }}>
-              {vaniCount}
-            </span>
-          </div>
-        )}
+            Sort
+          </span>
+          {CF_SORT_OPTIONS.map((opt) => {
+            const active = sortKey === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => toggleSort(opt.key)}
+                style={{
+                  padding: '4px 10px', borderRadius: '100px', border: 'none',
+                  background: active ? 'var(--indigo-bg)' : 'transparent',
+                  color: active ? 'var(--indigo)' : 'var(--text-muted)',
+                  fontSize: '11px', fontWeight: 500, cursor: 'pointer',
+                  fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+                  outline: active ? '1px solid var(--border-indigo)' : undefined,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {opt.label}{active && (sortDir === 'asc' ? ' ↑' : ' ↓')}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Results */}
@@ -335,7 +428,7 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
           <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>
         </Card>
       ) : (
-        <ConvictionFlowCards stocks={stocks} />
+        <ConvictionFlowCards stocks={sorted} />
       )}
 
       {/* Action Island */}
@@ -344,20 +437,26 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
         <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
           Showing{' '}
           <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
-            {stocks.length}
+            {sorted.length}
           </em>
-          {' '}Conviction Flow setup{stocks.length !== 1 ? 's' : ''}
+          {' '}Conviction Flow setup{sorted.length !== 1 ? 's' : ''}
         </span>
         {vaniCount > 0 && (
           <>
             <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-            <span style={{
-              fontSize: '13px', padding: '7px 16px',
-              background: 'var(--gold)', color: '#1a1410',
-              borderRadius: '100px', fontWeight: 600,
-            }}>
+            <button
+              onClick={() => setVaniOnly(true)}
+              style={{
+                fontSize: '13px', padding: '7px 16px',
+                background: 'var(--gold)', color: '#1a1410',
+                border: 'none', borderRadius: '100px',
+                fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {vaniCount} opportunit{vaniCount !== 1 ? 'ies' : 'y'}
-            </span>
+            </button>
           </>
         )}
       </ActionIsland>
