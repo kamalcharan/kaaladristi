@@ -117,42 +117,35 @@ interface DataItem {
   color?: string;
 }
 
-const SEP: React.CSSProperties = {
-  color: 'var(--border-strong)',
-  fontSize: '10px',
-  padding: '0 6px',
-  userSelect: 'none' as const,
-  flexShrink: 0,
-  opacity: 0.6,
-};
-
 function DataRow({ items }: { items: DataItem[] }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, rowGap: '2px' }}>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
+    }}>
       {items.map((item, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <span style={SEP}>·</span>}
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: '3px', flexShrink: 0 }}>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
-              fontWeight: 600,
-              textTransform: 'uppercase' as const,
-              letterSpacing: '0.06em',
-              color: 'var(--text-faint)',
-            }}>
-              {item.label}
-            </span>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '12px',
-              fontWeight: 500,
-              color: item.color ?? 'var(--text-primary)',
-            }}>
-              {item.value}
-            </span>
+        <span key={i} style={{ display: 'inline-flex', alignItems: 'baseline', gap: '3px' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            fontWeight: 600,
+            textTransform: 'uppercase' as const,
+            letterSpacing: '0.06em',
+            color: 'var(--text-faint)',
+          }}>
+            {item.label}
           </span>
-        </React.Fragment>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '12px',
+            fontWeight: 500,
+            color: item.color ?? 'var(--text-primary)',
+          }}>
+            {item.value}
+          </span>
+        </span>
       ))}
     </div>
   );
@@ -217,16 +210,15 @@ function FlowCard({ stock }: { stock: ScanStock }) {
           {isVani && (
             <span style={{
               display: 'inline-flex', alignItems: 'center',
-              padding: '1px 7px',
+              padding: '1px 8px',
               background: 'var(--gold-bg)',
               border: '1px solid var(--border-gold)',
               borderRadius: '100px',
               fontFamily: 'var(--font-mono)',
-              fontSize: '8px',
+              fontSize: '9px',
               fontWeight: 700,
-              letterSpacing: '0.06em',
+              letterSpacing: '0.02em',
               color: 'var(--gold)',
-              textTransform: 'uppercase' as const,
               flexShrink: 0,
             }}>
               VaNi Opportunity

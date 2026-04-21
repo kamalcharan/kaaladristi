@@ -14,7 +14,7 @@ type SortKey = 'magic_rs' | 'rsi_14' | 'rvol' | 'pct_chng' | 'reward' | 'symbol'
 type SortDir = 'asc' | 'desc';
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'vaniOpportunity', label: '✦ VaNi' },
+  { key: 'vaniOpportunity', label: '✦ VaNi Opportunity' },
   { key: 'magic_rs',        label: 'RS' },
   { key: 'rvol',            label: 'RVOL' },
   { key: 'reward',          label: 'Reward' },
@@ -367,7 +367,7 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
             }}
           >
             <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
-            VaNi only
+            VaNi Opportunity
             <span style={{
               fontFamily: 'var(--font-mono)', fontSize: '10px',
               padding: '1px 6px', borderRadius: '100px',
