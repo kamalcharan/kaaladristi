@@ -145,12 +145,25 @@ async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
   return map;
 }
 
-// 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
+// 3b: Fetch trading dates capped to actual latest data date (matches DataFreshnessChip)
 async function fetchRecentDates(limit: number): Promise<string[]> {
+  // Use km_industry_eod as the authoritative "as on date" — same source as the navbar chip.
+  // km_trading_calendar can have today marked "completed" before equity data is loaded,
+  // which would produce an empty latestEod map and zero scan results.
+  const { data: latestRes } = await from('km_industry_eod')
+    .select('trade_date')
+    .order('trade_date', { ascending: false })
+    .limit(1)
+    .execute();
+
+  const asOnDate = (latestRes?.[0] as { trade_date: string } | undefined)?.trade_date ?? null;
+  if (!asOnDate) return [];
+
   const { data } = await from('km_trading_calendar')
     .select('trade_date')
     .eq('status', 'completed')
     .eq('exchange', 'NSE')
+    .lte('trade_date', asOnDate)
     .order('trade_date', { ascending: false })
     .limit(limit)
     .execute();
