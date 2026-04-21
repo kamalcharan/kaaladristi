@@ -1,340 +1,94 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
-import { getRiskHex } from '@/lib/utils';
-import { signIn, signUp, forgotPassword } from '@/services/auth';
 import { useAuthStore } from '@/stores/authStore';
+import { Starfield, Navbar } from './landing/shared';
+import { Hero } from './landing/Hero';
+import { useTodayAtmo } from './landing/AtmosphericCard';
+import { C } from './landing/tokens';
 
-// ── Star Field ──
-function StarField() {
-  const ref = useRef<HTMLDivElement>(null);
+// ── Landing-page scoped CSS ───────────────────────────────────────────────
+const LANDING_CSS = `
+  .dq-wrap { max-width:1280px; margin:0 auto; padding:0 40px; }
+  @media(max-width:720px){ .dq-wrap{ padding:0 20px; } }
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    for (let i = 0; i < 200; i++) {
-      const star = document.createElement('div');
-      star.className = 'absolute w-[2px] h-[2px] rounded-full opacity-0';
-      star.style.backgroundColor = 'var(--text-primary)';
-      star.style.left = `${Math.random() * 100}%`;
-      star.style.top = `${Math.random() * 100}%`;
-      const dur = 2 + Math.random() * 4;
-      const delay = Math.random() * 5;
-      const opacity = 0.2 + Math.random() * 0.6;
-      star.style.animation = `twinkle ${dur}s ${delay}s ease-in-out infinite`;
-      star.style.setProperty('--tw-opacity', String(opacity));
-      el.appendChild(star);
-    }
-    return () => { el.innerHTML = ''; };
-  }, []);
+  .dq-fade { opacity:0; transform:translateY(24px); transition:opacity .9s ease,transform .9s ease; }
+  .dq-fade.dq-in { opacity:1; transform:translateY(0); }
 
-  return <div ref={ref} className="fixed inset-0 pointer-events-none z-0" />;
-}
+  .dq-section-label {
+    display:flex; align-items:center; gap:14px;
+    font-family:'JetBrains Mono','Geist Mono',ui-monospace,monospace;
+    font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+    color:#c9a84c; margin-bottom:28px;
+  }
+  .dq-section-label::before { content:""; display:block; width:28px; height:1px; background:#c9a84c; }
 
-// ── Animated Logo ──
-function AnimatedLogo() {
-  return (
-    <div className="w-12 h-12 relative">
-      <div className="absolute inset-0 border-2 border-accent-indigo/60 rounded-full animate-[orbit_15s_linear_infinite]" />
-      <div className="absolute inset-[15%] border-2 border-accent-violet/50 rounded-full animate-[orbit_10s_linear_infinite_reverse]" />
-      <div className="absolute inset-[30%] border-2 border-accent-cyan/60 rounded-full animate-[orbit_8s_linear_infinite]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-gradient-to-br from-accent-indigo to-accent-violet rounded-full shadow-[0_0_20px_var(--accent-indigo)]" />
-    </div>
-  );
-}
+  .dq-btn {
+    display:inline-flex; align-items:center; gap:10px;
+    padding:13px 22px; border:1px solid #c9a84c; color:#e2b96f;
+    font-family:'DM Sans','Inter',system-ui,sans-serif;
+    font-size:13px; letter-spacing:.14em; text-transform:uppercase;
+    text-decoration:none; transition:all .25s ease; background:transparent; cursor:pointer;
+  }
+  .dq-btn:hover { background:rgba(226,185,111,.08); box-shadow:0 0 32px rgba(226,185,111,.28),inset 0 0 16px rgba(226,185,111,.06); color:#fff4d9; }
+  .dq-btn-filled { background:linear-gradient(180deg,rgba(226,185,111,.92),rgba(201,168,76,.92)); color:#0a0a12 !important; border-color:#e2b96f; }
+  .dq-btn-filled:hover { box-shadow:0 0 40px rgba(226,185,111,.28); background:linear-gradient(180deg,rgba(240,205,135,1),rgba(226,185,111,1)) !important; }
+  .dq-arrow { transition:transform .25s ease; }
+  .dq-btn:hover .dq-arrow { transform:translateX(4px); }
 
-// ── Mini Risk Gauge ──
-function MiniGauge({ score }: { score: number }) {
-  const circumference = 2 * Math.PI * 22;
-  const offset = circumference - (score / 100) * circumference;
-  const color = getRiskHex(score);
+  .dq-navlink { transition:color .2s ease; text-decoration:none; color:#8a8372; }
+  .dq-navlink:hover { color:#e2b96f; }
+  @media(max-width:820px){ .dq-nav-links{ display:none !important; } }
 
-  return (
-    <div className="w-14 h-14 relative">
-      <svg width="56" height="56" viewBox="0 0 56 56" className="-rotate-90">
-        <circle cx="28" cy="28" r="22" fill="none" stroke="color-mix(in srgb, var(--text-primary) 10%, transparent)" strokeWidth="6" />
-        <circle
-          cx="28" cy="28" r="22" fill="none"
-          stroke={color} strokeWidth="6" strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          className="transition-all duration-1000"
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="font-mono text-base font-semibold" style={{ color }}>{score}</span>
-      </div>
-    </div>
-  );
-}
+  .dq-hero-grid { display:grid; grid-template-columns:1.15fr 1fr; gap:60px; align-items:center; }
+  @media(max-width:900px){ .dq-hero-grid{ grid-template-columns:1fr !important; } }
 
-// ── Auth form input style ──
-const inputClass = 'px-4 py-3.5 bg-kd-elevated border border-kd-border rounded-xl text-[15px] text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo focus:shadow-[0_0_0_3px_rgba(99,102,241,0.1)] transition-all w-full';
+  .dq-disclaimer { display:grid; grid-template-columns:auto 1fr auto; gap:28px; align-items:center; }
+  @media(max-width:820px){ .dq-disclaimer{ grid-template-columns:1fr !important; gap:12px !important; } }
 
-type AuthMode = 'login' | 'register' | 'forgot';
+  .dq-atmo-card { }
+  @media(max-width:900px){
+    .dq-atmo-card { position:relative !important; left:auto !important; bottom:auto !important; margin:24px auto !important; width:100% !important; max-width:420px; }
+  }
+
+  @keyframes slowspin    { to { transform:rotate(360deg); } }
+  @keyframes slowspinrev { to { transform:rotate(-360deg); } }
+  @keyframes breathe     { 0%,100%{opacity:.55;transform:scale(1)} 50%{opacity:1;transform:scale(1.04)} }
+`;
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user }  = useAuthStore();
+  const { atmo, loading } = useTodayAtmo();
 
-  const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  // Redirect authenticated users
+  useEffect(() => { if (user) navigate('/dashboard', { replace:true }); }, [user, navigate]);
 
-  // If already logged in, redirect to dashboard
+  // Inject scoped CSS on mount
   useEffect(() => {
-    if (user) navigate('/dashboard', { replace: true });
-  }, [user, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setIsSubmitting(true);
-
-    try {
-      if (authMode === 'forgot') {
-        const message = await forgotPassword(email);
-        setSuccess(message || 'If that email exists, a reset link has been sent.');
-        setAuthMode('login');
-      } else if (authMode === 'register') {
-        if (!fullName.trim()) {
-          setError('Please enter your full name');
-          setIsSubmitting(false);
-          return;
-        }
-        await signUp(email, password, fullName.trim());
-        navigate('/dashboard');
-      } else {
-        await signIn(email, password);
-        navigate('/dashboard');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    const tag = document.createElement('style');
+    tag.id = 'dristiq-landing-css';
+    tag.textContent = LANDING_CSS;
+    document.head.appendChild(tag);
+    return () => document.getElementById('dristiq-landing-css')?.remove();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-kd-bg text-[var(--text-primary)] overflow-hidden">
-      {/* Backgrounds */}
-      <StarField />
-      <div className="fixed w-[800px] h-[800px] rounded-full top-[-300px] left-1/2 -translate-x-1/2 blur-[100px] pointer-events-none z-0 animate-[orbit1_30s_linear_infinite]"
-           style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-indigo) 25%, transparent) 0%, transparent 70%)' }} />
-      <div className="fixed w-[600px] h-[600px] rounded-full bottom-[-200px] right-[-200px] blur-[100px] pointer-events-none z-0 animate-[orbit2_25s_linear_infinite]"
-           style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-violet) 20%, transparent) 0%, transparent 70%)' }} />
-      <div className="fixed w-[400px] h-[400px] rounded-full top-[40%] left-[-100px] blur-[100px] pointer-events-none z-0 animate-[orbit3_20s_linear_infinite]"
-           style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--accent-cyan) 15%, transparent) 0%, transparent 70%)' }} />
-      <div className="fixed inset-0 pointer-events-none z-0"
-           style={{ backgroundImage: 'linear-gradient(color-mix(in srgb, var(--accent-indigo) 3%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--accent-indigo) 3%, transparent) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
+    <div style={{ background:C.bg0, color:C.ink2, fontFamily:"'DM Sans','Inter',system-ui,sans-serif", fontSize:15, lineHeight:1.55, overflowX:'hidden', minHeight:'100vh', WebkitFontSmoothing:'antialiased' }}>
+      {/* Fixed backgrounds */}
+      <div style={{
+        position:'fixed', inset:0, zIndex:0, pointerEvents:'none',
+        background:`radial-gradient(1200px 700px at 70% -10%,rgba(45,27,105,.25),transparent 60%),radial-gradient(900px 600px at 10% 30%,rgba(226,185,111,.05),transparent 65%),radial-gradient(1400px 900px at 50% 110%,rgba(26,16,64,.35),transparent 60%),${C.bg0}`,
+      }}/>
+      <Starfield/>
 
-      {/* Main Layout */}
-      <div className="relative z-10 min-h-screen flex flex-col lg:flex-row">
-
-        {/* ── Left: Brand Panel ── */}
-        <div className="flex-1 flex flex-col justify-center px-6 sm:px-10 lg:px-20 py-10 sm:py-16 relative">
-          <nav className="absolute top-10 left-10 lg:left-20 right-10 lg:right-20 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <AnimatedLogo />
-              <span className="font-display text-2xl font-medium tracking-wide">Kala-Drishti</span>
-            </div>
-            <div className="hidden md:flex gap-8">
-              <a href="#" className="text-sm text-secondary hover:text-[var(--text-primary)] transition-colors">How it Works</a>
-              <a href="#" className="text-sm text-secondary hover:text-[var(--text-primary)] transition-colors">Methodology</a>
-              <a href="#" className="text-sm text-secondary hover:text-[var(--text-primary)] transition-colors">Pricing</a>
-            </div>
-          </nav>
-
-          <div className="max-w-[600px]">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-accent-indigo/10 border border-accent-indigo/20 rounded-full text-[13px] text-accent-indigo mb-8">
-              <div className="w-2 h-2 bg-accent-indigo rounded-full animate-pulse" />
-              Pre-Market Intelligence for Indian Indices
-            </div>
-
-            <h1 className="font-display text-[28px] sm:text-[44px] lg:text-[56px] font-semibold leading-[1.15] mb-6 tracking-tight">
-              Know Market Risk<br />
-              <span className="bg-gradient-to-r from-accent-indigo via-accent-violet to-accent-cyan bg-clip-text text-transparent">
-                Before It Happens
-              </span>
-            </h1>
-
-            <p className="text-lg text-secondary leading-relaxed mb-10">
-              Kala-Drishti uses time-cycle analysis to reveal hidden market stress points.
-              Get pre-computed risk intelligence for Market — every morning
-              before market opens.
-            </p>
-
-            <div className="flex flex-wrap gap-3 mb-12">
-              {[
-                { icon: '📊', label: 'Daily Risk Score' },
-                { icon: '📅', label: '7-Day Outlook' },
-                { icon: '🔔', label: 'WhatsApp Alerts' },
-                { icon: '⚡', label: 'Pre-Market Delivery' },
-              ].map((f) => (
-                <div key={f.label} className="flex items-center gap-2 px-4 py-2.5 glass-card rounded-full text-[13px] text-secondary">
-                  <span className="text-sm">{f.icon}</span>
-                  {f.label}
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-6 pt-8 border-t border-kd-border">
-              {['SEBI Compliant', 'No Buy/Sell Tips', 'Educational Only'].map((t) => (
-                <div key={t} className="flex items-center gap-2 text-[13px] text-muted">
-                  <svg className="text-risk-green" width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
-                  </svg>
-                  {t}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Right: Auth Panel ── */}
-        <div className="w-full lg:w-[480px] bg-kd-surface backdrop-blur-xl lg:border-l border-t lg:border-t-0 border-kd-border flex flex-col justify-center px-6 sm:px-10 lg:px-[60px] py-10 sm:py-16">
-          <div className="max-w-[360px] mx-auto w-full">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-semibold mb-2">
-                {authMode === 'forgot' ? 'Reset Password' : authMode === 'login' ? 'Welcome Back' : 'Get Started'}
-              </h2>
-              <p className="text-sm text-muted">
-                {authMode === 'forgot' ? 'Enter your email to receive a reset link' : authMode === 'login' ? 'Sign in to access your risk dashboard' : 'Create your account to begin'}
-              </p>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-1 bg-kd-elevated rounded-xl p-1 mb-7">
-              <button
-                onClick={() => { setAuthMode('login'); setError(''); setSuccess(''); }}
-                className={`flex-1 py-3 rounded-[10px] text-sm font-medium transition-all ${
-                  authMode === 'login'
-                    ? 'bg-kd-surface text-[var(--text-primary)] shadow-lg'
-                    : 'text-secondary hover:text-[var(--text-primary)]'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => { setAuthMode('register'); setError(''); setSuccess(''); }}
-                className={`flex-1 py-3 rounded-[10px] text-sm font-medium transition-all ${
-                  authMode === 'register'
-                    ? 'bg-kd-surface text-[var(--text-primary)] shadow-lg'
-                    : 'text-secondary hover:text-[var(--text-primary)]'
-                }`}
-              >
-                Create Account
-              </button>
-            </div>
-
-            {/* Error / Success messages */}
-            {error && (
-              <div className="mb-4 px-4 py-3 bg-risk-red/10 border border-risk-red/30 rounded-xl text-sm text-risk-red">
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="mb-4 px-4 py-3 bg-risk-green/10 border border-risk-green/30 rounded-xl text-sm text-risk-green">
-                {success}
-              </div>
-            )}
-
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-              {authMode === 'register' && (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-medium text-secondary">Full Name</label>
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Rajesh Kumar"
-                    required
-                    className={inputClass}
-                  />
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2">
-                <label className="text-[13px] font-medium text-secondary">Email Address</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  className={inputClass}
-                />
-              </div>
-
-              {authMode !== 'forgot' && (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-medium text-secondary">Password</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                    className={inputClass}
-                  />
-                  {authMode === 'register' && (
-                    <p className="text-[11px] text-muted">Minimum 6 characters</p>
-                  )}
-                </div>
-              )}
-
-              {authMode === 'login' && (
-                <div className="flex justify-end">
-                  <button type="button" onClick={() => { setAuthMode('forgot'); setError(''); setSuccess(''); }} className="text-[13px] text-accent-indigo hover:opacity-80 transition-opacity">Forgot password?</button>
-                </div>
-              )}
-
-              {authMode === 'forgot' && (
-                <div className="flex justify-end">
-                  <button type="button" onClick={() => { setAuthMode('login'); setError(''); setSuccess(''); }} className="text-[13px] text-accent-indigo hover:opacity-80 transition-opacity">Back to Sign In</button>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="py-4 bg-gradient-to-r from-accent-indigo to-accent-violet rounded-xl text-[15px] font-semibold text-[var(--text-primary)] shadow-[0_4px_20px_color-mix(in_srgb,var(--accent-indigo)_30%,transparent)] hover:-translate-y-0.5 hover:shadow-[0_8px_30px_color-mix(in_srgb,var(--accent-indigo)_40%,transparent)] transition-all disabled:opacity-50 disabled:translate-y-0 flex items-center justify-center gap-2"
-              >
-                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {authMode === 'forgot' ? 'Send Reset Link' : authMode === 'login' ? 'Sign In' : 'Create Account'}
-              </button>
-            </form>
-
-            {/* Live Preview */}
-            <div className="mt-8 p-5 bg-kd-elevated border border-kd-border rounded-2xl">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-xs text-muted uppercase tracking-wider">Today's Risk Preview</span>
-                <span className="flex items-center gap-1.5 text-[11px] text-risk-green">
-                  <span className="w-1.5 h-1.5 bg-risk-green rounded-full animate-pulse" />
-                  LIVE
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <MiniGauge score={68} />
-                <div>
-                  <div className="text-xs text-muted mb-0.5">NIFTY Risk Score</div>
-                  <div className="text-sm font-medium text-risk-amber">Distribution Regime</div>
-                </div>
-              </div>
-            </div>
-
-            <p className="mt-8 text-center text-xs text-muted">
-              By continuing, you agree to our <a href="#" className="text-accent-indigo">Terms</a> and <a href="#" className="text-accent-indigo">Privacy Policy</a>
-            </p>
-          </div>
-        </div>
+      {/* Page content */}
+      <div style={{ position:'relative', zIndex:2 }}>
+        <Navbar/>
+        <main>
+          <Hero atmo={atmo} loading={loading}/>
+          {/* Part 2: InsightSection, Pillars, VaNiSection */}
+          {/* Part 3: Personas, OriginCTA, Footer */}
+        </main>
       </div>
     </div>
   );
