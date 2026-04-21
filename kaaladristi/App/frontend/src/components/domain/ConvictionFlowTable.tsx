@@ -29,7 +29,7 @@ function fmtDistFromHigh(n: number | null | undefined): string {
   return `-${n.toFixed(1)}%`;
 }
 
-// ── Color helpers ─────────────────────────────────────────────────────────────
+// ── Colors ────────────────────────────────────────────────────────────────────
 
 function pctColor(n: number | null | undefined, threshold = 2): string {
   if (n == null) return 'var(--text-secondary)';
@@ -66,7 +66,50 @@ function distColor(n: number | null | undefined): string {
   return 'var(--bear)';
 }
 
-// ── Inline row ────────────────────────────────────────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
+
+// Deterministic hue from symbol so each stock gets a consistent colour
+const AVATAR_PALETTES = [
+  { bg: '#1e3a5f', fg: '#7eb8f7' },
+  { bg: '#1e3d2f', fg: '#6ecf9a' },
+  { bg: '#3b2a1a', fg: '#d4a84b' },
+  { bg: '#2d1e3e', fg: '#b07ef7' },
+  { bg: '#2a1f1f', fg: '#e07070' },
+  { bg: '#1a3040', fg: '#5ec8d8' },
+];
+
+function avatarPalette(symbol: string, isVani: boolean) {
+  if (isVani) return { bg: 'var(--gold)', fg: '#1a1410' };
+  const idx = symbol.charCodeAt(0) % AVATAR_PALETTES.length;
+  return AVATAR_PALETTES[idx];
+}
+
+function Avatar({ symbol, isVani }: { symbol: string; isVani: boolean }) {
+  const { bg, fg } = avatarPalette(symbol, isVani);
+  const initials = symbol.slice(0, 2).toUpperCase();
+  return (
+    <div style={{
+      width: '42px',
+      height: '42px',
+      borderRadius: '50%',
+      background: bg,
+      color: fg,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '13px',
+      fontWeight: 700,
+      letterSpacing: '0.02em',
+      flexShrink: 0,
+      border: isVani ? '1.5px solid rgba(212,168,75,0.4)' : '1.5px solid rgba(255,255,255,0.06)',
+    }}>
+      {initials}
+    </div>
+  );
+}
+
+// ── Inline data row ───────────────────────────────────────────────────────────
 
 interface DataItem {
   label: string;
@@ -74,27 +117,28 @@ interface DataItem {
   color?: string;
 }
 
-const DOT: React.CSSProperties = {
+const SEP: React.CSSProperties = {
   color: 'var(--border-strong)',
   fontSize: '10px',
-  padding: '0 7px',
+  padding: '0 6px',
   userSelect: 'none' as const,
   flexShrink: 0,
+  opacity: 0.6,
 };
 
 function DataRow({ items }: { items: DataItem[] }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, rowGap: '4px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, rowGap: '2px' }}>
       {items.map((item, i) => (
         <React.Fragment key={i}>
-          {i > 0 && <span style={DOT}>·</span>}
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: '4px', flexShrink: 0 }}>
+          {i > 0 && <span style={SEP}>·</span>}
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: '3px', flexShrink: 0 }}>
             <span style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '9px',
               fontWeight: 600,
               textTransform: 'uppercase' as const,
-              letterSpacing: '0.07em',
+              letterSpacing: '0.06em',
               color: 'var(--text-faint)',
             }}>
               {item.label}
@@ -122,22 +166,27 @@ function FlowCard({ stock }: { stock: ScanStock }) {
 
   return (
     <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '14px',
       background: isVani
-        ? 'linear-gradient(135deg, rgba(212,168,75,0.07) 0%, var(--card) 60%)'
+        ? 'linear-gradient(135deg, rgba(212,168,75,0.06) 0%, var(--card) 55%)'
         : 'var(--card)',
-      border: `1px solid ${isVani ? 'var(--border-gold)' : 'var(--border)'}`,
+      border: '1px solid var(--border)',
       borderLeft: isVani ? '3px solid var(--gold)' : '3px solid transparent',
       borderRadius: '12px',
-      padding: '11px 16px',
-      display: 'flex',
-      flexDirection: 'column' as const,
-      gap: '7px',
+      padding: '12px 16px 12px 14px',
+      transition: 'border-color 0.15s',
     }}>
 
-      {/* Row 1 — Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-        {/* Left: symbol + badges + company */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' as const, minWidth: 0 }}>
+      {/* Avatar */}
+      <Avatar symbol={stock.symbol} isVani={isVani} />
+
+      {/* Info — 4 rows */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: '5px' }}>
+
+        {/* Row 1 — Identity */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const }}>
           {isVani && (
             <span style={{ color: 'var(--gold)', fontSize: '10px', lineHeight: 1, flexShrink: 0 }}>✦</span>
           )}
@@ -155,10 +204,11 @@ function FlowCard({ stock }: { stock: ScanStock }) {
             <span style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '8px',
+              fontWeight: 600,
               color: 'var(--text-faint)',
-              padding: '1px 4px',
+              padding: '1px 5px',
               border: '1px solid var(--border)',
-              borderRadius: '3px',
+              borderRadius: '4px',
               flexShrink: 0,
             }}>
               {stock.exchange}
@@ -166,7 +216,7 @@ function FlowCard({ stock }: { stock: ScanStock }) {
           )}
           {isVani && (
             <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: '3px',
+              display: 'inline-flex', alignItems: 'center',
               padding: '1px 7px',
               background: 'var(--gold-bg)',
               border: '1px solid var(--border-gold)',
@@ -196,56 +246,61 @@ function FlowCard({ stock }: { stock: ScanStock }) {
           )}
         </div>
 
-        {/* Right: date + surge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-          {stock.trade_date && (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              color: 'var(--text-faint)',
-            }}>
-              {stock.trade_date}
-            </span>
-          )}
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '18px',
-            fontWeight: 700,
-            color: surgeColor(surge),
-            lineHeight: 1,
-          }}>
-            {fmtSurge(surge)}
-          </span>
-        </div>
+        {/* Row 2 — Price · Momentum */}
+        <DataRow items={[
+          { label: 'Close', value: fmt2(stock.close) },
+          { label: 'D%',    value: fmtPct(stock.d_pct),  color: pctColor(stock.d_pct, 1.5) },
+          { label: 'EMA20', value: fmt2(stock.ema_20) },
+          { label: 'RSI',   value: fmt2(stock.rsi_14),   color: rsiColor(stock.rsi_14) },
+          { label: 'RSS',   value: fmt2(stock.rss_value), color: rssColor(stock.rss_value) },
+        ]} />
+
+        {/* Row 3 — Delivery */}
+        <DataRow items={[
+          { label: '5D Avg',      value: fmtCr(stock.avg_amt_5d) },
+          { label: '22D Avg',     value: fmtCr(stock.avg_amt_22d) },
+          { label: 'Today Deliv', value: fmtCr(stock.deliv_value_cr) },
+        ]} />
+
+        {/* Row 4 — 52w · Returns */}
+        <DataRow items={[
+          { label: '52w',  value: fmt2(stock.w52_high) },
+          { label: 'Dist', value: fmtDistFromHigh(stock.pctBelow52wHigh), color: distColor(stock.pctBelow52wHigh) },
+          { label: '5D%',  value: fmtPct(stock.ret_5d),  color: pctColor(stock.ret_5d) },
+          { label: '22D%', value: fmtPct(stock.ret_22d), color: pctColor(stock.ret_22d) },
+          { label: '66D%', value: fmtPct(stock.ret_66d), color: pctColor(stock.ret_66d) },
+        ]} />
       </div>
 
-      {/* Thin rule */}
-      <div style={{ height: '1px', background: 'var(--border)', opacity: 0.6 }} />
-
-      {/* Row 2 — Price · Momentum */}
-      <DataRow items={[
-        { label: 'Close',  value: fmt2(stock.close) },
-        { label: 'D%',     value: fmtPct(stock.d_pct),   color: pctColor(stock.d_pct, 1.5) },
-        { label: 'EMA20',  value: fmt2(stock.ema_20) },
-        { label: 'RSI',    value: fmt2(stock.rsi_14),     color: rsiColor(stock.rsi_14) },
-        { label: 'RSS',    value: fmt2(stock.rss_value),  color: rssColor(stock.rss_value) },
-      ]} />
-
-      {/* Row 3 — Delivery */}
-      <DataRow items={[
-        { label: '5D Avg',     value: fmtCr(stock.avg_amt_5d) },
-        { label: '22D Avg',    value: fmtCr(stock.avg_amt_22d) },
-        { label: 'Today Deliv', value: fmtCr(stock.deliv_value_cr) },
-      ]} />
-
-      {/* Row 4 — 52w · Returns */}
-      <DataRow items={[
-        { label: '52w',   value: fmt2(stock.w52_high) },
-        { label: 'Dist',  value: fmtDistFromHigh(stock.pctBelow52wHigh), color: distColor(stock.pctBelow52wHigh) },
-        { label: '5D%',   value: fmtPct(stock.ret_5d),   color: pctColor(stock.ret_5d) },
-        { label: '22D%',  value: fmtPct(stock.ret_22d),  color: pctColor(stock.ret_22d) },
-        { label: '66D%',  value: fmtPct(stock.ret_66d),  color: pctColor(stock.ret_66d) },
-      ]} />
+      {/* Right — surge + date */}
+      <div style={{
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'flex-end',
+        gap: '4px',
+        paddingLeft: '8px',
+        borderLeft: '1px solid var(--border)',
+      }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '20px',
+          fontWeight: 700,
+          color: surgeColor(surge),
+          lineHeight: 1,
+        }}>
+          {fmtSurge(surge)}
+        </span>
+        {stock.trade_date && (
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            color: 'var(--text-faint)',
+          }}>
+            {stock.trade_date}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -255,7 +310,7 @@ function FlowCard({ stock }: { stock: ScanStock }) {
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
-      padding: '6px 0 8px',
+      padding: '4px 0 8px',
       fontFamily: 'var(--font-mono)',
       fontSize: '10px',
       fontWeight: 600,
@@ -293,8 +348,8 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
           <SectionLabel>
             <span style={{ color: 'var(--gold)', marginRight: '6px' }}>✦</span>
             VaNi Opportunity · {vani.length} stock{vani.length !== 1 ? 's' : ''}{' '}
-            <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}>
-              — surge &gt; 2× · price near EMA20 · avg 22D &gt; 2 Cr
+            <span style={{ fontWeight: 400 }}>
+              — surge &gt; 2× · near EMA20 · avg 22D &gt; 2 Cr
             </span>
           </SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
