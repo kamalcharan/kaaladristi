@@ -6,6 +6,7 @@ import { useScan, useAllScanCounts } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
+import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
 import type { ScanDefinition, ScanStock } from '@/types';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ function ScannerLanding() {
           </em>
         </h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          Seven condition-convergence presets, arranged against today's market structure.
+          Eight condition-convergence presets, arranged against today's market structure.
         </p>
       </div>
 
@@ -464,6 +465,186 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
   );
 }
 
+// ── Breakout Surge sort ───────────────────────────────────────
+
+type BSSortKey = 'rvol' | 'pct_from_breakout' | 'breakout_level' | 'close' | 'd_pct' | 'rsi_14' | 'ret_5d' | 'ret_22d' | 'symbol';
+
+const BS_SORT_OPTIONS: { key: BSSortKey; label: string }[] = [
+  { key: 'rvol',             label: 'RVOL' },
+  { key: 'pct_from_breakout', label: 'Brk%' },
+  { key: 'breakout_level',   label: 'Brk Lvl' },
+  { key: 'close',            label: 'Close' },
+  { key: 'd_pct',            label: 'D%' },
+  { key: 'rsi_14',           label: 'RSI' },
+  { key: 'ret_5d',           label: '5D%' },
+  { key: 'ret_22d',          label: '22D%' },
+  { key: 'symbol',           label: 'Symbol' },
+];
+
+function sortBSStocks(stocks: ScanStock[], key: BSSortKey, dir: SortDir): ScanStock[] {
+  return [...stocks].sort((a, b) => {
+    let va: string | number;
+    let vb: string | number;
+    switch (key) {
+      case 'symbol':           va = a.symbol;                      vb = b.symbol;                      break;
+      case 'rvol':             va = a.rvol ?? 0;                   vb = b.rvol ?? 0;                   break;
+      case 'pct_from_breakout': va = a.pct_from_breakout ?? 0;    vb = b.pct_from_breakout ?? 0;      break;
+      case 'breakout_level':   va = a.breakout_level ?? 0;        vb = b.breakout_level ?? 0;         break;
+      case 'close':            va = a.close;                       vb = b.close;                       break;
+      case 'd_pct':            va = a.d_pct ?? 0;                 vb = b.d_pct ?? 0;                  break;
+      case 'rsi_14':           va = a.rsi_14 ?? 0;                vb = b.rsi_14 ?? 0;                 break;
+      case 'ret_5d':           va = a.ret_5d ?? -999;             vb = b.ret_5d ?? -999;              break;
+      case 'ret_22d':          va = a.ret_22d ?? -999;            vb = b.ret_22d ?? -999;             break;
+      default:                 va = 0;                             vb = 0;
+    }
+    if (typeof va === 'string') {
+      return dir === 'asc' ? va.localeCompare(vb as string) : (vb as string).localeCompare(va);
+    }
+    return dir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number);
+  });
+}
+
+// ── Breakout Surge results ────────────────────────────────────
+
+function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
+  const { data: stocks = [], isLoading, error } = useScan('breakout_surge');
+  const [sortKey, setSortKey] = useState<BSSortKey>('rvol');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [vaniOnly, setVaniOnly] = useState(false);
+
+  const vaniCount = useMemo(() => stocks.filter((s) => s.vaniOpportunity).length, [stocks]);
+
+  const sorted = useMemo(() => {
+    let arr = vaniOnly ? stocks.filter((s) => s.vaniOpportunity) : stocks;
+    return sortBSStocks(arr, sortKey, sortDir);
+  }, [stocks, sortKey, sortDir, vaniOnly]);
+
+  const toggleSort = (key: BSSortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  return (
+    <>
+      {/* Sub-bar: sort + filters */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: '20px', gap: '12px', flexWrap: 'wrap',
+      }}>
+        {/* Left: VaNi toggle + label */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => setVaniOnly((f) => !f)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '6px 12px',
+              background: vaniOnly ? 'var(--gold)' : 'transparent',
+              border: '1px solid var(--border-gold)',
+              color: vaniOnly ? '#1a1410' : 'var(--gold)',
+              borderRadius: '100px',
+              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'var(--font-body)', transition: 'all 0.2s',
+              boxShadow: vaniOnly ? '0 0 16px rgba(212,168,75,0.3)' : undefined,
+            }}
+          >
+            <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
+            VaNi Opportunity
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: '10px',
+              padding: '1px 6px', borderRadius: '100px',
+              background: 'rgba(0,0,0,0.2)',
+              color: vaniOnly ? '#1a1410' : undefined,
+            }}>
+              {vaniCount}
+            </span>
+          </button>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '10px',
+            color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.07em',
+          }}>
+            NSE breakouts · RVOL &gt; 2×
+          </span>
+        </div>
+
+        {/* Right: sort strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '10px',
+            color: 'var(--text-faint)', textTransform: 'uppercase',
+            letterSpacing: '0.08em', whiteSpace: 'nowrap',
+          }}>
+            Sort
+          </span>
+          {BS_SORT_OPTIONS.map((opt) => {
+            const active = sortKey === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => toggleSort(opt.key)}
+                style={{
+                  padding: '4px 10px', borderRadius: '100px', border: 'none',
+                  background: active ? 'var(--indigo-bg)' : 'transparent',
+                  color: active ? 'var(--indigo)' : 'var(--text-muted)',
+                  fontSize: '11px', fontWeight: 500, cursor: 'pointer',
+                  fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+                  outline: active ? '1px solid var(--border-indigo)' : undefined,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {opt.label}{active && (sortDir === 'asc' ? ' ↑' : ' ↓')}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Results */}
+      {isLoading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
+          <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
+          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Running breakout surge scan…</span>
+        </div>
+      ) : error ? (
+        <Card rounded="xxl" className="py-12 text-center">
+          <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>
+        </Card>
+      ) : (
+        <BreakoutSurgeCards stocks={sorted} />
+      )}
+
+      {/* Action Island */}
+      <ActionIsland>
+        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0 }} />
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          Showing{' '}
+          <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
+            {sorted.length}
+          </em>
+          {' '}Breakout Surge setup{sorted.length !== 1 ? 's' : ''}
+        </span>
+        {vaniCount > 0 && (
+          <>
+            <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+            <button
+              onClick={() => setVaniOnly(true)}
+              style={{
+                fontSize: '13px', padding: '7px 16px',
+                background: 'var(--gold)', color: '#1a1410',
+                border: 'none', borderRadius: '100px',
+                fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {vaniCount} opportunit{vaniCount !== 1 ? 'ies' : 'y'}
+            </button>
+          </>
+        )}
+      </ActionIsland>
+    </>
+  );
+}
+
 // ── Screen 2: Results ──────────────────────────────────────────
 
 function ScannerResults({ presetId }: { presetId: string }) {
@@ -543,12 +724,22 @@ function ScannerResults({ presetId }: { presetId: string }) {
     </div>
   );
 
-  // Conviction Flow uses server-side RPC + its own table layout
+  // Conviction Flow — custom card layout
   if (presetId === 'conviction_flow') {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
         <ConvictionFlowResults preset={preset} />
+      </div>
+    );
+  }
+
+  // Breakout Surge — custom card layout
+  if (presetId === 'breakout_surge') {
+    return (
+      <div style={{ paddingBottom: '100px' }}>
+        {header}
+        <BreakoutSurgeResults preset={preset} />
       </div>
     );
   }

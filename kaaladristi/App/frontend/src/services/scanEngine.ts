@@ -70,6 +70,13 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     tooltip: 'delivery_surge_x = avg_amt_5d / avg_amt_22d. Surge > 1.5× means recent delivery is accelerating vs baseline. VaNi gate: surge > 2×, price near EMA20, avg_amt_22d > 2 Cr.',
     limit: 50,
   },
+  {
+    id: 'breakout_surge',
+    name: 'Breakout Surge',
+    description: 'NSE stocks breaking above 20-day highs with RVOL > 2× — fresh momentum with institutional volume',
+    tooltip: 'Close > 20-day high + RVOL > 2 + Close > 100. VaNi gate: RVOL > 5, 0–5% above breakout level, RSI < 75, price within 15% of EMA20.',
+    limit: 50,
+  },
 ];
 
 // ── Data Loading ───────────────────────────────────────────────
@@ -721,6 +728,63 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     .slice(0, 50);
 }
 
+/** Scan 8: Breakout Surge */
+function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
+  const results: ScanStock[] = [];
+
+  for (const [id] of bundle.latestEod) {
+    const eod = bundle.latestEod.get(id);
+    const sym = bundle.symbols.get(id);
+    if (!eod || !sym) continue;
+
+    // Universe: NSE only, ema_20 required
+    if (sym.exchange !== 'NSE') continue;
+    if (!eod.ema_20 || eod.ema_20 <= 0) continue;
+
+    const history = bundle.eodHistory.get(id) ?? [];
+    if (history.length < 21) continue; // need today + 20 prior bars
+
+    // breakout_level = MAX(close) over prior 20 bars (history[1..20], skip today at [0])
+    let breakout_level = 0;
+    for (let i = 1; i <= 20; i++) {
+      if (history[i].close > breakout_level) breakout_level = history[i].close;
+    }
+
+    if (eod.close <= breakout_level) continue;
+    if (eod.close <= 100) continue;
+    if ((eod.rvol ?? 0) <= 2) continue;
+
+    const pct_from_breakout = ((eod.close - breakout_level) / breakout_level) * 100;
+    const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
+    const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
+    const ret_22d = history.length > 22 ? ((eod.close - history[22].close) / history[22].close) * 100 : null;
+
+    const stock = buildScanStock(id, bundle, 'breakout_surge');
+    if (!stock) continue;
+
+    const is_vani =
+      (eod.rvol ?? 0) > 5 &&
+      pct_from_breakout >= 0 &&
+      pct_from_breakout <= 5 &&
+      (eod.rsi_14 ?? 100) < 75 &&
+      d_pct < 15;
+
+    results.push({
+      ...stock,
+      vaniOpportunity: is_vani,
+      d_pct:            Math.round(d_pct            * 100) / 100,
+      breakout_level:   Math.round(breakout_level   * 100) / 100,
+      pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
+      ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
+      ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
+    });
+  }
+
+  return results
+    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
+    .slice(0, 50);
+}
+
 // ── Public API ─────────────────────────────────────────────────
 
 const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
@@ -731,6 +795,7 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   quiet_accumulation: scanQuietAccumulation,
   distribution_warning: scanDistributionWarning,
   conviction_flow: scanConvictionFlow,
+  breakout_surge: scanBreakoutSurge,
 };
 
 /**
@@ -789,7 +854,7 @@ export interface ScanCountsResult {
   latestDate: string | null;
 }
 
-/** Return result counts for all 7 scans — uses shared cached data */
+/** Return result counts for all 8 scans — uses shared cached data */
 export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combined'): Promise<ScanCountsResult> {
   const bundle = await loadScanData();
   const counts: Record<string, number> = {};

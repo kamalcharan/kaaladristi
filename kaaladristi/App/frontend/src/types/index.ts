@@ -441,6 +441,9 @@ export interface ScanStock {
   ret_5d?: number | null;
   ret_22d?: number | null;
   ret_66d?: number | null;
+  // Breakout Surge computed fields (null for all other scans)
+  breakout_level?: number | null;
+  pct_from_breakout?: number | null;
 }
 
 export interface ScanDefinition {
