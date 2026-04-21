@@ -66,38 +66,52 @@ function distColor(n: number | null | undefined): string {
   return 'var(--bear)';
 }
 
-// ── Field cell ────────────────────────────────────────────────────────────────
+// ── Inline row ────────────────────────────────────────────────────────────────
 
-function Field({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <span style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: '9px',
-        fontWeight: 600,
-        textTransform: 'uppercase' as const,
-        letterSpacing: '0.07em',
-        color: 'var(--text-faint)',
-        whiteSpace: 'nowrap' as const,
-      }}>
-        {label}
-      </span>
-      <span style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: '13px',
-        fontWeight: 500,
-        color: color ?? 'var(--text-primary)',
-        lineHeight: 1,
-        whiteSpace: 'nowrap' as const,
-      }}>
-        {value}
-      </span>
-    </div>
-  );
+interface DataItem {
+  label: string;
+  value: string;
+  color?: string;
 }
 
-function HR() {
-  return <div style={{ height: '1px', background: 'var(--border)', margin: '12px 0' }} />;
+const DOT: React.CSSProperties = {
+  color: 'var(--border-strong)',
+  fontSize: '10px',
+  padding: '0 7px',
+  userSelect: 'none' as const,
+  flexShrink: 0,
+};
+
+function DataRow({ items }: { items: DataItem[] }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' as const, rowGap: '4px' }}>
+      {items.map((item, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <span style={DOT}>·</span>}
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: '4px', flexShrink: 0 }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              fontWeight: 600,
+              textTransform: 'uppercase' as const,
+              letterSpacing: '0.07em',
+              color: 'var(--text-faint)',
+            }}>
+              {item.label}
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: item.color ?? 'var(--text-primary)',
+            }}>
+              {item.value}
+            </span>
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
 }
 
 // ── Individual card ───────────────────────────────────────────────────────────
@@ -105,134 +119,97 @@ function HR() {
 function FlowCard({ stock }: { stock: ScanStock }) {
   const isVani = stock.vaniOpportunity;
   const surge  = stock.delivery_surge_x ?? null;
-  const dist52 = stock.pctBelow52wHigh;
 
   return (
     <div style={{
       background: isVani
-        ? 'linear-gradient(150deg, rgba(212,168,75,0.08) 0%, var(--card) 65%)'
+        ? 'linear-gradient(135deg, rgba(212,168,75,0.07) 0%, var(--card) 60%)'
         : 'var(--card)',
       border: `1px solid ${isVani ? 'var(--border-gold)' : 'var(--border)'}`,
-      borderRadius: '16px',
-      padding: '18px 20px',
-      position: 'relative',
-      overflow: 'hidden',
+      borderLeft: isVani ? '3px solid var(--gold)' : '3px solid transparent',
+      borderRadius: '12px',
+      padding: '11px 16px',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      gap: '7px',
     }}>
 
-      {/* Gold top bar */}
-      {isVani && (
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
-          height: '2px',
-          background: 'linear-gradient(90deg, var(--gold) 0%, transparent 100%)',
-        }} />
-      )}
-
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '2px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' as const }}>
+      {/* Row 1 — Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        {/* Left: symbol + badges + company */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' as const, minWidth: 0 }}>
           {isVani && (
-            <span style={{ color: 'var(--gold)', fontSize: '11px', lineHeight: 1 }}>✦</span>
+            <span style={{ color: 'var(--gold)', fontSize: '10px', lineHeight: 1, flexShrink: 0 }}>✦</span>
           )}
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: '16px',
+            fontSize: '14px',
             fontWeight: 700,
             color: isVani ? 'var(--gold)' : 'var(--text-primary)',
             letterSpacing: '-0.01em',
+            flexShrink: 0,
           }}>
             {stock.symbol}
           </span>
           {stock.exchange && (
             <span style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
+              fontSize: '8px',
               color: 'var(--text-faint)',
-              padding: '2px 5px',
+              padding: '1px 4px',
               border: '1px solid var(--border)',
-              borderRadius: '4px',
+              borderRadius: '3px',
+              flexShrink: 0,
             }}>
               {stock.exchange}
             </span>
           )}
           {isVani && (
             <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: '4px',
-              padding: '2px 9px',
+              display: 'inline-flex', alignItems: 'center', gap: '3px',
+              padding: '1px 7px',
               background: 'var(--gold-bg)',
               border: '1px solid var(--border-gold)',
               borderRadius: '100px',
               fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
+              fontSize: '8px',
               fontWeight: 700,
               letterSpacing: '0.06em',
               color: 'var(--gold)',
               textTransform: 'uppercase' as const,
+              flexShrink: 0,
             }}>
               VaNi Opportunity
             </span>
           )}
+          {stock.company_name && (
+            <span style={{
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap' as const,
+              minWidth: 0,
+            }}>
+              {stock.company_name}
+            </span>
+          )}
         </div>
 
-        {stock.trade_date && (
+        {/* Right: date + surge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+          {stock.trade_date && (
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              color: 'var(--text-faint)',
+            }}>
+              {stock.trade_date}
+            </span>
+          )}
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: '10px',
-            color: 'var(--text-faint)',
-            flexShrink: 0,
-            paddingTop: '2px',
-          }}>
-            {stock.trade_date}
-          </span>
-        )}
-      </div>
-
-      {stock.company_name && (
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: 1.3 }}>
-          {stock.company_name}
-        </div>
-      )}
-
-      <HR />
-
-      {/* ── Row 1: Price · Momentum ─────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '2px' }}>
-        <Field label="Close"  value={fmt2(stock.close)} />
-        <Field label="D%"     value={fmtPct(stock.d_pct)}   color={pctColor(stock.d_pct, 1.5)} />
-        <Field label="20 EMA" value={fmt2(stock.ema_20)} />
-        <Field label="RSI"    value={fmt2(stock.rsi_14)}     color={rsiColor(stock.rsi_14)} />
-        <Field label="RSS"    value={fmt2(stock.rss_value)}  color={rssColor(stock.rss_value)} />
-      </div>
-
-      <HR />
-
-      {/* ── Row 2: Delivery ────────────────────────────────── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr 1fr auto',
-        gap: '16px',
-        alignItems: 'flex-end',
-        marginBottom: '2px',
-      }}>
-        <Field label="5D Avg Amt"     value={fmtCr(stock.avg_amt_5d)} />
-        <Field label="22D Avg Amt"    value={fmtCr(stock.avg_amt_22d)} />
-        <Field label="Today Delivery" value={fmtCr(stock.deliv_value_cr)} />
-
-        {/* Delivery Surge hero */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '9px',
-            fontWeight: 600,
-            textTransform: 'uppercase' as const,
-            letterSpacing: '0.07em',
-            color: 'var(--text-faint)',
-          }}>
-            Delivery Surge
-          </span>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '24px',
+            fontSize: '18px',
             fontWeight: 700,
             color: surgeColor(surge),
             lineHeight: 1,
@@ -242,16 +219,33 @@ function FlowCard({ stock }: { stock: ScanStock }) {
         </div>
       </div>
 
-      <HR />
+      {/* Thin rule */}
+      <div style={{ height: '1px', background: 'var(--border)', opacity: 0.6 }} />
 
-      {/* ── Row 3: 52w Levels · Returns ─────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
-        <Field label="52w High"  value={fmt2(stock.w52_high)} />
-        <Field label="Dist 52w%" value={fmtDistFromHigh(dist52)}   color={distColor(dist52)} />
-        <Field label="5D%"       value={fmtPct(stock.ret_5d)}      color={pctColor(stock.ret_5d)} />
-        <Field label="22D%"      value={fmtPct(stock.ret_22d)}     color={pctColor(stock.ret_22d)} />
-        <Field label="66D%"      value={fmtPct(stock.ret_66d)}     color={pctColor(stock.ret_66d)} />
-      </div>
+      {/* Row 2 — Price · Momentum */}
+      <DataRow items={[
+        { label: 'Close',  value: fmt2(stock.close) },
+        { label: 'D%',     value: fmtPct(stock.d_pct),   color: pctColor(stock.d_pct, 1.5) },
+        { label: 'EMA20',  value: fmt2(stock.ema_20) },
+        { label: 'RSI',    value: fmt2(stock.rsi_14),     color: rsiColor(stock.rsi_14) },
+        { label: 'RSS',    value: fmt2(stock.rss_value),  color: rssColor(stock.rss_value) },
+      ]} />
+
+      {/* Row 3 — Delivery */}
+      <DataRow items={[
+        { label: '5D Avg',     value: fmtCr(stock.avg_amt_5d) },
+        { label: '22D Avg',    value: fmtCr(stock.avg_amt_22d) },
+        { label: 'Today Deliv', value: fmtCr(stock.deliv_value_cr) },
+      ]} />
+
+      {/* Row 4 — 52w · Returns */}
+      <DataRow items={[
+        { label: '52w',   value: fmt2(stock.w52_high) },
+        { label: 'Dist',  value: fmtDistFromHigh(stock.pctBelow52wHigh), color: distColor(stock.pctBelow52wHigh) },
+        { label: '5D%',   value: fmtPct(stock.ret_5d),   color: pctColor(stock.ret_5d) },
+        { label: '22D%',  value: fmtPct(stock.ret_22d),  color: pctColor(stock.ret_22d) },
+        { label: '66D%',  value: fmtPct(stock.ret_66d),  color: pctColor(stock.ret_66d) },
+      ]} />
     </div>
   );
 }
@@ -261,7 +255,7 @@ function FlowCard({ stock }: { stock: ScanStock }) {
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
-      padding: '6px 0 10px',
+      padding: '6px 0 8px',
       fontFamily: 'var(--font-mono)',
       fontSize: '10px',
       fontWeight: 600,
@@ -285,7 +279,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
       <div style={{
         padding: '48px 24px', textAlign: 'center',
         background: 'var(--card)', border: '1px solid var(--border)',
-        borderRadius: '16px', color: 'var(--text-muted)', fontSize: '14px',
+        borderRadius: '12px', color: 'var(--text-muted)', fontSize: '14px',
       }}>
         No stocks match Conviction Flow criteria today.
       </div>
@@ -303,7 +297,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
               — surge &gt; 2× · price near EMA20 · avg 22D &gt; 2 Cr
             </span>
           </SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '28px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
             {vani.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
           </div>
         </>
@@ -314,7 +308,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
           <SectionLabel>
             All Results · {stocks.length} stock{stocks.length !== 1 ? 's' : ''} · sorted by Surge ↓
           </SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {rest.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
           </div>
         </>
