@@ -351,7 +351,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
           <SectionLabel>
             All Results · {stocks.length} stock{stocks.length !== 1 ? 's' : ''} · sorted by Surge ↓
           </SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
             {rest.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
           </div>
         </>
