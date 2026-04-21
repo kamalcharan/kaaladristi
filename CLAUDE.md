@@ -12,7 +12,8 @@ kaaladristi/
 │   ├── backend/           # Python — data pipeline + FastAPI sidecar
 │   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger
 │   │   ├── pipeline/      # Downloaders (NSE/BSE bhav, FII/DII), processors, utils
-│   │   ├── pipeline_api.py  # FastAPI sidecar — port 8101
+│   │   ├── pipeline2_api.py # FastAPI sidecar — port 8101 (CURRENT — run this)
+│   │   ├── pipeline_api.py  # OLD FastAPI sidecar — DO NOT RUN (superseded by pipeline2_api.py)
 │   │   ├── breeze_downloader.py  # Unified EOD downloader (ICICI Breeze)
 │   │   ├── daily_pipeline.py     # Orchestrator for daily market data sync
 │   │   └── requirements.txt
@@ -142,15 +143,19 @@ npm run dev
 
 - **Language**: Python 3.11+
 - **Data sources**: NSE bhav copy, BSE bhav copy, ICICI Breeze API, Yahoo Finance (fallback), NSE FII/DII
-- **Pipeline API**: `uvicorn pipeline_api:app --host 0.0.0.0 --port 8101`
-- **Health endpoint**: `GET /api/pipeline/health`
+- **Pipeline API**: `uvicorn pipeline2_api:app --host 0.0.0.0 --port 8101` ← **always run this**
+- **Health endpoint**: `GET /api/pipeline2/health`
+
+> **⚠ Do not run `pipeline_api.py`** — it is the old v1 file, superseded by `pipeline2_api.py`.
+> The frontend calls `/api/pipeline2/` routes which only exist in `pipeline2_api.py`.
+> If the backend crashes and is restarted, make sure to start `pipeline2_api.py`, not `pipeline_api.py`.
 
 ### Running locally
 ```bash
 cd App/backend
 pip install -r requirements.txt
 # Set DB_PRIMARY + BREEZE_* in App/.env
-uvicorn pipeline_api:app --port 8101
+uvicorn pipeline2_api:app --port 8101
 ```
 
 ---
@@ -199,7 +204,7 @@ non-predictive insights explaining *why* risk is elevated or low in astronomical
 |---|---|---|
 | Skill registry | `App/backend/lib/ai_prompts.py` | `Skill(system, max_tokens)` named tuples per skill |
 | AI client | `App/backend/lib/ai_client.py` | Vendor-agnostic HTTP client (Anthropic / OpenAI) |
-| API endpoints | `App/backend/pipeline_api.py` | `GET /api/ai/*` — fetch + cache per-date insights |
+| API endpoints | `App/backend/pipeline2_api.py` | `GET /api/ai/*` — fetch + cache per-date insights |
 | UI component | `src/components/domain/VaNiInsight.tsx` | Reusable panel shown below any data card |
 
 ### Current Skills
@@ -221,7 +226,7 @@ non-predictive insights explaining *why* risk is elevated or low in astronomical
 
 ### Adding a New VaNi Skill
 1. Add `_SKILL_SYSTEM` constant + register in `SKILLS` dict in `lib/ai_prompts.py`
-2. Add `GET /api/ai/<skill-name>` endpoint in `pipeline_api.py`
+2. Add `GET /api/ai/<skill-name>` endpoint in `pipeline2_api.py`
 3. Add `use<SkillName>Insight()` React Query hook in `hooks/useDashboardExtras.ts`
 4. Drop `<VaNiInsight insight={...} isLoading={...} />` below any card
 
