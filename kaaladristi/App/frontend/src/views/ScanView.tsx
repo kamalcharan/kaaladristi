@@ -5,7 +5,7 @@ import { Card } from '@/components/ui';
 import { useScan, useAllScanCounts } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
-import ConvictionFlowTable from '@/components/domain/ConvictionFlowTable';
+import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
 import type { ScanDefinition } from '@/types';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -284,7 +284,7 @@ function ScannerLanding() {
 
 function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
   const { data: stocks = [], isLoading, error } = useScan('conviction_flow');
-  const vaniCount = useMemo(() => stocks.filter((s) => s.is_vani_opportunity).length, [stocks]);
+  const vaniCount = useMemo(() => stocks.filter((s) => s.vaniOpportunity).length, [stocks]);
 
   return (
     <>
@@ -298,7 +298,7 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
             fontFamily: 'var(--font-mono)', fontSize: '11px',
             color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.07em',
           }}>
-            Server-side · delivery value surge · all exchanges
+            Delivery value surge · all exchanges
           </span>
         </div>
         {vaniCount > 0 && (
@@ -335,7 +335,7 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
           <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>
         </Card>
       ) : (
-        <ConvictionFlowTable stocks={stocks} />
+        <ConvictionFlowCards stocks={stocks} />
       )}
 
       {/* Action Island */}

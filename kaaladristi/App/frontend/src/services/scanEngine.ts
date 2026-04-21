@@ -157,8 +157,8 @@ async function loadScanData(): Promise<ScanDataBundle> {
     return _cachedBundle.data;
   }
 
-  // 23 dates: 22 for conviction_flow rolling average + 1 buffer
-  const dates = await fetchRecentDates(23);
+  // 67 dates: 66 for conviction_flow 66D% return + 1 buffer
+  const dates = await fetchRecentDates(67);
   if (dates.length === 0) {
     const empty: ScanDataBundle = {
       industries: [],
@@ -385,6 +385,7 @@ function buildScanStock(
     company_name: sym.company_name,
     industry: sym.industry,
     exchange: sym.exchange ?? null,
+    trade_date: eod.trade_date,
     close: eod.close,
     pct_chng: eod.pct_chng,
     rsi_14: eod.rsi_14,
@@ -696,6 +697,11 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
       eod.close > 100 &&
       avg_amt_22d > 2;
 
+    // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
+    const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
+    const ret_22d = history.length > 22 ? ((eod.close - history[22].close) / history[22].close) * 100 : null;
+    const ret_66d = history.length > 66 ? ((eod.close - history[66].close) / history[66].close) * 100 : null;
+
     results.push({
       ...stock,
       vaniOpportunity: is_vani,
@@ -704,6 +710,9 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
       deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
       delivery_surge_x: Math.round(delivery_surge_x * 10000) / 10000,
       d_pct:            Math.round(d_pct            * 100) / 100,
+      ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
+      ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
+      ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
     });
   }
 
