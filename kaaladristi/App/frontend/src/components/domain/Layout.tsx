@@ -19,7 +19,9 @@ export default function Layout() {
     return !v;
   });
 
-  const isFullWidth = location.pathname.startsWith('/chart/') || location.pathname.startsWith('/pulse/');
+  const isFullWidth = location.pathname.startsWith('/chart/')
+    || location.pathname.startsWith('/pulse/')
+    || location.pathname.startsWith('/scanner');
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>

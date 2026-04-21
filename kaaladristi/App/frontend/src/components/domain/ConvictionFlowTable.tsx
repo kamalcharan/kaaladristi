@@ -340,7 +340,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
               — surge &gt; 2× · near EMA20 · avg 22D &gt; 2 Cr
             </span>
           </SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginBottom: '24px' }}>
             {vani.map((s) => <FlowCard key={s.equity_id} stock={s} />)}
           </div>
         </>
