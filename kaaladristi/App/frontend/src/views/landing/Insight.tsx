@@ -1,5 +1,5 @@
 import { C, SERIF, MONO, SANS } from './tokens';
-import { FadeUp, SectionHeader, Hair } from './shared';
+import { FadeUp, SectionHeader } from './shared';
 
 const CARDS = [
   { n:'01', t:'Same pattern, different sky.', b:"The same chart pattern behaves differently on an Amāvāsyā versus a Śukla Pakṣa. Modern technicals have no framework for this. Panchāṅgam does." },

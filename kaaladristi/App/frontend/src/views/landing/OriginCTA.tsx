@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { C, SERIF, MONO, SANS } from './tokens';
-import { FadeUp } from './shared';
-import { LogoMark } from './shared';
+import { FadeUp, LogoMark } from './shared';
 
 export function OriginCTA() {
   const [email, setEmail] = useState('');
