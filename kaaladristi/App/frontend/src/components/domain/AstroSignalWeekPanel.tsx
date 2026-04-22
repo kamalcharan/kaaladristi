@@ -296,7 +296,7 @@ export default function AstroSignalWeekPanel({ date }: { date: string }) {
   const { data: transits = [] } = useQuery({
     queryKey: ['astro_transits_db', date],
     queryFn: async (): Promise<TransitEvent[]> => {
-      const { data, error } = await from('km_astro_calendar_2026')
+      const { data, error } = await from('km_astro_calendar')
         .select('display_name,start_date,end_date,market_impact')
         .lte('start_date', weekEnd)
         .order('start_date', { ascending: true })

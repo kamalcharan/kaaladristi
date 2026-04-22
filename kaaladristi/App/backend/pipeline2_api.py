@@ -752,7 +752,7 @@ _ASTRO_SIGNAL_SQL = """
             '[]'
         ) AS active_events
     FROM km_astro_daily_signal s
-    LEFT JOIN km_astro_calendar_2026 e ON e.id = ANY(s.active_event_ids)
+    LEFT JOIN km_astro_calendar e ON e.id = ANY(s.active_event_ids)
     WHERE s.trade_date = %s
     GROUP BY s.trade_date
 """
@@ -822,7 +822,7 @@ def astro_transits(from_date: str = None, to_date: str = None):
         return _astro_cache[cache_key]
     sql = """
         SELECT id, display_name, start_date, end_date, market_impact, inference
-        FROM km_astro_calendar_2026
+        FROM km_astro_calendar
         WHERE is_transit = true
           AND start_date <= %s
           AND (end_date IS NULL OR end_date >= %s)

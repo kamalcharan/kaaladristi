@@ -548,7 +548,7 @@ export interface AstroSignal {
   sector_signals: Record<string, unknown> | null;
 }
 
-// ── Astro Transit (from km_astro_calendar_2026 where is_transit = true) ──
+// ── Astro Transit (from km_astro_calendar where is_transit = true) ──
 
 export interface AstroTransit {
   id: number;

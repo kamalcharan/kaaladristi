@@ -38,14 +38,14 @@ function fmtShort(iso: string): string {
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
 async function fetchActiveEvents(today: string): Promise<AstroEvent[]> {
-  const { data, error } = await from('km_astro_calendar_2026')
+  const { data, error } = await from('km_astro_calendar')
     .select('display_name,start_date,end_date,market_impact,inference')
     .lte('start_date', today)
     .gte('end_date', today)
     .order('start_date', { ascending: true })
     .execute();
 
-  if (error) throw new Error(`[km_astro_calendar_2026] ${error.message}`);
+  if (error) throw new Error(`[km_astro_calendar] ${error.message}`);
   return (data ?? []) as AstroEvent[];
 }
 

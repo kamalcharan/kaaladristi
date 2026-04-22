@@ -36,13 +36,13 @@ export async function fetchMonthEvents(year: number, month: number): Promise<Ast
   const firstDay = toIso(year, month, 1);
   const lastDay  = toIso(year, month, getDaysInMonth(year, month));
 
-  const { data, error } = await from('km_astro_calendar_2026')
+  const { data, error } = await from('km_astro_calendar')
     .select('*')
     .lte('start_date', lastDay)
     .order('start_date', { ascending: true })
     .execute();
 
-  if (error) throw new Error(`[km_astro_calendar_2026] ${error.message}`);
+  if (error) throw new Error(`[km_astro_calendar] ${error.message}`);
 
   const rows = (data ?? []) as AstroCalendarEvent[];
   return rows.filter(r =>
@@ -70,7 +70,7 @@ export async function fetchMonthSignals(year: number, month: number): Promise<As
 
 /** Key events for the month — turning dates and strong signals only. */
 export async function fetchKeyEvents(year: number, month: number): Promise<AstroCalendarEvent[]> {
-  const { data, error } = await from('km_astro_calendar_2026')
+  const { data, error } = await from('km_astro_calendar')
     .select('*')
     .eq('month', month)
     .eq('year', year)
@@ -78,6 +78,6 @@ export async function fetchKeyEvents(year: number, month: number): Promise<Astro
     .order('start_date', { ascending: true })
     .execute();
 
-  if (error) throw new Error(`[km_astro_calendar_2026] ${error.message}`);
+  if (error) throw new Error(`[km_astro_calendar] ${error.message}`);
   return (data ?? []) as AstroCalendarEvent[];
 }
