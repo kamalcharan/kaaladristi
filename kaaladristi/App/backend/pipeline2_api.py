@@ -838,6 +838,90 @@ def astro_transits(from_date: str = None, to_date: str = None):
     return result
 
 
+# ── Astro Calendar CRUD (admin only) ─────────────────────────────────────
+
+class AstroCalendarUpsert(BaseModel):
+    display_name: str
+    start_date: str
+    end_date: Optional[str] = None
+    market_impact: str
+    is_transit: bool = False
+    narrative: Optional[str] = None
+    notes: Optional[str] = None
+    inference: Optional[str] = None
+
+def _invalidate_astro_cache():
+    _astro_cache.clear()
+
+@app.post('/api/astro/calendar')
+def astro_calendar_create(req: AstroCalendarUpsert):
+    from datetime import date as _date
+    sd = req.start_date
+    month = int(sd[5:7])
+    year  = int(sd[:4])
+    sql = """
+        INSERT INTO km_astro_calendar
+          (display_name, start_date, end_date, market_impact, is_transit,
+           narrative, notes, inference, month, year, day_of_week)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                TO_CHAR(%s::date, 'Day'))
+        RETURNING id
+    """
+    try:
+        rows = _db_query(sql, (
+            req.display_name, req.start_date, req.end_date,
+            req.market_impact, req.is_transit,
+            req.narrative, req.notes, req.inference,
+            month, year, req.start_date,
+        ))
+        _invalidate_astro_cache()
+        return {'id': rows[0]['id']}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch('/api/astro/calendar/{event_id}')
+def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
+    sd = req.start_date
+    month = int(sd[5:7])
+    year  = int(sd[:4])
+    sql = """
+        UPDATE km_astro_calendar SET
+          display_name  = %s,
+          start_date    = %s,
+          end_date      = %s,
+          market_impact = %s,
+          is_transit    = %s,
+          narrative     = %s,
+          notes         = %s,
+          inference     = %s,
+          month         = %s,
+          year          = %s,
+          day_of_week   = TO_CHAR(%s::date, 'Day')
+        WHERE id = %s
+    """
+    try:
+        _db_query(sql, (
+            req.display_name, req.start_date, req.end_date,
+            req.market_impact, req.is_transit,
+            req.narrative, req.notes, req.inference,
+            month, year, req.start_date,
+            event_id,
+        ))
+        _invalidate_astro_cache()
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete('/api/astro/calendar/{event_id}')
+def astro_calendar_delete(event_id: int):
+    try:
+        _db_query('DELETE FROM km_astro_calendar WHERE id = %s', (event_id,))
+        _invalidate_astro_cache()
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── VaNi AI Endpoints ─────────────────────────────────────────────────────
 
 _insight_cache: dict[str, object] = {}

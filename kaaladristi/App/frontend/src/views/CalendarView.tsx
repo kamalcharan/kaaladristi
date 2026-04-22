@@ -1,10 +1,14 @@
 import { useState, useMemo, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, LayoutGrid, AlignLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorBoundary } from '@/components/ui';
-import { fetchMonthEvents, fetchMonthSignals, fetchKeyEvents } from '@/services/astroCalendar';
-import type { AstroCalendarEvent, AstroDailySignal } from '@/services/astroCalendar';
+import { useAuthStore } from '@/stores/authStore';
+import {
+  fetchMonthEvents, fetchMonthSignals, fetchKeyEvents,
+  createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
+} from '@/services/astroCalendar';
+import type { AstroCalendarEvent, AstroDailySignal, AstroCalendarPayload } from '@/services/astroCalendar';
 import { ASTRO_SIGNAL_CLASSES, ASTRO_SIGNAL_LABELS, impactToColor } from '@/constants/astroSignals';
 import {
   MONTH_ABBR, MONTH_FULL, DAY_ABBR,
@@ -554,16 +558,420 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
   );
 }
 
+// ── Admin shared styles ───────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: 'rgba(0,0,0,0.3)',
+  border: '1px solid var(--border)',
+  color: 'var(--text-primary)',
+  padding: '8px 10px',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 12.5,
+  borderRadius: 6,
+  outline: 'none',
+};
+
+const btnStyle: React.CSSProperties = {
+  padding: '7px 14px',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase' as const,
+  border: '1px solid var(--border)',
+  color: 'var(--text-secondary)',
+  background: 'transparent',
+  cursor: 'pointer',
+  borderRadius: 6,
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9.5,
+  letterSpacing: '0.18em',
+  color: 'var(--text-faint)',
+  textTransform: 'uppercase' as const,
+  marginBottom: 5,
+};
+
+const IMPACT_OPTIONS = [
+  'strong_bullish', 'bullish', 'minor_bullish', 'neutral',
+  'turning', 'minor_bearish', 'bearish', 'strong_bearish',
+];
+
+function impactColor(impact: string): string {
+  if (impact === 'strong_bullish') return 'var(--bull)';
+  if (impact === 'bullish')        return 'var(--bull)';
+  if (impact === 'minor_bullish')  return 'var(--bull)';
+  if (impact === 'turning')        return 'var(--gold)';
+  if (impact === 'strong_bearish') return 'var(--bear)';
+  if (impact === 'bearish')        return 'var(--bear)';
+  if (impact === 'minor_bearish')  return 'var(--caution)';
+  return 'var(--text-faint)';
+}
+
+// ── Confirm dialog ────────────────────────────────────────────────────────────
+
+function ConfirmDialog({ message, onConfirm, onCancel }: {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(7,7,12,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={onCancel}
+    >
+      <div
+        style={{ maxWidth: 400, width: '100%', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <p style={{ color: 'var(--text-primary)', fontSize: 14, marginBottom: 20 }}>{message}</p>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={btnStyle}>Cancel</button>
+          <button onClick={onConfirm} style={{ ...btnStyle, background: 'var(--bear)', color: '#fff', borderColor: 'var(--bear)' }}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Item modal (create / edit) ────────────────────────────────────────────────
+
+function ItemModal({ item, onSave, onCancel }: {
+  item: AstroCalendarEvent | null;
+  onSave: (p: AstroCalendarPayload) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const blank: AstroCalendarPayload = {
+    display_name: '', start_date: todayIso(), end_date: null,
+    market_impact: 'neutral', is_transit: false,
+    narrative: '', notes: '', inference: '',
+  };
+  const [form, setForm] = useState<AstroCalendarPayload>(
+    item
+      ? { display_name: item.display_name, start_date: item.start_date, end_date: item.end_date,
+          market_impact: item.market_impact, is_transit: item.is_transit,
+          narrative: item.narrative ?? '', notes: item.notes ?? '', inference: item.inference ?? '' }
+      : blank
+  );
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const set = <K extends keyof AstroCalendarPayload>(k: K, v: AstroCalendarPayload[K]) =>
+    setForm(f => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    if (!form.display_name.trim()) { setErr('Name is required'); return; }
+    if (!form.start_date)          { setErr('Start date is required'); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      await onSave(form);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Save failed');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(7,7,12,0.85)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={onCancel}
+    >
+      <div
+        style={{ maxWidth: 560, width: '100%', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--gold)', textTransform: 'uppercase' }}>
+            {item ? 'Edit Event' : 'New Event'}
+          </span>
+          <button onClick={onCancel} style={{ ...btnStyle, border: 'none', padding: '4px 8px' }}>× Close</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 22px', display: 'grid', gap: 14 }}>
+          {err && <div style={{ color: 'var(--bear)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>{err}</div>}
+
+          <div>
+            <label style={labelStyle}>Name</label>
+            <input style={inputStyle} value={form.display_name} onChange={e => set('display_name', e.target.value)} placeholder="e.g. Jupiter in Punarvasu" />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div>
+              <label style={labelStyle}>Start Date</label>
+              <input type="date" style={inputStyle} value={form.start_date} onChange={e => set('start_date', e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>End Date (optional)</label>
+              <input type="date" style={inputStyle} value={form.end_date ?? ''} onChange={e => set('end_date', e.target.value || null)} />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div>
+              <label style={labelStyle}>Market Impact</label>
+              <select style={inputStyle} value={form.market_impact} onChange={e => set('market_impact', e.target.value)}>
+                {IMPACT_OPTIONS.map(o => (
+                  <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Type</label>
+              <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                {([false, true] as const).map(v => (
+                  <button
+                    key={String(v)}
+                    onClick={() => set('is_transit', v)}
+                    style={{
+                      flex: 1, padding: '8px', fontFamily: 'var(--font-mono)', fontSize: 10,
+                      letterSpacing: '0.12em', textTransform: 'uppercase',
+                      background: form.is_transit === v ? 'rgba(212,168,75,0.12)' : 'transparent',
+                      border: '1px solid var(--border)',
+                      color: form.is_transit === v ? 'var(--gold)' : 'var(--text-faint)',
+                      cursor: 'pointer', borderRadius: 6,
+                    }}
+                  >
+                    {v ? 'Transit' : 'Event'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Inference (short)</label>
+            <input style={inputStyle} value={form.inference ?? ''} onChange={e => set('inference', e.target.value)} placeholder="One-line short label" />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Narrative · VaNi</label>
+            <textarea
+              rows={3}
+              style={{ ...inputStyle, resize: 'vertical' }}
+              value={form.narrative ?? ''}
+              onChange={e => set('narrative', e.target.value)}
+              placeholder="Full interpretation shown in inspector panel"
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+            <button onClick={onCancel} style={btnStyle}>Cancel</button>
+            <button
+              onClick={save}
+              disabled={saving}
+              style={{ ...btnStyle, background: 'var(--gold)', color: '#1a1410', fontWeight: 600, borderColor: 'var(--gold)', opacity: saving ? 0.7 : 1 }}
+            >
+              {saving ? 'Saving…' : item ? 'Save Changes' : 'Create'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Admin section ─────────────────────────────────────────────────────────────
+
+function AdminSection({ events, year, month, onRefresh }: {
+  events: AstroCalendarEvent[];
+  year: number;
+  month: number;
+  onRefresh: () => void;
+}) {
+  const [tab,     setTab]     = useState<'all' | 'events' | 'transits'>('all');
+  const [q,       setQ]       = useState('');
+  const [editing, setEditing] = useState<AstroCalendarEvent | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+
+  const filtered = useMemo(() => {
+    return events
+      .filter(e => {
+        if (tab === 'events'   && e.is_transit)  return false;
+        if (tab === 'transits' && !e.is_transit) return false;
+        if (q) return e.display_name.toLowerCase().includes(q.toLowerCase());
+        return true;
+      })
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+  }, [events, tab, q]);
+
+  const save = async (payload: AstroCalendarPayload) => {
+    if (editing === 'new') {
+      await createCalendarEvent(payload);
+    } else if (editing && typeof editing !== 'string') {
+      await updateCalendarEvent(editing.id, payload);
+    }
+    setEditing(null);
+    onRefresh();
+  };
+
+  const confirmDelete = async () => {
+    if (deleting == null) return;
+    await deleteCalendarEvent(deleting);
+    setDeleting(null);
+    onRefresh();
+  };
+
+  return (
+    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, marginTop: 16, overflow: 'hidden' }}>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--gold)', textTransform: 'uppercase' }}>
+            ◇ Registry · Admin · {events.length} rows
+          </span>
+          <div style={{ display: 'flex', gap: 3 }}>
+            {(['all', 'events', 'transits'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                style={{
+                  padding: '5px 10px', fontFamily: 'var(--font-mono)', fontSize: 9.5,
+                  letterSpacing: '0.14em', textTransform: 'uppercase',
+                  background: tab === t ? 'rgba(212,168,75,0.12)' : 'transparent',
+                  border: '1px solid var(--border)',
+                  color: tab === t ? 'var(--gold)' : 'var(--text-faint)',
+                  cursor: 'pointer', borderRadius: 6,
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Filter…"
+            style={{ ...inputStyle, width: 180, padding: '6px 10px', fontSize: 12 }}
+          />
+          <button
+            onClick={() => setEditing('new')}
+            style={{ ...btnStyle, background: 'var(--gold)', color: '#1a1410', fontWeight: 600, borderColor: 'var(--gold)' }}
+          >
+            + New
+          </button>
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '80px 1fr 140px 130px 1fr 90px',
+          gap: 12, padding: '10px 20px',
+          fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.16em',
+          color: 'var(--text-faint)', textTransform: 'uppercase',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <div>Type</div>
+        <div>Name</div>
+        <div>Dates</div>
+        <div>Impact</div>
+        <div>Narrative</div>
+        <div style={{ textAlign: 'right' }}>Actions</div>
+      </div>
+
+      {/* Rows */}
+      {filtered.length === 0 ? (
+        <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', fontSize: 11, fontStyle: 'italic' }}>
+          No records match
+        </div>
+      ) : (
+        filtered.map(ev => (
+          <div
+            key={ev.id}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '80px 1fr 140px 130px 1fr 90px',
+              gap: 12, padding: '12px 20px', alignItems: 'center',
+              borderBottom: '1px solid var(--border)',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 9, padding: '2px 6px',
+                border: `1px solid ${ev.is_transit ? 'var(--border-indigo)' : 'rgba(212,168,75,0.3)'}`,
+                color: ev.is_transit ? 'var(--indigo)' : 'var(--gold)',
+                textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: 4,
+                display: 'inline-block',
+              }}
+            >
+              {ev.is_transit ? 'Transit' : 'Event'}
+            </span>
+
+            <span style={{ fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {ev.display_name}
+            </span>
+
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)' }}>
+              {ev.start_date}
+              {ev.end_date && ev.end_date !== ev.start_date ? ` → ${ev.end_date.slice(5)}` : ''}
+            </span>
+
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: impactColor(ev.market_impact), textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {ev.market_impact.replace(/_/g, ' ')}
+            </span>
+
+            <span style={{ fontSize: 11, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {ev.narrative ?? ev.inference ?? '—'}
+            </span>
+
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditing(ev)} style={{ ...btnStyle, fontSize: 10, padding: '4px 8px' }}>Edit</button>
+              <button
+                onClick={() => setDeleting(ev.id)}
+                style={{ ...btnStyle, fontSize: 10, padding: '4px 8px', color: 'var(--bear)', borderColor: 'rgba(200,60,60,0.3)' }}
+              >
+                Del
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+
+      {editing != null && (
+        <ItemModal
+          item={editing === 'new' ? null : editing}
+          onSave={save}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+      {deleting != null && (
+        <ConfirmDialog
+          message={`Delete this event? This cannot be undone.`}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Main View ─────────────────────────────────────────────────────────────────
 
 export default function DCCalendarView() {
   const today = todayIso();
   const [year,  setYear]  = useState(2026);
   const [month, setMonth] = useState(4);
-  const [view,  setView]  = useState<'calendar' | 'timeline'>('calendar');
+  const [view,  setView]  = useState<'calendar' | 'timeline' | 'admin'>('calendar');
+  const { isAdmin } = useAuthStore();
+  const queryClient = useQueryClient();
+
+  const eventsKey = ['astro_calendar_events', year, month];
 
   const { data: events = [], isLoading: eventsLoading, isError: eventsError, error: eventsErr } = useQuery({
-    queryKey: ['astro_calendar_events', year, month],
+    queryKey: eventsKey,
     queryFn:  () => fetchMonthEvents(year, month),
     staleTime: 60_000,
   });
@@ -579,6 +987,8 @@ export default function DCCalendarView() {
     queryFn:  () => fetchKeyEvents(year, month),
     staleTime: 60_000,
   });
+
+  const refreshEvents = () => queryClient.invalidateQueries({ queryKey: eventsKey });
 
   const isLoading = eventsLoading || signalsLoading;
   const isError   = eventsError || signalsError;
@@ -652,6 +1062,27 @@ export default function DCCalendarView() {
                 </button>
               </div>
 
+              {/* Admin tab — only for admins */}
+              {isAdmin && (
+                <button
+                  onClick={() => setView(v => v === 'admin' ? 'calendar' : 'admin')}
+                  style={{
+                    padding: '7px 14px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.14em',
+                    textTransform: 'uppercase',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    background: view === 'admin' ? 'rgba(212,168,75,0.12)' : 'transparent',
+                    color: view === 'admin' ? 'var(--gold)' : 'var(--text-faint)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ◇ Admin
+                </button>
+              )}
+
               {/* Month navigator */}
               <button
                 onClick={prevMonth}
@@ -690,7 +1121,14 @@ export default function DCCalendarView() {
               <MonthSummary events={events} signals={signals} keyEvents={keyEvents} />
             )}
 
-            {view === 'calendar' ? (
+            {view === 'admin' ? (
+              <AdminSection
+                events={events}
+                year={year}
+                month={month}
+                onRefresh={refreshEvents}
+              />
+            ) : view === 'calendar' ? (
               <>
                 {/* Calendar grid */}
                 <div className="glass-card rounded-3xl p-5">
@@ -736,6 +1174,7 @@ export default function DCCalendarView() {
             ) : (
               <TimelineView events={events} year={year} month={month} />
             )}
+
           </>
         )}
       </div>
