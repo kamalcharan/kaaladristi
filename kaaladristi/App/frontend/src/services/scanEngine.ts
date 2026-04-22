@@ -17,7 +17,10 @@ import type {
   IndustryEodRow,
   EquitySymbolRow,
   EquityEodSnapshot,
+  VaniOpportunityConfig,
 } from '@/types';
+
+const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || 'http://localhost:8101';
 
 // ── Scan Definitions ───────────────────────────────────────────
 
@@ -60,9 +63,39 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     description: 'Previously strong stocks showing signs of institutional exit',
     limit: 25,
   },
+  {
+    id: 'conviction_flow',
+    name: 'Conviction Flow',
+    description: 'Stocks where 5-day delivery value is outpacing the 22-day norm — rising institutional commitment',
+    tooltip: 'delivery_surge_x = avg_amt_5d / avg_amt_22d. Surge > 1.5× means recent delivery is accelerating vs baseline. VaNi gate: surge > 2×, price near EMA20, avg_amt_22d > 2 Cr.',
+    limit: 50,
+  },
+  {
+    id: 'breakout_surge',
+    name: 'Breakout Surge',
+    description: 'NSE stocks breaking above 20-day highs with RVOL > 2× — fresh momentum with institutional volume',
+    tooltip: 'Close > 20-day high + RVOL > 2 + Close > 100. VaNi gate: RVOL > 5, 0–5% above breakout level, RSI < 75, price within 15% of EMA20.',
+    limit: 50,
+  },
 ];
 
 // ── Data Loading ───────────────────────────────────────────────
+
+interface OppConfig {
+  ema_atr_band: number;
+  reward_min_atr_multiple: number;
+  magic_rs_zones: string[];
+  flow_types: string[];
+  rvol_min: number;
+}
+
+const DEFAULT_OPP_CONFIG: OppConfig = {
+  ema_atr_band: 2.5,  // raised from 1.0 — catches trending stocks up to 2.5×ATR above EMA20
+  reward_min_atr_multiple: 0.0,
+  magic_rs_zones: ['Strong Bull', 'Mild Bull'],
+  flow_types: ['FRESH_LONGS', 'SHORT_COVERING'],
+  rvol_min: 0.3,  // lowered — volume scale discontinuity bug suppresses rvol artificially
+};
 
 interface ScanDataBundle {
   industries: IndustryEodRow[];
@@ -71,23 +104,59 @@ interface ScanDataBundle {
   latestEod: Map<number, EquityEodSnapshot>;
   eodHistory: Map<number, EquityEodSnapshot[]>; // equity_id → rows by date desc
   latestDate: string | null;
+  oppConfigMap: Map<string, OppConfig>; // presetId → config
 }
 
 let _cachedBundle: { data: ScanDataBundle; fetchedAt: number } | null = null;
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
 
+// Session-level config cache — presetId → OppConfig, fetched once per page load.
+let _oppConfigCache: Map<string, OppConfig> | null = null;
+
+async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
+  if (_oppConfigCache) return _oppConfigCache;
+  const map = new Map<string, OppConfig>();
+  try {
+    const res = await fetch(`${PIPELINE_URL}/api/vani-opportunity/config`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const configs = (await res.json()) as VaniOpportunityConfig[];
+    console.log('[scanEngine] raw API configs:', configs.map(c => ({ name: c.config_name, presets: c.applies_to_presets })));
+    for (const cfg of configs) {
+      const p = cfg.parameters;
+      const opp: OppConfig = {
+        ema_atr_band: Number(p.atr_multiplier),
+        reward_min_atr_multiple: Number(p.min_reward_atr_multiple),
+        magic_rs_zones: Array.isArray(p.rs_zones) ? p.rs_zones : DEFAULT_OPP_CONFIG.magic_rs_zones,
+        flow_types: Array.isArray(p.flow_types) ? p.flow_types : DEFAULT_OPP_CONFIG.flow_types,
+        rvol_min: Number(p.min_rvol),
+      };
+      for (const presetId of cfg.applies_to_presets) {
+        map.set(presetId, opp);
+      }
+    }
+    console.log('[scanEngine] oppConfig map keys:', [...map.keys()]);
+  } catch (e) {
+    console.warn('[scanEngine] config fetch failed, using defaults:', e);
+    for (const preset of SCAN_PRESETS) {
+      map.set(preset.id, { ...DEFAULT_OPP_CONFIG });
+    }
+  }
+  _oppConfigCache = map;
+  return map;
+}
+
+// 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
 async function fetchRecentDates(limit: number): Promise<string[]> {
-  const { data, error } = await from('km_equity_eod')
+  const { data } = await from('km_trading_calendar')
     .select('trade_date')
+    .eq('status', 'completed')
+    .eq('exchange', 'NSE')
     .order('trade_date', { ascending: false })
-    .limit(limit * 1500) // overfetch for dedup
+    .limit(limit)
     .execute();
 
-  if (error) throw new Error(error.message);
   const rows = (data ?? []) as { trade_date: string }[];
-  const unique = [...new Set(rows.map((r) => r.trade_date))];
-  unique.sort((a: string, b: string) => b.localeCompare(a));
-  return unique.slice(0, limit);
+  return rows.map((r) => r.trade_date).sort((a, b) => b.localeCompare(a));
 }
 
 async function loadScanData(): Promise<ScanDataBundle> {
@@ -95,8 +164,8 @@ async function loadScanData(): Promise<ScanDataBundle> {
     return _cachedBundle.data;
   }
 
-  // Get last 20 trade dates (enough for all scan lookbacks)
-  const dates = await fetchRecentDates(21);
+  // 67 dates: 66 for conviction_flow 66D% return + 1 buffer
+  const dates = await fetchRecentDates(67);
   if (dates.length === 0) {
     const empty: ScanDataBundle = {
       industries: [],
@@ -105,16 +174,16 @@ async function loadScanData(): Promise<ScanDataBundle> {
       latestEod: new Map(),
       eodHistory: new Map(),
       latestDate: null,
+      oppConfigMap: new Map(),
     };
     return empty;
   }
 
-  const latestDate = dates[0];
   const oldestDate = dates[dates.length - 1];
 
-  // Parallel fetches
-  const [industryRes, symbolRes, eodRes] = await Promise.all([
-    // Industry EOD for last 10 days
+  // Parallel fetches — market data + session-cached opportunity config map
+  const [industryRes, symbolRes, eodRes, oppConfigMap] = await Promise.all([
+    // Industry EOD for last 11 dates
     from('km_industry_eod')
       .select('*')
       .gte('trade_date', dates[Math.min(10, dates.length - 1)])
@@ -122,21 +191,42 @@ async function loadScanData(): Promise<ScanDataBundle> {
       .limit(1000)
       .execute(),
 
-    // All active equity symbols (include exchange + isin for dedup)
+    // All active equity symbols
     from('km_equity_symbols')
       .select('id,symbol,company_name,industry,exchange,isin,is_active')
       .is('is_active', 'true')
       .limit(8000)
       .execute(),
 
-    // Equity EOD for last 20 dates
+    // Equity EOD — explicit date list + extended select with ema_20/atr_14/delivery_pct/w52_high
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag')
-      .gte('trade_date', oldestDate)
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high')
+      .in('trade_date', dates)
       .order('trade_date', { ascending: false })
-      .limit(30000)
+      .limit(120000)
       .execute(),
+
+    // VaNi opportunity config — session-cached, fetched from pipeline API
+    fetchOpportunityConfig(),
   ]);
+
+  // Derive latestDate from actual loaded equity rows (not dates[0]).
+  // km_trading_calendar can have today marked "completed" before km_equity_eod
+  // data arrives, which would leave latestEod empty and all scans returning 0.
+  const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
+  const latestDate: string | null = allEodRows.length > 0 ? allEodRows[0].trade_date : null;
+
+  if (!latestDate) {
+    return {
+      industries: [],
+      industriesHistory: new Map(),
+      symbols: new Map(),
+      latestEod: new Map(),
+      eodHistory: new Map(),
+      latestDate: null,
+      oppConfigMap: new Map(),
+    };
+  }
 
   // Process industries
   const allIndustryRows = (industryRes.data ?? []) as IndustryEodRow[];
@@ -157,7 +247,7 @@ async function loadScanData(): Promise<ScanDataBundle> {
   // Process EOD
   const latestEod = new Map<number, EquityEodSnapshot>();
   const eodHistory = new Map<number, EquityEodSnapshot[]>();
-  for (const r of (eodRes.data ?? []) as EquityEodSnapshot[]) {
+  for (const r of allEodRows) {
     const arr = eodHistory.get(r.equity_id) ?? [];
     arr.push(r);
     eodHistory.set(r.equity_id, arr);
@@ -173,10 +263,42 @@ async function loadScanData(): Promise<ScanDataBundle> {
     latestEod,
     eodHistory,
     latestDate,
+    oppConfigMap,
   };
 
   _cachedBundle = { data: bundle, fetchedAt: Date.now() };
   return bundle;
+}
+
+// ── 3c: VaNi Opportunity evaluation ───────────────────────────
+
+let _oppDiagCount = 0;
+
+function evaluateOpportunity(stock: Omit<ScanStock, 'vaniOpportunity'>, config: OppConfig): boolean {
+  if (!stock.ema_20 || !stock.atr_14 || stock.atr_14 <= 0) return false;
+  const isBearish = config.flow_types.some(f => f === 'FRESH_SHORTS' || f === 'LONG_LIQUIDATION');
+  const withinBand =
+    stock.close >= stock.ema_20 - config.ema_atr_band * stock.atr_14 &&
+    stock.close <= stock.ema_20 + config.ema_atr_band * stock.atr_14;
+  // Bullish: upside runway to the top of the band (ema20 + band×atr14)
+  // Bearish: downside runway to the bottom of the band (ema20 - band×atr14)
+  const runway = isBearish
+    ? stock.close - (stock.ema_20 - config.ema_atr_band * stock.atr_14)
+    : (stock.ema_20 + config.ema_atr_band * stock.atr_14) - stock.close;
+  const hasReward = runway > config.reward_min_atr_multiple * stock.atr_14;
+  const zoneOk = config.magic_rs_zones.includes(stock.magic_rs_zone ?? '');
+  // LOW_VOLUME is an artifact of the volume scale discontinuity bug (CLAUDE.md § Known Issues).
+  // It is computed from artificially suppressed rvol — treat as neutral for bullish configs.
+  const flowOk = stock.flow_type === 'LOW_VOLUME' && !isBearish
+    ? true
+    : config.flow_types.includes(stock.flow_type ?? '');
+  const rvolOk = (stock.rvol ?? 0) >= config.rvol_min;
+  const result = withinBand && hasReward && zoneOk && flowOk && rvolOk;
+  if (!isBearish && !result && _oppDiagCount < 5) {
+    _oppDiagCount++;
+    console.log(`[scanEngine] VaNi miss (${stock.symbol}): band=${withinBand} reward=${hasReward} zone=${zoneOk}(${stock.magic_rs_zone}) flow=${flowOk}(${stock.flow_type}) rvol=${rvolOk}(${stock.rvol?.toFixed(2)}) ema=${stock.ema_20?.toFixed(1)} atr=${stock.atr_14?.toFixed(1)}`);
+  }
+  return result;
 }
 
 // ── Helper: DOT detection in history ───────────────────────────
@@ -258,6 +380,7 @@ function getIndustryClassifications(bundle: ScanDataBundle) {
 function buildScanStock(
   equityId: number,
   bundle: ScanDataBundle,
+  presetId: string,
 ): ScanStock | null {
   const eod = bundle.latestEod.get(equityId);
   const sym = bundle.symbols.get(equityId);
@@ -265,12 +388,28 @@ function buildScanStock(
 
   const history = bundle.eodHistory.get(equityId) ?? [];
 
-  return {
+  // 3c: Computed financial fields
+  const ema20 = eod.ema_20 ?? null;
+  const atr14 = eod.atr_14 ?? null;
+  const reward = (ema20 && atr14) ? (ema20 + atr14) - eod.close : null;
+  const rewardPct = (ema20 && atr14 && atr14 > 0) ? ((ema20 + atr14) - eod.close) / atr14 : null;
+  const pctBelow52wHigh = (eod.w52_high && eod.w52_high > 0)
+    ? ((eod.w52_high - eod.close) / eod.w52_high) * 100
+    : null;
+
+  const magicRsTrend: (boolean | null)[] = history.slice(0, 5).map((h, i) =>
+    h.magic_rs != null && (history[i + 1]?.magic_rs ?? null) != null
+      ? h.magic_rs > history[i + 1].magic_rs!
+      : null,
+  );
+
+  const partial: Omit<ScanStock, 'vaniOpportunity'> = {
     equity_id: equityId,
     symbol: sym.symbol,
     company_name: sym.company_name,
     industry: sym.industry,
     exchange: sym.exchange ?? null,
+    trade_date: eod.trade_date,
     close: eod.close,
     pct_chng: eod.pct_chng,
     rsi_14: eod.rsi_14,
@@ -279,6 +418,7 @@ function buildScanStock(
     flow_type: eod.flow_type,
     rvol: eod.rvol,
     sniper_inst: eod.sniper_inst,
+    sniper_hot: eod.sniper_hot ?? null,
     accum_distrib: eod.accum_distrib,
     rss_value: eod.rss_value,
     rss_spread: eod.rss_spread,
@@ -287,7 +427,21 @@ function buildScanStock(
     has_recent_svd: hasDotInHistory(history, 'svd', 5),
     has_recent_sbd: hasDotInHistory(history, 'sbd', 5),
     has_recent_syd: hasDotInHistory(history, 'syd', 5),
+    ema_20: ema20,
+    atr_14: atr14,
+    delivery_pct: eod.delivery_pct ?? null,
+    w52_high: eod.w52_high ?? null,
+    magicRsTrend,
+    reward,
+    rewardPct,
+    pctBelow52wHigh,
   };
+
+  const presetCfg = bundle.oppConfigMap.get(presetId) ?? null;
+  if (!presetCfg) {
+    console.warn(`[scanEngine] no OppConfig for presetId="${presetId}" — map keys: [${[...bundle.oppConfigMap.keys()].join(', ')}]`);
+  }
+  return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
 }
 
 // ── Scan Implementations ───────────────────────────────────────
@@ -311,7 +465,7 @@ function scanPowerBuy(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'power_buy');
     if (!stock || !stock.industry) continue;
 
     // Industry gate (unchanged)
@@ -348,7 +502,7 @@ function scanPowerSell(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'power_sell');
     if (!stock || !stock.industry) continue;
 
     // Industry gate (unchanged)
@@ -384,7 +538,7 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'smart_money');
     if (!stock || !stock.industry) continue;
     if (!accumulatingIndustries.has(stock.industry)) continue;
 
@@ -423,7 +577,7 @@ function scanFreshBreakout(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'fresh_breakout');
     if (!stock || !stock.industry) continue;
     if (!leading.has(stock.industry)) continue;
     if ((stock.rvol ?? 0) <= 2) continue;
@@ -466,7 +620,7 @@ function scanQuietAccumulation(bundle: ScanDataBundle): ScanStock[] {
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'quiet_accumulation');
     if (!stock || !stock.industry) continue;
     if (!eligibleIndustries.has(stock.industry)) continue;
     if (stock.accum_distrib !== 'ACCUMULATION') continue;
@@ -491,7 +645,7 @@ function scanDistributionWarning(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
 
   for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle);
+    const stock = buildScanStock(id, bundle, 'distribution_warning');
     if (!stock) continue;
 
     // Current zone NOT Strong Bull (degraded)
@@ -528,6 +682,134 @@ function scanDistributionWarning(bundle: ScanDataBundle): ScanStock[] {
     .slice(0, 25);
 }
 
+/** Scan 7: Conviction Flow */
+function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
+  const results: ScanStock[] = [];
+
+  for (const [id] of bundle.latestEod) {
+    const eod = bundle.latestEod.get(id);
+    if (!eod || !eod.ema_20 || eod.ema_20 <= 0) continue;
+
+    const history = bundle.eodHistory.get(id) ?? [];
+    if (history.length < 5) continue; // need at least 5 bars for 5D average
+
+    // Use available window up to 22/5 bars — matches SQL AVG behaviour
+    const w22 = history.slice(0, Math.min(history.length, 22));
+    const w5  = history.slice(0, Math.min(history.length, 5));
+
+    // deliv_value_cr per bar = delivery_qty × close / 10,000,000
+    const delivW22 = w22.map((h) => (h.delivery_qty ?? 0) * h.close / 10_000_000);
+    const delivW5  = w5.map((h)  => (h.delivery_qty ?? 0) * h.close / 10_000_000);
+
+    const avg_amt_5d  = delivW5.reduce((s, v) => s + v, 0) / w5.length;
+    const avg_amt_22d = delivW22.reduce((s, v) => s + v, 0) / w22.length;
+
+    if (avg_amt_22d <= 1.5) continue;
+
+    const delivery_surge_x = avg_amt_22d > 0 ? avg_amt_5d / avg_amt_22d : 0;
+    if (delivery_surge_x <= 1.5) continue;
+
+    const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
+    if (d_pct < -8 || d_pct > 8) continue;
+
+    const stock = buildScanStock(id, bundle, 'conviction_flow');
+    if (!stock) continue;
+
+    const is_vani =
+      delivery_surge_x > 2 &&
+      d_pct >= -3 && d_pct <= 5 &&
+      eod.close > 100 &&
+      avg_amt_22d > 2;
+
+    // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
+    const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
+    const ret_22d = history.length > 22 ? ((eod.close - history[22].close) / history[22].close) * 100 : null;
+    const ret_66d = history.length > 66 ? ((eod.close - history[66].close) / history[66].close) * 100 : null;
+
+    results.push({
+      ...stock,
+      vaniOpportunity: is_vani,
+      avg_amt_5d:       Math.round(avg_amt_5d       * 100) / 100,
+      avg_amt_22d:      Math.round(avg_amt_22d      * 100) / 100,
+      deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
+      delivery_surge_x: Math.round(delivery_surge_x * 10000) / 10000,
+      d_pct:            Math.round(d_pct            * 100) / 100,
+      ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
+      ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
+      ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
+    });
+  }
+
+  return results
+    .sort((a, b) => (b.delivery_surge_x ?? 0) - (a.delivery_surge_x ?? 0))
+    .slice(0, 50);
+}
+
+/** Scan 8: Breakout Surge */
+function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
+  const results: ScanStock[] = [];
+  const dbg = { total: 0, noSym: 0, notNse: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
+
+  for (const [id] of bundle.latestEod) {
+    const eod = bundle.latestEod.get(id);
+    const sym = bundle.symbols.get(id);
+    dbg.total++;
+    if (!eod || !sym) { dbg.noSym++; continue; }
+
+    // Universe: NSE only
+    if (sym.exchange !== 'NSE') { dbg.notNse++; continue; }
+
+    const history = bundle.eodHistory.get(id) ?? [];
+    if (history.length < 21) { dbg.shortHist++; continue; }
+
+    // breakout_level = MAX(close) over prior 20 bars (history[1..20], skip today at [0])
+    let breakout_level = 0;
+    for (let i = 1; i <= 20; i++) {
+      const c = Number(history[i].close);
+      if (c > breakout_level) breakout_level = c;
+    }
+
+    if (Number(eod.close) <= breakout_level) { dbg.belowBrk++; continue; }
+    if (Number(eod.close) <= 100) { dbg.below100++; continue; }
+    if ((Number(eod.rvol) || 0) <= 2) { dbg.lowRvol++; continue; }
+
+    const close      = Number(eod.close);
+    const ema20      = (eod.ema_20 != null && Number(eod.ema_20) > 0) ? Number(eod.ema_20) : null;
+    const rvol       = Number(eod.rvol) || 0;
+    const rsi14      = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
+    const pct_from_breakout = ((close - breakout_level) / breakout_level) * 100;
+    const d_pct = ema20 != null ? ((close - ema20) / ema20) * 100 : null;
+    const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
+    const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
+
+    const stock = buildScanStock(id, bundle, 'breakout_surge');
+    if (!stock) continue;
+
+    const is_vani =
+      rvol > 5 &&
+      pct_from_breakout >= 0 &&
+      pct_from_breakout <= 5 &&
+      (rsi14 ?? 100) < 75 &&
+      d_pct != null && d_pct < 15;
+
+    results.push({
+      ...stock,
+      vaniOpportunity: is_vani,
+      d_pct:            d_pct != null ? Math.round(d_pct * 100) / 100 : null,
+      breakout_level:   Math.round(breakout_level   * 100) / 100,
+      pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
+      ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
+      ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
+    });
+  }
+
+  console.log('[breakout_surge] latestDate:', bundle.latestDate, '| filters:', dbg, '| results:', results.length);
+
+  return results
+    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
+    .slice(0, 50);
+}
+
 // ── Public API ─────────────────────────────────────────────────
 
 const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
@@ -537,10 +819,12 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   fresh_breakout: scanFreshBreakout,
   quiet_accumulation: scanQuietAccumulation,
   distribution_warning: scanDistributionWarning,
+  conviction_flow: scanConvictionFlow,
+  breakout_surge: scanBreakoutSurge,
 };
 
 /**
- * Deduplicate scan results by ISIN (prefer NSE over BSE).
+ * Deduplicate scan results by ISIN (prefer VaNi opportunity, then NSE over BSE).
  * For Combined mode, ensures one row per company.
  */
 function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbolRow>): ScanStock[] {
@@ -549,15 +833,17 @@ function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbo
     const sym = symbols.get(stock.equity_id);
     const isin = sym?.isin;
     if (!isin) {
-      // No ISIN — keep as-is (won't deduplicate)
       seen.set(`_noisn_${stock.equity_id}`, stock);
       continue;
     }
     const existing = seen.get(isin);
     if (!existing) {
       seen.set(isin, stock);
-    } else if (stock.exchange === 'NSE' && existing.exchange !== 'NSE') {
-      seen.set(isin, stock); // NSE preferred
+    } else {
+      // Prefer VaNi opportunity first; fall back to NSE preference for ties
+      const stockWins = stock.vaniOpportunity && !existing.vaniOpportunity
+        || (!stock.vaniOpportunity === !existing.vaniOpportunity && stock.exchange === 'NSE' && existing.exchange !== 'NSE');
+      if (stockWins) seen.set(isin, stock);
     }
   }
   return [...seen.values()];
@@ -584,6 +870,29 @@ export async function executeScan(scanId: string, exchangeFilter: ExchangeFilter
 /** Invalidate scan data cache (call after data refresh) */
 export function invalidateScanCache(): void {
   _cachedBundle = null;
+  _oppConfigCache = null;
+  _oppDiagCount = 0;
+}
+
+export interface ScanCountsResult {
+  counts: Record<string, number>;
+  latestDate: string | null;
+}
+
+/** Return result counts for all 8 scans — uses shared cached data */
+export async function getAllScanCounts(exchangeFilter: ExchangeFilter = 'combined'): Promise<ScanCountsResult> {
+  const bundle = await loadScanData();
+  const counts: Record<string, number> = {};
+  for (const [id, fn] of Object.entries(SCAN_FUNCTIONS)) {
+    let results = fn(bundle);
+    if (exchangeFilter === 'combined') {
+      results = deduplicateByIsin(results, bundle.symbols);
+    } else {
+      results = results.filter((s) => s.exchange === exchangeFilter);
+    }
+    counts[id] = results.length;
+  }
+  return { counts, latestDate: bundle.latestDate };
 }
 
 // ── Manipulation Watch ────────────────────────────────────────
@@ -758,9 +1067,19 @@ function buildStockFromEod(
     rss_spread: eod.rss_spread,
     sma_150: eod.sma_150,
     volume_divergence_flag: eod.volume_divergence_flag,
-    has_recent_svd: false, // not needed for manipulation watch
+    has_recent_svd: false,
     has_recent_sbd: false,
     has_recent_syd: false,
+    sniper_hot: null,
+    ema_20: null,
+    atr_14: null,
+    delivery_pct: null,
+    w52_high: null,
+    magicRsTrend: [],
+    reward: null,
+    rewardPct: null,
+    pctBelow52wHigh: null,
+    vaniOpportunity: false,
   };
 }
 

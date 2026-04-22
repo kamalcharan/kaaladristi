@@ -34,7 +34,7 @@ export default function ScanPresenceCard({ stock, matchedScans }: ScanPresenceCa
           {matchedScans.map((scan) => (
             <Link
               key={scan.id}
-              to={`/scan?preset=${scan.id}`}
+              to={`/scanner/${scan.id}`}
               className="flex items-center gap-2 group"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-accent-indigo shrink-0" />

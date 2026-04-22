@@ -226,19 +226,36 @@ export default function SearchStrip() {
   }, []);
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-md">
-      {/* Search input */}
+    <div ref={containerRef} className="relative w-full">
+      {/* Search pill — matches .search in dashboard-LOCKED.html */}
       <div className="relative flex items-center">
-        <Search className="absolute left-2.5 w-3.5 h-3.5 text-muted pointer-events-none" />
+        <Search
+          className="absolute left-[14px] pointer-events-none"
+          style={{ width: '14px', height: '14px', color: 'var(--text-faint)' }}
+        />
         <input
           ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
-          onFocus={() => { if (query.length >= 2) setIsOpen(true); }}
           onKeyDown={handleKeyDown}
-          placeholder="Search index or stock...  ⌘K"
-          className="w-full pl-8 pr-8 py-1.5 text-xs bg-kd-elevated/60 border border-kd-border rounded-lg text-primary placeholder:text-muted/50 focus:outline-none focus:border-accent-indigo/40 focus:bg-kd-elevated transition-all"
+          placeholder="Search index or stock · ⌘K"
+          style={{
+            width: '100%',
+            paddingLeft: '38px',
+            paddingRight: query ? '32px' : '14px',
+            paddingTop: '8px',
+            paddingBottom: '8px',
+            fontSize: '13px',
+            color: 'var(--text-faint)',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid var(--border)',
+            borderRadius: '100px',
+            outline: 'none',
+            transition: 'border-color 0.18s',
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'var(--border-indigo)'; if (query.length >= 2) setIsOpen(true); }}
+          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
         />
         {query && (
           <button

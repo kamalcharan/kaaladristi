@@ -77,9 +77,7 @@ export interface JobResponse {
 
 // ── Pipeline API Base URL ────────────────────────────────────────────────────
 
-const PIPELINE_API = (
-  import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8100'
-);
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
 
 async function apiGet<T>(path: string): Promise<T> {
   const resp = await fetch(`${PIPELINE_API}${path}`);

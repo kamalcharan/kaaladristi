@@ -24,3 +24,6 @@ export { default as IndexWatchlist } from './IndexWatchlist';
 export { default as MagicRsLeaderboard } from './MagicRsLeaderboard';
 export { default as VaNiChatPanel } from './VaNiChatPanel';
 export { default as VaNiTrigger } from './VaNiTrigger';
+export { default as AstroSignalBadge } from './AstroSignalBadge';
+export { default as AstroSignalWeekPanel } from './AstroSignalWeekPanel';
+export { default as AstroIntelligencePanel } from './AstroIntelligencePanel';

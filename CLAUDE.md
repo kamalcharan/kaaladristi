@@ -12,7 +12,8 @@ kaaladristi/
 │   ├── backend/           # Python — data pipeline + FastAPI sidecar
 │   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger
 │   │   ├── pipeline/      # Downloaders (NSE/BSE bhav, FII/DII), processors, utils
-│   │   ├── pipeline_api.py  # FastAPI sidecar — port 8100
+│   │   ├── pipeline2_api.py # FastAPI sidecar — port 8101 (CURRENT — run this)
+│   │   ├── pipeline_api.py  # OLD FastAPI sidecar — DO NOT RUN (superseded by pipeline2_api.py)
 │   │   ├── breeze_downloader.py  # Unified EOD downloader (ICICI Breeze)
 │   │   ├── daily_pipeline.py     # Orchestrator for daily market data sync
 │   │   └── requirements.txt
@@ -32,7 +33,7 @@ kaaladristi/
 
 ## Database (Self-hosted PostgreSQL + PostgREST)
 
-- **DB**: `ki_prime_db` on VPS, accessed via `DB_PRIMARY` env var
+- **DB**: `kaala_dristi_db` on VPS, accessed via `DB_PRIMARY` env var
 - **API layer**: PostgREST on port 3000 (JWT-secured)
 - **Python backend**: direct psycopg2 via `lib/db_client.py`
 - **Frontend**: PostgREST REST API via `services/postgrest.ts`
@@ -53,7 +54,7 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **035** (`km_migration_035_pipeline_coverage.sql`)
+Latest migration: **050** (`km_migration_050_migrate_dc_inference.sql`)
 
 | Table | Description |
 |---|---|
@@ -61,6 +62,9 @@ Latest migration: **035** (`km_migration_035_pipeline_coverage.sql`)
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
 | `km_index_constituents` | Index→Equity mapping with sector/weight (migration 022, FK → `km_index_symbols`) |
 | `km_industry_eod` | Daily industry-level aggregation from equity EOD (migration 033, PK: trade_date + industry) |
+| `km_astro_rule_master` | Timeless Vedic astro-market rule registry (migration 047) |
+| `km_astro_calendar_2026` | 2026 event instances with market_impact (migration 048) |
+| `km_astro_daily_signal` | Computed net astro signal per date (migration 049) |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -95,7 +99,7 @@ See `App/frontend/.env.example` for the full template.
 DB_PRIMARY=postgresql://...          # Python backend only
 JWT_SECRET=...                       # matches PostgreSQL app.jwt_secret
 VITE_POSTGREST_URL=http://VPS:3000   # frontend
-VITE_PIPELINE_API_URL=http://...:8100
+VITE_PIPELINE_API_URL=http://...:8101
 VITE_THEME=kaaladristi               # or tech-ai or jade-thorn
 BREEZE_API_KEY=...
 BREEZE_API_SECRET=...
@@ -139,15 +143,19 @@ npm run dev
 
 - **Language**: Python 3.11+
 - **Data sources**: NSE bhav copy, BSE bhav copy, ICICI Breeze API, Yahoo Finance (fallback), NSE FII/DII
-- **Pipeline API**: `uvicorn pipeline_api:app --host 0.0.0.0 --port 8100`
-- **Health endpoint**: `GET /api/pipeline/health`
+- **Pipeline API**: `uvicorn pipeline2_api:app --host 0.0.0.0 --port 8101` ← **always run this**
+- **Health endpoint**: `GET /api/pipeline2/health`
+
+> **⚠ Do not run `pipeline_api.py`** — it is the old v1 file, superseded by `pipeline2_api.py`.
+> The frontend calls `/api/pipeline2/` routes which only exist in `pipeline2_api.py`.
+> If the backend crashes and is restarted, make sure to start `pipeline2_api.py`, not `pipeline_api.py`.
 
 ### Running locally
 ```bash
 cd App/backend
 pip install -r requirements.txt
 # Set DB_PRIMARY + BREEZE_* in App/.env
-uvicorn pipeline_api:app --port 8100
+uvicorn pipeline2_api:app --port 8101
 ```
 
 ---
@@ -159,7 +167,7 @@ uvicorn pipeline_api:app --port 8100
 docker-compose up --build
 ```
 
-Services: `frontend` (port 3001), `backend` (port 8100), `nginx` (port 80 reverse proxy).
+Services: `frontend` (port 3001), `backend` (port 8101), `nginx` (port 80 reverse proxy).
 
 ---
 
@@ -196,7 +204,7 @@ non-predictive insights explaining *why* risk is elevated or low in astronomical
 |---|---|---|
 | Skill registry | `App/backend/lib/ai_prompts.py` | `Skill(system, max_tokens)` named tuples per skill |
 | AI client | `App/backend/lib/ai_client.py` | Vendor-agnostic HTTP client (Anthropic / OpenAI) |
-| API endpoints | `App/backend/pipeline_api.py` | `GET /api/ai/*` — fetch + cache per-date insights |
+| API endpoints | `App/backend/pipeline2_api.py` | `GET /api/ai/*` — fetch + cache per-date insights |
 | UI component | `src/components/domain/VaNiInsight.tsx` | Reusable panel shown below any data card |
 
 ### Current Skills
@@ -218,7 +226,7 @@ non-predictive insights explaining *why* risk is elevated or low in astronomical
 
 ### Adding a New VaNi Skill
 1. Add `_SKILL_SYSTEM` constant + register in `SKILLS` dict in `lib/ai_prompts.py`
-2. Add `GET /api/ai/<skill-name>` endpoint in `pipeline_api.py`
+2. Add `GET /api/ai/<skill-name>` endpoint in `pipeline2_api.py`
 3. Add `use<SkillName>Insight()` React Query hook in `hooks/useDashboardExtras.ts`
 4. Drop `<VaNiInsight insight={...} isLoading={...} />` below any card
 
@@ -236,7 +244,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **038**.
+Next migration number: **053**.
 
 ---
 
@@ -392,3 +400,25 @@ Detailed spec for each milestone: see `docs/visual-pulse-spec.md`
 VP-1 (RSI Signal Tower) must go through **multiple design iterations** until the
 visual language feels right. Only then proceed to VP-2. Once one metaphor works,
 the pattern applies to all others.
+
+---
+
+## Astro Market-Book 2026
+
+Three new tables as of migrations 047-050:
+- `km_astro_rule_master` — timeless rule registry (600+ rules planned)
+- `km_astro_calendar_2026` — 2026 event instances with market_impact
+- `km_astro_daily_signal` — computed net signal per date
+
+Scoring: strong_bull=+3, bull=+2, minor_bull=+1, neutral=0,
+         minor_bear=-1, bear=-2, strong_bear=-3
+Turning date flagged regardless of score.
+
+Recompute signals after any calendar insert/update:
+```sql
+SELECT compute_astro_daily_signals('2026-01-01', '2026-12-31');
+```
+
+API endpoints:
+- `GET /api/astro/daily-signal?date=YYYY-MM-DD` — single date, includes active_events array
+- `GET /api/astro/signals?from=YYYY-MM-DD&to=YYYY-MM-DD` — range, max 90 days, used by calendar view

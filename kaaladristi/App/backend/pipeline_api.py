@@ -351,6 +351,19 @@ def data_health_insight(days: int = 60):
     return {"insight": insight, "ai": insight is not None}
 
 
+@app.get('/api/vani-opportunity/config')
+def vani_opportunity_config():
+    """Return all active VaNi Opportunity config rows (one per direction)."""
+    rows = db.select(
+        'kd_vani_opportunity_config',
+        'id,config_name,description,is_active,applies_to_presets,parameters,created_at,updated_at',
+        filters={'is_active': 'true'},
+        order='id.asc',
+        limit=10,
+    )
+    return rows or []
+
+
 @app.get('/api/pipeline/health')
 def health():
     """Overall pipeline health check."""
@@ -1342,6 +1355,211 @@ def coverage_summary(trade_date: str = None):
             worst = classification
 
     return {'trade_date': trade_date, 'steps': steps, 'overall': worst}
+
+
+# ── Panchang Endpoints ────────────────────────────────────────────────────────
+
+# Static per-date — panchang never changes once populated
+_panchang_cache: dict[str, dict] = {}
+
+_PANCHANG_SQL = """
+    SELECT
+        today.*,
+        tomorrow.tithi_name     AS tithi_next_name,
+        tomorrow.nakshatra_name AS nakshatra_next_name,
+        tomorrow.karana_name    AS karana_next_name
+    FROM km_daily_panchang today
+    LEFT JOIN km_daily_panchang tomorrow
+        ON tomorrow.date = today.date + INTERVAL '1 day'
+    WHERE today.date = %s
+"""
+
+
+@app.get('/api/panchang/daily')
+def panchang_daily(date: str = None):
+    """Today's panchangam with next-day names for mid-day transition display."""
+    if not date:
+        date = datetime.now(IST).strftime('%Y-%m-%d')
+
+    if date in _panchang_cache:
+        return _panchang_cache[date]
+
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(_PANCHANG_SQL, (date,))
+        else:
+            # PostgREST fallback — two selects merged
+            rows = db.select('km_daily_panchang', '*', filters={'date': date}, limit=1)
+            if rows:
+                next_date = (datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                nxt = db.select('km_daily_panchang', 'tithi_name,nakshatra_name,karana_name',
+                                filters={'date': next_date}, limit=1)
+                rows[0]['tithi_next_name'] = nxt[0].get('tithi_name') if nxt else None
+                rows[0]['nakshatra_next_name'] = nxt[0].get('nakshatra_name') if nxt else None
+                rows[0]['karana_next_name'] = nxt[0].get('karana_name') if nxt else None
+    except Exception as e:
+        log.error(f"panchang_daily error for {date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f'No panchang data for {date}')
+
+    row = dict(rows[0])
+    # Stringify any date/time objects psycopg2 returns as Python types
+    for k, v in row.items():
+        if hasattr(v, 'isoformat'):
+            row[k] = v.isoformat()
+
+    _panchang_cache[date] = row
+    return row
+
+
+# ── Astro Market-Book Endpoints ───────────────────────────────────────────────
+
+_astro_signal_cache: dict[str, dict] = {}
+
+_ASTRO_SIGNAL_SQL = """
+    SELECT
+        s.*,
+        COALESCE(
+            json_agg(
+                json_build_object('id', e.id, 'display_name', e.display_name,
+                                  'market_impact', e.market_impact,
+                                  'start_date', e.start_date, 'end_date', e.end_date)
+                ORDER BY e.market_impact
+            ) FILTER (WHERE e.id IS NOT NULL),
+            '[]'
+        ) AS active_events
+    FROM km_astro_daily_signal s
+    LEFT JOIN km_astro_calendar_2026 e ON e.id = ANY(s.active_event_ids)
+    WHERE s.trade_date = %s
+    GROUP BY s.trade_date
+"""
+
+_ASTRO_RANGE_SQL = """
+    SELECT
+        s.trade_date, s.net_signal, s.net_score,
+        s.active_event_count, s.turning_date,
+        s.strong_bullish_count, s.bullish_count, s.minor_bullish_count,
+        s.neutral_count, s.minor_bearish_count, s.bearish_count, s.strong_bearish_count,
+        s.primary_event, s.secondary_event
+    FROM km_astro_daily_signal s
+    WHERE s.trade_date BETWEEN %s AND %s
+    ORDER BY s.trade_date
+"""
+
+
+@app.get('/api/astro/daily-signal')
+def astro_daily_signal(date: str = None):
+    """Net astro signal for a single date with active event details."""
+    if not date:
+        date = datetime.now(IST).strftime('%Y-%m-%d')
+
+    if date in _astro_signal_cache:
+        return _astro_signal_cache[date]
+
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(_ASTRO_SIGNAL_SQL, (date,))
+        else:
+            rows = db.select('km_astro_daily_signal', '*', filters={'trade_date': date}, limit=1)
+    except Exception as e:
+        log.error(f"astro_daily_signal error for {date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f'No astro signal for {date}')
+
+    row = dict(rows[0])
+    for k, v in row.items():
+        if hasattr(v, 'isoformat'):
+            row[k] = v.isoformat()
+
+    _astro_signal_cache[date] = row
+    return row
+
+
+@app.get('/api/astro/transits')
+def astro_transits(from_date: str = None, to_date: str = None):
+    """Active transits/conjunctions overlapping the given date range."""
+    today = datetime.now(IST).date()
+    if not from_date:
+        from_date = today.strftime('%Y-%m-%d')
+    if not to_date:
+        to_date = (today + timedelta(days=6)).strftime('%Y-%m-%d')
+
+    cache_key = f"transits_{from_date}_{to_date}"
+    if cache_key in _astro_signal_cache:
+        return _astro_signal_cache[cache_key]
+
+    sql = """
+        SELECT id, display_name, start_date, end_date, market_impact, inference
+        FROM km_astro_calendar_2026
+        WHERE is_transit = true
+          AND start_date <= %s
+          AND (end_date IS NULL OR end_date >= %s)
+        ORDER BY start_date
+    """
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(sql, (to_date, from_date))
+        else:
+            rows = db.select('km_astro_calendar_2026',
+                             'id,display_name,start_date,end_date,market_impact,inference',
+                             filters={'is_transit': 'true'}, order='start_date.asc')
+    except Exception as e:
+        log.error(f"astro_transits error {from_date}→{to_date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    result = []
+    for row in rows:
+        r = dict(row)
+        for k, v in r.items():
+            if hasattr(v, 'isoformat'):
+                r[k] = v.isoformat()
+        result.append(r)
+
+    _astro_signal_cache[cache_key] = result
+    return result
+
+
+@app.get('/api/astro/signals')
+def astro_signals(from_date: str = None, to_date: str = None):
+    """Net astro signals for a date range (max 90 days). Used by calendar view."""
+    today = datetime.now(IST).date()
+    if not from_date:
+        from_date = today.strftime('%Y-%m-%d')
+    if not to_date:
+        to_date = (today + timedelta(days=30)).strftime('%Y-%m-%d')
+
+    # Clamp to 90-day window
+    try:
+        d_from = date.fromisoformat(from_date)
+        d_to = date.fromisoformat(to_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f'Invalid date format: {e}')
+
+    if (d_to - d_from).days > 90:
+        raise HTTPException(status_code=400, detail='Range exceeds 90-day maximum')
+
+    try:
+        if hasattr(db, 'execute'):
+            rows = db.execute(_ASTRO_RANGE_SQL, (from_date, to_date))
+        else:
+            rows = db.select('km_astro_daily_signal', '*',
+                             order='trade_date.asc', limit=91)
+    except Exception as e:
+        log.error(f"astro_signals error {from_date}→{to_date}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    result = []
+    for row in rows:
+        r = dict(row)
+        for k, v in r.items():
+            if hasattr(v, 'isoformat'):
+                r[k] = v.isoformat()
+        result.append(r)
+    return result
 
 
 # ── AI Endpoints ──────────────────────────────────────────────────────────────

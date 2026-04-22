@@ -5,6 +5,7 @@ import {
   RegimeBadge,
   PanchangamCard, MarketBreadthChart, BreadthRocChart, SevenDayStrip,
   SectorRotationStrip, IndexWatchlist, MagicRsLeaderboard,
+  AstroSignalBadge, AstroSignalWeekPanel, AstroIntelligencePanel,
 } from '@/components/domain';
 
 interface DashboardViewProps {
@@ -28,17 +29,28 @@ export default function DashboardView({ report }: DashboardViewProps) {
 
       {/* ═══ Row 1: Cycle Intelligence (left) + Panchangam (right) ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 mb-5">
-        {/* Cycle Intelligence — regime badge + planetary only */}
+        {/* Cycle Intelligence — regime badge + planetary + astro badge */}
         <Card rounded="xxl" className="px-5 py-4 flex items-center gap-4 flex-wrap">
           <RegimeBadge regime={report.regime} />
           <div className="flex items-center gap-2 text-sm text-secondary bg-kd-elevated/40 px-3 py-1.5 rounded-lg border border-kd-border">
             <Activity className="w-3.5 h-3.5 text-accent-indigo shrink-0" />
             <span className="text-xs">{report.planetarySummary}</span>
           </div>
+          <AstroSignalBadge date={report.date} />
         </Card>
 
         {/* Panchangam */}
         <PanchangamCard date={report.date} />
+      </div>
+
+      {/* ═══ Row 1b: Astro Signal — Week Ahead (full width) ═══ */}
+      <div className="mb-5">
+        <AstroSignalWeekPanel date={report.date} />
+      </div>
+
+      {/* ═══ Row 1c: Astro Intelligence — transits + 7-day outlook (full width) ═══ */}
+      <div className="mb-5">
+        <AstroIntelligencePanel date={report.date} />
       </div>
 
       {/* ═══ Row 2: Index Watchlist (full width) ═══ */}

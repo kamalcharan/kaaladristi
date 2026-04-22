@@ -277,7 +277,7 @@ Each industry evaluates all applicable triggers and picks the top-ranked one for
 Each trigger ranked by urgency × specificity. If multiple trigger, pick most urgent. If none trigger, industry gets a neutral row without a headline (just stats + sparkline).
 
 **Benchmark selector:**
-
+   
 User can change "Compare vs NIFTY 50" to NIFTY 500, NIFTY MIDCAP, or a sectoral index. The vs-benchmark columns (both headline reference and stats strip) recompute. This was Charan's explicit ask: *"how are they performing vs Nifty500, Nifty 50 or any other sectorial index, user can select."*
 
 **Note on cross-screen clash:** V1.0's Industry Transition and Scanner were both stock-lists-with-industry-context and clashed. V2 separates them decisively:

@@ -259,6 +259,10 @@ export interface DailyPanchang {
   tithi_end_next_day: boolean | null;
   nakshatra_end_ist: string | null;
   nakshatra_end_next_day: boolean | null;
+  // Next-day values joined from tomorrow's row (via /api/panchang/daily)
+  tithi_next_name: string | null;
+  nakshatra_next_name: string | null;
+  karana_next_name: string | null;
 }
 
 // ── Market Breadth (from km_market_breadth) ──
@@ -407,6 +411,7 @@ export interface ScanStock {
   flow_type: string | null;
   rvol: number | null;
   sniper_inst: number | null;
+  sniper_hot: number | null;
   accum_distrib: string | null;
   rss_value: number | null;
   rss_spread: number | null;
@@ -415,6 +420,30 @@ export interface ScanStock {
   has_recent_svd: boolean;
   has_recent_sbd: boolean;
   has_recent_syd: boolean;
+  // Migration 042 additions
+  ema_20: number | null;
+  atr_14: number | null;
+  delivery_pct: number | null;
+  w52_high: number | null;
+  // Computed fields
+  magicRsTrend: (boolean | null)[];
+  reward: number | null;
+  rewardPct: number | null;
+  pctBelow52wHigh: number | null;
+  vaniOpportunity: boolean;
+  // Conviction Flow computed fields (null for all other scans)
+  trade_date?: string;
+  avg_amt_5d?: number | null;
+  avg_amt_22d?: number | null;
+  deliv_value_cr?: number | null;
+  delivery_surge_x?: number | null;
+  d_pct?: number | null;
+  ret_5d?: number | null;
+  ret_22d?: number | null;
+  ret_66d?: number | null;
+  // Breakout Surge computed fields (null for all other scans)
+  breakout_level?: number | null;
+  pct_from_breakout?: number | null;
 }
 
 export interface ScanDefinition {
@@ -423,6 +452,38 @@ export interface ScanDefinition {
   description: string;
   tooltip?: string;
   limit: number;
+}
+
+export interface VaniOpportunityConfig {
+  id: number;
+  config_name: string;
+  description?: string;
+  is_active: boolean;
+  applies_to_presets: string[];
+  parameters: {
+    atr_multiplier: number;
+    min_rvol: number;
+    rs_zones: string[];
+    flow_types: string[];
+    min_reward_atr_multiple: number;
+    [key: string]: unknown;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConvictionFlowStock {
+  equity_id: number;
+  symbol: string;
+  trade_date: string;
+  close: number;
+  ema_20: number;
+  d_pct: number;
+  avg_amt_5d: number;
+  avg_amt_22d: number;
+  deliv_value_cr: number;
+  delivery_surge_x: number;
+  is_vani_opportunity: boolean;
 }
 
 export interface EquitySymbolRow {
@@ -459,4 +520,41 @@ export interface EquityEodSnapshot {
   sma_150: number | null;
   volume_divergence_flag: string | null;
   value_cr: number | null;
+  // Migration 042 additions
+  ema_20: number | null;
+  atr_14: number | null;
+  delivery_pct: number | null;
+  delivery_qty: number | null;
+  w52_high: number | null;
+}
+
+// ── Astro Daily Signal (from km_astro_daily_signal) ──
+
+export interface AstroSignal {
+  trade_date: string;
+  net_signal: string;
+  net_score: number;
+  primary_event: string | null;
+  secondary_event: string | null;
+  active_event_count: number;
+  turning_date: boolean;
+  strong_bullish_count: number;
+  bullish_count: number;
+  minor_bullish_count: number;
+  neutral_count: number;
+  minor_bearish_count: number;
+  bearish_count: number;
+  strong_bearish_count: number;
+  sector_signals: Record<string, unknown> | null;
+}
+
+// ── Astro Transit (from km_astro_calendar where is_transit = true) ──
+
+export interface AstroTransit {
+  id: number;
+  display_name: string;
+  start_date: string;
+  end_date: string | null;
+  market_impact: string;
+  inference: string | null;
 }

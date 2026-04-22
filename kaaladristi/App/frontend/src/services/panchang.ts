@@ -1,14 +1,13 @@
-import { from, rpc } from './postgrest';
+import { from } from './postgrest';
 import type { DailyPanchang, MarketBreadthDay, BreadthRocDay } from '@/types';
 
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+
 export async function fetchPanchang(date: string): Promise<DailyPanchang | null> {
-  const { data, error } = await from('km_daily_panchang')
-    .select('*')
-    .eq('date', date)
-    .maybeSingle()
-    .execute();
-  if (error) throw new Error(`[km_daily_panchang] ${error.message}`);
-  return data as DailyPanchang | null;
+  const res = await fetch(`${PIPELINE_API}/api/panchang/daily?date=${encodeURIComponent(date)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`[panchang] HTTP ${res.status}`);
+  return res.json() as Promise<DailyPanchang>;
 }
 
 export async function fetchMarketBreadth(days = 66): Promise<MarketBreadthDay[]> {
