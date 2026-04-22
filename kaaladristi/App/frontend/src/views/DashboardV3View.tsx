@@ -6,37 +6,12 @@ import {
   CurrentSkyRail,
   PingsColumn,
   SixDayOutlookCompact,
+  AmbientGauges,
+  SectorRotationFlow,
   DensityToggle,
   ActionIsland,
   type Density,
 } from '@/components/domain/DashboardV3';
-
-// ── Step 3 placeholder ────────────────────────────────────────────────────────
-
-function ComingSoonCard({ label }: { label: string }) {
-  return (
-    <div
-      className="rounded-xl flex items-center justify-center"
-      style={{
-        minHeight: 160,
-        background: 'var(--card)',
-        border: '1px dashed var(--border)',
-      }}
-    >
-      <span
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.16em',
-          color: 'var(--text-faint)',
-          textTransform: 'uppercase',
-        }}
-      >
-        {label} · Step 3
-      </span>
-    </div>
-  );
-}
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
@@ -105,13 +80,11 @@ export default function DashboardV3View() {
         </div>
       )}
 
-      {/* ── TERMINAL only: ambient context + sector rotation (Step 3) ── */}
+      {/* ── TERMINAL only: ambient gauges + sector rotation ── */}
       {density === 'terminal' && (
         <>
-          <ComingSoonCard label="Ambient context" />
-          <div style={{ marginTop: 16 }}>
-            <ComingSoonCard label="Sector rotation" />
-          </div>
+          <AmbientGauges />
+          <SectorRotationFlow />
         </>
       )}
 

@@ -6,5 +6,7 @@ export { default as TodaysSky } from './TodaysSky';
 export { default as CurrentSkyRail } from './CurrentSkyRail';
 export { default as PingsColumn } from './PingsColumn';
 export { default as SixDayOutlookCompact } from './SixDayOutlookCompact';
+export { default as AmbientGauges } from './AmbientGauges';
+export { default as SectorRotationFlow } from './SectorRotationFlow';
 export type { Density } from './DensityToggle';
 export type { KickerTier } from './Kicker';
