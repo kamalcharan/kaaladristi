@@ -855,7 +855,6 @@ def _invalidate_astro_cache():
 
 @app.post('/api/astro/calendar')
 def astro_calendar_create(req: AstroCalendarUpsert):
-    from datetime import date as _date
     sd = req.start_date
     month = int(sd[5:7])
     year  = int(sd[:4])
@@ -867,17 +866,24 @@ def astro_calendar_create(req: AstroCalendarUpsert):
                 TO_CHAR(%s::date, 'Day'))
         RETURNING id
     """
+    conn = _conn()
     try:
-        rows = _db_query(sql, (
-            req.display_name, req.start_date, req.end_date,
-            req.market_impact, req.is_transit,
-            req.narrative, req.notes, req.inference,
-            month, year, req.start_date,
-        ))
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                req.display_name, req.start_date, req.end_date,
+                req.market_impact, req.is_transit,
+                req.narrative, req.notes, req.inference,
+                month, year, req.start_date,
+            ))
+            row_id = cur.fetchone()[0]
+        conn.commit()
         _invalidate_astro_cache()
-        return {'id': rows[0]['id']}
+        return {'id': row_id}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 @app.patch('/api/astro/calendar/{event_id}')
 def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
@@ -899,27 +905,39 @@ def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
           day_of_week   = TO_CHAR(%s::date, 'Day')
         WHERE id = %s
     """
+    conn = _conn()
     try:
-        _db_query(sql, (
-            req.display_name, req.start_date, req.end_date,
-            req.market_impact, req.is_transit,
-            req.narrative, req.notes, req.inference,
-            month, year, req.start_date,
-            event_id,
-        ))
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                req.display_name, req.start_date, req.end_date,
+                req.market_impact, req.is_transit,
+                req.narrative, req.notes, req.inference,
+                month, year, req.start_date,
+                event_id,
+            ))
+        conn.commit()
         _invalidate_astro_cache()
         return {'ok': True}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 @app.delete('/api/astro/calendar/{event_id}')
 def astro_calendar_delete(event_id: int):
+    conn = _conn()
     try:
-        _db_query('DELETE FROM km_astro_calendar WHERE id = %s', (event_id,))
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_astro_calendar WHERE id = %s', (event_id,))
+        conn.commit()
         _invalidate_astro_cache()
         return {'ok': True}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 
 # ── VaNi AI Endpoints ─────────────────────────────────────────────────────
