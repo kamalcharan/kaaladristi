@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useVaNiStore } from '@/stores/vaniStore';
 import Sidebar from './Sidebar';
@@ -12,16 +12,11 @@ export default function Layout() {
     () => localStorage.getItem('kd_sidebar_collapsed') === 'true'
   );
   const { open: vaniOpen, toggle: toggleVani } = useVaNiStore();
-  const location = useLocation();
 
   const toggle = () => setCollapsed(v => {
     localStorage.setItem('kd_sidebar_collapsed', String(!v));
     return !v;
   });
-
-  const isFullWidth = location.pathname.startsWith('/chart/')
-    || location.pathname.startsWith('/pulse/')
-    || location.pathname.startsWith('/scanner');
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>
@@ -77,9 +72,7 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <div
-          className={`relative z-10 p-4 pb-8 ${isFullWidth ? 'max-w-full' : 'max-w-6xl mx-auto'}`}
-        >
+        <div className="relative z-10 p-4 pb-8">
           <Outlet />
         </div>
       </main>
