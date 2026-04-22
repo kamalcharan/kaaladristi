@@ -423,9 +423,6 @@ function buildScanStock(
   };
 
   const presetCfg = bundle.oppConfigMap.get(presetId) ?? null;
-  if (!presetCfg) {
-    console.warn(`[scanEngine] no OppConfig for presetId="${presetId}" — map keys: [${[...bundle.oppConfigMap.keys()].join(', ')}]`);
-  }
   return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
 }
 
@@ -804,9 +801,7 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     '| PASSED:', results.length,
   );
 
-  return results
-    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
-    .slice(0, 100);
+  return results.sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0));
 }
 
 // ── Public API ─────────────────────────────────────────────────
