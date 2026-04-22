@@ -323,7 +323,11 @@ function CountPill({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-function EventGroup({ label, items }: { label: string; items: AstroCalendarEvent[] }) {
+function EventGroup({ label, items, onEdit }: {
+  label: string;
+  items: AstroCalendarEvent[];
+  onEdit?: (ev: AstroCalendarEvent) => void;
+}) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{
@@ -338,17 +342,33 @@ function EventGroup({ label, items }: { label: string; items: AstroCalendarEvent
           const desc = ev.narrative ?? ev.inference ?? null;
           return (
             <div key={ev.id} style={{ borderLeft: `2px solid ${col}`, paddingLeft: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 2 }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 8.5,
-                  color: col, letterSpacing: '0.1em', textTransform: 'uppercase',
-                }}>
-                  {ev.market_impact.replace(/_/g, ' ')}
-                </span>
-                {ev.end_date && ev.end_date !== ev.start_date && (
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)' }}>
-                    → {ev.end_date.slice(5)}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 7, marginBottom: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 8.5,
+                    color: col, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  }}>
+                    {ev.market_impact.replace(/_/g, ' ')}
                   </span>
+                  {ev.end_date && ev.end_date !== ev.start_date && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)' }}>
+                      → {ev.end_date.slice(5)}
+                    </span>
+                  )}
+                </div>
+                {onEdit && (
+                  <button
+                    onClick={() => onEdit(ev)}
+                    style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 8.5,
+                      color: 'var(--gold)', background: 'transparent',
+                      border: '1px solid rgba(212,168,75,0.3)', borderRadius: 4,
+                      padding: '1px 7px', cursor: 'pointer', letterSpacing: '0.12em',
+                      textTransform: 'uppercase', flexShrink: 0,
+                    }}
+                  >
+                    Edit
+                  </button>
                 )}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: desc ? 4 : 0 }}>
@@ -368,14 +388,18 @@ function EventGroup({ label, items }: { label: string; items: AstroCalendarEvent
 }
 
 function DayInspector({
-  dayIso, signal, events, isToday, onClose,
+  dayIso, signal, events, isToday, isAdmin, onClose, onRefresh,
 }: {
   dayIso: string;
   signal?: AstroDailySignal;
   events: AstroCalendarEvent[];
   isToday: boolean;
+  isAdmin?: boolean;
   onClose: () => void;
+  onRefresh?: () => void;
 }) {
+  const [editing, setEditing] = useState<AstroCalendarEvent | null>(null);
+
   const parts = dayIso.split('-').map(Number);
   const [, m, d] = parts;
   const dow = new Date(dayIso).getDay();
@@ -386,6 +410,13 @@ function DayInspector({
   const score = signal?.net_score ?? null;
   const transits = events.filter(e => e.is_transit);
   const discrete = events.filter(e => !e.is_transit);
+
+  const handleSave = async (payload: AstroCalendarPayload) => {
+    if (!editing) return;
+    await updateCalendarEvent(editing.id, payload);
+    setEditing(null);
+    onRefresh?.();
+  };
 
   return (
     <div style={{
@@ -491,11 +522,19 @@ function DayInspector({
           </div>
         ) : (
           <>
-            {discrete.length > 0 && <EventGroup label="Events" items={discrete} />}
-            {transits.length > 0 && <EventGroup label="Active Transits" items={transits} />}
+            {discrete.length > 0 && <EventGroup label="Events" items={discrete} onEdit={isAdmin ? setEditing : undefined} />}
+            {transits.length > 0 && <EventGroup label="Active Transits" items={transits} onEdit={isAdmin ? setEditing : undefined} />}
           </>
         )}
       </div>
+
+      {editing && (
+        <ItemModal
+          item={editing}
+          onSave={handleSave}
+          onCancel={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1435,7 +1474,9 @@ export default function DCCalendarView() {
                       signal={pickedCell.signal}
                       events={pickedCell.events}
                       isToday={pickedCell.isToday}
+                      isAdmin={isAdmin}
                       onClose={() => setPicked(null)}
+                      onRefresh={refreshEvents}
                     />
                   )}
                 </div>
