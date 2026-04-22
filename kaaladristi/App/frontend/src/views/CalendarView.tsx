@@ -15,54 +15,33 @@ import {
   getDaysInMonth, getFirstWeekdayOffset, toIso, todayIso, fmtDate,
 } from '@/lib/dateUtils';
 
-// ── Score → visual meta ───────────────────────────────────────────────────────
+// ── Bias meta ─────────────────────────────────────────────────────────────────
 
-interface DayMeta {
-  borderClass: string;
-  bgClass: string;
-  scoreColor: string;
-  glowClass: string;
-  label: string;
-}
+const BIAS: Record<string, { fill: string; border: string; label: string }> = {
+  strong_bullish: { fill: 'rgba(110,207,154,0.85)', border: 'var(--bull)',    label: 'Strong +'  },
+  bullish:        { fill: 'rgba(110,207,154,0.55)', border: 'var(--bull)',    label: 'Positive'  },
+  mild_bullish:   { fill: 'rgba(110,207,154,0.28)', border: 'var(--bull)',    label: 'Mild +'    },
+  neutral:        { fill: 'rgba(255,255,255,0.04)', border: 'transparent',   label: 'Neutral'   },
+  turning:        { fill: 'rgba(212,168,75,0.45)',  border: 'var(--gold)',   label: 'Turning'   },
+  mild_bearish:   { fill: 'rgba(200,130,50,0.28)',  border: 'var(--caution)',label: 'Mild −'    },
+  bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Caution'   },
+  strong_bearish: { fill: 'rgba(217,80,68,0.80)',   border: 'var(--bear)',   label: 'Negative'  },
+  closed:         { fill: 'rgba(46,42,34,0.35)',    border: 'transparent',   label: 'Closed'    },
+};
 
-function scoreMeta(score: number): DayMeta {
-  if (score >= 4) return { borderClass:'border-emerald-400/60', bgClass:'bg-emerald-950/30', glowClass:'shadow-emerald-900/40', scoreColor:'text-emerald-400', label:'Strong Positive' };
-  if (score >= 2) return { borderClass:'border-emerald-600/40', bgClass:'bg-emerald-950/15', glowClass:'', scoreColor:'text-emerald-500', label:'Positive' };
-  if (score > 0)  return { borderClass:'border-green-800/30',   bgClass:'bg-green-950/10',   glowClass:'', scoreColor:'text-green-600',  label:'Mild Positive' };
-  if (score === 0)return { borderClass:'border-kd-border',      bgClass:'',                  glowClass:'', scoreColor:'text-muted',      label:'Neutral' };
-  if (score >= -1)return { borderClass:'border-red-800/30',     bgClass:'bg-red-950/10',     glowClass:'', scoreColor:'text-red-500',    label:'Mild Negative' };
-  if (score >= -2)return { borderClass:'border-red-600/40',     bgClass:'bg-red-950/20',     glowClass:'', scoreColor:'text-red-400',    label:'Negative' };
-  return            { borderClass:'border-red-400/60',          bgClass:'bg-red-950/30',     glowClass:'shadow-red-900/40', scoreColor:'text-red-400', label:'Strong Negative' };
+function getBias(signal: AstroDailySignal | undefined, isWeekend: boolean) {
+  if (isWeekend) return BIAS.closed;
+  const key = signal?.net_signal?.toLowerCase() ?? 'neutral';
+  return BIAS[key] ?? BIAS.neutral;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getActiveEventsForDay(dayIso: string, events: AstroCalendarEvent[]): AstroCalendarEvent[] {
   return events.filter(e => {
-    if (!e.end_date) return e.start_date === dayIso;
-    return dayIso >= e.start_date && dayIso <= e.end_date;
+    const end = e.end_date ?? e.start_date;
+    return dayIso >= e.start_date && dayIso <= end;
   });
-}
-
-function isSpanning(e: AstroCalendarEvent): boolean {
-  return !!e.end_date && e.end_date !== e.start_date;
-}
-
-// ── Event pill ────────────────────────────────────────────────────────────────
-
-function EventPill({ event, muted = false }: { event: AstroCalendarEvent; muted?: boolean }) {
-  const c = ASTRO_SIGNAL_CLASSES[impactToColor(event.market_impact)];
-
-  return (
-    <div className={cn(
-      'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium truncate border',
-      c.bg, c.text, c.border,
-      muted && 'opacity-50',
-    )}>
-      {isSpanning(event) && <span className="opacity-60 shrink-0">—</span>}
-      <span className="truncate">{event.display_name}</span>
-    </div>
-  );
 }
 
 // ── Day cell ──────────────────────────────────────────────────────────────────
@@ -74,88 +53,194 @@ interface DayCellProps {
   events: AstroCalendarEvent[];
   signal?: AstroDailySignal;
   isToday: boolean;
-  isCurrentMonth: boolean;
   isWeekend: boolean;
+  onClick?: () => void;
 }
 
-function DayCell({ dayIso, dayNum, weekday, events, signal, isToday, isCurrentMonth, isWeekend }: DayCellProps) {
-  const score    = signal?.net_score ?? 0;
-  const meta     = scoreMeta(score);
-  const turning  = signal?.turning_date ?? false;
-  const hasMajor = events.some(e => e.market_impact === 'strong_bullish' || e.market_impact === 'strong_bearish');
-
-  const singleDay  = events.filter(e => !isSpanning(e));
-  const spanning   = events.filter(isSpanning);
-  const maxSingle  = 3;
-  const maxSpan    = 2;
-  const singleOver = Math.max(0, singleDay.length - maxSingle);
-  const spanOver   = Math.max(0, spanning.length - maxSpan);
+function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, onClick }: DayCellProps) {
+  const bias    = getBias(signal, isWeekend);
+  const turning = signal?.turning_date ?? false;
+  const isMajor = events.some(e =>
+    e.market_impact === 'strong_bullish' ||
+    e.market_impact === 'strong_bearish' ||
+    e.market_impact === 'turning'
+  );
+  const topEvent = events.find(e => !e.is_transit) ?? events[0];
 
   return (
-    <div className={cn(
-      'relative flex flex-col rounded-xl border p-1.5 sm:p-2 min-h-[80px] sm:min-h-[130px] transition-all',
-      meta.borderClass, meta.bgClass,
-      isToday && 'ring-2 ring-accent-indigo/70 ring-offset-1 ring-offset-kd-bg',
-      !isCurrentMonth && 'opacity-25',
-      isWeekend && 'opacity-50',
-      meta.glowClass && `shadow-lg ${meta.glowClass}`,
-    )}>
-      {/* Date header */}
-      <div className="flex items-start justify-between mb-1.5">
-        <div>
-          <span className={cn(
-            'text-base font-bold mono leading-none',
-            isToday ? 'text-accent-indigo' : 'text-[var(--text-primary)]',
-          )}>{dayNum}</span>
-          <span className="text-[10px] text-muted ml-1">{weekday}</span>
+    <button
+      onClick={onClick}
+      style={{
+        position: 'relative',
+        padding: '9px 9px 8px',
+        minHeight: 100,
+        textAlign: 'left',
+        background: isToday ? 'rgba(212,168,75,0.04)' : 'transparent',
+        border: isToday
+          ? '1px solid rgba(212,168,75,0.5)'
+          : '1px solid var(--border)',
+        cursor: 'pointer',
+        borderRadius: 8,
+        opacity: isWeekend ? 0.5 : 1,
+        width: '100%',
+        transition: 'border-color 0.15s',
+      }}
+    >
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+          <span style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 17,
+            color: isToday ? 'var(--gold)' : 'var(--text-primary)',
+            lineHeight: 1,
+          }}>
+            {dayNum}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 8,
+            color: 'var(--text-faint)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+          }}>
+            {weekday}
+          </span>
         </div>
-        <div className="flex items-center gap-1">
-          {turning && (
-            <span className="text-risk-amber text-xs" title="Turning Date">◈</span>
-          )}
-          {hasMajor && (
-            <span className="text-accent-gold text-xs" title="Major Event">✦</span>
-          )}
-          {events.length > 0 && (
-            <span className={cn('text-[11px] font-bold mono', meta.scoreColor)}>
-              {score > 0 ? '+' : ''}{score}
+        <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+          {turning && <span style={{ color: 'var(--gold)', fontSize: 9 }} title="Turning date">◈</span>}
+          {isMajor && <span style={{ color: 'var(--gold)', fontSize: 9 }} title="Major event">★</span>}
+          {isToday && (
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 7,
+              color: 'var(--gold)',
+              padding: '1px 3px',
+              border: '1px solid rgba(212,168,75,0.45)',
+              letterSpacing: '0.18em',
+            }}>
+              NOW
             </span>
           )}
         </div>
       </div>
 
-      {/* Single-day events — prominent */}
-      <div className="flex flex-col gap-0.5 flex-1">
-        {singleDay.slice(0, maxSingle).map(e => (
-          <EventPill key={e.id} event={e} />
-        ))}
-        {singleOver > 0 && (
-          <span className="text-[10px] text-muted pl-1">+{singleOver} more</span>
-        )}
-
-        {/* Spanning transit events — muted at bottom */}
-        {spanning.length > 0 && (
-          <div className={cn('flex flex-col gap-0.5 mt-auto', singleDay.length > 0 && 'mt-1')}>
-            {spanning.slice(0, maxSpan).map(e => (
-              <EventPill key={e.id} event={e} muted />
-            ))}
-            {spanOver > 0 && (
-              <span className="text-[10px] text-muted pl-1">+{spanOver} transit</span>
-            )}
-          </div>
-        )}
-
-        {events.length === 0 && (
-          <span className="text-[10px] text-muted mt-auto">—</span>
-        )}
-      </div>
-
-      {/* Weekend closed label */}
-      {isWeekend && (
-        <span className="absolute bottom-1 right-1.5 text-[9px] uppercase tracking-wider text-muted/60">
-          Closed
-        </span>
+      {/* 3 segments */}
+      {isWeekend ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', height: 30,
+          background: 'repeating-linear-gradient(45deg, rgba(46,42,34,0.18) 0 6px, transparent 6px 12px)',
+          border: '1px solid var(--border)',
+          borderRadius: 4,
+        }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.22em' }}>
+            CLOSED
+          </span>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2, height: 30 }}>
+          {(['AM', 'MID', 'CLOSE'] as const).map(lbl => (
+            <div
+              key={lbl}
+              style={{
+                background: bias.fill,
+                borderBottom: bias.border !== 'transparent' ? `2px solid ${bias.border}` : '2px solid rgba(255,255,255,0.06)',
+                borderRadius: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 7,
+                color: 'rgba(255,255,255,0.35)',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+              }}>
+                {lbl}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
+
+      {/* Bias label */}
+      {!isWeekend && (
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 8.5,
+          color: bias.border !== 'transparent' ? bias.border : 'var(--text-faint)',
+          textAlign: 'center',
+          marginTop: 3,
+          letterSpacing: '0.04em',
+        }}>
+          {bias.label}
+        </div>
+      )}
+
+      {/* Top event name */}
+      {topEvent && !isWeekend && (
+        <div style={{
+          marginTop: 5,
+          fontSize: 9.5,
+          color: isMajor ? 'var(--gold)' : 'var(--text-faint)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          lineHeight: 1.3,
+        }}>
+          {topEvent.display_name}
+          {events.length > 1 ? ` +${events.length - 1}` : ''}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ── Bias legend ───────────────────────────────────────────────────────────────
+
+function BiasLegend() {
+  const items = [
+    { key: 'strong_bullish', label: 'Strong +' },
+    { key: 'bullish',        label: 'Positive' },
+    { key: 'mild_bullish',   label: 'Mild +'   },
+    { key: 'neutral',        label: 'Neutral'  },
+    { key: 'turning',        label: 'Turning'  },
+    { key: 'mild_bearish',   label: 'Mild −'   },
+    { key: 'bearish',        label: 'Caution'  },
+    { key: 'strong_bearish', label: 'Negative' },
+  ];
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', alignItems: 'center', marginTop: 16 }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+        Legend
+      </span>
+      {items.map(({ key, label }) => {
+        const b = BIAS[key];
+        return (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{
+              width: 14,
+              height: 10,
+              background: b.fill,
+              borderBottom: `2px solid ${b.border !== 'transparent' ? b.border : 'rgba(255,255,255,0.1)'}`,
+              borderRadius: 2,
+            }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+              {label}
+            </span>
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: 'var(--gold)', fontSize: 11 }}>◈</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>Turning date</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: 'var(--gold)', fontSize: 11 }}>★</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>Major event</span>
+      </div>
     </div>
   );
 }
@@ -214,43 +299,6 @@ function Stat({ value, label, color }: { value: number; label: string; color: st
     <div className="text-center">
       <p className={cn('text-2xl font-bold mono', color)}>{value}</p>
       <p className="text-[10px] text-muted uppercase tracking-wide">{label}</p>
-    </div>
-  );
-}
-
-// ── Legend ────────────────────────────────────────────────────────────────────
-
-function Legend() {
-  const items: { label: string; dotClass: string }[] = [
-    { label: 'Strong Positive (≥4)', dotClass: 'bg-emerald-400' },
-    { label: 'Positive (2-3)',        dotClass: 'bg-emerald-600' },
-    { label: 'Mild Positive (0-1)',   dotClass: 'bg-green-700' },
-    { label: 'Neutral',              dotClass: 'bg-slate-600' },
-    { label: 'Mild Negative',        dotClass: 'bg-red-700' },
-    { label: 'Negative / Bearish',   dotClass: 'bg-red-500' },
-  ];
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4">
-      <span className="text-[10px] uppercase tracking-widest font-bold text-muted">Legend</span>
-      {items.map(i => (
-        <div key={i.label} className="flex items-center gap-1.5">
-          <div className={cn('w-2.5 h-2.5 rounded-sm', i.dotClass)} />
-          <span className="text-[11px] text-[var(--text-secondary)]">{i.label}</span>
-        </div>
-      ))}
-      <div className="flex items-center gap-1.5">
-        <span className="text-risk-amber text-sm">◈</span>
-        <span className="text-[11px] text-slate-400">Turning Date</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-accent-gold text-sm">✦</span>
-        <span className="text-[11px] text-slate-400">Major Event (Strong Signal)</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[11px] text-muted">—</span>
-        <span className="text-[11px] text-slate-400">Transit (background)</span>
-      </div>
     </div>
   );
 }
@@ -1153,7 +1201,6 @@ export default function DCCalendarView() {
                           events={cell.events}
                           signal={cell.signal}
                           isToday={cell.isToday}
-                          isCurrentMonth
                           isWeekend={cell.isWeekend}
                         />
                       ) : (
@@ -1164,7 +1211,7 @@ export default function DCCalendarView() {
                 </div>
 
                 {/* Legend */}
-                <Legend />
+                <BiasLegend />
 
                 {/* Footer */}
                 <p className="text-[10px] text-muted text-right mt-4 mono">
