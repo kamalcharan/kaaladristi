@@ -164,55 +164,40 @@ async function loadScanData(): Promise<ScanDataBundle> {
     return _cachedBundle.data;
   }
 
-  // 67 dates: 66 for conviction_flow 66D% return + 1 buffer
-  const dates = await fetchRecentDates(67);
-  if (dates.length === 0) {
-    const empty: ScanDataBundle = {
-      industries: [],
-      industriesHistory: new Map(),
-      symbols: new Map(),
-      latestEod: new Map(),
-      eodHistory: new Map(),
-      latestDate: null,
-      oppConfigMap: new Map(),
-    };
-    return empty;
-  }
+  // Use calendar-day cutoffs instead of km_trading_calendar.
+  // Scanner always uses the latest available km_equity_eod data regardless
+  // of whether km_trading_calendar has been backfilled.
+  // 100 calendar days ≈ 70 trading days (enough for 66D return + buffer).
+  const eodCutoff = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // 20 calendar days ≈ 14 trading days for industry rotation detection.
+  const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const oldestDate = dates[dates.length - 1];
-
-  // Parallel fetches — market data + session-cached opportunity config map
   const [industryRes, symbolRes, eodRes, oppConfigMap] = await Promise.all([
-    // Industry EOD for last 11 dates
     from('km_industry_eod')
       .select('*')
-      .gte('trade_date', dates[Math.min(10, dates.length - 1)])
+      .gte('trade_date', industryCutoff)
       .order('trade_date', { ascending: false })
       .limit(1000)
       .execute(),
 
-    // All active equity symbols
     from('km_equity_symbols')
       .select('id,symbol,company_name,industry,exchange,isin,is_active')
       .is('is_active', 'true')
       .limit(8000)
       .execute(),
 
-    // Equity EOD — explicit date list + extended select with ema_20/atr_14/delivery_pct/w52_high
     from('km_equity_eod')
       .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high')
-      .in('trade_date', dates)
+      .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
       .execute(),
 
-    // VaNi opportunity config — session-cached, fetched from pipeline API
     fetchOpportunityConfig(),
   ]);
 
-  // Derive latestDate from actual loaded equity rows (not dates[0]).
-  // km_trading_calendar can have today marked "completed" before km_equity_eod
-  // data arrives, which would leave latestEod empty and all scans returning 0.
+  // Derive latestDate from actual loaded equity rows.
+  // This is always the true latest date regardless of km_trading_calendar state.
   const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
   const latestDate: string | null = allEodRows.length > 0 ? allEodRows[0].trade_date : null;
 
