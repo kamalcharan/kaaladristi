@@ -855,15 +855,13 @@ def _invalidate_astro_cache():
 
 @app.post('/api/astro/calendar')
 def astro_calendar_create(req: AstroCalendarUpsert):
-    sd = req.start_date
-    month = int(sd[5:7])
-    year  = int(sd[:4])
+    # month, year, day_of_week are GENERATED ALWAYS columns — do NOT include
+    # them in the INSERT list; PostgreSQL computes them from start_date.
     sql = """
         INSERT INTO km_astro_calendar
           (display_name, start_date, end_date, market_impact, is_transit,
-           narrative, notes, inference, month, year, day_of_week)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                TO_CHAR(%s::date, 'Day'))
+           narrative, notes, inference)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """
     conn = _conn()
@@ -873,7 +871,6 @@ def astro_calendar_create(req: AstroCalendarUpsert):
                 req.display_name, req.start_date, req.end_date,
                 req.market_impact, req.is_transit,
                 req.narrative, req.notes, req.inference,
-                month, year, req.start_date,
             ))
             row_id = cur.fetchone()[0]
         conn.commit()
@@ -887,9 +884,8 @@ def astro_calendar_create(req: AstroCalendarUpsert):
 
 @app.patch('/api/astro/calendar/{event_id}')
 def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
-    sd = req.start_date
-    month = int(sd[5:7])
-    year  = int(sd[:4])
+    # month, year, day_of_week are GENERATED ALWAYS columns — omit from SET;
+    # they auto-recompute when start_date changes.
     sql = """
         UPDATE km_astro_calendar SET
           display_name  = %s,
@@ -899,10 +895,7 @@ def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
           is_transit    = %s,
           narrative     = %s,
           notes         = %s,
-          inference     = %s,
-          month         = %s,
-          year          = %s,
-          day_of_week   = TO_CHAR(%s::date, 'Day')
+          inference     = %s
         WHERE id = %s
     """
     conn = _conn()
@@ -912,7 +905,6 @@ def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
                 req.display_name, req.start_date, req.end_date,
                 req.market_impact, req.is_transit,
                 req.narrative, req.notes, req.inference,
-                month, year, req.start_date,
                 event_id,
             ))
         conn.commit()
