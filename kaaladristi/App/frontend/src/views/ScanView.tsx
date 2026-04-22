@@ -5,6 +5,7 @@ import { Card } from '@/components/ui';
 import { useScan, useAllScanCounts } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
+import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
 import type { ScanDefinition, ScanStock } from '@/types';
@@ -879,17 +880,39 @@ function ScannerResults({ presetId }: { presetId: string }) {
         </Card>
       ) : sorted.length > 0 ? (
         <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {sorted.map((stock) => (
-              <StockCard key={stock.equity_id} stock={stock} />
-            ))}
-          </div>
-          <div style={{ marginTop: '12px', textAlign: 'center' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>
-              {sorted.length} result{sorted.length !== 1 ? 's' : ''}
-              {oppFilter && ' · VaNi Opportunity filter active'}
-            </span>
-          </div>
+          {(() => {
+            const vaniStocks = sorted.filter((s) => s.vaniOpportunity);
+            const restStocks = sorted.filter((s) => !s.vaniOpportunity);
+            return (
+              <>
+                {vaniStocks.length > 0 && (
+                  <>
+                    <ScanSectionLabel>
+                      <span style={{ color: 'var(--gold)', marginRight: '6px' }}>✦</span>
+                      VaNi Opportunity · {vaniStocks.length} stock{vaniStocks.length !== 1 ? 's' : ''}
+                    </ScanSectionLabel>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+                      {vaniStocks.map((stock) => (
+                        <StockCard key={stock.equity_id} stock={stock} />
+                      ))}
+                    </div>
+                  </>
+                )}
+                {restStocks.length > 0 && (
+                  <>
+                    <ScanSectionLabel>
+                      All Results · {sorted.length} stock{sorted.length !== 1 ? 's' : ''}
+                    </ScanSectionLabel>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {restStocks.map((stock) => (
+                        <StockCard key={stock.equity_id} stock={stock} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </>
       ) : (
         <div style={{

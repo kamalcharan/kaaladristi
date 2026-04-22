@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
 import React from 'react';
 import { ZONE_LABELS, FLOW_LABELS } from '@/constants/signalScale';
+import { ScanCardWrapper, VaniBadge } from './ScanCardShell';
 
 export { ZONE_LABELS, FLOW_LABELS };
 
@@ -238,34 +239,18 @@ export function StockCard({ stock }: { stock: ScanStock }) {
   );
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleClick}
-      onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-      style={{
-        background: 'var(--card)',
-        border: `1px solid ${stock.vaniOpportunity ? 'rgba(212,168,75,0.25)' : 'var(--border)'}`,
-        borderRadius: '12px',
-        padding: '14px 16px',
-        cursor: 'pointer',
-        display: 'grid',
-        gridTemplateColumns: '1fr 120px 100px',
-        gap: '18px',
-        alignItems: 'center',
-        boxShadow: stock.vaniOpportunity
-          ? '0 0 0 1px rgba(212,168,75,0.2), 0 8px 20px rgba(0,0,0,0.15)'
-          : undefined,
-        transition: 'all 0.18s',
-      }}
-    >
+    <ScanCardWrapper isVani={!!stock.vaniOpportunity} symbol={stock.symbol} onClick={handleClick}>
+      <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '1fr 120px 100px', gap: '18px', alignItems: 'center' }}>
       {/* Zone 1: Identity + Evidence strip */}
       <div style={{ minWidth: 0 }}>
         {/* Symbol + badges */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
+          {stock.vaniOpportunity && (
+            <span style={{ color: 'var(--gold)', fontSize: '10px', lineHeight: 1, flexShrink: 0 }}>✦</span>
+          )}
           <span style={{
-            fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 500,
-            color: 'var(--text-primary)', letterSpacing: '-0.01em',
+            fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 700,
+            color: stock.vaniOpportunity ? 'var(--gold)' : 'var(--text-primary)', letterSpacing: '-0.01em',
           }}>
             {heroName}
           </span>
@@ -291,16 +276,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
               {flowCfg.label}
             </span>
           )}
-          {stock.vaniOpportunity && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '2px 8px', fontFamily: 'var(--font-mono)', fontSize: '9.5px',
-              borderRadius: '5px', letterSpacing: '0.06em', textTransform: 'uppercase',
-              fontWeight: 700, background: 'var(--gold)', color: '#1a1410', whiteSpace: 'nowrap',
-            }}>
-              ✦ Opportunity
-            </span>
-          )}
+          {stock.vaniOpportunity && <VaniBadge />}
         </div>
 
         {/* Company + industry */}
@@ -444,5 +420,6 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         )}
       </div>
     </div>
+  </ScanCardWrapper>
   );
 }

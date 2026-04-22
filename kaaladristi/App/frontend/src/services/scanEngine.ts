@@ -748,16 +748,13 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 /** Scan 8: Breakout Surge */
 function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
-  const dbg = { total: 0, noSym: 0, notNse: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
+  const dbg = { total: 0, noSym: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
     const sym = bundle.symbols.get(id);
     dbg.total++;
     if (!eod || !sym) { dbg.noSym++; continue; }
-
-    // Universe: NSE only
-    if (sym.exchange !== 'NSE') { dbg.notNse++; continue; }
 
     const history = bundle.eodHistory.get(id) ?? [];
     if (history.length < 21) { dbg.shortHist++; continue; }
