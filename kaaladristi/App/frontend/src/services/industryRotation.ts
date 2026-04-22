@@ -142,6 +142,41 @@ export async function fetchIndustryRotation(): Promise<IndustryRotationData> {
   return { rotatingIn, leading, rotatingOut, latestDate, nseAsOfDate, bseAsOfDate };
 }
 
+// ── Sparkline History ──────────────────────────────────────────
+
+/**
+ * Fetch last N avg_magic_rs values per industry — used for sparklines.
+ * Returns Record<industry, number[]> oldest-first per industry.
+ */
+export async function fetchIndustrySparklines(
+  industries: string[],
+  n: number
+): Promise<Record<string, number[]>> {
+  if (industries.length === 0) return {};
+
+  const { data, error } = await from('km_industry_eod')
+    .select('trade_date,industry,avg_magic_rs')
+    .in('industry', industries)
+    .order('trade_date', { ascending: false })
+    .limit(n * industries.length + industries.length)
+    .execute();
+
+  if (error) throw new Error(`[km_industry_eod sparklines] ${error.message}`);
+
+  const rows = (data ?? []) as { trade_date: string; industry: string; avg_magic_rs: number | null }[];
+
+  const result: Record<string, number[]> = {};
+  for (const industry of industries) {
+    const pts = rows
+      .filter(r => r.industry === industry)
+      .slice(0, n)
+      .reverse()
+      .map(r => r.avg_magic_rs ?? 0);
+    result[industry] = pts;
+  }
+  return result;
+}
+
 // ── Stock Expansion ────────────────────────────────────────────
 
 export interface IndustryStockRow {

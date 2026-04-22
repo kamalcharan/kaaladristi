@@ -30,3 +30,16 @@ export async function fetchAstroWeek(fromDate: string, toDate: string): Promise<
   if (error) throw new Error(`[km_astro_daily_signal] ${error.message}`);
   return (data ?? []) as AstroSignal[];
 }
+
+/** Last N net_score values up to and including toDate — oldest first */
+export async function fetchRecentAstroScores(toDate: string, n: number): Promise<number[]> {
+  const { data, error } = await from('km_astro_daily_signal')
+    .select('trade_date,net_score')
+    .lte('trade_date', toDate)
+    .order('trade_date', { ascending: false })
+    .limit(n)
+    .execute();
+  if (error) throw new Error(`[km_astro_daily_signal scores] ${error.message}`);
+  const rows = (data ?? []) as { trade_date: string; net_score: number }[];
+  return rows.reverse().map(r => r.net_score);
+}
