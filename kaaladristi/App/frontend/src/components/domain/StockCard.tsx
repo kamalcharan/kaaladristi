@@ -11,25 +11,9 @@ import { Card } from '@/components/ui';
 import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
 import React from 'react';
+import { ZONE_LABELS, FLOW_LABELS } from '@/constants/signalScale';
 
-// ── Vocabulary mapping (kept for backward compat with IndustryTransitionView, ManipulationWatchView) ──
-
-export const ZONE_LABELS: Record<string, { label: string; color: string }> = {
-  'Strong Bull': { label: 'Strong Bull', color: 'text-risk-green' },
-  'Mild Bull':   { label: 'Mild Bull',   color: 'text-risk-green/70' },
-  'Neutral':     { label: 'Neutral',     color: 'text-muted' },
-  'Mild Bear':   { label: 'Mild Bear',   color: 'text-risk-red/70' },
-  'Strong Bear': { label: 'Strong Bear', color: 'text-risk-red' },
-};
-
-export const FLOW_LABELS: Record<string, { label: string; color: string }> = {
-  FRESH_LONGS:      { label: 'Fresh Longs',      color: 'text-risk-green' },
-  FRESH_SHORTS:     { label: 'Fresh Shorts',     color: 'text-risk-red' },
-  SHORT_COVERING:   { label: 'Short Covering',   color: 'text-risk-amber' },
-  LONG_LIQUIDATION: { label: 'Liquidation',      color: 'text-risk-red/80' },
-  LOW_VOLUME:       { label: 'Low Volume',        color: 'text-muted' },
-  MIXED:            { label: 'Mixed',             color: 'text-muted' },
-};
+export { ZONE_LABELS, FLOW_LABELS };
 
 // ── Exchange Badge (kept for backward compat) ─────────────────
 
@@ -92,7 +76,7 @@ const FLOW_DISPLAY: Record<string, { label: string; bull: boolean }> = {
   FRESH_LONGS:      { label: 'Fresh Longs',   bull: true },
   SHORT_COVERING:   { label: 'Short Covering', bull: true },
   FRESH_SHORTS:     { label: 'Fresh Shorts',   bull: false },
-  LONG_LIQUIDATION: { label: 'Liquidation',    bull: false },
+  LONG_LIQUIDATION: { label: 'Long Liquidation', bull: false },
   LOW_VOLUME:       { label: 'Low Volume',     bull: false },
   MIXED:            { label: 'Mixed',          bull: false },
 };

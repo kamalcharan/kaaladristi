@@ -9,9 +9,9 @@ const FLOW_CONFIG: Record<string, { label: string; color: string; bg: string; bo
   FRESH_LONGS:       { label: 'Fresh Longs',       color: 'text-risk-green',    bg: 'bg-risk-green/10',    border: 'border-risk-green/30' },
   SHORT_COVERING:    { label: 'Short Covering',    color: 'text-risk-amber',    bg: 'bg-risk-amber/10',    border: 'border-risk-amber/30' },
   FRESH_SHORTS:      { label: 'Fresh Shorts',      color: 'text-risk-red',      bg: 'bg-risk-red/10',      border: 'border-risk-red/30' },
-  LONG_LIQUIDATION:  { label: 'Long Liquidation',  color: 'text-orange-400',    bg: 'bg-orange-400/10',    border: 'border-orange-400/30' },
-  MIXED:             { label: 'Mixed',             color: 'text-[var(--text-muted)]', bg: 'bg-kd-elevated',  border: 'border-kd-border' },
-  LOW_VOLUME:        { label: 'Low Vol',           color: 'text-[var(--text-muted)]', bg: 'bg-kd-elevated',  border: 'border-kd-border' },
+  LONG_LIQUIDATION:  { label: 'Long Liquidation',  color: 'text-risk-red/80',   bg: 'bg-risk-red/10',      border: 'border-risk-red/30'    },
+  MIXED:             { label: 'Mixed',             color: 'text-[var(--text-muted)]', bg: 'bg-kd-elevated',  border: 'border-kd-border'      },
+  LOW_VOLUME:        { label: 'Low Volume',        color: 'text-[var(--text-muted)]', bg: 'bg-kd-elevated',  border: 'border-kd-border'      },
 };
 
 function FlowBadge({ flow }: { flow: string | null }) {

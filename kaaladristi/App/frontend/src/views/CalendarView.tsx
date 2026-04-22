@@ -9,7 +9,7 @@ import {
   createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
 } from '@/services/astroCalendar';
 import type { AstroCalendarEvent, AstroDailySignal, AstroCalendarPayload } from '@/services/astroCalendar';
-import { ASTRO_SIGNAL_CLASSES, ASTRO_SIGNAL_LABELS, impactToColor } from '@/constants/astroSignals';
+import { SIGNAL_CLASSES as ASTRO_SIGNAL_CLASSES, SIGNAL_LABELS as ASTRO_SIGNAL_LABELS, impactToColor, IMPACT_OPTIONS } from '@/constants/signalScale';
 import {
   MONTH_ABBR, MONTH_FULL, DAY_ABBR,
   getDaysInMonth, getFirstWeekdayOffset, toIso, todayIso, fmtDate,
@@ -18,15 +18,15 @@ import {
 // ── Bias meta ─────────────────────────────────────────────────────────────────
 
 const BIAS: Record<string, { fill: string; border: string; label: string }> = {
-  strong_bullish: { fill: 'rgba(110,207,154,0.85)', border: 'var(--bull)',    label: 'Strong +'  },
-  bullish:        { fill: 'rgba(110,207,154,0.55)', border: 'var(--bull)',    label: 'Positive'  },
-  mild_bullish:   { fill: 'rgba(110,207,154,0.28)', border: 'var(--bull)',    label: 'Mild +'    },
-  neutral:        { fill: 'rgba(255,255,255,0.04)', border: 'transparent',   label: 'Neutral'   },
-  turning:        { fill: 'rgba(212,168,75,0.45)',  border: 'var(--gold)',   label: 'Turning'   },
-  mild_bearish:   { fill: 'rgba(200,130,50,0.28)',  border: 'var(--caution)',label: 'Mild −'    },
-  bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Caution'   },
-  strong_bearish: { fill: 'rgba(217,80,68,0.80)',   border: 'var(--bear)',   label: 'Negative'  },
-  closed:         { fill: 'rgba(46,42,34,0.35)',    border: 'transparent',   label: 'Closed'    },
+  strong_bullish: { fill: 'rgba(110,207,154,0.85)', border: 'var(--bull)',    label: 'Strong Bull' },
+  bullish:        { fill: 'rgba(110,207,154,0.55)', border: 'var(--bull)',    label: 'Bullish'     },
+  mild_bullish:   { fill: 'rgba(110,207,154,0.28)', border: 'var(--bull)',    label: 'Mild Bull'   },
+  neutral:        { fill: 'rgba(255,255,255,0.04)', border: 'transparent',   label: 'Neutral'     },
+  turning:        { fill: 'rgba(212,168,75,0.45)',  border: 'var(--gold)',   label: 'Turning'     },
+  mild_bearish:   { fill: 'rgba(200,130,50,0.28)',  border: 'var(--caution)',label: 'Mild Bear'   },
+  bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Bearish'     },
+  strong_bearish: { fill: 'rgba(217,80,68,0.80)',   border: 'var(--bear)',   label: 'Strong Bear' },
+  closed:         { fill: 'rgba(46,42,34,0.35)',    border: 'transparent',   label: 'Closed'      },
 };
 
 function getBias(signal: AstroDailySignal | undefined, isWeekend: boolean) {
@@ -221,14 +221,14 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
 
 function BiasLegend() {
   const items = [
-    { key: 'strong_bullish', label: 'Strong +' },
-    { key: 'bullish',        label: 'Positive' },
-    { key: 'mild_bullish',   label: 'Mild +'   },
-    { key: 'neutral',        label: 'Neutral'  },
-    { key: 'turning',        label: 'Turning'  },
-    { key: 'mild_bearish',   label: 'Mild −'   },
-    { key: 'bearish',        label: 'Caution'  },
-    { key: 'strong_bearish', label: 'Negative' },
+    { key: 'strong_bullish', label: 'Strong Bull' },
+    { key: 'bullish',        label: 'Bullish'     },
+    { key: 'mild_bullish',   label: 'Mild Bull'   },
+    { key: 'neutral',        label: 'Neutral'     },
+    { key: 'turning',        label: 'Turning'     },
+    { key: 'mild_bearish',   label: 'Mild Bear'   },
+    { key: 'bearish',        label: 'Bearish'     },
+    { key: 'strong_bearish', label: 'Strong Bear' },
   ];
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', alignItems: 'center', marginTop: 16 }}>
@@ -284,8 +284,8 @@ function MonthSummary({
       <div className="flex flex-wrap items-start gap-6">
         {/* Stats */}
         <div className="flex gap-4">
-          <Stat value={posCount}      label="Positive Days" color="text-emerald-400" />
-          <Stat value={cautionCount}  label="Caution Days"  color="text-risk-amber" />
+          <Stat value={posCount}      label="Bullish Days"  color="text-emerald-400" />
+          <Stat value={cautionCount}  label="Turning Days"  color="text-risk-amber" />
           <Stat value={peakCount}     label="Peak Days"     color="text-accent-gold" />
           <Stat value={events.length} label="Total Events"  color="text-accent-indigo" />
         </div>
@@ -895,19 +895,11 @@ const labelStyle: React.CSSProperties = {
   marginBottom: 5,
 };
 
-const IMPACT_OPTIONS = [
-  'strong_bullish', 'bullish', 'minor_bullish', 'neutral',
-  'turning', 'minor_bearish', 'bearish', 'strong_bearish',
-];
-
 function impactColor(impact: string): string {
-  if (impact === 'strong_bullish') return 'var(--bull)';
-  if (impact === 'bullish')        return 'var(--bull)';
-  if (impact === 'minor_bullish')  return 'var(--bull)';
-  if (impact === 'turning')        return 'var(--gold)';
-  if (impact === 'strong_bearish') return 'var(--bear)';
-  if (impact === 'bearish')        return 'var(--bear)';
-  if (impact === 'minor_bearish')  return 'var(--caution)';
+  if (['strong_bullish', 'bullish', 'mild_bullish'].includes(impact)) return 'var(--bull)';
+  if (impact === 'turning')                                            return 'var(--gold)';
+  if (['strong_bearish', 'bearish'].includes(impact))                 return 'var(--bear)';
+  if (impact === 'mild_bearish')                                       return 'var(--caution)';
   return 'var(--text-faint)';
 }
 
