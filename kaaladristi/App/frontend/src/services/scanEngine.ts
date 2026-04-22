@@ -826,10 +826,7 @@ function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbo
   for (const stock of stocks) {
     const sym = symbols.get(stock.equity_id);
     const isin = sym?.isin;
-    if (!isin) {
-      seen.set(`_noisn_${stock.equity_id}`, stock);
-      continue;
-    }
+    if (!isin) continue; // skip no-ISIN stocks in combined mode — matches SQL WHERE isin IS NOT NULL
     const existing = seen.get(isin);
     if (!existing) {
       seen.set(isin, stock);
@@ -866,6 +863,27 @@ export function invalidateScanCache(): void {
   _cachedBundle = null;
   _oppConfigCache = null;
   _oppDiagCount = 0;
+}
+
+/** Fetch scan preset definitions from the DB (via pipeline API). */
+export async function fetchScanPresets(): Promise<ScanDefinition[]> {
+  const res = await fetch(`${PIPELINE_URL}/api/scan/presets`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const rows = (await res.json()) as Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    tooltip: string | null;
+    sort_order: number;
+    result_limit: number;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description ?? '',
+    tooltip: r.tooltip ?? undefined,
+    limit: r.result_limit,
+  }));
 }
 
 export interface ScanCountsResult {

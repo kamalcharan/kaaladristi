@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ScanStock } from '@/types';
 import { ScanCardWrapper, VaniBadge, ScanSectionLabel, CardExchangeBadge } from './ScanCardShell';
+import { displaySymbol } from '@/lib/symbolUtils';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ function BurstCard({ stock }: { stock: ScanStock }) {
             letterSpacing: '-0.01em',
             flexShrink: 0,
           }}>
-            {stock.symbol}
+            {displaySymbol(stock)}
           </span>
           <CardExchangeBadge exchange={stock.exchange} />
           {isVani && <VaniBadge />}

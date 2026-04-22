@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Loader2, ChevronLeft } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useScan, useAllScanCounts } from '@/hooks/useScan';
+import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
@@ -154,6 +154,7 @@ function ActionIsland({ children }: { children: React.ReactNode }) {
 function ScannerLanding() {
   const navigate = useNavigate();
   const { data: allCountsData } = useAllScanCounts('combined');
+  const { data: presets = SCAN_PRESETS } = useScanPresets();
   const allCounts = allCountsData?.counts;
   const latestDate = allCountsData?.latestDate ?? null;
 
@@ -187,7 +188,7 @@ function ScannerLanding() {
 
       {/* Preset grid — 3 columns, taller cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-        {SCAN_PRESETS.map((preset) => {
+        {presets.map((preset) => {
           const count = allCounts?.[preset.id] ?? null;
           const rel = count != null ? getRelevance(count) : 1;
           const bar = REL_BAR[rel];
@@ -658,10 +659,11 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [oppFilter, setOppFilter] = useState(false);
 
-  const preset = SCAN_PRESETS.find((p) => p.id === presetId);
+  const { data: presets = SCAN_PRESETS } = useScanPresets();
+  const preset = presets.find((p) => p.id === presetId);
 
   const { data: stocks, isLoading, error } = useScan(
-    preset ? presetId : SCAN_PRESETS[0].id,
+    preset ? presetId : (presets[0]?.id ?? presetId),
     exchangeFilter,
   );
 
