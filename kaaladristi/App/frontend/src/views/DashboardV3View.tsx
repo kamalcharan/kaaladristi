@@ -3,19 +3,22 @@ import { useAppStore } from '@/stores/appStore';
 import { useDashboardPings } from '@/hooks/useDashboardPings';
 import {
   TodaysSky,
+  CurrentSkyRail,
+  PingsColumn,
+  SixDayOutlookCompact,
   DensityToggle,
   ActionIsland,
   type Density,
 } from '@/components/domain/DashboardV3';
 
-// ── Placeholder card for Step 2 panels ───────────────────────────────────────
+// ── Step 3 placeholder ────────────────────────────────────────────────────────
 
 function ComingSoonCard({ label }: { label: string }) {
   return (
     <div
       className="rounded-xl flex items-center justify-center"
       style={{
-        minHeight: 180,
+        minHeight: 160,
         background: 'var(--card)',
         border: '1px dashed var(--border)',
       }}
@@ -29,7 +32,7 @@ function ComingSoonCard({ label }: { label: string }) {
           textTransform: 'uppercase',
         }}
       >
-        {label} · Step 2
+        {label} · Step 3
       </span>
     </div>
   );
@@ -58,13 +61,14 @@ export default function DashboardV3View() {
               marginBottom: 4,
             }}
           >
-            {new Date(selectedDate).toLocaleDateString('en-IN', {
+            {new Date(selectedDate + 'T00:00:00Z').toLocaleDateString('en-IN', {
               weekday: 'long',
               day: 'numeric',
               month: 'long',
               year: 'numeric',
-            })}
-            {' '}· End of Day
+              timeZone: 'UTC',
+            })}{' '}
+            · End of Day
           </div>
           <h1
             style={{
@@ -77,7 +81,10 @@ export default function DashboardV3View() {
               margin: 0,
             }}
           >
-            Today&apos;s <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Read</em>
+            Today&apos;s{' '}
+            <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
+              Read
+            </em>
           </h1>
         </div>
         <DensityToggle density={density} onChange={setDensity} />
@@ -92,13 +99,13 @@ export default function DashboardV3View() {
           className="grid gap-4 mb-4"
           style={{ gridTemplateColumns: '1fr 2fr 1fr' }}
         >
-          <ComingSoonCard label="Current Sky" />
-          <ComingSoonCard label="Pings · What stands out" />
-          <ComingSoonCard label="Six-day outlook" />
+          <CurrentSkyRail date={selectedDate} />
+          <PingsColumn date={selectedDate} />
+          <SixDayOutlookCompact date={selectedDate} />
         </div>
       )}
 
-      {/* ── TERMINAL only: ambient gauges + sector rotation ── */}
+      {/* ── TERMINAL only: ambient context + sector rotation (Step 3) ── */}
       {density === 'terminal' && (
         <>
           <ComingSoonCard label="Ambient context" />
