@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
 import React from 'react';
 import { ZONE_LABELS, FLOW_LABELS } from '@/constants/signalScale';
-import { ScanCardWrapper, VaniBadge } from './ScanCardShell';
+import { ScanCardWrapper, VaniBadge, CardExchangeBadge } from './ScanCardShell';
 
 export { ZONE_LABELS, FLOW_LABELS };
 
@@ -254,17 +254,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
           }}>
             {heroName}
           </span>
-          {stock.exchange && (
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '9px', padding: '2px 5px',
-              borderRadius: '4px', letterSpacing: '0.1em', fontWeight: 600,
-              background: stock.exchange === 'NSE' ? 'rgba(6,182,212,0.12)' : 'rgba(251,191,36,0.12)',
-              color: stock.exchange === 'NSE' ? '#06b6d4' : '#fbbf24',
-              border: `1px solid ${stock.exchange === 'NSE' ? 'rgba(6,182,212,0.25)' : 'rgba(251,191,36,0.25)'}`,
-            }}>
-              {stock.exchange}
-            </span>
-          )}
+          <CardExchangeBadge exchange={stock.exchange} />
           {flowCfg && (
             <span style={{
               fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '2px 7px',

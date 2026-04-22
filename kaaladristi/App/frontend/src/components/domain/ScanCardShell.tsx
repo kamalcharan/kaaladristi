@@ -54,6 +54,24 @@ export function Avatar({ symbol, isVani }: { symbol: string; isVani: boolean }) 
   );
 }
 
+// ── Exchange badge ────────────────────────────────────────────────────────────
+
+export function CardExchangeBadge({ exchange }: { exchange: string | null | undefined }) {
+  if (!exchange) return null;
+  const isNse = exchange === 'NSE';
+  return (
+    <span style={{
+      fontFamily: 'var(--font-mono)', fontSize: '9px', padding: '2px 5px',
+      borderRadius: '4px', letterSpacing: '0.1em', fontWeight: 600, flexShrink: 0,
+      background: isNse ? 'rgba(6,182,212,0.12)' : 'rgba(251,191,36,0.12)',
+      color: isNse ? '#06b6d4' : '#fbbf24',
+      border: `1px solid ${isNse ? 'rgba(6,182,212,0.25)' : 'rgba(251,191,36,0.25)'}`,
+    }}>
+      {exchange}
+    </span>
+  );
+}
+
 // ── VaNi Opportunity badge ────────────────────────────────────────────────────
 
 export function VaniBadge() {

@@ -65,6 +65,65 @@ const REL_BAR: Record<number, { width: string; color: string; opacity: number }>
   4: { width: '100%', color: 'var(--gold)',       opacity: 1   },
 };
 
+// ── Exchange Tabs (shared) ─────────────────────────────────────
+
+function ExchangeTabs({ value, onChange }: { value: ExchangeFilter; onChange: (f: ExchangeFilter) => void }) {
+  return (
+    <div style={{
+      display: 'flex', gap: '2px', padding: '4px',
+      background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '100px',
+    }}>
+      {(['combined', 'NSE', 'BSE'] as ExchangeFilter[]).map((ex) => (
+        <button
+          key={ex}
+          onClick={() => onChange(ex)}
+          style={{
+            padding: '6px 16px', borderRadius: '100px', border: 'none',
+            background: value === ex ? 'rgba(255,255,255,0.06)' : 'transparent',
+            color: value === ex ? 'var(--text-primary)' : 'var(--text-muted)',
+            fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+            fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+          }}
+        >
+          {ex === 'combined' ? 'Combined' : ex}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── VaNi filter button (shared) ────────────────────────────────
+
+function VaniFilterButton({ active, count, onToggle }: { active: boolean; count: number; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '6px',
+        padding: '6px 12px',
+        background: active ? 'var(--gold)' : 'transparent',
+        border: '1px solid var(--border-gold)',
+        color: active ? '#1a1410' : 'var(--gold)',
+        borderRadius: '100px',
+        fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+        fontFamily: 'var(--font-body)', transition: 'all 0.2s',
+        boxShadow: active ? '0 0 16px rgba(212,168,75,0.3)' : undefined,
+      }}
+    >
+      <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
+      VaNi Opportunity
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: '10px',
+        padding: '1px 6px', borderRadius: '100px',
+        background: 'rgba(0,0,0,0.2)',
+        color: active ? '#1a1410' : undefined,
+      }}>
+        {count}
+      </span>
+    </button>
+  );
+}
+
 // ── Action Island (shared shell) ──────────────────────────────
 
 function ActionIsland({ children }: { children: React.ReactNode }) {
@@ -328,7 +387,8 @@ function sortCFStocks(stocks: ScanStock[], key: CFSortKey, dir: SortDir): ScanSt
 // ── Conviction Flow results (server-side RPC, different columns) ───────────
 
 function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
-  const { data: stocks = [], isLoading, error } = useScan('conviction_flow');
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
+  const { data: stocks = [], isLoading, error } = useScan('conviction_flow', exchangeFilter);
   const [sortKey, setSortKey] = useState<CFSortKey>('delivery_surge_x');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [vaniOnly, setVaniOnly] = useState(false);
@@ -352,39 +412,10 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: '20px', gap: '12px', flexWrap: 'wrap',
       }}>
-        {/* Left: VaNi toggle + label */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => setVaniOnly((f) => !f)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '6px 12px',
-              background: vaniOnly ? 'var(--gold)' : 'transparent',
-              border: '1px solid var(--border-gold)',
-              color: vaniOnly ? '#1a1410' : 'var(--gold)',
-              borderRadius: '100px',
-              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
-              fontFamily: 'var(--font-body)', transition: 'all 0.2s',
-              boxShadow: vaniOnly ? '0 0 16px rgba(212,168,75,0.3)' : undefined,
-            }}
-          >
-            <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
-            VaNi Opportunity
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '10px',
-              padding: '1px 6px', borderRadius: '100px',
-              background: 'rgba(0,0,0,0.2)',
-              color: vaniOnly ? '#1a1410' : undefined,
-            }}>
-              {vaniCount}
-            </span>
-          </button>
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: '10px',
-            color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.07em',
-          }}>
-            Delivery value surge · all exchanges
-          </span>
+        {/* Left: exchange tabs + VaNi toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} />
+          <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
         </div>
 
         {/* Right: sort strip */}
@@ -508,7 +539,8 @@ function sortBSStocks(stocks: ScanStock[], key: BSSortKey, dir: SortDir): ScanSt
 // ── Breakout Surge results ────────────────────────────────────
 
 function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
-  const { data: stocks = [], isLoading, error } = useScan('breakout_surge');
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
+  const { data: stocks = [], isLoading, error } = useScan('breakout_surge', exchangeFilter);
   const [sortKey, setSortKey] = useState<BSSortKey>('rvol');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [vaniOnly, setVaniOnly] = useState(false);
@@ -532,39 +564,10 @@ function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: '20px', gap: '12px', flexWrap: 'wrap',
       }}>
-        {/* Left: VaNi toggle + label */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => setVaniOnly((f) => !f)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '6px 12px',
-              background: vaniOnly ? 'var(--gold)' : 'transparent',
-              border: '1px solid var(--border-gold)',
-              color: vaniOnly ? '#1a1410' : 'var(--gold)',
-              borderRadius: '100px',
-              fontSize: '11px', fontWeight: 600, cursor: 'pointer',
-              fontFamily: 'var(--font-body)', transition: 'all 0.2s',
-              boxShadow: vaniOnly ? '0 0 16px rgba(212,168,75,0.3)' : undefined,
-            }}
-          >
-            <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
-            VaNi Opportunity
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '10px',
-              padding: '1px 6px', borderRadius: '100px',
-              background: 'rgba(0,0,0,0.2)',
-              color: vaniOnly ? '#1a1410' : undefined,
-            }}>
-              {vaniCount}
-            </span>
-          </button>
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: '10px',
-            color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.07em',
-          }}>
-            NSE breakouts · RVOL &gt; 2×
-          </span>
+        {/* Left: exchange tabs + VaNi toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} />
+          <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
         </div>
 
         {/* Right: sort strip */}
@@ -786,55 +789,8 @@ function ScannerResults({ presetId }: { presetId: string }) {
         marginBottom: '20px', gap: '16px', flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Exchange tabs */}
-          <div style={{
-            display: 'flex', gap: '2px', padding: '4px',
-            background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '100px',
-          }}>
-            {(['combined', 'NSE', 'BSE'] as ExchangeFilter[]).map((ex) => (
-              <button
-                key={ex}
-                onClick={() => setExchangeFilter(ex)}
-                style={{
-                  padding: '6px 16px', borderRadius: '100px', border: 'none',
-                  background: exchangeFilter === ex ? 'rgba(255,255,255,0.06)' : 'transparent',
-                  color: exchangeFilter === ex ? 'var(--text-primary)' : 'var(--text-muted)',
-                  fontSize: '12px', fontWeight: 500, cursor: 'pointer',
-                  fontFamily: 'var(--font-body)', transition: 'all 0.15s',
-                }}
-              >
-                {ex === 'combined' ? 'Combined' : ex}
-              </button>
-            ))}
-          </div>
-
-          {/* VaNi Opportunity filter */}
-          <button
-            onClick={() => setOppFilter((f) => !f)}
-            title="Show only setups that pass today's VaNi opportunity policy"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              padding: '7px 14px',
-              background: oppFilter ? 'var(--gold)' : 'transparent',
-              border: '1px solid var(--border-gold)',
-              color: oppFilter ? '#1a1410' : 'var(--gold)',
-              borderRadius: '100px',
-              fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-              fontFamily: 'var(--font-body)', transition: 'all 0.2s',
-              boxShadow: oppFilter ? '0 0 20px rgba(212,168,75,0.3)' : undefined,
-            }}
-          >
-            <span style={{ fontSize: '11px', lineHeight: 1 }}>✦</span>
-            VaNi Opportunity
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '10.5px',
-              padding: '2px 7px', borderRadius: '100px', marginLeft: '2px',
-              background: 'rgba(0,0,0,0.2)',
-              color: oppFilter ? '#1a1410' : undefined,
-            }}>
-              {oppCount}
-            </span>
-          </button>
+          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} />
+          <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />
         </div>
 
         {/* Sort strip */}
