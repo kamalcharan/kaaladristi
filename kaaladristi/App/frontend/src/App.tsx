@@ -11,6 +11,7 @@ import LandingPage from '@/views/LandingPage';
 import LoginPage from '@/views/LoginPage';
 import ProfileSetup from '@/views/ProfileSetup';
 import DashboardPage from '@/views/DashboardPage';
+import DashboardV3Page from '@/views/DashboardV3Page';
 import MarketsView from '@/views/MarketsView';
 
 import TransmissionView from '@/views/TransmissionView';
@@ -95,7 +96,8 @@ function AppRoutes() {
       {/* Authenticated + onboarded: App shell */}
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardV3Page />} />
+          <Route path="/dashboard-v1" element={<DashboardPage />} />
           <Route path="/markets" element={<MarketsView />} />
 
           <Route path="/transmission" element={<TransmissionView />} />
