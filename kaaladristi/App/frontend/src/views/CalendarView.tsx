@@ -54,10 +54,11 @@ interface DayCellProps {
   signal?: AstroDailySignal;
   isToday: boolean;
   isWeekend: boolean;
+  isSelected?: boolean;
   onClick?: () => void;
 }
 
-function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, onClick }: DayCellProps) {
+function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelected, onClick }: DayCellProps) {
   const bias    = getBias(signal, isWeekend);
   const turning = signal?.turning_date ?? false;
   const isMajor = events.some(e =>
@@ -75,8 +76,10 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, onClick 
         padding: '9px 9px 8px',
         minHeight: 100,
         textAlign: 'left',
-        background: isToday ? 'rgba(212,168,75,0.04)' : 'transparent',
-        border: isToday
+        background: isSelected ? 'rgba(212,168,75,0.06)' : isToday ? 'rgba(212,168,75,0.04)' : 'transparent',
+        border: isSelected
+          ? '1px solid var(--gold)'
+          : isToday
           ? '1px solid rgba(212,168,75,0.5)'
           : '1px solid var(--border)',
         cursor: 'pointer',
@@ -299,6 +302,200 @@ function Stat({ value, label, color }: { value: number; label: string; color: st
     <div className="text-center">
       <p className={cn('text-2xl font-bold mono', color)}>{value}</p>
       <p className="text-[10px] text-muted uppercase tracking-wide">{label}</p>
+    </div>
+  );
+}
+
+// ── Day Inspector ─────────────────────────────────────────────────────────────
+
+function CountPill({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 3,
+      padding: '3px 7px',
+      border: `1px solid ${color}40`,
+      borderRadius: 4,
+      background: `${color}10`,
+    }}>
+      <span style={{ fontSize: 8, color }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color }}>{value}</span>
+    </div>
+  );
+}
+
+function EventGroup({ label, items }: { label: string; items: AstroCalendarEvent[] }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.2em',
+        color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8,
+      }}>
+        {label} ({items.length})
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map(ev => {
+          const col = impactColor(ev.market_impact);
+          const desc = ev.narrative ?? ev.inference ?? null;
+          return (
+            <div key={ev.id} style={{ borderLeft: `2px solid ${col}`, paddingLeft: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 2 }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 8.5,
+                  color: col, letterSpacing: '0.1em', textTransform: 'uppercase',
+                }}>
+                  {ev.market_impact.replace(/_/g, ' ')}
+                </span>
+                {ev.end_date && ev.end_date !== ev.start_date && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)' }}>
+                    → {ev.end_date.slice(5)}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: desc ? 4 : 0 }}>
+                {ev.display_name}
+              </div>
+              {desc && (
+                <div style={{ fontSize: 10.5, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+                  {desc}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DayInspector({
+  dayIso, signal, events, isToday, onClose,
+}: {
+  dayIso: string;
+  signal?: AstroDailySignal;
+  events: AstroCalendarEvent[];
+  isToday: boolean;
+  onClose: () => void;
+}) {
+  const parts = dayIso.split('-').map(Number);
+  const [, m, d] = parts;
+  const dow = new Date(dayIso).getDay();
+  const weekdayFull = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dow];
+  const isWeekend = dow === 0 || dow === 6;
+  const bias = getBias(signal, isWeekend);
+  const turning = signal?.turning_date ?? false;
+  const score = signal?.net_score ?? null;
+  const transits = events.filter(e => e.is_transit);
+  const discrete = events.filter(e => !e.is_transit);
+
+  return (
+    <div style={{
+      position: 'sticky', top: 80,
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        padding: '16px 18px 12px',
+        borderBottom: '1px solid var(--border)',
+        background: isToday ? 'rgba(212,168,75,0.04)' : 'transparent',
+      }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 9,
+            color: 'var(--text-faint)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 4,
+          }}>
+            {MONTH_FULL[m - 1]} · {weekdayFull}
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: 44,
+            color: isToday ? 'var(--gold)' : 'var(--text-primary)', lineHeight: 1,
+          }}>
+            {d}
+          </div>
+          {isToday && (
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--gold)',
+              letterSpacing: '0.2em', border: '1px solid rgba(212,168,75,0.4)',
+              padding: '1px 5px', marginTop: 5, display: 'inline-block',
+            }}>
+              TODAY
+            </span>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          style={{ color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, padding: '0 4px', lineHeight: 1 }}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Signal block */}
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
+        {signal && !isWeekend ? (
+          <>
+            <div style={{
+              background: bias.fill,
+              borderLeft: `3px solid ${bias.border !== 'transparent' ? bias.border : 'rgba(255,255,255,0.1)'}`,
+              borderRadius: '0 6px 6px 0',
+              padding: '10px 14px', marginBottom: 10,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 10,
+                  color: bias.border !== 'transparent' ? bias.border : 'var(--text-faint)',
+                  letterSpacing: '0.14em', textTransform: 'uppercase',
+                }}>
+                  {bias.label}
+                </span>
+                {score !== null && (
+                  <span style={{
+                    fontFamily: 'var(--font-display)', fontSize: 22,
+                    color: bias.border !== 'transparent' ? bias.border : 'var(--text-secondary)', lineHeight: 1,
+                  }}>
+                    {score > 0 ? `+${score}` : score}
+                  </span>
+                )}
+              </div>
+              {turning && (
+                <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 8.5, color: 'var(--gold)', letterSpacing: '0.12em' }}>
+                  ◈ TURNING DATE
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {signal.strong_bullish_count  > 0 && <CountPill label="▲▲" value={signal.strong_bullish_count}  color="var(--bull)" />}
+              {signal.bullish_count         > 0 && <CountPill label="▲"  value={signal.bullish_count}         color="var(--bull)" />}
+              {signal.minor_bullish_count   > 0 && <CountPill label="△"  value={signal.minor_bullish_count}   color="var(--bull)" />}
+              {signal.neutral_count         > 0 && <CountPill label="·"  value={signal.neutral_count}         color="var(--text-faint)" />}
+              {signal.minor_bearish_count   > 0 && <CountPill label="▽"  value={signal.minor_bearish_count}   color="var(--caution)" />}
+              {signal.bearish_count         > 0 && <CountPill label="▼"  value={signal.bearish_count}         color="var(--caution)" />}
+              {signal.strong_bearish_count  > 0 && <CountPill label="▼▼" value={signal.strong_bearish_count}  color="var(--bear)" />}
+            </div>
+          </>
+        ) : (
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', fontStyle: 'italic' }}>
+            {isWeekend ? 'Market closed' : 'No signal data'}
+          </div>
+        )}
+      </div>
+
+      {/* Events list */}
+      <div style={{ padding: '14px 18px', maxHeight: 440, overflowY: 'auto' }}>
+        {events.length === 0 ? (
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>
+            No events this day
+          </div>
+        ) : (
+          <>
+            {discrete.length > 0 && <EventGroup label="Events" items={discrete} />}
+            {transits.length > 0 && <EventGroup label="Active Transits" items={transits} />}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1013,6 +1210,7 @@ export default function DCCalendarView() {
   const [year,  setYear]  = useState(2026);
   const [month, setMonth] = useState(4);
   const [view,  setView]  = useState<'calendar' | 'timeline' | 'admin'>('calendar');
+  const [picked, setPicked] = useState<string | null>(null);
   const { isAdmin } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -1066,8 +1264,10 @@ export default function DCCalendarView() {
     };
   }), [offset, numDays, totalCells, year, month, events, signalMap, today]);
 
-  const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
-  const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
+  const pickedCell = picked ? (cells.find(c => c?.iso === picked) ?? null) : null;
+
+  const prevMonth = () => { setPicked(null); if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const nextMonth = () => { setPicked(null); if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
 
   return (
     <ErrorBoundary>
@@ -1178,45 +1378,67 @@ export default function DCCalendarView() {
               />
             ) : view === 'calendar' ? (
               <>
-                {/* Calendar grid */}
-                <div className="glass-card rounded-3xl p-5">
-                  {/* Day headers */}
-                  <div className="grid grid-cols-7 mb-3">
-                    {DAY_ABBR.map(d => (
-                      <div key={d} className="text-center text-[11px] uppercase tracking-widest font-bold text-muted py-2">
-                        {d}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: picked ? 'minmax(0, 1fr) 310px' : '1fr',
+                  gap: 16,
+                  alignItems: 'start',
+                }}>
+                  {/* Left: calendar */}
+                  <div>
+                    <div className="glass-card rounded-3xl p-5">
+                      {/* Day headers */}
+                      <div className="grid grid-cols-7 mb-3">
+                        {DAY_ABBR.map(d => (
+                          <div key={d} className="text-center text-[11px] uppercase tracking-widest font-bold text-muted py-2">
+                            {d}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+
+                      {/* Day cells */}
+                      <div className="grid grid-cols-7 gap-2">
+                        {cells.map((cell, i) =>
+                          cell ? (
+                            <DayCell
+                              key={cell.iso}
+                              dayIso={cell.iso}
+                              dayNum={cell.dayNum}
+                              weekday={cell.weekday}
+                              events={cell.events}
+                              signal={cell.signal}
+                              isToday={cell.isToday}
+                              isWeekend={cell.isWeekend}
+                              isSelected={picked === cell.iso}
+                              onClick={() => setPicked(p => p === cell.iso ? null : cell.iso)}
+                            />
+                          ) : (
+                            <div key={`empty-${i}`} className="min-h-[130px]" />
+                          )
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Legend */}
+                    <BiasLegend />
+
+                    {/* Footer */}
+                    <p className="text-[10px] text-muted text-right mt-4 mono">
+                      Kāla-Drishti · {events.length} events · {MONTH_FULL[month - 1]} {year}
+                    </p>
                   </div>
 
-                  {/* Day cells */}
-                  <div className="grid grid-cols-7 gap-2">
-                    {cells.map((cell, i) =>
-                      cell ? (
-                        <DayCell
-                          key={cell.iso}
-                          dayIso={cell.iso}
-                          dayNum={cell.dayNum}
-                          weekday={cell.weekday}
-                          events={cell.events}
-                          signal={cell.signal}
-                          isToday={cell.isToday}
-                          isWeekend={cell.isWeekend}
-                        />
-                      ) : (
-                        <div key={`empty-${i}`} className="min-h-[130px]" />
-                      )
-                    )}
-                  </div>
+                  {/* Right: inspector */}
+                  {picked && pickedCell && (
+                    <DayInspector
+                      dayIso={picked}
+                      signal={pickedCell.signal}
+                      events={pickedCell.events}
+                      isToday={pickedCell.isToday}
+                      onClose={() => setPicked(null)}
+                    />
+                  )}
                 </div>
-
-                {/* Legend */}
-                <BiasLegend />
-
-                {/* Footer */}
-                <p className="text-[10px] text-muted text-right mt-4 mono">
-                  Kāla-Drishti · {events.length} events · {MONTH_FULL[month - 1]} {year}
-                </p>
               </>
             ) : (
               <TimelineView events={events} year={year} month={month} />
