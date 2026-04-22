@@ -70,8 +70,11 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
   const topEvent = events.find(e => !e.is_transit) ?? events[0];
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onClick?.()}
       style={{
         position: 'relative',
         padding: '9px 9px 8px',
@@ -213,7 +216,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
