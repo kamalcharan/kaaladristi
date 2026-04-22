@@ -365,7 +365,7 @@ function getIndustryClassifications(bundle: ScanDataBundle) {
 function buildScanStock(
   equityId: number,
   bundle: ScanDataBundle,
-  presetId: string,
+  presetId: string | null = null,
 ): ScanStock | null {
   const eod = bundle.latestEod.get(equityId);
   const sym = bundle.symbols.get(equityId);
@@ -422,7 +422,7 @@ function buildScanStock(
     pctBelow52wHigh,
   };
 
-  const presetCfg = bundle.oppConfigMap.get(presetId) ?? null;
+  const presetCfg = presetId ? (bundle.oppConfigMap.get(presetId) ?? null) : null;
   return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
 }
 
@@ -694,7 +694,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
     if (d_pct < -8 || d_pct > 8) continue;
 
-    const stock = buildScanStock(id, bundle, 'conviction_flow');
+    const stock = buildScanStock(id, bundle); // VaNi computed inline below
     if (!stock) continue;
 
     const is_vani =
@@ -769,7 +769,7 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
 
-    const stock = buildScanStock(id, bundle, 'breakout_surge');
+    const stock = buildScanStock(id, bundle); // VaNi computed inline below
     if (!stock) continue;
 
     const is_vani =
