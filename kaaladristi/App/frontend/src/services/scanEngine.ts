@@ -748,34 +748,37 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 /** Scan 8: Breakout Surge */
 function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
-  const dbg = { total: 0, noSym: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
     const sym = bundle.symbols.get(id);
-    dbg.total++;
-    if (!eod || !sym) { dbg.noSym++; continue; }
+    if (!eod || !sym) continue;
 
+    // Need at least 15 prior bars to compute a reliable breakout level
     const history = bundle.eodHistory.get(id) ?? [];
-    if (history.length < 21) { dbg.shortHist++; continue; }
+    const priorBars = Math.min(history.length - 1, 20); // history[1..20], skip today at [0]
+    if (priorBars < 15) continue;
 
-    // breakout_level = MAX(close) over prior 20 bars (history[1..20], skip today at [0])
+    // breakout_level = MAX(close) over up to 20 prior bars
     let breakout_level = 0;
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= priorBars; i++) {
       const c = Number(history[i].close);
       if (c > breakout_level) breakout_level = c;
     }
 
-    if (Number(eod.close) <= breakout_level) { dbg.belowBrk++; continue; }
-    if (Number(eod.close) <= 100) { dbg.below100++; continue; }
-    if ((Number(eod.rvol) || 0) <= 2) { dbg.lowRvol++; continue; }
+    const close = Number(eod.close);
+    const ema20 = (eod.ema_20 != null && Number(eod.ema_20) > 0) ? Number(eod.ema_20) : null;
+    const rvol  = Number(eod.rvol) || 0;
+    const rsi14 = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
 
-    const close      = Number(eod.close);
-    const ema20      = (eod.ema_20 != null && Number(eod.ema_20) > 0) ? Number(eod.ema_20) : null;
-    const rvol       = Number(eod.rvol) || 0;
-    const rsi14      = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
+    // Universe filters (match SQL WHERE clause)
+    if (close <= breakout_level) continue;
+    if (close < 50) continue;           // minimum price ≥ 50
+    if (rvol <= 0.1) continue;          // some minimum volume activity
+    if (ema20 == null) continue;        // indicators must be computed
+
     const pct_from_breakout = ((close - breakout_level) / breakout_level) * 100;
-    const d_pct = ema20 != null ? ((close - ema20) / ema20) * 100 : null;
+    const d_pct  = ((close - ema20) / ema20) * 100;
     const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
 
@@ -784,27 +787,26 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
 
     const is_vani =
       rvol > 5 &&
-      pct_from_breakout >= 0 &&
-      pct_from_breakout <= 5 &&
+      pct_from_breakout >= 0 && pct_from_breakout <= 5 &&
       (rsi14 ?? 100) < 75 &&
-      d_pct != null && d_pct < 15;
+      d_pct < 15;
 
     results.push({
       ...stock,
       vaniOpportunity: is_vani,
-      d_pct:            d_pct != null ? Math.round(d_pct * 100) / 100 : null,
-      breakout_level:   Math.round(breakout_level   * 100) / 100,
+      d_pct:             Math.round(d_pct             * 100) / 100,
+      breakout_level:    Math.round(breakout_level    * 100) / 100,
       pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
       ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
     });
   }
 
-  console.log('[breakout_surge] latestDate:', bundle.latestDate, '| filters:', dbg, '| results:', results.length);
+  console.log('[breakout_surge] latestDate:', bundle.latestDate, '| results:', results.length);
 
   return results
     .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
-    .slice(0, 50);
+    .slice(0, 100);
 }
 
 // ── Public API ─────────────────────────────────────────────────
