@@ -33,17 +33,22 @@ function labelFor(iso: string): { dow: string; dd: number; mon: string } {
 interface Tone { label: string; color: string; borderAccent: string }
 
 function signalToTone(signal: string | undefined): Tone {
-  switch (signal?.toUpperCase()) {
-    case 'STRONG_BULL':
-    case 'BULL':
-    case 'BULLISH':    return { label: 'Positive', color: 'var(--bull)',    borderAccent: 'var(--bull)' };
-    case 'MINOR_BULL': return { label: 'Mild +',   color: 'var(--bull)',    borderAccent: 'var(--bull)' };
-    case 'NEUTRAL':    return { label: 'Neutral',  color: 'var(--text-faint)', borderAccent: 'transparent' };
-    case 'MINOR_BEAR': return { label: 'Mild −',   color: 'var(--caution)', borderAccent: 'var(--caution)' };
-    case 'BEAR':
-    case 'BEARISH':    return { label: 'Caution',  color: 'var(--caution)', borderAccent: 'var(--caution)' };
-    case 'STRONG_BEAR':return { label: 'Negative', color: 'var(--bear)',    borderAccent: 'var(--bear)' };
-    default:           return { label: '—',        color: 'var(--text-faint)', borderAccent: 'transparent' };
+  switch (signal?.toLowerCase()) {
+    case 'strong_bull':
+    case 'strong_bullish':
+    case 'bull':
+    case 'bullish':      return { label: 'Positive', color: 'var(--bull)',        borderAccent: 'var(--bull)' };
+    case 'minor_bull':
+    case 'minor_bullish':return { label: 'Mild +',   color: 'var(--bull)',        borderAccent: 'var(--bull)' };
+    case 'neutral':      return { label: 'Neutral',  color: 'var(--text-faint)',  borderAccent: 'transparent' };
+    case 'turning':      return { label: 'Turning',  color: 'var(--gold)',        borderAccent: 'var(--gold)' };
+    case 'minor_bear':
+    case 'minor_bearish':return { label: 'Mild −',   color: 'var(--caution)',     borderAccent: 'var(--caution)' };
+    case 'bear':
+    case 'bearish':      return { label: 'Caution',  color: 'var(--caution)',     borderAccent: 'var(--caution)' };
+    case 'strong_bear':
+    case 'strong_bearish':return { label: 'Negative', color: 'var(--bear)',       borderAccent: 'var(--bear)' };
+    default:             return { label: '—',        color: 'var(--text-faint)',  borderAccent: 'transparent' };
   }
 }
 
@@ -219,8 +224,9 @@ export default function SixDayOutlookCompact({ date }: SixDayOutlookCompactProps
       >
         {[
           { color: 'var(--bull)',    label: 'Positive' },
-          { color: 'var(--caution)',  label: 'Caution' },
+          { color: 'var(--caution)', label: 'Caution' },
           { color: 'var(--bear)',    label: 'Negative' },
+          { color: 'var(--gold)',    label: 'Turning' },
         ].map(({ color, label }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div
