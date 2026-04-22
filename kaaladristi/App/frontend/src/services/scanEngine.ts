@@ -733,16 +733,21 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 /** Scan 8: Breakout Surge */
 function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
+  const dbg = {
+    total: 0, noSym: 0, shortHist: 0,
+    belowBrk: 0, below50: 0, lowRvol: 0, noEma: 0,
+  };
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
     const sym = bundle.symbols.get(id);
-    if (!eod || !sym) continue;
+    dbg.total++;
+    if (!eod || !sym) { dbg.noSym++; continue; }
 
     // Need at least 15 prior bars to compute a reliable breakout level
     const history = bundle.eodHistory.get(id) ?? [];
     const priorBars = Math.min(history.length - 1, 20); // history[1..20], skip today at [0]
-    if (priorBars < 15) continue;
+    if (priorBars < 15) { dbg.shortHist++; continue; }
 
     // breakout_level = MAX(close) over up to 20 prior bars
     let breakout_level = 0;
@@ -757,10 +762,10 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     const rsi14 = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
 
     // Universe filters (match SQL WHERE clause)
-    if (close <= breakout_level) continue;
-    if (close < 50) continue;           // minimum price ≥ 50
-    if (rvol <= 0.1) continue;          // some minimum volume activity
-    if (ema20 == null) continue;        // indicators must be computed
+    if (close <= breakout_level) { dbg.belowBrk++; continue; }
+    if (close < 50)              { dbg.below50++;  continue; }
+    if (rvol <= 0.1)             { dbg.lowRvol++;  continue; }
+    if (ema20 == null)           { dbg.noEma++;    continue; }
 
     const pct_from_breakout = ((close - breakout_level) / breakout_level) * 100;
     const d_pct  = ((close - ema20) / ema20) * 100;
@@ -787,7 +792,17 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     });
   }
 
-  console.log('[breakout_surge] latestDate:', bundle.latestDate, '| results:', results.length);
+  console.log(
+    '[breakout_surge] latestDate:', bundle.latestDate,
+    '\n  total in latestEod:', dbg.total,
+    '| noSym:', dbg.noSym,
+    '| shortHist (<15 bars):', dbg.shortHist,
+    '| belowBrk:', dbg.belowBrk,
+    '| below50:', dbg.below50,
+    '| lowRvol:', dbg.lowRvol,
+    '| noEma:', dbg.noEma,
+    '| PASSED:', results.length,
+  );
 
   return results
     .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
