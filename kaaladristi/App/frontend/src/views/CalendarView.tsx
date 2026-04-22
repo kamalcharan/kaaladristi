@@ -56,9 +56,10 @@ interface DayCellProps {
   isWeekend: boolean;
   isSelected?: boolean;
   onClick?: () => void;
+  onEditEvent?: (ev: AstroCalendarEvent) => void;
 }
 
-function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelected, onClick }: DayCellProps) {
+function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelected, onClick, onEditEvent }: DayCellProps) {
   const bias    = getBias(signal, isWeekend);
   const turning = signal?.turning_date ?? false;
   const isMajor = events.some(e =>
@@ -182,19 +183,34 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
         </div>
       )}
 
-      {/* Top event name */}
+      {/* Top event name + optional admin edit */}
       {topEvent && !isWeekend && (
-        <div style={{
-          marginTop: 5,
-          fontSize: 9.5,
-          color: isMajor ? 'var(--gold)' : 'var(--text-faint)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          lineHeight: 1.3,
-        }}>
-          {topEvent.display_name}
-          {events.length > 1 ? ` +${events.length - 1}` : ''}
+        <div style={{ marginTop: 5, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3 }}>
+          <div style={{
+            fontSize: 9.5,
+            color: isMajor ? 'var(--gold)' : 'var(--text-faint)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            lineHeight: 1.3,
+            flex: 1,
+          }}>
+            {topEvent.display_name}
+            {events.length > 1 ? ` +${events.length - 1}` : ''}
+          </div>
+          {onEditEvent && (
+            <button
+              onClick={e => { e.stopPropagation(); onEditEvent(topEvent); }}
+              title="Edit event"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--gold)', fontSize: 10, padding: '0 1px',
+                lineHeight: 1, flexShrink: 0, opacity: 0.7,
+              }}
+            >
+              ✎
+            </button>
+          )}
         </div>
       )}
     </button>
@@ -967,7 +983,7 @@ function ItemModal({ item, onSave, onCancel }: {
       onClick={onCancel}
     >
       <div
-        style={{ maxWidth: 560, width: '100%', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}
+        style={{ maxWidth: 740, width: '100%', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -1038,7 +1054,7 @@ function ItemModal({ item, onSave, onCancel }: {
           <div>
             <label style={labelStyle}>Narrative · VaNi</label>
             <textarea
-              rows={3}
+              rows={5}
               style={{ ...inputStyle, resize: 'vertical' }}
               value={form.narrative ?? ''}
               onChange={e => set('narrative', e.target.value)}
@@ -1250,6 +1266,7 @@ export default function DCCalendarView() {
   const [month, setMonth] = useState(4);
   const [view,  setView]  = useState<'calendar' | 'timeline' | 'admin'>('calendar');
   const [picked, setPicked] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<AstroCalendarEvent | null>(null);
   const { isAdmin } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -1274,6 +1291,13 @@ export default function DCCalendarView() {
   });
 
   const refreshEvents = () => queryClient.invalidateQueries({ queryKey: eventsKey });
+
+  const handleCellEditSave = async (payload: AstroCalendarPayload) => {
+    if (!editingEvent) return;
+    await updateCalendarEvent(editingEvent.id, payload);
+    setEditingEvent(null);
+    refreshEvents();
+  };
 
   const isLoading = eventsLoading || signalsLoading;
   const isError   = eventsError || signalsError;
@@ -1450,6 +1474,7 @@ export default function DCCalendarView() {
                               isWeekend={cell.isWeekend}
                               isSelected={picked === cell.iso}
                               onClick={() => setPicked(p => p === cell.iso ? null : cell.iso)}
+                              onEditEvent={isAdmin ? setEditingEvent : undefined}
                             />
                           ) : (
                             <div key={`empty-${i}`} className="min-h-[130px]" />
@@ -1488,6 +1513,15 @@ export default function DCCalendarView() {
           </>
         )}
       </div>
+
+      {/* Top-level edit modal — triggered from day cell ✎ button */}
+      {editingEvent && (
+        <ItemModal
+          item={editingEvent}
+          onSave={handleCellEditSave}
+          onCancel={() => setEditingEvent(null)}
+        />
+      )}
     </ErrorBoundary>
   );
 }
