@@ -1,4 +1,4 @@
--- Migration: M051
+-- Migration: 062
 -- Date: 2026-04-23
 -- Description: Rule Engine schema alterations
 --   - Extend km_astro_rule_master with rule engine columns
