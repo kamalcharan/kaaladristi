@@ -62,29 +62,35 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
     const lbl = note.calendar_label as keyof typeof LABEL_COLOR;
     return (
       <div className={cn(
-        'flex items-start gap-2 px-2 py-1 rounded border text-xs group',
+        'flex items-start gap-2 px-2 py-1 rounded border text-xs',
         LABEL_BG[lbl] ?? 'bg-slate-800/60 border-white/10',
       )}>
-        <span className={cn('font-medium shrink-0', LABEL_COLOR[lbl])}>
-          {note.calendar_label.replace('_', ' ')}
-        </span>
-        {note.scope !== 'market' && (
-          <span className="text-muted shrink-0">· {note.scope}: {note.scope_value}</span>
-        )}
-        {note.annotation && (
-          <span className="text-secondary italic flex-1">{note.annotation}</span>
-        )}
-        <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={cn('font-semibold shrink-0', LABEL_COLOR[lbl])}>
+              {note.calendar_label.replace('_', ' ')}
+            </span>
+            {note.scope !== 'market' && (
+              <span className="text-muted text-[10px] shrink-0">
+                {note.scope.toUpperCase()}: {note.scope_value}
+              </span>
+            )}
+          </div>
+          {note.annotation && (
+            <span className="text-secondary italic text-[10px]">{note.annotation}</span>
+          )}
+        </div>
+        <div className="flex gap-1 shrink-0 mt-0.5">
           <button
             onClick={() => setEditing(true)}
-            className="text-muted hover:text-white transition-colors text-[10px] px-1.5 py-0.5 rounded hover:bg-white/10"
+            className="text-muted hover:text-white transition-colors text-[10px] px-1.5 py-0.5 rounded hover:bg-white/10 border border-white/10"
           >
             Edit
           </button>
           <button
             onClick={() => onDelete(note.id)}
             disabled={saving}
-            className="text-muted hover:text-risk-red transition-colors"
+            className="text-muted hover:text-risk-red transition-colors p-0.5 rounded hover:bg-risk-red/10"
           >
             <Trash2 className="w-3 h-3" />
           </button>
@@ -159,10 +165,9 @@ interface NewNoteFormProps {
 }
 
 function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
-  const [open, setOpen]           = useState(false);
-  const [label, setLabel]         = useState<PanchangCalendarLabel>('POSITIVE');
-  const [scope, setScope]         = useState<PanchangScope>('market');
-  const [scopeVal, setScopeVal]   = useState('');
+  const [label, setLabel]           = useState<PanchangCalendarLabel>('POSITIVE');
+  const [scope, setScope]           = useState<PanchangScope>('market');
+  const [scopeVal, setScopeVal]     = useState('');
   const [annotation, setAnnotation] = useState('');
 
   function submit() {
@@ -177,72 +182,61 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
     setScope('market');
     setScopeVal('');
     setAnnotation('');
-    setOpen(false);
-  }
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1 text-[10px] text-muted hover:text-accent-indigo transition-colors py-0.5"
-      >
-        <Plus className="w-3 h-3" /> Add note
-      </button>
-    );
   }
 
   return (
-    <div className="flex flex-col gap-1.5 p-2 rounded border border-accent-indigo/30 bg-accent-indigo/5 mt-1">
-      <div className="flex gap-2 flex-wrap">
+    <div className="flex flex-col gap-1.5 p-2 rounded border border-white/8 bg-white/[0.02] mt-1">
+      <div className="flex gap-1.5 flex-wrap items-center">
+        {/* Signal label */}
         <select
           value={label}
           onChange={e => setLabel(e.target.value as PanchangCalendarLabel)}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white"
+          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
         >
           {CALENDAR_LABEL_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+        {/* Scope */}
         <select
           value={scope}
-          onChange={e => setScope(e.target.value as PanchangScope)}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white"
+          onChange={e => { setScope(e.target.value as PanchangScope); setScopeVal(''); }}
+          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
         >
           {SCOPE_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+        {/* Scope value (sector name / commodity / planet / currency) */}
         {scope !== 'market' && (
           <input
             type="text"
             value={scopeVal}
             onChange={e => setScopeVal(e.target.value)}
-            placeholder={`${scope} name…`}
-            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white w-32"
+            placeholder={
+              scope === 'sector'    ? 'e.g. Banking, IT…'   :
+              scope === 'commodity' ? 'e.g. Gold, Silver…'  :
+              scope === 'planet'    ? 'e.g. Jupiter, Venus…':
+                                     'e.g. USDINR…'
+            }
+            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white w-36 focus:outline-none focus:border-accent-indigo/50"
           />
         )}
-      </div>
-      <input
-        type="text"
-        value={annotation}
-        onChange={e => setAnnotation(e.target.value)}
-        placeholder="Annotation (optional)…"
-        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white w-full"
-        onKeyDown={e => e.key === 'Enter' && submit()}
-      />
-      <div className="flex gap-1.5">
+        {/* Annotation */}
+        <input
+          type="text"
+          value={annotation}
+          onChange={e => setAnnotation(e.target.value)}
+          placeholder="Note (optional)…"
+          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white flex-1 min-w-[120px] focus:outline-none focus:border-accent-indigo/50"
+          onKeyDown={e => e.key === 'Enter' && submit()}
+        />
         <button
           onClick={submit}
-          disabled={saving}
-          className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-risk-green/20 border border-risk-green/40 text-risk-green hover:bg-risk-green/30 transition-colors"
+          disabled={saving || (scope !== 'market' && !scopeVal)}
+          className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >
           <Plus className="w-3 h-3" /> Add
-        </button>
-        <button
-          onClick={() => setOpen(false)}
-          className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-800 border border-white/10 text-muted hover:text-white transition-colors"
-        >
-          <X className="w-3 h-3" /> Cancel
         </button>
       </div>
     </div>
@@ -501,7 +495,7 @@ export default function AdminPanchangView() {
             <table className="w-full text-left min-w-[900px]">
               <thead>
                 <tr className="border-b border-white/10">
-                  {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra / Lord', 'Annotations (CRUD)'].map(h => (
+                  {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra / Lord', 'Signals / Annotations  (scope → label → Add)'].map(h => (
                     <th
                       key={h}
                       className="px-3 py-2.5 text-[11px] font-semibold text-muted uppercase tracking-wide"

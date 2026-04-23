@@ -9,8 +9,6 @@ import {
   LABEL_COLOR,
   LABEL_BG,
 } from '@/services/panchangService';
-import { SIGNAL_LABELS, impactToColor, SIGNAL_CLASSES } from '@/constants/signalScale';
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function isWeekend(weekday: string) {
@@ -36,24 +34,6 @@ function formatRashi(row: PanchangRow) {
 function formatTithi(row: PanchangRow) {
   if (row.tithi_end_time) return `${row.tithi} (till ${row.tithi_end_time})`;
   return row.tithi;
-}
-
-// ── Signal badge ──────────────────────────────────────────────────────────────
-
-function SignalBadge({ signal }: { signal: string | null }) {
-  if (!signal || signal === 'neutral') return null;
-  const color = impactToColor(signal);
-  const cls   = SIGNAL_CLASSES[color];
-  return (
-    <span
-      className={cn(
-        'inline-block text-[10px] font-medium px-1.5 py-0.5 rounded border leading-none',
-        cls.text, cls.bg, cls.border,
-      )}
-    >
-      {SIGNAL_LABELS[signal] ?? signal}
-    </span>
-  );
 }
 
 // ── Note pill ─────────────────────────────────────────────────────────────────
@@ -125,32 +105,26 @@ function PanchangTableRow({ row }: { row: PanchangRow }) {
         <span className="text-xs text-muted">{row.nak_lord}</span>
       </td>
 
-      {/* Astro Signal */}
+      {/* Signals / Notes */}
       <td className="px-3 py-2.5">
-        <div className="flex flex-col gap-1">
-          {row.net_signal && <SignalBadge signal={row.net_signal} />}
-          {row.turning_date && (
-            <span className="text-[10px] text-risk-amber font-medium">⟳ Turning</span>
-          )}
-        </div>
-      </td>
-
-      {/* Day Notes */}
-      <td className="px-3 py-2.5">
-        <div className="flex flex-wrap gap-1">
-          {row.notes.map(n => (
-            <div key={n.id} className="flex flex-col gap-0.5">
-              <NotePill
-                label={n.calendar_label}
-                scope={n.scope}
-                scopeValue={n.scope_value}
-              />
-              {n.annotation && (
-                <span className="text-[10px] text-muted italic pl-0.5">{n.annotation}</span>
-              )}
-            </div>
-          ))}
-        </div>
+        {row.notes.length === 0 ? (
+          <span className="text-[10px] text-white/15">—</span>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {row.notes.map(n => (
+              <div key={n.id} className="flex flex-col gap-0.5">
+                <NotePill
+                  label={n.calendar_label}
+                  scope={n.scope}
+                  scopeValue={n.scope_value}
+                />
+                {n.annotation && (
+                  <span className="text-[10px] text-muted italic pl-0.5">{n.annotation}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -254,7 +228,7 @@ export default function PanchangView() {
             <table className="w-full text-left min-w-[800px]">
               <thead>
                 <tr className="border-b border-white/10">
-                  {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra', 'Nak Lord', 'Signal', 'Annotations'].map(h => (
+                  {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra', 'Nak Lord', 'Signals / Notes'].map(h => (
                     <th
                       key={h}
                       className="px-3 py-2.5 text-[11px] font-semibold text-muted uppercase tracking-wide"
