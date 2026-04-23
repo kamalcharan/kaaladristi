@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock } from 'lucide-react';
+import { ChevronLeft, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play } from 'lucide-react';
 import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast, ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
+import { runRuleDiscovery } from './discoveryService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -260,6 +261,17 @@ export default function RuleDetail() {
     onError: (err: Error) => toast('error', `Delete failed: ${err.message}`),
   });
 
+  // ── Discover mutation ──
+  const discoverMutation = useMutation({
+    mutationFn: () => runRuleDiscovery(ruleId),
+    onSuccess: () => {
+      toast('success', 'Discovery started for this rule');
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-counts'] });
+    },
+    onError: (err: Error) => toast('error', err.message),
+  });
+
   const handleDelete = () => {
     if (deleteArmed) {
       deleteMutation.mutate();
@@ -312,6 +324,19 @@ export default function RuleDetail() {
           </button>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Run Discovery */}
+            <button
+              onClick={() => discoverMutation.mutate()}
+              disabled={discoverMutation.isPending}
+              title="Run discovery for this rule only"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all disabled:opacity-50"
+            >
+              {discoverMutation.isPending
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Play className="w-3.5 h-3.5" />}
+              Run Discovery
+            </button>
+
             {/* Clone */}
             <button
               onClick={() => { setSaveError(null); setModalMode('clone'); }}

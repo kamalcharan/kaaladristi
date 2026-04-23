@@ -7,8 +7,10 @@ import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/components/ui';
 import { ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
-import RuleFormModal, { emptyForm, formToInput, type FormMode } from './RuleFormModal';
+import RuleFormModal, { emptyForm, type FormMode } from './RuleFormModal';
 import { createRule, toggleRuleActive, type AstroRuleFull } from './ruleService';
+import DiscoveryPanel from './DiscoveryPanel';
+import { fetchSignalCounts } from './discoveryService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,6 +115,21 @@ function ConfidenceCell({ score }: { score: number | null | undefined }) {
   const pct = Math.round(score * 100);
   const color = pct >= 65 ? 'text-risk-green' : pct >= 45 ? 'text-risk-amber' : 'text-muted';
   return <span className={cn('text-xs font-mono tabular-nums', color)}>{pct}%</span>;
+}
+
+function SignalsBadge({ count, isUnavailable }: { count: number | undefined; isUnavailable: boolean }) {
+  if (isUnavailable) return <span className="text-muted text-xs font-mono">N/A</span>;
+  if (count === undefined) return <span className="text-muted text-xs">—</span>;
+  const style = count === 0
+    ? 'bg-kd-elevated text-muted border-kd-border'
+    : count >= 100
+    ? 'bg-risk-green/15 text-risk-green border-risk-green/30'
+    : 'bg-risk-amber/15 text-risk-amber border-risk-amber/30';
+  return (
+    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono border tabular-nums', style)}>
+      {count.toLocaleString()}
+    </span>
+  );
 }
 
 // ── Toggle switch ─────────────────────────────────────────────────────────────
@@ -273,6 +290,7 @@ export default function RuleList() {
   const { toasts, toast, dismiss } = useToast();
   const qc = useQueryClient();
 
+  const [activeTab, setActiveTab] = useState<'rules' | 'discovery'>('rules');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [modalOpen, setModalOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -289,11 +307,23 @@ export default function RuleList() {
     staleTime: 10 * 60 * 1000,
   });
 
+  const { data: signalCounts = [] } = useQuery({
+    queryKey: ['rule-engine', 'signal-counts'],
+    queryFn: fetchSignalCounts,
+    staleTime: 60 * 1000,
+  });
+
   const confMap = useMemo(() => {
     const m = new Map<number, RuleConfidence>();
     for (const c of confidence) m.set(c.rule_id, c);
     return m;
   }, [confidence]);
+
+  const signalMap = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const sc of signalCounts) m.set(sc.rule_id, sc.count);
+    return m;
+  }, [signalCounts]);
 
   // ── Create mutation ──
   const createMutation = useMutation({
@@ -376,116 +406,152 @@ export default function RuleList() {
                 Vedic astro-market rules — click any rule to view detail &amp; occurrence history
               </p>
             </div>
-            <StatsBar rules={filtered} />
+            {activeTab === 'rules' && <StatsBar rules={filtered} />}
           </div>
-          <button
-            onClick={() => { setSaveError(null); setModalOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4" /> Add Rule
-          </button>
+          {activeTab === 'rules' && (
+            <button
+              onClick={() => { setSaveError(null); setModalOpen(true); }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Add Rule
+            </button>
+          )}
         </header>
 
-        {/* Filters */}
-        <FilterBar filters={filters} onChange={setFilters} />
+        {/* Tab switcher */}
+        <div className="flex gap-0 border-b border-kd-border/50 -mt-2">
+          {(['rules', 'discovery'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px capitalize',
+                activeTab === tab
+                  ? 'border-accent-indigo text-accent-indigo'
+                  : 'border-transparent text-muted hover:text-secondary',
+              )}
+            >
+              {tab === 'rules' ? 'Rules' : 'Discovery'}
+            </button>
+          ))}
+        </div>
 
-        {/* Table */}
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted text-sm border border-kd-border rounded-xl bg-kd-elevated/30">
-            <Database className="w-5 h-5 opacity-40" />
-            {rules.length === 0 ? 'No rules in database' : 'No rules match the current filters'}
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-kd-border">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b border-kd-border bg-kd-elevated/60">
-                  {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Source'].map(h => (
-                    <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((rule, i) => {
-                  const outcome = effectiveOutcome(rule);
-                  const conf = confMap.get(rule.id);
-                  const isAvailable = rule.data_source !== 'unavailable';
-                  return (
-                    <tr
-                      key={rule.id}
-                      onClick={() => navigate(`/rules/${rule.id}`)}
-                      className={cn(
-                        'border-b border-kd-border/50 cursor-pointer transition-colors',
-                        i % 2 === 0 ? 'bg-transparent' : 'bg-kd-elevated/20',
-                        'hover:bg-kd-elevated/60',
-                        !rule.is_active && 'opacity-50',
-                      )}
-                    >
-                      {/* Toggle */}
-                      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        <ActiveToggle
-                          ruleId={rule.id}
-                          isActive={rule.is_active}
-                          onToggle={(id, next) => toggleMutation.mutate({ id, isActive: next })}
-                        />
-                      </td>
+        {/* Rules tab */}
+        {activeTab === 'rules' && (
+          <>
+            {/* Filters */}
+            <FilterBar filters={filters} onChange={setFilters} />
 
-                      {/* Code */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <span className="font-mono text-[11px] text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-1.5 py-0.5 rounded">
-                          {rule.rule_code}
-                        </span>
-                      </td>
-
-                      {/* Name */}
-                      <td className="px-3 py-2.5 max-w-[260px]">
-                        <span className="text-secondary leading-tight line-clamp-2">{rule.display_name}</span>
-                      </td>
-
-                      {/* Type */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <TypeChip ruleType={rule.rule_type} />
-                      </td>
-
-                      {/* Outcome */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <OutcomeBadge outcome={outcome} />
-                      </td>
-
-                      {/* Probability */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        {rule.probability_label ? (
-                          <span className={cn('text-xs', PROB_STYLES[rule.probability_label] ?? 'text-muted')}>
-                            {rule.probability_label}
-                          </span>
-                        ) : <span className="text-muted text-xs">—</span>}
-                      </td>
-
-                      {/* Confidence */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <ConfidenceCell score={conf?.confidence_score} />
-                      </td>
-
-                      {/* Source */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <span className={cn('inline-flex items-center gap-1 text-[11px]', isAvailable ? 'text-risk-green/70' : 'text-muted')}>
-                          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', isAvailable ? 'bg-risk-green/70' : 'bg-kd-border')} />
-                          {rule.data_source === 'user_defined' ? 'Custom' : isAvailable ? 'Available' : 'N/A'}
-                        </span>
-                      </td>
+            {/* Table */}
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted text-sm border border-kd-border rounded-xl bg-kd-elevated/30">
+                <Database className="w-5 h-5 opacity-40" />
+                {rules.length === 0 ? 'No rules in database' : 'No rules match the current filters'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-kd-border">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-kd-border bg-kd-elevated/60">
+                      {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Signals', 'Source'].map(h => (
+                        <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {filtered.map((rule, i) => {
+                      const outcome = effectiveOutcome(rule);
+                      const conf = confMap.get(rule.id);
+                      const isAvailable = rule.data_source !== 'unavailable';
+                      return (
+                        <tr
+                          key={rule.id}
+                          onClick={() => navigate(`/rules/${rule.id}`)}
+                          className={cn(
+                            'border-b border-kd-border/50 cursor-pointer transition-colors',
+                            i % 2 === 0 ? 'bg-transparent' : 'bg-kd-elevated/20',
+                            'hover:bg-kd-elevated/60',
+                            !rule.is_active && 'opacity-50',
+                          )}
+                        >
+                          {/* Toggle */}
+                          <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                            <ActiveToggle
+                              ruleId={rule.id}
+                              isActive={rule.is_active}
+                              onToggle={(id, next) => toggleMutation.mutate({ id, isActive: next })}
+                            />
+                          </td>
+
+                          {/* Code */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className="font-mono text-[11px] text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-1.5 py-0.5 rounded">
+                              {rule.rule_code}
+                            </span>
+                          </td>
+
+                          {/* Name */}
+                          <td className="px-3 py-2.5 max-w-[260px]">
+                            <span className="text-secondary leading-tight line-clamp-2">{rule.display_name}</span>
+                          </td>
+
+                          {/* Type */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <TypeChip ruleType={rule.rule_type} />
+                          </td>
+
+                          {/* Outcome */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <OutcomeBadge outcome={outcome} />
+                          </td>
+
+                          {/* Probability */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {rule.probability_label ? (
+                              <span className={cn('text-xs', PROB_STYLES[rule.probability_label] ?? 'text-muted')}>
+                                {rule.probability_label}
+                              </span>
+                            ) : <span className="text-muted text-xs">—</span>}
+                          </td>
+
+                          {/* Confidence */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <ConfidenceCell score={conf?.confidence_score} />
+                          </td>
+
+                          {/* Signals */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <SignalsBadge
+                              count={signalMap.get(rule.id)}
+                              isUnavailable={rule.data_source === 'unavailable'}
+                            />
+                          </td>
+
+                          {/* Source */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className={cn('inline-flex items-center gap-1 text-[11px]', isAvailable ? 'text-risk-green/70' : 'text-muted')}>
+                              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', isAvailable ? 'bg-risk-green/70' : 'bg-kd-border')} />
+                              {rule.data_source === 'user_defined' ? 'Custom' : isAvailable ? 'Available' : 'N/A'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p className="text-[11px] text-muted text-right font-mono">
+              {filtered.length} of {rules.length} rules
+            </p>
+          </>
         )}
 
-        <p className="text-[11px] text-muted text-right font-mono">
-          {filtered.length} of {rules.length} rules
-        </p>
+        {/* Discovery tab */}
+        {activeTab === 'discovery' && <DiscoveryPanel />}
       </div>
 
       {/* Add Rule Modal */}

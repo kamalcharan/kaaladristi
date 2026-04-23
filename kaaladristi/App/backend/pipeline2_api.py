@@ -1371,3 +1371,279 @@ def ping():
         'db': 'ok' if db_ok else 'error',
         'worker_running': bool(_worker_process and _worker_process.poll() is None),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DISCOVERY ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Module-level state for the single running discovery job ───────────────────
+
+_discovery_state: dict = {
+    'job_id':          None,
+    'running':         False,
+    'started_at':      None,
+    'finished_at':     None,
+    'rules_total':     0,
+    'rules_done':      0,
+    'signals_inserted': 0,
+    'current_rule_code': None,
+    'errors':          [],
+}
+
+# ── Import discovery logic lazily (scripts package, same process) ─────────────
+
+def _import_discover_rule():
+    """Return discover_rule callable, or raise ImportError with useful message."""
+    try:
+        from scripts.rule_discovery import discover_rule  # noqa: PLC0415
+        return discover_rule
+    except Exception as exc:
+        raise ImportError(f'Cannot import rule_discovery: {exc}') from exc
+
+
+def _load_rules_for_discovery(conn, mode: str, rule_id: int | None = None) -> list[dict]:
+    """Load active available rules based on mode."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        if mode == 'single' and rule_id is not None:
+            cur.execute(
+                "SELECT id, rule_code, rule_type, display_name, outcome, "
+                "probability_label, conditions, data_source "
+                "FROM km_astro_rule_master "
+                "WHERE id = %s AND is_active = TRUE AND is_deleted = FALSE",
+                (rule_id,)
+            )
+        elif mode == 'missing':
+            cur.execute(
+                "SELECT r.id, r.rule_code, r.rule_type, r.display_name, r.outcome, "
+                "r.probability_label, r.conditions, r.data_source "
+                "FROM km_astro_rule_master r "
+                "WHERE r.is_active = TRUE AND r.is_deleted = FALSE "
+                "AND r.data_source = 'available' "
+                "AND NOT EXISTS ("
+                "  SELECT 1 FROM km_rule_signals s WHERE s.rule_id = r.id"
+                ") "
+                "ORDER BY r.rule_type, r.rule_code"
+            )
+        else:  # 'all'
+            cur.execute(
+                "SELECT id, rule_code, rule_type, display_name, outcome, "
+                "probability_label, conditions, data_source "
+                "FROM km_astro_rule_master "
+                "WHERE is_active = TRUE AND is_deleted = FALSE "
+                "AND data_source = 'available' "
+                "ORDER BY rule_type, rule_code"
+            )
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+def _run_discovery_bg(mode: str, rule_id: int | None = None):
+    """Background task: run rule discovery and update _discovery_state."""
+    import json as _json  # noqa: PLC0415
+
+    global _discovery_state
+
+    # Guard: prevent overlapping runs
+    if _discovery_state['running']:
+        log.warning('Discovery already running — ignoring duplicate request')
+        return
+
+    job_id = _discovery_state['job_id']
+    _discovery_state.update({
+        'running':          True,
+        'started_at':       datetime.utcnow().isoformat(),
+        'finished_at':      None,
+        'rules_total':      0,
+        'rules_done':       0,
+        'signals_inserted': 0,
+        'current_rule_code': None,
+        'errors':           [],
+    })
+
+    try:
+        discover_rule = _import_discover_rule()
+    except ImportError as exc:
+        log.error(f'Discovery import failed: {exc}')
+        _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
+        _discovery_state['errors'].append({'rule_code': 'IMPORT', 'error': str(exc)})
+        return
+
+    try:
+        conn = _conn()
+    except Exception as exc:
+        log.error(f'Discovery DB connection failed: {exc}')
+        _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
+        _discovery_state['errors'].append({'rule_code': 'DB_CONN', 'error': str(exc)})
+        return
+
+    try:
+        rules = _load_rules_for_discovery(conn, mode, rule_id)
+        _discovery_state['rules_total'] = len(rules)
+        log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
+
+        for rule in rules:
+            _discovery_state['current_rule_code'] = rule['rule_code']
+
+            # Ensure conditions is a dict (may come from DB as dict or str)
+            if isinstance(rule.get('conditions'), str):
+                try:
+                    rule['conditions'] = _json.loads(rule['conditions'])
+                except Exception:
+                    rule['conditions'] = {}
+            elif rule.get('conditions') is None:
+                rule['conditions'] = {}
+
+            try:
+                matched_rows = discover_rule(conn, rule)
+
+                strength = {'Very High': 5, 'High': 4, 'Reasonable': 3, 'Low': 2}.get(
+                    rule.get('probability_label'), 3
+                )
+                inserted = 0
+                with conn.cursor() as cur:
+                    for (d, snapshot) in matched_rows:
+                        cur.execute(
+                            "INSERT INTO km_rule_signals "
+                            "(date, rule_id, signal, strength, details, conditions_snapshot) "
+                            "VALUES (%s, %s, %s, %s, %s, %s) "
+                            "ON CONFLICT (date, rule_id) DO NOTHING",
+                            (d, rule['id'], rule.get('outcome'), strength,
+                             rule['display_name'], _json.dumps(snapshot))
+                        )
+                        inserted += cur.rowcount
+                conn.commit()
+                _discovery_state['signals_inserted'] += inserted
+
+            except Exception as exc:
+                log.error(f"Discovery error rule {rule['rule_code']}: {exc}")
+                conn.rollback()
+                _discovery_state['errors'].append(
+                    {'rule_code': rule['rule_code'], 'error': str(exc)}
+                )
+
+            _discovery_state['rules_done'] += 1
+
+    except Exception as exc:
+        log.error(f'Discovery task failed: {exc}')
+        _discovery_state['errors'].append({'rule_code': 'FATAL', 'error': str(exc)})
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _discovery_state['running'] = False
+        _discovery_state['finished_at'] = datetime.utcnow().isoformat()
+        _discovery_state['current_rule_code'] = None
+        log.info(
+            f'Discovery [{mode}] done — {_discovery_state["rules_done"]} rules, '
+            f'{_discovery_state["signals_inserted"]} signals, '
+            f'{len(_discovery_state["errors"])} errors'
+        )
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@app.post('/api/discovery/run-all')
+def discovery_run_all(background_tasks: BackgroundTasks):
+    """Trigger full discovery for all active available rules (all history)."""
+    if _discovery_state['running']:
+        raise HTTPException(409, 'A discovery job is already running')
+    job_id = str(uuid.uuid4())
+    _discovery_state['job_id'] = job_id
+    background_tasks.add_task(_run_discovery_bg, 'all')
+    return {'job_id': job_id, 'status': 'started', 'message': 'Full discovery started'}
+
+
+@app.post('/api/discovery/run-missing')
+def discovery_run_missing(background_tasks: BackgroundTasks):
+    """Trigger discovery only for rules with zero signals."""
+    if _discovery_state['running']:
+        raise HTTPException(409, 'A discovery job is already running')
+    # Count missing rules synchronously so we can return the number
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM km_astro_rule_master r "
+                "WHERE r.is_active = TRUE AND r.is_deleted = FALSE "
+                "AND r.data_source = 'available' "
+                "AND NOT EXISTS (SELECT 1 FROM km_rule_signals s WHERE s.rule_id = r.id)"
+            )
+            missing_count = cur.fetchone()[0]
+        conn.close()
+    except Exception:
+        missing_count = 0
+
+    job_id = str(uuid.uuid4())
+    _discovery_state['job_id'] = job_id
+    background_tasks.add_task(_run_discovery_bg, 'missing')
+    return {
+        'job_id': job_id,
+        'status': 'started',
+        'message': 'Missing rules discovery started',
+        'rules_to_process': missing_count,
+    }
+
+
+@app.post('/api/discovery/run-rule/{rule_id}')
+def discovery_run_single(rule_id: int, background_tasks: BackgroundTasks):
+    """Trigger discovery for a single rule_id."""
+    if _discovery_state['running']:
+        raise HTTPException(409, 'A discovery job is already running')
+    job_id = str(uuid.uuid4())
+    _discovery_state['job_id'] = job_id
+    background_tasks.add_task(_run_discovery_bg, 'single', rule_id)
+    return {'job_id': job_id, 'status': 'started', 'rule_id': rule_id}
+
+
+@app.get('/api/discovery/status')
+def discovery_status():
+    """Return current or last discovery job state."""
+    state = dict(_discovery_state)
+
+    # Add a summary from the DB
+    summary = {'rules_with_signals': 0, 'rules_without_signals': 0, 'total_signals': 0}
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT "
+                "  COUNT(DISTINCT rule_id) AS rules_with_signals, "
+                "  SUM(cnt) AS total_signals "
+                "FROM (SELECT rule_id, COUNT(*) AS cnt FROM km_rule_signals GROUP BY rule_id) t"
+            )
+            row = cur.fetchone()
+            if row:
+                summary['rules_with_signals'] = row[0] or 0
+                summary['total_signals'] = row[1] or 0
+
+            cur.execute(
+                "SELECT COUNT(*) FROM km_astro_rule_master "
+                "WHERE is_active = TRUE AND is_deleted = FALSE AND data_source = 'available'"
+            )
+            total_active = (cur.fetchone() or [0])[0] or 0
+            summary['rules_without_signals'] = max(0, total_active - summary['rules_with_signals'])
+        conn.close()
+    except Exception as exc:
+        log.warning(f'discovery_status summary query failed: {exc}')
+
+    state['summary'] = summary
+    return state
+
+
+@app.get('/api/discovery/signal-counts')
+def discovery_signal_counts():
+    """Return per-rule signal counts for the Rule List column."""
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT rule_id, COUNT(*) AS count FROM km_rule_signals GROUP BY rule_id"
+            )
+            rows = cur.fetchall()
+        conn.close()
+        return [{'rule_id': r[0], 'count': r[1]} for r in rows]
+    except Exception as exc:
+        raise HTTPException(500, f'Signal counts query failed: {exc}')
+
