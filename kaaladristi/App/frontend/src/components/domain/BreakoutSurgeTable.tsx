@@ -1,5 +1,7 @@
 import React from 'react';
 import type { ScanStock } from '@/types';
+import { ScanCardWrapper, VaniBadge, ScanSectionLabel, CardExchangeBadge } from './ScanCardShell';
+import { displaySymbol } from '@/lib/symbolUtils';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -55,48 +57,6 @@ function brkPctColor(n: number | null | undefined): string {
   return 'var(--caution)';
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
-
-const AVATAR_PALETTES = [
-  { bg: '#1e3a5f', fg: '#7eb8f7' },
-  { bg: '#1e3d2f', fg: '#6ecf9a' },
-  { bg: '#3b2a1a', fg: '#d4a84b' },
-  { bg: '#2d1e3e', fg: '#b07ef7' },
-  { bg: '#2a1f1f', fg: '#e07070' },
-  { bg: '#1a3040', fg: '#5ec8d8' },
-];
-
-function avatarPalette(symbol: string, isVani: boolean) {
-  if (isVani) return { bg: 'var(--gold)', fg: '#1a1410' };
-  const idx = symbol.charCodeAt(0) % AVATAR_PALETTES.length;
-  return AVATAR_PALETTES[idx];
-}
-
-function Avatar({ symbol, isVani }: { symbol: string; isVani: boolean }) {
-  const { bg, fg } = avatarPalette(symbol, isVani);
-  const initials = symbol.slice(0, 2).toUpperCase();
-  return (
-    <div style={{
-      width: '42px',
-      height: '42px',
-      borderRadius: '50%',
-      background: bg,
-      color: fg,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'var(--font-mono)',
-      fontSize: '13px',
-      fontWeight: 700,
-      letterSpacing: '0.02em',
-      flexShrink: 0,
-      border: isVani ? '1.5px solid rgba(212,168,75,0.4)' : '1.5px solid rgba(255,255,255,0.06)',
-    }}>
-      {initials}
-    </div>
-  );
-}
-
 // ── Inline data row ───────────────────────────────────────────────────────────
 
 interface DataItem {
@@ -146,23 +106,7 @@ function BurstCard({ stock }: { stock: ScanStock }) {
   const rvol = stock.rvol ?? null;
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '14px',
-      background: isVani
-        ? 'linear-gradient(135deg, rgba(212,168,75,0.06) 0%, var(--card) 55%)'
-        : 'var(--card)',
-      border: '1px solid var(--border)',
-      borderLeft: isVani ? '3px solid var(--gold)' : '3px solid transparent',
-      borderRadius: '12px',
-      padding: '12px 16px 12px 14px',
-      transition: 'border-color 0.15s',
-    }}>
-
-      {/* Avatar */}
-      <Avatar symbol={stock.symbol} isVani={isVani} />
-
+    <ScanCardWrapper isVani={isVani} symbol={stock.symbol}>
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: '5px' }}>
 
@@ -179,39 +123,10 @@ function BurstCard({ stock }: { stock: ScanStock }) {
             letterSpacing: '-0.01em',
             flexShrink: 0,
           }}>
-            {stock.symbol}
+            {displaySymbol(stock)}
           </span>
-          {stock.exchange && (
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '8px',
-              fontWeight: 600,
-              color: 'var(--text-faint)',
-              padding: '1px 5px',
-              border: '1px solid var(--border)',
-              borderRadius: '4px',
-              flexShrink: 0,
-            }}>
-              {stock.exchange}
-            </span>
-          )}
-          {isVani && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '1px 8px',
-              background: 'var(--gold-bg)',
-              border: '1px solid var(--border-gold)',
-              borderRadius: '100px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
-              fontWeight: 700,
-              letterSpacing: '0.02em',
-              color: 'var(--gold)',
-              flexShrink: 0,
-            }}>
-              VaNi Opportunity
-            </span>
-          )}
+          <CardExchangeBadge exchange={stock.exchange} />
+          {isVani && <VaniBadge />}
           {stock.company_name && (
             <span style={{
               fontSize: '11px',
@@ -281,25 +196,7 @@ function BurstCard({ stock }: { stock: ScanStock }) {
           </span>
         )}
       </div>
-    </div>
-  );
-}
-
-// ── Section label ─────────────────────────────────────────────────────────────
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      padding: '4px 0 8px',
-      fontFamily: 'var(--font-mono)',
-      fontSize: '10px',
-      fontWeight: 600,
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.08em',
-      color: 'var(--text-faint)',
-    }}>
-      {children}
-    </div>
+    </ScanCardWrapper>
   );
 }
 
@@ -325,13 +222,13 @@ export default function BreakoutSurgeCards({ stocks }: { stocks: ScanStock[] }) 
     <div>
       {vani.length > 0 && (
         <>
-          <SectionLabel>
+          <ScanSectionLabel>
             <span style={{ color: 'var(--gold)', marginRight: '6px' }}>✦</span>
             VaNi Opportunity · {vani.length} stock{vani.length !== 1 ? 's' : ''}{' '}
             <span style={{ fontWeight: 400 }}>
               — RVOL &gt; 5× · breakout within 5% · RSI &lt; 75
             </span>
-          </SectionLabel>
+          </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px', marginBottom: '24px' }}>
             {vani.map((s) => <BurstCard key={s.equity_id} stock={s} />)}
           </div>
@@ -340,9 +237,9 @@ export default function BreakoutSurgeCards({ stocks }: { stocks: ScanStock[] }) 
 
       {rest.length > 0 && (
         <>
-          <SectionLabel>
+          <ScanSectionLabel>
             All Results · {stocks.length} stock{stocks.length !== 1 ? 's' : ''} · sorted by RVOL ↓
-          </SectionLabel>
+          </ScanSectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
             {rest.map((s) => <BurstCard key={s.equity_id} stock={s} />)}
           </div>

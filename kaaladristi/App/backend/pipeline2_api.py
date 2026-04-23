@@ -684,6 +684,21 @@ def vani_opportunity_config():
         conn.close()
 
 
+@app.get('/api/scan/presets')
+def scan_presets():
+    """Return all active scan preset definitions ordered by sort_order."""
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id,name,description,tooltip,sort_order,result_limit,is_active "
+                "FROM kd_scan_presets WHERE is_active = true ORDER BY sort_order"
+            )
+            return cur.fetchall() or []
+    finally:
+        conn.close()
+
+
 # ── Shared helper ─────────────────────────────────────────────────────────
 
 def _db_query(sql: str, params: tuple = ()) -> list[dict]:
@@ -855,35 +870,37 @@ def _invalidate_astro_cache():
 
 @app.post('/api/astro/calendar')
 def astro_calendar_create(req: AstroCalendarUpsert):
-    from datetime import date as _date
-    sd = req.start_date
-    month = int(sd[5:7])
-    year  = int(sd[:4])
+    # month, year, day_of_week are GENERATED ALWAYS columns — do NOT include
+    # them in the INSERT list; PostgreSQL computes them from start_date.
     sql = """
         INSERT INTO km_astro_calendar
           (display_name, start_date, end_date, market_impact, is_transit,
-           narrative, notes, inference, month, year, day_of_week)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                TO_CHAR(%s::date, 'Day'))
+           narrative, notes, inference)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """
+    conn = _conn()
     try:
-        rows = _db_query(sql, (
-            req.display_name, req.start_date, req.end_date,
-            req.market_impact, req.is_transit,
-            req.narrative, req.notes, req.inference,
-            month, year, req.start_date,
-        ))
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                req.display_name, req.start_date, req.end_date,
+                req.market_impact, req.is_transit,
+                req.narrative, req.notes, req.inference,
+            ))
+            row_id = cur.fetchone()[0]
+        conn.commit()
         _invalidate_astro_cache()
-        return {'id': rows[0]['id']}
+        return {'id': row_id}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 @app.patch('/api/astro/calendar/{event_id}')
 def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
-    sd = req.start_date
-    month = int(sd[5:7])
-    year  = int(sd[:4])
+    # month, year, day_of_week are GENERATED ALWAYS columns — omit from SET;
+    # they auto-recompute when start_date changes.
     sql = """
         UPDATE km_astro_calendar SET
           display_name  = %s,
@@ -893,33 +910,253 @@ def astro_calendar_update(event_id: int, req: AstroCalendarUpsert):
           is_transit    = %s,
           narrative     = %s,
           notes         = %s,
-          inference     = %s,
-          month         = %s,
-          year          = %s,
-          day_of_week   = TO_CHAR(%s::date, 'Day')
+          inference     = %s
         WHERE id = %s
     """
+    conn = _conn()
     try:
-        _db_query(sql, (
-            req.display_name, req.start_date, req.end_date,
-            req.market_impact, req.is_transit,
-            req.narrative, req.notes, req.inference,
-            month, year, req.start_date,
-            event_id,
-        ))
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                req.display_name, req.start_date, req.end_date,
+                req.market_impact, req.is_transit,
+                req.narrative, req.notes, req.inference,
+                event_id,
+            ))
+        conn.commit()
         _invalidate_astro_cache()
         return {'ok': True}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 @app.delete('/api/astro/calendar/{event_id}')
 def astro_calendar_delete(event_id: int):
+    conn = _conn()
     try:
-        _db_query('DELETE FROM km_astro_calendar WHERE id = %s', (event_id,))
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_astro_calendar WHERE id = %s', (event_id,))
+        conn.commit()
         _invalidate_astro_cache()
         return {'ok': True}
     except Exception as e:
+        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+# ── Panchang Generate Endpoint ───────────────────────────────────────────────
+
+@app.post('/api/panchang/generate')
+def panchang_generate(month: int, year: int):
+    """
+    Compute and upsert panchang rows for the given month/year into
+    km_panchang_calendar. Runs synchronously — no background task.
+    """
+    import calendar as _cal
+    from datetime import date as _date, timedelta as _td
+    try:
+        from generate_panchang_2026 import build_row, upsert_panchang_calendar
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=f'Ephemeris module unavailable: {exc}')
+
+    last_day = _cal.monthrange(year, month)[1]
+    start    = _date(year, month, 1)
+    end      = _date(year, month, last_day)
+
+    db_rows  = []
+    errors   = []
+    conn     = _conn()
+    try:
+        d = start
+        while d <= end:
+            try:
+                _csv_row, db_row = build_row(d, conn)
+                db_rows.append(db_row)
+            except Exception as e:
+                errors.append(f'{d}: {e}')
+            d += _td(days=1)
+
+        if db_rows:
+            upsert_panchang_calendar(conn, db_rows)
+
+        result = {'upserted': len(db_rows), 'errors': errors}
+        return result
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+# ── Panchang Calendar Endpoints ───────────────────────────────────────────────
+
+@app.get('/api/panchang/calendar')
+def panchang_calendar(month: int, year: int):
+    """
+    Monthly panchang rows joined with astro daily signals and day notes.
+    Returns one object per calendar day with nested notes array.
+    """
+    import calendar as _cal
+    last_day = _cal.monthrange(year, month)[1]
+    first_iso = f'{year:04d}-{month:02d}-01'
+    last_iso  = f'{year:04d}-{month:02d}-{last_day:02d}'
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    p.trade_date::text,
+                    p.weekday,
+                    p.tithi,
+                    CASE
+                        WHEN dp.tithi_end_ist IS NOT NULL
+                        THEN TO_CHAR(dp.tithi_end_ist, 'HH24:MI')
+                             || CASE WHEN dp.tithi_end_next_day THEN '+1' ELSE '' END
+                        ELSE p.tithi_end_time
+                    END AS tithi_end_time,
+                    p.moon_rashi,
+                    p.moon_rashi_next,
+                    p.moon_rashi_change_time,
+                    p.nakshatra,
+                    p.nakshatra_next,
+                    p.nakshatra_change_time,
+                    CASE
+                        WHEN dp.nakshatra_end_ist IS NOT NULL
+                        THEN TO_CHAR(dp.nakshatra_end_ist, 'HH24:MI')
+                             || CASE WHEN dp.nakshatra_end_next_day THEN '+1' ELSE '' END
+                        ELSE NULL
+                    END AS nakshatra_end_time,
+                    p.nak_lord,
+                    s.net_signal,
+                    s.net_score,
+                    s.turning_date
+                FROM km_panchang_calendar p
+                LEFT JOIN km_daily_panchang dp ON dp.date = p.trade_date
+                LEFT JOIN km_astro_daily_signal s ON s.trade_date = p.trade_date
+                WHERE p.trade_date BETWEEN %s AND %s
+                ORDER BY p.trade_date
+            """, (first_iso, last_iso))
+            panchang_rows = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT id, trade_date::text, calendar_label, scope, scope_value,
+                       annotation, sort_order
+                FROM km_panchang_day_notes
+                WHERE trade_date BETWEEN %s AND %s
+                ORDER BY trade_date, sort_order, id
+            """, (first_iso, last_iso))
+            notes_rows = cur.fetchall()
+
+        # index notes by date
+        notes_by_date: dict = {}
+        for n in notes_rows:
+            nd = n['trade_date']
+            notes_by_date.setdefault(nd, []).append(dict(n))
+
+        for row in panchang_rows:
+            row['notes'] = notes_by_date.get(row['trade_date'], [])
+
+        return panchang_rows
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+# ── Panchang Day Notes CRUD ───────────────────────────────────────────────────
+
+class PanchangNotePayload(BaseModel):
+    trade_date:     str
+    calendar_label: str
+    scope:          str = 'market'
+    scope_value:    Optional[str] = None
+    annotation:     Optional[str] = None
+    sort_order:     int = 0
+
+
+@app.get('/api/panchang/notes')
+def panchang_notes_for_date(date: str):
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, trade_date::text, calendar_label, scope, scope_value,
+                       annotation, sort_order
+                FROM km_panchang_day_notes
+                WHERE trade_date = %s
+                ORDER BY sort_order, id
+            """, (date,))
+            return [dict(r) for r in cur.fetchall()]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post('/api/panchang/notes')
+def panchang_note_create(req: PanchangNotePayload):
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO km_panchang_day_notes
+                  (trade_date, calendar_label, scope, scope_value, annotation, sort_order)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (req.trade_date, req.calendar_label, req.scope,
+                  req.scope_value, req.annotation, req.sort_order))
+            row_id = cur.fetchone()[0]
+        conn.commit()
+        return {'id': row_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.patch('/api/panchang/notes/{note_id}')
+def panchang_note_update(note_id: int, req: PanchangNotePayload):
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE km_panchang_day_notes SET
+                  trade_date     = %s,
+                  calendar_label = %s,
+                  scope          = %s,
+                  scope_value    = %s,
+                  annotation     = %s,
+                  sort_order     = %s
+                WHERE id = %s
+            """, (req.trade_date, req.calendar_label, req.scope,
+                  req.scope_value, req.annotation, req.sort_order, note_id))
+        conn.commit()
+        return {'ok': True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.delete('/api/panchang/notes/{note_id}')
+def panchang_note_delete(note_id: int):
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_panchang_day_notes WHERE id = %s', (note_id,))
+        conn.commit()
+        return {'ok': True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 
 # ── VaNi AI Endpoints ─────────────────────────────────────────────────────

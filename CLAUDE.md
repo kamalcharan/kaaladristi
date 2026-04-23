@@ -244,7 +244,70 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **053**.
+Next migration number: **057**.
+
+---
+
+## Signal Vocabulary — Canonical Source of Truth
+
+**Always import from `App/frontend/src/constants/signalScale.ts`.** Never define signal labels, colors, or type unions inline in components.
+
+### 1. Market Impact Scale (`MarketImpact` type)
+
+Used for: `km_astro_calendar.market_impact`, `km_astro_daily_signal.net_signal`, dropdown options, badge colors.
+
+| DB key | Display label | Color class |
+|---|---|---|
+| `strong_bullish` | Strong Bull | `text-risk-green` |
+| `bullish` | Bullish | `text-risk-green` |
+| `mild_bullish` | Mild Bull | `text-risk-green/70` |
+| `neutral` | Neutral | `text-slate-400` |
+| `turning` | Turning | `text-risk-amber` |
+| `mild_bearish` | Mild Bear | `text-risk-red/70` |
+| `bearish` | Bearish | `text-risk-red` |
+| `strong_bearish` | Strong Bear | `text-risk-red` |
+
+**Note:** The old `minor_bullish` / `minor_bearish` keys are **deprecated**. Migration 056 renames them in the DB.
+
+### 2. MagicRS Zones
+
+Used for: `km_equity_eod.magic_rs_zone`, `km_index_eod.magic_rs_zone` (Title Case, DB-computed).
+
+| DB value | Display label | Color class |
+|---|---|---|
+| `Strong Bull` | Strong Bull | `text-risk-green` |
+| `Mild Bull` | Mild Bull | `text-risk-green/70` |
+| `Neutral` | Neutral | `text-muted` |
+| `Mild Bear` | Mild Bear | `text-risk-red/70` |
+| `Strong Bear` | Strong Bear | `text-risk-red` |
+
+### 3. Flow Types
+
+Used for: `km_equity_eod.flow_type`, `km_index_eod.flow_type` (UPPER_SNAKE, DB-computed).
+
+| DB value | Display label | Color class |
+|---|---|---|
+| `FRESH_LONGS` | Fresh Longs | `text-risk-green` |
+| `FRESH_SHORTS` | Fresh Shorts | `text-risk-red` |
+| `SHORT_COVERING` | Short Covering | `text-risk-amber` |
+| `LONG_LIQUIDATION` | Long Liquidation | `text-risk-red/80` |
+| `LOW_VOLUME` | Low Volume | `text-muted` |
+| `MIXED` | Mixed | `text-muted` |
+
+### Imports
+
+```typescript
+import {
+  type MarketImpact,
+  SIGNAL_LABELS,      // MarketImpact → display label
+  impactToColor,      // impact → 'green' | 'red' | 'amber' | 'slate'
+  SIGNAL_CLASSES,     // color → { text, bg, border } Tailwind classes
+  IMPACT_OPTIONS,     // ordered array of all MarketImpact values
+  ZONE_LABELS,        // MagicRS zone → { label, color }
+  FLOW_LABELS,        // flow type → { label, color }
+  flowLabel,          // (flowType?) → { label, color } with fallback
+} from '@/constants/signalScale';
+```
 
 ---
 

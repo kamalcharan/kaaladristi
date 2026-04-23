@@ -164,55 +164,40 @@ async function loadScanData(): Promise<ScanDataBundle> {
     return _cachedBundle.data;
   }
 
-  // 67 dates: 66 for conviction_flow 66D% return + 1 buffer
-  const dates = await fetchRecentDates(67);
-  if (dates.length === 0) {
-    const empty: ScanDataBundle = {
-      industries: [],
-      industriesHistory: new Map(),
-      symbols: new Map(),
-      latestEod: new Map(),
-      eodHistory: new Map(),
-      latestDate: null,
-      oppConfigMap: new Map(),
-    };
-    return empty;
-  }
+  // Use calendar-day cutoffs instead of km_trading_calendar.
+  // Scanner always uses the latest available km_equity_eod data regardless
+  // of whether km_trading_calendar has been backfilled.
+  // 100 calendar days ≈ 70 trading days (enough for 66D return + buffer).
+  const eodCutoff = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // 20 calendar days ≈ 14 trading days for industry rotation detection.
+  const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const oldestDate = dates[dates.length - 1];
-
-  // Parallel fetches — market data + session-cached opportunity config map
   const [industryRes, symbolRes, eodRes, oppConfigMap] = await Promise.all([
-    // Industry EOD for last 11 dates
     from('km_industry_eod')
       .select('*')
-      .gte('trade_date', dates[Math.min(10, dates.length - 1)])
+      .gte('trade_date', industryCutoff)
       .order('trade_date', { ascending: false })
       .limit(1000)
       .execute(),
 
-    // All active equity symbols
     from('km_equity_symbols')
       .select('id,symbol,company_name,industry,exchange,isin,is_active')
       .is('is_active', 'true')
       .limit(8000)
       .execute(),
 
-    // Equity EOD — explicit date list + extended select with ema_20/atr_14/delivery_pct/w52_high
     from('km_equity_eod')
       .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high')
-      .in('trade_date', dates)
+      .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
       .execute(),
 
-    // VaNi opportunity config — session-cached, fetched from pipeline API
     fetchOpportunityConfig(),
   ]);
 
-  // Derive latestDate from actual loaded equity rows (not dates[0]).
-  // km_trading_calendar can have today marked "completed" before km_equity_eod
-  // data arrives, which would leave latestEod empty and all scans returning 0.
+  // Derive latestDate from actual loaded equity rows.
+  // This is always the true latest date regardless of km_trading_calendar state.
   const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
   const latestDate: string | null = allEodRows.length > 0 ? allEodRows[0].trade_date : null;
 
@@ -380,7 +365,7 @@ function getIndustryClassifications(bundle: ScanDataBundle) {
 function buildScanStock(
   equityId: number,
   bundle: ScanDataBundle,
-  presetId: string,
+  presetId: string | null = null,
 ): ScanStock | null {
   const eod = bundle.latestEod.get(equityId);
   const sym = bundle.symbols.get(equityId);
@@ -437,10 +422,7 @@ function buildScanStock(
     pctBelow52wHigh,
   };
 
-  const presetCfg = bundle.oppConfigMap.get(presetId) ?? null;
-  if (!presetCfg) {
-    console.warn(`[scanEngine] no OppConfig for presetId="${presetId}" — map keys: [${[...bundle.oppConfigMap.keys()].join(', ')}]`);
-  }
+  const presetCfg = presetId ? (bundle.oppConfigMap.get(presetId) ?? null) : null;
   return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
 }
 
@@ -712,7 +694,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
     if (d_pct < -8 || d_pct > 8) continue;
 
-    const stock = buildScanStock(id, bundle, 'conviction_flow');
+    const stock = buildScanStock(id, bundle); // VaNi computed inline below
     if (!stock) continue;
 
     const is_vani =
@@ -748,7 +730,10 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 /** Scan 8: Breakout Surge */
 function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
-  const dbg = { total: 0, noSym: 0, notNse: 0, shortHist: 0, belowBrk: 0, below100: 0, lowRvol: 0 };
+  const dbg = {
+    total: 0, noSym: 0, shortHist: 0,
+    belowBrk: 0, below50: 0, lowRvol: 0, noEma: 0,
+  };
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
@@ -756,58 +741,67 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     dbg.total++;
     if (!eod || !sym) { dbg.noSym++; continue; }
 
-    // Universe: NSE only
-    if (sym.exchange !== 'NSE') { dbg.notNse++; continue; }
-
+    // Need at least 15 prior bars to compute a reliable breakout level
     const history = bundle.eodHistory.get(id) ?? [];
-    if (history.length < 21) { dbg.shortHist++; continue; }
+    const priorBars = Math.min(history.length - 1, 20); // history[1..20], skip today at [0]
+    if (priorBars < 15) { dbg.shortHist++; continue; }
 
-    // breakout_level = MAX(close) over prior 20 bars (history[1..20], skip today at [0])
+    // breakout_level = MAX(close) over up to 20 prior bars
     let breakout_level = 0;
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= priorBars; i++) {
       const c = Number(history[i].close);
       if (c > breakout_level) breakout_level = c;
     }
 
-    if (Number(eod.close) <= breakout_level) { dbg.belowBrk++; continue; }
-    if (Number(eod.close) <= 100) { dbg.below100++; continue; }
-    if ((Number(eod.rvol) || 0) <= 2) { dbg.lowRvol++; continue; }
+    const close = Number(eod.close);
+    const ema20 = (eod.ema_20 != null && Number(eod.ema_20) > 0) ? Number(eod.ema_20) : null;
+    const rvol  = Number(eod.rvol) || 0;
+    const rsi14 = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
 
-    const close      = Number(eod.close);
-    const ema20      = (eod.ema_20 != null && Number(eod.ema_20) > 0) ? Number(eod.ema_20) : null;
-    const rvol       = Number(eod.rvol) || 0;
-    const rsi14      = eod.rsi_14 != null ? Number(eod.rsi_14) : null;
+    // Universe filters (match SQL WHERE clause)
+    if (close <= breakout_level) { dbg.belowBrk++; continue; }
+    if (close < 50)              { dbg.below50++;  continue; }
+    if (rvol <= 0.1)             { dbg.lowRvol++;  continue; }
+    if (ema20 == null)           { dbg.noEma++;    continue; }
+
     const pct_from_breakout = ((close - breakout_level) / breakout_level) * 100;
-    const d_pct = ema20 != null ? ((close - ema20) / ema20) * 100 : null;
+    const d_pct  = ((close - ema20) / ema20) * 100;
     const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
 
-    const stock = buildScanStock(id, bundle, 'breakout_surge');
+    const stock = buildScanStock(id, bundle); // VaNi computed inline below
     if (!stock) continue;
 
     const is_vani =
       rvol > 5 &&
-      pct_from_breakout >= 0 &&
-      pct_from_breakout <= 5 &&
+      pct_from_breakout >= 0 && pct_from_breakout <= 5 &&
       (rsi14 ?? 100) < 75 &&
-      d_pct != null && d_pct < 15;
+      d_pct < 15;
 
     results.push({
       ...stock,
       vaniOpportunity: is_vani,
-      d_pct:            d_pct != null ? Math.round(d_pct * 100) / 100 : null,
-      breakout_level:   Math.round(breakout_level   * 100) / 100,
+      d_pct:             Math.round(d_pct             * 100) / 100,
+      breakout_level:    Math.round(breakout_level    * 100) / 100,
       pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
       ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
     });
   }
 
-  console.log('[breakout_surge] latestDate:', bundle.latestDate, '| filters:', dbg, '| results:', results.length);
+  console.log(
+    '[breakout_surge] latestDate:', bundle.latestDate,
+    '\n  total in latestEod:', dbg.total,
+    '| noSym:', dbg.noSym,
+    '| shortHist (<15 bars):', dbg.shortHist,
+    '| belowBrk:', dbg.belowBrk,
+    '| below50:', dbg.below50,
+    '| lowRvol:', dbg.lowRvol,
+    '| noEma:', dbg.noEma,
+    '| PASSED:', results.length,
+  );
 
-  return results
-    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
-    .slice(0, 50);
+  return results.sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0));
 }
 
 // ── Public API ─────────────────────────────────────────────────
@@ -832,10 +826,7 @@ function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbo
   for (const stock of stocks) {
     const sym = symbols.get(stock.equity_id);
     const isin = sym?.isin;
-    if (!isin) {
-      seen.set(`_noisn_${stock.equity_id}`, stock);
-      continue;
-    }
+    if (!isin) continue; // skip no-ISIN stocks in combined mode — matches SQL WHERE isin IS NOT NULL
     const existing = seen.get(isin);
     if (!existing) {
       seen.set(isin, stock);
@@ -872,6 +863,27 @@ export function invalidateScanCache(): void {
   _cachedBundle = null;
   _oppConfigCache = null;
   _oppDiagCount = 0;
+}
+
+/** Fetch scan preset definitions from the DB (via pipeline API). */
+export async function fetchScanPresets(): Promise<ScanDefinition[]> {
+  const res = await fetch(`${PIPELINE_URL}/api/scan/presets`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const rows = (await res.json()) as Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    tooltip: string | null;
+    sort_order: number;
+    result_limit: number;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description ?? '',
+    tooltip: r.tooltip ?? undefined,
+    limit: r.result_limit,
+  }));
 }
 
 export interface ScanCountsResult {

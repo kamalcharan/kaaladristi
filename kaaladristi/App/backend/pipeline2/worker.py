@@ -229,6 +229,30 @@ def _run_daily(conn, job: dict) -> None:
     log.info(f'Job #{job_id} daily_run {trade_date_obj}: {outcome.overall_status} '
              f'({len(outcome.steps)} steps, {rows} rows)')
 
+    # Mark trade_date as completed in km_trading_calendar so the frontend
+    # fetchRecentDates() query (which filters status='completed') sees today's data.
+    # This is the pipeline2 equivalent of daily_pipeline.py's mark_day_status().
+    if outcome.overall_status in ('completed', 'partial'):
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO km_trading_calendar (trade_date, exchange, status)
+                    VALUES (%s, 'NSE', %s)
+                    ON CONFLICT (trade_date, exchange) DO UPDATE
+                      SET status = EXCLUDED.status
+                    """,
+                    [str(trade_date_obj), outcome.overall_status],
+                )
+            conn.commit()
+            log.info(f'km_trading_calendar: {trade_date_obj} NSE → {outcome.overall_status}')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            log.warning(f'km_trading_calendar update failed (non-fatal): {e}')
+
 
 # ── Backfill ──────────────────────────────────────────────────────────────
 

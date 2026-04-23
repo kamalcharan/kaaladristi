@@ -27,6 +27,8 @@ import ScanView from '@/views/ScanView';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
 import DataPipelinePage from '@/pages/DataPipeline';
+import PanchangView from '@/views/PanchangView';
+import AdminPanchangView from '@/views/AdminPanchangView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -115,6 +117,8 @@ function AppRoutes() {
           <Route path="/industry-transition" element={<IndustryTransitionView />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="/data-pipeline" element={<DataPipelinePage />} />
+          <Route path="/panchang" element={<PanchangView />} />
+          <Route path="/admin/panchang" element={<AdminPanchangView />} />
         </Route>
       </Route>
 

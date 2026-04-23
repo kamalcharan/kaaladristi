@@ -4,33 +4,26 @@ import { Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { useIndustryRotation, useIndustryStocks } from '@/hooks/useIndustryRotation';
 import type { IndustryRotationItem } from '@/types';
+import { FLOW_LABELS, ZONE_LABELS } from '@/constants/signalScale';
 
-// ── Flow type display mapping (KaalaDristi vocabulary) ────────
-
-const FLOW_LABELS: Record<string, { label: string; color: string }> = {
-  FRESH_LONGS:      { label: 'Fresh Longs',      color: 'text-risk-green bg-risk-green/10' },
-  FRESH_SHORTS:     { label: 'Fresh Shorts',     color: 'text-risk-red bg-risk-red/10' },
-  SHORT_COVERING:   { label: 'Short Covering',   color: 'text-risk-amber bg-risk-amber/10' },
-  LONG_LIQUIDATION: { label: 'Liquidation',      color: 'text-risk-red bg-risk-red/10' },
-  LOW_VOLUME:       { label: 'Low Volume',        color: 'text-muted bg-kd-elevated/30' },
-  MIXED:            { label: 'Mixed',             color: 'text-muted bg-kd-elevated/30' },
-};
-
-const ZONE_COLORS: Record<string, string> = {
-  'Strong Bull': 'text-risk-green',
-  'Mild Bull':   'text-risk-green/70',
-  'Neutral':     'text-muted',
-  'Mild Bear':   'text-risk-red/70',
-  'Strong Bear': 'text-risk-red',
-};
+const ZONE_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(ZONE_LABELS).map(([k, v]) => [k, v.color]),
+);
 
 // ── Flow Chip ──────────────────────────────────────────────────
 
+const FLOW_BG: Record<string, string> = {
+  'text-risk-green': 'bg-risk-green/10',
+  'text-risk-red':   'bg-risk-red/10',
+  'text-risk-amber': 'bg-risk-amber/10',
+};
+
 function FlowChip({ flowType }: { flowType: string | null }) {
   if (!flowType) return null;
-  const config = FLOW_LABELS[flowType] ?? { label: flowType, color: 'text-muted bg-kd-elevated/30' };
+  const config = FLOW_LABELS[flowType] ?? { label: flowType, color: 'text-muted' };
+  const bg = FLOW_BG[config.color] ?? 'bg-kd-elevated/30';
   return (
-    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-md', config.color)}>
+    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-md', config.color, bg)}>
       {config.label}
     </span>
   );

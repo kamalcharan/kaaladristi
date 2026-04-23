@@ -60,9 +60,9 @@ function fmtShort(d: string) {
 
 /** Glow color based on market_impact category — overrides signalColor for bars */
 function transitGlow(impact: string): { color: string; shadow: string } {
-  if (['strong_bullish', 'bullish', 'minor_bullish'].includes(impact))
+  if (['strong_bullish', 'bullish', 'mild_bullish'].includes(impact))
     return { color: '#1a8a4a', shadow: '0 0 6px #1a8a4a' };
-  if (['strong_bearish', 'bearish', 'minor_bearish'].includes(impact))
+  if (['strong_bearish', 'bearish', 'mild_bearish'].includes(impact))
     return { color: '#c0392b', shadow: '0 0 6px #c0392b' };
   return { color: '#f0a500', shadow: '0 0 6px #f0a500' };
 }

@@ -19,6 +19,7 @@ const navSections: NavSection[] = [
       { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition' },
       { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch' },
       { to: '/astro-calendar',      glyph: '☽', label: 'Planetary Intel' },
+      { to: '/panchang',            glyph: '☿', label: 'Panchang' },
       { to: '/pulse/1',             glyph: '◌', label: 'Visual Pulse' },
     ],
   },
@@ -246,6 +247,82 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             ))}
           </div>
         ))}
+
+        {/* ── Admin section (admin-only) ── */}
+        {isAdmin && (
+          <div style={{ marginTop: '24px' }}>
+            {!collapsed && (
+              <div
+                style={{
+                  padding: '0 12px 8px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  color: 'var(--indigo)',
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  opacity: 0.8,
+                }}
+              >
+                Admin
+              </div>
+            )}
+            {[
+              { to: '/admin/panchang', glyph: '⊞', label: 'Panchang Admin' },
+            ].map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                title={item.label}
+                style={({ isActive }) => ({
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: collapsed ? 0 : '11px',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  padding: collapsed ? '9px 0' : '9px 12px',
+                  borderRadius: '8px',
+                  color: isActive ? 'var(--indigo)' : 'var(--text-muted)',
+                  fontSize: '13.5px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.18s',
+                  marginBottom: '1px',
+                  background: isActive ? 'rgba(99,102,241,0.12)' : 'transparent',
+                  textDecoration: 'none',
+                })}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = 'rgba(99,102,241,0.08)';
+                  el.style.color = 'var(--text-secondary)';
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = 'transparent';
+                  el.style.color = 'var(--text-muted)';
+                }}
+              >
+                {({ isActive }) => (
+                  <>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        fontSize: '14px',
+                        width: '16px',
+                        textAlign: 'center',
+                        opacity: isActive ? 1 : 0.75,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.glyph}
+                    </span>
+                    {!collapsed && (
+                      <span className="truncate leading-none">{item.label}</span>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Footer: user + date ── */}
