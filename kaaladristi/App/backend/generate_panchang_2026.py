@@ -291,8 +291,18 @@ def build_row(d, conn):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 MONTHS = [
-    ('march_2026', date(2026, 3, 1),  date(2026, 3, 31)),
-    ('april_2026', date(2026, 4, 1),  date(2026, 4, 30)),
+    ('january_2026',   date(2026,  1,  1), date(2026,  1, 31)),
+    ('february_2026',  date(2026,  2,  1), date(2026,  2, 28)),
+    ('march_2026',     date(2026,  3,  1), date(2026,  3, 31)),
+    ('april_2026',     date(2026,  4,  1), date(2026,  4, 30)),
+    ('may_2026',       date(2026,  5,  1), date(2026,  5, 31)),
+    ('june_2026',      date(2026,  6,  1), date(2026,  6, 30)),
+    ('july_2026',      date(2026,  7,  1), date(2026,  7, 31)),
+    ('august_2026',    date(2026,  8,  1), date(2026,  8, 31)),
+    ('september_2026', date(2026,  9,  1), date(2026,  9, 30)),
+    ('october_2026',   date(2026, 10,  1), date(2026, 10, 31)),
+    ('november_2026',  date(2026, 11,  1), date(2026, 11, 30)),
+    ('december_2026',  date(2026, 12,  1), date(2026, 12, 31)),
 ]
 
 FIELDNAMES = ['DATE', 'DAY', 'TITHI', 'MOON RASHI', 'NAKSHATRA', 'NAK LORD', 'RESULTS']
@@ -300,7 +310,7 @@ FIELDNAMES = ['DATE', 'DAY', 'TITHI', 'MOON RASHI', 'NAKSHATRA', 'NAK LORD', 'RE
 
 def main():
     print('=' * 65)
-    print('  KaalaDristi Panchang Generator — March & April 2026')
+    print('  KaalaDristi Panchang Generator — Full Year 2026')
     print('  Ayanamsa: Lahiri Sidereal | Time: 09:15 IST')
     print('=' * 65)
 

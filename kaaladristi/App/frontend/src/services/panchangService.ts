@@ -108,3 +108,17 @@ export async function deletePanchangNote(id: number): Promise<void> {
   });
   if (!res.ok) throw new Error(`[delete panchang note] HTTP ${res.status}`);
 }
+
+export interface GenerateResult {
+  upserted: number;
+  errors: string[];
+}
+
+export async function generatePanchangMonth(year: number, month: number): Promise<GenerateResult> {
+  const res = await fetch(
+    `${PIPELINE_API}/api/panchang/generate?year=${year}&month=${month}`,
+    { method: 'POST' },
+  );
+  if (!res.ok) throw new Error(`[panchang/generate] HTTP ${res.status}`);
+  return res.json();
+}

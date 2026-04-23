@@ -947,6 +947,50 @@ def astro_calendar_delete(event_id: int):
         conn.close()
 
 
+# ── Panchang Generate Endpoint ───────────────────────────────────────────────
+
+@app.post('/api/panchang/generate')
+def panchang_generate(month: int, year: int):
+    """
+    Compute and upsert panchang rows for the given month/year into
+    km_panchang_calendar. Runs synchronously — no background task.
+    """
+    import calendar as _cal
+    from datetime import date as _date, timedelta as _td
+    try:
+        from generate_panchang_2026 import build_row, upsert_panchang_calendar
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=f'Ephemeris module unavailable: {exc}')
+
+    last_day = _cal.monthrange(year, month)[1]
+    start    = _date(year, month, 1)
+    end      = _date(year, month, last_day)
+
+    db_rows  = []
+    errors   = []
+    conn     = _conn()
+    try:
+        d = start
+        while d <= end:
+            try:
+                _csv_row, db_row = build_row(d, conn)
+                db_rows.append(db_row)
+            except Exception as e:
+                errors.append(f'{d}: {e}')
+            d += _td(days=1)
+
+        if db_rows:
+            upsert_panchang_calendar(conn, db_rows)
+
+        result = {'upserted': len(db_rows), 'errors': errors}
+        return result
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
 # ── Panchang Calendar Endpoints ───────────────────────────────────────────────
 
 @app.get('/api/panchang/calendar')

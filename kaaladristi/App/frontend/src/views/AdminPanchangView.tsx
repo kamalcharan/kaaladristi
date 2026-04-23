@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ChevronLeft, ChevronRight, Loader2, AlertCircle, Plus, Trash2, Check, X, Moon,
+  ChevronLeft, ChevronRight, Loader2, AlertCircle, Plus, Trash2, Check, X, Moon, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MONTH_FULL } from '@/lib/dateUtils';
@@ -10,6 +10,7 @@ import {
   createPanchangNote,
   updatePanchangNote,
   deletePanchangNote,
+  generatePanchangMonth,
   type PanchangRow,
   type PanchangNote,
   type NotePayload,
@@ -335,6 +336,7 @@ export default function AdminPanchangView() {
   const today   = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
+  const [genMsg, setGenMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const qc = useQueryClient();
 
   const cacheKey = ['panchang_calendar', year, month];
@@ -362,6 +364,20 @@ export default function AdminPanchangView() {
     onSuccess: () => qc.invalidateQueries({ queryKey: cacheKey }),
   });
 
+  const generateMut = useMutation({
+    mutationFn: () => generatePanchangMonth(year, month),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: cacheKey });
+      const errText = result.errors.length > 0 ? ` (${result.errors.length} errors)` : '';
+      setGenMsg({ ok: result.errors.length === 0, text: `Generated ${result.upserted} days${errText}` });
+      setTimeout(() => setGenMsg(null), 5000);
+    },
+    onError: (e) => {
+      setGenMsg({ ok: false, text: e instanceof Error ? e.message : 'Generation failed' });
+      setTimeout(() => setGenMsg(null), 8000);
+    },
+  });
+
   const saving = createMut.isPending || updateMut.isPending || deleteMut.isPending;
 
   function prev() {
@@ -384,23 +400,57 @@ export default function AdminPanchangView() {
             Admin
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {saving && <Loader2 className="w-3.5 h-3.5 text-accent-indigo animate-spin" />}
+
+          {/* Generate button */}
           <button
-            onClick={prev}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
+            onClick={() => generateMut.mutate()}
+            disabled={generateMut.isPending}
+            title={`Generate panchang for ${MONTH_FULL[month - 1]} ${year}`}
+            className={cn(
+              'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all',
+              generateMut.isPending
+                ? 'opacity-50 cursor-not-allowed border-white/10 text-muted'
+                : 'border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/10 hover:border-accent-indigo/60',
+            )}
           >
-            <ChevronLeft className="w-4 h-4" />
+            {generateMut.isPending
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <RefreshCw className="w-3 h-3" />
+            }
+            Generate
           </button>
-          <span className="text-sm font-medium text-white min-w-[130px] text-center">
-            {MONTH_FULL[month - 1]} {year}
-          </span>
-          <button
-            onClick={next}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+
+          {/* Status flash */}
+          {genMsg && (
+            <span className={cn(
+              'text-xs px-2 py-1 rounded border',
+              genMsg.ok
+                ? 'text-risk-green bg-risk-green/10 border-risk-green/30'
+                : 'text-risk-amber bg-risk-amber/10 border-risk-amber/30',
+            )}>
+              {genMsg.text}
+            </span>
+          )}
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={prev}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-white min-w-[130px] text-center">
+              {MONTH_FULL[month - 1]} {year}
+            </span>
+            <button
+              onClick={next}
+              className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -423,8 +473,8 @@ export default function AdminPanchangView() {
           <div className="text-center py-16 text-muted text-sm">
             No panchang data for {MONTH_FULL[month - 1]} {year}.
             <br />
-            <span className="text-xs opacity-60">
-              Run <code className="mono bg-slate-800 px-1 py-0.5 rounded">generate_panchang_2026.py</code> on the VPS first.
+            <span className="text-xs opacity-60 block mt-2">
+              Click <strong className="text-accent-indigo">Generate</strong> above to compute and load this month.
             </span>
           </div>
         )}
