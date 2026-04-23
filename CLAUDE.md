@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Kāla-Drishti — Claude Code Context
 
 Market analysis and forecasting platform combining NSE/BSE market data with planetary/astronomical intelligence.
@@ -10,8 +14,12 @@ Market analysis and forecasting platform combining NSE/BSE market data with plan
 kaaladristi/
 ├── App/
 │   ├── backend/           # Python — data pipeline + FastAPI sidecar
-│   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger
+│   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger, ai_client
 │   │   ├── pipeline/      # Downloaders (NSE/BSE bhav, FII/DII), processors, utils
+│   │   ├── pipeline2/     # Pipeline2 orchestrator (handlers, scheduler, worker, health)
+│   │   ├── engine/        # Risk engine (risk_engine.py) + correlations
+│   │   ├── scripts/       # One-shot data scripts: rule_discovery.py, rule_discovery_test.py
+│   │   ├── indicators/    # Technical indicator compute functions
 │   │   ├── pipeline2_api.py # FastAPI sidecar — port 8101 (CURRENT — run this)
 │   │   ├── pipeline_api.py  # OLD FastAPI sidecar — DO NOT RUN (superseded by pipeline2_api.py)
 │   │   ├── breeze_downloader.py  # Unified EOD downloader (ICICI Breeze)
@@ -54,7 +62,7 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **050** (`km_migration_050_migrate_dc_inference.sql`)
+Latest migration: **062** (`km_migration_062_rule_engine_schema.sql`)
 
 | Table | Description |
 |---|---|
@@ -62,9 +70,14 @@ Latest migration: **050** (`km_migration_050_migrate_dc_inference.sql`)
 | `km_breadth_roc` | ROC momentum breadth oscillator (migration 021) |
 | `km_index_constituents` | Index→Equity mapping with sector/weight (migration 022, FK → `km_index_symbols`) |
 | `km_industry_eod` | Daily industry-level aggregation from equity EOD (migration 033, PK: trade_date + industry) |
-| `km_astro_rule_master` | Timeless Vedic astro-market rule registry (migration 047) |
+| `km_astro_rule_master` | Timeless Vedic astro-market rule registry (migration 047); extended by migration 062 with `conditions` JSONB, `scope`, `outcome`, `probability_label`, `data_source`, `is_deleted` |
 | `km_astro_calendar_2026` | 2026 event instances with market_impact (migration 048) |
 | `km_astro_daily_signal` | Computed net astro signal per date (migration 049) |
+| `km_daily_panchang` | Daily Vedic panchang (vara, nakshatra, tithi, yoga, paksha, dlnl_match, is_ekadashi, is_purnima, hemisphere_event) — source for rule discovery |
+| `km_planetary_positions` | Daily planet positions (planet, longitude, sign_name, nakshatra_name, speed, retrograde, combust, vargottam) |
+| `km_planetary_aspects` | Daily planetary aspects (planet_1, planet_2, aspect_type, orb, exact) |
+| `km_rule_signals` | Discovered rule signal instances (date, rule_id, signal, strength, details, conditions_snapshot, actual_market_return, matched) |
+| `km_rule_confidence` | Per-rule backtested confidence (rule_id PK, total_occurrences, matched_count, confidence_score) |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -171,22 +184,19 @@ Services: `frontend` (port 3001), `backend` (port 8101), `nginx` (port 80 revers
 
 ---
 
-## Current Plan (PLAN.md)
+## Current Plan
 
-Working through a 7-step EOD data pipeline build:
+Active sprint: **Rules Engine**.
 
-| Step | Status | Description |
+| Component | Status | Description |
 |---|---|---|
-| 1 | Done | Schema updates (corp actions, sync log, intraday tables, adj columns) |
-| 2 | Done | Shared lib (`lib/`) extracted |
-| 3 | Partial | Master data expansion (BSE equities, TRI indices) |
-| 4 | Done | `breeze_downloader.py` unified EOD downloader |
-| 5 | Todo | `corp_actions_loader.py` — fetch BSE corporate actions |
-| 6 | Todo | `adj_factor_calculator.py` — apply price adjustments |
-| 7 | Todo | Historical backfill (~8.8M rows) |
-| 8 | Todo | Daily sync runner |
+| DB schema (migration 062) | Done | `km_astro_rule_master` extended, `km_rule_signals` backtesting cols, `km_rule_confidence` table |
+| Rule discovery script | Done | `App/backend/scripts/rule_discovery.py` — populates `km_rule_signals` from all active rules |
+| Rule Engine UI | In progress | React pages `/rules` (list) and `/rules/:id` (detail) |
+| Backtesting | Todo | Fill `actual_market_return` + `matched` in `km_rule_signals`, compute `km_rule_confidence` |
+| Risk Engine | Prototype | `App/backend/engine/risk_engine.py` — 4-dimension score (structural/momentum/volatility/deception) |
 
-**Phase 2** (after EOD solid): 15-min intraday, Rules Engine, ephemeris overlays.
+EOD pipeline (Steps 5-8 from PLAN.md) is parked while Rules Engine is active.
 
 ---
 
@@ -244,7 +254,69 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **057**.
+Next migration number: **063**.
+
+---
+
+## Rules Engine
+
+### Architecture
+
+```
+km_astro_rule_master  →  scripts/rule_discovery.py  →  km_rule_signals
+                                                              ↓
+                                                     km_rule_confidence  (backtesting)
+```
+
+**Rule discovery** (`App/backend/scripts/rule_discovery.py`):
+- Reads all `is_active=TRUE AND data_source='available'` rules from `km_astro_rule_master`
+- Each rule has a `rule_type` and a `conditions` JSONB that drives a typed discovery function
+- Inserts matching dates into `km_rule_signals` with `ON CONFLICT DO NOTHING`
+- Uses `KD_DB_PASSWORD` env var (not `DB_PRIMARY`); hardcoded host `187.127.136.65`
+
+```bash
+# Run discovery for all history
+cd App/backend/scripts
+KD_DB_PASSWORD=... python rule_discovery.py
+
+# Run for a single year (test mode)
+KD_DB_PASSWORD=... python rule_discovery.py 2026
+
+# Quick test via wrapper
+python rule_discovery_test.py   # runs 2026 only
+```
+
+### Rule Types
+
+| `rule_type` | Discovery function | Conditions keys |
+|---|---|---|
+| `nakshatra_vara` | `discover_nakshatra_vara` | `vara`, `nakshatra_lord`, `day_lord_equals_nakshatra_lord` |
+| `planet_transit` | `discover_planet_in_nakshatra` / `discover_relative_position` | `planet`, `nakshatra`, `same_sign`, `position`, `aspect_type` |
+| `planet_state` | `discover_planet_state` | `planet`, `condition` (combust/retrograde/vargottam/reducing_speed), `planets_retrograde`, `planets_alone` |
+| `planet_conjunction` | `discover_conjunction` | `planet_1`, `planet_2`, `aspect_type` |
+| `vedh` | `discover_vedh` | `planet`, `vedh_of`, `mutual_vedh` |
+| `tithi_alone` | `discover_tithi` | `tithi_base`, `paksha`, `is_ekadashi`, `is_purnima` |
+| `compound` | panchak / yog / seasonal / sign routers | `panchak_day`, `yoga`, `event`, `sign` |
+| `eclipse` | `discover_eclipse` | `eclipse_type` (lunar/solar) |
+
+### Risk Engine (Prototype)
+
+`App/backend/engine/risk_engine.py` — 4-dimension composite score (0-100):
+- **Structural** (0-25): Saturn/Jupiter retrogrades + aspects
+- **Momentum** (0-25): Mars retrograde + Mars-Saturn/Mars-Rahu
+- **Volatility** (0-25): Moon in high-risk nakshatras + gandanta + malefic clustering
+- **Deception** (0-25): Mercury/Venus retrograde + Mercury-Rahu
+
+Regime: Accumulation (≤30) / Expansion (≤50) / Distribution (≤70) / Capital Protection (>70).
+Currently reads from SQLite (`schema.py`), not the Postgres stack. Prototype only.
+
+### Rule Engine UI
+
+Routes: `/rules` (list) and `/rules/:id` (detail).
+Component files: `src/pages/RuleEngine/RuleList.tsx`, `RuleDetail.tsx`, `index.ts`.
+Data: PostgREST on `187.127.136.65:3000`.
+- List: `GET /km_astro_rule_master?is_deleted=eq.false&is_active=eq.true&select=...`
+- Detail: `GET /km_astro_rule_master?id=eq.{id}&select=*` + `GET /km_rule_confidence?rule_id=eq.{id}` + `GET /km_rule_signals?rule_id=eq.{id}&order=date.desc&limit=50`
 
 ---
 

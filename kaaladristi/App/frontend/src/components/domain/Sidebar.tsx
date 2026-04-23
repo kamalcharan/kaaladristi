@@ -27,6 +27,7 @@ const navSections: NavSection[] = [
     heading: 'Author',
     items: [
       { to: '/inference',    glyph: '✎', label: 'Inference DB' },
+      { to: '/rules',        glyph: '⊞', label: 'Rule Engine' },
       { to: '/rule-eval',    glyph: '⊛', label: 'Rule Eval' },
 
       { to: '/transmission', glyph: '⇝', label: 'Risk Transmission' },
