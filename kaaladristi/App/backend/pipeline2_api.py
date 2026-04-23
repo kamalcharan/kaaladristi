@@ -1012,19 +1012,30 @@ def panchang_calendar(month: int, year: int):
                     p.trade_date::text,
                     p.weekday,
                     p.tithi,
-                    p.tithi_end_time,
+                    CASE
+                        WHEN dp.tithi_end_ist IS NOT NULL
+                        THEN TO_CHAR(dp.tithi_end_ist, 'HH24:MI')
+                             || CASE WHEN dp.tithi_end_next_day THEN '+1' ELSE '' END
+                        ELSE p.tithi_end_time
+                    END AS tithi_end_time,
                     p.moon_rashi,
                     p.moon_rashi_next,
                     p.moon_rashi_change_time,
                     p.nakshatra,
-                    p.nakshatra_end_time,
                     p.nakshatra_next,
                     p.nakshatra_change_time,
+                    CASE
+                        WHEN dp.nakshatra_end_ist IS NOT NULL
+                        THEN TO_CHAR(dp.nakshatra_end_ist, 'HH24:MI')
+                             || CASE WHEN dp.nakshatra_end_next_day THEN '+1' ELSE '' END
+                        ELSE NULL
+                    END AS nakshatra_end_time,
                     p.nak_lord,
                     s.net_signal,
                     s.net_score,
                     s.turning_date
                 FROM km_panchang_calendar p
+                LEFT JOIN km_daily_panchang dp ON dp.date = p.trade_date
                 LEFT JOIN km_astro_daily_signal s ON s.trade_date = p.trade_date
                 WHERE p.trade_date BETWEEN %s AND %s
                 ORDER BY p.trade_date
