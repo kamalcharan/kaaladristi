@@ -27,7 +27,6 @@ const navSections: NavSection[] = [
     heading: 'Author',
     items: [
       { to: '/inference',    glyph: '✎', label: 'Inference DB' },
-      { to: '/rules',        glyph: '⊞', label: 'Rule Engine' },
       { to: '/rule-eval',    glyph: '⊛', label: 'Rule Eval' },
 
       { to: '/transmission', glyph: '⇝', label: 'Risk Transmission' },
@@ -269,6 +268,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             )}
             {[
               { to: '/admin/panchang', glyph: '⊞', label: 'Panchang Admin' },
+              { to: '/rules',         glyph: '⊟', label: 'Rule Engine'    },
             ].map(item => (
               <NavLink
                 key={item.to}
