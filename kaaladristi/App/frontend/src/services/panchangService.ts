@@ -1,9 +1,22 @@
+import { from } from './postgrest';
+import {
+  type MarketImpact,
+  SIGNAL_LABELS,
+  impactToColor,
+  SIGNAL_CLASSES,
+  IMPACT_OPTIONS,
+} from '@/constants/signalScale';
+
 const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+
+// Re-export so callers can use the canonical scale directly
+export type { MarketImpact };
+export { SIGNAL_LABELS, impactToColor, SIGNAL_CLASSES, IMPACT_OPTIONS };
 
 export interface PanchangNote {
   id: number;
   trade_date: string;
-  calendar_label: PanchangCalendarLabel;
+  calendar_label: MarketImpact;
   scope: PanchangScope;
   scope_value: string | null;
   annotation: string | null;
@@ -30,20 +43,6 @@ export interface PanchangRow {
 }
 
 export type PanchangScope = 'market' | 'sector' | 'commodity' | 'planet' | 'currency';
-export type PanchangCalendarLabel =
-  | 'POSITIVE'
-  | 'NEGATIVE'
-  | 'VOLATILE'
-  | 'MAJOR_POSITIVE'
-  | 'SUDDEN_SPURT';
-
-export const CALENDAR_LABEL_OPTIONS: { value: PanchangCalendarLabel; label: string }[] = [
-  { value: 'POSITIVE',      label: 'Positive'       },
-  { value: 'NEGATIVE',      label: 'Negative'       },
-  { value: 'VOLATILE',      label: 'Volatile'       },
-  { value: 'MAJOR_POSITIVE',label: 'Major Positive' },
-  { value: 'SUDDEN_SPURT',  label: 'Sudden Spurt'   },
-];
 
 export const SCOPE_OPTIONS: { value: PanchangScope; label: string }[] = [
   { value: 'market',    label: 'Market'    },
@@ -53,21 +52,20 @@ export const SCOPE_OPTIONS: { value: PanchangScope; label: string }[] = [
   { value: 'currency',  label: 'Currency'  },
 ];
 
-export const LABEL_COLOR: Record<PanchangCalendarLabel, string> = {
-  POSITIVE:       'text-risk-green',
-  NEGATIVE:       'text-risk-red',
-  VOLATILE:       'text-risk-amber',
-  MAJOR_POSITIVE: 'text-risk-green',
-  SUDDEN_SPURT:   'text-risk-amber',
-};
+// ── Sector list from DB ────────────────────────────────────────────────────────
 
-export const LABEL_BG: Record<PanchangCalendarLabel, string> = {
-  POSITIVE:       'bg-risk-green/10 border-risk-green/30',
-  NEGATIVE:       'bg-risk-red/10 border-risk-red/30',
-  VOLATILE:       'bg-risk-amber/10 border-risk-amber/30',
-  MAJOR_POSITIVE: 'bg-risk-green/20 border-risk-green/40',
-  SUDDEN_SPURT:   'bg-risk-amber/20 border-risk-amber/40',
-};
+export async function fetchSectors(): Promise<string[]> {
+  const { data, error } = await from('km_industry_eod')
+    .select('industry')
+    .order('industry', { ascending: true })
+    .execute();
+  if (error) throw new Error(`[fetchSectors] ${error.message}`);
+  // deduplicate
+  const rows = (data ?? []) as { industry: string }[];
+  return [...new Set(rows.map(r => r.industry))].filter(Boolean).sort();
+}
+
+// ── API functions ──────────────────────────────────────────────────────────────
 
 export async function fetchPanchangCalendar(year: number, month: number): Promise<PanchangRow[]> {
   const res = await fetch(`${PIPELINE_API}/api/panchang/calendar?year=${year}&month=${month}`);
@@ -77,7 +75,7 @@ export async function fetchPanchangCalendar(year: number, month: number): Promis
 
 export interface NotePayload {
   trade_date: string;
-  calendar_label: PanchangCalendarLabel;
+  calendar_label: MarketImpact;
   scope: PanchangScope;
   scope_value?: string | null;
   annotation?: string | null;

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { MONTH_FULL } from '@/lib/dateUtils';
 import {
   fetchPanchangCalendar,
+  fetchSectors,
   createPanchangNote,
   updatePanchangNote,
   deletePanchangNote,
@@ -14,13 +15,67 @@ import {
   type PanchangRow,
   type PanchangNote,
   type NotePayload,
-  type PanchangCalendarLabel,
+  type MarketImpact,
   type PanchangScope,
-  CALENDAR_LABEL_OPTIONS,
+  IMPACT_OPTIONS,
+  SIGNAL_LABELS,
+  impactToColor,
+  SIGNAL_CLASSES,
   SCOPE_OPTIONS,
-  LABEL_COLOR,
-  LABEL_BG,
 } from '@/services/panchangService';
+
+// ── Label pill ────────────────────────────────────────────────────────────────
+
+function LabelPill({ label }: { label: MarketImpact }) {
+  const cls = SIGNAL_CLASSES[impactToColor(label)];
+  return (
+    <span className={cn(
+      'text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-none shrink-0',
+      cls.text, cls.bg, cls.border,
+    )}>
+      {SIGNAL_LABELS[label] ?? label}
+    </span>
+  );
+}
+
+// ── Label select ──────────────────────────────────────────────────────────────
+
+function LabelSelect({ value, onChange }: { value: MarketImpact; onChange: (v: MarketImpact) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value as MarketImpact)}
+      className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white focus:outline-none focus:border-accent-indigo/50"
+    >
+      {IMPACT_OPTIONS.map(opt => (
+        <option key={opt} value={opt}>{SIGNAL_LABELS[opt]}</option>
+      ))}
+    </select>
+  );
+}
+
+// ── Sector multi-select ───────────────────────────────────────────────────────
+
+function SectorSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: sectors = [] } = useQuery<string[]>({
+    queryKey: ['sectors_list'],
+    queryFn: fetchSectors,
+    staleTime: 60 * 60 * 1000,
+  });
+
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-48 focus:outline-none focus:border-accent-indigo/50"
+    >
+      <option value="">— select sector —</option>
+      {sectors.map(s => (
+        <option key={s} value={s}>{s}</option>
+      ))}
+    </select>
+  );
+}
 
 // ── Editable note row ─────────────────────────────────────────────────────────
 
@@ -32,10 +87,10 @@ interface NoteRowProps {
 }
 
 function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
-  const [editing, setEditing]     = useState(false);
-  const [label, setLabel]         = useState<PanchangCalendarLabel>(note.calendar_label);
-  const [scope, setScope]         = useState<PanchangScope>(note.scope);
-  const [scopeVal, setScopeVal]   = useState(note.scope_value ?? '');
+  const [editing, setEditing]       = useState(false);
+  const [label, setLabel]           = useState<MarketImpact>(note.calendar_label);
+  const [scope, setScope]           = useState<PanchangScope>(note.scope);
+  const [scopeVal, setScopeVal]     = useState(note.scope_value ?? '');
   const [annotation, setAnnotation] = useState(note.annotation ?? '');
 
   function save() {
@@ -59,38 +114,35 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
   }
 
   if (!editing) {
-    const lbl = note.calendar_label as keyof typeof LABEL_COLOR;
     return (
-      <div className={cn(
-        'flex items-start gap-2 px-2 py-1 rounded border text-xs',
-        LABEL_BG[lbl] ?? 'bg-slate-800/60 border-white/10',
-      )}>
-        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={cn('font-semibold shrink-0', LABEL_COLOR[lbl])}>
-              {note.calendar_label.replace('_', ' ')}
-            </span>
+      <div className="flex items-start gap-2 p-2 rounded border border-white/8 bg-white/[0.02] text-xs">
+        <div className="flex flex-col gap-1 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <LabelPill label={note.calendar_label} />
             {note.scope !== 'market' && (
-              <span className="text-muted text-[10px] shrink-0">
-                {note.scope.toUpperCase()}: {note.scope_value}
+              <span className="text-[10px] text-muted uppercase tracking-wide">
+                {note.scope}:
               </span>
+            )}
+            {note.scope_value && (
+              <span className="text-secondary text-[11px] font-medium">{note.scope_value}</span>
             )}
           </div>
           {note.annotation && (
-            <span className="text-secondary italic text-[10px]">{note.annotation}</span>
+            <span className="text-muted italic text-[11px] leading-snug">{note.annotation}</span>
           )}
         </div>
-        <div className="flex gap-1 shrink-0 mt-0.5">
+        <div className="flex gap-1 shrink-0">
           <button
             onClick={() => setEditing(true)}
-            className="text-muted hover:text-white transition-colors text-[10px] px-1.5 py-0.5 rounded hover:bg-white/10 border border-white/10"
+            className="text-[10px] text-muted hover:text-white px-1.5 py-0.5 rounded border border-white/10 hover:bg-white/10 transition-colors"
           >
             Edit
           </button>
           <button
             onClick={() => onDelete(note.id)}
             disabled={saving}
-            className="text-muted hover:text-risk-red transition-colors p-0.5 rounded hover:bg-risk-red/10"
+            className="p-0.5 text-muted hover:text-risk-red transition-colors"
           >
             <Trash2 className="w-3 h-3" />
           </button>
@@ -99,34 +151,30 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
     );
   }
 
+  // Edit mode
   return (
-    <div className="flex flex-col gap-1.5 p-2 rounded border border-accent-indigo/30 bg-accent-indigo/5">
-      <div className="flex gap-2 flex-wrap">
-        <select
-          value={label}
-          onChange={e => setLabel(e.target.value as PanchangCalendarLabel)}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white"
-        >
-          {CALENDAR_LABEL_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+    <div className="flex flex-col gap-2 p-2.5 rounded border border-accent-indigo/30 bg-accent-indigo/5">
+      <div className="flex gap-2 flex-wrap items-center">
+        <LabelSelect value={label} onChange={setLabel} />
         <select
           value={scope}
-          onChange={e => setScope(e.target.value as PanchangScope)}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white"
+          onChange={e => { setScope(e.target.value as PanchangScope); setScopeVal(''); }}
+          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white focus:outline-none focus:border-accent-indigo/50"
         >
-          {SCOPE_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+          {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        {scope !== 'market' && (
+        {scope === 'sector'    && <SectorSelect value={scopeVal} onChange={setScopeVal} />}
+        {scope !== 'market' && scope !== 'sector' && (
           <input
             type="text"
             value={scopeVal}
             onChange={e => setScopeVal(e.target.value)}
-            placeholder={`${scope} name…`}
-            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white w-32"
+            placeholder={
+              scope === 'commodity' ? 'Gold, Silver, Crude…' :
+              scope === 'planet'    ? 'Jupiter, Venus…'       :
+                                     'USDINR, EURINR…'
+            }
+            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-40 focus:outline-none focus:border-accent-indigo/50"
           />
         )}
       </div>
@@ -134,8 +182,8 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
         type="text"
         value={annotation}
         onChange={e => setAnnotation(e.target.value)}
-        placeholder="Annotation (optional)…"
-        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white w-full"
+        placeholder="Note…"
+        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-full focus:outline-none focus:border-accent-indigo/50"
       />
       <div className="flex gap-1.5">
         <button
@@ -145,10 +193,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
         >
           <Check className="w-3 h-3" /> Save
         </button>
-        <button
-          onClick={cancel}
-          className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-800 border border-white/10 text-muted hover:text-white transition-colors"
-        >
+        <button onClick={cancel} className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-800 border border-white/10 text-muted hover:text-white transition-colors">
           <X className="w-3 h-3" /> Cancel
         </button>
       </div>
@@ -156,7 +201,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
   );
 }
 
-// ── New note form ─────────────────────────────────────────────────────────────
+// ── New note form (always expanded inline) ────────────────────────────────────
 
 interface NewNoteFormProps {
   tradeDate: string;
@@ -165,7 +210,7 @@ interface NewNoteFormProps {
 }
 
 function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
-  const [label, setLabel]           = useState<PanchangCalendarLabel>('POSITIVE');
+  const [label, setLabel]           = useState<MarketImpact>('neutral');
   const [scope, setScope]           = useState<PanchangScope>('market');
   const [scopeVal, setScopeVal]     = useState('');
   const [annotation, setAnnotation] = useState('');
@@ -178,63 +223,49 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
       scope_value:  scopeVal || null,
       annotation:   annotation || null,
     });
-    setLabel('POSITIVE');
-    setScope('market');
     setScopeVal('');
     setAnnotation('');
   }
 
+  const canAdd = scope === 'market' || Boolean(scopeVal);
+
   return (
-    <div className="flex flex-col gap-1.5 p-2 rounded border border-white/8 bg-white/[0.02] mt-1">
+    <div className="flex flex-col gap-1.5 p-2 rounded border border-white/[0.06] bg-white/[0.02] mt-1">
       <div className="flex gap-1.5 flex-wrap items-center">
-        {/* Signal label */}
-        <select
-          value={label}
-          onChange={e => setLabel(e.target.value as PanchangCalendarLabel)}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
-        >
-          {CALENDAR_LABEL_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        {/* Scope */}
+        <LabelSelect value={label} onChange={setLabel} />
         <select
           value={scope}
           onChange={e => { setScope(e.target.value as PanchangScope); setScopeVal(''); }}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
+          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white focus:outline-none focus:border-accent-indigo/50"
         >
-          {SCOPE_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+          {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        {/* Scope value (sector name / commodity / planet / currency) */}
-        {scope !== 'market' && (
+        {scope === 'sector' && <SectorSelect value={scopeVal} onChange={setScopeVal} />}
+        {scope !== 'market' && scope !== 'sector' && (
           <input
             type="text"
             value={scopeVal}
             onChange={e => setScopeVal(e.target.value)}
             placeholder={
-              scope === 'sector'    ? 'e.g. Banking, IT…'   :
-              scope === 'commodity' ? 'e.g. Gold, Silver…'  :
-              scope === 'planet'    ? 'e.g. Jupiter, Venus…':
-                                     'e.g. USDINR…'
+              scope === 'commodity' ? 'Gold, Silver, Crude…' :
+              scope === 'planet'    ? 'Jupiter, Venus…'       :
+                                     'USDINR, EURINR…'
             }
-            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white w-36 focus:outline-none focus:border-accent-indigo/50"
+            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-40 focus:outline-none focus:border-accent-indigo/50"
           />
         )}
-        {/* Annotation */}
         <input
           type="text"
           value={annotation}
           onChange={e => setAnnotation(e.target.value)}
           placeholder="Note (optional)…"
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1 text-white flex-1 min-w-[120px] focus:outline-none focus:border-accent-indigo/50"
-          onKeyDown={e => e.key === 'Enter' && submit()}
+          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white flex-1 min-w-[140px] focus:outline-none focus:border-accent-indigo/50"
+          onKeyDown={e => e.key === 'Enter' && canAdd && submit()}
         />
         <button
           onClick={submit}
-          disabled={saving || (scope !== 'market' && !scopeVal)}
-          className="flex items-center gap-1 text-xs px-2.5 py-1 rounded bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          disabled={saving || !canAdd}
+          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >
           <Plus className="w-3 h-3" /> Add
         </button>
@@ -302,7 +333,7 @@ function AdminPanchangRow({ row, onAddNote, onSaveNote, onDeleteNote, saving }: 
         <div className="text-[10px] text-muted mt-0.5">{row.nak_lord}</div>
       </td>
 
-      {/* Annotations (editable) */}
+      {/* Signals / Annotations */}
       <td className="px-3 py-2 align-top">
         <div className="flex flex-col gap-1.5">
           {row.notes.map(n => (
@@ -430,13 +461,9 @@ export default function AdminPanchangView() {
           )}
 
           <div className="flex items-center gap-1">
-            <button
-              onClick={prev}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
-            >
+            <button onClick={prev} className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            {/* Month select */}
             <select
               value={month}
               onChange={e => setMonth(Number(e.target.value))}
@@ -446,20 +473,13 @@ export default function AdminPanchangView() {
                 <option key={i + 1} value={i + 1}>{m}</option>
               ))}
             </select>
-            {/* Year input */}
             <input
               type="number"
               value={year}
-              onChange={e => {
-                const v = Number(e.target.value);
-                if (v >= 1900 && v <= 2100) setYear(v);
-              }}
+              onChange={e => { const v = Number(e.target.value); if (v >= 1900 && v <= 2100) setYear(v); }}
               className="w-20 text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white text-center focus:outline-none focus:border-accent-indigo/50"
             />
-            <button
-              onClick={next}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
-            >
+            <button onClick={next} className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -473,14 +493,12 @@ export default function AdminPanchangView() {
             <Loader2 className="w-6 h-6 text-accent-indigo animate-spin" />
           </div>
         )}
-
         {error && (
           <div className="flex items-center gap-2 text-risk-red text-sm py-8 justify-center">
             <AlertCircle className="w-4 h-4" />
             {error instanceof Error ? error.message : 'Failed to load panchang data'}
           </div>
         )}
-
         {!isLoading && !error && (!data || data.length === 0) && (
           <div className="text-center py-16 text-muted text-sm">
             No panchang data for {MONTH_FULL[month - 1]} {year}.
@@ -490,17 +508,13 @@ export default function AdminPanchangView() {
             </span>
           </div>
         )}
-
         {!isLoading && data && data.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-white/5">
-            <table className="w-full text-left min-w-[900px]">
+            <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-white/10">
-                  {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra / Lord', 'Signals / Annotations  (scope → label → Add)'].map(h => (
-                    <th
-                      key={h}
-                      className="px-3 py-2.5 text-[11px] font-semibold text-muted uppercase tracking-wide"
-                    >
+                  {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra / Lord', 'Signals / Annotations'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-[11px] font-semibold text-muted uppercase tracking-wide">
                       {h}
                     </th>
                   ))}

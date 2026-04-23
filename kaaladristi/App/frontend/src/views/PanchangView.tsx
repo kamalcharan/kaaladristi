@@ -5,9 +5,11 @@ import { cn } from '@/lib/utils';
 import { MONTH_FULL } from '@/lib/dateUtils';
 import {
   fetchPanchangCalendar,
+  impactToColor,
+  SIGNAL_CLASSES,
+  SIGNAL_LABELS,
   type PanchangRow,
-  LABEL_COLOR,
-  LABEL_BG,
+  type MarketImpact,
 } from '@/services/panchangService';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,20 +46,18 @@ function NotePill({ label, scope, scopeValue }: {
   scope: string;
   scopeValue: string | null;
 }) {
-  const lbl = label as keyof typeof LABEL_COLOR;
-  const displayLabel = label.replace('_', ' ');
-  const displayScope = scopeValue ? `${scope}: ${scopeValue}` : scope;
+  const cls = SIGNAL_CLASSES[impactToColor(label as MarketImpact)];
+  const displayLabel = SIGNAL_LABELS[label] ?? label;
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border leading-none',
-        LABEL_COLOR[lbl] ?? 'text-slate-400',
-        LABEL_BG[lbl] ?? 'bg-slate-800/60 border-white/10',
+        cls.text, cls.bg, cls.border,
       )}
     >
       {displayLabel}
-      {scope !== 'market' && (
-        <span className="opacity-70">· {displayScope}</span>
+      {scope !== 'market' && scopeValue && (
+        <span className="opacity-70">· {scopeValue}</span>
       )}
     </span>
   );
