@@ -441,9 +441,26 @@ export default function AdminPanchangView() {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm font-medium text-white min-w-[130px] text-center">
-              {MONTH_FULL[month - 1]} {year}
-            </span>
+            {/* Month select */}
+            <select
+              value={month}
+              onChange={e => setMonth(Number(e.target.value))}
+              className="text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
+            >
+              {MONTH_FULL.map((m, i) => (
+                <option key={i + 1} value={i + 1}>{m}</option>
+              ))}
+            </select>
+            {/* Year input */}
+            <input
+              type="number"
+              value={year}
+              onChange={e => {
+                const v = Number(e.target.value);
+                if (v >= 1900 && v <= 2100) setYear(v);
+              }}
+              className="w-20 text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white text-center focus:outline-none focus:border-accent-indigo/50"
+            />
             <button
               onClick={next}
               className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"

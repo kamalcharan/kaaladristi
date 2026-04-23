@@ -185,7 +185,7 @@ export default function PanchangView() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
         <div className="flex items-center gap-2">
           <Moon className="w-4 h-4 text-accent-indigo" />
-          <h1 className="text-base font-semibold text-white">Panchang 2026</h1>
+          <h1 className="text-base font-semibold text-white">Panchang</h1>
           <span className="text-sm text-muted">09:15 IST · Lahiri Sidereal</span>
         </div>
         <div className="flex items-center gap-2">
@@ -195,9 +195,26 @@ export default function PanchangView() {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-sm font-medium text-white min-w-[130px] text-center">
-            {MONTH_FULL[month - 1]} {year}
-          </span>
+          {/* Month select */}
+          <select
+            value={month}
+            onChange={e => setMonth(Number(e.target.value))}
+            className="text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
+          >
+            {MONTH_FULL.map((m, i) => (
+              <option key={i + 1} value={i + 1}>{m}</option>
+            ))}
+          </select>
+          {/* Year input */}
+          <input
+            type="number"
+            value={year}
+            onChange={e => {
+              const v = Number(e.target.value);
+              if (v >= 1900 && v <= 2100) setYear(v);
+            }}
+            className="w-20 text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white text-center focus:outline-none focus:border-accent-indigo/50"
+          />
           <button
             onClick={next}
             className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
@@ -227,7 +244,7 @@ export default function PanchangView() {
             No panchang data for {MONTH_FULL[month - 1]} {year}.
             <br />
             <span className="text-xs opacity-60">
-              Run <code className="mono bg-slate-800 px-1 py-0.5 rounded">generate_panchang_2026.py</code> on the VPS to populate.
+              Use Panchang Admin → Generate to compute this month.
             </span>
           </div>
         )}

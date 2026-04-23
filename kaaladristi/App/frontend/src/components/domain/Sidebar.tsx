@@ -19,7 +19,7 @@ const navSections: NavSection[] = [
       { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition' },
       { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch' },
       { to: '/astro-calendar',      glyph: '☽', label: 'Planetary Intel' },
-      { to: '/panchang',            glyph: '☿', label: 'Panchang 2026' },
+      { to: '/panchang',            glyph: '☿', label: 'Panchang' },
       { to: '/pulse/1',             glyph: '◌', label: 'Visual Pulse' },
     ],
   },
