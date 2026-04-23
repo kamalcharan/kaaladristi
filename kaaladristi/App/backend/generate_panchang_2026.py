@@ -128,6 +128,37 @@ def find_transition(d, value_fn, v_morning, h_start=9.25, h_end=15.5):
             break
     return jd_to_ist_hhmm(hi)
 
+
+def find_end_time(d, value_fn, v_open, h_start=9.25, h_horizon=39.25):
+    """
+    Find when value_fn first changes from v_open, searching from 09:15 IST
+    up to 30 hours forward (h_horizon = 09:15 + 30h = 39.25 IST, i.e.
+    03:15 two days later).  Covers all realistic nakshatra durations (~27h).
+
+    Returns:
+        'HH:MM'    — end time on the same calendar day
+        'HH:MM+1'  — end time on the next calendar day
+        None       — did not change within 30-hour window (extremely rare)
+    """
+    jd_s = to_jd(d, h_start)
+    jd_e = to_jd(d, h_horizon)
+    if value_fn(jd_e) == v_open:
+        return None                        # still same value 30 h later
+    lo, hi = jd_s, jd_e
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        if value_fn(mid) == v_open:
+            lo = mid
+        else:
+            hi = mid
+        if (hi - lo) * 1440 < (1 / 60):
+            break
+    unix_sec = (hi - 2440587.5) * 86400
+    dt_ist   = datetime(1970, 1, 1) + timedelta(seconds=unix_sec) + timedelta(hours=IST_OFFSET)
+    if dt_ist.date() > d:
+        return dt_ist.strftime('%H:%M') + '+1'
+    return dt_ist.strftime('%H:%M')
+
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 def fetch_results(conn, d):
@@ -178,7 +209,7 @@ def upsert_panchang_calendar(conn, rows_db):
           (trade_date, weekday,
            tithi, tithi_end_time,
            moon_rashi, moon_rashi_next, moon_rashi_change_time,
-           nakshatra, nakshatra_next, nakshatra_change_time,
+           nakshatra, nakshatra_end_time, nakshatra_next, nakshatra_change_time,
            nak_lord)
         VALUES %s
         ON CONFLICT (trade_date) DO UPDATE SET
@@ -189,6 +220,7 @@ def upsert_panchang_calendar(conn, rows_db):
           moon_rashi_next        = EXCLUDED.moon_rashi_next,
           moon_rashi_change_time = EXCLUDED.moon_rashi_change_time,
           nakshatra              = EXCLUDED.nakshatra,
+          nakshatra_end_time     = EXCLUDED.nakshatra_end_time,
           nakshatra_next         = EXCLUDED.nakshatra_next,
           nakshatra_change_time  = EXCLUDED.nakshatra_change_time,
           nak_lord               = EXCLUDED.nak_lord,
@@ -199,7 +231,7 @@ def upsert_panchang_calendar(conn, rows_db):
             r['trade_date'], r['weekday'],
             r['tithi'], r['tithi_end_time'],
             r['moon_rashi'], r['moon_rashi_next'], r['moon_rashi_change_time'],
-            r['nakshatra'], r['nakshatra_next'], r['nakshatra_change_time'],
+            r['nakshatra'], r['nakshatra_end_time'], r['nakshatra_next'], r['nakshatra_change_time'],
             r['nak_lord'],
         )
         for r in rows_db
@@ -221,6 +253,8 @@ def build_row(d, conn):
     nak_m = nak_of(moon_m)
     nak_e = nak_of(moon_e)
     nak_change_t = None
+    # Full-day end time: when does the opening nakshatra end?
+    nak_end_t = find_end_time(d, lambda jd: nak_of(sidereal_lon(jd, swe.MOON)), nak_m)
     if nak_m == nak_e:
         nak_str = NAKSHATRAS[nak_m]
         nak_next = None
@@ -281,6 +315,7 @@ def build_row(d, conn):
         'moon_rashi_next':        rash_next,
         'moon_rashi_change_time': rash_change_t,
         'nakshatra':              NAKSHATRAS[nak_m],
+        'nakshatra_end_time':     nak_end_t,
         'nakshatra_next':         nak_next,
         'nakshatra_change_time':  nak_change_t,
         'nak_lord':               NAK_LORDS[nak_m],

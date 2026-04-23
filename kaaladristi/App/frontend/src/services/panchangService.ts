@@ -19,6 +19,7 @@ export interface PanchangRow {
   moon_rashi_next: string | null;
   moon_rashi_change_time: string | null;
   nakshatra: string;
+  nakshatra_end_time: string | null;
   nakshatra_next: string | null;
   nakshatra_change_time: string | null;
   nak_lord: string;

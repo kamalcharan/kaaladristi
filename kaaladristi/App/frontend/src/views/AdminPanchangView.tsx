@@ -258,10 +258,11 @@ function AdminPanchangRow({ row, onAddNote, onSaveNote, onDeleteNote, saving }: 
   const mmm     = MONTH_FULL[parseInt(parts[1]) - 1]?.slice(0, 3);
 
   function nakStr() {
+    const endSuffix = row.nakshatra_end_time ? ` (till ${row.nakshatra_end_time})` : '';
     if (row.nakshatra_next && row.nakshatra_change_time)
-      return `${row.nakshatra} → ${row.nakshatra_next} ${row.nakshatra_change_time}`;
-    if (row.nakshatra_next) return `${row.nakshatra} → ${row.nakshatra_next}`;
-    return row.nakshatra;
+      return `${row.nakshatra} → ${row.nakshatra_next} ${row.nakshatra_change_time}${endSuffix}`;
+    if (row.nakshatra_next) return `${row.nakshatra} → ${row.nakshatra_next}${endSuffix}`;
+    return `${row.nakshatra}${endSuffix}`;
   }
 
   function rashiStr() {

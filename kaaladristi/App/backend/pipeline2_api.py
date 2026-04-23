@@ -1017,6 +1017,7 @@ def panchang_calendar(month: int, year: int):
                     p.moon_rashi_next,
                     p.moon_rashi_change_time,
                     p.nakshatra,
+                    p.nakshatra_end_time,
                     p.nakshatra_next,
                     p.nakshatra_change_time,
                     p.nak_lord,
