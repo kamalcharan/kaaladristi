@@ -54,26 +54,46 @@ function LabelSelect({ value, onChange }: { value: MarketImpact; onChange: (v: M
   );
 }
 
-// ── Sector multi-select ───────────────────────────────────────────────────────
+// ── Sector checkbox list ──────────────────────────────────────────────────────
 
-function SectorSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function SectorCheckboxList({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const { data: sectors = [] } = useQuery<string[]>({
     queryKey: ['sectors_list'],
     queryFn: fetchSectors,
     staleTime: 60 * 60 * 1000,
   });
 
+  const selected = value ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  function toggle(sector: string) {
+    const next = selected.includes(sector)
+      ? selected.filter(s => s !== sector)
+      : [...selected, sector];
+    onChange(next.join(', '));
+  }
+
   return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-48 focus:outline-none focus:border-accent-indigo/50"
-    >
-      <option value="">— select sector —</option>
+    <div className="flex flex-col gap-0.5 max-h-40 overflow-y-auto rounded border border-white/10 bg-slate-900 px-2 py-1.5 w-full">
+      {sectors.length === 0 && (
+        <span className="text-[11px] text-muted italic">Loading sectors…</span>
+      )}
       {sectors.map(s => (
-        <option key={s} value={s}>{s}</option>
+        <label key={s} className="flex items-center gap-2 cursor-pointer group">
+          <input
+            type="checkbox"
+            checked={selected.includes(s)}
+            onChange={() => toggle(s)}
+            className="accent-indigo-400 w-3 h-3 shrink-0"
+          />
+          <span className={cn(
+            'text-[11px] leading-snug',
+            selected.includes(s) ? 'text-white' : 'text-secondary group-hover:text-white',
+          )}>
+            {s}
+          </span>
+        </label>
       ))}
-    </select>
+    </div>
   );
 }
 
@@ -163,7 +183,6 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
         >
           {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        {scope === 'sector'    && <SectorSelect value={scopeVal} onChange={setScopeVal} />}
         {scope !== 'market' && scope !== 'sector' && (
           <input
             type="text"
@@ -178,12 +197,15 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
           />
         )}
       </div>
-      <input
-        type="text"
+      {scope === 'sector' && (
+        <SectorCheckboxList value={scopeVal} onChange={setScopeVal} />
+      )}
+      <textarea
         value={annotation}
         onChange={e => setAnnotation(e.target.value)}
         placeholder="Note…"
-        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-full focus:outline-none focus:border-accent-indigo/50"
+        rows={3}
+        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-full focus:outline-none focus:border-accent-indigo/50 resize-y"
       />
       <div className="flex gap-1.5">
         <button
@@ -230,7 +252,8 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
   const canAdd = scope === 'market' || Boolean(scopeVal);
 
   return (
-    <div className="flex flex-col gap-1.5 p-2 rounded border border-white/[0.06] bg-white/[0.02] mt-1">
+    <div className="flex flex-col gap-2 p-2.5 rounded border border-white/[0.06] bg-white/[0.02] mt-1">
+      {/* Row 1: label + scope + non-sector scope value */}
       <div className="flex gap-1.5 flex-wrap items-center">
         <LabelSelect value={label} onChange={setLabel} />
         <select
@@ -240,7 +263,6 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
         >
           {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        {scope === 'sector' && <SectorSelect value={scopeVal} onChange={setScopeVal} />}
         {scope !== 'market' && scope !== 'sector' && (
           <input
             type="text"
@@ -251,25 +273,32 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
               scope === 'planet'    ? 'Jupiter, Venus…'       :
                                      'USDINR, EURINR…'
             }
-            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-40 focus:outline-none focus:border-accent-indigo/50"
+            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-48 focus:outline-none focus:border-accent-indigo/50"
           />
         )}
-        <input
-          type="text"
-          value={annotation}
-          onChange={e => setAnnotation(e.target.value)}
-          placeholder="Note (optional)…"
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white flex-1 min-w-[140px] focus:outline-none focus:border-accent-indigo/50"
-          onKeyDown={e => e.key === 'Enter' && canAdd && submit()}
-        />
-        <button
-          onClick={submit}
-          disabled={saving || !canAdd}
-          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-        >
-          <Plus className="w-3 h-3" /> Add
-        </button>
       </div>
+
+      {/* Sector checkboxes (full width, scrollable) */}
+      {scope === 'sector' && (
+        <SectorCheckboxList value={scopeVal} onChange={setScopeVal} />
+      )}
+
+      {/* Annotation textarea */}
+      <textarea
+        value={annotation}
+        onChange={e => setAnnotation(e.target.value)}
+        placeholder="Note (optional)…"
+        rows={3}
+        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-full focus:outline-none focus:border-accent-indigo/50 resize-y"
+      />
+
+      <button
+        onClick={submit}
+        disabled={saving || !canAdd}
+        className="self-start flex items-center gap-1 text-xs px-2.5 py-1.5 rounded bg-accent-indigo/20 border border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <Plus className="w-3 h-3" /> Add
+      </button>
     </div>
   );
 }
