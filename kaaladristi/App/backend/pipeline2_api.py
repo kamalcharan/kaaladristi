@@ -947,6 +947,162 @@ def astro_calendar_delete(event_id: int):
         conn.close()
 
 
+# ── Panchang Calendar Endpoints ───────────────────────────────────────────────
+
+@app.get('/api/panchang/calendar')
+def panchang_calendar(month: int, year: int):
+    """
+    Monthly panchang rows joined with astro daily signals and day notes.
+    Returns one object per calendar day with nested notes array.
+    """
+    import calendar as _cal
+    last_day = _cal.monthrange(year, month)[1]
+    first_iso = f'{year:04d}-{month:02d}-01'
+    last_iso  = f'{year:04d}-{month:02d}-{last_day:02d}'
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    p.trade_date::text,
+                    p.weekday,
+                    p.tithi,
+                    p.tithi_end_time,
+                    p.moon_rashi,
+                    p.moon_rashi_next,
+                    p.moon_rashi_change_time,
+                    p.nakshatra,
+                    p.nakshatra_next,
+                    p.nakshatra_change_time,
+                    p.nak_lord,
+                    s.net_signal,
+                    s.net_score,
+                    s.turning_date
+                FROM km_panchang_calendar p
+                LEFT JOIN km_astro_daily_signal s ON s.trade_date = p.trade_date
+                WHERE p.trade_date BETWEEN %s AND %s
+                ORDER BY p.trade_date
+            """, (first_iso, last_iso))
+            panchang_rows = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT id, trade_date::text, calendar_label, scope, scope_value,
+                       annotation, sort_order
+                FROM km_panchang_day_notes
+                WHERE trade_date BETWEEN %s AND %s
+                ORDER BY trade_date, sort_order, id
+            """, (first_iso, last_iso))
+            notes_rows = cur.fetchall()
+
+        # index notes by date
+        notes_by_date: dict = {}
+        for n in notes_rows:
+            nd = n['trade_date']
+            notes_by_date.setdefault(nd, []).append(dict(n))
+
+        for row in panchang_rows:
+            row['notes'] = notes_by_date.get(row['trade_date'], [])
+
+        return panchang_rows
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+# ── Panchang Day Notes CRUD ───────────────────────────────────────────────────
+
+class PanchangNotePayload(BaseModel):
+    trade_date:     str
+    calendar_label: str
+    scope:          str = 'market'
+    scope_value:    Optional[str] = None
+    annotation:     Optional[str] = None
+    sort_order:     int = 0
+
+
+@app.get('/api/panchang/notes')
+def panchang_notes_for_date(date: str):
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, trade_date::text, calendar_label, scope, scope_value,
+                       annotation, sort_order
+                FROM km_panchang_day_notes
+                WHERE trade_date = %s
+                ORDER BY sort_order, id
+            """, (date,))
+            return [dict(r) for r in cur.fetchall()]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.post('/api/panchang/notes')
+def panchang_note_create(req: PanchangNotePayload):
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO km_panchang_day_notes
+                  (trade_date, calendar_label, scope, scope_value, annotation, sort_order)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (req.trade_date, req.calendar_label, req.scope,
+                  req.scope_value, req.annotation, req.sort_order))
+            row_id = cur.fetchone()[0]
+        conn.commit()
+        return {'id': row_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.patch('/api/panchang/notes/{note_id}')
+def panchang_note_update(note_id: int, req: PanchangNotePayload):
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE km_panchang_day_notes SET
+                  trade_date     = %s,
+                  calendar_label = %s,
+                  scope          = %s,
+                  scope_value    = %s,
+                  annotation     = %s,
+                  sort_order     = %s
+                WHERE id = %s
+            """, (req.trade_date, req.calendar_label, req.scope,
+                  req.scope_value, req.annotation, req.sort_order, note_id))
+        conn.commit()
+        return {'ok': True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@app.delete('/api/panchang/notes/{note_id}')
+def panchang_note_delete(note_id: int):
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_panchang_day_notes WHERE id = %s', (note_id,))
+        conn.commit()
+        return {'ok': True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
 # ── VaNi AI Endpoints ─────────────────────────────────────────────────────
 
 _insight_cache: dict[str, object] = {}

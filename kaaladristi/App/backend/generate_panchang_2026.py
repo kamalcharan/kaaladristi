@@ -7,6 +7,8 @@ Uses pyswisseph with Lahiri sidereal ayanamsa (mandatory for Vedic panchang).
 Calculations at 09:15 IST (market open). Mid-day changes detected via binary
 search and noted inline (e.g. "Hasta / Chitra 09:29").
 
+Also writes structured rows to km_panchang_calendar in the DB.
+
 Run on VPS:
     KD_DB_PASSWORD=yourpassword python3 generate_panchang_2026.py
 
@@ -15,6 +17,7 @@ Cross-check: Mar 17 → Shatabhisha, Mar 25 → Mrigsira
 
 import swisseph as swe
 import psycopg2
+import psycopg2.extras
 import csv
 import os
 from datetime import datetime, timedelta, date
@@ -167,6 +170,44 @@ def fetch_results(conn, d):
 
     return ' | '.join(parts) if parts else ''
 
+
+def upsert_panchang_calendar(conn, rows_db):
+    """UPSERT a list of structured panchang dicts into km_panchang_calendar."""
+    sql = """
+        INSERT INTO km_panchang_calendar
+          (trade_date, weekday,
+           tithi, tithi_end_time,
+           moon_rashi, moon_rashi_next, moon_rashi_change_time,
+           nakshatra, nakshatra_next, nakshatra_change_time,
+           nak_lord)
+        VALUES %s
+        ON CONFLICT (trade_date) DO UPDATE SET
+          weekday                = EXCLUDED.weekday,
+          tithi                  = EXCLUDED.tithi,
+          tithi_end_time         = EXCLUDED.tithi_end_time,
+          moon_rashi             = EXCLUDED.moon_rashi,
+          moon_rashi_next        = EXCLUDED.moon_rashi_next,
+          moon_rashi_change_time = EXCLUDED.moon_rashi_change_time,
+          nakshatra              = EXCLUDED.nakshatra,
+          nakshatra_next         = EXCLUDED.nakshatra_next,
+          nakshatra_change_time  = EXCLUDED.nakshatra_change_time,
+          nak_lord               = EXCLUDED.nak_lord,
+          updated_at             = now()
+    """
+    values = [
+        (
+            r['trade_date'], r['weekday'],
+            r['tithi'], r['tithi_end_time'],
+            r['moon_rashi'], r['moon_rashi_next'], r['moon_rashi_change_time'],
+            r['nakshatra'], r['nakshatra_next'], r['nakshatra_change_time'],
+            r['nak_lord'],
+        )
+        for r in rows_db
+    ]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, values)
+    conn.commit()
+
 # ── Row builder ───────────────────────────────────────────────────────────────
 
 def build_row(d, conn):
@@ -179,42 +220,49 @@ def build_row(d, conn):
     # ── Nakshatra ─────────────────────────────────────────────────────────────
     nak_m = nak_of(moon_m)
     nak_e = nak_of(moon_e)
+    nak_change_t = None
     if nak_m == nak_e:
         nak_str = NAKSHATRAS[nak_m]
+        nak_next = None
     else:
-        t = find_transition(d, lambda jd: nak_of(sidereal_lon(jd, swe.MOON)), nak_m)
-        nak_str = (f'{NAKSHATRAS[nak_m]} / {NAKSHATRAS[nak_e]} {t}'
-                   if t else f'{NAKSHATRAS[nak_m]} / {NAKSHATRAS[nak_e]}')
+        nak_change_t = find_transition(d, lambda jd: nak_of(sidereal_lon(jd, swe.MOON)), nak_m)
+        nak_next = NAKSHATRAS[nak_e]
+        nak_str = (f'{NAKSHATRAS[nak_m]} / {nak_next} {nak_change_t}'
+                   if nak_change_t else f'{NAKSHATRAS[nak_m]} / {nak_next}')
 
     # ── Moon Rashi ────────────────────────────────────────────────────────────
     rash_m = rashi_of(moon_m)
     rash_e = rashi_of(moon_e)
+    rash_change_t = None
     if rash_m == rash_e:
         rash_str = RASHIS[rash_m]
+        rash_next = None
     else:
-        t = find_transition(d, lambda jd: rashi_of(sidereal_lon(jd, swe.MOON)), rash_m)
-        rash_str = (f'{RASHIS[rash_m]} / {RASHIS[rash_e]} from {t}'
-                    if t else f'{RASHIS[rash_m]} / {RASHIS[rash_e]}')
+        rash_change_t = find_transition(d, lambda jd: rashi_of(sidereal_lon(jd, swe.MOON)), rash_m)
+        rash_next = RASHIS[rash_e]
+        rash_str = (f'{RASHIS[rash_m]} / {rash_next} from {rash_change_t}'
+                    if rash_change_t else f'{RASHIS[rash_m]} / {rash_next}')
 
     # ── Tithi ─────────────────────────────────────────────────────────────────
     sun_e_lon = sidereal_lon(jd_close, swe.SUN)
     tith_m = tithi_of(moon_m, sun_m)
     tith_e = tithi_of(moon_e, sun_e_lon)
+    tith_end_t = None
     if tith_m == tith_e:
         tith_str = tithi_label(tith_m)
     else:
-        t = find_transition(
+        tith_end_t = find_transition(
             d,
             lambda jd: tithi_of(sidereal_lon(jd, swe.MOON), sidereal_lon(jd, swe.SUN)),
             tith_m,
         )
-        tith_str = (f'{tithi_label(tith_m)} / {tithi_label(tith_e)} {t}'
-                    if t else f'{tithi_label(tith_m)} / {tithi_label(tith_e)}')
+        tith_str = (f'{tithi_label(tith_m)} / {tithi_label(tith_e)} {tith_end_t}'
+                    if tith_end_t else f'{tithi_label(tith_m)} / {tithi_label(tith_e)}')
 
     # ── RESULTS from DB ───────────────────────────────────────────────────────
     results = fetch_results(conn, d) if conn else ''
 
-    return {
+    csv_row = {
         'DATE':       d.strftime('%d-%m-%Y'),
         'DAY':        WEEKDAYS[d.weekday()],
         'TITHI':      tith_str,
@@ -223,6 +271,22 @@ def build_row(d, conn):
         'NAK LORD':   NAK_LORDS[nak_m],
         'RESULTS':    results,
     }
+
+    db_row = {
+        'trade_date':             d,
+        'weekday':                WEEKDAYS[d.weekday()],
+        'tithi':                  tithi_label(tith_m),
+        'tithi_end_time':         tith_end_t,
+        'moon_rashi':             RASHIS[rash_m],
+        'moon_rashi_next':        rash_next,
+        'moon_rashi_change_time': rash_change_t,
+        'nakshatra':              NAKSHATRAS[nak_m],
+        'nakshatra_next':         nak_next,
+        'nakshatra_change_time':  nak_change_t,
+        'nak_lord':               NAK_LORDS[nak_m],
+    }
+
+    return csv_row, db_row
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -250,24 +314,37 @@ def main():
 
     for name, start, end in MONTHS:
         print(f'── {name.upper()} ──────────────────────────────────────────')
-        rows = []
+        csv_rows = []
+        db_rows  = []
         d = start
         while d <= end:
             try:
-                row = build_row(d, conn)
-                rows.append(row)
-                print(f"  {row['DATE']}  {row['DAY']:<10}  "
-                      f"{row['NAKSHATRA']:<35}  {row['TITHI']}")
+                csv_row, db_row = build_row(d, conn)
+                csv_rows.append(csv_row)
+                db_rows.append(db_row)
+                print(f"  {csv_row['DATE']}  {csv_row['DAY']:<10}  "
+                      f"{csv_row['NAKSHATRA']:<35}  {csv_row['TITHI']}")
             except Exception as e:
                 print(f'  ERROR {d}: {e}')
             d += timedelta(days=1)
 
+        # Write CSV
         out = os.path.join(OUTPUT_DIR, f'{name}_panchang.csv')
         with open(out, 'w', newline='', encoding='utf-8') as f:
             w = csv.DictWriter(f, fieldnames=FIELDNAMES)
             w.writeheader()
-            w.writerows(rows)
-        print(f'\n  ✓ Saved: {out}\n')
+            w.writerows(csv_rows)
+        print(f'\n  ✓ Saved: {out}')
+
+        # Write to DB
+        if conn and db_rows:
+            try:
+                upsert_panchang_calendar(conn, db_rows)
+                print(f'  ✓ Upserted {len(db_rows)} rows → km_panchang_calendar\n')
+            except Exception as e:
+                print(f'  ⚠  DB upsert failed: {e}\n')
+        else:
+            print()
 
     if conn:
         conn.close()
