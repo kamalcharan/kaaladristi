@@ -218,7 +218,7 @@ def discover_planet_state(conn, rule):
             JOIN km_daily_panchang d ON p.date = d.date
             WHERE p.planet = %s
             AND EXTRACT(DOW FROM p.date) NOT IN (0,6)
-            AND FLOOR(MOD(p.longitude, 30) * 9.0 / 10) = (p.sign - 1)
+            AND FLOOR(MOD(p.longitude, 30.0) * 9.0 / 10.0) = (p.sign - 1)
         """
         params = [planet]
         if sign_filter:
@@ -303,7 +303,7 @@ def discover_relative_position(conn, rule):
             JOIN km_planetary_positions p2 ON p1.date = p2.date
             JOIN km_daily_panchang d ON p1.date = d.date
             WHERE p1.planet = 'Mars' AND p2.planet = 'Saturn'
-            AND ((p1.longitude - p2.longitude + 360) % 360) BETWEEN 28 AND 32
+            AND ((p1.longitude - p2.longitude + 360.0) % 360.0) BETWEEN 28 AND 32
             AND EXTRACT(DOW FROM p1.date) NOT IN (0,6)
         """)
         for row in cur.fetchall():
