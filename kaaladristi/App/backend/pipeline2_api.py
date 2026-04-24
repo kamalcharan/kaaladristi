@@ -1699,3 +1699,120 @@ def discovery_run_clean(background_tasks: BackgroundTasks):
         'signals_deleted': deleted,
     }
 
+
+# ── Confidence scoring ────────────────────────────────────────────────────────
+
+_confidence_state: dict = {
+    'job_id':            None,
+    'running':           False,
+    'started_at':        None,
+    'finished_at':       None,
+    'signals_scored':    0,
+    'rules_upserted':    0,
+    'error':             None,
+}
+
+
+def _run_confidence_bg():
+    """Background task: score km_rule_signals and upsert km_rule_confidence."""
+    import json as _json  # noqa: PLC0415
+
+    global _confidence_state
+
+    if _confidence_state['running']:
+        log.warning('Confidence scoring already running — ignoring duplicate request')
+        return
+
+    _confidence_state.update({
+        'running':        True,
+        'started_at':     datetime.utcnow().isoformat(),
+        'finished_at':    None,
+        'signals_scored': 0,
+        'rules_upserted': 0,
+        'error':          None,
+    })
+
+    try:
+        from scripts.confidence_scoring import (  # noqa: PLC0415
+            build_nifty_returns,
+            update_signals_returns,
+            compute_confidence,
+        )
+    except Exception as exc:
+        log.error(f'Confidence import failed: {exc}')
+        _confidence_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'error': str(exc)})
+        return
+
+    try:
+        conn = _conn()
+    except Exception as exc:
+        log.error(f'Confidence DB connection failed: {exc}')
+        _confidence_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'error': str(exc)})
+        return
+
+    try:
+        nifty_returns = build_nifty_returns(conn)
+        scored = update_signals_returns(conn, nifty_returns)
+        upserted = compute_confidence(conn)
+        _confidence_state['signals_scored'] = scored
+        _confidence_state['rules_upserted'] = upserted
+        log.info(f'Confidence done — {scored} signals scored, {upserted} rules upserted')
+    except Exception as exc:
+        log.error(f'Confidence scoring failed: {exc}')
+        _confidence_state['error'] = str(exc)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _confidence_state['running'] = False
+        _confidence_state['finished_at'] = datetime.utcnow().isoformat()
+
+
+@app.post('/api/confidence/compute')
+def confidence_compute(background_tasks: BackgroundTasks):
+    """Score all km_rule_signals against Nifty returns and upsert km_rule_confidence."""
+    if _confidence_state['running']:
+        raise HTTPException(409, 'Confidence scoring is already running')
+    job_id = str(uuid.uuid4())
+    _confidence_state['job_id'] = job_id
+    background_tasks.add_task(_run_confidence_bg)
+    return {'job_id': job_id, 'status': 'started', 'message': 'Confidence scoring started'}
+
+
+@app.get('/api/confidence/status')
+def confidence_status():
+    """Return current or last confidence scoring job state."""
+    return dict(_confidence_state)
+
+
+@app.get('/api/confidence/summary')
+def confidence_summary():
+    """
+    Return per-rule confidence scores joined with rule metadata.
+    Ordered by confidence_score DESC.
+    """
+    try:
+        conn = _conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    r.id          AS rule_id,
+                    r.rule_code,
+                    r.display_name,
+                    r.outcome,
+                    r.rule_type,
+                    c.total_occurrences,
+                    c.matched_count,
+                    c.confidence_score,
+                    c.last_computed_at
+                FROM km_rule_confidence c
+                JOIN km_astro_rule_master r ON c.rule_id = r.id
+                ORDER BY c.confidence_score DESC NULLS LAST
+            """)
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except Exception as exc:
+        raise HTTPException(500, f'Confidence summary query failed: {exc}')
+
