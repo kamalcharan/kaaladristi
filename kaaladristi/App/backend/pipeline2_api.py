@@ -1394,10 +1394,15 @@ _discovery_state: dict = {
 # ── Import discovery logic lazily (scripts package, same process) ─────────────
 
 def _import_discover_rule():
-    """Return discover_rule callable, or raise ImportError with useful message."""
+    """Return (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras) or raise."""
     try:
-        from scripts.rule_discovery import discover_rule  # noqa: PLC0415
-        return discover_rule
+        from scripts.rule_discovery import (  # noqa: PLC0415
+            discover_rule,
+            load_vocabulary,
+            build_vedh_map,
+            get_panchak_nakshatras,
+        )
+        return discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras
     except Exception as exc:
         raise ImportError(f'Cannot import rule_discovery: {exc}') from exc
 
@@ -1462,7 +1467,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
     })
 
     try:
-        discover_rule = _import_discover_rule()
+        discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras = _import_discover_rule()
     except ImportError as exc:
         log.error(f'Discovery import failed: {exc}')
         _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
@@ -1478,6 +1483,11 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         return
 
     try:
+        vocab = load_vocabulary(conn)
+        vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
+        panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
+        log.info(f'Vocabulary loaded: {len(vocab["nakshatra_positions_names"])} nakshatras')
+
         rules = _load_rules_for_discovery(conn, mode, rule_id)
         _discovery_state['rules_total'] = len(rules)
         log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
@@ -1495,7 +1505,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                 rule['conditions'] = {}
 
             try:
-                matched_rows = discover_rule(conn, rule)
+                matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks)
 
                 strength = {'Very High': 5, 'High': 4, 'Reasonable': 3, 'Low': 2}.get(
                     rule.get('probability_label'), 3
