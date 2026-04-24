@@ -21,25 +21,63 @@ def insert_signal(cur, date, rule_id, signal, strength, details, snapshot):
         ON CONFLICT (date, rule_id) DO NOTHING
     """, (date, rule_id, signal, strength, details, json.dumps(snapshot)))
 
-# ── VEDH MAP (nakshatra → its vedh nakshatra) ──────────────
-VEDH_MAP = {
-    'Ashwini':'Vishakha','Bharani':'Anuradha','Krittika':'Jyeshtha',
-    'Rohini':'Mula','Mrigasira':'Purva Ashadha','Ardra':'Uttara Ashadha',
-    'Punarvasu':'Shravana','Pushya':'Dhanistha','Ashlesha':'Shatabhisha',
-    'Magha':'Purva Bhadrapada','Purva Phalguni':'Uttara Bhadrapada',
-    'Uttara Phalguni':'Revati','Hasta':'Ashwini','Chitra':'Bharani',
-    'Swati':'Krittika','Vishakha':'Ashwini','Anuradha':'Bharani',
-    'Jyeshtha':'Krittika','Mula':'Rohini','Purva Ashadha':'Mrigasira',
-    'Uttara Ashadha':'Ardra','Shravana':'Punarvasu','Dhanistha':'Pushya',
-    'Shatabhisha':'Ashlesha','Purva Bhadrapada':'Magha',
-    'Uttara Bhadrapada':'Purva Phalguni','Revati':'Uttara Phalguni',
-    # Abhijeet is a special nakshatra between Uttara Ashadha and Shravana
-    'Abhijeet':'Ardra',
-}
 
-PANCHAK_NAKSHATRAS = {
-    'Dhanistha','Shatabhisha','Purva Bhadrapada','Uttara Bhadrapada','Revati'
-}
+def load_vocabulary(conn):
+    """Load all vocabulary from master tables at startup"""
+    cur = conn.cursor()
+
+    # Load nakshatras — use positions_name as canonical
+    cur.execute("""
+        SELECT name, positions_name
+        FROM km_nakshatras
+        ORDER BY id
+    """)
+    rows = cur.fetchall()
+    # positions_name is what km_planetary_positions uses
+    NAKSHATRA_POSITIONS_NAMES = [r[1] for r in rows]
+    # master_name → positions_name mapping
+    NAKSHATRA_NAME_MAP = {r[0]: r[1] for r in rows}
+    # positions_name → master_name mapping
+    NAKSHATRA_REVERSE_MAP = {r[1]: r[0] for r in rows}
+
+    # Load planets
+    cur.execute("SELECT name FROM km_planets ORDER BY id")
+    PLANET_NAMES = [r[0] for r in cur.fetchall()]
+
+    # Load yoga names from km_daily_panchang
+    cur.execute("""
+        SELECT DISTINCT yoga_name FROM km_daily_panchang
+        WHERE yoga_name IS NOT NULL ORDER BY 1
+    """)
+    YOGA_NAMES = [r[0] for r in cur.fetchall()]
+
+    return {
+        'nakshatra_positions_names': NAKSHATRA_POSITIONS_NAMES,
+        'nakshatra_name_map': NAKSHATRA_NAME_MAP,
+        'nakshatra_reverse_map': NAKSHATRA_REVERSE_MAP,
+        'planet_names': PLANET_NAMES,
+        'yoga_names': YOGA_NAMES,
+    }
+
+
+def build_vedh_map(nakshatra_positions_names):
+    """
+    Vedh = nakshatra that is exactly opposite (14 positions away in 27-nakshatra cycle).
+    Nakshatra pairs (1-indexed): nak N does vedh of nak N+13 (mod 27).
+    Built using positions_name values from km_nakshatras master table.
+    """
+    naks = nakshatra_positions_names  # list of 27 names in order
+    vedh_map = {}
+    for i, nak in enumerate(naks):
+        opposite_idx = (i + 13) % 27
+        vedh_map[nak] = naks[opposite_idx]
+        vedh_map[naks[opposite_idx]] = nak
+    return vedh_map
+
+
+def get_panchak_nakshatras(nakshatra_positions_names):
+    """Panchak = last 5 nakshatras (23-27): indices 22-26 in positions_name order."""
+    return set(nakshatra_positions_names[22:27])
 
 # ── DISCOVERY FUNCTIONS ─────────────────────────────────────
 
@@ -270,6 +308,33 @@ def discover_planet_state(conn, rule):
                 'speed': float(row[1]), 'sign': row[2], 'vara': row[3]
             }))
 
+    elif condition == 'atichari':
+        # Atichari = planet moving at > 1.5x its average speed
+        cur.execute("""
+            SELECT AVG(speed) FROM km_planetary_positions
+            WHERE planet = %s AND speed > 0
+        """, (planet,))
+        avg_speed = cur.fetchone()[0] or 1.0
+        nak_filter = cond.get('nakshatra')
+        query = """
+            SELECT p.date, p.speed, p.nakshatra_name, p.sign_name, d.vara
+            FROM km_planetary_positions p
+            JOIN km_daily_panchang d ON p.date = d.date
+            WHERE p.planet = %s AND p.speed > %s
+            AND EXTRACT(DOW FROM p.date) NOT IN (0,6)
+        """
+        params = [planet, float(avg_speed) * 1.5]
+        if nak_filter:
+            query += " AND p.nakshatra_name = %s"
+            params.append(nak_filter)
+        cur.execute(query, params)
+        for row in cur.fetchall():
+            rows.append((row[0], {
+                'planet': planet, 'condition': 'atichari',
+                'speed': float(row[1]), 'nakshatra': row[2],
+                'sign': row[3], 'vara': row[4]
+            }))
+
     return rows
 
 
@@ -299,6 +364,45 @@ def discover_conjunction(conn, rule):
         rows.append((row[0], {
             'planet_1': row[1], 'planet_2': row[2],
             'aspect_type': aspect, 'orb': float(row[3]) if row[3] else None,
+            'vara': row[4], 'nakshatra_lord': row[5]
+        }))
+    return rows
+
+
+def discover_inner_planet_conjunction(conn, rule):
+    """
+    Compute Mercury-Venus conjunction directly from km_planetary_positions
+    by finding dates where longitude difference < 5 degrees.
+    Used because km_planetary_aspects does NOT contain Mercury-Venus aspects.
+    """
+    cond = rule['conditions']
+    p1 = cond.get('planet_1')
+    p2 = cond.get('planet_2')
+    rows = []
+
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT a.date,
+               a.longitude as lon1,
+               b.longitude as lon2,
+               ABS(a.longitude - b.longitude) as raw_diff,
+               d.vara, d.nakshatra_lord
+        FROM km_planetary_positions a
+        JOIN km_planetary_positions b ON a.date = b.date
+        JOIN km_daily_panchang d ON a.date = d.date
+        WHERE a.planet = %s AND b.planet = %s
+        AND LEAST(
+            ABS(a.longitude - b.longitude),
+            360 - ABS(a.longitude - b.longitude)
+        ) < 5
+        AND EXTRACT(DOW FROM a.date) NOT IN (0,6)
+    """, (p1, p2))
+
+    for row in cur.fetchall():
+        rows.append((row[0], {
+            'planet_1': p1, 'planet_2': p2,
+            'lon_1': float(row[1]), 'lon_2': float(row[2]),
+            'separation_deg': float(row[3]),
             'vara': row[4], 'nakshatra_lord': row[5]
         }))
     return rows
@@ -334,7 +438,31 @@ def discover_relative_position(conn, rule):
             }))
         return rows
 
+    # Saturn 12th from Moon (Shani Chandra Dwidwadash Yog)
+    if rule_code == 'VOL-SCW-BEA':
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT moon.date, moon.longitude as moon_lon,
+                   sat.longitude as sat_lon,
+                   d.vara, d.nakshatra_lord
+            FROM km_planetary_positions moon
+            JOIN km_planetary_positions sat ON moon.date = sat.date
+            JOIN km_daily_panchang d ON moon.date = d.date
+            WHERE moon.planet = 'Moon' AND sat.planet = 'Saturn'
+            AND ((sat.longitude - moon.longitude + 360) % 360) BETWEEN 318 AND 342
+            AND EXTRACT(DOW FROM moon.date) NOT IN (0,6)
+        """)
+        for row in cur.fetchall():
+            rows.append((row[0], {
+                'moon_lon': float(row[1]),
+                'saturn_lon': float(row[2]),
+                'vara': row[3], 'nakshatra_lord': row[4]
+            }))
+        return rows
+
     # Mars/Venus ahead/behind Jupiter in same sign
+    # Note: sign_name in conditions must match km_planetary_positions.sign_name exactly
+    # (e.g. verify Cancer spelling with: SELECT DISTINCT sign_name FROM km_planetary_positions WHERE sign_name ILIKE '%cancer%')
     if cond.get('same_sign') and cond.get('position') in ('ahead', 'behind'):
         p1 = cond['planet_1']
         p2 = cond['planet_2']
@@ -445,7 +573,7 @@ def discover_relative_position(conn, rule):
     return rows
 
 
-def discover_vedh(conn, rule):
+def discover_vedh(conn, rule, vedh_map):
     """vedh rules"""
     cond = rule['conditions']
     rows = []
@@ -483,7 +611,7 @@ def discover_vedh(conn, rule):
     targets = target_nak if isinstance(target_nak, list) else [target_nak]
 
     for target in targets:
-        vedh_nak = VEDH_MAP.get(target)
+        vedh_nak = vedh_map.get(target)
         if not vedh_nak:
             continue
         cur = conn.cursor()
@@ -571,7 +699,7 @@ def discover_tithi(conn, rule):
     return rows
 
 
-def discover_compound_panchak(conn, rule):
+def discover_compound_panchak(conn, rule, panchak_naks):
     """Panchak rules"""
     cond = rule['conditions']
     rows = []
@@ -586,7 +714,7 @@ def discover_compound_panchak(conn, rule):
             WHERE nakshatra_name = ANY(%s)
             AND yoga_name ILIKE %s
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
-        """, (list(PANCHAK_NAKSHATRAS), f'%{yoga_name}%'))
+        """, (list(panchak_naks), f'%{yoga_name}%'))
         for row in cur.fetchall():
             rows.append((row[0], {
                 'panchak_nakshatra': row[3], 'yoga': row[4], 'vara': row[1]
@@ -608,9 +736,8 @@ def discover_compound_panchak(conn, rule):
             SELECT date, vara, nakshatra_name
             FROM panchak_days
             WHERE prev_nak IS NULL
-               OR prev_nak NOT IN ('Dhanistha','Shatabhisha',
-                 'Purva Bhadrapada','Uttara Bhadrapada','Revati')
-        """, (list(PANCHAK_NAKSHATRAS),))
+               OR prev_nak != ALL(%s)
+        """, (list(panchak_naks), list(panchak_naks)))
         for row in cur.fetchall():
             if row[1] == start_day:
                 rows.append((row[0], {
@@ -741,13 +868,16 @@ def discover_sign_planet(conn, rule):
 
 # ── MAIN DISCOVERY ROUTER ───────────────────────────────────
 
-def discover_rule(conn, rule):
+def discover_rule(conn, rule, vedh_map, panchak_naks):
     """Route rule to correct discovery function based on rule_type and conditions"""
     rt = rule['rule_type']
     cond = rule['conditions'] or {}
     rc = rule['rule_code']
 
     if rt == 'nakshatra_vara':
+        # DN-SAT-SP-BUL and similar: tithi_base+paksha+vara combos route to tithi discovery
+        if cond.get('tithi_base') and cond.get('paksha') and cond.get('vara'):
+            return discover_tithi(conn, rule)
         return discover_nakshatra_vara(conn, rule)
 
     elif rt == 'planet_transit':
@@ -764,17 +894,26 @@ def discover_rule(conn, rule):
         return discover_planet_state(conn, rule)
 
     elif rt == 'planet_conjunction':
+        # Inner planets (Mercury/Venus) are not in km_planetary_aspects — compute directly
+        inner_planets = {'Mercury', 'Venus'}
+        p1 = cond.get('planet_1', '')
+        p2 = cond.get('planet_2', '')
+        if p1 in inner_planets or p2 in inner_planets:
+            return discover_inner_planet_conjunction(conn, rule)
         return discover_conjunction(conn, rule)
 
     elif rt == 'vedh':
-        return discover_vedh(conn, rule)
+        return discover_vedh(conn, rule, vedh_map)
 
     elif rt == 'tithi_alone':
         return discover_tithi(conn, rule)
 
     elif rt == 'compound':
         if cond.get('panchak_day') or cond.get('panchak_start_day') or cond.get('panchak_all'):
-            return discover_compound_panchak(conn, rule)
+            return discover_compound_panchak(conn, rule, panchak_naks)
+        elif cond.get('planet') and cond.get('nakshatra'):
+            # YOG-MAN-ASH-BUL and similar: planet+nakshatra in compound → transit discovery
+            return discover_planet_in_nakshatra(conn, rule)
         elif cond.get('yoga') or cond.get('yog'):
             return discover_compound_yog(conn, rule)
         elif cond.get('event'):
@@ -803,6 +942,13 @@ def main(year_filter=None):
     start_time = time.time()
     conn = get_conn()
 
+    # Load vocabulary from master tables — canonical spelling for nakshatras/planets
+    vocab = load_vocabulary(conn)
+    vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
+    panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
+    print(f"Vocabulary loaded: {len(vocab['nakshatra_positions_names'])} nakshatras, "
+          f"{len(vocab['planet_names'])} planets, {len(vocab['yoga_names'])} yogas")
+
     # Load all active available rules
     cur = conn.cursor()
     cur.execute("""
@@ -829,7 +975,7 @@ def main(year_filter=None):
 
     for i, rule in enumerate(rules):
         try:
-            rows = discover_rule(conn, rule)
+            rows = discover_rule(conn, rule, vedh_map, panchak_naks)
 
             # Filter by year if specified
             if year_filter:
