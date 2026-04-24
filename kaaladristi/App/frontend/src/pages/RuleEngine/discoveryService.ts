@@ -13,6 +13,8 @@ export interface DiscoveryStatus {
   signals_inserted: number;
   current_rule_code: string | null;
   errors: { rule_code: string; error: string }[];
+  confidence_computed_at: string | null;
+  confidence_error: string | null;
   summary: {
     rules_with_signals: number;
     rules_without_signals: number;
@@ -74,5 +76,10 @@ export async function cancelDiscovery(): Promise<{ status: string }> {
 
 export async function runCleanDiscovery(): Promise<{ job_id: string; signals_deleted: number }> {
   const res = await postJson(`${PIPELINE_API}/api/discovery/run-clean`);
+  return res.json();
+}
+
+export async function computeConfidence(): Promise<{ job_id: string }> {
+  const res = await postJson(`${PIPELINE_API}/api/confidence/compute`);
   return res.json();
 }

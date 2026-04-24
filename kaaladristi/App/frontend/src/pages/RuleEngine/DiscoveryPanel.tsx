@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Play, AlertTriangle, CheckCircle2, Activity, XCircle, Trash2 } from 'lucide-react';
+import { Play, AlertTriangle, CheckCircle2, Activity, XCircle, Trash2, BarChart2 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useToast, ToastContainer } from '@/components/ui';
@@ -8,6 +8,7 @@ import {
   runMissingDiscovery,
   cancelDiscovery,
   runCleanDiscovery,
+  computeConfidence,
   fetchDiscoveryStatus,
   fetchSignalCounts,
   type DiscoveryStatus,
@@ -239,6 +240,12 @@ export default function DiscoveryPanel() {
     onError: (err: Error) => { handleError(err); setCleanConfirm(false); },
   });
 
+  const confidenceMutation = useMutation({
+    mutationFn: computeConfidence,
+    onSuccess: () => { toast('success', 'Confidence scoring started'); invalidate(); },
+    onError: handleError,
+  });
+
   const btnBase =
     'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -320,6 +327,39 @@ export default function DiscoveryPanel() {
               ⚠ This will DELETE all rows in km_rule_signals and re-run full discovery.
             </p>
           )}
+        </section>
+
+        {/* Confidence scoring */}
+        <section>
+          <h2 className="text-sm font-medium text-secondary mb-2">Confidence Scoring</h2>
+          <div className="flex items-center gap-4 flex-wrap">
+            <button
+              onClick={() => confidenceMutation.mutate()}
+              disabled={isRunning || confidenceMutation.isPending}
+              className={cn(
+                btnBase,
+                'text-risk-green/80 border-risk-green/30 bg-risk-green/10 hover:bg-risk-green/20',
+              )}
+            >
+              <BarChart2 className="w-4 h-4" />
+              {confidenceMutation.isPending ? 'Computing…' : 'Compute Confidence'}
+            </button>
+            <p className="text-xs font-mono text-muted">
+              {status?.confidence_error ? (
+                <span className="text-risk-red/70">Error: {status.confidence_error}</span>
+              ) : status?.confidence_computed_at ? (
+                <span className="text-secondary">
+                  Last computed:{' '}
+                  {new Date(status.confidence_computed_at).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: 'numeric', minute: '2-digit',
+                  })}
+                </span>
+              ) : (
+                <span>Confidence not yet computed</span>
+              )}
+            </p>
+          </div>
         </section>
 
         {/* Progress (shown while running) */}
