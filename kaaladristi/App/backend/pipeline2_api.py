@@ -1527,17 +1527,20 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                     rule.get('probability_label'), 3
                 )
                 inserted = 0
-                with conn.cursor() as cur:
-                    for (d, snapshot) in matched_rows:
-                        cur.execute(
+                if matched_rows:
+                    from psycopg2.extras import execute_values as _ev
+                    _data = [
+                        (d, rule['id'], rule.get('outcome'), strength,
+                         rule['display_name'], _json.dumps(snapshot))
+                        for d, snapshot in matched_rows
+                    ]
+                    with conn.cursor() as cur:
+                        _ev(cur,
                             "INSERT INTO km_rule_signals "
                             "(date, rule_id, signal, strength, details, conditions_snapshot) "
-                            "VALUES (%s, %s, %s, %s, %s, %s) "
-                            "ON CONFLICT (date, rule_id) DO NOTHING",
-                            (d, rule['id'], rule.get('outcome'), strength,
-                             rule['display_name'], _json.dumps(snapshot))
-                        )
-                        inserted += cur.rowcount
+                            "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
+                            _data)
+                        inserted = cur.rowcount
                 conn.commit()
                 _discovery_state['signals_inserted'] += inserted
 
