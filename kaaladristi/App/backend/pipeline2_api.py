@@ -1397,15 +1397,20 @@ _discovery_state: dict = {
 # ── Import discovery logic lazily (scripts package, same process) ─────────────
 
 def _import_discover_rule():
-    """Return (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras) or raise."""
+    """Return discovery functions tuple or raise."""
     try:
         from scripts.rule_discovery import (  # noqa: PLC0415
             discover_rule,
             load_vocabulary,
             build_vedh_map,
             get_panchak_nakshatras,
+            should_group_transits,
+            detect_transits,
+            insert_transits,
         )
-        return discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras
+        return (discover_rule, load_vocabulary, build_vedh_map,
+                get_panchak_nakshatras, should_group_transits,
+                detect_transits, insert_transits)
     except Exception as exc:
         raise ImportError(f'Cannot import rule_discovery: {exc}') from exc
 
@@ -1471,7 +1476,8 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
     })
 
     try:
-        discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras = _import_discover_rule()
+        (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras,
+         should_group_transits, detect_transits, insert_transits) = _import_discover_rule()
     except ImportError as exc:
         log.error(f'Discovery import failed: {exc}')
         _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
@@ -1534,6 +1540,13 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                         inserted += cur.rowcount
                 conn.commit()
                 _discovery_state['signals_inserted'] += inserted
+
+                # Insert transits for transit-grouped rule types
+                if matched_rows and should_group_transits(rule):
+                    rule_transits = detect_transits(conn, rule, matched_rows)
+                    if rule_transits:
+                        insert_transits(conn, rule, rule_transits)
+                        conn.commit()
 
             except Exception as exc:
                 log.error(f"Discovery error rule {rule['rule_code']}: {exc}")

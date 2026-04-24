@@ -408,6 +408,8 @@ export default function RuleDetail() {
   const [deleteArmed, setDeleteArmed] = useState(false);
   // Track when a background discovery job is running for this page
   const [trackingDiscovery, setTrackingDiscovery] = useState(false);
+  // Job ID of the discovery we started — used to avoid reacting to a stale cached status
+  const [startedJobId, setStartedJobId] = useState<string | null>(null);
   // Signals pagination (0-indexed)
   const [signalsPage, setSignalsPage] = useState(0);
 
@@ -474,8 +476,11 @@ export default function RuleDetail() {
   useEffect(() => {
     if (!trackingDiscovery || !discoveryStatus) return;
     if (discoveryStatus.running) return;
+    // Guard against stale cached status from before our job was launched
+    if (startedJobId && discoveryStatus.job_id !== startedJobId) return;
     // Job finished — stop polling and refresh rule data
     setTrackingDiscovery(false);
+    setStartedJobId(null);
     setSignalsPage(0);
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signals-upcoming', ruleId] });
@@ -490,7 +495,7 @@ export default function RuleDetail() {
     } else {
       toast('success', `Discovery complete — ${inserted.toLocaleString()} signals inserted`);
     }
-  }, [discoveryStatus, trackingDiscovery, ruleId, qc, toast, setSignalsPage]);
+  }, [discoveryStatus, trackingDiscovery, startedJobId, ruleId, qc, toast, setSignalsPage]);
 
   // ── Edit mutation ──
   const editMutation = useMutation({
@@ -538,9 +543,10 @@ export default function RuleDetail() {
   // ── Discover mutation ──
   const discoverMutation = useMutation({
     mutationFn: () => runRuleDiscovery(ruleId),
-    onSuccess: () => {
-      toast('info', 'Discovery running — results will refresh when done');
+    onSuccess: (data) => {
+      setStartedJobId(data.job_id);
       setTrackingDiscovery(true);
+      toast('info', 'Discovery running — results will refresh when done');
     },
     onError: (err: Error) => toast('error', err.message),
   });
