@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play } from 'lucide-react';
@@ -8,7 +8,7 @@ import { useToast, ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
-import { runRuleDiscovery } from './discoveryService';
+import { runRuleDiscovery, fetchDiscoveryStatus } from './discoveryService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -382,6 +382,8 @@ export default function RuleDetail() {
   const [saveError, setSaveError] = useState<string | null>(null);
   // Delete confirmation: first click arms, second click within 3s fires
   const [deleteArmed, setDeleteArmed] = useState(false);
+  // Track when a background discovery job is running for this page
+  const [trackingDiscovery, setTrackingDiscovery] = useState(false);
 
   const { data: rule, isLoading, isError, error } = useQuery({
     queryKey: ['rule-engine', 'rule', ruleId],
@@ -424,6 +426,37 @@ export default function RuleDetail() {
     enabled: !isNaN(ruleId),
     staleTime: 10 * 60 * 1000,
   });
+
+  // Poll discovery status while a job is running so the button stays in loading
+  // state and data refreshes automatically when the job completes.
+  const { data: discoveryStatus } = useQuery({
+    queryKey: ['rule-engine', 'discovery-status'],
+    queryFn: fetchDiscoveryStatus,
+    staleTime: 0,
+    enabled: trackingDiscovery,
+    refetchInterval: trackingDiscovery ? 2000 : false,
+  });
+
+  useEffect(() => {
+    if (!trackingDiscovery || !discoveryStatus) return;
+    if (discoveryStatus.running) return;
+    // Job finished — stop polling and refresh rule data
+    setTrackingDiscovery(false);
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'transits', ruleId] });
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'transits-upcoming', ruleId] });
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence', ruleId] });
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-counts'] });
+    const inserted = discoveryStatus.signals_inserted;
+    const errors = discoveryStatus.errors.length;
+    if (errors > 0) {
+      toast('error', `Discovery finished with ${errors} error(s)`);
+    } else {
+      toast('success', `Discovery complete — ${inserted.toLocaleString()} signals inserted`);
+    }
+  }, [discoveryStatus, trackingDiscovery, ruleId, qc, toast]);
+
+  const isDiscoveryRunning = discoverMutation.isPending || trackingDiscovery;
 
   // ── Edit mutation ──
   const editMutation = useMutation({
@@ -472,9 +505,8 @@ export default function RuleDetail() {
   const discoverMutation = useMutation({
     mutationFn: () => runRuleDiscovery(ruleId),
     onSuccess: () => {
-      toast('success', 'Discovery started for this rule');
-      qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
-      qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-counts'] });
+      toast('info', 'Discovery running — results will refresh when done');
+      setTrackingDiscovery(true);
     },
     onError: (err: Error) => toast('error', err.message),
   });
@@ -534,14 +566,14 @@ export default function RuleDetail() {
             {/* Run Discovery */}
             <button
               onClick={() => discoverMutation.mutate()}
-              disabled={discoverMutation.isPending}
+              disabled={isDiscoveryRunning}
               title="Run discovery for this rule only"
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all disabled:opacity-50"
             >
-              {discoverMutation.isPending
+              {isDiscoveryRunning
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <Play className="w-3.5 h-3.5" />}
-              Run Discovery
+              {isDiscoveryRunning ? 'Running…' : 'Run Discovery'}
             </button>
 
             {/* Clone */}
