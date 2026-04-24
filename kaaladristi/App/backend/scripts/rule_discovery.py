@@ -1069,7 +1069,7 @@ def discover_rule(conn, rule, vedh_map, panchak_naks):
 
 # ── MAIN ────────────────────────────────────────────────────
 
-def main(year_filter=None):
+def main(year_filter=None, rule_code_filter=None):
     start_time = time.time()
     conn = get_conn()
 
@@ -1101,6 +1101,14 @@ def main(year_filter=None):
         })
 
     print(f"Loaded {len(rules)} active available rules")
+
+    if rule_code_filter:
+        rules = [r for r in rules if r['rule_code'] == rule_code_filter]
+        if not rules:
+            print(f"Rule not found: {rule_code_filter}")
+            return
+        print(f"Running discovery for single rule: {rule_code_filter}")
+
     total_inserted = 0
     total_transits = 0
     total_errors = 0
@@ -1147,9 +1155,9 @@ def main(year_filter=None):
 
             total_transits += n_transits
 
-            if (i + 1) % 10 == 0:
-                print(f"  [{i+1}/{len(rules)}] {rule['rule_code']}: "
-                      f"{len(rows)} signals, {n_transits} transits")
+            print(f"  {rule['rule_code']}: {len(rows)} signals | "
+                  f"group_transits={should_group_transits(rule)} | "
+                  f"transits={n_transits}")
 
         except Exception as e:
             print(f"  ERROR rule {rule['rule_code']}: {e}")
@@ -1168,5 +1176,11 @@ def main(year_filter=None):
 
 if __name__ == '__main__':
     import sys
-    year = int(sys.argv[1]) if len(sys.argv) > 1 else None
-    main(year_filter=year)
+    year = None
+    rule_code_filter = None
+    for arg in sys.argv[1:]:
+        if arg.isdigit():
+            year = int(arg)
+        else:
+            rule_code_filter = arg
+    main(year_filter=year, rule_code_filter=rule_code_filter)
