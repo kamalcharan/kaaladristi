@@ -68,11 +68,16 @@ _scheduler = None
 _worker_process: subprocess.Popen | None = None
 
 
-def _conn():
+def _conn(statement_timeout_ms: int = 0):
     """Return a fresh psycopg2 connection. Callers must close."""
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL not set')
-    return psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    if statement_timeout_ms:
+        with conn.cursor() as cur:
+            cur.execute(f'SET statement_timeout = {statement_timeout_ms}')
+        conn.commit()
+    return conn
 
 
 def _reset_stale_jobs():
@@ -1389,6 +1394,7 @@ _discovery_state: dict = {
     'rules_done':            0,
     'signals_inserted':      0,
     'current_rule_code':     None,
+    'phase':                 None,
     'errors':                [],
     'confidence_computed_at': None,
     'confidence_error':      None,
@@ -1484,22 +1490,26 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         _discovery_state['errors'].append({'rule_code': 'IMPORT', 'error': str(exc)})
         return
 
+    _discovery_state['phase'] = 'connecting'
     try:
-        conn = _conn()
+        conn = _conn(statement_timeout_ms=60000)
     except Exception as exc:
         log.error(f'Discovery DB connection failed: {exc}')
-        _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
+        _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'phase': None})
         _discovery_state['errors'].append({'rule_code': 'DB_CONN', 'error': str(exc)})
         return
 
     try:
+        _discovery_state['phase'] = 'loading vocabulary'
         vocab = load_vocabulary(conn)
         vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
         panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
         log.info(f'Vocabulary loaded: {len(vocab["nakshatra_positions_names"])} nakshatras')
 
+        _discovery_state['phase'] = 'loading rules'
         rules = _load_rules_for_discovery(conn, mode, rule_id)
         _discovery_state['rules_total'] = len(rules)
+        _discovery_state['phase'] = 'running'
         log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
 
         for rule in rules:
@@ -1571,6 +1581,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         _discovery_state['running'] = False
         _discovery_state['finished_at'] = datetime.utcnow().isoformat()
         _discovery_state['current_rule_code'] = None
+        _discovery_state['phase'] = None
         log.info(
             f'Discovery [{mode}] done — {_discovery_state["rules_done"]} rules, '
             f'{_discovery_state["signals_inserted"]} signals, '

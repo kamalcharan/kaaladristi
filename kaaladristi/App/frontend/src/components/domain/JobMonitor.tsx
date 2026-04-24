@@ -99,7 +99,9 @@ export default function JobMonitor() {
       onClick={() => setExpanded(v => !v)}>
       <Loader2 className="w-3.5 h-3.5 animate-spin" />
       {discoveryRunning
-        ? `Discovery · ${discovery!.rules_done}/${discovery!.rules_total} rules`
+        ? discovery!.rules_total === 0
+          ? `Discovery · ${discovery!.phase ?? 'starting'}…`
+          : `Discovery · ${discovery!.rules_done}/${discovery!.rules_total} rules`
         : `Confidence scoring · ${confidence!.signals_scored} scored`}
       {expanded ? <ChevronDown className="w-3 h-3 ml-1" /> : <ChevronUp className="w-3 h-3 ml-1" />}
     </div>
@@ -168,11 +170,18 @@ export default function JobMonitor() {
 
               {discoveryRunning && discovery && (
                 <>
-                  <ProgressBar done={discovery.rules_done} total={discovery.rules_total} />
+                  {discovery.rules_total === 0 ? (
+                    <div className="flex items-center gap-2 text-[11px] text-risk-amber/80 py-1">
+                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                      <span className="capitalize">{discovery.phase ?? 'Starting'}…</span>
+                    </div>
+                  ) : (
+                    <ProgressBar done={discovery.rules_done} total={discovery.rules_total} />
+                  )}
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
                     <div>
                       <p className="text-muted">Rules</p>
-                      <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total}</p>
+                      <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total || '?'}</p>
                     </div>
                     <div>
                       <p className="text-muted">Signals inserted</p>

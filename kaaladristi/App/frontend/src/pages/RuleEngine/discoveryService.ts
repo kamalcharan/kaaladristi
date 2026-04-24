@@ -12,6 +12,7 @@ export interface DiscoveryStatus {
   rules_done: number;
   signals_inserted: number;
   current_rule_code: string | null;
+  phase: string | null;
   errors: { rule_code: string; error: string }[];
   confidence_computed_at: string | null;
   confidence_error: string | null;
