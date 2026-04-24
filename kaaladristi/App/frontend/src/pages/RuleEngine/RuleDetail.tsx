@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play } from 'lucide-react';
 import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast, ToastContainer } from '@/components/ui';
@@ -108,17 +108,26 @@ async function fetchRuleConfidence(ruleId: number): Promise<RuleConfidence | nul
   return (data as unknown as RuleConfidence) ?? null;
 }
 
-async function fetchRuleSignals(ruleId: number): Promise<RuleSignal[]> {
+const PAGE_SIZE = 20;
+
+interface SignalsPage {
+  rows: RuleSignal[];
+  total: number;
+}
+
+async function fetchRuleSignals(ruleId: number, page: number): Promise<SignalsPage> {
   const today = new Date().toISOString().split('T')[0];
-  const { data, error } = await from('km_rule_signals')
+  const offset = page * PAGE_SIZE;
+  const { data, error, count } = await from('km_rule_signals')
     .select('id,date,signal,strength,details,matched')
     .eq('rule_id', ruleId)
     .lte('date', today)
     .order('date', { ascending: false })
-    .limit(50)
+    .withCount()
+    .range(offset, offset + PAGE_SIZE - 1)
     .execute();
   if (error) throw new Error(error.message);
-  return (data as RuleSignal[]) ?? [];
+  return { rows: (data as RuleSignal[]) ?? [], total: count ?? 0 };
 }
 
 async function fetchUpcomingSignals(ruleId: number): Promise<RuleSignal[]> {
@@ -399,6 +408,8 @@ export default function RuleDetail() {
   const [deleteArmed, setDeleteArmed] = useState(false);
   // Track when a background discovery job is running for this page
   const [trackingDiscovery, setTrackingDiscovery] = useState(false);
+  // Signals pagination (0-indexed)
+  const [signalsPage, setSignalsPage] = useState(0);
 
   const { data: rule, isLoading, isError, error } = useQuery({
     queryKey: ['rule-engine', 'rule', ruleId],
@@ -414,11 +425,12 @@ export default function RuleDetail() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const { data: signals = [] } = useQuery({
-    queryKey: ['rule-engine', 'signals', ruleId],
-    queryFn: () => fetchRuleSignals(ruleId),
+  const { data: signalsData = { rows: [], total: 0 } } = useQuery({
+    queryKey: ['rule-engine', 'signals', ruleId, signalsPage],
+    queryFn: () => fetchRuleSignals(ruleId, signalsPage),
     enabled: !isNaN(ruleId),
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const { data: upcomingSignals = [] } = useQuery({
@@ -464,6 +476,7 @@ export default function RuleDetail() {
     if (discoveryStatus.running) return;
     // Job finished — stop polling and refresh rule data
     setTrackingDiscovery(false);
+    setSignalsPage(0);
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signals-upcoming', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'transits', ruleId] });
@@ -477,7 +490,7 @@ export default function RuleDetail() {
     } else {
       toast('success', `Discovery complete — ${inserted.toLocaleString()} signals inserted`);
     }
-  }, [discoveryStatus, trackingDiscovery, ruleId, qc, toast]);
+  }, [discoveryStatus, trackingDiscovery, ruleId, qc, toast, setSignalsPage]);
 
   // ── Edit mutation ──
   const editMutation = useMutation({
@@ -731,52 +744,90 @@ export default function RuleDetail() {
 
         {/* Historical occurrences / transit history */}
         <section>
-          <h2 className="text-sm font-medium text-secondary mb-2">
-            {transits.length > 0 ? 'Transit History' : 'Historical Occurrences (last 50)'}
-            {(transits.length > 0 || signals.length > 0) && (
-              <span className="ml-2 text-[11px] font-mono text-muted font-normal">
-                last {transits.length > 0 ? transits.length : signals.length}
-              </span>
-            )}
-          </h2>
-          {transits.length > 0 ? (
-            <TransitTable transits={transits} />
-          ) : signals.length === 0 ? (
-            <div className="flex items-center justify-center h-24 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
-              No signals recorded — run rule discovery to populate
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-kd-border">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-kd-border bg-kd-elevated/60">
-                    {['Date', 'Signal', 'Strength', 'Details', 'Matched'].map(h => (
-                      <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {signals.map(sig => (
-                    <tr key={sig.id} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
-                      <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{sig.date}</td>
-                      <td className="px-3 py-2 text-xs text-secondary capitalize">{sig.signal ?? '—'}</td>
-                      <td className="px-3 py-2 text-xs tabular-nums text-center">
-                        {sig.strength != null ? <span className="text-risk-amber">{sig.strength}</span> : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted max-w-[260px] truncate">{sig.details ?? '—'}</td>
-                      <td className="px-3 py-2 text-xs text-center">
-                        <span className={sig.matched === true ? 'text-risk-green' : sig.matched === false ? 'text-risk-red/60' : 'text-muted'}>
-                          {sig.matched === true ? '✓' : sig.matched === false ? '✗' : '—'}
+          {(() => {
+            const { rows: signals, total: signalsTotal } = signalsData;
+            const totalPages = Math.ceil(signalsTotal / PAGE_SIZE);
+            const startItem = signalsTotal === 0 ? 0 : signalsPage * PAGE_SIZE + 1;
+            const endItem = Math.min((signalsPage + 1) * PAGE_SIZE, signalsTotal);
+
+            return (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-sm font-medium text-secondary">
+                    {transits.length > 0 ? 'Transit History' : 'Historical Occurrences'}
+                  </h2>
+                  {transits.length === 0 && signalsTotal > 0 && (
+                    <span className="text-[11px] font-mono text-muted">
+                      Showing {startItem.toLocaleString()}–{endItem.toLocaleString()} of {signalsTotal.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+
+                {transits.length > 0 ? (
+                  <TransitTable transits={transits} />
+                ) : signals.length === 0 && signalsTotal === 0 ? (
+                  <div className="flex items-center justify-center h-24 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
+                    No signals recorded — run rule discovery to populate
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="overflow-x-auto rounded-xl border border-kd-border">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-kd-border bg-kd-elevated/60">
+                            {['Date', 'Signal', 'Strength', 'Details', 'Matched'].map(h => (
+                              <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {signals.map(sig => (
+                            <tr key={sig.id} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
+                              <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{sig.date}</td>
+                              <td className="px-3 py-2 text-xs text-secondary capitalize">{sig.signal ?? '—'}</td>
+                              <td className="px-3 py-2 text-xs tabular-nums text-center">
+                                {sig.strength != null ? <span className="text-risk-amber">{sig.strength}</span> : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-muted max-w-[260px] truncate">{sig.details ?? '—'}</td>
+                              <td className="px-3 py-2 text-xs text-center">
+                                <span className={sig.matched === true ? 'text-risk-green' : sig.matched === false ? 'text-risk-red/60' : 'text-muted'}>
+                                  {sig.matched === true ? '✓' : sig.matched === false ? '✗' : '—'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between px-1">
+                        <button
+                          onClick={() => setSignalsPage(p => p - 1)}
+                          disabled={signalsPage === 0}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                        </button>
+                        <span className="text-[11px] font-mono text-muted">
+                          Page {signalsPage + 1} of {totalPages}
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                        <button
+                          onClick={() => setSignalsPage(p => p + 1)}
+                          disabled={signalsPage >= totalPages - 1}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          Next <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </section>
 
         {/* Upcoming signals */}
