@@ -1464,14 +1464,9 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
 
     global _discovery_state
 
-    # Guard: prevent overlapping runs
-    if _discovery_state['running']:
-        log.warning('Discovery already running — ignoring duplicate request')
-        return
-
     job_id = _discovery_state['job_id']
+    # Reset counters — running=True already set by the endpoint
     _discovery_state.update({
-        'running':           True,
         'cancel_requested':  False,
         'started_at':        datetime.utcnow().isoformat(),
         'finished_at':       None,
