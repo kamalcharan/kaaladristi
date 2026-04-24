@@ -27,3 +27,4 @@ export { usePanchang, useMarketBreadth, useActiveIndexes, usePanchangInsight, us
 export { useVisualPulse } from './useVisualPulse';
 export { useIndustryRotation, useIndustryStocks } from './useIndustryRotation';
 export { useScan } from './useScan';
+export { useBackendStatus, type BackendState } from './useBackendStatus';

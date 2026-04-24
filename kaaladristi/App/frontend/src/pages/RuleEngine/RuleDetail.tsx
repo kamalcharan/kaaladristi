@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play, WifiOff, X } from 'lucide-react';
 import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast, ToastContainer } from '@/components/ui';
+import { useBackendStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
@@ -446,6 +447,8 @@ export default function RuleDetail() {
   // Signals pagination (0-indexed)
   const [signalsPage, setSignalsPage] = useState(0);
 
+  const backendStatus = useBackendStatus();
+
   const { data: rule, isLoading, isError, error } = useQuery({
     queryKey: ['rule-engine', 'rule', ruleId],
     queryFn: () => fetchRule(ruleId),
@@ -498,13 +501,24 @@ export default function RuleDetail() {
 
   // Poll discovery status while a job is running so the button stays in loading
   // state and data refreshes automatically when the job completes.
-  const { data: discoveryStatus } = useQuery({
+  const { data: discoveryStatus, isError: discoveryPollError } = useQuery({
     queryKey: ['rule-engine', 'discovery-status'],
     queryFn: fetchDiscoveryStatus,
     staleTime: 0,
     enabled: trackingDiscovery,
     refetchInterval: trackingDiscovery ? 2000 : false,
+    retry: 1,
+    retryDelay: 1000,
   });
+
+  // If backend goes offline while tracking, stop showing "Running…" immediately
+  useEffect(() => {
+    if (!trackingDiscovery) return;
+    if (backendStatus !== 'offline' && !discoveryPollError) return;
+    setTrackingDiscovery(false);
+    setStartedJobId(null);
+    toast('error', 'Backend offline — discovery status unknown. Check if the server is running.');
+  }, [backendStatus, discoveryPollError, trackingDiscovery, toast]);
 
   useEffect(() => {
     if (!trackingDiscovery || !discoveryStatus) return;
@@ -639,6 +653,14 @@ export default function RuleDetail() {
   return (
     <>
       <div className="space-y-5">
+        {/* Backend offline banner */}
+        {backendStatus === 'offline' && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-risk-red/30 bg-risk-red/10 text-risk-red/80 text-xs">
+            <WifiOff className="w-3.5 h-3.5 shrink-0" />
+            <span>Backend offline — server is not responding. Start uvicorn and refresh.</span>
+          </div>
+        )}
+
         {/* Back + action buttons */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <button
@@ -657,16 +679,21 @@ export default function RuleDetail() {
                 title="Request cancellation"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-red/80 border border-risk-red/30 bg-risk-red/10 rounded-lg hover:bg-risk-red/20 transition-all disabled:opacity-50"
               >
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                {cancelMutation.isPending
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <X className="w-3.5 h-3.5" />}
                 {cancelMutation.isPending ? 'Cancelling…' : 'Running… Cancel?'}
               </button>
             ) : (
               <button
                 onClick={() => discoverMutation.mutate()}
-                title="Run discovery for this rule only"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all"
+                disabled={backendStatus === 'offline'}
+                title={backendStatus === 'offline' ? 'Backend offline' : 'Run discovery for this rule only'}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Play className="w-3.5 h-3.5" />
+                {backendStatus === 'offline'
+                  ? <WifiOff className="w-3.5 h-3.5" />
+                  : <Play className="w-3.5 h-3.5" />}
                 Run Discovery
               </button>
             )}
