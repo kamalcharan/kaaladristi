@@ -263,8 +263,8 @@ function EquityChart({ transits, highlightId, onHighlight }: {
   highlightId: number | null;
   onHighlight: (id: number | null) => void;
 }) {
-  const W = 800, H = 240;
-  const PAD = { l: 48, r: 16, t: 16, b: 36 };
+  const W = 1100, H = 320;
+  const PAD = { l: 52, r: 20, t: 20, b: 40 };
 
   const sorted = useMemo(() =>
     [...transits]
@@ -534,12 +534,13 @@ function BacktestTabs({
   highlightId: number | null;
   onHighlight: (id: number | null) => void;
 }) {
-  const [tab, setTab] = useState<'transits' | 'upcoming' | 'occurrences' | 'yearly'>('transits');
+  const [tab, setTab] = useState<'transits' | 'upcoming' | 'signals' | 'occurrences' | 'yearly'>('transits');
   const totalPages = Math.ceil(signalsTotal / PAGE_SIZE);
 
   const tabs = [
     { key: 'transits'    as const, label: `Transits · ${transits.length}` },
     { key: 'upcoming'    as const, label: `Upcoming · ${upcomingTransits.length}` },
+    { key: 'signals'     as const, label: `Next Signals · ${upcomingSignals.length}` },
     { key: 'occurrences' as const, label: `Daily · ${signalsTotal.toLocaleString()}` },
     ...(yearlyConf.length > 0 ? [{ key: 'yearly' as const, label: `Year-by-Year · ${yearlyConf.length}` }] : []),
   ];
@@ -576,7 +577,7 @@ function BacktestTabs({
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-kd-border bg-kd-elevated/60">
-                  {['Start', 'End', 'Days', 'Return', 'Regime', 'Matched'].map(h => (
+                  {['Start', 'End', 'Days', 'Nifty Return', 'Regime', 'Matched'].map(h => (
                     <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -647,6 +648,35 @@ function BacktestTabs({
           </div>
       )}
 
+      {/* Next Signals tab */}
+      {tab === 'signals' && (
+        upcomingSignals.length === 0
+          ? <p className="px-4 py-6 text-sm text-muted text-center">No upcoming signals in data range</p>
+          : <div className="p-4 flex flex-wrap gap-3">
+              {upcomingSignals.map((s, i) => {
+                const dt = new Date(s.date + 'T00:00:00');
+                const inDays = Math.round((dt.getTime() - Date.now()) / 86400000);
+                const isNext = i === 0;
+                return (
+                  <div key={s.id} className={cn(
+                    'min-w-[140px] px-4 py-3 border',
+                    isNext
+                      ? 'border-accent-gold/40 bg-accent-gold/5'
+                      : 'border-kd-border bg-kd-elevated/30',
+                  )}>
+                    <p className={cn('font-mono text-[10px] uppercase tracking-wider mb-1', isNext ? 'text-accent-gold' : 'text-muted')}>
+                      {isNext ? `Next · in ${inDays}d` : `T+${inDays}d`}
+                    </p>
+                    <p className="font-mono text-lg font-medium text-white">{s.date}</p>
+                    <p className="font-mono text-[10px] text-muted mt-1 uppercase">
+                      {dt.toLocaleDateString('en-US', { weekday: 'long' })}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+      )}
+
       {/* Occurrences tab */}
       {tab === 'occurrences' && (
         signals.length === 0 && signalsTotal === 0
@@ -699,20 +729,6 @@ function BacktestTabs({
                   >
                     Next <ChevronRight className="w-3.5 h-3.5"/>
                   </button>
-                </div>
-              )}
-              {upcomingSignals.length > 0 && (
-                <div className="px-4 py-3 border-t border-kd-border/40">
-                  <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Upcoming Signals</p>
-                  <p className="text-xs text-secondary font-mono">
-                    Next:{' '}
-                    <span className="text-accent-indigo">
-                      {new Date(upcomingSignals[0].date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                    {upcomingSignals.length > 1 && (
-                      <span className="text-muted ml-2">+{upcomingSignals.length - 1} more</span>
-                    )}
-                  </p>
                 </div>
               )}
           </div>
@@ -1126,59 +1142,71 @@ export default function RuleDetail() {
 
         {/* Header card */}
         <div className="rounded-xl border border-kd-border bg-kd-card p-5 space-y-4">
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="flex-1 min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xs text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-2 py-0.5 rounded">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex-1 min-w-0">
+              {/* Pills row */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="font-mono text-[10px] tracking-wider text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-2.5 py-1 rounded">
                   {rule.rule_code}
                 </span>
-                <span className="text-[11px] font-mono text-muted border border-kd-border bg-kd-elevated px-1.5 py-0.5 rounded">
+                <span className="font-mono text-[10px] tracking-wider text-accent-indigo border border-accent-indigo/30 bg-accent-indigo/8 px-2.5 py-1 rounded uppercase">
                   {RULE_TYPE_LABELS[rule.rule_type] ?? rule.rule_type}
                 </span>
+                <OutcomeBadge outcome={outcome} />
                 {!rule.is_active && (
-                  <span className="text-[11px] font-mono text-risk-red/70 border border-risk-red/20 bg-risk-red/10 px-1.5 py-0.5 rounded">
+                  <span className="font-mono text-[10px] text-risk-red/70 border border-risk-red/20 bg-risk-red/10 px-2.5 py-1 rounded uppercase tracking-wider">
                     Inactive
                   </span>
                 )}
+                <span className="font-mono text-[10px] text-muted tracking-wider ml-1">
+                  BENCHMARK · NIFTY 50
+                </span>
               </div>
-              <h1 className="font-display text-3xl font-medium text-white leading-tight mt-1 tracking-tight">{rule.display_name}</h1>
+              {/* Large serif title */}
+              <h1 className="font-display text-3xl font-medium text-white leading-tight tracking-tight">
+                {rule.display_name}
+              </h1>
+              {/* Italic remarks inline */}
+              {rule.remarks && (
+                <p className="text-sm text-muted italic mt-1.5 leading-relaxed">{rule.remarks}</p>
+              )}
             </div>
-            <OutcomeBadge outcome={outcome} />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-kd-border/40">
-            <div>
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Probability</p>
-              <p className="text-sm text-secondary">{rule.probability_label ?? rule.probability ?? '—'}</p>
+          {/* Conditions inline as key → value chips */}
+          {rule.conditions && Object.keys(rule.conditions).length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-kd-border/40">
+              <span className="font-mono text-[10px] text-muted uppercase tracking-wider shrink-0">Conditions</span>
+              {Object.entries(rule.conditions).map(([k, v]) => (
+                <span key={k} className="inline-flex items-center gap-2 px-3 py-1 border border-kd-border/60 bg-kd-elevated/30 text-xs">
+                  <span className="font-mono text-[10px] text-muted uppercase tracking-wider">{k}</span>
+                  <span className="text-secondary">{Array.isArray(v) ? v.join(', ') : String(v)}</span>
+                </span>
+              ))}
             </div>
-            <div>
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Data Source</p>
-              <span className={cn('inline-flex items-center gap-1 text-sm', rule.data_source !== 'unavailable' ? 'text-risk-green/70' : 'text-muted')}>
-                <span className={cn('w-1.5 h-1.5 rounded-full', rule.data_source !== 'unavailable' ? 'bg-risk-green/70' : 'bg-kd-border')} />
+          )}
+
+          {/* Scope + data source row */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-3 border-t border-kd-border/40">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Scope</span>
+              <ScopeChips scope={rule.scope} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Source</span>
+              <span className={cn('inline-flex items-center gap-1.5 text-xs', rule.data_source !== 'unavailable' ? 'text-risk-green/70' : 'text-muted')}>
+                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', rule.data_source !== 'unavailable' ? 'bg-risk-green/70' : 'bg-kd-border')} />
                 {rule.data_source === 'user_defined' ? 'Custom' : rule.data_source ?? '—'}
               </span>
             </div>
-            <div className="col-span-2">
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Scope</p>
-              <ScopeChips scope={rule.scope} />
-            </div>
+            {(rule.probability_label ?? rule.probability) && (
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Probability</span>
+                <span className="text-xs text-secondary">{rule.probability_label ?? rule.probability}</span>
+              </div>
+            )}
           </div>
-
-          {rule.remarks && (
-            <div className="pt-3 border-t border-kd-border/40">
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Remarks</p>
-              <p className="text-sm text-secondary leading-relaxed">{rule.remarks}</p>
-            </div>
-          )}
         </div>
-
-        {/* Conditions */}
-        <section>
-          <h2 className="text-sm font-medium text-secondary mb-2">Conditions</h2>
-          <div className="rounded-xl border border-kd-border bg-kd-card p-4">
-            <ConditionsBlock conditions={rule.conditions} />
-          </div>
-        </section>
 
         {/* Backtesting */}
         <section className="space-y-3">
