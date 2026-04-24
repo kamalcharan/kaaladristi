@@ -539,11 +539,14 @@ export default function RuleDetail() {
     qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-counts'] });
     const inserted = discoveryStatus.signals_inserted;
-    const errors = discoveryStatus.errors.length;
-    if (errors > 0) {
-      toast('error', `Discovery finished with ${errors} error(s)`);
+    const errs = discoveryStatus.errors;
+    if (errs.length > 0) {
+      const first = errs[0];
+      const extra = errs.length > 1 ? ` (+${errs.length - 1} more)` : '';
+      toast('error', `Discovery error — ${first.rule_code}: ${first.error}${extra}`);
     } else {
-      toast('success', `Discovery complete — ${inserted.toLocaleString()} signals inserted`);
+      const transits = discoveryStatus.transits_inserted ?? 0;
+      toast('success', `Discovery complete — ${inserted.toLocaleString()} signals, ${transits} transits`);
     }
   }, [discoveryStatus, trackingDiscovery, startedJobId, ruleId, qc, toast, setSignalsPage]);
 

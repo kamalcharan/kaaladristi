@@ -119,9 +119,17 @@ function ProgressSection({
             ? `Processing: ${status.current_rule_code}`
             : 'Starting…'}
         </span>
-        <span className="text-accent-indigo">
-          {status.signals_inserted.toLocaleString()} signals inserted
-        </span>
+        <div className="flex items-center gap-3">
+          {status.errors.length > 0 && (
+            <span className="text-risk-red/70 flex items-center gap-1">
+              <XCircle className="w-3 h-3" />
+              {status.errors.length} err
+            </span>
+          )}
+          <span className="text-accent-indigo">
+            {status.signals_inserted.toLocaleString()} signals
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -140,23 +148,31 @@ function LastRunSummary({ status }: { status: DiscoveryStatus }) {
         )
       : null;
 
+  const hasErrors = status.errors.length > 0;
   return (
-    <div className="rounded-xl border border-kd-border bg-kd-elevated/30 p-4 space-y-2">
+    <div className={cn(
+      'rounded-xl border p-4 space-y-2',
+      hasErrors ? 'border-risk-red/30 bg-risk-red/5' : 'border-kd-border bg-kd-elevated/30',
+    )}>
       <div className="flex items-center gap-2 text-sm">
-        <CheckCircle2 className="w-4 h-4 text-risk-green/70 shrink-0" />
-        <span className="text-secondary font-medium">Last run completed</span>
+        {hasErrors
+          ? <XCircle className="w-4 h-4 text-risk-red/70 shrink-0" />
+          : <CheckCircle2 className="w-4 h-4 text-risk-green/70 shrink-0" />}
+        <span className="text-secondary font-medium">
+          {hasErrors ? `Last run — ${status.errors.length} error${status.errors.length !== 1 ? 's' : ''}` : 'Last run completed'}
+        </span>
         {duration != null && (
           <span className="text-muted text-xs font-mono ml-auto">{duration}s</span>
         )}
       </div>
       <div className="grid grid-cols-3 gap-3 text-center">
         {[
-          { label: 'Rules processed', value: status.rules_done },
-          { label: 'Signals inserted', value: status.signals_inserted.toLocaleString() },
-          { label: 'Errors', value: status.errors.length },
-        ].map(({ label, value }) => (
+          { label: 'Rules processed', value: status.rules_done, red: false },
+          { label: 'Signals inserted', value: status.signals_inserted.toLocaleString(), red: false },
+          { label: 'Errors', value: status.errors.length, red: hasErrors },
+        ].map(({ label, value, red }) => (
           <div key={label}>
-            <p className="text-sm font-semibold text-secondary tabular-nums">{value}</p>
+            <p className={cn('text-sm font-semibold tabular-nums', red ? 'text-risk-red/80' : 'text-secondary')}>{value}</p>
             <p className="text-[10px] text-muted font-mono">{label}</p>
           </div>
         ))}
