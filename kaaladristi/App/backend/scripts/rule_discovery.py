@@ -80,6 +80,75 @@ def get_panchak_nakshatras(nakshatra_positions_names):
     return set(nakshatra_positions_names[22:27])
 
 
+# ── Transit grouping ──────────────────────────────────────────────────────────
+
+# Rule types whose signals should be grouped into contiguous transit periods
+TRANSIT_GROUPED_TYPES: frozenset = frozenset({
+    'planet_transit', 'planet_state', 'vedh', 'planet_conjunction', 'planet_manifestation',
+})
+# Rule types that remain as individual daily signals (no transit grouping)
+DAILY_ONLY_TYPES: frozenset = frozenset({
+    'nakshatra_vara', 'tithi_alone', 'eclipse', 'seasonal',
+})
+
+
+def should_group_transits(rule) -> bool:
+    """Return True if consecutive signals for this rule should be grouped into transits."""
+    rt = rule['rule_type']
+    if rt in TRANSIT_GROUPED_TYPES:
+        return True
+    # compound rules that represent a planet in a sign are also transit-like
+    if rt == 'compound' and 'sign' in (rule.get('conditions') or {}):
+        return True
+    return False
+
+
+def detect_transits(conn, rule, dates_with_snapshots: list) -> list:
+    """
+    Group consecutive signal dates (gap ≤ 4 calendar days) into transit periods.
+    Gap ≤ 4 covers Friday→Monday and single-day public holidays without false splits.
+    Returns list of dicts: {start_date, end_date, conditions_snapshot}.
+    """
+    if not dates_with_snapshots:
+        return []
+
+    sorted_rows = sorted(dates_with_snapshots, key=lambda x: x[0])
+    transits = []
+
+    start_date, snapshot = sorted_rows[0][0], sorted_rows[0][1]
+    end_date = start_date
+
+    for d, snap in sorted_rows[1:]:
+        gap = (d - end_date).days
+        if gap <= 4:
+            end_date = d
+        else:
+            transits.append({'start_date': start_date, 'end_date': end_date,
+                              'conditions_snapshot': snapshot})
+            start_date, end_date, snapshot = d, d, snap
+
+    transits.append({'start_date': start_date, 'end_date': end_date,
+                     'conditions_snapshot': snapshot})
+    return transits
+
+
+def insert_transits(conn, rule, transits: list) -> int:
+    """Insert detected transits into km_rule_transits. Returns count inserted."""
+    if not transits:
+        return 0
+    cur = conn.cursor()
+    inserted = 0
+    for t in transits:
+        cur.execute("""
+            INSERT INTO km_rule_transits (rule_id, start_date, end_date, conditions_snapshot)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (rule_id, start_date) DO NOTHING
+        """, (rule['id'], t['start_date'], t['end_date'],
+              json.dumps(t['conditions_snapshot'])))
+        inserted += cur.rowcount
+    return inserted
+
+
 # ── Phase 2 rules — not yet implemented ────────────────────────────────────────
 # These rule codes exist in km_astro_rule_master (data_source='available') but
 # require computation logic not yet built.  They return [] without error.
@@ -1063,6 +1132,18 @@ def main(year_filter=None):
 
             conn.commit()
             total_inserted += inserted
+
+            # Group signals into transit periods for transit-type rules
+            if rows and should_group_transits(rule):
+                try:
+                    transits = detect_transits(conn, rule, rows)
+                    transit_ins = insert_transits(conn, rule, transits)
+                    conn.commit()
+                    if transit_ins:
+                        pass  # counted silently
+                except Exception as te:
+                    print(f"  TRANSIT ERROR rule {rule['rule_code']}: {te}")
+                    conn.rollback()
 
             if (i + 1) % 20 == 0:
                 print(f"  Processed {i+1}/{len(rules)} rules | Signals so far: {total_inserted}")

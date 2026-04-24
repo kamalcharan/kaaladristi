@@ -1652,18 +1652,58 @@ def discovery_status():
 
 @app.get('/api/discovery/signal-counts')
 def discovery_signal_counts():
-    """Return per-rule signal counts for the Rule List column."""
+    """Return per-rule signal counts plus transit counts for the Rule List column."""
     try:
         conn = _conn()
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT rule_id, COUNT(*) AS count FROM km_rule_signals GROUP BY rule_id"
             )
-            rows = cur.fetchall()
+            signal_rows = cur.fetchall()
+            cur.execute(
+                "SELECT rule_id, COUNT(*) AS total, "
+                "COUNT(*) FILTER (WHERE end_date <= CURRENT_DATE) AS historical "
+                "FROM km_rule_transits GROUP BY rule_id"
+            )
+            transit_rows = cur.fetchall()
         conn.close()
-        return [{'rule_id': r[0], 'count': r[1]} for r in rows]
+        transit_map = {r[0]: {'total': r[1], 'historical': r[2]} for r in transit_rows}
+        return [
+            {
+                'rule_id': r[0],
+                'count': r[1],
+                'transit_total': transit_map.get(r[0], {}).get('total', 0),
+                'transit_historical': transit_map.get(r[0], {}).get('historical', 0),
+            }
+            for r in signal_rows
+        ]
     except Exception as exc:
         raise HTTPException(500, f'Signal counts query failed: {exc}')
+
+
+@app.get('/api/discovery/transit-counts')
+def discovery_transit_counts():
+    """Return per-rule transit counts (historical and future) for the Rule List column."""
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    rule_id,
+                    COUNT(*)                                          AS total,
+                    COUNT(*) FILTER (WHERE end_date <= CURRENT_DATE) AS historical,
+                    COUNT(*) FILTER (WHERE start_date > CURRENT_DATE) AS future
+                FROM km_rule_transits
+                GROUP BY rule_id
+            """)
+            rows = cur.fetchall()
+        conn.close()
+        return [
+            {'rule_id': r[0], 'total': r[1], 'historical': r[2], 'future': r[3]}
+            for r in rows
+        ]
+    except Exception as exc:
+        raise HTTPException(500, f'Transit counts query failed: {exc}')
 
 
 @app.post('/api/discovery/cancel')
@@ -1734,9 +1774,11 @@ def _run_confidence_bg():
 
     try:
         from scripts.confidence_scoring import (  # noqa: PLC0415
-            build_nifty_returns,
-            update_signals_returns,
-            compute_confidence,
+            build_nifty_close_map,
+            load_rule_outcome_map,
+            update_transit_returns,
+            compute_confidence_from_transits,
+            compute_yearly_breakdown,
         )
     except Exception as exc:
         log.error(f'Confidence import failed: {exc}')
@@ -1751,12 +1793,14 @@ def _run_confidence_bg():
         return
 
     try:
-        nifty_returns = build_nifty_returns(conn)
-        scored = update_signals_returns(conn, nifty_returns)
-        upserted = compute_confidence(conn)
+        close_map = build_nifty_close_map(conn)
+        rule_outcome_map = load_rule_outcome_map(conn)
+        scored = update_transit_returns(conn, close_map, rule_outcome_map)
+        upserted = compute_confidence_from_transits(conn)
+        compute_yearly_breakdown(conn)
         _confidence_state['signals_scored'] = scored
         _confidence_state['rules_upserted'] = upserted
-        log.info(f'Confidence done — {scored} signals scored, {upserted} rules upserted')
+        log.info(f'Confidence done — {scored} transits scored, {upserted} rules upserted')
     except Exception as exc:
         log.error(f'Confidence scoring failed: {exc}')
         _confidence_state['error'] = str(exc)
@@ -1788,16 +1832,13 @@ def confidence_status():
 
 @app.get('/api/confidence/summary')
 def confidence_summary():
-    """
-    Return per-rule confidence scores joined with rule metadata.
-    Ordered by confidence_score DESC.
-    """
+    """Return per-rule confidence scores joined with rule metadata. Ordered by confidence DESC."""
     try:
         conn = _conn()
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT
-                    r.id          AS rule_id,
+                    r.id              AS rule_id,
                     r.rule_code,
                     r.display_name,
                     r.outcome,
@@ -1805,6 +1846,13 @@ def confidence_summary():
                     c.total_occurrences,
                     c.matched_count,
                     c.confidence_score,
+                    c.avg_return_all,
+                    c.avg_return_matched,
+                    c.avg_return_unmatched,
+                    c.best_return,
+                    c.worst_return,
+                    c.avg_duration_days,
+                    c.historical_transits,
                     c.last_computed_at
                 FROM km_rule_confidence c
                 JOIN km_astro_rule_master r ON c.rule_id = r.id
@@ -1815,4 +1863,23 @@ def confidence_summary():
         return rows
     except Exception as exc:
         raise HTTPException(500, f'Confidence summary query failed: {exc}')
+
+
+@app.get('/api/confidence/yearly/{rule_id}')
+def confidence_yearly(rule_id: int):
+    """Return year-by-year win-rate breakdown for a single rule."""
+    try:
+        conn = _conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT year, transits, matched, win_pct, avg_return, avg_duration
+                FROM km_rule_confidence_yearly
+                WHERE rule_id = %s
+                ORDER BY year DESC
+            """, (rule_id,))
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except Exception as exc:
+        raise HTTPException(500, f'Yearly confidence query failed: {exc}')
 

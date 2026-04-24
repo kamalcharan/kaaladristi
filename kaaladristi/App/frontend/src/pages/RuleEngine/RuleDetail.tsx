@@ -17,7 +17,32 @@ interface RuleConfidence {
   total_occurrences: number | null;
   matched_count: number | null;
   confidence_score: number | null;
+  avg_return_all: number | null;
+  avg_return_matched: number | null;
+  avg_return_unmatched: number | null;
+  best_return: number | null;
+  worst_return: number | null;
+  avg_duration_days: number | null;
+  historical_transits: number | null;
   last_computed_at: string | null;
+}
+
+interface RuleTransit {
+  id: number;
+  start_date: string;
+  end_date: string;
+  duration_days: number;
+  nifty_return_pct: number | null;
+  matched: boolean | null;
+}
+
+interface RuleConfidenceYearly {
+  year: number;
+  transits: number;
+  matched: number;
+  win_pct: number | null;
+  avg_return: number | null;
+  avg_duration: number | null;
 }
 
 interface RuleSignal {
@@ -70,7 +95,12 @@ async function fetchRule(id: number): Promise<AstroRuleFull> {
 
 async function fetchRuleConfidence(ruleId: number): Promise<RuleConfidence | null> {
   const { data, error } = await from('km_rule_confidence')
-    .select('rule_id,total_occurrences,matched_count,confidence_score,last_computed_at')
+    .select([
+      'rule_id', 'total_occurrences', 'matched_count', 'confidence_score',
+      'avg_return_all', 'avg_return_matched', 'avg_return_unmatched',
+      'best_return', 'worst_return', 'avg_duration_days', 'historical_transits',
+      'last_computed_at',
+    ].join(','))
     .eq('rule_id', ruleId)
     .maybeSingle()
     .execute();
@@ -87,6 +117,39 @@ async function fetchRuleSignals(ruleId: number): Promise<RuleSignal[]> {
     .execute();
   if (error) throw new Error(error.message);
   return (data as RuleSignal[]) ?? [];
+}
+
+async function fetchRuleTransits(ruleId: number): Promise<RuleTransit[]> {
+  const { data, error } = await from('km_rule_transits')
+    .select('id,start_date,end_date,duration_days,nifty_return_pct,matched')
+    .eq('rule_id', ruleId)
+    .lte('end_date', new Date().toISOString().slice(0, 10))
+    .order('start_date', { ascending: false })
+    .limit(20)
+    .execute();
+  if (error) throw new Error(error.message);
+  return (data as RuleTransit[]) ?? [];
+}
+
+async function fetchUpcomingTransits(ruleId: number): Promise<RuleTransit[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await from('km_rule_transits')
+    .select('id,start_date,end_date,duration_days,nifty_return_pct,matched')
+    .eq('rule_id', ruleId)
+    .gt('start_date', today)
+    .order('start_date', { ascending: true })
+    .limit(10)
+    .execute();
+  if (error) throw new Error(error.message);
+  return (data as RuleTransit[]) ?? [];
+}
+
+const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
+
+async function fetchYearlyConfidence(ruleId: number): Promise<RuleConfidenceYearly[]> {
+  const res = await fetch(`${PIPELINE_API}/api/confidence/yearly/${ruleId}`);
+  if (!res.ok) throw new Error(`Yearly confidence fetch failed: ${res.status}`);
+  return res.json();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -140,32 +203,155 @@ function ConditionsBlock({ conditions }: { conditions: Record<string, unknown> |
   );
 }
 
-function ConfidenceCards({ conf }: { conf: RuleConfidence | null }) {
-  const items = [
-    { label: 'Occurrences', value: conf?.total_occurrences ?? null, fmt: (v: number) => v.toLocaleString(), color: (_v: number | null) => 'text-secondary' },
-    { label: 'Matched',     value: conf?.matched_count ?? null,     fmt: (v: number) => v.toLocaleString(), color: (_v: number | null) => 'text-secondary' },
+function confidenceColor(score: number | null): string {
+  if (score == null) return 'text-muted';
+  if (score >= 70) return 'text-risk-green';
+  if (score >= 60) return 'text-risk-amber';
+  if (score >= 50) return 'text-yellow-400';
+  return 'text-risk-red/70';
+}
+
+function returnColor(v: number | null): string {
+  if (v == null) return 'text-muted';
+  return v >= 0 ? 'text-risk-green' : 'text-risk-red/80';
+}
+
+function fmtPct(v: number | null, decimals = 1): string {
+  if (v == null) return '—';
+  return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
+}
+
+function ConfidenceSummary({ conf }: { conf: RuleConfidence | null }) {
+  const cards = [
     {
-      label: 'Confidence',
-      value: conf?.confidence_score ?? null,
-      fmt:  (v: number) => `${Math.round(v * 100)}%`,
-      color: (v: number | null) => {
-        if (v == null) return 'text-muted';
-        const pct = Math.round(v * 100);
-        return pct >= 65 ? 'text-risk-green' : pct >= 45 ? 'text-risk-amber' : 'text-risk-red/70';
-      },
+      label: 'Transits',
+      value: conf?.historical_transits != null ? String(conf.historical_transits) : '—',
+      color: 'text-secondary',
+    },
+    {
+      label: 'Matched',
+      value: conf?.matched_count != null ? String(conf.matched_count) : '—',
+      color: 'text-secondary',
+    },
+    {
+      label: 'Win Rate',
+      value: conf?.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—',
+      color: confidenceColor(conf?.confidence_score ?? null),
+    },
+    {
+      label: 'Avg Return',
+      value: fmtPct(conf?.avg_return_all ?? null),
+      color: returnColor(conf?.avg_return_all ?? null),
     },
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {items.map(({ label, value, fmt, color }) => (
-        <div key={label} className="flex flex-col items-center justify-center gap-1 py-4 rounded-xl border border-kd-border bg-kd-elevated/40 text-center">
-          <span className={cn('text-2xl font-semibold tabular-nums', color(value as number | null))}>
-            {value != null ? fmt(value as number) : '—'}
-          </span>
-          <span className="text-[11px] text-muted font-mono">{label}</span>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {cards.map(({ label, value, color }) => (
+          <div key={label} className="flex flex-col items-center justify-center gap-1 py-4 rounded-xl border border-kd-border bg-kd-elevated/40 text-center">
+            <span className={cn('text-2xl font-semibold tabular-nums', color)}>{value}</span>
+            <span className="text-[11px] text-muted font-mono">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {conf && (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 rounded-xl border border-kd-border bg-kd-elevated/20 px-4 py-3">
+          {[
+            { label: 'Avg duration', value: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', color: 'text-secondary' },
+            { label: 'When matched', value: fmtPct(conf.avg_return_matched), color: returnColor(conf.avg_return_matched) },
+            { label: 'When missed', value: fmtPct(conf.avg_return_unmatched), color: returnColor(conf.avg_return_unmatched) },
+            { label: 'Best transit', value: fmtPct(conf.best_return), color: returnColor(conf.best_return) },
+            { label: 'Worst transit', value: fmtPct(conf.worst_return), color: returnColor(conf.worst_return) },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="flex flex-col items-center gap-0.5 text-center">
+              <span className={cn('text-sm font-semibold tabular-nums', color)}>{value}</span>
+              <span className="text-[10px] font-mono text-muted">{label}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+    </div>
+  );
+}
+
+function YearlyTable({ rows }: { rows: RuleConfidenceYearly[] }) {
+  if (rows.length === 0) return null;
+  const recent = rows.slice(0, 10);
+  return (
+    <div className="overflow-x-auto rounded-xl border border-kd-border">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b border-kd-border bg-kd-elevated/60">
+            {['Year', 'Transits', 'Matched', 'Win%', 'Avg Return', 'Avg Days'].map(h => (
+              <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {recent.map(row => (
+            <tr key={row.year} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
+              <td className="px-3 py-2 text-xs font-mono text-secondary tabular-nums">{row.year}</td>
+              <td className="px-3 py-2 text-xs tabular-nums text-center">{row.transits}</td>
+              <td className="px-3 py-2 text-xs tabular-nums text-center">{row.matched}</td>
+              <td className="px-3 py-2 text-xs tabular-nums text-center">
+                <span className={confidenceColor(row.win_pct)}>
+                  {row.win_pct != null ? `${row.win_pct.toFixed(1)}%` : '—'}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-xs tabular-nums text-center">
+                <span className={returnColor(row.avg_return)}>{fmtPct(row.avg_return)}</span>
+              </td>
+              <td className="px-3 py-2 text-xs tabular-nums text-center text-muted">
+                {row.avg_duration != null ? `${row.avg_duration.toFixed(1)}d` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TransitTable({ transits, upcoming = false }: { transits: RuleTransit[]; upcoming?: boolean }) {
+  if (transits.length === 0) return null;
+  return (
+    <div className="overflow-x-auto rounded-xl border border-kd-border">
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b border-kd-border bg-kd-elevated/60">
+            {['Start', 'End', 'Days', ...(upcoming ? [] : ['Return', 'Matched'])].map(h => (
+              <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {transits.map(t => (
+            <tr key={t.id} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
+              <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{t.start_date}</td>
+              <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{t.end_date}</td>
+              <td className="px-3 py-2 text-xs tabular-nums text-center text-muted">{t.duration_days}</td>
+              {!upcoming && (
+                <>
+                  <td className="px-3 py-2 text-xs tabular-nums text-center">
+                    <span className={returnColor(t.nifty_return_pct)}>{fmtPct(t.nifty_return_pct)}</span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-center">
+                    <span className={t.matched === true ? 'text-risk-green' : t.matched === false ? 'text-risk-red/60' : 'text-muted'}>
+                      {t.matched === true ? '✓' : t.matched === false ? '✗' : '—'}
+                    </span>
+                  </td>
+                </>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -216,6 +402,27 @@ export default function RuleDetail() {
     queryFn: () => fetchRuleSignals(ruleId),
     enabled: !isNaN(ruleId),
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: transits = [] } = useQuery({
+    queryKey: ['rule-engine', 'transits', ruleId],
+    queryFn: () => fetchRuleTransits(ruleId),
+    enabled: !isNaN(ruleId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: upcomingTransits = [] } = useQuery({
+    queryKey: ['rule-engine', 'transits-upcoming', ruleId],
+    queryFn: () => fetchUpcomingTransits(ruleId),
+    enabled: !isNaN(ruleId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: yearlyConf = [] } = useQuery({
+    queryKey: ['rule-engine', 'confidence-yearly', ruleId],
+    queryFn: () => fetchYearlyConfidence(ruleId),
+    enabled: !isNaN(ruleId),
+    staleTime: 10 * 60 * 1000,
   });
 
   // ── Edit mutation ──
@@ -426,7 +633,7 @@ export default function RuleDetail() {
           </div>
         </section>
 
-        {/* Confidence */}
+        {/* Backtesting */}
         <section>
           <h2 className="text-sm font-medium text-secondary mb-2">
             Backtesting
@@ -436,23 +643,48 @@ export default function RuleDetail() {
               </span>
             )}
           </h2>
-          <ConfidenceCards conf={conf} />
-          {!conf && (
-            <p className="text-xs text-muted text-center mt-2">
-              Run <span className="font-mono">rule_discovery.py</span> to populate backtesting data
-            </p>
+          {conf ? (
+            <ConfidenceSummary conf={conf} />
+          ) : (
+            <div className="flex items-center justify-center h-20 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
+              Run confidence scoring to populate backtesting data
+            </div>
           )}
         </section>
 
-        {/* Occurrences */}
+        {/* Year-by-year breakdown */}
+        {yearlyConf.length > 0 && (
+          <section>
+            <h2 className="text-sm font-medium text-secondary mb-2">
+              Year-by-Year
+              <span className="ml-2 text-[11px] font-mono text-muted font-normal">last {Math.min(yearlyConf.length, 10)} years</span>
+            </h2>
+            <YearlyTable rows={yearlyConf} />
+          </section>
+        )}
+
+        {/* Upcoming transits */}
+        {upcomingTransits.length > 0 && (
+          <section>
+            <h2 className="text-sm font-medium text-secondary mb-2">
+              Upcoming Transits
+              <span className="ml-2 text-[11px] font-mono text-muted font-normal">{upcomingTransits.length} detected</span>
+            </h2>
+            <TransitTable transits={upcomingTransits} upcoming />
+          </section>
+        )}
+
+        {/* Historical transit history */}
         <section>
           <h2 className="text-sm font-medium text-secondary mb-2">
-            Recent Occurrences
-            {signals.length > 0 && (
-              <span className="ml-2 text-[11px] font-mono text-muted font-normal">last {signals.length}</span>
-            )}
+            {transits.length > 0 ? 'Transit History' : 'Signal Occurrences'}
+            <span className="ml-2 text-[11px] font-mono text-muted font-normal">
+              last {transits.length > 0 ? transits.length : signals.length}
+            </span>
           </h2>
-          {signals.length === 0 ? (
+          {transits.length > 0 ? (
+            <TransitTable transits={transits} />
+          ) : signals.length === 0 ? (
             <div className="flex items-center justify-center h-24 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
               No signals recorded — run rule discovery to populate
             </div>
