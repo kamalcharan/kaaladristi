@@ -1608,6 +1608,7 @@ def discovery_run_all(background_tasks: BackgroundTasks):
         raise HTTPException(409, 'A discovery job is already running')
     job_id = str(uuid.uuid4())
     _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
     background_tasks.add_task(_run_discovery_bg, 'all')
     return {'job_id': job_id, 'status': 'started', 'message': 'Full discovery started'}
 
@@ -1634,6 +1635,7 @@ def discovery_run_missing(background_tasks: BackgroundTasks):
 
     job_id = str(uuid.uuid4())
     _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
     background_tasks.add_task(_run_discovery_bg, 'missing')
     return {
         'job_id': job_id,
@@ -1650,6 +1652,7 @@ def discovery_run_single(rule_id: int, background_tasks: BackgroundTasks):
         raise HTTPException(409, 'A discovery job is already running')
     job_id = str(uuid.uuid4())
     _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
     background_tasks.add_task(_run_discovery_bg, 'single', rule_id)
     return {'job_id': job_id, 'status': 'started', 'rule_id': rule_id}
 
@@ -1770,6 +1773,7 @@ def discovery_run_clean(background_tasks: BackgroundTasks):
         raise HTTPException(500, f'Failed to clear signals: {exc}')
     job_id = str(uuid.uuid4())
     _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
     background_tasks.add_task(_run_discovery_bg, 'all')
     return {
         'job_id': job_id,
