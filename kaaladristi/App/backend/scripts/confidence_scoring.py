@@ -21,13 +21,14 @@ TODAY = date.today()
 # ── STEP 1: Build Nifty close-price lookup ─────────────────────────────────────
 
 def build_nifty_close_map(conn) -> dict:
-    """Return {date: close_price} for all Nifty trading dates."""
+    """Return {trade_date: close_price} for all Nifty 50 trading dates."""
     cur = conn.cursor()
     cur.execute("""
-        SELECT date, close
-        FROM km_index_eod
-        WHERE symbol = %s
-        ORDER BY date
+        SELECT e.trade_date, e.close
+        FROM km_index_eod e
+        JOIN km_index_symbols s ON e.index_id = s.id
+        WHERE s.name = %s
+        ORDER BY e.trade_date
     """, (NIFTY_SYMBOL,))
     rows = cur.fetchall()
     close_map = {trade_date: float(close) for trade_date, close in rows if close is not None}
