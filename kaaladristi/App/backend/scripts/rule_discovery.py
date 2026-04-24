@@ -80,14 +80,33 @@ def discover_nakshatra_vara(conn, rule):
             }
             rows.append((row[0], snapshot))
     else:
-        # standard day + nakshatra_lord
+        # standard vara + nakshatra_lord ('day' is a legacy alias for 'vara')
+        day = cond.get('day') or cond.get('vara')
+        nak_lord = cond.get('nakshatra_lord')
+        if not day and not nak_lord:
+            return rows
         cur = conn.cursor()
-        cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
-            FROM km_daily_panchang
-            WHERE vara = %s AND nakshatra_lord = %s
-            AND EXTRACT(DOW FROM date) NOT IN (0,6)
-        """, (cond['day'], cond['nakshatra_lord']))
+        if day and nak_lord:
+            cur.execute("""
+                SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+                FROM km_daily_panchang
+                WHERE vara = %s AND nakshatra_lord = %s
+                AND EXTRACT(DOW FROM date) NOT IN (0,6)
+            """, (day, nak_lord))
+        elif day:
+            cur.execute("""
+                SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+                FROM km_daily_panchang
+                WHERE vara = %s
+                AND EXTRACT(DOW FROM date) NOT IN (0,6)
+            """, (day,))
+        else:
+            cur.execute("""
+                SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+                FROM km_daily_panchang
+                WHERE nakshatra_lord = %s
+                AND EXTRACT(DOW FROM date) NOT IN (0,6)
+            """, (nak_lord,))
         for row in cur.fetchall():
             snapshot = {
                 'vara': row[1], 'nakshatra_lord': row[2],
@@ -218,7 +237,7 @@ def discover_planet_state(conn, rule):
             JOIN km_daily_panchang d ON p.date = d.date
             WHERE p.planet = %s
             AND EXTRACT(DOW FROM p.date) NOT IN (0,6)
-            AND FLOOR(MOD(p.longitude, 30.0) * 9.0 / 10.0) = (p.sign - 1)
+            AND FLOOR(MOD(p.longitude::numeric, 30.0) * 9.0 / 10.0) = (p.sign - 1)
         """
         params = [planet]
         if sign_filter:
@@ -303,7 +322,7 @@ def discover_relative_position(conn, rule):
             JOIN km_planetary_positions p2 ON p1.date = p2.date
             JOIN km_daily_panchang d ON p1.date = d.date
             WHERE p1.planet = 'Mars' AND p2.planet = 'Saturn'
-            AND ((p1.longitude - p2.longitude + 360.0) % 360.0) BETWEEN 28 AND 32
+            AND ((p1.longitude::numeric - p2.longitude::numeric + 360.0) % 360.0) BETWEEN 28 AND 32
             AND EXTRACT(DOW FROM p1.date) NOT IN (0,6)
         """)
         for row in cur.fetchall():
