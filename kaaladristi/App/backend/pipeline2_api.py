@@ -1380,15 +1380,16 @@ def ping():
 # ── Module-level state for the single running discovery job ───────────────────
 
 _discovery_state: dict = {
-    'job_id':          None,
-    'running':         False,
-    'started_at':      None,
-    'finished_at':     None,
-    'rules_total':     0,
-    'rules_done':      0,
-    'signals_inserted': 0,
+    'job_id':            None,
+    'running':           False,
+    'cancel_requested':  False,
+    'started_at':        None,
+    'finished_at':       None,
+    'rules_total':       0,
+    'rules_done':        0,
+    'signals_inserted':  0,
     'current_rule_code': None,
-    'errors':          [],
+    'errors':            [],
 }
 
 # ── Import discovery logic lazily (scripts package, same process) ─────────────
@@ -1456,14 +1457,15 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
 
     job_id = _discovery_state['job_id']
     _discovery_state.update({
-        'running':          True,
-        'started_at':       datetime.utcnow().isoformat(),
-        'finished_at':      None,
-        'rules_total':      0,
-        'rules_done':       0,
-        'signals_inserted': 0,
+        'running':           True,
+        'cancel_requested':  False,
+        'started_at':        datetime.utcnow().isoformat(),
+        'finished_at':       None,
+        'rules_total':       0,
+        'rules_done':        0,
+        'signals_inserted':  0,
         'current_rule_code': None,
-        'errors':           [],
+        'errors':            [],
     })
 
     try:
@@ -1493,6 +1495,12 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
 
         for rule in rules:
+            # Honour cancel requests between rules
+            if _discovery_state['cancel_requested']:
+                log.info(f'Discovery [{mode}] cancelled after {_discovery_state["rules_done"]} rules')
+                _discovery_state['errors'].append({'rule_code': 'CANCELLED', 'error': 'Cancelled by user'})
+                break
+
             _discovery_state['current_rule_code'] = rule['rule_code']
 
             # Ensure conditions is a dict (may come from DB as dict or str)
@@ -1656,4 +1664,38 @@ def discovery_signal_counts():
         return [{'rule_id': r[0], 'count': r[1]} for r in rows]
     except Exception as exc:
         raise HTTPException(500, f'Signal counts query failed: {exc}')
+
+
+@app.post('/api/discovery/cancel')
+def discovery_cancel():
+    """Request cancellation of the currently running discovery job."""
+    if not _discovery_state['running']:
+        raise HTTPException(409, 'No discovery job is currently running')
+    _discovery_state['cancel_requested'] = True
+    return {'status': 'cancel_requested', 'job_id': _discovery_state['job_id']}
+
+
+@app.post('/api/discovery/run-clean')
+def discovery_run_clean(background_tasks: BackgroundTasks):
+    """Delete ALL existing signals then run full discovery from scratch."""
+    if _discovery_state['running']:
+        raise HTTPException(409, 'A discovery job is already running')
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_rule_signals')
+            deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        raise HTTPException(500, f'Failed to clear signals: {exc}')
+    job_id = str(uuid.uuid4())
+    _discovery_state['job_id'] = job_id
+    background_tasks.add_task(_run_discovery_bg, 'all')
+    return {
+        'job_id': job_id,
+        'status': 'started',
+        'message': f'Cleared {deleted:,} signals — full discovery started',
+        'signals_deleted': deleted,
+    }
 

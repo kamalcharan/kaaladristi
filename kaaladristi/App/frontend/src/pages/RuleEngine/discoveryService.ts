@@ -5,6 +5,7 @@ const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://l
 export interface DiscoveryStatus {
   job_id: string | null;
   running: boolean;
+  cancel_requested: boolean;
   started_at: string | null;
   finished_at: string | null;
   rules_total: number;
@@ -63,5 +64,15 @@ export async function fetchDiscoveryStatus(): Promise<DiscoveryStatus> {
 export async function fetchSignalCounts(): Promise<SignalCount[]> {
   const res = await fetch(`${PIPELINE_API}/api/discovery/signal-counts`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function cancelDiscovery(): Promise<{ status: string }> {
+  const res = await postJson(`${PIPELINE_API}/api/discovery/cancel`);
+  return res.json();
+}
+
+export async function runCleanDiscovery(): Promise<{ job_id: string; signals_deleted: number }> {
+  const res = await postJson(`${PIPELINE_API}/api/discovery/run-clean`);
   return res.json();
 }
