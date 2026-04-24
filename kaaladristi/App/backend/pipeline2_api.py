@@ -1799,7 +1799,7 @@ def discovery_run_clean(background_tasks: BackgroundTasks):
     }
 
 
-@app.delete('/api/discovery/rule/{rule_id}/signals')
+@app.post('/api/discovery/rule/{rule_id}/drop-signals')
 def discovery_drop_rule_signals(rule_id: int):
     """Delete all signals and transits for a single rule_id, resetting it for re-discovery."""
     if _discovery_state['running']:

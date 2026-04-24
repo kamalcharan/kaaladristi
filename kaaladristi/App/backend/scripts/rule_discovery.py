@@ -958,6 +958,9 @@ def discover_sign_planet(conn, rule):
     rows = []
     sign = cond.get('sign')
     planets = cond.get('planets_present', [])
+    # Normalize: may be stored as a bare string "Venus" instead of ["Venus"]
+    if isinstance(planets, str):
+        planets = [planets]
     if not sign or not planets:
         return rows
 

@@ -87,11 +87,7 @@ export async function computeConfidence(): Promise<{ job_id: string }> {
 }
 
 export async function dropRuleSignals(ruleId: number): Promise<{ signals_deleted: number; transits_deleted: number }> {
-  const res = await fetch(`${PIPELINE_API}/api/discovery/rule/${ruleId}/signals`, { method: 'DELETE' });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? `HTTP ${res.status}`);
-  }
+  const res = await postJson(`${PIPELINE_API}/api/discovery/rule/${ruleId}/drop-signals`);
   return res.json();
 }
 
