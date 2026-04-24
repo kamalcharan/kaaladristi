@@ -1134,18 +1134,13 @@ def main(year_filter=None):
             total_inserted += inserted
 
             # Group signals into transit periods for transit-type rules
-            if rows and should_group_transits(rule):
-                try:
-                    transits = detect_transits(conn, rule, rows)
-                    transit_ins = insert_transits(conn, rule, transits)
-                    conn.commit()
-                    if transit_ins:
-                        pass  # counted silently
-                except Exception as te:
-                    print(f"  TRANSIT ERROR rule {rule['rule_code']}: {te}")
-                    conn.rollback()
-
-            if (i + 1) % 20 == 0:
+            print(f"  {rule['rule_code']}: should_group={should_group_transits(rule)}")
+            if should_group_transits(rule):
+                transits = detect_transits(conn, rule, rows)
+                n_transits = insert_transits(conn, rule, transits)
+                conn.commit()
+                print(f"  {rule['rule_code']}: {len(rows)} signals, {n_transits} transits")
+            elif (i + 1) % 20 == 0:
                 print(f"  Processed {i+1}/{len(rules)} rules | Signals so far: {total_inserted}")
 
         except Exception as e:
