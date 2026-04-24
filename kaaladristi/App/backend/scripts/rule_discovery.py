@@ -1102,6 +1102,7 @@ def main(year_filter=None):
 
     print(f"Loaded {len(rules)} active available rules")
     total_inserted = 0
+    total_transits = 0
     total_errors = 0
 
     for i, rule in enumerate(rules):
@@ -1133,15 +1134,22 @@ def main(year_filter=None):
             conn.commit()
             total_inserted += inserted
 
-            # Group signals into transit periods for transit-type rules
-            print(f"  {rule['rule_code']}: should_group={should_group_transits(rule)}")
             if should_group_transits(rule):
                 transits = detect_transits(conn, rule, rows)
-                n_transits = insert_transits(conn, rule, transits)
-                conn.commit()
-                print(f"  {rule['rule_code']}: {len(rows)} signals, {n_transits} transits")
-            elif (i + 1) % 20 == 0:
-                print(f"  Processed {i+1}/{len(rules)} rules | Signals so far: {total_inserted}")
+                if transits:
+                    n_transits = insert_transits(conn, rule, transits)
+                    conn.commit()
+                else:
+                    n_transits = 0
+            else:
+                n_transits = 0
+                transits = []
+
+            total_transits += n_transits
+
+            if (i + 1) % 10 == 0:
+                print(f"  [{i+1}/{len(rules)}] {rule['rule_code']}: "
+                      f"{len(rows)} signals, {n_transits} transits")
 
         except Exception as e:
             print(f"  ERROR rule {rule['rule_code']}: {e}")
@@ -1149,7 +1157,12 @@ def main(year_filter=None):
             total_errors += 1
 
     elapsed = time.time() - start_time
-    print(f"\nDone. Rules processed: {len(rules)} | Signals inserted: {total_inserted} | Errors: {total_errors} | Time: {elapsed:.1f}s")
+    print(f"\nDone.")
+    print(f"  Rules processed:  {len(rules)}")
+    print(f"  Signals inserted: {total_inserted}")
+    print(f"  Transits created: {total_transits}")
+    print(f"  Errors:           {total_errors}")
+    print(f"  Time:             {elapsed:.1f}s")
     conn.close()
 
 
