@@ -145,10 +145,11 @@ async function fetchUpcomingSignals(ruleId: number): Promise<RuleSignal[]> {
 }
 
 async function fetchRuleTransits(ruleId: number): Promise<RuleTransit[]> {
+  const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await from('km_rule_transits')
     .select('id,start_date,end_date,duration_days,nifty_return_pct,matched')
     .eq('rule_id', ruleId)
-    .lte('end_date', new Date().toISOString().slice(0, 10))
+    .lte('start_date', today)   // include ongoing transits (end_date may be in future)
     .order('start_date', { ascending: false })
     .limit(20)
     .execute();

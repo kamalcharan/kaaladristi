@@ -184,8 +184,12 @@ export default function JobMonitor() {
                       <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total || '?'}</p>
                     </div>
                     <div>
-                      <p className="text-muted">Signals inserted</p>
+                      <p className="text-muted">Signals</p>
                       <p className="text-secondary font-mono">{discovery.signals_inserted.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted">Transits</p>
+                      <p className="text-secondary font-mono">{(discovery.transits_inserted ?? 0).toLocaleString()}</p>
                     </div>
                     {discovery.current_rule_code && (
                       <div className="col-span-2">
@@ -210,7 +214,7 @@ export default function JobMonitor() {
 
               {!discoveryRunning && discovery?.finished_at && (
                 <div className="text-[11px] text-muted space-y-0.5">
-                  <p>{discovery.signals_inserted.toLocaleString()} signals inserted · {discovery.rules_done} rules</p>
+                  <p>{discovery.signals_inserted.toLocaleString()} signals · {(discovery.transits_inserted ?? 0).toLocaleString()} transits · {discovery.rules_done} rules</p>
                   {(discovery.errors?.length ?? 0) > 0 && (
                     <p className="text-risk-red/70">{discovery.errors.length} error(s)</p>
                   )}

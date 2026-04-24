@@ -1393,6 +1393,7 @@ _discovery_state: dict = {
     'rules_total':           0,
     'rules_done':            0,
     'signals_inserted':      0,
+    'transits_inserted':     0,
     'current_rule_code':     None,
     'phase':                 None,
     'errors':                [],
@@ -1473,6 +1474,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         'rules_total':       0,
         'rules_done':        0,
         'signals_inserted':  0,
+        'transits_inserted': 0,
         'current_rule_code': None,
         'errors':            [],
     })
@@ -1564,8 +1566,9 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                 if matched_rows and should_group_transits(rule):
                     rule_transits = detect_transits(conn, rule, matched_rows)
                     if rule_transits:
-                        insert_transits(conn, rule, rule_transits)
+                        n_tr = insert_transits(conn, rule, rule_transits)
                         conn.commit()
+                        _discovery_state['transits_inserted'] += n_tr
 
             except Exception as exc:
                 log.error(f"Discovery error rule {rule['rule_code']}: {exc}")
