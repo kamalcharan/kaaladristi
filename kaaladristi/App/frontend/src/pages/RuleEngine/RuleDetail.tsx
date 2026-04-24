@@ -109,11 +109,26 @@ async function fetchRuleConfidence(ruleId: number): Promise<RuleConfidence | nul
 }
 
 async function fetchRuleSignals(ruleId: number): Promise<RuleSignal[]> {
+  const today = new Date().toISOString().split('T')[0];
   const { data, error } = await from('km_rule_signals')
     .select('id,date,signal,strength,details,matched')
     .eq('rule_id', ruleId)
+    .lte('date', today)
     .order('date', { ascending: false })
     .limit(50)
+    .execute();
+  if (error) throw new Error(error.message);
+  return (data as RuleSignal[]) ?? [];
+}
+
+async function fetchUpcomingSignals(ruleId: number): Promise<RuleSignal[]> {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await from('km_rule_signals')
+    .select('id,date,signal,strength,details,matched')
+    .eq('rule_id', ruleId)
+    .gt('date', today)
+    .order('date', { ascending: true })
+    .limit(5)
     .execute();
   if (error) throw new Error(error.message);
   return (data as RuleSignal[]) ?? [];
@@ -406,6 +421,13 @@ export default function RuleDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: upcomingSignals = [] } = useQuery({
+    queryKey: ['rule-engine', 'signals-upcoming', ruleId],
+    queryFn: () => fetchUpcomingSignals(ruleId),
+    enabled: !isNaN(ruleId),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: transits = [] } = useQuery({
     queryKey: ['rule-engine', 'transits', ruleId],
     queryFn: () => fetchRuleTransits(ruleId),
@@ -443,6 +465,7 @@ export default function RuleDetail() {
     // Job finished — stop polling and refresh rule data
     setTrackingDiscovery(false);
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'signals-upcoming', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'transits', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'transits-upcoming', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence', ruleId] });
@@ -706,13 +729,15 @@ export default function RuleDetail() {
           </section>
         )}
 
-        {/* Historical transit history */}
+        {/* Historical occurrences / transit history */}
         <section>
           <h2 className="text-sm font-medium text-secondary mb-2">
-            {transits.length > 0 ? 'Transit History' : 'Signal Occurrences'}
-            <span className="ml-2 text-[11px] font-mono text-muted font-normal">
-              last {transits.length > 0 ? transits.length : signals.length}
-            </span>
+            {transits.length > 0 ? 'Transit History' : 'Historical Occurrences (last 50)'}
+            {(transits.length > 0 || signals.length > 0) && (
+              <span className="ml-2 text-[11px] font-mono text-muted font-normal">
+                last {transits.length > 0 ? transits.length : signals.length}
+              </span>
+            )}
           </h2>
           {transits.length > 0 ? (
             <TransitTable transits={transits} />
@@ -750,6 +775,31 @@ export default function RuleDetail() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </section>
+
+        {/* Upcoming signals */}
+        <section>
+          <h2 className="text-sm font-medium text-secondary mb-2">Upcoming Signals</h2>
+          {upcomingSignals.length === 0 ? (
+            <p className="text-xs text-muted px-1">No upcoming signals in data range</p>
+          ) : (
+            <div className="space-y-1">
+              <p className="text-xs text-secondary px-1">
+                Next occurrence:{' '}
+                <span className="text-accent-indigo font-mono">
+                  {new Date(upcomingSignals[0].date + 'T00:00:00').toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                  })}
+                </span>
+              </p>
+              {upcomingSignals.length > 1 && (
+                <p className="text-[11px] font-mono text-muted px-1">
+                  +{upcomingSignals.length - 1} more within range:{' '}
+                  {upcomingSignals.slice(1).map(s => s.date).join(', ')}
+                </p>
+              )}
             </div>
           )}
         </section>
