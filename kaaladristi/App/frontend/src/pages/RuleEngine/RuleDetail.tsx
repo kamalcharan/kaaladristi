@@ -456,8 +456,6 @@ export default function RuleDetail() {
     }
   }, [discoveryStatus, trackingDiscovery, ruleId, qc, toast]);
 
-  const isDiscoveryRunning = discoverMutation.isPending || trackingDiscovery;
-
   // ── Edit mutation ──
   const editMutation = useMutation({
     mutationFn: (patch: Parameters<typeof updateRule>[1]) => updateRule(ruleId, patch),
@@ -510,6 +508,8 @@ export default function RuleDetail() {
     },
     onError: (err: Error) => toast('error', err.message),
   });
+
+  const isDiscoveryRunning = discoverMutation.isPending || trackingDiscovery;
 
   const handleDelete = () => {
     if (deleteArmed) {
