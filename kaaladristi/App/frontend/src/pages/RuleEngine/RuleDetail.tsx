@@ -162,7 +162,7 @@ async function fetchUpcomingTransits(ruleId: number): Promise<RuleTransit[]> {
     .eq('rule_id', ruleId)
     .gt('start_date', today)
     .order('start_date', { ascending: true })
-    .limit(10)
+    .limit(3)
     .execute();
   if (error) throw new Error(error.message);
   return (data as RuleTransit[]) ?? [];
@@ -245,27 +245,29 @@ function fmtPct(v: number | null, decimals = 1): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
 }
 
-function ConfidenceSummary({ conf }: { conf: RuleConfidence | null }) {
+function ConfidenceSummary({ conf }: { conf: RuleConfidence }) {
   const cards = [
     {
-      label: 'Transits',
-      value: conf?.historical_transits != null ? String(conf.historical_transits) : '—',
+      label: 'Historical Transits',
+      value: conf.historical_transits != null ? String(conf.historical_transits) : '—',
       color: 'text-secondary',
     },
     {
       label: 'Matched',
-      value: conf?.matched_count != null ? String(conf.matched_count) : '—',
+      value: conf.matched_count != null && conf.total_occurrences != null
+        ? `${conf.matched_count}/${conf.total_occurrences}`
+        : conf.matched_count != null ? String(conf.matched_count) : '—',
       color: 'text-secondary',
     },
     {
-      label: 'Win Rate',
-      value: conf?.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—',
-      color: confidenceColor(conf?.confidence_score ?? null),
+      label: 'Confidence Score',
+      value: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—',
+      color: confidenceColor(conf.confidence_score),
     },
     {
       label: 'Avg Return',
-      value: fmtPct(conf?.avg_return_all ?? null),
-      color: returnColor(conf?.avg_return_all ?? null),
+      value: fmtPct(conf.avg_return_all),
+      color: returnColor(conf.avg_return_all),
     },
   ];
 
@@ -280,14 +282,12 @@ function ConfidenceSummary({ conf }: { conf: RuleConfidence | null }) {
         ))}
       </div>
 
-      {conf && (
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 rounded-xl border border-kd-border bg-kd-elevated/20 px-4 py-3">
+      <div className="rounded-xl border border-kd-border bg-kd-elevated/20 px-4 py-3 space-y-3">
+        <div className="grid grid-cols-3 gap-4">
           {[
+            { label: 'Avg when matched', value: fmtPct(conf.avg_return_matched), color: returnColor(conf.avg_return_matched) },
+            { label: 'Avg when not matched', value: fmtPct(conf.avg_return_unmatched), color: returnColor(conf.avg_return_unmatched) },
             { label: 'Avg duration', value: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', color: 'text-secondary' },
-            { label: 'When matched', value: fmtPct(conf.avg_return_matched), color: returnColor(conf.avg_return_matched) },
-            { label: 'When missed', value: fmtPct(conf.avg_return_unmatched), color: returnColor(conf.avg_return_unmatched) },
-            { label: 'Best transit', value: fmtPct(conf.best_return), color: returnColor(conf.best_return) },
-            { label: 'Worst transit', value: fmtPct(conf.worst_return), color: returnColor(conf.worst_return) },
           ].map(({ label, value, color }) => (
             <div key={label} className="flex flex-col items-center gap-0.5 text-center">
               <span className={cn('text-sm font-semibold tabular-nums', color)}>{value}</span>
@@ -295,14 +295,26 @@ function ConfidenceSummary({ conf }: { conf: RuleConfidence | null }) {
             </div>
           ))}
         </div>
-      )}
+        <div className="grid grid-cols-3 gap-4 pt-2 border-t border-kd-border/40">
+          {[
+            { label: 'Best transit', value: fmtPct(conf.best_return), color: returnColor(conf.best_return) },
+            { label: 'Worst transit', value: fmtPct(conf.worst_return), color: returnColor(conf.worst_return) },
+            { label: 'Total scored', value: conf.total_occurrences != null ? `${conf.total_occurrences} transits` : '—', color: 'text-muted' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="flex flex-col items-center gap-0.5 text-center">
+              <span className={cn('text-sm font-semibold tabular-nums', color)}>{value}</span>
+              <span className="text-[10px] font-mono text-muted">{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
 function YearlyTable({ rows }: { rows: RuleConfidenceYearly[] }) {
   if (rows.length === 0) return null;
-  const recent = rows.slice(0, 10);
+  const recent = rows.slice(0, 15);
   return (
     <div className="overflow-x-auto rounded-xl border border-kd-border">
       <table className="w-full text-sm border-collapse">
@@ -376,6 +388,27 @@ function TransitTable({ transits, upcoming = false }: { transits: RuleTransit[];
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function UpcomingTransitCards({ transits }: { transits: RuleTransit[] }) {
+  const shown = transits.slice(0, 3);
+  if (shown.length === 0) {
+    return <p className="text-xs text-muted px-1">No upcoming transits in data range</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {shown.map(t => {
+        const fmt = (iso: string) =>
+          new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return (
+          <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-kd-border bg-kd-elevated/40">
+            <span className="text-sm font-mono text-secondary">{fmt(t.start_date)} – {fmt(t.end_date)}</span>
+            <span className="text-xs text-muted">({t.duration_days} days)</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -717,11 +750,21 @@ export default function RuleDetail() {
               </span>
             )}
           </h2>
-          {conf ? (
+          {conf?.confidence_score != null ? (
             <ConfidenceSummary conf={conf} />
           ) : (
-            <div className="flex items-center justify-center h-20 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
-              Run confidence scoring to populate backtesting data
+            <div className="flex flex-col items-center justify-center gap-3 py-6 rounded-xl border border-kd-border bg-kd-elevated/30">
+              <p className="text-sm text-muted">Run discovery and confidence scoring to populate data</p>
+              <button
+                onClick={() => discoverMutation.mutate()}
+                disabled={isDiscoveryRunning}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all disabled:opacity-50"
+              >
+                {isDiscoveryRunning
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Play className="w-3.5 h-3.5" />}
+                {isDiscoveryRunning ? 'Running…' : 'Run Discovery'}
+              </button>
             </div>
           )}
         </section>
@@ -731,24 +774,31 @@ export default function RuleDetail() {
           <section>
             <h2 className="text-sm font-medium text-secondary mb-2">
               Year-by-Year
-              <span className="ml-2 text-[11px] font-mono text-muted font-normal">last {Math.min(yearlyConf.length, 10)} years</span>
+              <span className="ml-2 text-[11px] font-mono text-muted font-normal">last {Math.min(yearlyConf.length, 15)} years</span>
             </h2>
             <YearlyTable rows={yearlyConf} />
           </section>
         )}
 
-        {/* Upcoming transits */}
-        {upcomingTransits.length > 0 && (
-          <section>
-            <h2 className="text-sm font-medium text-secondary mb-2">
-              Upcoming Transits
-              <span className="ml-2 text-[11px] font-mono text-muted font-normal">{upcomingTransits.length} detected</span>
-            </h2>
-            <TransitTable transits={upcomingTransits} upcoming />
-          </section>
-        )}
+        {/* Transit History */}
+        <section>
+          <h2 className="text-sm font-medium text-secondary mb-2">Historical Transits (last 20)</h2>
+          {transits.length > 0 ? (
+            <TransitTable transits={transits} />
+          ) : (
+            <div className="flex items-center justify-center h-20 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
+              No transits recorded — run discovery to populate
+            </div>
+          )}
+        </section>
 
-        {/* Historical occurrences / transit history */}
+        {/* Upcoming transits */}
+        <section>
+          <h2 className="text-sm font-medium text-secondary mb-2">Upcoming</h2>
+          <UpcomingTransitCards transits={upcomingTransits} />
+        </section>
+
+        {/* Historical occurrences (signals) */}
         <section>
           {(() => {
             const { rows: signals, total: signalsTotal } = signalsData;
@@ -759,19 +809,15 @@ export default function RuleDetail() {
             return (
               <>
                 <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-sm font-medium text-secondary">
-                    {transits.length > 0 ? 'Transit History' : 'Historical Occurrences'}
-                  </h2>
-                  {transits.length === 0 && signalsTotal > 0 && (
+                  <h2 className="text-sm font-medium text-secondary">Historical Occurrences</h2>
+                  {signalsTotal > 0 && (
                     <span className="text-[11px] font-mono text-muted">
                       Showing {startItem.toLocaleString()}–{endItem.toLocaleString()} of {signalsTotal.toLocaleString()}
                     </span>
                   )}
                 </div>
 
-                {transits.length > 0 ? (
-                  <TransitTable transits={transits} />
-                ) : signals.length === 0 && signalsTotal === 0 ? (
+                {signals.length === 0 && signalsTotal === 0 ? (
                   <div className="flex items-center justify-center h-24 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
                     No signals recorded — run rule discovery to populate
                   </div>
