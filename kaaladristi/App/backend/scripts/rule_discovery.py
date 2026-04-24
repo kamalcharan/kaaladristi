@@ -79,7 +79,35 @@ def get_panchak_nakshatras(nakshatra_positions_names):
     """Panchak = last 5 nakshatras (23-27): indices 22-26 in positions_name order."""
     return set(nakshatra_positions_names[22:27])
 
-# ── DISCOVERY FUNCTIONS ─────────────────────────────────────
+
+# ── Phase 2 rules — not yet implemented ────────────────────────────────────────
+# These rule codes exist in km_astro_rule_master (data_source='available') but
+# require computation logic not yet built.  They return [] without error.
+# When implementing a group, remove its codes from this set.
+NOT_IMPLEMENTED_RULE_CODES: frozenset = frozenset({
+    # Tithi kshay / vriddhi — needs consecutive-day tithi comparison
+    'TTH-KSH-SP-BEA', 'TTH-SEK-BUL', 'TTH-VKK-BUL', 'VOL-KSH-SP-BEA',
+    # Paap Kartari — malefic flanking position logic not built
+    'YOG-JPK-BEA', 'YOG-MPK-MS-BEA', 'YOG-MPK-RS-BEA',
+    # Lunar apogee / perigee / phase events — source from km_astro_calendar
+    'VOL-APO-VOL', 'VOL-BHA-VOL', 'VOL-PER-BEA', 'VOL-PRD-VOL', 'VOL-TOT-TRN',
+    # Seasonal calendar patterns — custom logic not built
+    'SEA-3SAT-SP-BUL', 'SEA-ASE-FRI-BUL',
+    # Eindra Yog inside Panchak — combined panchak + specific yoga
+    'YOG-EIN-PNK-BUL',
+    # Vedh with vedh_by condition (planet IS vedhed by another) — not handled
+    'VDH-JUP-PUS-BUL', 'VDH-RAH-ABH-BUL',
+    # Mercury Manifestation (emergence from combust zone) — not built
+    'TRN-MER-MAN-TRN',
+})
+# Notes on other Phase 2 groups (already return [] from existing type handlers):
+#   D9 navamsa rules (TR-UFN-*, VOL-MRS-PD9-BEA, VOL-MOO-MER-D9-VOL)
+#     → detected by d9_sign / d9_sign_in conditions keys in planet_transit handler
+#   Heliacal rise rules (TRN-VEN-RIS-*, TRN-MER-RIS-*)
+#     → planet_manifestation type without mercury_position → return []
+
+# Vara names used by km_daily_panchang that correspond to weekend days
+_WEEKEND_VARAS: frozenset = frozenset({'Ravi', 'Shani'})  # Sunday, Saturday
 
 def discover_nakshatra_vara(conn, rule):
     """day_nakshatra and day_lord_nak_lord rules"""
@@ -724,26 +752,35 @@ def discover_compound_panchak(conn, rule, panchak_naks):
     # Panchak starts on specific day
     if cond.get('panchak_start_day'):
         start_day = cond['panchak_start_day']
-        # Find first day of each panchak period
+        # LAG must run over ALL days (no weekday filter) so transitions that
+        # fall on weekends are correctly detected rather than attributed to the
+        # next weekday inside the panchak window.
         cur.execute("""
-            WITH panchak_days AS (
+            WITH all_panchak AS (
                 SELECT date, vara, nakshatra_name,
                        LAG(nakshatra_name) OVER (ORDER BY date) as prev_nak
                 FROM km_daily_panchang
                 WHERE nakshatra_name = ANY(%s)
-                AND EXTRACT(DOW FROM date) NOT IN (0,6)
             )
             SELECT date, vara, nakshatra_name
-            FROM panchak_days
-            WHERE prev_nak IS NULL
-               OR prev_nak != ALL(%s)
+            FROM all_panchak
+            WHERE prev_nak IS NULL OR prev_nak != ALL(%s)
         """, (list(panchak_naks), list(panchak_naks)))
         for row in cur.fetchall():
-            if row[1] == start_day:
-                rows.append((row[0], {
-                    'panchak_start_day': row[1],
-                    'first_nakshatra': row[2]
-                }))
+            actual_start = row[0]
+            actual_vara = row[1]
+            if actual_vara != start_day:
+                continue
+            # Carry weekend panchak starts to the following Monday
+            signal_date = actual_start
+            dow = actual_start.weekday()  # Mon=0, Sat=5, Sun=6
+            if dow >= 5:
+                signal_date = actual_start + timedelta(days=(7 - dow))
+            rows.append((signal_date, {
+                'panchak_start_day': actual_vara,
+                'panchak_start_date': str(actual_start),
+                'first_nakshatra': row[2],
+            }))
         return rows
 
     return rows
@@ -759,14 +796,24 @@ def discover_compound_yog(conn, rule):
 
     cur = conn.cursor()
     vara = cond.get('vara')
+    is_weekend_vara = vara in _WEEKEND_VARAS
 
     if vara:
-        cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, yoga_name
-            FROM km_daily_panchang
-            WHERE yoga_name ILIKE %s AND vara = %s
-            AND EXTRACT(DOW FROM date) NOT IN (0,6)
-        """, (f'%{yoga}%', vara))
+        if is_weekend_vara:
+            # Weekend vara (Ravi=Sunday, Shani=Saturday): drop weekday filter
+            # and carry signal date to the following Monday
+            cur.execute("""
+                SELECT date, vara, nakshatra_lord, nakshatra_name, yoga_name
+                FROM km_daily_panchang
+                WHERE yoga_name ILIKE %s AND vara = %s
+            """, (f'%{yoga}%', vara))
+        else:
+            cur.execute("""
+                SELECT date, vara, nakshatra_lord, nakshatra_name, yoga_name
+                FROM km_daily_panchang
+                WHERE yoga_name ILIKE %s AND vara = %s
+                AND EXTRACT(DOW FROM date) NOT IN (0,6)
+            """, (f'%{yoga}%', vara))
     else:
         cur.execute("""
             SELECT date, vara, nakshatra_lord, nakshatra_name, yoga_name
@@ -776,8 +823,14 @@ def discover_compound_yog(conn, rule):
         """, (f'%{yoga}%',))
 
     for row in cur.fetchall():
-        rows.append((row[0], {
-            'yoga': row[4], 'vara': row[1], 'nakshatra_lord': row[2]
+        signal_date = row[0]
+        if is_weekend_vara:
+            dow = signal_date.weekday()  # Mon=0, Sat=5, Sun=6
+            if dow >= 5:
+                signal_date = signal_date + timedelta(days=(7 - dow))
+        rows.append((signal_date, {
+            'yoga': row[4], 'vara': row[1], 'nakshatra_lord': row[2],
+            **(({'yoga_date': str(row[0])}) if is_weekend_vara else {}),
         }))
     return rows
 
@@ -873,6 +926,15 @@ def discover_rule(conn, rule, vedh_map, panchak_naks):
     rt = rule['rule_type']
     cond = rule['conditions'] or {}
     rc = rule['rule_code']
+
+    # Phase 2 rules — not yet implemented, skip cleanly
+    if rc in NOT_IMPLEMENTED_RULE_CODES:
+        return []
+
+    # VOL-SCW-BEA conditions may not carry the standard relative-position keys
+    # that would otherwise route it to discover_relative_position — force it directly
+    if rc == 'VOL-SCW-BEA':
+        return discover_relative_position(conn, rule)
 
     if rt == 'nakshatra_vara':
         # DN-SAT-SP-BUL and similar: tithi_base+paksha+vara combos route to tithi discovery
