@@ -1459,6 +1459,7 @@ def _load_rules_for_discovery(conn, mode: str, rule_id: int | None = None) -> li
 
 def _run_discovery_bg(mode: str, rule_id: int | None = None):
     """Background task: run rule discovery and update _discovery_state."""
+    print(f"DEBUG: background task started, mode={mode}", flush=True)
     import json as _json  # noqa: PLC0415
 
     global _discovery_state
@@ -1481,33 +1482,43 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         'errors':            [],
     })
 
+    print("DEBUG: about to import rule_discovery", flush=True)
     try:
         (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras,
          should_group_transits, detect_transits, insert_transits) = _import_discover_rule()
     except ImportError as exc:
+        print(f"DEBUG: import failed: {exc}", flush=True)
         log.error(f'Discovery import failed: {exc}')
         _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
         _discovery_state['errors'].append({'rule_code': 'IMPORT', 'error': str(exc)})
         return
+    print("DEBUG: import succeeded", flush=True)
 
     _discovery_state['phase'] = 'connecting'
+    print("DEBUG: about to open DB connection", flush=True)
     try:
         conn = _conn(statement_timeout_ms=60000)
     except Exception as exc:
+        print(f"DEBUG: DB connection failed: {exc}", flush=True)
         log.error(f'Discovery DB connection failed: {exc}')
         _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'phase': None})
         _discovery_state['errors'].append({'rule_code': 'DB_CONN', 'error': str(exc)})
         return
 
+    print("DEBUG: DB connection opened", flush=True)
     try:
         _discovery_state['phase'] = 'loading vocabulary'
+        print("DEBUG: about to load vocabulary", flush=True)
         vocab = load_vocabulary(conn)
         vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
         panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
+        print(f"DEBUG: vocabulary loaded: {len(vocab['nakshatra_positions_names'])} nakshatras", flush=True)
         log.info(f'Vocabulary loaded: {len(vocab["nakshatra_positions_names"])} nakshatras')
 
         _discovery_state['phase'] = 'loading rules'
+        print(f"DEBUG: about to load rules from DB", flush=True)
         rules = _load_rules_for_discovery(conn, mode, rule_id)
+        print(f"DEBUG: loaded {len(rules)} rules", flush=True)
         _discovery_state['rules_total'] = len(rules)
         _discovery_state['phase'] = 'running'
         log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
