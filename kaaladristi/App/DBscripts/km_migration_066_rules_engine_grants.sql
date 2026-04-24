@@ -12,6 +12,6 @@ GRANT ALL ON km_rule_confidence        TO kd_app;
 GRANT ALL ON km_rule_transits          TO kd_app;
 GRANT ALL ON km_rule_confidence_yearly TO kd_app;
 
--- Sequence grants for tables with serial/identity PKs
-GRANT USAGE, SELECT ON SEQUENCE km_rule_transits_id_seq          TO kd_app;
-GRANT USAGE, SELECT ON SEQUENCE km_rule_confidence_yearly_id_seq TO kd_app;
+-- Sequence grant for km_rule_transits (BIGSERIAL id column)
+-- km_rule_confidence_yearly has a composite PK (rule_id, year) — no sequence
+GRANT USAGE, SELECT ON SEQUENCE km_rule_transits_id_seq TO kd_app;
