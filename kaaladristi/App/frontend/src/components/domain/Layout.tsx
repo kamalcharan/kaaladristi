@@ -6,6 +6,7 @@ import Sidebar from './Sidebar';
 import DataFreshnessChip from './DataFreshnessChip';
 import SearchStrip from './SearchStrip';
 import VaNiChatPanel from './VaNiChatPanel';
+import JobMonitor from './JobMonitor';
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(
@@ -78,6 +79,7 @@ export default function Layout() {
       </main>
 
       <VaNiChatPanel />
+      <JobMonitor />
     </div>
   );
 }

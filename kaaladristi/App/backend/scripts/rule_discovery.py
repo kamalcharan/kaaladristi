@@ -136,17 +136,17 @@ def insert_transits(conn, rule, transits: list) -> int:
     """Insert detected transits into km_rule_transits. Returns count inserted."""
     if not transits:
         return 0
+    from psycopg2.extras import execute_values
+    data = [
+        (rule['id'], t['start_date'], t['end_date'], json.dumps(t['conditions_snapshot']))
+        for t in transits
+    ]
     cur = conn.cursor()
-    inserted = 0
-    for t in transits:
-        cur.execute("""
-            INSERT INTO km_rule_transits (rule_id, start_date, end_date, conditions_snapshot)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (rule_id, start_date) DO NOTHING
-        """, (rule['id'], t['start_date'], t['end_date'],
-              json.dumps(t['conditions_snapshot'])))
-        inserted += cur.rowcount
-    return inserted
+    execute_values(cur,
+        "INSERT INTO km_rule_transits (rule_id, start_date, end_date, conditions_snapshot) "
+        "VALUES %s ON CONFLICT (rule_id, start_date) DO NOTHING",
+        data)
+    return cur.rowcount
 
 
 # ── Phase 2 rules — not yet implemented ────────────────────────────────────────
@@ -288,24 +288,19 @@ def discover_planet_state(conn, rule):
         planets = cond['planets_retrograde']
         cur = conn.cursor()
         cur.execute("""
-            SELECT date FROM km_planetary_positions
-            WHERE planet = ANY(%s) AND retrograde = TRUE
-            AND EXTRACT(DOW FROM date) NOT IN (0,6)
-            GROUP BY date
-            HAVING COUNT(DISTINCT planet) = %s
+            SELECT p.date, d.vara, d.nakshatra_lord
+            FROM km_planetary_positions p
+            LEFT JOIN km_daily_panchang d ON p.date = d.date
+            WHERE p.planet = ANY(%s) AND p.retrograde = TRUE
+            AND EXTRACT(DOW FROM p.date) NOT IN (0,6)
+            GROUP BY p.date, d.vara, d.nakshatra_lord
+            HAVING COUNT(DISTINCT p.planet) = %s
         """, (planets, len(planets)))
-        dates = [r[0] for r in cur.fetchall()]
-        for d in dates:
-            cur2 = conn.cursor()
-            cur2.execute("""
-                SELECT vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
-                FROM km_daily_panchang WHERE date = %s
-            """, (d,))
-            prow = cur2.fetchone()
+        for row in cur.fetchall():
             snapshot = {'planets_retrograde': planets}
-            if prow:
-                snapshot.update({'vara': prow[0], 'nakshatra_lord': prow[1]})
-            rows.append((d, snapshot))
+            if row[1]:
+                snapshot.update({'vara': row[1], 'nakshatra_lord': row[2]})
+            rows.append((row[0], snapshot))
         return rows
 
     # Multi-planet alone in sign
@@ -968,23 +963,19 @@ def discover_sign_planet(conn, rule):
 
     cur = conn.cursor()
     cur.execute("""
-        SELECT date FROM km_planetary_positions
-        WHERE sign_name = %s AND planet = ANY(%s)
-        AND EXTRACT(DOW FROM date) NOT IN (0,6)
-        GROUP BY date
-        HAVING COUNT(DISTINCT planet) = %s
+        SELECT p.date, d.vara, d.nakshatra_lord
+        FROM km_planetary_positions p
+        LEFT JOIN km_daily_panchang d ON p.date = d.date
+        WHERE p.sign_name = %s AND p.planet = ANY(%s)
+        AND EXTRACT(DOW FROM p.date) NOT IN (0,6)
+        GROUP BY p.date, d.vara, d.nakshatra_lord
+        HAVING COUNT(DISTINCT p.planet) = %s
     """, (sign, planets, len(planets)))
-    dates = [r[0] for r in cur.fetchall()]
-    for d in dates:
-        cur2 = conn.cursor()
-        cur2.execute("""
-            SELECT vara, nakshatra_lord FROM km_daily_panchang WHERE date=%s
-        """, (d,))
-        prow = cur2.fetchone()
+    for row in cur.fetchall():
         snapshot = {'sign': sign, 'planets': planets}
-        if prow:
-            snapshot.update({'vara': prow[0], 'nakshatra_lord': prow[1]})
-        rows.append((d, snapshot))
+        if row[1]:
+            snapshot.update({'vara': row[1], 'nakshatra_lord': row[2]})
+        rows.append((row[0], snapshot))
     return rows
 
 
@@ -1125,20 +1116,19 @@ def main(year_filter=None, rule_code_filter=None):
                 continue
 
             strength = strength_from_probability(rule['probability_label'])
+            from psycopg2.extras import execute_values
+            ins_data = [
+                (d, rule['id'], rule['outcome'], strength,
+                 rule['display_name'], json.dumps(snapshot))
+                for d, snapshot in rows
+            ]
             ins_cur = conn.cursor()
-            inserted = 0
-            for (d, snapshot) in rows:
-                ins_cur.execute("""
-                    INSERT INTO km_rule_signals
-                      (date, rule_id, signal, strength, details, conditions_snapshot)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (date, rule_id) DO NOTHING
-                """, (
-                    d, rule['id'], rule['outcome'], strength,
-                    rule['display_name'], json.dumps(snapshot)
-                ))
-                inserted += ins_cur.rowcount
-
+            execute_values(ins_cur,
+                "INSERT INTO km_rule_signals "
+                "(date, rule_id, signal, strength, details, conditions_snapshot) "
+                "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
+                ins_data)
+            inserted = ins_cur.rowcount
             conn.commit()
             total_inserted += inserted
 

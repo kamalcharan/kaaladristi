@@ -68,11 +68,16 @@ _scheduler = None
 _worker_process: subprocess.Popen | None = None
 
 
-def _conn():
+def _conn(statement_timeout_ms: int = 0):
     """Return a fresh psycopg2 connection. Callers must close."""
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL not set')
-    return psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    if statement_timeout_ms:
+        with conn.cursor() as cur:
+            cur.execute(f'SET statement_timeout = {statement_timeout_ms}')
+        conn.commit()
+    return conn
 
 
 def _reset_stale_jobs():
@@ -1389,6 +1394,7 @@ _discovery_state: dict = {
     'rules_done':            0,
     'signals_inserted':      0,
     'current_rule_code':     None,
+    'phase':                 None,
     'errors':                [],
     'confidence_computed_at': None,
     'confidence_error':      None,
@@ -1484,22 +1490,26 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         _discovery_state['errors'].append({'rule_code': 'IMPORT', 'error': str(exc)})
         return
 
+    _discovery_state['phase'] = 'connecting'
     try:
-        conn = _conn()
+        conn = _conn(statement_timeout_ms=60000)
     except Exception as exc:
         log.error(f'Discovery DB connection failed: {exc}')
-        _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
+        _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'phase': None})
         _discovery_state['errors'].append({'rule_code': 'DB_CONN', 'error': str(exc)})
         return
 
     try:
+        _discovery_state['phase'] = 'loading vocabulary'
         vocab = load_vocabulary(conn)
         vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
         panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
         log.info(f'Vocabulary loaded: {len(vocab["nakshatra_positions_names"])} nakshatras')
 
+        _discovery_state['phase'] = 'loading rules'
         rules = _load_rules_for_discovery(conn, mode, rule_id)
         _discovery_state['rules_total'] = len(rules)
+        _discovery_state['phase'] = 'running'
         log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
 
         for rule in rules:
@@ -1527,17 +1537,20 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                     rule.get('probability_label'), 3
                 )
                 inserted = 0
-                with conn.cursor() as cur:
-                    for (d, snapshot) in matched_rows:
-                        cur.execute(
+                if matched_rows:
+                    from psycopg2.extras import execute_values as _ev
+                    _data = [
+                        (d, rule['id'], rule.get('outcome'), strength,
+                         rule['display_name'], _json.dumps(snapshot))
+                        for d, snapshot in matched_rows
+                    ]
+                    with conn.cursor() as cur:
+                        _ev(cur,
                             "INSERT INTO km_rule_signals "
                             "(date, rule_id, signal, strength, details, conditions_snapshot) "
-                            "VALUES (%s, %s, %s, %s, %s, %s) "
-                            "ON CONFLICT (date, rule_id) DO NOTHING",
-                            (d, rule['id'], rule.get('outcome'), strength,
-                             rule['display_name'], _json.dumps(snapshot))
-                        )
-                        inserted += cur.rowcount
+                            "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
+                            _data)
+                        inserted = cur.rowcount
                 conn.commit()
                 _discovery_state['signals_inserted'] += inserted
 
@@ -1568,6 +1581,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         _discovery_state['running'] = False
         _discovery_state['finished_at'] = datetime.utcnow().isoformat()
         _discovery_state['current_rule_code'] = None
+        _discovery_state['phase'] = None
         log.info(
             f'Discovery [{mode}] done — {_discovery_state["rules_done"]} rules, '
             f'{_discovery_state["signals_inserted"]} signals, '
@@ -1781,6 +1795,95 @@ def discovery_run_clean(background_tasks: BackgroundTasks):
         'message': f'Cleared {deleted:,} signals — full discovery started',
         'signals_deleted': deleted,
     }
+
+
+@app.get('/api/discovery/diagnose')
+def discovery_diagnose():
+    """
+    Diagnostic endpoint — measures each phase of discovery initialization.
+    Hit this to find out exactly where things are slow / failing.
+    Returns timing for: DB connect, import, rule load, 1-rule test.
+    """
+    import time as _t
+    report: dict = {}
+
+    # 1. DB connect
+    t0 = _t.monotonic()
+    try:
+        conn = _conn()
+        report['db_connect_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['db_connect'] = 'ok'
+    except Exception as exc:
+        report['db_connect_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['db_connect'] = f'FAILED: {exc}'
+        return report
+
+    # 2. Import rule_discovery
+    t0 = _t.monotonic()
+    try:
+        (discover_rule, load_vocabulary, build_vedh_map,
+         get_panchak_nakshatras, should_group_transits,
+         detect_transits, insert_transits) = _import_discover_rule()
+        report['import_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['import'] = 'ok'
+    except Exception as exc:
+        report['import_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['import'] = f'FAILED: {exc}'
+        conn.close()
+        return report
+
+    # 3. Load vocabulary
+    t0 = _t.monotonic()
+    try:
+        vocab = load_vocabulary(conn)
+        vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
+        panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
+        report['vocab_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['vocab'] = f'ok — {len(vocab["nakshatra_positions_names"])} nakshatras'
+    except Exception as exc:
+        report['vocab_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['vocab'] = f'FAILED: {exc}'
+        conn.close()
+        return report
+
+    # 4. Load rules
+    t0 = _t.monotonic()
+    try:
+        rules = _load_rules_for_discovery(conn, 'all')
+        report['rules_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['rules_count'] = len(rules)
+        report['rules'] = 'ok'
+    except Exception as exc:
+        report['rules_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['rules'] = f'FAILED: {exc}'
+        conn.close()
+        return report
+
+    # 5. Run 1 simple nakshatra_vara rule as a speed test
+    test_rule = next((r for r in rules if r['rule_type'] == 'nakshatra_vara'), None)
+    if test_rule:
+        t0 = _t.monotonic()
+        try:
+            matched = discover_rule(conn, test_rule, vedh_map, panchak_naks)
+            report['test_rule_ms'] = round((_t.monotonic() - t0) * 1000)
+            report['test_rule'] = test_rule['rule_code']
+            report['test_rule_matched'] = len(matched)
+        except Exception as exc:
+            report['test_rule_ms'] = round((_t.monotonic() - t0) * 1000)
+            report['test_rule'] = f'FAILED: {exc}'
+    else:
+        report['test_rule'] = 'no nakshatra_vara rule found'
+
+    conn.close()
+    report['verdict'] = (
+        'slow_db_connect' if report.get('db_connect_ms', 0) > 3000
+        else 'slow_import' if report.get('import_ms', 0) > 2000
+        else 'slow_vocab' if report.get('vocab_ms', 0) > 2000
+        else 'slow_rules_load' if report.get('rules_ms', 0) > 2000
+        else 'slow_per_rule' if report.get('test_rule_ms', 0) > 3000
+        else 'ok'
+    )
+    return report
 
 
 # ── Confidence scoring ────────────────────────────────────────────────────────
