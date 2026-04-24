@@ -312,13 +312,25 @@ function EquityChart({ transits, highlightId, onHighlight }: {
   const years: number[] = [];
   for (let y = startYear; y <= endYear; y += yearStep) years.push(y);
 
+  const finalEquity = points[points.length - 1].equity;
+  const finalGain   = (finalEquity - 100).toFixed(1);
+  const scored      = points.length;
+  const windowYears = endYear - startYear;
+
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
-      <div className="px-4 pt-3 pb-0 flex items-baseline justify-between">
-        <span className="text-[10px] font-mono text-muted uppercase tracking-wider">
-          Equity Curve · Nifty returns compounded across transit windows
-        </span>
-        <span className="text-[10px] font-mono text-muted">{points.length} transits plotted</span>
+      <div className="px-5 pt-4 pb-2">
+        <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-2">
+          Backtest · {windowYears}Y window · as of {new Date().toISOString().slice(0, 10)}
+        </p>
+        <p className="font-display text-2xl text-white leading-snug">
+          <em className={cn('not-italic font-medium', Number(finalGain) >= 0 ? 'text-risk-green' : 'text-risk-red/80')}>
+            {Number(finalGain) >= 0 ? '+' : ''}{finalGain}%
+          </em>
+          {' '}compounded across{' '}
+          <span className="font-mono text-accent-gold">{scored}</span>
+          {' '}completed transits
+        </p>
       </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
@@ -424,20 +436,22 @@ function BacktestStatGrid({ conf }: { conf: RuleConfidence }) {
 
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
-      <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 divide-x divide-kd-border/50">
+      {/* Top row — Confidence gets extra width */}
+      <div className="grid grid-cols-2 sm:grid-cols-[1.3fr_1fr_1fr_1fr_1fr] divide-y sm:divide-y-0 divide-x divide-kd-border/50">
         {top.map((s, i) => (
-          <div key={i} className={cn('px-4 py-4', i === 0 && 'sm:col-span-1')}>
+          <div key={i} className="px-4 py-5">
             <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-2">{s.k}</p>
-            <p className={cn('font-mono font-semibold tabular-nums leading-none', s.big ? 'text-2xl' : 'text-xl', s.color)}>{s.v}</p>
+            <p className={cn('font-mono font-semibold tabular-nums leading-none', i === 0 ? 'text-3xl' : 'text-xl', s.color)}>{s.v}</p>
             {s.sub && <p className="text-[10px] font-mono text-muted mt-1.5">{s.sub}</p>}
           </div>
         ))}
       </div>
+      {/* Bottom row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-kd-border/50 border-t border-kd-border/50">
         {bot.map((s, i) => (
           <div key={i} className="px-4 py-3">
             <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">{s.k}</p>
-            <p className={cn('font-mono text-base font-semibold tabular-nums', s.color)}>{s.v}</p>
+            <p className={cn('font-mono text-lg font-semibold tabular-nums', s.color)}>{s.v}</p>
           </div>
         ))}
       </div>
@@ -1127,7 +1141,7 @@ export default function RuleDetail() {
                   </span>
                 )}
               </div>
-              <h1 className="text-base font-semibold text-white leading-snug mt-1">{rule.display_name}</h1>
+              <h1 className="font-display text-3xl font-medium text-white leading-tight mt-1 tracking-tight">{rule.display_name}</h1>
             </div>
             <OutcomeBadge outcome={outcome} />
           </div>
