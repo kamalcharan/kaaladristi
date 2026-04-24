@@ -523,7 +523,7 @@ def discover_relative_position(conn, rule):
             JOIN km_planetary_positions p2 ON p1.date = p2.date
             JOIN km_daily_panchang d ON p1.date = d.date
             WHERE p1.planet = 'Mars' AND p2.planet = 'Saturn'
-            AND ((p1.longitude::numeric - p2.longitude::numeric + 360.0) % 360.0) BETWEEN 28 AND 32
+            AND MOD(p1.longitude::numeric - p2.longitude::numeric + 360, 360) BETWEEN 28 AND 32
             AND EXTRACT(DOW FROM p1.date) NOT IN (0,6)
         """)
         for row in cur.fetchall():
@@ -546,7 +546,7 @@ def discover_relative_position(conn, rule):
             JOIN km_planetary_positions sat ON moon.date = sat.date
             JOIN km_daily_panchang d ON moon.date = d.date
             WHERE moon.planet = 'Moon' AND sat.planet = 'Saturn'
-            AND ((sat.longitude - moon.longitude + 360) % 360) BETWEEN 318 AND 342
+            AND MOD(sat.longitude::numeric - moon.longitude::numeric + 360, 360) BETWEEN 318 AND 342
             AND EXTRACT(DOW FROM moon.date) NOT IN (0,6)
         """)
         for row in cur.fetchall():
