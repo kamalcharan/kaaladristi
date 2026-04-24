@@ -248,9 +248,9 @@ function fmtPct(v: number | null, decimals = 1): string {
 }
 
 function ConfidenceSummary({ conf }: { conf: RuleConfidence }) {
-  const cards = [
+  const topCards = [
     {
-      label: 'Historical Transits',
+      label: 'Transits',
       value: conf.historical_transits != null ? String(conf.historical_transits) : '—',
       color: 'text-secondary',
     },
@@ -262,7 +262,7 @@ function ConfidenceSummary({ conf }: { conf: RuleConfidence }) {
       color: 'text-secondary',
     },
     {
-      label: 'Confidence Score',
+      label: 'Confidence',
       value: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—',
       color: confidenceColor(conf.confidence_score),
     },
@@ -271,37 +271,35 @@ function ConfidenceSummary({ conf }: { conf: RuleConfidence }) {
       value: fmtPct(conf.avg_return_all),
       color: returnColor(conf.avg_return_all),
     },
+    {
+      label: 'High (Best)',
+      value: fmtPct(conf.best_return),
+      color: returnColor(conf.best_return),
+    },
+    {
+      label: 'Low (Worst)',
+      value: fmtPct(conf.worst_return),
+      color: returnColor(conf.worst_return),
+    },
   ];
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {cards.map(({ label, value, color }) => (
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+        {topCards.map(({ label, value, color }) => (
           <div key={label} className="flex flex-col items-center justify-center gap-1 py-4 rounded-xl border border-kd-border bg-kd-elevated/40 text-center">
-            <span className={cn('text-2xl font-semibold tabular-nums', color)}>{value}</span>
+            <span className={cn('text-xl font-semibold tabular-nums', color)}>{value}</span>
             <span className="text-[11px] text-muted font-mono">{label}</span>
           </div>
         ))}
       </div>
 
-      <div className="rounded-xl border border-kd-border bg-kd-elevated/20 px-4 py-3 space-y-3">
+      <div className="rounded-xl border border-kd-border bg-kd-elevated/20 px-4 py-3">
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: 'Avg when matched', value: fmtPct(conf.avg_return_matched), color: returnColor(conf.avg_return_matched) },
             { label: 'Avg when not matched', value: fmtPct(conf.avg_return_unmatched), color: returnColor(conf.avg_return_unmatched) },
             { label: 'Avg duration', value: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', color: 'text-secondary' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex flex-col items-center gap-0.5 text-center">
-              <span className={cn('text-sm font-semibold tabular-nums', color)}>{value}</span>
-              <span className="text-[10px] font-mono text-muted">{label}</span>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-4 pt-2 border-t border-kd-border/40">
-          {[
-            { label: 'Best transit', value: fmtPct(conf.best_return), color: returnColor(conf.best_return) },
-            { label: 'Worst transit', value: fmtPct(conf.worst_return), color: returnColor(conf.worst_return) },
-            { label: 'Total scored', value: conf.total_occurrences != null ? `${conf.total_occurrences} transits` : '—', color: 'text-muted' },
           ].map(({ label, value, color }) => (
             <div key={label} className="flex flex-col items-center gap-0.5 text-center">
               <span className={cn('text-sm font-semibold tabular-nums', color)}>{value}</span>
