@@ -8,7 +8,7 @@ import { useToast, ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
-import { runRuleDiscovery, fetchDiscoveryStatus } from './discoveryService';
+import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery } from './discoveryService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -584,6 +584,17 @@ export default function RuleDetail() {
     onError: (err: Error) => toast('error', err.message),
   });
 
+  // ── Cancel mutation ──
+  const cancelMutation = useMutation({
+    mutationFn: cancelDiscovery,
+    onSuccess: () => {
+      setTrackingDiscovery(false);
+      setStartedJobId(null);
+      toast('info', 'Cancel requested — job will stop after current rule');
+    },
+    onError: (err: Error) => toast('error', `Cancel failed: ${err.message}`),
+  });
+
   const isDiscoveryRunning = discoverMutation.isPending || trackingDiscovery;
 
   const handleDelete = () => {
@@ -638,18 +649,27 @@ export default function RuleDetail() {
           </button>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Run Discovery */}
-            <button
-              onClick={() => discoverMutation.mutate()}
-              disabled={isDiscoveryRunning}
-              title="Run discovery for this rule only"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all disabled:opacity-50"
-            >
-              {isDiscoveryRunning
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <Play className="w-3.5 h-3.5" />}
-              {isDiscoveryRunning ? 'Running…' : 'Run Discovery'}
-            </button>
+            {/* Run Discovery / Cancel */}
+            {isDiscoveryRunning ? (
+              <button
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+                title="Request cancellation"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-red/80 border border-risk-red/30 bg-risk-red/10 rounded-lg hover:bg-risk-red/20 transition-all disabled:opacity-50"
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                {cancelMutation.isPending ? 'Cancelling…' : 'Running… Cancel?'}
+              </button>
+            ) : (
+              <button
+                onClick={() => discoverMutation.mutate()}
+                title="Run discovery for this rule only"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all"
+              >
+                <Play className="w-3.5 h-3.5" />
+                Run Discovery
+              </button>
+            )}
 
             {/* Clone */}
             <button
@@ -760,10 +780,8 @@ export default function RuleDetail() {
                 disabled={isDiscoveryRunning}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-risk-amber border border-risk-amber/30 bg-risk-amber/10 rounded-lg hover:bg-risk-amber/20 transition-all disabled:opacity-50"
               >
-                {isDiscoveryRunning
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Play className="w-3.5 h-3.5" />}
-                {isDiscoveryRunning ? 'Running…' : 'Run Discovery'}
+                <Play className="w-3.5 h-3.5" />
+                Run Discovery
               </button>
             </div>
           )}
