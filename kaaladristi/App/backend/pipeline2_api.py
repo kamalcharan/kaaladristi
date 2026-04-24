@@ -1594,29 +1594,11 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
             f'{len(_discovery_state["errors"])} errors'
         )
 
-    # Auto-run confidence scoring after discovery completes
-    try:
-        log.info('Discovery complete. Starting confidence scoring…')
-        from scripts.confidence_scoring import (  # noqa: PLC0415
-            build_nifty_close_map,
-            load_rule_outcome_map,
-            update_transit_returns,
-            compute_confidence_from_transits,
-            compute_yearly_breakdown,
-        )
-        conf_conn = _conn()
-        close_map = build_nifty_close_map(conf_conn)
-        rule_outcome_map = load_rule_outcome_map(conf_conn)
-        update_transit_returns(conf_conn, close_map, rule_outcome_map)
-        compute_confidence_from_transits(conf_conn)
-        compute_yearly_breakdown(conf_conn)
-        conf_conn.close()
-        _discovery_state['confidence_computed_at'] = datetime.utcnow().isoformat()
-        _discovery_state['confidence_error'] = None
-        log.info('Confidence scoring complete.')
-    except Exception as exc:
-        log.error(f'Confidence scoring error: {exc}')
-        _discovery_state['confidence_error'] = str(exc)
+    # Auto-run confidence scoring after discovery completes — delegates to
+    # _run_confidence_bg() so _confidence_state is updated correctly and
+    # /api/confidence/status reflects the run.
+    log.info('Discovery complete. Starting confidence scoring…')
+    _run_confidence_bg()
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
