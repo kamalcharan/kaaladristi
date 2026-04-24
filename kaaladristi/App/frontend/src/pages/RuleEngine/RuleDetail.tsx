@@ -256,15 +256,15 @@ function regimeOf(ret: number | null): 'bull' | 'side' | 'bear' {
   return 'side';
 }
 
-// ── Equity Curve Chart ────────────────────────────────────────────────────────
+// ── Per-Transit Bar Chart ─────────────────────────────────────────────────────
 
-function EquityChart({ transits, highlightId, onHighlight }: {
+function PerTransitBarChart({ transits, highlightId, onHighlight }: {
   transits: RuleTransit[];
   highlightId: number | null;
   onHighlight: (id: number | null) => void;
 }) {
   const W = 1100, H = 320;
-  const PAD = { l: 52, r: 20, t: 20, b: 40 };
+  const PAD = { l: 52, r: 114, t: 30, b: 58 };
 
   const sorted = useMemo(() =>
     [...transits]
@@ -273,141 +273,160 @@ function EquityChart({ transits, highlightId, onHighlight }: {
     [transits]
   );
 
-  const points = useMemo(() => {
-    let equity = 100;
-    return sorted.map(t => {
-      equity *= (1 + (t.nifty_return_pct ?? 0) / 100);
-      return { t, equity };
-    });
+  const avgDuration = useMemo(() => {
+    if (sorted.length === 0) return 0;
+    return Math.round(sorted.reduce((s, t) => s + (t.duration_days ?? 0), 0) / sorted.length);
   }, [sorted]);
 
-  if (points.length < 2) return null;
+  if (sorted.length < 2) return null;
 
-  const xs = sorted.map(p => new Date(p.start_date).getTime());
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const ys = points.map(p => p.equity);
-  const minY = Math.min(Math.min(...ys) * 0.96, 97);
-  const maxY = Math.max(...ys) * 1.04;
-  const maxAbs = Math.max(...sorted.map(t => Math.abs(t.nifty_return_pct ?? 0)), 1);
+  const n = sorted.length;
+  const chartW = W - PAD.l - PAD.r;
+  const chartH = H - PAD.t - PAD.b;
+  const chartBotY = PAD.t + chartH;
+  const baseline  = PAD.t + chartH / 2;
 
-  const xFor = (iso: string) =>
-    minX === maxX ? (W - PAD.l - PAD.r) / 2 + PAD.l
-    : PAD.l + ((new Date(iso).getTime() - minX) / (maxX - minX)) * (W - PAD.l - PAD.r);
-  const yFor = (v: number) =>
-    PAD.t + (1 - (v - minY) / (maxY - minY)) * (H - PAD.t - PAD.b);
+  const returns = sorted.map(t => t.nifty_return_pct ?? 0);
+  const maxAbs     = Math.max(...returns.map(Math.abs), 1);
+  const paddedMax  = maxAbs * 1.18;
+  const avgReturn  = returns.reduce((s, v) => s + v, 0) / n;
 
-  const linePath = points.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'} ${xFor(p.t.start_date).toFixed(1)} ${yFor(p.equity).toFixed(1)}`
-  ).join(' ');
+  const slotW = chartW / n;
+  const barW  = Math.max(3, Math.min(slotW * 0.62, 18));
 
-  const lastX = xFor(points[points.length - 1].t.start_date).toFixed(1);
-  const fillPath = `M ${PAD.l} ${H - PAD.b} L ${points.map(p =>
-    `${xFor(p.t.start_date).toFixed(1)} ${yFor(p.equity).toFixed(1)}`).join(' L ')} L ${lastX} ${H - PAD.b} Z`;
+  const yForRet  = (ret: number) => baseline - (ret / paddedMax) * (chartH / 2);
+  const xForIdx  = (i: number)   => PAD.l + (i + 0.5) * slotW;
+  const avgLineY = yForRet(avgReturn);
 
-  const baseline = yFor(100);
+  // Y-axis ticks
+  const tickStep = paddedMax > 20 ? 10 : paddedMax > 9 ? 5 : 2;
+  const ticks: number[] = [];
+  for (let v = -Math.ceil(paddedMax / tickStep) * tickStep; v <= paddedMax; v += tickStep) ticks.push(v);
 
-  const startYear = new Date(minX).getFullYear();
-  const endYear   = new Date(maxX).getFullYear();
-  const yearStep  = Math.max(1, Math.ceil((endYear - startYear) / 6));
-  const years: number[] = [];
-  for (let y = startYear; y <= endYear; y += yearStep) years.push(y);
+  // Year labels — first bar of each year
+  const yearMarks: Array<{ year: number; x: number }> = [];
+  let prevYear = -1;
+  sorted.forEach((t, i) => {
+    const yr = parseInt(t.start_date.slice(0, 4));
+    if (yr !== prevYear) { yearMarks.push({ year: yr, x: xForIdx(i) }); prevYear = yr; }
+  });
 
-  const finalEquity = points[points.length - 1].equity;
-  const finalGain   = (finalEquity - 100).toFixed(1);
-  const scored      = points.length;
+  const startYear   = parseInt(sorted[0].start_date.slice(0, 4));
+  const endYear     = parseInt(sorted[n - 1].start_date.slice(0, 4));
   const windowYears = endYear - startYear;
+  const today       = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
       <div className="px-5 pt-4 pb-2">
-        <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-2">
-          Backtest · {windowYears}Y window · as of {new Date().toISOString().slice(0, 10)}
+        <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1.5">
+          Per-Transit Performance · {n} events · {windowYears}Y window · as of {today}
         </p>
-        <p className="font-display text-2xl text-white leading-snug">
-          <em className={cn('not-italic font-medium', Number(finalGain) >= 0 ? 'text-risk-green' : 'text-risk-red/80')}>
-            {Number(finalGain) >= 0 ? '+' : ''}{finalGain}%
-          </em>
-          {' '}compounded across{' '}
-          <span className="font-mono text-accent-gold">{scored}</span>
-          {' '}completed transits
+        <p className="font-display text-xl text-white leading-snug">
+          Each bar is{' '}
+          <em className="not-italic text-accent-gold font-medium">one transit</em>
+          {' '}— the rule fires, runs for ~{avgDuration}d, and ends. Between events, nothing is held.
         </p>
       </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
-        <defs>
-          <linearGradient id="eqFill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%"   stopColor="var(--bull)" stopOpacity="0.18"/>
-            <stop offset="100%" stopColor="var(--bull)" stopOpacity="0"/>
-          </linearGradient>
-        </defs>
-
-        {/* Baseline at 100 */}
-        <line x1={PAD.l} y1={baseline} x2={W - PAD.r} y2={baseline}
-          stroke="rgba(255,255,255,0.09)" strokeWidth="0.8" strokeDasharray="4 6"/>
-
-        {/* Y-axis labels */}
-        {[-20, -10, 0, 10, 20, 50, 100, 150].map(offset => {
-          const v = 100 + offset;
-          if (v < minY || v > maxY) return null;
+        {/* Grid lines */}
+        {ticks.map(v => {
+          const y = yForRet(v);
+          if (y < PAD.t || y > chartBotY) return null;
           return (
-            <text key={offset} x={PAD.l - 6} y={yFor(v) + 3}
-              fill="rgba(148,163,184,0.45)" fontFamily="monospace" fontSize="8" textAnchor="end">
-              {offset >= 0 ? `+${offset}%` : `${offset}%`}
-            </text>
-          );
-        })}
-
-        {/* Year ticks */}
-        {years.map(y => {
-          const x = xFor(`${y}-06-01`);
-          return (
-            <g key={y}>
-              <line x1={x} y1={H - PAD.b} x2={x} y2={H - PAD.b + 4} stroke="rgba(255,255,255,0.1)"/>
-              <text x={x} y={H - PAD.b + 16} fill="rgba(148,163,184,0.45)" fontFamily="monospace" fontSize="9" textAnchor="middle">{y}</text>
+            <g key={v}>
+              <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
+                stroke={v === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.04)'}
+                strokeWidth={v === 0 ? 0.9 : 0.5}
+                strokeDasharray={v === 0 ? undefined : '3 6'}
+              />
+              <text x={PAD.l - 5} y={y + 3.5}
+                fill="rgba(148,163,184,0.45)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
+                {v > 0 ? `+${v}%` : `${v}%`}
+              </text>
             </g>
           );
         })}
 
-        {/* Area fill + line */}
-        <path d={fillPath} fill="url(#eqFill)"/>
-        <path d={linePath} fill="none" stroke="var(--bull)" strokeWidth="1.6"/>
+        {/* Bars + match dots */}
+        {sorted.map((t, i) => {
+          const ret   = t.nifty_return_pct ?? 0;
+          const x     = xForIdx(i);
+          const isPos = ret >= 0;
+          const barTop = isPos ? yForRet(ret) : baseline;
+          const barH   = Math.max(1.5, Math.abs(yForRet(ret) - baseline));
+          const isHl  = highlightId === t.id;
+          const dim   = highlightId != null && !isHl;
 
-        {/* Scatter dots */}
-        {points.map(({ t, equity }) => {
-          const x = xFor(t.start_date);
-          const y = yFor(equity);
-          const r = 3 + (Math.abs(t.nifty_return_pct ?? 0) / maxAbs) * 4.5;
-          const col = t.matched === true
-            ? 'var(--bull)'
-            : t.matched === false
-              ? 'var(--bear)'
-              : 'var(--caution)';
-          const isHl = highlightId === t.id;
-          const dim  = highlightId != null && !isHl;
           return (
             <g key={t.id} style={{ cursor: 'pointer' }} onClick={() => onHighlight(isHl ? null : t.id)}>
-              {isHl && <circle cx={x} cy={y} r={r + 7} fill={col} opacity="0.18"/>}
-              <circle cx={x} cy={y} r={r}
-                fill={t.matched !== false ? col : 'none'}
-                stroke={col}
-                strokeWidth={t.matched === false ? 1.5 : 0}
-                opacity={dim ? 0.18 : 1}/>
+              {isHl && (
+                <line x1={x} y1={PAD.t} x2={x} y2={chartBotY}
+                  stroke="var(--gold)" strokeWidth="0.7" strokeDasharray="2 3" opacity="0.55"/>
+              )}
+              {/* Bar: filled green for positive, hollow red for negative */}
+              <rect
+                x={x - barW / 2} y={barTop} width={barW} height={barH}
+                fill={isPos ? 'var(--bull)' : 'none'}
+                stroke={isPos ? 'none' : 'var(--bear)'}
+                strokeWidth={isPos ? 0 : 1.2}
+                opacity={dim ? 0.15 : isHl ? 1 : 0.82}
+              />
+              {/* Match dot row below chart area */}
+              <circle cx={x} cy={chartBotY + 9} r={2.5}
+                fill={
+                  t.matched === true  ? 'var(--bull)' :
+                  t.matched === false ? 'var(--bear)' :
+                  'rgba(255,255,255,0.12)'
+                }
+                opacity={dim ? 0.18 : 0.9}
+              />
             </g>
           );
         })}
+
+        {/* Avg return dashed line + label */}
+        {avgLineY > PAD.t && avgLineY < chartBotY && (
+          <>
+            <line x1={PAD.l} y1={avgLineY} x2={W - PAD.r} y2={avgLineY}
+              stroke="var(--gold)" strokeWidth="1.2" strokeDasharray="5 4" opacity="0.75"/>
+            <text x={W - PAD.r + 7} y={avgLineY + 4}
+              fill="var(--gold)" fontFamily="monospace" fontSize="9" letterSpacing="0.5">
+              {`AVG ${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}%`}
+            </text>
+          </>
+        )}
+
+        {/* Year labels */}
+        {yearMarks.map(({ year, x }) => (
+          <text key={year} x={x} y={H - 8}
+            fill="rgba(148,163,184,0.38)" fontFamily="monospace" fontSize="9" textAnchor="middle">
+            {year}
+          </text>
+        ))}
       </svg>
 
-      <div className="px-4 pb-3 pt-1 flex gap-5 flex-wrap border-t border-kd-border/30 mt-1">
-        {[
-          { dot: 'bg-risk-green', label: 'Matched' },
-          { dot: 'bg-risk-red', border: true, label: 'Unmatched (hollow)' },
-        ].map(({ dot, border, label }) => (
-          <span key={label} className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
-            <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', dot, border ? 'bg-transparent border border-risk-red' : '')}/>
-            {label}
-          </span>
-        ))}
-        <span className="text-[10px] font-mono text-muted">Dot size ∝ return magnitude · click to highlight row</span>
+      {/* Reading guide */}
+      <div className="px-4 py-2.5 border-t border-kd-border/30 flex items-center gap-5 flex-wrap">
+        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+          <span className="w-2.5 h-2.5 bg-risk-green shrink-0 opacity-80"/>
+          Positive return
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+          <span className="w-2.5 h-2.5 border border-risk-red shrink-0"/>
+          Negative return
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+          <span className="w-2 h-2 rounded-full bg-risk-green shrink-0"/>
+          Matched ·
+          <span className="w-2 h-2 rounded-full bg-risk-red shrink-0 mx-1"/>
+          Unmatched (dots below)
+        </span>
+        <span className="text-[10px] font-mono text-accent-gold">
+          {`— AVG ${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}% (dashed)`}
+        </span>
+        <span className="text-[10px] font-mono text-muted ml-auto">click bar to highlight row</span>
       </div>
     </div>
   );
@@ -415,23 +434,32 @@ function EquityChart({ transits, highlightId, onHighlight }: {
 
 // ── Stat Grid ─────────────────────────────────────────────────────────────────
 
-function BacktestStatGrid({ conf }: { conf: RuleConfidence }) {
-  const hitRate = conf.matched_count != null && conf.total_occurrences != null && conf.total_occurrences > 0
-    ? `${((conf.matched_count / conf.total_occurrences) * 100).toFixed(0)}% hit rate`
+function BacktestStatGrid({ conf, transits }: { conf: RuleConfidence; transits: RuleTransit[] }) {
+  const n = conf.total_occurrences ?? 0;
+  const confQual = n < 20 ? 'MODERATE' : n < 50 ? 'STRONG' : 'VERY STRONG';
+  const hitRate = conf.matched_count != null && n > 0
+    ? `${((conf.matched_count / n) * 100).toFixed(0)}% hit rate`
     : '';
 
+  // Best/worst transit dates from local transit data
+  const scored = transits.filter(t => t.nifty_return_pct != null);
+  const bestTransit  = scored.reduce<RuleTransit | null>((b, t) =>
+    b == null || (t.nifty_return_pct ?? -Infinity) > (b.nifty_return_pct ?? -Infinity) ? t : b, null);
+  const worstTransit = scored.reduce<RuleTransit | null>((b, t) =>
+    b == null || (t.nifty_return_pct ?? Infinity) < (b.nifty_return_pct ?? Infinity) ? t : b, null);
+
   const top = [
-    { k: 'CONFIDENCE',   v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—', sub: conf.total_occurrences != null ? `n=${conf.total_occurrences}` : '', color: confidenceColor(conf.confidence_score), big: true },
-    { k: 'HISTORICAL',   v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: conf.total_occurrences != null ? `${conf.total_occurrences} scored` : '', color: 'text-white' },
-    { k: 'MATCHED',      v: conf.matched_count != null && conf.total_occurrences != null ? `${conf.matched_count}/${conf.total_occurrences}` : '—', sub: hitRate, color: 'text-accent-gold' },
+    { k: 'CONFIDENCE',   v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—', sub: `${confQual} · n=${n}`, color: confidenceColor(conf.confidence_score), big: true },
+    { k: 'HISTORICAL',   v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: n > 0 ? `${n} scored` : '', color: 'text-white' },
+    { k: 'MATCHED',      v: conf.matched_count != null && n > 0 ? `${conf.matched_count}/${n}` : '—', sub: hitRate, color: 'text-accent-gold' },
     { k: 'AVG RETURN',   v: fmtPct(conf.avg_return_all), sub: 'All transits', color: returnColor(conf.avg_return_all) },
     { k: 'AVG MATCHED',  v: fmtPct(conf.avg_return_matched), sub: conf.matched_count != null ? `${conf.matched_count} transits` : '', color: 'text-risk-green' },
   ];
   const bot = [
-    { k: 'AVG UNMATCHED', v: fmtPct(conf.avg_return_unmatched), color: 'text-risk-red/70' },
-    { k: 'BEST TRANSIT',  v: fmtPct(conf.best_return),          color: 'text-risk-green' },
-    { k: 'WORST TRANSIT', v: fmtPct(conf.worst_return),         color: 'text-risk-red/70' },
-    { k: 'AVG DURATION',  v: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', color: 'text-secondary' },
+    { k: 'AVG UNMATCHED', v: fmtPct(conf.avg_return_unmatched), sub: conf.matched_count != null && n > 0 ? `${n - conf.matched_count} transits` : '', color: 'text-risk-red/70' },
+    { k: 'BEST TRANSIT',  v: fmtPct(conf.best_return),  sub: bestTransit?.start_date ?? '',  color: 'text-risk-green' },
+    { k: 'WORST TRANSIT', v: fmtPct(conf.worst_return), sub: worstTransit?.start_date ?? '', color: 'text-risk-red/70' },
+    { k: 'AVG DURATION',  v: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', sub: 'Window length', color: 'text-secondary' },
   ];
 
   return (
@@ -452,6 +480,7 @@ function BacktestStatGrid({ conf }: { conf: RuleConfidence }) {
           <div key={i} className="px-4 py-3">
             <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">{s.k}</p>
             <p className={cn('font-mono text-lg font-semibold tabular-nums', s.color)}>{s.v}</p>
+            {s.sub && <p className="text-[10px] font-mono text-muted mt-1">{s.sub}</p>}
           </div>
         ))}
       </div>
@@ -627,21 +656,33 @@ function BacktestTabs({
       {tab === 'upcoming' && (
         upcomingTransits.length === 0
           ? <p className="px-4 py-6 text-sm text-muted text-center">No upcoming transits in data range</p>
-          : <div>
-              {upcomingTransits.map((t, i) => {
-                const inDays = Math.round((new Date(t.start_date).getTime() - Date.now()) / 86400000);
-                const fmt = (iso: string) =>
-                  new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          : <div className="overflow-x-auto">
+              {/* Header */}
+              <div className="grid grid-cols-[120px_120px_70px_1fr_100px_1fr] gap-2.5 px-4 py-2.5 border-b border-kd-border bg-kd-elevated/60">
+                {['START', 'END', 'DAYS', 'AGING', 'STRENGTH', 'NOTE'].map(h => (
+                  <span key={h} className="text-[9.5px] font-mono text-muted uppercase tracking-wider">{h}</span>
+                ))}
+              </div>
+              {upcomingTransits.map(t => {
+                const inDays  = Math.round((new Date(t.start_date + 'T00:00:00').getTime() - Date.now()) / 86400000);
+                const agingPct = Math.max(5, 100 - Math.min(100, inDays / 10));
+                const agingColor = inDays < 30 ? 'text-accent-gold' : inDays < 180 ? 'text-secondary' : 'text-muted';
+                const agingBar   = inDays < 30 ? 'bg-accent-gold' : inDays < 180 ? 'bg-secondary' : 'bg-kd-border';
+                const stars   = inDays < 7 ? 5 : inDays < 30 ? 4 : inDays < 180 ? 3 : 2;
+                const note    = inDays < 7 ? 'Imminent — watch' : inDays < 90 ? 'Future window' : 'Long window — rare';
                 return (
-                  <div key={t.id} className={cn(
-                    'flex items-center justify-between gap-4 px-4 py-3 border-b border-kd-border/40',
-                    i === 0 && 'bg-accent-gold/5',
-                  )}>
-                    <div>
-                      {i === 0 && <span className="text-[10px] font-mono text-accent-gold uppercase tracking-wider block mb-0.5">Next · in {inDays}d</span>}
-                      <span className="text-sm font-mono text-secondary">{fmt(t.start_date)} – {fmt(t.end_date)}</span>
-                    </div>
-                    <span className="text-xs text-muted whitespace-nowrap">{t.duration_days}d window</span>
+                  <div key={t.id} className="grid grid-cols-[120px_120px_70px_1fr_100px_1fr] gap-2.5 items-center px-4 py-3 border-b border-kd-border/40 hover:bg-kd-elevated/30 transition-colors">
+                    <span className="font-mono text-[12.5px] text-white tabular-nums">{t.start_date}</span>
+                    <span className="font-mono text-[12.5px] text-secondary tabular-nums">{t.end_date}</span>
+                    <span className="font-mono text-xs text-muted tabular-nums">{t.duration_days}d</span>
+                    <span className="flex items-center gap-2">
+                      <span className={cn('font-mono text-[13px] tabular-nums font-medium', agingColor)}>in {inDays}d</span>
+                      <div className="flex-1 h-[3px] bg-kd-border/50 rounded-full overflow-hidden">
+                        <div className={cn('h-full rounded-full opacity-70', agingBar)} style={{ width: `${agingPct}%` }}/>
+                      </div>
+                    </span>
+                    <span className="text-accent-gold text-sm tracking-wider">{'★'.repeat(stars)}</span>
+                    <span className={cn('text-xs', inDays < 7 ? 'text-accent-gold italic' : 'text-muted')}>{note}</span>
                   </div>
                 );
               })}
@@ -686,7 +727,7 @@ function BacktestTabs({
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-kd-border bg-kd-elevated/60">
-                      {['Date', 'Signal', 'Strength', 'Details', 'Matched'].map(h => (
+                      {['Date', 'Signal', 'Strength', 'Details'].map(h => (
                         <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -697,14 +738,9 @@ function BacktestTabs({
                         <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{sig.date}</td>
                         <td className="px-3 py-2 text-xs text-secondary capitalize">{sig.signal ?? '—'}</td>
                         <td className="px-3 py-2 text-xs tabular-nums text-center">
-                          {sig.strength != null ? <span className="text-risk-amber">{sig.strength}</span> : '—'}
+                          {sig.strength != null ? <span className="text-accent-gold">{sig.strength}</span> : '—'}
                         </td>
-                        <td className="px-3 py-2 text-xs text-muted max-w-[260px] truncate">{sig.details ?? '—'}</td>
-                        <td className="px-3 py-2 text-xs text-center">
-                          <span className={sig.matched === true ? 'text-risk-green' : sig.matched === false ? 'text-risk-red/60' : 'text-muted'}>
-                            {sig.matched === true ? '✓' : sig.matched === false ? '✗' : '—'}
-                          </span>
-                        </td>
+                        <td className="px-3 py-2 text-xs text-muted max-w-[320px] truncate">{sig.details ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1219,12 +1255,12 @@ export default function RuleDetail() {
 
           {conf != null ? (
             <>
-              <EquityChart
+              <PerTransitBarChart
                 transits={transits}
                 highlightId={highlightTransitId}
                 onHighlight={setHighlightTransitId}
               />
-              <BacktestStatGrid conf={conf} />
+              <BacktestStatGrid conf={conf} transits={transits} />
               {transits.length >= 3 && <RegimeGrid transits={transits} />}
             </>
           ) : (
