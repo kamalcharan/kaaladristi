@@ -268,6 +268,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
             )}
             {[
               { to: '/admin/panchang', glyph: '⊞', label: 'Panchang Admin' },
+              { to: '/rules',         glyph: '⊟', label: 'Rule Engine'    },
             ].map(item => (
               <NavLink
                 key={item.to}
