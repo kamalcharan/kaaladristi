@@ -1,10 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Play, AlertTriangle, CheckCircle2, Activity } from 'lucide-react';
+import { Play, AlertTriangle, CheckCircle2, Activity, XCircle, Trash2, BarChart2 } from 'lucide-react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useToast, ToastContainer } from '@/components/ui';
 import {
   runFullDiscovery,
   runMissingDiscovery,
+  cancelDiscovery,
+  runCleanDiscovery,
+  computeConfidence,
   fetchDiscoveryStatus,
   fetchSignalCounts,
   type DiscoveryStatus,
@@ -57,28 +61,53 @@ function SummaryCards({ status }: { status: DiscoveryStatus | undefined }) {
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
-function ProgressSection({ status }: { status: DiscoveryStatus }) {
+function ProgressSection({
+  status,
+  onCancel,
+  cancelling,
+}: {
+  status: DiscoveryStatus;
+  onCancel: () => void;
+  cancelling: boolean;
+}) {
   const pct =
     status.rules_total > 0
       ? Math.round((status.rules_done / status.rules_total) * 100)
       : 0;
+
+  const isCancelRequested = status.cancel_requested;
 
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card p-4 space-y-3">
       <div className="flex items-center justify-between text-sm">
         <div className="flex items-center gap-2 text-risk-amber">
           <Activity className="w-4 h-4 animate-pulse" />
-          <span className="font-medium">Discovery running…</span>
+          <span className="font-medium">
+            {isCancelRequested ? 'Cancelling…' : 'Discovery running…'}
+          </span>
         </div>
-        <span className="text-muted font-mono text-xs">
-          {status.rules_done} / {status.rules_total} rules
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-muted font-mono text-xs">
+            {status.rules_done} / {status.rules_total} rules
+          </span>
+          <button
+            onClick={onCancel}
+            disabled={cancelling || isCancelRequested}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-risk-red/40 text-risk-red/80 bg-risk-red/10 hover:bg-risk-red/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            {isCancelRequested ? 'Cancelling' : 'Cancel'}
+          </button>
+        </div>
       </div>
 
       {/* Progress bar */}
       <div className="w-full h-2 rounded-full bg-kd-elevated overflow-hidden">
         <div
-          className="h-full rounded-full bg-risk-amber transition-all duration-500"
+          className={cn(
+            'h-full rounded-full transition-all duration-500',
+            isCancelRequested ? 'bg-risk-red/60' : 'bg-risk-amber',
+          )}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -165,6 +194,7 @@ function ErrorList({ errors }: { errors: DiscoveryStatus['errors'] }) {
 export default function DiscoveryPanel() {
   const { toasts, toast, dismiss } = useToast();
   const qc = useQueryClient();
+  const [cleanConfirm, setCleanConfirm] = useState(false);
 
   // Status — poll every 2s while running
   const { data: status } = useQuery({
@@ -177,23 +207,42 @@ export default function DiscoveryPanel() {
 
   const isRunning = status?.running ?? false;
 
-  const handleSuccess = (label: string) => {
-    toast('success', `${label} started`);
-    // Start fast polling
+  const invalidate = () =>
     qc.invalidateQueries({ queryKey: ['rule-engine', 'discovery-status'] });
-  };
 
   const handleError = (err: Error) => toast('error', err.message);
 
   const runAllMutation = useMutation({
     mutationFn: runFullDiscovery,
-    onSuccess: () => handleSuccess('Full discovery'),
+    onSuccess: () => { toast('success', 'Full discovery started'); invalidate(); },
     onError: handleError,
   });
 
   const runMissingMutation = useMutation({
     mutationFn: runMissingDiscovery,
-    onSuccess: () => handleSuccess('Missing rules discovery'),
+    onSuccess: () => { toast('success', 'Missing-rules discovery started'); invalidate(); },
+    onError: handleError,
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: cancelDiscovery,
+    onSuccess: () => { toast('success', 'Cancel requested — finishing current rule…'); invalidate(); },
+    onError: handleError,
+  });
+
+  const cleanMutation = useMutation({
+    mutationFn: runCleanDiscovery,
+    onSuccess: (data) => {
+      toast('success', `Cleared ${data.signals_deleted.toLocaleString()} signals — discovery started`);
+      setCleanConfirm(false);
+      invalidate();
+    },
+    onError: (err: Error) => { handleError(err); setCleanConfirm(false); },
+  });
+
+  const confidenceMutation = useMutation({
+    mutationFn: computeConfidence,
+    onSuccess: () => { toast('success', 'Confidence scoring started'); invalidate(); },
     onError: handleError,
   });
 
@@ -236,19 +285,91 @@ export default function DiscoveryPanel() {
               <Play className="w-4 h-4" />
               Run Missing Only
             </button>
+
+            {/* Clean & Regenerate — two-step confirm */}
+            {!cleanConfirm ? (
+              <button
+                onClick={() => setCleanConfirm(true)}
+                disabled={isRunning}
+                className={cn(
+                  btnBase,
+                  'text-risk-red/80 border-risk-red/30 bg-risk-red/10 hover:bg-risk-red/20',
+                )}
+              >
+                <Trash2 className="w-4 h-4" />
+                Clean &amp; Regenerate
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => cleanMutation.mutate()}
+                  disabled={cleanMutation.isPending}
+                  className={cn(
+                    btnBase,
+                    'text-risk-red border-risk-red/50 bg-risk-red/20 hover:bg-risk-red/30',
+                  )}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {cleanMutation.isPending ? 'Clearing…' : 'Drop all signals & run'}
+                </button>
+                <button
+                  onClick={() => setCleanConfirm(false)}
+                  className="text-xs text-muted hover:text-secondary px-2 py-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
-          {isRunning && (
-            <p className="text-xs text-muted mt-2">
-              Stop by waiting for the job to complete — no cancel endpoint available yet.
+          {cleanConfirm && (
+            <p className="text-xs text-risk-red/70 mt-2 font-mono">
+              ⚠ This will DELETE all rows in km_rule_signals and re-run full discovery.
             </p>
           )}
+        </section>
+
+        {/* Confidence scoring */}
+        <section>
+          <h2 className="text-sm font-medium text-secondary mb-2">Confidence Scoring</h2>
+          <div className="flex items-center gap-4 flex-wrap">
+            <button
+              onClick={() => confidenceMutation.mutate()}
+              disabled={isRunning || confidenceMutation.isPending}
+              className={cn(
+                btnBase,
+                'text-risk-green/80 border-risk-green/30 bg-risk-green/10 hover:bg-risk-green/20',
+              )}
+            >
+              <BarChart2 className="w-4 h-4" />
+              {confidenceMutation.isPending ? 'Computing…' : 'Compute Confidence'}
+            </button>
+            <p className="text-xs font-mono text-muted">
+              {status?.confidence_error ? (
+                <span className="text-risk-red/70">Error: {status.confidence_error}</span>
+              ) : status?.confidence_computed_at ? (
+                <span className="text-secondary">
+                  Last computed:{' '}
+                  {new Date(status.confidence_computed_at).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: 'numeric', minute: '2-digit',
+                  })}
+                </span>
+              ) : (
+                <span>Confidence not yet computed</span>
+              )}
+            </p>
+          </div>
         </section>
 
         {/* Progress (shown while running) */}
         {isRunning && status && (
           <section>
-            <ProgressSection status={status} />
+            <ProgressSection
+              status={status}
+              onCancel={() => cancelMutation.mutate()}
+              cancelling={cancelMutation.isPending}
+            />
           </section>
         )}
 

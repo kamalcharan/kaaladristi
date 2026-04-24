@@ -111,10 +111,19 @@ function TypeChip({ ruleType }: { ruleType: string }) {
 }
 
 function ConfidenceCell({ score }: { score: number | null | undefined }) {
-  if (score == null) return <span className="text-muted text-xs">—</span>;
-  const pct = Math.round(score * 100);
-  const color = pct >= 65 ? 'text-risk-green' : pct >= 45 ? 'text-risk-amber' : 'text-muted';
-  return <span className={cn('text-xs font-mono tabular-nums', color)}>{pct}%</span>;
+  if (score == null) return <span className="text-muted text-xs font-mono">Not scored</span>;
+  // score is already 0-100 (confidence_score column)
+  const pct = Math.round(score);
+  const { label, color } =
+    pct >= 70 ? { label: 'Strong',   color: 'text-risk-green' }
+    : pct >= 60 ? { label: 'Moderate', color: 'text-risk-amber' }
+    : pct >= 50 ? { label: 'Weak',     color: 'text-yellow-400' }
+    :             { label: 'Inverse?', color: 'text-risk-red/80' };
+  return (
+    <span className={cn('text-xs font-mono tabular-nums', color)}>
+      {pct}% <span className="opacity-60">{label}</span>
+    </span>
+  );
 }
 
 function SignalsBadge({ count, isUnavailable }: { count: number | undefined; isUnavailable: boolean }) {

@@ -1380,24 +1380,37 @@ def ping():
 # ── Module-level state for the single running discovery job ───────────────────
 
 _discovery_state: dict = {
-    'job_id':          None,
-    'running':         False,
-    'started_at':      None,
-    'finished_at':     None,
-    'rules_total':     0,
-    'rules_done':      0,
-    'signals_inserted': 0,
-    'current_rule_code': None,
-    'errors':          [],
+    'job_id':                None,
+    'running':               False,
+    'cancel_requested':      False,
+    'started_at':            None,
+    'finished_at':           None,
+    'rules_total':           0,
+    'rules_done':            0,
+    'signals_inserted':      0,
+    'current_rule_code':     None,
+    'errors':                [],
+    'confidence_computed_at': None,
+    'confidence_error':      None,
 }
 
 # ── Import discovery logic lazily (scripts package, same process) ─────────────
 
 def _import_discover_rule():
-    """Return discover_rule callable, or raise ImportError with useful message."""
+    """Return discovery functions tuple or raise."""
     try:
-        from scripts.rule_discovery import discover_rule  # noqa: PLC0415
-        return discover_rule
+        from scripts.rule_discovery import (  # noqa: PLC0415
+            discover_rule,
+            load_vocabulary,
+            build_vedh_map,
+            get_panchak_nakshatras,
+            should_group_transits,
+            detect_transits,
+            insert_transits,
+        )
+        return (discover_rule, load_vocabulary, build_vedh_map,
+                get_panchak_nakshatras, should_group_transits,
+                detect_transits, insert_transits)
     except Exception as exc:
         raise ImportError(f'Cannot import rule_discovery: {exc}') from exc
 
@@ -1451,18 +1464,20 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
 
     job_id = _discovery_state['job_id']
     _discovery_state.update({
-        'running':          True,
-        'started_at':       datetime.utcnow().isoformat(),
-        'finished_at':      None,
-        'rules_total':      0,
-        'rules_done':       0,
-        'signals_inserted': 0,
+        'running':           True,
+        'cancel_requested':  False,
+        'started_at':        datetime.utcnow().isoformat(),
+        'finished_at':       None,
+        'rules_total':       0,
+        'rules_done':        0,
+        'signals_inserted':  0,
         'current_rule_code': None,
-        'errors':           [],
+        'errors':            [],
     })
 
     try:
-        discover_rule = _import_discover_rule()
+        (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras,
+         should_group_transits, detect_transits, insert_transits) = _import_discover_rule()
     except ImportError as exc:
         log.error(f'Discovery import failed: {exc}')
         _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
@@ -1478,11 +1493,22 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
         return
 
     try:
+        vocab = load_vocabulary(conn)
+        vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
+        panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
+        log.info(f'Vocabulary loaded: {len(vocab["nakshatra_positions_names"])} nakshatras')
+
         rules = _load_rules_for_discovery(conn, mode, rule_id)
         _discovery_state['rules_total'] = len(rules)
         log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
 
         for rule in rules:
+            # Honour cancel requests between rules
+            if _discovery_state['cancel_requested']:
+                log.info(f'Discovery [{mode}] cancelled after {_discovery_state["rules_done"]} rules')
+                _discovery_state['errors'].append({'rule_code': 'CANCELLED', 'error': 'Cancelled by user'})
+                break
+
             _discovery_state['current_rule_code'] = rule['rule_code']
 
             # Ensure conditions is a dict (may come from DB as dict or str)
@@ -1495,7 +1521,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                 rule['conditions'] = {}
 
             try:
-                matched_rows = discover_rule(conn, rule)
+                matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks)
 
                 strength = {'Very High': 5, 'High': 4, 'Reasonable': 3, 'Low': 2}.get(
                     rule.get('probability_label'), 3
@@ -1514,6 +1540,13 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                         inserted += cur.rowcount
                 conn.commit()
                 _discovery_state['signals_inserted'] += inserted
+
+                # Insert transits for transit-grouped rule types
+                if matched_rows and should_group_transits(rule):
+                    rule_transits = detect_transits(conn, rule, matched_rows)
+                    if rule_transits:
+                        insert_transits(conn, rule, rule_transits)
+                        conn.commit()
 
             except Exception as exc:
                 log.error(f"Discovery error rule {rule['rule_code']}: {exc}")
@@ -1541,6 +1574,30 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
             f'{len(_discovery_state["errors"])} errors'
         )
 
+    # Auto-run confidence scoring after discovery completes
+    try:
+        log.info('Discovery complete. Starting confidence scoring…')
+        from scripts.confidence_scoring import (  # noqa: PLC0415
+            build_nifty_close_map,
+            load_rule_outcome_map,
+            update_transit_returns,
+            compute_confidence_from_transits,
+            compute_yearly_breakdown,
+        )
+        conf_conn = _conn()
+        close_map = build_nifty_close_map(conf_conn)
+        rule_outcome_map = load_rule_outcome_map(conf_conn)
+        update_transit_returns(conf_conn, close_map, rule_outcome_map)
+        compute_confidence_from_transits(conf_conn)
+        compute_yearly_breakdown(conf_conn)
+        conf_conn.close()
+        _discovery_state['confidence_computed_at'] = datetime.utcnow().isoformat()
+        _discovery_state['confidence_error'] = None
+        log.info('Confidence scoring complete.')
+    except Exception as exc:
+        log.error(f'Confidence scoring error: {exc}')
+        _discovery_state['confidence_error'] = str(exc)
+
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
@@ -1551,6 +1608,7 @@ def discovery_run_all(background_tasks: BackgroundTasks):
         raise HTTPException(409, 'A discovery job is already running')
     job_id = str(uuid.uuid4())
     _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
     background_tasks.add_task(_run_discovery_bg, 'all')
     return {'job_id': job_id, 'status': 'started', 'message': 'Full discovery started'}
 
@@ -1577,6 +1635,7 @@ def discovery_run_missing(background_tasks: BackgroundTasks):
 
     job_id = str(uuid.uuid4())
     _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
     background_tasks.add_task(_run_discovery_bg, 'missing')
     return {
         'job_id': job_id,
@@ -1593,6 +1652,7 @@ def discovery_run_single(rule_id: int, background_tasks: BackgroundTasks):
         raise HTTPException(409, 'A discovery job is already running')
     job_id = str(uuid.uuid4())
     _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
     background_tasks.add_task(_run_discovery_bg, 'single', rule_id)
     return {'job_id': job_id, 'status': 'started', 'rule_id': rule_id}
 
@@ -1634,16 +1694,235 @@ def discovery_status():
 
 @app.get('/api/discovery/signal-counts')
 def discovery_signal_counts():
-    """Return per-rule signal counts for the Rule List column."""
+    """Return per-rule signal counts plus transit counts for the Rule List column."""
     try:
         conn = _conn()
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT rule_id, COUNT(*) AS count FROM km_rule_signals GROUP BY rule_id"
             )
-            rows = cur.fetchall()
+            signal_rows = cur.fetchall()
+            cur.execute(
+                "SELECT rule_id, COUNT(*) AS total, "
+                "COUNT(*) FILTER (WHERE end_date <= CURRENT_DATE) AS historical "
+                "FROM km_rule_transits GROUP BY rule_id"
+            )
+            transit_rows = cur.fetchall()
         conn.close()
-        return [{'rule_id': r[0], 'count': r[1]} for r in rows]
+        transit_map = {r[0]: {'total': r[1], 'historical': r[2]} for r in transit_rows}
+        return [
+            {
+                'rule_id': r[0],
+                'count': r[1],
+                'transit_total': transit_map.get(r[0], {}).get('total', 0),
+                'transit_historical': transit_map.get(r[0], {}).get('historical', 0),
+            }
+            for r in signal_rows
+        ]
     except Exception as exc:
         raise HTTPException(500, f'Signal counts query failed: {exc}')
+
+
+@app.get('/api/discovery/transit-counts')
+def discovery_transit_counts():
+    """Return per-rule transit counts (historical and future) for the Rule List column."""
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    rule_id,
+                    COUNT(*)                                          AS total,
+                    COUNT(*) FILTER (WHERE end_date <= CURRENT_DATE) AS historical,
+                    COUNT(*) FILTER (WHERE start_date > CURRENT_DATE) AS future
+                FROM km_rule_transits
+                GROUP BY rule_id
+            """)
+            rows = cur.fetchall()
+        conn.close()
+        return [
+            {'rule_id': r[0], 'total': r[1], 'historical': r[2], 'future': r[3]}
+            for r in rows
+        ]
+    except Exception as exc:
+        raise HTTPException(500, f'Transit counts query failed: {exc}')
+
+
+@app.post('/api/discovery/cancel')
+def discovery_cancel():
+    """Request cancellation of the currently running discovery job."""
+    if not _discovery_state['running']:
+        raise HTTPException(409, 'No discovery job is currently running')
+    _discovery_state['cancel_requested'] = True
+    return {'status': 'cancel_requested', 'job_id': _discovery_state['job_id']}
+
+
+@app.post('/api/discovery/run-clean')
+def discovery_run_clean(background_tasks: BackgroundTasks):
+    """Delete ALL existing signals then run full discovery from scratch."""
+    if _discovery_state['running']:
+        raise HTTPException(409, 'A discovery job is already running')
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_rule_signals')
+            deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        raise HTTPException(500, f'Failed to clear signals: {exc}')
+    job_id = str(uuid.uuid4())
+    _discovery_state['job_id'] = job_id
+    _discovery_state['running'] = True
+    background_tasks.add_task(_run_discovery_bg, 'all')
+    return {
+        'job_id': job_id,
+        'status': 'started',
+        'message': f'Cleared {deleted:,} signals — full discovery started',
+        'signals_deleted': deleted,
+    }
+
+
+# ── Confidence scoring ────────────────────────────────────────────────────────
+
+_confidence_state: dict = {
+    'job_id':            None,
+    'running':           False,
+    'started_at':        None,
+    'finished_at':       None,
+    'signals_scored':    0,
+    'rules_upserted':    0,
+    'error':             None,
+}
+
+
+def _run_confidence_bg():
+    """Background task: score km_rule_signals and upsert km_rule_confidence."""
+    import json as _json  # noqa: PLC0415
+
+    global _confidence_state
+
+    if _confidence_state['running']:
+        log.warning('Confidence scoring already running — ignoring duplicate request')
+        return
+
+    _confidence_state.update({
+        'running':        True,
+        'started_at':     datetime.utcnow().isoformat(),
+        'finished_at':    None,
+        'signals_scored': 0,
+        'rules_upserted': 0,
+        'error':          None,
+    })
+
+    try:
+        from scripts.confidence_scoring import (  # noqa: PLC0415
+            build_nifty_close_map,
+            load_rule_outcome_map,
+            update_transit_returns,
+            compute_confidence_from_transits,
+            compute_yearly_breakdown,
+        )
+    except Exception as exc:
+        log.error(f'Confidence import failed: {exc}')
+        _confidence_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'error': str(exc)})
+        return
+
+    try:
+        conn = _conn()
+    except Exception as exc:
+        log.error(f'Confidence DB connection failed: {exc}')
+        _confidence_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'error': str(exc)})
+        return
+
+    try:
+        close_map = build_nifty_close_map(conn)
+        rule_outcome_map = load_rule_outcome_map(conn)
+        scored = update_transit_returns(conn, close_map, rule_outcome_map)
+        upserted = compute_confidence_from_transits(conn)
+        compute_yearly_breakdown(conn)
+        _confidence_state['signals_scored'] = scored
+        _confidence_state['rules_upserted'] = upserted
+        log.info(f'Confidence done — {scored} transits scored, {upserted} rules upserted')
+    except Exception as exc:
+        log.error(f'Confidence scoring failed: {exc}')
+        _confidence_state['error'] = str(exc)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _confidence_state['running'] = False
+        _confidence_state['finished_at'] = datetime.utcnow().isoformat()
+
+
+@app.post('/api/confidence/compute')
+def confidence_compute(background_tasks: BackgroundTasks):
+    """Score all km_rule_signals against Nifty returns and upsert km_rule_confidence."""
+    if _confidence_state['running']:
+        raise HTTPException(409, 'Confidence scoring is already running')
+    job_id = str(uuid.uuid4())
+    _confidence_state['job_id'] = job_id
+    background_tasks.add_task(_run_confidence_bg)
+    return {'job_id': job_id, 'status': 'started', 'message': 'Confidence scoring started'}
+
+
+@app.get('/api/confidence/status')
+def confidence_status():
+    """Return current or last confidence scoring job state."""
+    return dict(_confidence_state)
+
+
+@app.get('/api/confidence/summary')
+def confidence_summary():
+    """Return per-rule confidence scores joined with rule metadata. Ordered by confidence DESC."""
+    try:
+        conn = _conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    r.id              AS rule_id,
+                    r.rule_code,
+                    r.display_name,
+                    r.outcome,
+                    r.rule_type,
+                    c.total_occurrences,
+                    c.matched_count,
+                    c.confidence_score,
+                    c.avg_return_all,
+                    c.avg_return_matched,
+                    c.avg_return_unmatched,
+                    c.best_return,
+                    c.worst_return,
+                    c.avg_duration_days,
+                    c.historical_transits,
+                    c.last_computed_at
+                FROM km_rule_confidence c
+                JOIN km_astro_rule_master r ON c.rule_id = r.id
+                ORDER BY c.confidence_score DESC NULLS LAST
+            """)
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except Exception as exc:
+        raise HTTPException(500, f'Confidence summary query failed: {exc}')
+
+
+@app.get('/api/confidence/yearly/{rule_id}')
+def confidence_yearly(rule_id: int):
+    """Return year-by-year win-rate breakdown for a single rule."""
+    try:
+        conn = _conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT year, transits, matched, win_pct, avg_return, avg_duration
+                FROM km_rule_confidence_yearly
+                WHERE rule_id = %s
+                ORDER BY year DESC
+            """, (rule_id,))
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return rows
+    except Exception as exc:
+        raise HTTPException(500, f'Yearly confidence query failed: {exc}')
 
