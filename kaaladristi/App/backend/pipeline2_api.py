@@ -1797,6 +1797,95 @@ def discovery_run_clean(background_tasks: BackgroundTasks):
     }
 
 
+@app.get('/api/discovery/diagnose')
+def discovery_diagnose():
+    """
+    Diagnostic endpoint — measures each phase of discovery initialization.
+    Hit this to find out exactly where things are slow / failing.
+    Returns timing for: DB connect, import, rule load, 1-rule test.
+    """
+    import time as _t
+    report: dict = {}
+
+    # 1. DB connect
+    t0 = _t.monotonic()
+    try:
+        conn = _conn()
+        report['db_connect_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['db_connect'] = 'ok'
+    except Exception as exc:
+        report['db_connect_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['db_connect'] = f'FAILED: {exc}'
+        return report
+
+    # 2. Import rule_discovery
+    t0 = _t.monotonic()
+    try:
+        (discover_rule, load_vocabulary, build_vedh_map,
+         get_panchak_nakshatras, should_group_transits,
+         detect_transits, insert_transits) = _import_discover_rule()
+        report['import_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['import'] = 'ok'
+    except Exception as exc:
+        report['import_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['import'] = f'FAILED: {exc}'
+        conn.close()
+        return report
+
+    # 3. Load vocabulary
+    t0 = _t.monotonic()
+    try:
+        vocab = load_vocabulary(conn)
+        vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
+        panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
+        report['vocab_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['vocab'] = f'ok — {len(vocab["nakshatra_positions_names"])} nakshatras'
+    except Exception as exc:
+        report['vocab_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['vocab'] = f'FAILED: {exc}'
+        conn.close()
+        return report
+
+    # 4. Load rules
+    t0 = _t.monotonic()
+    try:
+        rules = _load_rules_for_discovery(conn, 'all')
+        report['rules_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['rules_count'] = len(rules)
+        report['rules'] = 'ok'
+    except Exception as exc:
+        report['rules_ms'] = round((_t.monotonic() - t0) * 1000)
+        report['rules'] = f'FAILED: {exc}'
+        conn.close()
+        return report
+
+    # 5. Run 1 simple nakshatra_vara rule as a speed test
+    test_rule = next((r for r in rules if r['rule_type'] == 'nakshatra_vara'), None)
+    if test_rule:
+        t0 = _t.monotonic()
+        try:
+            matched = discover_rule(conn, test_rule, vedh_map, panchak_naks)
+            report['test_rule_ms'] = round((_t.monotonic() - t0) * 1000)
+            report['test_rule'] = test_rule['rule_code']
+            report['test_rule_matched'] = len(matched)
+        except Exception as exc:
+            report['test_rule_ms'] = round((_t.monotonic() - t0) * 1000)
+            report['test_rule'] = f'FAILED: {exc}'
+    else:
+        report['test_rule'] = 'no nakshatra_vara rule found'
+
+    conn.close()
+    report['verdict'] = (
+        'slow_db_connect' if report.get('db_connect_ms', 0) > 3000
+        else 'slow_import' if report.get('import_ms', 0) > 2000
+        else 'slow_vocab' if report.get('vocab_ms', 0) > 2000
+        else 'slow_rules_load' if report.get('rules_ms', 0) > 2000
+        else 'slow_per_rule' if report.get('test_rule_ms', 0) > 3000
+        else 'ok'
+    )
+    return report
+
+
 # ── Confidence scoring ────────────────────────────────────────────────────────
 
 _confidence_state: dict = {

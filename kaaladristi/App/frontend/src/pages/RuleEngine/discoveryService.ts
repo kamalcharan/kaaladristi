@@ -84,3 +84,9 @@ export async function computeConfidence(): Promise<{ job_id: string }> {
   const res = await postJson(`${PIPELINE_API}/api/confidence/compute`);
   return res.json();
 }
+
+export async function runDiagnose(): Promise<Record<string, unknown>> {
+  const res = await fetch(`${PIPELINE_API}/api/discovery/diagnose`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

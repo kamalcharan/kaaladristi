@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Play, AlertTriangle, CheckCircle2, Activity, XCircle, Trash2, BarChart2 } from 'lucide-react';
+import { Play, AlertTriangle, CheckCircle2, Activity, XCircle, Trash2, BarChart2, Stethoscope } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useToast, ToastContainer } from '@/components/ui';
@@ -9,6 +9,7 @@ import {
   cancelDiscovery,
   runCleanDiscovery,
   computeConfidence,
+  runDiagnose,
   fetchDiscoveryStatus,
   fetchSignalCounts,
   type DiscoveryStatus,
@@ -189,12 +190,43 @@ function ErrorList({ errors }: { errors: DiscoveryStatus['errors'] }) {
   );
 }
 
+// ── Diagnostic result ─────────────────────────────────────────────────────────
+
+function DiagnosticResult({ data }: { data: Record<string, unknown> }) {
+  const verdict = data.verdict as string;
+  const rows: { label: string; value: string; bad?: boolean }[] = [
+    { label: 'DB connect', value: `${data.db_connect_ms}ms — ${data.db_connect}`, bad: String(data.db_connect).startsWith('FAILED') },
+    { label: 'Import', value: `${data.import_ms}ms — ${data.import}`, bad: String(data.import).startsWith('FAILED') },
+    { label: 'Vocab load', value: `${data.vocab_ms}ms — ${data.vocab}`, bad: String(data.vocab).startsWith('FAILED') },
+    { label: 'Rules load', value: `${data.rules_ms}ms — ${data.rules_count} rules`, bad: String(data.rules).startsWith('FAILED') },
+    { label: 'Test rule', value: data.test_rule_ms != null ? `${data.test_rule_ms}ms — ${data.test_rule} (${data.test_rule_matched} matches)` : String(data.test_rule), bad: String(data.test_rule).startsWith('FAILED') },
+  ].filter(r => r.value !== 'undefinedms — undefined');
+
+  return (
+    <div className={cn(
+      'rounded-xl border p-4 space-y-2',
+      verdict === 'ok' ? 'border-risk-green/30 bg-risk-green/5' : 'border-risk-amber/30 bg-risk-amber/5',
+    )}>
+      <p className={cn('text-xs font-medium', verdict === 'ok' ? 'text-risk-green/80' : 'text-risk-amber')}>
+        Diagnosis: {verdict.replace(/_/g, ' ')}
+      </p>
+      {rows.map(r => (
+        <div key={r.label} className="flex gap-3 text-[11px] font-mono">
+          <span className="w-24 text-muted shrink-0">{r.label}</span>
+          <span className={r.bad ? 'text-risk-red/80' : 'text-secondary'}>{r.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DiscoveryPanel() {
   const { toasts, toast, dismiss } = useToast();
   const qc = useQueryClient();
   const [cleanConfirm, setCleanConfirm] = useState(false);
+  const [diagResult, setDiagResult] = useState<Record<string, unknown> | null>(null);
 
   // Status — poll every 2s while running
   const { data: status } = useQuery({
@@ -244,6 +276,12 @@ export default function DiscoveryPanel() {
     mutationFn: computeConfidence,
     onSuccess: () => { toast('success', 'Confidence scoring started'); invalidate(); },
     onError: handleError,
+  });
+
+  const diagnoseMutation = useMutation({
+    mutationFn: runDiagnose,
+    onSuccess: (data) => setDiagResult(data),
+    onError: (err: Error) => toast('error', err.message),
   });
 
   const btnBase =
@@ -359,6 +397,22 @@ export default function DiscoveryPanel() {
                 <span>Confidence not yet computed</span>
               )}
             </p>
+          </div>
+        </section>
+
+        {/* Diagnose */}
+        <section>
+          <h2 className="text-sm font-medium text-secondary mb-2">Diagnostics</h2>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => diagnoseMutation.mutate()}
+              disabled={diagnoseMutation.isPending}
+              className={cn(btnBase, 'text-muted border-kd-border bg-kd-elevated/40 hover:bg-kd-elevated')}
+            >
+              <Stethoscope className="w-4 h-4" />
+              {diagnoseMutation.isPending ? 'Running diagnostics…' : 'Run Diagnostics'}
+            </button>
+            {diagResult && <DiagnosticResult data={diagResult} />}
           </div>
         </section>
 
