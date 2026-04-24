@@ -1540,6 +1540,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
 
             try:
                 matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks)
+                print(f"DEBUG [{rule['rule_code']}]: discover_rule → {len(matched_rows)} rows, should_group={should_group_transits(rule)}", flush=True)
 
                 strength = {'Very High': 5, 'High': 4, 'Reasonable': 3, 'Low': 2}.get(
                     rule.get('probability_label'), 3
@@ -1565,10 +1566,20 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                 # Insert transits for transit-grouped rule types
                 if matched_rows and should_group_transits(rule):
                     rule_transits = detect_transits(conn, rule, matched_rows)
+                    print(f"DEBUG [{rule['rule_code']}]: detect_transits → {len(rule_transits)} transits", flush=True)
                     if rule_transits:
-                        n_tr = insert_transits(conn, rule, rule_transits)
-                        conn.commit()
-                        _discovery_state['transits_inserted'] += n_tr
+                        try:
+                            n_tr = insert_transits(conn, rule, rule_transits)
+                            conn.commit()
+                            _discovery_state['transits_inserted'] += n_tr
+                            print(f"DEBUG [{rule['rule_code']}]: insert_transits → {n_tr} inserted", flush=True)
+                        except Exception as tr_exc:
+                            conn.rollback()
+                            print(f"DEBUG [{rule['rule_code']}]: insert_transits FAILED: {tr_exc}", flush=True)
+                            log.error(f"Transit insert error rule {rule['rule_code']}: {tr_exc}")
+                            _discovery_state['errors'].append(
+                                {'rule_code': rule['rule_code'] + ':TRANSIT', 'error': str(tr_exc)}
+                            )
 
             except Exception as exc:
                 log.error(f"Discovery error rule {rule['rule_code']}: {exc}")
@@ -1785,6 +1796,31 @@ def discovery_run_clean(background_tasks: BackgroundTasks):
         'status': 'started',
         'message': f'Cleared {deleted:,} signals — full discovery started',
         'signals_deleted': deleted,
+    }
+
+
+@app.delete('/api/discovery/rule/{rule_id}/signals')
+def discovery_drop_rule_signals(rule_id: int):
+    """Delete all signals and transits for a single rule_id, resetting it for re-discovery."""
+    if _discovery_state['running']:
+        raise HTTPException(409, 'A discovery job is running — wait for it to finish before dropping signals')
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_rule_transits WHERE rule_id = %s', (rule_id,))
+            transits_deleted = cur.rowcount
+            cur.execute('DELETE FROM km_rule_signals WHERE rule_id = %s', (rule_id,))
+            signals_deleted = cur.rowcount
+            cur.execute('DELETE FROM km_rule_confidence WHERE rule_id = %s', (rule_id,))
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        raise HTTPException(500, f'Failed to drop signals for rule {rule_id}: {exc}')
+    return {
+        'rule_id': rule_id,
+        'signals_deleted': signals_deleted,
+        'transits_deleted': transits_deleted,
+        'status': 'cleared',
     }
 
 

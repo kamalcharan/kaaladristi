@@ -86,6 +86,15 @@ export async function computeConfidence(): Promise<{ job_id: string }> {
   return res.json();
 }
 
+export async function dropRuleSignals(ruleId: number): Promise<{ signals_deleted: number; transits_deleted: number }> {
+  const res = await fetch(`${PIPELINE_API}/api/discovery/rule/${ruleId}/signals`, { method: 'DELETE' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function runDiagnose(): Promise<Record<string, unknown>> {
   const res = await fetch(`${PIPELINE_API}/api/discovery/diagnose`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play, WifiOff, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play, WifiOff, X, Eraser } from 'lucide-react';
 import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast, ToastContainer } from '@/components/ui';
@@ -9,7 +9,7 @@ import { useBackendStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
-import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery } from './discoveryService';
+import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery, dropRuleSignals } from './discoveryService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -441,6 +441,8 @@ export default function RuleDetail() {
   const [saveError, setSaveError] = useState<string | null>(null);
   // Delete confirmation: first click arms, second click within 3s fires
   const [deleteArmed, setDeleteArmed] = useState(false);
+  // Drop signals confirmation: same two-step pattern
+  const [dropArmed, setDropArmed] = useState(false);
   // Track when a background discovery job is running for this page
   const [trackingDiscovery, setTrackingDiscovery] = useState(false);
   // Job ID of the discovery we started — used to avoid reacting to a stale cached status
@@ -599,6 +601,32 @@ export default function RuleDetail() {
     onError: (err: Error) => toast('error', err.message),
   });
 
+  // ── Drop signals mutation ──
+  const dropSignalsMutation = useMutation({
+    mutationFn: () => dropRuleSignals(ruleId),
+    onSuccess: (data) => {
+      setDropArmed(false);
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'signals-upcoming', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'transits', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'transits-upcoming', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence-yearly', ruleId] });
+      toast('success', `Cleared ${data.signals_deleted} signals · ${data.transits_deleted} transits — run discovery to repopulate`);
+    },
+    onError: (err: Error) => { setDropArmed(false); toast('error', `Drop failed: ${err.message}`); },
+  });
+
+  const handleDropSignals = () => {
+    if (dropArmed) {
+      dropSignalsMutation.mutate();
+      setDropArmed(false);
+    } else {
+      setDropArmed(true);
+      setTimeout(() => setDropArmed(false), 3000);
+    }
+  };
+
   // ── Cancel mutation ──
   const cancelMutation = useMutation({
     mutationFn: cancelDiscovery,
@@ -698,6 +726,24 @@ export default function RuleDetail() {
                 Run Discovery
               </button>
             )}
+
+            {/* Drop Signals (two-step confirm) */}
+            <button
+              onClick={handleDropSignals}
+              disabled={dropSignalsMutation.isPending || isDiscoveryRunning}
+              title="Delete all signals, transits and confidence for this rule so you can re-run discovery from scratch"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all disabled:opacity-50',
+                dropArmed
+                  ? 'text-white bg-risk-red/60 border-risk-red animate-pulse'
+                  : 'text-muted border-kd-border hover:text-risk-red/70 hover:border-risk-red/30',
+              )}
+            >
+              {dropSignalsMutation.isPending
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Eraser className="w-3.5 h-3.5" />}
+              {dropArmed ? 'Confirm Drop?' : 'Drop Signals'}
+            </button>
 
             {/* Clone */}
             <button
