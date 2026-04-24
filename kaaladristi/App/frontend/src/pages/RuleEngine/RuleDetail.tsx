@@ -847,7 +847,7 @@ export default function RuleDetail() {
               </span>
             )}
           </h2>
-          {conf?.confidence_score != null ? (
+          {conf != null ? (
             <ConfidenceSummary conf={conf} />
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-6 rounded-xl border border-kd-border bg-kd-elevated/30">

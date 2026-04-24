@@ -125,7 +125,7 @@ def _flush_transit_batch(conn, batch: list):
 def load_rule_outcome_map(conn) -> dict:
     """Return {rule_id: outcome} for all rules."""
     cur = conn.cursor()
-    cur.execute("SELECT id, outcome FROM km_astro_rule_master")
+    cur.execute("SELECT id, COALESCE(outcome, base_bias) FROM km_astro_rule_master")
     return {row[0]: row[1] for row in cur.fetchall()}
 
 
