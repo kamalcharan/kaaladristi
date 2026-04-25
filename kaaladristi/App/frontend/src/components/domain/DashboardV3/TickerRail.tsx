@@ -176,21 +176,6 @@ function Card({ ticker, data }: { ticker: TickerConfig; data?: TickerData }) {
           : '—'}
       </span>
 
-      {/* Data date — shows which trade date is being displayed */}
-      {data?.trade_date && (
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 8,
-          color: 'var(--text-faint)',
-          letterSpacing: '0.08em',
-          opacity: 0.6,
-        }}>
-          {new Date(data.trade_date + 'T00:00:00Z').toLocaleDateString('en-IN', {
-            day: 'numeric', month: 'short', timeZone: 'UTC',
-          })}
-        </span>
-      )}
-
       {/* RSI + MagicRS zone — hide for VIX */}
       {!ticker.isVix && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -213,8 +198,28 @@ function Card({ ticker, data }: { ticker: TickerConfig; data?: TickerData }) {
             letterSpacing: '0.06em',
           }}>
             ● {zoneShort(zone)}
+            {data?.magic_rs != null && (
+              <span style={{ color: 'var(--text-faint)', marginLeft: 3 }}>
+                {data.magic_rs > 0 ? '+' : ''}{data.magic_rs.toFixed(1)}
+              </span>
+            )}
           </span>
         </div>
+      )}
+
+      {/* Trade date — clearly visible so stale data is obvious */}
+      {data?.trade_date && (
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 8,
+          color: 'var(--text-faint)',
+          letterSpacing: '0.08em',
+          marginTop: 2,
+        }}>
+          {new Date(data.trade_date + 'T00:00:00Z').toLocaleDateString('en-IN', {
+            day: 'numeric', month: 'short', timeZone: 'UTC',
+          })}
+        </span>
       )}
     </div>
   );
