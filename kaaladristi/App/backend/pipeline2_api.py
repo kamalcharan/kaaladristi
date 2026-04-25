@@ -21,7 +21,7 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -864,6 +864,124 @@ def panchang_daily(date: str = None):
     # Cache past dates only — today's signals may still be updating after discovery
     if date_obj < today:
         _panchang_full_cache[date] = result
+
+    return result
+
+
+_WEEK_SIGNALS_SQL = """
+    SELECT
+        s.date,
+        COUNT(*)                                                          AS total_signals,
+        COUNT(*) FILTER (WHERE r.outcome IN ('strong_bullish','bullish','mild_bullish'))  AS bullish,
+        COUNT(*) FILTER (WHERE r.outcome IN ('strong_bearish','bearish','mild_bearish'))  AS bearish,
+        COUNT(*) FILTER (WHERE r.outcome = 'turning')                                     AS turning,
+        COUNT(*) FILTER (WHERE r.outcome = 'neutral')                                     AS neutral,
+        ROUND(AVG(c.confidence_score)::numeric, 1)                       AS avg_confidence,
+        MAX(s.strength)                                                   AS peak_strength,
+        json_agg(
+            json_build_object(
+                'rule_id',        r.id,
+                'rule_code',      r.rule_code,
+                'rule_name',      r.display_name,
+                'rule_type',      r.rule_type,
+                'outcome',        r.outcome,
+                'strength',       s.strength,
+                'confidence',     c.confidence_score,
+                'probability_label', r.probability_label
+            )
+            ORDER BY c.confidence_score DESC NULLS LAST, s.strength DESC
+        ) AS signals
+    FROM km_rule_signals s
+    JOIN  km_astro_rule_master  r ON r.id = s.rule_id
+    LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
+    WHERE s.date BETWEEN %s AND %s
+      AND r.is_active = TRUE
+      AND r.is_deleted = FALSE
+    GROUP BY s.date
+    ORDER BY s.date
+"""
+
+_PANCHANG_WEEK_SQL = """
+    SELECT date, vara, nakshatra_name, tithi, yoga, paksha,
+           dlnl_match, is_ekadashi, is_purnima
+    FROM km_daily_panchang
+    WHERE date BETWEEN %s AND %s
+    ORDER BY date
+"""
+
+_IS_TRADING_WEEK_SQL = """
+    SELECT DISTINCT date FROM km_index_eod
+    WHERE date BETWEEN %s AND %s
+      AND index_id = (SELECT id FROM km_index_symbols WHERE name = 'NIFTY 50' LIMIT 1)
+"""
+
+
+@app.get('/api/panchang/week')
+def panchang_week(from_date: str = Query(..., alias='from'),
+                  to_date: str  = Query(..., alias='to')):
+    """
+    Per-day rule signal summary for a date range (max 31 days).
+    Returns list of {date, vara, nakshatra_name, tithi, is_trading_day,
+                     total_signals, bullish, bearish, turning, neutral,
+                     avg_confidence, peak_strength, signals[]}.
+    """
+    try:
+        from_obj = datetime.strptime(from_date, '%Y-%m-%d').date()
+        to_obj   = datetime.strptime(to_date,   '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Dates must be YYYY-MM-DD')
+
+    if (to_obj - from_obj).days > 31:
+        raise HTTPException(status_code=400, detail='Range must be ≤ 31 days')
+    if to_obj < from_obj:
+        raise HTTPException(status_code=400, detail='to must be ≥ from')
+
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(_PANCHANG_WEEK_SQL, (from_date, to_date))
+            panchang_rows = {str(r['date']): dict(r) for r in cur.fetchall()}
+
+            cur.execute(_WEEK_SIGNALS_SQL, (from_date, to_date))
+            signal_rows = {str(r['date']): dict(r) for r in cur.fetchall()}
+
+            cur.execute(_IS_TRADING_WEEK_SQL, (from_date, to_date))
+            trading_days = {str(r['date']) for r in cur.fetchall()}
+    except Exception as e:
+        log.error(f'panchang_week error {from_date}→{to_date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+    # Build one entry per calendar day in range
+    result = []
+    day = from_obj
+    while day <= to_obj:
+        ds = str(day)
+        prow = panchang_rows.get(ds, {})
+        srow = signal_rows.get(ds, {})
+
+        result.append({
+            'date':            ds,
+            'vara':            prow.get('vara'),
+            'nakshatra_name':  prow.get('nakshatra_name'),
+            'tithi':           prow.get('tithi'),
+            'yoga':            prow.get('yoga'),
+            'paksha':          prow.get('paksha'),
+            'dlnl_match':      prow.get('dlnl_match'),
+            'is_ekadashi':     prow.get('is_ekadashi'),
+            'is_purnima':      prow.get('is_purnima'),
+            'is_trading_day':  ds in trading_days,
+            'total_signals':   int(srow.get('total_signals', 0)),
+            'bullish':         int(srow.get('bullish', 0)),
+            'bearish':         int(srow.get('bearish', 0)),
+            'turning':         int(srow.get('turning', 0)),
+            'neutral':         int(srow.get('neutral', 0)),
+            'avg_confidence':  float(srow['avg_confidence']) if srow.get('avg_confidence') is not None else None,
+            'peak_strength':   int(srow['peak_strength']) if srow.get('peak_strength') is not None else None,
+            'signals':         srow.get('signals') or [],
+        })
+        day += timedelta(days=1)
 
     return result
 
