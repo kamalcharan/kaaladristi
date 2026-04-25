@@ -126,7 +126,8 @@ class QueryBuilder {
 
   /** IN filter: column IN (val1, val2, ...) */
   in(column: string, values: (string | number)[]): this {
-    this.state.params.append(column, `in.(${values.join(',')})`);
+    const formatted = values.map(v => typeof v === 'string' ? `"${v}"` : v);
+    this.state.params.append(column, `in.(${formatted.join(',')})`);
     return this;
   }
 

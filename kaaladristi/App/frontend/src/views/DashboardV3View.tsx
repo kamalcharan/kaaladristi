@@ -3,7 +3,6 @@ import { useAppStore } from '@/stores/appStore';
 import { dashboardDate } from '@/stores/appStore';
 import { useDashboardPings } from '@/hooks/useDashboardPings';
 import {
-  TodaysSky,
   CurrentSkyRail,
   PingsColumn,
   SixDayOutlookCompact,
@@ -14,14 +13,15 @@ import {
   MarketWeatherCard,
   type Density,
 } from '@/components/domain/DashboardV3';
-import TickerRail    from '@/components/domain/DashboardV3/TickerRail';
+import TickerRail     from '@/components/domain/DashboardV3/TickerRail';
 import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
+import PanchangamCard from '@/components/domain/PanchangamCard';
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function DashboardV3View() {
   const [density, setDensity] = useState<Density>('terminal');
-  const { selectedDate } = useAppStore();
+  useAppStore(); // keep store subscribed for future symbol use
 
   // After 7 PM IST use next trading day; weekends always show Monday
   const displayDate = dashboardDate();
@@ -43,13 +43,8 @@ export default function DashboardV3View() {
             marginBottom: 4,
           }}>
             {new Date(displayDate + 'T00:00:00Z').toLocaleDateString('en-IN', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-              timeZone: 'UTC',
-            })}{' '}
-            · End of Day
+              weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+            })}{' '}· End of Day
           </div>
           <h1 style={{
             fontFamily: 'var(--font-display)',
@@ -61,9 +56,7 @@ export default function DashboardV3View() {
             margin: 0,
           }}>
             Today&apos;s{' '}
-            <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
-              Read
-            </em>
+            <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Read</em>
           </h1>
         </div>
         <DensityToggle density={density} onChange={setDensity} />
@@ -72,16 +65,21 @@ export default function DashboardV3View() {
       {/* ── ROW 0: Ticker Rail — always visible ── */}
       <TickerRail date={displayDate} />
 
-      {/* ── ROW 1: TodaysSky — always visible ── */}
-      <TodaysSky date={displayDate} />
+      {/* ── ROW 1: Astro-Technical Alignment (65%) + Panchangam (35%) — always visible ── */}
+      <div
+        className="grid gap-4 mb-4"
+        style={{ gridTemplateColumns: '65fr 35fr' }}
+      >
+        <MarketWeatherCard date={displayDate} />
+        <PanchangamCard date={displayDate} />
+      </div>
 
-      {/* ── ROW 2: Hero 3-col — calm hidden ── */}
+      {/* ── ROW 2: Pings + 6-Day Outlook — calm hidden ── */}
       {density !== 'calm' && (
         <div
           className="grid gap-4 mb-4"
-          style={{ gridTemplateColumns: '320px 1fr 1fr' }}
+          style={{ gridTemplateColumns: '1fr 1fr' }}
         >
-          <MarketWeatherCard date={displayDate} />
           <PingsColumn date={displayDate} />
           <SixDayOutlookCompact date={displayDate} />
         </div>
@@ -94,7 +92,7 @@ export default function DashboardV3View() {
         </div>
       )}
 
-      {/* ── ROW 4: Breadth gauges + Sector Rotation — standard + terminal ── */}
+      {/* ── ROW 4: Breadth gauges (1/3) + Sector Rotation (2/3) — standard + terminal ── */}
       {density !== 'calm' && (
         <div
           className="grid gap-4 mb-4"
