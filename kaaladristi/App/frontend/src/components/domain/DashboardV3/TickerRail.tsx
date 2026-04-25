@@ -20,6 +20,11 @@ interface TickerData {
   magic_rs_zone: string | null;
 }
 
+interface TickerEntry {
+  current: TickerData;
+  prev: TickerData | null;
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TICKERS: TickerConfig[] = [
@@ -29,9 +34,9 @@ const TICKERS: TickerConfig[] = [
   { name: 'India VIX',  label: 'INDIA VIX',  isVix: true  },
 ];
 
-// ── Data fetch — one query per index for reliability ──────────────────────────
+// ── Data fetch — two rows per index so we can compute real pct change ──────────
 
-async function fetchTickerData(date: string): Promise<Record<string, TickerData>> {
+async function fetchTickerData(date: string): Promise<Record<string, TickerEntry>> {
   // 1. Resolve symbol IDs
   const { data: symbols } = await from('km_index_symbols')
     .select('id,name')
@@ -44,8 +49,8 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerData>
   const idMap: Record<string, number> = {};
   for (const s of symbols as SymRow[]) idMap[s.name] = s.id;
 
-  // 2. Fetch most-recent row per index separately (avoids cross-index ordering issues)
-  const result: Record<string, TickerData> = {};
+  // 2. Fetch 2 most-recent rows per index — row[0] = current, row[1] = prev
+  const result: Record<string, TickerEntry> = {};
 
   await Promise.all(
     TICKERS.map(async ticker => {
@@ -57,11 +62,16 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerData>
         .eq('index_id', id)
         .lte('trade_date', date)
         .order('trade_date', { ascending: false })
-        .limit(1)
+        .limit(2)
         .execute();
 
-      const row = (rows as TickerData[] | null)?.[0];
-      if (row) result[ticker.name] = row;
+      const typedRows = (rows as TickerData[] | null) ?? [];
+      if (typedRows.length > 0) {
+        result[ticker.name] = {
+          current: typedRows[0],
+          prev:    typedRows[1] ?? null,
+        };
+      }
     }),
   );
 
@@ -95,7 +105,8 @@ function rsiColor(rsi: number | null): string {
 function deriveZone(magic_rs: number | null, magic_ma: number | null): string | null {
   if (magic_rs == null || magic_ma == null) return null;
   const diff = Math.abs(magic_rs - magic_ma);
-  const THRESHOLD = 6.0;
+  // Index RS values are ~±3 scale (vs equities ~±20), use proportionally lower thresholds
+  const THRESHOLD = 1.0;
   if (magic_rs > magic_ma) {
     if (diff > THRESHOLD * 1.5) return 'Strong Bull';
     if (diff > THRESHOLD)       return 'Mild Bull';
@@ -131,19 +142,34 @@ function zoneShort(zone: string | null): string {
 
 // ── Single card ───────────────────────────────────────────────────────────────
 
-function Card({ ticker, data }: { ticker: TickerConfig; data?: TickerData }) {
-  const pct   = data?.pct_chng ?? null;
+function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) {
+  const data = entry?.current;
+  const prev = entry?.prev;
+
   const close = data?.close ?? null;
   const rsi   = data?.rsi_14 ?? null;
-  const zone  = data?.magic_rs_zone ?? deriveZone(data?.magic_rs ?? null, data?.magic_ma ?? null);
-  const changeClr = changeColor(pct, ticker.isVix);
 
-  // Compute pct from prev_close if pct_chng is null
-  const displayPct = pct ?? (
-    close != null && data?.prev_close != null && data.prev_close !== 0
-      ? ((close - data.prev_close) / data.prev_close) * 100
-      : null
+  // Prefer DB pct_chng, then compute from actual previous row close (most accurate),
+  // then fall back to DB prev_close column (may be stale/wrong)
+  const displayPct: number | null = data?.pct_chng ?? (
+    close != null && prev?.close != null && prev.close !== 0
+      ? ((close - prev.close) / prev.close) * 100
+      : close != null && data?.prev_close != null && data.prev_close !== 0
+        ? ((close - data.prev_close) / data.prev_close) * 100
+        : null
   );
+
+  // Zone: prefer current row, fall back to previous row (magic_rs may not be computed yet)
+  const zone =
+    data?.magic_rs_zone
+    ?? deriveZone(data?.magic_rs ?? null, data?.magic_ma ?? null)
+    ?? prev?.magic_rs_zone
+    ?? deriveZone(prev?.magic_rs ?? null, prev?.magic_ma ?? null);
+
+  // magic_rs for display: use current if available, else prev
+  const displayMagicRs = data?.magic_rs ?? prev?.magic_rs ?? null;
+
+  const changeClr = changeColor(displayPct, ticker.isVix);
 
   return (
     <div style={{
@@ -214,9 +240,9 @@ function Card({ ticker, data }: { ticker: TickerConfig; data?: TickerData }) {
             letterSpacing: '0.06em',
           }}>
             ● {zoneShort(zone)}
-            {data?.magic_rs != null && (
+            {displayMagicRs != null && (
               <span style={{ color: 'var(--text-faint)', marginLeft: 3 }}>
-                {data.magic_rs > 0 ? '+' : ''}{data.magic_rs.toFixed(1)}
+                {displayMagicRs > 0 ? '+' : ''}{displayMagicRs.toFixed(1)}
               </span>
             )}
           </span>
@@ -257,7 +283,7 @@ export default function TickerRail({ date }: { date: string }) {
         <Card
           key={ticker.name}
           ticker={ticker}
-          data={isLoading ? undefined : data?.[ticker.name]}
+          entry={isLoading ? undefined : data?.[ticker.name]}
         />
       ))}
     </div>
