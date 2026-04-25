@@ -1481,6 +1481,8 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
 
     print("DEBUG: about to import rule_discovery", flush=True)
     try:
+        import scripts.rule_discovery as _rd_mod  # noqa: PLC0415
+        _rd_mod._PANCHANG_SCHEMA_PRINTED = False   # reset diag flag for fresh run
         (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras,
          should_group_transits, detect_transits, insert_transits) = _import_discover_rule()
     except ImportError as exc:
@@ -1958,8 +1960,12 @@ def _run_confidence_bg():
             build_nifty_close_map,
             load_rule_outcome_map,
             update_transit_returns,
+            populate_partial_day_flags,
+            update_daily_signal_returns,
             compute_confidence_from_transits,
+            compute_confidence_from_daily_signals,
             compute_yearly_breakdown,
+            compute_yearly_breakdown_from_signals,
         )
     except Exception as exc:
         log.error(f'Confidence import failed: {exc}')
@@ -1976,12 +1982,24 @@ def _run_confidence_bg():
     try:
         close_map = build_nifty_close_map(conn)
         rule_outcome_map = load_rule_outcome_map(conn)
+
+        # Transit-based rules
         scored = update_transit_returns(conn, close_map, rule_outcome_map)
-        upserted = compute_confidence_from_transits(conn)
+
+        # Daily-only rules (nakshatra_vara, tithi_alone, eclipse)
+        populate_partial_day_flags(conn)
+        daily_scored = update_daily_signal_returns(conn, close_map, rule_outcome_map)
+
+        # Confidence aggregation
+        upserted  = compute_confidence_from_transits(conn)
+        upserted += compute_confidence_from_daily_signals(conn)
         compute_yearly_breakdown(conn)
-        _confidence_state['signals_scored'] = scored
+        compute_yearly_breakdown_from_signals(conn)
+
+        _confidence_state['signals_scored'] = scored + daily_scored
         _confidence_state['rules_upserted'] = upserted
-        log.info(f'Confidence done — {scored} transits scored, {upserted} rules upserted')
+        log.info(f'Confidence done — {scored} transits + {daily_scored} daily signals scored, '
+                 f'{upserted} rules upserted')
     except Exception as exc:
         log.error(f'Confidence scoring failed: {exc}')
         _confidence_state['error'] = str(exc)

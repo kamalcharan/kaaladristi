@@ -178,6 +178,59 @@ NOT_IMPLEMENTED_RULE_CODES: frozenset = frozenset({
 # Vara names used by km_daily_panchang that correspond to weekend days
 _WEEKEND_VARAS: frozenset = frozenset({'Ravi', 'Shani'})  # Sunday, Saturday
 
+_PANCHANG_SCHEMA_PRINTED = False  # print distinct-value snapshot only once per run
+
+
+def _panchang_diagnostics(conn, rule_code, schema, vara_val, nak_lord=None, nakshatra=None):
+    """
+    Print diagnostic info when discover_nakshatra_vara returns 0 rows.
+    Distinct-value snapshot is printed only once per process run.
+    """
+    global _PANCHANG_SCHEMA_PRINTED
+    diag = conn.cursor()
+    print(f"  DIAG [{rule_code}] schema={schema} vara_val={vara_val!r} "
+          f"nak_lord={nak_lord!r} nakshatra={nakshatra!r}", flush=True)
+
+    # Check: does the exact match exist WITHOUT the DOW filter?
+    # (skip for Schema C where nak_lord is a list repr, not a scalar)
+    simple_lord = nak_lord if (nak_lord and not nak_lord.startswith('[')) else None
+    if vara_val and simple_lord:
+        diag.execute(
+            "SELECT COUNT(*) FROM km_daily_panchang WHERE vara=%s AND nakshatra_lord=%s",
+            (vara_val, simple_lord))
+        no_filter_count = diag.fetchone()[0]
+        print(f"  DIAG [{rule_code}] rows WITHOUT DOW filter: {no_filter_count}", flush=True)
+        if no_filter_count > 0:
+            print(f"  DIAG [{rule_code}] → DOW filter is removing all rows — "
+                  f"panchang date column may not align with calendar DOW", flush=True)
+
+    if not _PANCHANG_SCHEMA_PRINTED:
+        _PANCHANG_SCHEMA_PRINTED = True
+        # Distinct vara values
+        diag.execute("SELECT DISTINCT vara FROM km_daily_panchang ORDER BY vara")
+        varas = [r[0] for r in diag.fetchall()]
+        print(f"  DIAG [panchang] distinct vara values: {varas}", flush=True)
+        # Distinct nakshatra_lord values
+        diag.execute(
+            "SELECT DISTINCT nakshatra_lord FROM km_daily_panchang ORDER BY nakshatra_lord")
+        lords = [r[0] for r in diag.fetchall()]
+        print(f"  DIAG [panchang] distinct nakshatra_lord values: {lords}", flush=True)
+        # Total row count
+        diag.execute("SELECT COUNT(*) FROM km_daily_panchang")
+        total = diag.fetchone()[0]
+        print(f"  DIAG [panchang] total rows: {total}", flush=True)
+
+    # Per-vara breakdown for failing rule (always shown)
+    if vara_val:
+        diag.execute(
+            "SELECT DISTINCT nakshatra_lord, COUNT(*) FROM km_daily_panchang "
+            "WHERE vara=%s GROUP BY nakshatra_lord ORDER BY nakshatra_lord",
+            (vara_val,))
+        lords_for_vara = [(r[0], r[1]) for r in diag.fetchall()]
+        print(f"  DIAG [{rule_code}] nakshatra_lord counts for vara={vara_val!r}: "
+              f"{lords_for_vara}", flush=True)
+
+
 def discover_nakshatra_vara(conn, rule):
     """
     Discover signals for nakshatra_vara rules.
@@ -214,6 +267,8 @@ def discover_nakshatra_vara(conn, rule):
         """)
         for row in cur.fetchall():
             rows.append((row[0], _snap(row)))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'D', vara_val)
         return rows
 
     # ── Schema A: specific nakshatra name ─────────────────────────────────────
@@ -226,6 +281,8 @@ def discover_nakshatra_vara(conn, rule):
         """, (vara_val, cond['nakshatra']))
         for row in cur.fetchall():
             rows.append((row[0], _snap(row)))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'A', vara_val, nakshatra=cond['nakshatra'])
         return rows
 
     # ── Schema C: list of nakshatra lords ─────────────────────────────────────
@@ -240,6 +297,8 @@ def discover_nakshatra_vara(conn, rule):
         """, (vara_val, lords))
         for row in cur.fetchall():
             rows.append((row[0], _snap(row)))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'C', vara_val, nak_lord=str(lords))
         return rows
 
     # ── Schema E: tithi_base + paksha (+ optional vara) ───────────────────────
@@ -263,11 +322,15 @@ def discover_nakshatra_vara(conn, rule):
                 'nakshatra': row[3], 'tithi': row[4],
                 'tithi_base': row[5], 'paksha': row[6],
             }))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'E', vara_val)
         return rows
 
     # ── Schema B: vara/day + nakshatra_lord (singular), vara-only, lord-only ──
     nak_lord = cond.get('nakshatra_lord')
     if not vara_val and not nak_lord:
+        print(f"  DIAG [{rule['rule_code']}] no conditions matched any schema — "
+              f"conditions keys: {list(cond.keys())}")
         return rows
     if vara_val and nak_lord:
         cur.execute("""
@@ -292,6 +355,8 @@ def discover_nakshatra_vara(conn, rule):
         """, (nak_lord,))
     for row in cur.fetchall():
         rows.append((row[0], _snap(row)))
+    if not rows:
+        _panchang_diagnostics(conn, rule['rule_code'], 'B', vara_val, nak_lord=nak_lord)
     return rows
 
 
@@ -1106,6 +1171,8 @@ def discover_rule(conn, rule, vedh_map, panchak_naks):
 # ── MAIN ────────────────────────────────────────────────────
 
 def main(year_filter=None, rule_code_filter=None):
+    global _PANCHANG_SCHEMA_PRINTED
+    _PANCHANG_SCHEMA_PRINTED = False  # reset so diagnostics fire fresh each run
     start_time = time.time()
     conn = get_conn()
 
