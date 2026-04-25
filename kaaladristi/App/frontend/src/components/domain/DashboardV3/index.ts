@@ -9,6 +9,8 @@ export { default as SixDayOutlookCompact } from './SixDayOutlookCompact';
 export { default as AmbientGauges } from './AmbientGauges';
 export { default as SectorRotationFlow } from './SectorRotationFlow';
 export { default as MarketWeatherCard } from './MarketWeatherCard';
+export { default as TickerRail } from './TickerRail';
+export { default as NakVaraSignals } from './NakVaraSignals';
 export type { Density } from './DensityToggle';
 export type { KickerTier } from './Kicker';
 export type { MarketWeatherProps } from './MarketWeatherCard';
