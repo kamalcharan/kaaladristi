@@ -1541,7 +1541,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                 rule['conditions'] = {}
 
             try:
-                matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks)
+                matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks, vocab)
                 print(f"DEBUG [{rule['rule_code']}]: discover_rule → {len(matched_rows)} rows, should_group={should_group_transits(rule)}", flush=True)
 
                 strength = {'Very High': 5, 'High': 4, 'Reasonable': 3, 'Low': 2}.get(
@@ -1559,7 +1559,9 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                         _ev(cur,
                             "INSERT INTO km_rule_signals "
                             "(date, rule_id, signal, strength, details, conditions_snapshot) "
-                            "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
+                            "VALUES %s ON CONFLICT (date, rule_id) DO UPDATE "
+                            "SET conditions_snapshot = km_rule_signals.conditions_snapshot || "
+                            "    EXCLUDED.conditions_snapshot::jsonb",
                             _data)
                         inserted = cur.rowcount
                 conn.commit()
@@ -1901,7 +1903,7 @@ def discovery_diagnose():
     if test_rule:
         t0 = _t.monotonic()
         try:
-            matched = discover_rule(conn, test_rule, vedh_map, panchak_naks)
+            matched = discover_rule(conn, test_rule, vedh_map, panchak_naks, vocab)
             report['test_rule_ms'] = round((_t.monotonic() - t0) * 1000)
             report['test_rule'] = test_rule['rule_code']
             report['test_rule_matched'] = len(matched)

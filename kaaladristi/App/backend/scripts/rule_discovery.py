@@ -51,12 +51,26 @@ def load_vocabulary(conn):
     """)
     YOGA_NAMES = [r[0] for r in cur.fetchall()]
 
+    # Load nakshatra lords — positions_name → lord planet name
+    cur.execute("""
+        SELECT n.id, n.positions_name, p.name as lord
+        FROM km_nakshatras n
+        JOIN km_nakshatra_lords nl ON nl.nakshatra_id = n.id
+        JOIN km_planets p ON p.id = nl.planet_id
+        ORDER BY n.id
+    """)
+    nak_lord_rows = cur.fetchall()
+    NAKSHATRA_LORD_MAP = {r[1]: r[2] for r in nak_lord_rows}  # positions_name → lord
+    NAKSHATRA_BY_ID    = {r[0]: r[1] for r in nak_lord_rows}  # id → positions_name
+
     return {
         'nakshatra_positions_names': NAKSHATRA_POSITIONS_NAMES,
         'nakshatra_name_map': NAKSHATRA_NAME_MAP,
         'nakshatra_reverse_map': NAKSHATRA_REVERSE_MAP,
         'planet_names': PLANET_NAMES,
         'yoga_names': YOGA_NAMES,
+        'nakshatra_lord_map': NAKSHATRA_LORD_MAP,
+        'nakshatra_by_id': NAKSHATRA_BY_ID,
     }
 
 
@@ -231,42 +245,115 @@ def _panchang_diagnostics(conn, rule_code, schema, vara_val, nak_lord=None, naks
               f"{lords_for_vara}", flush=True)
 
 
-def discover_nakshatra_vara(conn, rule):
+def discover_nakshatra_vara(conn, rule, vocab):
     """
     Discover signals for nakshatra_vara rules.
-    Handles five condition schemas — checked in priority order:
+    Handles mid-day nakshatra changeovers — generates signals for both
+    morning and afternoon nakshatra lords when changeover falls during
+    market hours (09:15–15:30 IST).
 
+    Five condition schemas (checked in priority order):
     D  day_lord_equals_nakshatra_lord=True
-         WHERE dlnl_match = TRUE
-    A  vara/day + nakshatra  (specific nakshatra name)
-         WHERE vara = X AND nakshatra_name = Y
-    C  vara/day + nakshatra_lord_in  (list of lords)
-         WHERE vara = X AND nakshatra_lord = ANY([...])
+    A  vara/day + nakshatra name (specific nakshatra)
+    C  vara/day + nakshatra_lord_in (list of lords)
     E  vara/day + paksha + tithi_base
-         WHERE vara = X AND paksha = P AND tithi_base_name ILIKE '%T%'
     B  vara/day + nakshatra_lord (singular), vara-only, or lord-only
-         WHERE vara = X [AND nakshatra_lord = L]
     """
+    from datetime import time as dtime
+
+    MARKET_OPEN  = dtime(9, 15)
+    MARKET_CLOSE = dtime(15, 30)
+
     cond = rule['conditions']
     rows = []
     cur = conn.cursor()
+
+    nakshatra_lord_map  = vocab['nakshatra_lord_map']       # positions_name → lord
+    nakshatra_positions = vocab['nakshatra_positions_names'] # ordered list of 27
+
     # 'day' is a legacy alias for 'vara' in older rule conditions
     vara_val = cond.get('vara') or cond.get('day')
 
-    def _snap(row):
-        return {'vara': row[1], 'nakshatra_lord': row[2],
-                'nakshatra': row[3], 'tithi': row[4], 'paksha': row[5]}
+    def get_afternoon_lord(nak_name):
+        """Lord of the nakshatra immediately following nak_name."""
+        try:
+            idx = nakshatra_positions.index(nak_name)
+        except ValueError:
+            return None
+        next_name = nakshatra_positions[(idx + 1) % 27]
+        return nakshatra_lord_map.get(next_name)
 
-    # ── Schema D ──────────────────────────────────────────────────────────────
+    def resolve_lords(vara, nakshatra_lord, nak_name, end_ist, end_next):
+        """
+        Returns list of (effective_lord, snapshot_extra) tuples.
+        Normally 1 item. Two items when changeover falls inside market hours.
+        """
+        end_time = end_ist  # datetime.time or None
+
+        # Full day — nakshatra runs past market close or into next calendar day
+        if end_next or end_time is None or end_time >= MARKET_CLOSE:
+            return [(nakshatra_lord, {})]
+
+        # Changeover before market open — afternoon nakshatra governs all day
+        if end_time < MARKET_OPEN:
+            afternoon_lord = get_afternoon_lord(nak_name)
+            if not afternoon_lord:
+                return [(nakshatra_lord, {})]
+            return [(afternoon_lord, {
+                'pre_market_changeover': True,
+                'morning_nakshatra_lord': nakshatra_lord,
+                'nakshatra_lord': afternoon_lord,
+                'changeover_time': str(end_time),
+            })]
+
+        # Split day — changeover between 09:15 and 15:30
+        afternoon_lord = get_afternoon_lord(nak_name)
+        if not afternoon_lord:
+            return [(nakshatra_lord, {
+                'session': 'morning',
+                'changeover_time': str(end_time),
+                'is_split_day': True,
+            })]
+        return [
+            (nakshatra_lord, {
+                'session': 'morning',
+                'changeover_time': str(end_time),
+                'is_split_day': True,
+                'afternoon_nakshatra_lord': afternoon_lord,
+            }),
+            (afternoon_lord, {
+                'session': 'afternoon',
+                'changeover_time': str(end_time),
+                'is_split_day': True,
+                'morning_nakshatra_lord': nakshatra_lord,
+            }),
+        ]
+
+    def make_snap(vara, nakshatra_lord, nakshatra_name, tithi_name, paksha, extra):
+        snap = {
+            'vara': vara,
+            'nakshatra_lord': nakshatra_lord,
+            'nakshatra': nakshatra_name,
+            'tithi': tithi_name,
+            'paksha': paksha,
+        }
+        snap.update(extra)
+        return snap
+
+    # ── Schema D: day lord = nakshatra lord (pre-computed flag) ──────────────
     if cond.get('day_lord_equals_nakshatra_lord'):
         cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            SELECT date, vara, nakshatra_lord, nakshatra_name,
+                   tithi_name, paksha,
+                   nakshatra_end_ist, nakshatra_end_next_day
             FROM km_daily_panchang
             WHERE dlnl_match = TRUE
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
         """)
         for row in cur.fetchall():
-            rows.append((row[0], _snap(row)))
+            date_, vara, nak_lord, nak_name, tithi, paksha, end_ist, end_next = row
+            for eff_lord, extra in resolve_lords(vara, nak_lord, nak_name, end_ist, end_next):
+                rows.append((date_, make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'D', vara_val)
         return rows
@@ -274,13 +361,17 @@ def discover_nakshatra_vara(conn, rule):
     # ── Schema A: specific nakshatra name ─────────────────────────────────────
     if vara_val and cond.get('nakshatra'):
         cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            SELECT date, vara, nakshatra_lord, nakshatra_name,
+                   tithi_name, paksha,
+                   nakshatra_end_ist, nakshatra_end_next_day
             FROM km_daily_panchang
             WHERE vara = %s AND nakshatra_name = %s
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
         """, (vara_val, cond['nakshatra']))
         for row in cur.fetchall():
-            rows.append((row[0], _snap(row)))
+            date_, vara, nak_lord, nak_name, tithi, paksha, end_ist, end_next = row
+            for eff_lord, extra in resolve_lords(vara, nak_lord, nak_name, end_ist, end_next):
+                rows.append((date_, make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'A', vara_val, nakshatra=cond['nakshatra'])
         return rows
@@ -290,13 +381,18 @@ def discover_nakshatra_vara(conn, rule):
     if vara_val and lord_in:
         lords = lord_in if isinstance(lord_in, list) else [lord_in]
         cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            SELECT date, vara, nakshatra_lord, nakshatra_name,
+                   tithi_name, paksha,
+                   nakshatra_end_ist, nakshatra_end_next_day
             FROM km_daily_panchang
             WHERE vara = %s AND nakshatra_lord = ANY(%s)
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
         """, (vara_val, lords))
         for row in cur.fetchall():
-            rows.append((row[0], _snap(row)))
+            date_, vara, nak_lord, nak_name, tithi, paksha, end_ist, end_next = row
+            for eff_lord, extra in resolve_lords(vara, nak_lord, nak_name, end_ist, end_next):
+                if eff_lord in lords:
+                    rows.append((date_, make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'C', vara_val, nak_lord=str(lords))
         return rows
@@ -310,53 +406,61 @@ def discover_nakshatra_vara(conn, rule):
             params.append(vara_val)
         cur.execute(f"""
             SELECT date, vara, nakshatra_lord, nakshatra_name,
-                   tithi_name, tithi_base_name, paksha
+                   tithi_name, tithi_base_name, paksha,
+                   nakshatra_end_ist, nakshatra_end_next_day
             FROM km_daily_panchang
             WHERE tithi_base_name ILIKE %s AND paksha = %s
             {vara_clause}
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
         """, params)
         for row in cur.fetchall():
-            rows.append((row[0], {
-                'vara': row[1], 'nakshatra_lord': row[2],
-                'nakshatra': row[3], 'tithi': row[4],
-                'tithi_base': row[5], 'paksha': row[6],
-            }))
+            date_, vara, nak_lord, nak_name, tithi, tithi_base, paksha, end_ist, end_next = row
+            for eff_lord, extra in resolve_lords(vara, nak_lord, nak_name, end_ist, end_next):
+                snap = make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)
+                snap['tithi_base'] = tithi_base
+                rows.append((date_, snap))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'E', vara_val)
         return rows
 
-    # ── Schema B: vara/day + nakshatra_lord (singular), vara-only, lord-only ──
-    nak_lord = cond.get('nakshatra_lord')
-    if not vara_val and not nak_lord:
+    # ── Schema B: vara + nakshatra_lord (singular), vara-only, or lord-only ──
+    nak_lord_cond = cond.get('nakshatra_lord')
+    if not vara_val and not nak_lord_cond:
         print(f"  DIAG [{rule['rule_code']}] no conditions matched any schema — "
               f"conditions keys: {list(cond.keys())}")
         return rows
-    if vara_val and nak_lord:
+
+    if vara_val:
+        # Fetch all rows for this vara so Python can filter by effective lord
+        # (which may be the afternoon nakshatra's lord after a mid-day changeover)
         cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
-            FROM km_daily_panchang
-            WHERE vara = %s AND nakshatra_lord = %s
-            AND EXTRACT(DOW FROM date) NOT IN (0,6)
-        """, (vara_val, nak_lord))
-    elif vara_val:
-        cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            SELECT date, vara, nakshatra_lord, nakshatra_name,
+                   tithi_name, paksha,
+                   nakshatra_end_ist, nakshatra_end_next_day
             FROM km_daily_panchang
             WHERE vara = %s
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
         """, (vara_val,))
     else:
         cur.execute("""
-            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            SELECT date, vara, nakshatra_lord, nakshatra_name,
+                   tithi_name, paksha,
+                   nakshatra_end_ist, nakshatra_end_next_day
             FROM km_daily_panchang
             WHERE nakshatra_lord = %s
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
-        """, (nak_lord,))
+        """, (nak_lord_cond,))
+
     for row in cur.fetchall():
-        rows.append((row[0], _snap(row)))
+        date_, vara, nak_lord, nak_name, tithi, paksha, end_ist, end_next = row
+        for eff_lord, extra in resolve_lords(vara, nak_lord, nak_name, end_ist, end_next):
+            # Filter by effective lord after changeover resolution
+            if nak_lord_cond and eff_lord != nak_lord_cond:
+                continue
+            rows.append((date_, make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)))
+
     if not rows:
-        _panchang_diagnostics(conn, rule['rule_code'], 'B', vara_val, nak_lord=nak_lord)
+        _panchang_diagnostics(conn, rule['rule_code'], 'B', vara_val, nak_lord=nak_lord_cond)
     return rows
 
 
@@ -1093,7 +1197,7 @@ def discover_sign_planet(conn, rule):
 
 # ── MAIN DISCOVERY ROUTER ───────────────────────────────────
 
-def discover_rule(conn, rule, vedh_map, panchak_naks):
+def discover_rule(conn, rule, vedh_map, panchak_naks, vocab):
     """Route rule to correct discovery function based on rule_type and conditions"""
     rt = rule['rule_type']
     cond = rule['conditions'] or {}
@@ -1109,8 +1213,7 @@ def discover_rule(conn, rule, vedh_map, panchak_naks):
         return discover_relative_position(conn, rule)
 
     if rt == 'nakshatra_vara':
-        # All five condition schemas (A-E) are handled inside discover_nakshatra_vara.
-        return discover_nakshatra_vara(conn, rule)
+        return discover_nakshatra_vara(conn, rule, vocab)
 
     elif rt == 'planet_transit':
         if cond.get('same_nakshatra') or cond.get('same_sign') or \
@@ -1218,7 +1321,7 @@ def main(year_filter=None, rule_code_filter=None):
 
     for i, rule in enumerate(rules):
         try:
-            rows = discover_rule(conn, rule, vedh_map, panchak_naks)
+            rows = discover_rule(conn, rule, vedh_map, panchak_naks, vocab)
 
             # Filter by year if specified
             if year_filter:
@@ -1238,7 +1341,9 @@ def main(year_filter=None, rule_code_filter=None):
             execute_values(ins_cur,
                 "INSERT INTO km_rule_signals "
                 "(date, rule_id, signal, strength, details, conditions_snapshot) "
-                "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
+                "VALUES %s ON CONFLICT (date, rule_id) DO UPDATE "
+                "SET conditions_snapshot = km_rule_signals.conditions_snapshot || "
+                "    EXCLUDED.conditions_snapshot::jsonb",
                 ins_data)
             inserted = ins_cur.rowcount
             conn.commit()
