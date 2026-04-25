@@ -75,18 +75,7 @@ export default function DashboardV3View() {
         <PanchangamCard date={displayDate} />
       </div>
 
-      {/* ── ROW 2: Pings + 6-Day Outlook — calm hidden ── */}
-      {density !== 'calm' && (
-        <div
-          className="grid gap-4 mb-4"
-          style={{ gridTemplateColumns: '1fr 1fr' }}
-        >
-          <PingsColumn date={displayDate} />
-          <SixDayOutlookCompact date={displayDate} />
-        </div>
-      )}
-
-      {/* ── ROW 3: Market Breadth + ROC charts — calm hidden ── */}
+      {/* ── ROW 2: Market Breadth + ROC charts — calm hidden ── */}
       {density !== 'calm' && (
         <div
           className="grid gap-4 mb-4"
@@ -94,6 +83,17 @@ export default function DashboardV3View() {
         >
           <MarketBreadthChart />
           <BreadthRocChart />
+        </div>
+      )}
+
+      {/* ── ROW 3: Pings + 6-Day Outlook — calm hidden ── */}
+      {density !== 'calm' && (
+        <div
+          className="grid gap-4 mb-4"
+          style={{ gridTemplateColumns: '1fr 1fr' }}
+        >
+          <PingsColumn date={displayDate} />
+          <SixDayOutlookCompact date={displayDate} />
         </div>
       )}
 

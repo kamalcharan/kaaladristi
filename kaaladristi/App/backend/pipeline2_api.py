@@ -897,6 +897,7 @@ _WEEK_SIGNALS_SQL = """
     WHERE s.date BETWEEN %s AND %s
       AND r.is_active = TRUE
       AND r.is_deleted = FALSE
+      AND r.rule_type = 'nakshatra_vara'
     GROUP BY s.date
     ORDER BY s.date
 """
