@@ -16,6 +16,7 @@ interface TickerData {
   prev_close: number | null;
   rsi_14: number | null;
   magic_rs: number | null;
+  magic_ma: number | null;
   magic_rs_zone: string | null;
 }
 
@@ -52,7 +53,7 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerData>
       if (!id) return;
 
       const { data: rows } = await from('km_index_eod')
-        .select('trade_date,close,prev_close,pct_chng,rsi_14,magic_rs,magic_rs_zone')
+        .select('trade_date,close,prev_close,pct_chng,rsi_14,magic_rs,magic_ma,magic_rs_zone')
         .eq('index_id', id)
         .lte('trade_date', date)
         .order('trade_date', { ascending: false })
@@ -91,6 +92,21 @@ function rsiColor(rsi: number | null): string {
   return '#ef4444';
 }
 
+function deriveZone(magic_rs: number | null, magic_ma: number | null): string | null {
+  if (magic_rs == null || magic_ma == null) return null;
+  const diff = Math.abs(magic_rs - magic_ma);
+  const THRESHOLD = 6.0;
+  if (magic_rs > magic_ma) {
+    if (diff > THRESHOLD * 1.5) return 'Strong Bull';
+    if (diff > THRESHOLD)       return 'Mild Bull';
+    return 'Neutral';
+  } else {
+    if (diff > THRESHOLD * 1.5) return 'Strong Bear';
+    if (diff > THRESHOLD)       return 'Mild Bear';
+    return 'Neutral';
+  }
+}
+
 function zoneColor(zone: string | null): string {
   switch (zone) {
     case 'Strong Bull': return '#22c55e';
@@ -119,7 +135,7 @@ function Card({ ticker, data }: { ticker: TickerConfig; data?: TickerData }) {
   const pct   = data?.pct_chng ?? null;
   const close = data?.close ?? null;
   const rsi   = data?.rsi_14 ?? null;
-  const zone  = data?.magic_rs_zone ?? null;
+  const zone  = data?.magic_rs_zone ?? deriveZone(data?.magic_rs ?? null, data?.magic_ma ?? null);
   const changeClr = changeColor(pct, ticker.isVix);
 
   // Compute pct from prev_close if pct_chng is null
