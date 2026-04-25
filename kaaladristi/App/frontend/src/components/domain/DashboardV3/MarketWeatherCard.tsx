@@ -12,6 +12,7 @@ export interface MarketWeatherProps {
       score: number;
       positive: number;
       negative: number;
+      turning: number;
       mixed: number;
       total: number;
     };
@@ -86,6 +87,7 @@ const sampleData: MarketWeatherProps = {
       score: 73.4,
       positive: 4,
       negative: 1,
+      turning: 0,
       mixed: 0,
       total: 5,
     },
@@ -202,7 +204,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
             color: 'var(--text-faint)',
           }}
         >
-          Based on {data.components.astro.total} rule signal{data.components.astro.total !== 1 ? 's' : ''}
+          Based on {data.components.astro.total} nak-vara rule signal{data.components.astro.total !== 1 ? 's' : ''}
         </span>
       </div>
     </div>
@@ -339,9 +341,9 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
 
 function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro'] }) {
   const pills: { label: string; count: number; color: string }[] = [
-    { label: 'Positive', count: astro.positive, color: '#22c55e' },
-    { label: 'Negative', count: astro.negative, color: '#ef4444' },
-    { label: 'Mixed',    count: astro.mixed,    color: '#f59e0b' },
+    { label: 'Positive',   count: astro.positive, color: '#22c55e' },
+    { label: 'Negative',   count: astro.negative, color: '#ef4444' },
+    { label: 'Inflection', count: astro.turning,  color: '#D4A853' },
   ];
 
   return (

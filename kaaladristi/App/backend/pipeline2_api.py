@@ -989,11 +989,14 @@ def panchang_week(from_date: str = Query(..., alias='from'),
 # ── Dashboard Composite ────────────────────────────────────────────────────
 
 _COMPOSITE_ASTRO_SQL = """
-    SELECT r.outcome, s.strength, c.confidence_score
+    SELECT r.outcome, r.display_name AS rule_name, s.strength, c.confidence_score
     FROM km_rule_signals s
     JOIN  km_astro_rule_master  r ON r.id = s.rule_id
     LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
-    WHERE s.date = %s AND r.is_active = TRUE AND r.is_deleted = FALSE
+    WHERE s.date = %s
+      AND r.is_active = TRUE
+      AND r.is_deleted = FALSE
+      AND r.rule_type = 'nakshatra_vara'
 """
 
 _COMPOSITE_ROC_SQL = """
@@ -1088,7 +1091,8 @@ def dashboard_composite(date: str = Query(default=None)):
                 'score':    astro_score,
                 'positive': positive,
                 'negative': negative,
-                'mixed':    mixed + turning,
+                'turning':  turning,
+                'mixed':    mixed,
                 'total':    total,
             },
             'roc': {
