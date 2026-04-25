@@ -13,9 +13,11 @@ import {
   MarketWeatherCard,
   type Density,
 } from '@/components/domain/DashboardV3';
-import TickerRail     from '@/components/domain/DashboardV3/TickerRail';
-import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
-import PanchangamCard from '@/components/domain/PanchangamCard';
+import TickerRail        from '@/components/domain/DashboardV3/TickerRail';
+import NakVaraSignals    from '@/components/domain/DashboardV3/NakVaraSignals';
+import PanchangamCard    from '@/components/domain/PanchangamCard';
+import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
+import BreadthRocChart   from '@/components/domain/BreadthRocChart';
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
@@ -92,7 +94,18 @@ export default function DashboardV3View() {
         </div>
       )}
 
-      {/* ── ROW 4: Breadth gauges (1/3) + Sector Rotation (2/3) — standard + terminal ── */}
+      {/* ── ROW 4: Market Breadth + ROC charts — standard + terminal ── */}
+      {density !== 'calm' && (
+        <div
+          className="grid gap-4 mb-4"
+          style={{ gridTemplateColumns: '1fr 1fr' }}
+        >
+          <MarketBreadthChart />
+          <BreadthRocChart />
+        </div>
+      )}
+
+      {/* ── ROW 5: Gauge summary (1/3) + Sector Rotation (2/3) — standard + terminal ── */}
       {density !== 'calm' && (
         <div
           className="grid gap-4 mb-4"
@@ -103,7 +116,7 @@ export default function DashboardV3View() {
         </div>
       )}
 
-      {/* ── ROW 5: Rule Signals (Nak-Vara first) — terminal only ── */}
+      {/* ── ROW 6: Rule Signals (Nak-Vara first) — terminal only ── */}
       {density === 'terminal' && (
         <div className="mb-4">
           <NakVaraSignals date={displayDate} />
