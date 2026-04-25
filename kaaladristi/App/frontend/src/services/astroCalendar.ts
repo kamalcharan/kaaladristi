@@ -66,22 +66,62 @@ export async function fetchMonthEvents(year: number, month: number): Promise<Ast
   );
 }
 
-/** Daily astro signals for a given month. */
+/** Daily astro signals for a given month — derived from km_rule_signals (nakshatra_vara only). */
 export async function fetchMonthSignals(year: number, month: number): Promise<AstroDailySignal[]> {
-  const firstDay      = toIso(year, month, 1);
-  const nextMonthYear = month === 12 ? year + 1 : year;
-  const nextMonth     = month === 12 ? 1 : month + 1;
-  const firstDayNext  = toIso(nextMonthYear, nextMonth, 1);
+  const firstDay = toIso(year, month, 1);
+  const lastDay  = toIso(year, month, getDaysInMonth(year, month));
 
-  const { data, error } = await from('km_astro_daily_signal')
-    .select('*')
-    .gte('trade_date', firstDay)
-    .lt('trade_date', firstDayNext)
-    .order('trade_date', { ascending: true })
-    .execute();
+  const res = await fetch(`${PIPELINE_API}/api/panchang/week?from=${firstDay}&to=${lastDay}`);
+  if (!res.ok) return [];
 
-  if (error) throw new Error(`[km_astro_daily_signal] ${error.message}`);
-  return (data ?? []) as AstroDailySignal[];
+  type RuleDay = {
+    date: string;
+    total_signals: number;
+    bullish: number;
+    bearish: number;
+    turning: number;
+    signals: Array<{ rule_name: string; outcome: string }>;
+  };
+
+  const days: RuleDay[] = await res.json();
+
+  return days.map(d => {
+    const { date, total_signals, bullish, bearish, turning, signals } = d;
+
+    // Derive net_signal using same logic as SixDayOutlookCompact
+    let net_signal = 'neutral';
+    if (total_signals > 0) {
+      if (turning > 0 && turning >= bullish && turning >= bearish) {
+        net_signal = 'turning';
+      } else {
+        const ratio = (bullish - bearish) / total_signals;
+        if      (ratio >  0.5) net_signal = 'strong_bullish';
+        else if (ratio >  0.2) net_signal = 'bullish';
+        else if (ratio > -0.2) net_signal = 'neutral';
+        else if (ratio > -0.5) net_signal = 'bearish';
+        else                   net_signal = 'strong_bearish';
+      }
+    }
+
+    const isTurning = turning > 0 && turning >= bullish && turning >= bearish;
+
+    return {
+      trade_date:           date,
+      net_signal,
+      net_score:            bullish - bearish,
+      primary_event:        signals[0]?.rule_name ?? null,
+      secondary_event:      signals[1]?.rule_name ?? null,
+      active_event_count:   total_signals,
+      turning_date:         isTurning,
+      strong_bullish_count: 0,
+      bullish_count:        bullish,
+      minor_bullish_count:  0,
+      neutral_count:        Math.max(0, total_signals - bullish - bearish - turning),
+      minor_bearish_count:  0,
+      bearish_count:        bearish,
+      strong_bearish_count: 0,
+    };
+  });
 }
 
 /** Key events for the month — turning dates and strong signals only. */
