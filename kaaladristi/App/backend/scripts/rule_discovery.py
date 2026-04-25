@@ -192,6 +192,24 @@ NOT_IMPLEMENTED_RULE_CODES: frozenset = frozenset({
 # Vara names used by km_daily_panchang that correspond to weekend days
 _WEEKEND_VARAS: frozenset = frozenset({'Ravi', 'Shani'})  # Sunday, Saturday
 
+# km_daily_panchang stores Sanskrit vara names. Rule conditions may use English.
+_VARA_EN_TO_SK: dict = {
+    'Sunday':    'Ravi',
+    'Monday':    'Soma',
+    'Tuesday':   'Mangal',
+    'Wednesday': 'Budha',
+    'Thursday':  'Guru',
+    'Friday':    'Shukra',
+    'Saturday':  'Shani',
+}
+
+
+def _normalize_vara(vara: str | None) -> str | None:
+    """Translate English day name to Sanskrit vara name if needed."""
+    if vara is None:
+        return None
+    return _VARA_EN_TO_SK.get(vara, vara)
+
 _PANCHANG_SCHEMA_PRINTED = False  # print distinct-value snapshot only once per run
 
 
@@ -272,7 +290,8 @@ def discover_nakshatra_vara(conn, rule, vocab):
     nakshatra_positions = vocab['nakshatra_positions_names'] # ordered list of 27
 
     # 'day' is a legacy alias for 'vara' in older rule conditions
-    vara_val = cond.get('vara') or cond.get('day')
+    # Normalize English day names (e.g. "Thursday") → Sanskrit vara names (e.g. "Guru")
+    vara_val = _normalize_vara(cond.get('vara') or cond.get('day'))
 
     def get_afternoon_lord(nak_name):
         """Lord of the nakshatra immediately following nak_name."""
@@ -944,7 +963,7 @@ def discover_tithi(conn, rule):
     # Ekadashi + vara
     if cond.get('is_ekadashi') and cond.get('vara'):
         extra = ""
-        params = [cond['vara']]
+        params = [_normalize_vara(cond['vara'])]
         if cond.get('paksha'):
             extra += " AND paksha = %s"
             params.append(cond['paksha'])
@@ -1072,7 +1091,7 @@ def discover_compound_yog(conn, rule):
         return rows
 
     cur = conn.cursor()
-    vara = cond.get('vara')
+    vara = _normalize_vara(cond.get('vara'))
     is_weekend_vara = vara in _WEEKEND_VARAS
 
     if vara:
