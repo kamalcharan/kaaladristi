@@ -762,7 +762,7 @@ _PANCHANG_SIGNALS_SQL = """
 _TRADING_DAY_SQL = """
     SELECT COUNT(*) AS cnt
     FROM km_index_eod
-    WHERE date = %s
+    WHERE trade_date = %s
       AND index_id = (SELECT id FROM km_index_symbols WHERE name = 'NIFTY 50' LIMIT 1)
 """
 
@@ -910,8 +910,8 @@ _PANCHANG_WEEK_SQL = """
 """
 
 _IS_TRADING_WEEK_SQL = """
-    SELECT DISTINCT date FROM km_index_eod
-    WHERE date BETWEEN %s AND %s
+    SELECT DISTINCT trade_date FROM km_index_eod
+    WHERE trade_date BETWEEN %s AND %s
       AND index_id = (SELECT id FROM km_index_symbols WHERE name = 'NIFTY 50' LIMIT 1)
 """
 
@@ -938,7 +938,7 @@ def panchang_week(from_date: str = Query(..., alias='from'),
 
     conn = _conn()
     try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(_PANCHANG_WEEK_SQL, (from_date, to_date))
             panchang_rows = {str(r['date']): dict(r) for r in cur.fetchall()}
 
@@ -946,7 +946,7 @@ def panchang_week(from_date: str = Query(..., alias='from'),
             signal_rows = {str(r['date']): dict(r) for r in cur.fetchall()}
 
             cur.execute(_IS_TRADING_WEEK_SQL, (from_date, to_date))
-            trading_days = {str(r['date']) for r in cur.fetchall()}
+            trading_days = {str(r['trade_date']) for r in cur.fetchall()}
     except Exception as e:
         log.error(f'panchang_week error {from_date}→{to_date}: {e}')
         raise HTTPException(status_code=500, detail=str(e))
