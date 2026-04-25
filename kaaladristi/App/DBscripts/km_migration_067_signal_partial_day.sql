@@ -30,9 +30,9 @@ SET partial_day = CASE
         THEN TRUE
     ELSE FALSE
 END
-FROM km_daily_panchang p
-JOIN km_astro_rule_master r ON r.id = s.rule_id
-WHERE p.date = s.date;
+FROM km_daily_panchang p, km_astro_rule_master r
+WHERE p.date = s.date
+  AND r.id = s.rule_id;
 
 -- ── 3. Verify ──────────────────────────────────────────────────────────────────
 SELECT

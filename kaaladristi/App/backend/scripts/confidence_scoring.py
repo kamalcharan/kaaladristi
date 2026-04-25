@@ -179,9 +179,9 @@ def populate_partial_day_flags(conn) -> int:
                 THEN TRUE
             ELSE FALSE
         END
-        FROM km_daily_panchang p
-        JOIN km_astro_rule_master r ON r.id = s.rule_id
+        FROM km_daily_panchang p, km_astro_rule_master r
         WHERE p.date = s.date
+          AND r.id = s.rule_id
           AND s.partial_day IS NULL
     """)
     updated = cur.rowcount
