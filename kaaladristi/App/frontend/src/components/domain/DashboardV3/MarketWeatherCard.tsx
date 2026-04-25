@@ -467,24 +467,23 @@ interface MarketWeatherCardProps {
   date?: string;
 }
 
+const cardBox: React.CSSProperties = {
+  background: 'var(--card)',
+  border: '1px solid rgba(212,168,83,0.20)',
+  borderRadius: 14,
+  overflow: 'hidden',
+  backdropFilter: 'blur(12px)',
+  boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+  padding: '48px 20px',
+  textAlign: 'center' as const,
+};
+
 export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {}) {
-  const { data, isLoading, isError } = useMarketWeather(date ?? '');
-  const display = data ?? sampleData;
+  const { data, isLoading, isError, error } = useMarketWeather(date ?? '');
 
   if (isLoading) {
     return (
-      <div
-        style={{
-          background: 'var(--card)',
-          border: '1px solid rgba(212,168,83,0.20)',
-          borderRadius: 14,
-          overflow: 'hidden',
-          backdropFilter: 'blur(12px)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
-          padding: '48px 20px',
-          textAlign: 'center',
-        }}
-      >
+      <div style={cardBox}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
           LOADING…
         </span>
@@ -492,21 +491,24 @@ export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {})
     );
   }
 
-  if (isError) {
-    // Fall back to sample data with a subtle indicator
+  if (isError || !data) {
     return (
-      <div style={{ position: 'relative' }}>
-        <CardShell data={sampleData} />
-        <div style={{
-          position: 'absolute', top: 8, right: 12,
-          fontFamily: 'var(--font-mono)', fontSize: 8,
-          color: 'var(--text-faint)', letterSpacing: '0.1em',
-        }}>
-          SAMPLE
+      <div style={{ ...cardBox, padding: '32px 24px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8 }}>
+          Astro-Technical Alignment
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#ef4444', letterSpacing: '0.1em', marginBottom: 6 }}>
+          API UNAVAILABLE
+        </div>
+        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-faint)' }}>
+          {(error as Error)?.message ?? 'Could not reach pipeline API'}
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', marginTop: 8, letterSpacing: '0.08em' }}>
+          /api/dashboard/composite · {date}
         </div>
       </div>
     );
   }
 
-  return <CardShell data={display} />;
+  return <CardShell data={data} />;
 }
