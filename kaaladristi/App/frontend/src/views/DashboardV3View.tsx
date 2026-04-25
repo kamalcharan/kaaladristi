@@ -10,6 +10,7 @@ import {
   SectorRotationFlow,
   DensityToggle,
   ActionIsland,
+  MarketWeatherCard,
   type Density,
 } from '@/components/domain/DashboardV3';
 
@@ -79,6 +80,11 @@ export default function DashboardV3View() {
           <SixDayOutlookCompact date={selectedDate} />
         </div>
       )}
+
+      {/* ── Market Weather Card — always visible (sample data, layout approval) ── */}
+      <div className="mb-4" style={{ maxWidth: 420 }}>
+        <MarketWeatherCard />
+      </div>
 
       {/* ── TERMINAL only: ambient gauges + sector rotation ── */}
       {density === 'terminal' && (
