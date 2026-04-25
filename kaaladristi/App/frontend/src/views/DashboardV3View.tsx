@@ -6,7 +6,6 @@ import {
   CurrentSkyRail,
   PingsColumn,
   SixDayOutlookCompact,
-  AmbientGauges,
   SectorRotationFlow,
   DensityToggle,
   ActionIsland,
@@ -105,13 +104,9 @@ export default function DashboardV3View() {
         </div>
       )}
 
-      {/* ── ROW 5: Gauge summary (1/3) + Sector Rotation (2/3) — standard + terminal ── */}
+      {/* ── ROW 5: Sector Rotation full-width — standard + terminal ── */}
       {density !== 'calm' && (
-        <div
-          className="grid gap-4 mb-4"
-          style={{ gridTemplateColumns: '1fr 2fr' }}
-        >
-          <AmbientGauges />
+        <div className="mb-4">
           <SectorRotationFlow />
         </div>
       )}
