@@ -10,6 +10,7 @@ interface TickerConfig {
 }
 
 interface TickerData {
+  trade_date: string;
   close: number;
   pct_chng: number | null;
   prev_close: number | null;
@@ -51,7 +52,7 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerData>
       if (!id) return;
 
       const { data: rows } = await from('km_index_eod')
-        .select('close,prev_close,pct_chng,rsi_14,magic_rs,magic_rs_zone')
+        .select('trade_date,close,prev_close,pct_chng,rsi_14,magic_rs,magic_rs_zone')
         .eq('index_id', id)
         .lte('trade_date', date)
         .order('trade_date', { ascending: false })
@@ -174,6 +175,21 @@ function Card({ ticker, data }: { ticker: TickerConfig; data?: TickerData }) {
           ? `${displayPct > 0 ? '▲' : displayPct < 0 ? '▼' : '—'} ${Math.abs(displayPct).toFixed(2)}%`
           : '—'}
       </span>
+
+      {/* Data date — shows which trade date is being displayed */}
+      {data?.trade_date && (
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 8,
+          color: 'var(--text-faint)',
+          letterSpacing: '0.08em',
+          opacity: 0.6,
+        }}>
+          {new Date(data.trade_date + 'T00:00:00Z').toLocaleDateString('en-IN', {
+            day: 'numeric', month: 'short', timeZone: 'UTC',
+          })}
+        </span>
+      )}
 
       {/* RSI + MagicRS zone — hide for VIX */}
       {!ticker.isVix && (
