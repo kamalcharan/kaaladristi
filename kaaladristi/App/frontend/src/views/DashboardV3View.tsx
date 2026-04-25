@@ -86,14 +86,7 @@ export default function DashboardV3View() {
         </div>
       )}
 
-      {/* ── ROW 3: Sky Rail — calm hidden ── */}
-      {density !== 'calm' && (
-        <div className="mb-4">
-          <CurrentSkyRail date={displayDate} />
-        </div>
-      )}
-
-      {/* ── ROW 4: Market Breadth + ROC charts — standard + terminal ── */}
+      {/* ── ROW 3: Market Breadth + ROC charts — calm hidden ── */}
       {density !== 'calm' && (
         <div
           className="grid gap-4 mb-4"
@@ -101,6 +94,13 @@ export default function DashboardV3View() {
         >
           <MarketBreadthChart />
           <BreadthRocChart />
+        </div>
+      )}
+
+      {/* ── ROW 4: Sky Rail — standard + terminal ── */}
+      {density !== 'calm' && (
+        <div className="mb-4">
+          <CurrentSkyRail date={displayDate} />
         </div>
       )}
 

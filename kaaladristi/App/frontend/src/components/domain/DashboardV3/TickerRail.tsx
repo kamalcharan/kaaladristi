@@ -3,31 +3,34 @@ import { from } from '@/services/postgrest';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface TickerCard {
+interface TickerConfig {
   name: string;
-  label: string;       // display label
-  isVix: boolean;      // VIX shows differently — no % sign, red=good
+  label: string;
+  isVix: boolean;
 }
 
 interface TickerData {
   close: number;
-  prev_close: number | null;
   pct_chng: number | null;
+  prev_close: number | null;
+  rsi_14: number | null;
+  magic_rs: number | null;
+  magic_rs_zone: string | null;
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const TICKERS: TickerCard[] = [
-  { name: 'NIFTY 50',   label: 'NIFTY 50',    isVix: false },
-  { name: 'NIFTY BANK', label: 'NIFTY BANK',  isVix: false },
-  { name: 'NIFTY 500',  label: 'NIFTY 500',   isVix: false },
-  { name: 'India VIX',  label: 'INDIA VIX',   isVix: true  },
+const TICKERS: TickerConfig[] = [
+  { name: 'NIFTY 50',   label: 'NIFTY 50',   isVix: false },
+  { name: 'NIFTY BANK', label: 'NIFTY BANK', isVix: false },
+  { name: 'NIFTY 500',  label: 'NIFTY 500',  isVix: false },
+  { name: 'India VIX',  label: 'INDIA VIX',  isVix: true  },
 ];
 
-// ── Data fetch ────────────────────────────────────────────────────────────────
+// ── Data fetch — one query per index for reliability ──────────────────────────
 
 async function fetchTickerData(date: string): Promise<Record<string, TickerData>> {
-  // Resolve index IDs first (cached by react-query key including date)
+  // 1. Resolve symbol IDs
   const { data: symbols } = await from('km_index_symbols')
     .select('id,name')
     .in('name', TICKERS.map(t => t.name))
@@ -39,49 +42,38 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerData>
   const idMap: Record<string, number> = {};
   for (const s of symbols as SymRow[]) idMap[s.name] = s.id;
 
-  // Fetch latest EOD row on or before date for each index
-  const ids = Object.values(idMap);
-  const { data: rows } = await from('km_index_eod')
-    .select('index_id,trade_date,close,prev_close,pct_chng')
-    .in('index_id', ids)
-    .lte('trade_date', date)
-    .order('trade_date', { ascending: false })
-    .limit(ids.length * 10)  // enough rows across staggered trade dates
-    .execute();
-
-  type EodRow = { index_id: number; trade_date: string; close: number; prev_close: number | null; pct_chng: number | null };
-  const eodRows = (rows ?? []) as EodRow[];
-
-  // Keep only the most-recent row per index_id
-  const seen = new Set<number>();
+  // 2. Fetch most-recent row per index separately (avoids cross-index ordering issues)
   const result: Record<string, TickerData> = {};
-  const reverseIdMap: Record<number, string> = {};
-  for (const [name, id] of Object.entries(idMap)) reverseIdMap[id] = name;
 
-  for (const r of eodRows) {
-    if (seen.has(r.index_id)) continue;
-    seen.add(r.index_id);
-    const name = reverseIdMap[r.index_id];
-    if (name) {
-      result[name] = { close: r.close, prev_close: r.prev_close, pct_chng: r.pct_chng };
-    }
-  }
+  await Promise.all(
+    TICKERS.map(async ticker => {
+      const id = idMap[ticker.name];
+      if (!id) return;
+
+      const { data: rows } = await from('km_index_eod')
+        .select('close,prev_close,pct_chng,rsi_14,magic_rs,magic_rs_zone')
+        .eq('index_id', id)
+        .lte('trade_date', date)
+        .order('trade_date', { ascending: false })
+        .limit(1)
+        .execute();
+
+      const row = (rows as TickerData[] | null)?.[0];
+      if (row) result[ticker.name] = row;
+    }),
+  );
 
   return result;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(val: number, decimals = 2): string {
-  return val.toLocaleString('en-IN', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+function fmt(val: number): string {
+  return val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function changeColor(pct: number | null, isVix: boolean): string {
   if (pct == null) return 'var(--text-faint)';
-  // VIX: rising is negative for market
   const positive = isVix ? pct < 0 : pct > 0;
   const negative = isVix ? pct > 0 : pct < 0;
   if (positive) return '#22c55e';
@@ -89,34 +81,65 @@ function changeColor(pct: number | null, isVix: boolean): string {
   return 'var(--text-faint)';
 }
 
-function arrow(pct: number | null): string {
-  if (pct == null) return '';
-  if (pct > 0) return '▲';
-  if (pct < 0) return '▼';
-  return '—';
+function rsiColor(rsi: number | null): string {
+  if (rsi == null) return 'var(--text-faint)';
+  if (rsi >= 70) return '#ef4444';
+  if (rsi >= 60) return '#f59e0b';
+  if (rsi >= 40) return '#22c55e';
+  if (rsi >= 30) return '#f59e0b';
+  return '#ef4444';
+}
+
+function zoneColor(zone: string | null): string {
+  switch (zone) {
+    case 'Strong Bull': return '#22c55e';
+    case 'Mild Bull':   return '#86efac';
+    case 'Neutral':     return 'var(--text-faint)';
+    case 'Mild Bear':   return '#fca5a5';
+    case 'Strong Bear': return '#ef4444';
+    default:            return 'var(--text-faint)';
+  }
+}
+
+function zoneShort(zone: string | null): string {
+  switch (zone) {
+    case 'Strong Bull': return 'S.Bull';
+    case 'Mild Bull':   return 'M.Bull';
+    case 'Neutral':     return 'Neut';
+    case 'Mild Bear':   return 'M.Bear';
+    case 'Strong Bear': return 'S.Bear';
+    default:            return '—';
+  }
 }
 
 // ── Single card ───────────────────────────────────────────────────────────────
 
-function Card({ ticker, data }: { ticker: TickerCard; data?: TickerData }) {
-  const pct = data?.pct_chng ?? null;
+function Card({ ticker, data }: { ticker: TickerConfig; data?: TickerData }) {
+  const pct   = data?.pct_chng ?? null;
   const close = data?.close ?? null;
-  const color = changeColor(pct, ticker.isVix);
+  const rsi   = data?.rsi_14 ?? null;
+  const zone  = data?.magic_rs_zone ?? null;
+  const changeClr = changeColor(pct, ticker.isVix);
+
+  // Compute pct from prev_close if pct_chng is null
+  const displayPct = pct ?? (
+    close != null && data?.prev_close != null && data.prev_close !== 0
+      ? ((close - data.prev_close) / data.prev_close) * 100
+      : null
+  );
 
   return (
-    <div
-      style={{
-        background: 'var(--card)',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        padding: '10px 14px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        minWidth: 0,
-        flex: 1,
-      }}
-    >
+    <div style={{
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      padding: '10px 14px 8px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2,
+      minWidth: 0,
+      flex: 1,
+    }}>
       {/* Label */}
       <span style={{
         fontFamily: 'var(--font-mono)',
@@ -128,7 +151,7 @@ function Card({ ticker, data }: { ticker: TickerCard; data?: TickerData }) {
         {ticker.label}
       </span>
 
-      {/* Value */}
+      {/* Close */}
       <span style={{
         fontFamily: 'var(--font-display)',
         fontSize: 20,
@@ -137,20 +160,46 @@ function Card({ ticker, data }: { ticker: TickerCard; data?: TickerData }) {
         lineHeight: 1.1,
         color: close != null ? 'var(--text-primary)' : 'var(--text-faint)',
       }}>
-        {close != null ? fmt(close, ticker.isVix ? 2 : 2) : '—'}
+        {close != null ? fmt(close) : '—'}
       </span>
 
       {/* Change */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          fontWeight: 600,
-          color,
-        }}>
-          {pct != null ? `${arrow(pct)} ${Math.abs(pct).toFixed(2)}%` : '—'}
-        </span>
-      </div>
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        fontWeight: 600,
+        color: changeClr,
+      }}>
+        {displayPct != null
+          ? `${displayPct > 0 ? '▲' : displayPct < 0 ? '▼' : '—'} ${Math.abs(displayPct).toFixed(2)}%`
+          : '—'}
+      </span>
+
+      {/* RSI + MagicRS zone — hide for VIX */}
+      {!ticker.isVix && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: 'var(--text-faint)',
+            letterSpacing: '0.08em',
+          }}>
+            RSI{' '}
+            <span style={{ color: rsiColor(rsi), fontWeight: 600 }}>
+              {rsi != null ? rsi.toFixed(0) : '—'}
+            </span>
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.12)', fontSize: 10 }}>│</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: zoneColor(zone),
+            letterSpacing: '0.06em',
+          }}>
+            ● {zoneShort(zone)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
