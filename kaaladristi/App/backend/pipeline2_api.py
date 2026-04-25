@@ -936,7 +936,7 @@ def panchang_week(from_date: str = Query(..., alias='from'),
     if to_obj < from_obj:
         raise HTTPException(status_code=400, detail='to must be ≥ from')
 
-    conn = _get_conn()
+    conn = _conn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(_PANCHANG_WEEK_SQL, (from_date, to_date))
