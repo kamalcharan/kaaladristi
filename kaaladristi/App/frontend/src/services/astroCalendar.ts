@@ -19,6 +19,15 @@ export interface AstroCalendarEvent {
   year: number;
 }
 
+export interface SignalItem {
+  rule_id: number;
+  rule_name: string;
+  outcome: string;
+  strength: number | null;
+  confidence: number | null;
+  probability_label: string | null;
+}
+
 export interface AstroDailySignal {
   trade_date: string;
   net_signal: string;
@@ -34,6 +43,7 @@ export interface AstroDailySignal {
   minor_bearish_count: number;
   bearish_count: number;
   strong_bearish_count: number;
+  signals: SignalItem[];
 }
 
 export interface AstroCalendarPayload {
@@ -80,7 +90,7 @@ export async function fetchMonthSignals(year: number, month: number): Promise<As
     bullish: number;
     bearish: number;
     turning: number;
-    signals: Array<{ rule_name: string; outcome: string }>;
+    signals: SignalItem[];
   };
 
   const days: RuleDay[] = await res.json();
@@ -120,6 +130,7 @@ export async function fetchMonthSignals(year: number, month: number): Promise<As
       minor_bearish_count:  0,
       bearish_count:        bearish,
       strong_bearish_count: 0,
+      signals,
     };
   });
 }
