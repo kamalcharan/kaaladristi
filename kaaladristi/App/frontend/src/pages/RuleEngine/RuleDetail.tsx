@@ -278,7 +278,7 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
     return Math.round(sorted.reduce((s, t) => s + (t.duration_days ?? 0), 0) / sorted.length);
   }, [sorted]);
 
-  if (sorted.length < 2) return null;
+  if (sorted.length < 1) return null;
 
   const n = sorted.length;
   const chartW = W - PAD.l - PAD.r;
@@ -315,17 +315,19 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
   const endYear     = parseInt(sorted[n - 1].start_date.slice(0, 4));
   const windowYears = endYear - startYear;
   const today       = new Date().toISOString().slice(0, 10);
+  const windowLabel = windowYears > 0 ? `${windowYears}Y window` : sorted[0].start_date.slice(0, 7);
 
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
       <div className="px-5 pt-4 pb-2">
         <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1.5">
-          Per-Transit Performance · {n} events · {windowYears}Y window · as of {today}
+          Per-Transit Performance · {n} event{n !== 1 ? 's' : ''} · {windowLabel} · as of {today}
         </p>
         <p className="font-display text-xl text-white leading-snug">
           Each bar is{' '}
           <em className="not-italic text-accent-gold font-medium">one transit</em>
-          {' '}— the rule fires, runs for ~{avgDuration}d, and ends. Between events, nothing is held.
+          {' '}— the rule fires{avgDuration > 0 ? `, runs for ~${avgDuration}d,` : ''} and ends. Between events, nothing is held.
+          {n < 5 && <span className="text-[11px] font-sans font-normal text-muted ml-2">({n} event{n !== 1 ? 's' : ''} — more history accumulates over time)</span>}
         </p>
       </div>
 
@@ -1261,7 +1263,7 @@ export default function RuleDetail() {
                 onHighlight={setHighlightTransitId}
               />
               <BacktestStatGrid conf={conf} transits={transits} />
-              {transits.length >= 3 && <RegimeGrid transits={transits} />}
+              {transits.length >= 1 && <RegimeGrid transits={transits} />}
             </>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-6 rounded-xl border border-kd-border bg-kd-elevated/30">
