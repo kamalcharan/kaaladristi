@@ -306,6 +306,7 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
 function BarsSection({ data }: { data: MarketWeatherProps }) {
   const { astro, roc, breadth } = data.components;
   const astroNorm = astro.score / 100;
+  const astroBarLabel = astroNorm >= 0.60 ? 'Positive' : astroNorm >= 0.45 ? 'Mixed' : 'Negative';
   const { glyph: arrowGlyph, color: arrowColor } = rocArrow(roc.roc_13, roc.roc_13_prev);
   const rocText = rocLabel(roc.roc_13);
   const bLabel = breadthLabel(breadth.breadth_score);
@@ -315,7 +316,7 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
       <BarRow
         label="Astro Signals"
         normalized={astroNorm}
-        rightLabel="Positive"
+        rightLabel={astroBarLabel}
       />
       <BarRow
         label="Momentum"
