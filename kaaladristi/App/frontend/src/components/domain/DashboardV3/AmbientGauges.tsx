@@ -82,18 +82,18 @@ function GaugeCard({ label, value, sub, color, sparkValues = [], expanded, onTog
 
 function breadthTone(score: number | null): { text: string; color: string } {
   if (score === null) return { text: '—', color: 'var(--text-faint)' };
-  if (score >= 70) return { text: 'expanding', color: 'var(--bull)' };
-  if (score >= 50) return { text: 'neutral+', color: 'var(--gold)' };
-  if (score >= 30) return { text: 'neutral−', color: 'var(--caution)' };
-  return { text: 'contracting', color: 'var(--bear)' };
+  if (score >= 70) return { text: 'Elevated',   color: 'var(--bull)' };
+  if (score >= 50) return { text: 'Moderate+',  color: 'var(--gold)' };
+  if (score >= 30) return { text: 'Moderate−',  color: 'var(--caution)' };
+  return                   { text: 'Depressed',  color: 'var(--bear)' };
 }
 
 function rocTone(val: number | null): { text: string; color: string } {
   if (val === null) return { text: '—', color: 'var(--text-faint)' };
-  if (val > 0.5) return { text: 'accelerating', color: 'var(--bull)' };
-  if (val > 0) return { text: 'positive', color: 'var(--gold)' };
-  if (val > -0.5) return { text: 'slowing', color: 'var(--caution)' };
-  return { text: 'declining', color: 'var(--bear)' };
+  if (val > 0.5) return { text: 'Accelerating', color: 'var(--bull)' };
+  if (val > 0)   return { text: 'Decelerating', color: 'var(--gold)' };
+  if (val > -0.5) return { text: 'Stabilising', color: 'var(--caution)' };
+  return                 { text: 'Contracting',  color: 'var(--bear)' };
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
