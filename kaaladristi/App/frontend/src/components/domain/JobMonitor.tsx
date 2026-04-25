@@ -102,9 +102,11 @@ export default function JobMonitor() {
       onClick={() => setExpanded(v => !v)}>
       <Loader2 className="w-3.5 h-3.5 animate-spin" />
       {discoveryRunning
-        ? discovery!.rules_total === 0
-          ? `Discovery · ${discovery!.phase ?? 'starting'}…`
-          : `Discovery · ${discovery!.rules_done}/${discovery!.rules_total} rules`
+        ? discovery!.phase === 'confidence_scoring'
+          ? `Confidence scoring · ${confidence?.signals_scored ?? 0} scored`
+          : discovery!.rules_total === 0
+            ? `Discovery · ${discovery!.phase ?? 'starting'}…`
+            : `Discovery · ${discovery!.rules_done}/${discovery!.rules_total} rules`
         : `Confidence scoring · ${confidence!.signals_scored} scored`}
       {expanded ? <ChevronDown className="w-3 h-3 ml-1" /> : <ChevronUp className="w-3 h-3 ml-1" />}
     </div>
@@ -180,7 +182,12 @@ export default function JobMonitor() {
 
               {discoveryRunning && discovery && (
                 <>
-                  {discovery.rules_total === 0 ? (
+                  {discovery.phase === 'confidence_scoring' ? (
+                    <div className="flex items-center gap-2 text-[11px] text-risk-green/80 py-1">
+                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                      <span>Confidence scoring — scoring transits…</span>
+                    </div>
+                  ) : discovery.rules_total === 0 ? (
                     <div className="flex items-center gap-2 text-[11px] text-risk-amber/80 py-1">
                       <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                       <span className="capitalize">{discovery.phase ?? 'Starting'}…</span>
@@ -188,36 +195,40 @@ export default function JobMonitor() {
                   ) : (
                     <ProgressBar done={discovery.rules_done} total={discovery.rules_total} />
                   )}
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <p className="text-muted">Rules</p>
-                      <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total || '?'}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted">Signals</p>
-                      <p className="text-secondary font-mono">{discovery.signals_inserted.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted">Transits</p>
-                      <p className="text-secondary font-mono">{(discovery.transits_inserted ?? 0).toLocaleString()}</p>
-                    </div>
-                    {discovery.current_rule_code && (
-                      <div className="col-span-2">
-                        <p className="text-muted">Current rule</p>
-                        <p className="text-accent-indigo/80 font-mono truncate">{discovery.current_rule_code}</p>
+                  {discovery.phase !== 'confidence_scoring' && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <p className="text-muted">Rules</p>
+                          <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total || '?'}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted">Signals</p>
+                          <p className="text-secondary font-mono">{discovery.signals_inserted.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted">Transits</p>
+                          <p className="text-secondary font-mono">{(discovery.transits_inserted ?? 0).toLocaleString()}</p>
+                        </div>
+                        {discovery.current_rule_code && (
+                          <div className="col-span-2">
+                            <p className="text-muted">Current rule</p>
+                            <p className="text-accent-indigo/80 font-mono truncate">{discovery.current_rule_code}</p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {!cancelMutation.isPending && !discovery.cancel_requested && (
-                    <button
-                      onClick={() => cancelMutation.mutate()}
-                      className="w-full mt-1 px-3 py-1.5 text-xs text-risk-red/70 border border-risk-red/30 bg-risk-red/10 rounded-lg hover:bg-risk-red/20 transition-all"
-                    >
-                      Cancel Discovery
-                    </button>
-                  )}
-                  {(cancelMutation.isPending || discovery.cancel_requested) && (
-                    <p className="text-[11px] text-risk-amber text-center">Cancel requested — finishing current rule…</p>
+                      {!cancelMutation.isPending && !discovery.cancel_requested && (
+                        <button
+                          onClick={() => cancelMutation.mutate()}
+                          className="w-full mt-1 px-3 py-1.5 text-xs text-risk-red/70 border border-risk-red/30 bg-risk-red/10 rounded-lg hover:bg-risk-red/20 transition-all"
+                        >
+                          Cancel Discovery
+                        </button>
+                      )}
+                      {(cancelMutation.isPending || discovery.cancel_requested) && (
+                        <p className="text-[11px] text-risk-amber text-center">Cancel requested — finishing current rule…</p>
+                      )}
+                    </>
                   )}
                 </>
               )}
