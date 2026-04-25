@@ -1598,21 +1598,29 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
             conn.close()
         except Exception:
             pass
-        _discovery_state['running'] = False
-        _discovery_state['finished_at'] = datetime.utcnow().isoformat()
+        # Keep running=True here — confidence phase follows immediately below.
+        # We only clear transient per-rule state in the finally block.
         _discovery_state['current_rule_code'] = None
-        _discovery_state['phase'] = None
         log.info(
             f'Discovery [{mode}] done — {_discovery_state["rules_done"]} rules, '
             f'{_discovery_state["signals_inserted"]} signals, '
             f'{len(_discovery_state["errors"])} errors'
         )
 
-    # Auto-run confidence scoring after discovery completes — delegates to
-    # _run_confidence_bg() so _confidence_state is updated correctly and
-    # /api/confidence/status reflects the run.
+    # Phase 2: auto-run confidence scoring.
+    # running stays True so the frontend keeps polling and data is only
+    # refreshed once both discovery AND confidence have completed.
+    _discovery_state['phase'] = 'confidence_scoring'
     log.info('Discovery complete. Starting confidence scoring…')
     _run_confidence_bg()
+    # Sync confidence result into discovery state so the panel can show it
+    _discovery_state['confidence_computed_at'] = _confidence_state.get('finished_at')
+    _discovery_state['confidence_error'] = _confidence_state.get('error')
+    # Mark the full pipeline (discovery + confidence) as done
+    _discovery_state['running'] = False
+    _discovery_state['finished_at'] = datetime.utcnow().isoformat()
+    _discovery_state['phase'] = None
+    log.info('Full discovery+confidence pipeline complete.')
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
