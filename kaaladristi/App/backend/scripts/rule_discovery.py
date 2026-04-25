@@ -263,6 +263,27 @@ def _panchang_diagnostics(conn, rule_code, schema, vara_val, nak_lord=None, naks
               f"{lords_for_vara}", flush=True)
 
 
+def _merge_split_days(rows: list) -> list:
+    """
+    Deduplicate rows with the same date.
+    Happens when a mid-day nakshatra changeover causes both morning and
+    afternoon lords to match the same rule on the same date (e.g. Schema C
+    with nakshatra_lord_in: [Rahu, Ketu]).  The DB UNIQUE(date, rule_id)
+    constraint allows only one row per date — merge into the morning snapshot.
+    """
+    seen: dict = {}
+    for date_, snap in rows:
+        if date_ not in seen:
+            seen[date_] = dict(snap)
+        else:
+            # Second entry = afternoon session; enrich the morning snapshot
+            existing = seen[date_]
+            existing['is_split_day'] = True
+            existing['both_sessions'] = True
+            existing.setdefault('afternoon_nakshatra_lord', snap.get('nakshatra_lord'))
+    return list(seen.items())
+
+
 def discover_nakshatra_vara(conn, rule, vocab):
     """
     Discover signals for nakshatra_vara rules.
@@ -375,7 +396,7 @@ def discover_nakshatra_vara(conn, rule, vocab):
                 rows.append((date_, make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'D', vara_val)
-        return rows
+        return _merge_split_days(rows)
 
     # ── Schema A: specific nakshatra name ─────────────────────────────────────
     if vara_val and cond.get('nakshatra'):
@@ -393,7 +414,7 @@ def discover_nakshatra_vara(conn, rule, vocab):
                 rows.append((date_, make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'A', vara_val, nakshatra=cond['nakshatra'])
-        return rows
+        return _merge_split_days(rows)
 
     # ── Schema C: list of nakshatra lords ─────────────────────────────────────
     lord_in = cond.get('nakshatra_lord_in')
@@ -414,7 +435,7 @@ def discover_nakshatra_vara(conn, rule, vocab):
                     rows.append((date_, make_snap(vara, eff_lord, nak_name, tithi, paksha, extra)))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'C', vara_val, nak_lord=str(lords))
-        return rows
+        return _merge_split_days(rows)
 
     # ── Schema E: tithi_base + paksha (+ optional vara) ───────────────────────
     if cond.get('tithi_base') and cond.get('paksha'):
@@ -440,7 +461,7 @@ def discover_nakshatra_vara(conn, rule, vocab):
                 rows.append((date_, snap))
         if not rows:
             _panchang_diagnostics(conn, rule['rule_code'], 'E', vara_val)
-        return rows
+        return _merge_split_days(rows)
 
     # ── Schema B: vara + nakshatra_lord (singular), vara-only, or lord-only ──
     nak_lord_cond = cond.get('nakshatra_lord')
@@ -480,7 +501,7 @@ def discover_nakshatra_vara(conn, rule, vocab):
 
     if not rows:
         _panchang_diagnostics(conn, rule['rule_code'], 'B', vara_val, nak_lord=nak_lord_cond)
-    return rows
+    return _merge_split_days(rows)
 
 
 def discover_planet_in_nakshatra(conn, rule):
@@ -1360,11 +1381,9 @@ def main(year_filter=None, rule_code_filter=None):
             execute_values(ins_cur,
                 "INSERT INTO km_rule_signals "
                 "(date, rule_id, signal, strength, details, conditions_snapshot) "
-                "VALUES %s ON CONFLICT (date, rule_id) DO UPDATE "
-                "SET conditions_snapshot = km_rule_signals.conditions_snapshot || "
-                "    EXCLUDED.conditions_snapshot::jsonb",
+                "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
                 ins_data)
-            inserted = ins_cur.rowcount
+            inserted = len(ins_data)
             conn.commit()
             total_inserted += inserted
 

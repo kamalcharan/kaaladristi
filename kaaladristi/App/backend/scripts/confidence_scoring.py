@@ -262,12 +262,17 @@ def update_daily_signal_returns(conn, close_map: dict, rule_outcome_map: dict) -
 
 
 def _flush_signal_batch(conn, batch: list):
+    from psycopg2.extras import execute_values
     cur = conn.cursor()
-    cur.executemany(
+    execute_values(
+        cur,
         "UPDATE km_rule_signals "
-        "SET actual_market_return = %s, matched = %s "
-        "WHERE id = %s",
+        "SET actual_market_return = v.ret_pct, matched = v.matched "
+        "FROM (VALUES %s) AS v(ret_pct, matched, id) "
+        "WHERE km_rule_signals.id = v.id::int",
         batch,
+        template="(%s, %s, %s)",
+        page_size=500,
     )
 
 

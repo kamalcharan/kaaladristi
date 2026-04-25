@@ -1559,11 +1559,9 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                         _ev(cur,
                             "INSERT INTO km_rule_signals "
                             "(date, rule_id, signal, strength, details, conditions_snapshot) "
-                            "VALUES %s ON CONFLICT (date, rule_id) DO UPDATE "
-                            "SET conditions_snapshot = km_rule_signals.conditions_snapshot || "
-                            "    EXCLUDED.conditions_snapshot::jsonb",
+                            "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
                             _data)
-                        inserted = cur.rowcount
+                        inserted = len(_data)
                 conn.commit()
                 _discovery_state['signals_inserted'] += inserted
 
