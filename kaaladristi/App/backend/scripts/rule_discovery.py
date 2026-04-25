@@ -178,15 +178,87 @@ NOT_IMPLEMENTED_RULE_CODES: frozenset = frozenset({
 # Vara names used by km_daily_panchang that correspond to weekend days
 _WEEKEND_VARAS: frozenset = frozenset({'Ravi', 'Shani'})  # Sunday, Saturday
 
-def discover_nakshatra_vara(conn, rule):
-    """day_nakshatra and day_lord_nak_lord rules"""
-    cond = rule['conditions']
-    strength = strength_from_probability(rule['probability_label'])
-    rows = []
+_PANCHANG_SCHEMA_PRINTED = False  # print distinct-value snapshot only once per run
 
+
+def _panchang_diagnostics(conn, rule_code, schema, vara_val, nak_lord=None, nakshatra=None):
+    """
+    Print diagnostic info when discover_nakshatra_vara returns 0 rows.
+    Distinct-value snapshot is printed only once per process run.
+    """
+    global _PANCHANG_SCHEMA_PRINTED
+    diag = conn.cursor()
+    print(f"  DIAG [{rule_code}] schema={schema} vara_val={vara_val!r} "
+          f"nak_lord={nak_lord!r} nakshatra={nakshatra!r}", flush=True)
+
+    # Check: does the exact match exist WITHOUT the DOW filter?
+    # (skip for Schema C where nak_lord is a list repr, not a scalar)
+    simple_lord = nak_lord if (nak_lord and not nak_lord.startswith('[')) else None
+    if vara_val and simple_lord:
+        diag.execute(
+            "SELECT COUNT(*) FROM km_daily_panchang WHERE vara=%s AND nakshatra_lord=%s",
+            (vara_val, simple_lord))
+        no_filter_count = diag.fetchone()[0]
+        print(f"  DIAG [{rule_code}] rows WITHOUT DOW filter: {no_filter_count}", flush=True)
+        if no_filter_count > 0:
+            print(f"  DIAG [{rule_code}] → DOW filter is removing all rows — "
+                  f"panchang date column may not align with calendar DOW", flush=True)
+
+    if not _PANCHANG_SCHEMA_PRINTED:
+        _PANCHANG_SCHEMA_PRINTED = True
+        # Distinct vara values
+        diag.execute("SELECT DISTINCT vara FROM km_daily_panchang ORDER BY vara")
+        varas = [r[0] for r in diag.fetchall()]
+        print(f"  DIAG [panchang] distinct vara values: {varas}", flush=True)
+        # Distinct nakshatra_lord values
+        diag.execute(
+            "SELECT DISTINCT nakshatra_lord FROM km_daily_panchang ORDER BY nakshatra_lord")
+        lords = [r[0] for r in diag.fetchall()]
+        print(f"  DIAG [panchang] distinct nakshatra_lord values: {lords}", flush=True)
+        # Total row count
+        diag.execute("SELECT COUNT(*) FROM km_daily_panchang")
+        total = diag.fetchone()[0]
+        print(f"  DIAG [panchang] total rows: {total}", flush=True)
+
+    # Per-vara breakdown for failing rule (always shown)
+    if vara_val:
+        diag.execute(
+            "SELECT DISTINCT nakshatra_lord, COUNT(*) FROM km_daily_panchang "
+            "WHERE vara=%s GROUP BY nakshatra_lord ORDER BY nakshatra_lord",
+            (vara_val,))
+        lords_for_vara = [(r[0], r[1]) for r in diag.fetchall()]
+        print(f"  DIAG [{rule_code}] nakshatra_lord counts for vara={vara_val!r}: "
+              f"{lords_for_vara}", flush=True)
+
+
+def discover_nakshatra_vara(conn, rule):
+    """
+    Discover signals for nakshatra_vara rules.
+    Handles five condition schemas — checked in priority order:
+
+    D  day_lord_equals_nakshatra_lord=True
+         WHERE dlnl_match = TRUE
+    A  vara/day + nakshatra  (specific nakshatra name)
+         WHERE vara = X AND nakshatra_name = Y
+    C  vara/day + nakshatra_lord_in  (list of lords)
+         WHERE vara = X AND nakshatra_lord = ANY([...])
+    E  vara/day + paksha + tithi_base
+         WHERE vara = X AND paksha = P AND tithi_base_name ILIKE '%T%'
+    B  vara/day + nakshatra_lord (singular), vara-only, or lord-only
+         WHERE vara = X [AND nakshatra_lord = L]
+    """
+    cond = rule['conditions']
+    rows = []
+    cur = conn.cursor()
+    # 'day' is a legacy alias for 'vara' in older rule conditions
+    vara_val = cond.get('vara') or cond.get('day')
+
+    def _snap(row):
+        return {'vara': row[1], 'nakshatra_lord': row[2],
+                'nakshatra': row[3], 'tithi': row[4], 'paksha': row[5]}
+
+    # ── Schema D ──────────────────────────────────────────────────────────────
     if cond.get('day_lord_equals_nakshatra_lord'):
-        # DLNL rule — use pre-computed dlnl_match
-        cur = conn.cursor()
         cur.execute("""
             SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
             FROM km_daily_panchang
@@ -194,60 +266,97 @@ def discover_nakshatra_vara(conn, rule):
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
         """)
         for row in cur.fetchall():
-            snapshot = {
-                'vara': row[1], 'nakshatra_lord': row[2],
-                'nakshatra': row[3], 'tithi': row[4], 'paksha': row[5]
-            }
-            rows.append((row[0], snapshot))
-    elif 'vara' in cond and 'nakshatra' in cond:
-        # specific nakshatra+vara combo (not lord-based)
-        cur = conn.cursor()
+            rows.append((row[0], _snap(row)))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'D', vara_val)
+        return rows
+
+    # ── Schema A: specific nakshatra name ─────────────────────────────────────
+    if vara_val and cond.get('nakshatra'):
         cur.execute("""
             SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
             FROM km_daily_panchang
             WHERE vara = %s AND nakshatra_name = %s
             AND EXTRACT(DOW FROM date) NOT IN (0,6)
-        """, (cond['vara'], cond['nakshatra']))
+        """, (vara_val, cond['nakshatra']))
         for row in cur.fetchall():
-            snapshot = {
+            rows.append((row[0], _snap(row)))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'A', vara_val, nakshatra=cond['nakshatra'])
+        return rows
+
+    # ── Schema C: list of nakshatra lords ─────────────────────────────────────
+    lord_in = cond.get('nakshatra_lord_in')
+    if vara_val and lord_in:
+        lords = lord_in if isinstance(lord_in, list) else [lord_in]
+        cur.execute("""
+            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            FROM km_daily_panchang
+            WHERE vara = %s AND nakshatra_lord = ANY(%s)
+            AND EXTRACT(DOW FROM date) NOT IN (0,6)
+        """, (vara_val, lords))
+        for row in cur.fetchall():
+            rows.append((row[0], _snap(row)))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'C', vara_val, nak_lord=str(lords))
+        return rows
+
+    # ── Schema E: tithi_base + paksha (+ optional vara) ───────────────────────
+    if cond.get('tithi_base') and cond.get('paksha'):
+        params: list = [f"%{cond['tithi_base']}%", cond['paksha']]
+        vara_clause = ''
+        if vara_val:
+            vara_clause = 'AND vara = %s'
+            params.append(vara_val)
+        cur.execute(f"""
+            SELECT date, vara, nakshatra_lord, nakshatra_name,
+                   tithi_name, tithi_base_name, paksha
+            FROM km_daily_panchang
+            WHERE tithi_base_name ILIKE %s AND paksha = %s
+            {vara_clause}
+            AND EXTRACT(DOW FROM date) NOT IN (0,6)
+        """, params)
+        for row in cur.fetchall():
+            rows.append((row[0], {
                 'vara': row[1], 'nakshatra_lord': row[2],
-                'nakshatra': row[3], 'tithi': row[4], 'paksha': row[5]
-            }
-            rows.append((row[0], snapshot))
+                'nakshatra': row[3], 'tithi': row[4],
+                'tithi_base': row[5], 'paksha': row[6],
+            }))
+        if not rows:
+            _panchang_diagnostics(conn, rule['rule_code'], 'E', vara_val)
+        return rows
+
+    # ── Schema B: vara/day + nakshatra_lord (singular), vara-only, lord-only ──
+    nak_lord = cond.get('nakshatra_lord')
+    if not vara_val and not nak_lord:
+        print(f"  DIAG [{rule['rule_code']}] no conditions matched any schema — "
+              f"conditions keys: {list(cond.keys())}")
+        return rows
+    if vara_val and nak_lord:
+        cur.execute("""
+            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            FROM km_daily_panchang
+            WHERE vara = %s AND nakshatra_lord = %s
+            AND EXTRACT(DOW FROM date) NOT IN (0,6)
+        """, (vara_val, nak_lord))
+    elif vara_val:
+        cur.execute("""
+            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            FROM km_daily_panchang
+            WHERE vara = %s
+            AND EXTRACT(DOW FROM date) NOT IN (0,6)
+        """, (vara_val,))
     else:
-        # standard vara + nakshatra_lord ('day' is a legacy alias for 'vara')
-        day = cond.get('day') or cond.get('vara')
-        nak_lord = cond.get('nakshatra_lord')
-        if not day and not nak_lord:
-            return rows
-        cur = conn.cursor()
-        if day and nak_lord:
-            cur.execute("""
-                SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
-                FROM km_daily_panchang
-                WHERE vara = %s AND nakshatra_lord = %s
-                AND EXTRACT(DOW FROM date) NOT IN (0,6)
-            """, (day, nak_lord))
-        elif day:
-            cur.execute("""
-                SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
-                FROM km_daily_panchang
-                WHERE vara = %s
-                AND EXTRACT(DOW FROM date) NOT IN (0,6)
-            """, (day,))
-        else:
-            cur.execute("""
-                SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
-                FROM km_daily_panchang
-                WHERE nakshatra_lord = %s
-                AND EXTRACT(DOW FROM date) NOT IN (0,6)
-            """, (nak_lord,))
-        for row in cur.fetchall():
-            snapshot = {
-                'vara': row[1], 'nakshatra_lord': row[2],
-                'nakshatra': row[3], 'tithi': row[4], 'paksha': row[5]
-            }
-            rows.append((row[0], snapshot))
+        cur.execute("""
+            SELECT date, vara, nakshatra_lord, nakshatra_name, tithi_name, paksha
+            FROM km_daily_panchang
+            WHERE nakshatra_lord = %s
+            AND EXTRACT(DOW FROM date) NOT IN (0,6)
+        """, (nak_lord,))
+    for row in cur.fetchall():
+        rows.append((row[0], _snap(row)))
+    if not rows:
+        _panchang_diagnostics(conn, rule['rule_code'], 'B', vara_val, nak_lord=nak_lord)
     return rows
 
 
@@ -958,6 +1067,9 @@ def discover_sign_planet(conn, rule):
     rows = []
     sign = cond.get('sign')
     planets = cond.get('planets_present', [])
+    # Normalize: may be stored as a bare string "Venus" instead of ["Venus"]
+    if isinstance(planets, str):
+        planets = [planets]
     if not sign or not planets:
         return rows
 
@@ -997,9 +1109,7 @@ def discover_rule(conn, rule, vedh_map, panchak_naks):
         return discover_relative_position(conn, rule)
 
     if rt == 'nakshatra_vara':
-        # DN-SAT-SP-BUL and similar: tithi_base+paksha+vara combos route to tithi discovery
-        if cond.get('tithi_base') and cond.get('paksha') and cond.get('vara'):
-            return discover_tithi(conn, rule)
+        # All five condition schemas (A-E) are handled inside discover_nakshatra_vara.
         return discover_nakshatra_vara(conn, rule)
 
     elif rt == 'planet_transit':
@@ -1061,6 +1171,8 @@ def discover_rule(conn, rule, vedh_map, panchak_naks):
 # ── MAIN ────────────────────────────────────────────────────
 
 def main(year_filter=None, rule_code_filter=None):
+    global _PANCHANG_SCHEMA_PRINTED
+    _PANCHANG_SCHEMA_PRINTED = False  # reset so diagnostics fire fresh each run
     start_time = time.time()
     conn = get_conn()
 

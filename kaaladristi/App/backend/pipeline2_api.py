@@ -1393,6 +1393,7 @@ _discovery_state: dict = {
     'rules_total':           0,
     'rules_done':            0,
     'signals_inserted':      0,
+    'transits_inserted':     0,
     'current_rule_code':     None,
     'phase':                 None,
     'errors':                [],
@@ -1459,55 +1460,64 @@ def _load_rules_for_discovery(conn, mode: str, rule_id: int | None = None) -> li
 
 def _run_discovery_bg(mode: str, rule_id: int | None = None):
     """Background task: run rule discovery and update _discovery_state."""
+    print(f"DEBUG: background task started, mode={mode}", flush=True)
     import json as _json  # noqa: PLC0415
 
     global _discovery_state
 
-    # Guard: prevent overlapping runs
-    if _discovery_state['running']:
-        log.warning('Discovery already running — ignoring duplicate request')
-        return
-
     job_id = _discovery_state['job_id']
+    # Reset counters — running=True already set by the endpoint
     _discovery_state.update({
-        'running':           True,
         'cancel_requested':  False,
         'started_at':        datetime.utcnow().isoformat(),
         'finished_at':       None,
         'rules_total':       0,
         'rules_done':        0,
         'signals_inserted':  0,
+        'transits_inserted': 0,
         'current_rule_code': None,
         'errors':            [],
     })
 
+    print("DEBUG: about to import rule_discovery", flush=True)
     try:
+        import scripts.rule_discovery as _rd_mod  # noqa: PLC0415
+        _rd_mod._PANCHANG_SCHEMA_PRINTED = False   # reset diag flag for fresh run
         (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras,
          should_group_transits, detect_transits, insert_transits) = _import_discover_rule()
     except ImportError as exc:
+        print(f"DEBUG: import failed: {exc}", flush=True)
         log.error(f'Discovery import failed: {exc}')
         _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat()})
         _discovery_state['errors'].append({'rule_code': 'IMPORT', 'error': str(exc)})
         return
+    print("DEBUG: import succeeded", flush=True)
 
     _discovery_state['phase'] = 'connecting'
+    print("DEBUG: about to open DB connection", flush=True)
     try:
         conn = _conn(statement_timeout_ms=60000)
     except Exception as exc:
+        print(f"DEBUG: DB connection failed: {exc}", flush=True)
         log.error(f'Discovery DB connection failed: {exc}')
         _discovery_state.update({'running': False, 'finished_at': datetime.utcnow().isoformat(), 'phase': None})
         _discovery_state['errors'].append({'rule_code': 'DB_CONN', 'error': str(exc)})
         return
 
+    print("DEBUG: DB connection opened", flush=True)
     try:
         _discovery_state['phase'] = 'loading vocabulary'
+        print("DEBUG: about to load vocabulary", flush=True)
         vocab = load_vocabulary(conn)
         vedh_map = build_vedh_map(vocab['nakshatra_positions_names'])
         panchak_naks = get_panchak_nakshatras(vocab['nakshatra_positions_names'])
+        print(f"DEBUG: vocabulary loaded: {len(vocab['nakshatra_positions_names'])} nakshatras", flush=True)
         log.info(f'Vocabulary loaded: {len(vocab["nakshatra_positions_names"])} nakshatras')
 
         _discovery_state['phase'] = 'loading rules'
+        print(f"DEBUG: about to load rules from DB", flush=True)
         rules = _load_rules_for_discovery(conn, mode, rule_id)
+        print(f"DEBUG: loaded {len(rules)} rules", flush=True)
         _discovery_state['rules_total'] = len(rules)
         _discovery_state['phase'] = 'running'
         log.info(f'Discovery [{mode}] starting — {len(rules)} rules, job {job_id}')
@@ -1532,6 +1542,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
 
             try:
                 matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks)
+                print(f"DEBUG [{rule['rule_code']}]: discover_rule → {len(matched_rows)} rows, should_group={should_group_transits(rule)}", flush=True)
 
                 strength = {'Very High': 5, 'High': 4, 'Reasonable': 3, 'Low': 2}.get(
                     rule.get('probability_label'), 3
@@ -1557,9 +1568,20 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                 # Insert transits for transit-grouped rule types
                 if matched_rows and should_group_transits(rule):
                     rule_transits = detect_transits(conn, rule, matched_rows)
+                    print(f"DEBUG [{rule['rule_code']}]: detect_transits → {len(rule_transits)} transits", flush=True)
                     if rule_transits:
-                        insert_transits(conn, rule, rule_transits)
-                        conn.commit()
+                        try:
+                            n_tr = insert_transits(conn, rule, rule_transits)
+                            conn.commit()
+                            _discovery_state['transits_inserted'] += n_tr
+                            print(f"DEBUG [{rule['rule_code']}]: insert_transits → {n_tr} inserted", flush=True)
+                        except Exception as tr_exc:
+                            conn.rollback()
+                            print(f"DEBUG [{rule['rule_code']}]: insert_transits FAILED: {tr_exc}", flush=True)
+                            log.error(f"Transit insert error rule {rule['rule_code']}: {tr_exc}")
+                            _discovery_state['errors'].append(
+                                {'rule_code': rule['rule_code'] + ':TRANSIT', 'error': str(tr_exc)}
+                            )
 
             except Exception as exc:
                 log.error(f"Discovery error rule {rule['rule_code']}: {exc}")
@@ -1578,39 +1600,29 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
             conn.close()
         except Exception:
             pass
-        _discovery_state['running'] = False
-        _discovery_state['finished_at'] = datetime.utcnow().isoformat()
+        # Keep running=True here — confidence phase follows immediately below.
+        # We only clear transient per-rule state in the finally block.
         _discovery_state['current_rule_code'] = None
-        _discovery_state['phase'] = None
         log.info(
             f'Discovery [{mode}] done — {_discovery_state["rules_done"]} rules, '
             f'{_discovery_state["signals_inserted"]} signals, '
             f'{len(_discovery_state["errors"])} errors'
         )
 
-    # Auto-run confidence scoring after discovery completes
-    try:
-        log.info('Discovery complete. Starting confidence scoring…')
-        from scripts.confidence_scoring import (  # noqa: PLC0415
-            build_nifty_close_map,
-            load_rule_outcome_map,
-            update_transit_returns,
-            compute_confidence_from_transits,
-            compute_yearly_breakdown,
-        )
-        conf_conn = _conn()
-        close_map = build_nifty_close_map(conf_conn)
-        rule_outcome_map = load_rule_outcome_map(conf_conn)
-        update_transit_returns(conf_conn, close_map, rule_outcome_map)
-        compute_confidence_from_transits(conf_conn)
-        compute_yearly_breakdown(conf_conn)
-        conf_conn.close()
-        _discovery_state['confidence_computed_at'] = datetime.utcnow().isoformat()
-        _discovery_state['confidence_error'] = None
-        log.info('Confidence scoring complete.')
-    except Exception as exc:
-        log.error(f'Confidence scoring error: {exc}')
-        _discovery_state['confidence_error'] = str(exc)
+    # Phase 2: auto-run confidence scoring.
+    # running stays True so the frontend keeps polling and data is only
+    # refreshed once both discovery AND confidence have completed.
+    _discovery_state['phase'] = 'confidence_scoring'
+    log.info('Discovery complete. Starting confidence scoring…')
+    _run_confidence_bg()
+    # Sync confidence result into discovery state so the panel can show it
+    _discovery_state['confidence_computed_at'] = _confidence_state.get('finished_at')
+    _discovery_state['confidence_error'] = _confidence_state.get('error')
+    # Mark the full pipeline (discovery + confidence) as done
+    _discovery_state['running'] = False
+    _discovery_state['finished_at'] = datetime.utcnow().isoformat()
+    _discovery_state['phase'] = None
+    log.info('Full discovery+confidence pipeline complete.')
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -1797,6 +1809,31 @@ def discovery_run_clean(background_tasks: BackgroundTasks):
     }
 
 
+@app.post('/api/discovery/rule/{rule_id}/drop-signals')
+def discovery_drop_rule_signals(rule_id: int):
+    """Delete all signals and transits for a single rule_id, resetting it for re-discovery."""
+    if _discovery_state['running']:
+        raise HTTPException(409, 'A discovery job is running — wait for it to finish before dropping signals')
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM km_rule_transits WHERE rule_id = %s', (rule_id,))
+            transits_deleted = cur.rowcount
+            cur.execute('DELETE FROM km_rule_signals WHERE rule_id = %s', (rule_id,))
+            signals_deleted = cur.rowcount
+            cur.execute('DELETE FROM km_rule_confidence WHERE rule_id = %s', (rule_id,))
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        raise HTTPException(500, f'Failed to drop signals for rule {rule_id}: {exc}')
+    return {
+        'rule_id': rule_id,
+        'signals_deleted': signals_deleted,
+        'transits_deleted': transits_deleted,
+        'status': 'cleared',
+    }
+
+
 @app.get('/api/discovery/diagnose')
 def discovery_diagnose():
     """
@@ -1923,8 +1960,12 @@ def _run_confidence_bg():
             build_nifty_close_map,
             load_rule_outcome_map,
             update_transit_returns,
+            populate_partial_day_flags,
+            update_daily_signal_returns,
             compute_confidence_from_transits,
+            compute_confidence_from_daily_signals,
             compute_yearly_breakdown,
+            compute_yearly_breakdown_from_signals,
         )
     except Exception as exc:
         log.error(f'Confidence import failed: {exc}')
@@ -1941,12 +1982,24 @@ def _run_confidence_bg():
     try:
         close_map = build_nifty_close_map(conn)
         rule_outcome_map = load_rule_outcome_map(conn)
+
+        # Transit-based rules
         scored = update_transit_returns(conn, close_map, rule_outcome_map)
-        upserted = compute_confidence_from_transits(conn)
+
+        # Daily-only rules (nakshatra_vara, tithi_alone, eclipse)
+        populate_partial_day_flags(conn)
+        daily_scored = update_daily_signal_returns(conn, close_map, rule_outcome_map)
+
+        # Confidence aggregation
+        upserted  = compute_confidence_from_transits(conn)
+        upserted += compute_confidence_from_daily_signals(conn)
         compute_yearly_breakdown(conn)
-        _confidence_state['signals_scored'] = scored
+        compute_yearly_breakdown_from_signals(conn)
+
+        _confidence_state['signals_scored'] = scored + daily_scored
         _confidence_state['rules_upserted'] = upserted
-        log.info(f'Confidence done — {scored} transits scored, {upserted} rules upserted')
+        log.info(f'Confidence done — {scored} transits + {daily_scored} daily signals scored, '
+                 f'{upserted} rules upserted')
     except Exception as exc:
         log.error(f'Confidence scoring failed: {exc}')
         _confidence_state['error'] = str(exc)
