@@ -1051,13 +1051,36 @@ def dashboard_composite(date: str = Query(default=None)):
         conn.close()
 
     # ── Astro component ────────────────────────────────────────────────────
-    positive = sum(1 for r in astro_rows if r['outcome'] in _BULLISH_SET)
-    negative = sum(1 for r in astro_rows if r['outcome'] in _BEARISH_SET)
-    turning  = sum(1 for r in astro_rows if r['outcome'] == 'turning')
-    mixed    = sum(1 for r in astro_rows if r['outcome'] not in _BULLISH_SET and r['outcome'] not in _BEARISH_SET and r['outcome'] != 'turning')
+    pos_rows = [r for r in astro_rows if r['outcome'] in _BULLISH_SET]
+    neg_rows = [r for r in astro_rows if r['outcome'] in _BEARISH_SET]
+    trn_rows = [r for r in astro_rows if r['outcome'] == 'turning']
+    positive = len(pos_rows)
+    negative = len(neg_rows)
+    turning  = len(trn_rows)
+    mixed    = len(astro_rows) - positive - negative - turning
     total    = len(astro_rows)
-    astro_norm = (positive / total) if total > 0 else 0.5
-    astro_score = round(astro_norm * 100, 1)
+
+    def _avg_conf(rows: list) -> float:
+        confs = [float(r['confidence_score']) for r in rows if r['confidence_score'] is not None]
+        return round(sum(confs) / len(confs), 1) if confs else 0.0
+
+    avg_pos_conf = _avg_conf(pos_rows)
+    avg_neg_conf = _avg_conf(neg_rows)
+    avg_trn_conf = _avg_conf(trn_rows)
+
+    # Astro bar = average confidence of the dominant-direction signals
+    if total == 0:
+        astro_norm = 0.5
+        astro_score = 50.0
+    elif turning > positive and turning > negative:
+        astro_score = avg_trn_conf
+        astro_norm  = avg_trn_conf / 100.0
+    elif positive >= negative:
+        astro_score = avg_pos_conf
+        astro_norm  = avg_pos_conf / 100.0
+    else:
+        astro_score = avg_neg_conf
+        astro_norm  = avg_neg_conf / 100.0
 
     # ── ROC component ──────────────────────────────────────────────────────
     roc_13      = float(roc_rows[0]['roc_13']) if roc_rows else 0.0
@@ -1088,12 +1111,15 @@ def dashboard_composite(date: str = Query(default=None)):
         'composite_icon':  icon,
         'components': {
             'astro': {
-                'score':    astro_score,
-                'positive': positive,
-                'negative': negative,
-                'turning':  turning,
-                'mixed':    mixed,
-                'total':    total,
+                'score':        astro_score,
+                'positive':     positive,
+                'negative':     negative,
+                'turning':      turning,
+                'mixed':        mixed,
+                'total':        total,
+                'avg_pos_conf': avg_pos_conf,
+                'avg_neg_conf': avg_neg_conf,
+                'avg_trn_conf': avg_trn_conf,
             },
             'roc': {
                 'roc_13':      round(roc_13, 4),
