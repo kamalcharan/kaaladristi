@@ -722,7 +722,8 @@ def _stringify_dates(row: dict) -> dict:
 
 # ── Panchangam ────────────────────────────────────────────────────────────
 
-_panchang_cache: dict[str, dict] = {}
+_panchang_cache: dict[str, dict] = {}       # bare panchang (legacy, kept for internal use)
+_panchang_full_cache: dict[str, dict] = {}  # enriched: panchang + signals + summary
 
 _PANCHANG_SQL = """
     SELECT
@@ -736,23 +737,135 @@ _PANCHANG_SQL = """
     WHERE today.date = %s
 """
 
+_PANCHANG_SIGNALS_SQL = """
+    SELECT
+        r.id              AS rule_id,
+        r.rule_code,
+        r.display_name    AS rule_name,
+        r.rule_type,
+        r.outcome,
+        r.probability_label,
+        r.scope,
+        s.strength,
+        s.conditions_snapshot,
+        c.confidence_score,
+        c.avg_return_matched,
+        c.total_occurrences
+    FROM km_rule_signals s
+    JOIN  km_astro_rule_master r  ON r.id = s.rule_id
+    LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
+    WHERE s.date = %s
+      AND r.is_active = TRUE
+    ORDER BY c.confidence_score DESC NULLS LAST, s.strength DESC
+"""
+
+_TRADING_DAY_SQL = """
+    SELECT COUNT(*) AS cnt
+    FROM km_index_eod
+    WHERE date = %s
+      AND index_id = (SELECT id FROM km_index_symbols WHERE name = 'NIFTY 50' LIMIT 1)
+"""
+
+# Outcome groupings for the 8-value scale
+_BULLISH_OUTCOMES = frozenset({'strong_bullish', 'bullish', 'mild_bullish'})
+_BEARISH_OUTCOMES = frozenset({'strong_bearish', 'bearish', 'mild_bearish'})
+
 
 @app.get('/api/panchang/daily')
 def panchang_daily(date: str = None):
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    today = datetime.now(tz=tz_ist).date()
+
     if not date:
-        date = datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d')
-    if date in _panchang_cache:
-        return _panchang_cache[date]
+        date = today.strftime('%Y-%m-%d')
+
+    # Enriched cache — skip today so freshly-run signals appear immediately
+    if date in _panchang_full_cache:
+        return _panchang_full_cache[date]
+
     try:
-        rows = _db_query(_PANCHANG_SQL, (date,))
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f'Invalid date format: {date}')
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # ── 1. Panchang row ──────────────────────────────────────────
+            cur.execute(_PANCHANG_SQL, (date,))
+            panchang_row = cur.fetchone()
+            if not panchang_row:
+                raise HTTPException(status_code=404, detail=f'No panchang data for {date}')
+            panchang_data = _stringify_dates(dict(panchang_row))
+
+            # ── 2. Rule signals for this date ────────────────────────────
+            cur.execute(_PANCHANG_SIGNALS_SQL, (date,))
+            signals = []
+            bullish = bearish = volatile = turning = neutral = 0
+            confidence_scores = []
+
+            for r in cur.fetchall():
+                outcome = r['outcome'] or 'neutral'
+                conf = float(r['confidence_score']) if r['confidence_score'] is not None else None
+                signals.append({
+                    'rule_id':           r['rule_id'],
+                    'rule_code':         r['rule_code'],
+                    'rule_name':         r['rule_name'],
+                    'rule_type':         r['rule_type'],
+                    'outcome':           outcome,
+                    'probability_label': r['probability_label'],
+                    'scope':             r['scope'],
+                    'strength':          r['strength'],
+                    'conditions_snapshot': r['conditions_snapshot'],
+                    'confidence_score':  conf,
+                    'avg_return':        float(r['avg_return_matched']) if r['avg_return_matched'] is not None else None,
+                    'total_occurrences': r['total_occurrences'],
+                })
+                if outcome in _BULLISH_OUTCOMES:   bullish  += 1
+                elif outcome in _BEARISH_OUTCOMES: bearish  += 1
+                elif outcome == 'volatile':        volatile += 1
+                elif outcome == 'turning':         turning  += 1
+                else:                              neutral  += 1
+                if conf is not None:
+                    confidence_scores.append(conf)
+
+            # ── 3. Is this a trading day? ────────────────────────────────
+            if date_obj > today:
+                is_trading_day = None
+            else:
+                cur.execute(_TRADING_DAY_SQL, (date,))
+                td = cur.fetchone()
+                is_trading_day = bool(td['cnt'] > 0) if td else False
+
+    except HTTPException:
+        raise
     except Exception as e:
         log.error(f'panchang_daily error for {date}: {e}')
         raise HTTPException(status_code=500, detail=str(e))
-    if not rows:
-        raise HTTPException(status_code=404, detail=f'No panchang data for {date}')
-    row = _stringify_dates(rows[0])
-    _panchang_cache[date] = row
-    return row
+    finally:
+        conn.close()
+
+    result = {
+        **panchang_data,
+        'is_trading_day': is_trading_day,
+        'signals': signals,
+        'summary': {
+            'total_signals': len(signals),
+            'bullish':       bullish,
+            'bearish':       bearish,
+            'volatile':      volatile,
+            'turning':       turning,
+            'neutral':       neutral,
+            'avg_confidence': round(sum(confidence_scores) / len(confidence_scores), 1)
+                              if confidence_scores else None,
+        },
+    }
+
+    # Cache past dates only — today's signals may still be updating after discovery
+    if date_obj < today:
+        _panchang_full_cache[date] = result
+
+    return result
 
 
 # ── Astro Market-Book ─────────────────────────────────────────────────────
