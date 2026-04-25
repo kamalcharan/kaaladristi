@@ -53,6 +53,21 @@ interface RuleSignal {
   strength: number | null;
   details: string | null;
   matched: boolean | null;
+  actual_market_return: number | null;
+  partial_day: boolean | null;
+}
+
+const DAILY_ONLY_TYPES = new Set(['nakshatra_vara', 'tithi_alone', 'eclipse']);
+
+function signalToTransit(s: RuleSignal): RuleTransit {
+  return {
+    id: s.id,
+    start_date: s.date,
+    end_date: s.date,
+    duration_days: 1,
+    nifty_return_pct: s.actual_market_return,
+    matched: s.matched,
+  };
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -120,7 +135,7 @@ async function fetchRuleSignals(ruleId: number, page: number): Promise<SignalsPa
   const today = new Date().toISOString().split('T')[0];
   const offset = page * PAGE_SIZE;
   const { data, error, count } = await from('km_rule_signals')
-    .select('id,date,signal,strength,details,matched')
+    .select('id,date,signal,strength,details,matched,actual_market_return,partial_day')
     .eq('rule_id', ruleId)
     .lte('date', today)
     .order('date', { ascending: false })
@@ -129,6 +144,20 @@ async function fetchRuleSignals(ruleId: number, page: number): Promise<SignalsPa
     .execute();
   if (error) throw new Error(error.message);
   return { rows: (data as RuleSignal[]) ?? [], total: count ?? 0 };
+}
+
+async function fetchSignalReturns(ruleId: number): Promise<RuleTransit[]> {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await from('km_rule_signals')
+    .select('id,date,matched,actual_market_return,partial_day')
+    .eq('rule_id', ruleId)
+    .lte('date', today)
+    .notNull('actual_market_return')
+    .order('date', { ascending: false })
+    .limit(300)
+    .execute();
+  if (error) throw new Error(error.message);
+  return ((data as RuleSignal[]) ?? []).map(signalToTransit);
 }
 
 async function fetchUpcomingSignals(ruleId: number): Promise<RuleSignal[]> {
@@ -444,32 +473,35 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
 
 // ── Stat Grid ─────────────────────────────────────────────────────────────────
 
-function BacktestStatGrid({ conf, transits }: { conf: RuleConfidence; transits: RuleTransit[] }) {
+function BacktestStatGrid({ conf, transits, isDaily = false }: {
+  conf: RuleConfidence; transits: RuleTransit[]; isDaily?: boolean;
+}) {
+  const occ = isDaily ? 'signals' : 'transits';
   const n = conf.total_occurrences ?? 0;
   const confQual = n < 20 ? 'MODERATE' : n < 50 ? 'STRONG' : 'VERY STRONG';
   const hitRate = conf.matched_count != null && n > 0
     ? `${((conf.matched_count / n) * 100).toFixed(0)}% hit rate`
     : '';
 
-  // Best/worst transit dates from local transit data
+  // Best/worst dates from local data
   const scored = transits.filter(t => t.nifty_return_pct != null);
-  const bestTransit  = scored.reduce<RuleTransit | null>((b, t) =>
+  const bestT  = scored.reduce<RuleTransit | null>((b, t) =>
     b == null || (t.nifty_return_pct ?? -Infinity) > (b.nifty_return_pct ?? -Infinity) ? t : b, null);
-  const worstTransit = scored.reduce<RuleTransit | null>((b, t) =>
+  const worstT = scored.reduce<RuleTransit | null>((b, t) =>
     b == null || (t.nifty_return_pct ?? Infinity) < (b.nifty_return_pct ?? Infinity) ? t : b, null);
 
   const top = [
-    { k: 'CONFIDENCE',   v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—', sub: `${confQual} · n=${n}`, color: confidenceColor(conf.confidence_score), big: true },
-    { k: 'HISTORICAL',   v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: n > 0 ? `${n} scored` : '', color: 'text-white' },
-    { k: 'MATCHED',      v: conf.matched_count != null && n > 0 ? `${conf.matched_count}/${n}` : '—', sub: hitRate, color: 'text-accent-gold' },
-    { k: 'AVG RETURN',   v: fmtPct(conf.avg_return_all), sub: 'All transits', color: returnColor(conf.avg_return_all) },
-    { k: 'AVG MATCHED',  v: fmtPct(conf.avg_return_matched), sub: conf.matched_count != null ? `${conf.matched_count} transits` : '', color: 'text-risk-green' },
+    { k: 'CONFIDENCE',  v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—', sub: `${confQual} · n=${n}`, color: confidenceColor(conf.confidence_score), big: true },
+    { k: 'HISTORICAL',  v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: n > 0 ? `${n} scored` : '', color: 'text-white' },
+    { k: 'MATCHED',     v: conf.matched_count != null && n > 0 ? `${conf.matched_count}/${n}` : '—', sub: hitRate, color: 'text-accent-gold' },
+    { k: 'AVG RETURN',  v: fmtPct(conf.avg_return_all), sub: `All ${occ}`, color: returnColor(conf.avg_return_all) },
+    { k: 'AVG MATCHED', v: fmtPct(conf.avg_return_matched), sub: conf.matched_count != null ? `${conf.matched_count} ${occ}` : '', color: 'text-risk-green' },
   ];
   const bot = [
-    { k: 'AVG UNMATCHED', v: fmtPct(conf.avg_return_unmatched), sub: conf.matched_count != null && n > 0 ? `${n - conf.matched_count} transits` : '', color: 'text-risk-red/70' },
-    { k: 'BEST TRANSIT',  v: fmtPct(conf.best_return),  sub: bestTransit?.start_date ?? '',  color: 'text-risk-green' },
-    { k: 'WORST TRANSIT', v: fmtPct(conf.worst_return), sub: worstTransit?.start_date ?? '', color: 'text-risk-red/70' },
-    { k: 'AVG DURATION',  v: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', sub: 'Window length', color: 'text-secondary' },
+    { k: 'AVG UNMATCHED', v: fmtPct(conf.avg_return_unmatched), sub: conf.matched_count != null && n > 0 ? `${n - conf.matched_count} ${occ}` : '', color: 'text-risk-red/70' },
+    { k: isDaily ? 'BEST DAY'  : 'BEST TRANSIT',  v: fmtPct(conf.best_return),  sub: bestT?.start_date  ?? '', color: 'text-risk-green' },
+    { k: isDaily ? 'WORST DAY' : 'WORST TRANSIT', v: fmtPct(conf.worst_return), sub: worstT?.start_date ?? '', color: 'text-risk-red/70' },
+    { k: 'AVG DURATION', v: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', sub: isDaily ? 'Per signal' : 'Window length', color: 'text-secondary' },
   ];
 
   return (
@@ -916,20 +948,37 @@ function BacktestTabs({
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-kd-border bg-kd-elevated/60">
-                      {['Date', 'Signal', 'Strength', 'Details'].map(h => (
+                      {['Date', 'Signal', 'Strength', 'Nifty', 'Details'].map(h => (
                         <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {signals.map(sig => (
-                      <tr key={sig.id} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
-                        <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{sig.date}</td>
+                      <tr key={sig.id} className={cn(
+                        'border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors',
+                        sig.partial_day && 'opacity-70'
+                      )}>
+                        <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">
+                          {sig.date}
+                          {sig.partial_day && (
+                            <span className="ml-1.5 text-[9px] font-mono text-risk-amber/70 border border-risk-amber/30 rounded px-1">
+                              partial
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-xs text-secondary capitalize">{sig.signal ?? '—'}</td>
                         <td className="px-3 py-2 text-xs tabular-nums text-center">
                           {sig.strength != null ? <span className="text-accent-gold">{sig.strength}</span> : '—'}
                         </td>
-                        <td className="px-3 py-2 text-xs text-muted max-w-[320px] truncate">{sig.details ?? '—'}</td>
+                        <td className="px-3 py-2 text-xs tabular-nums text-center">
+                          {sig.actual_market_return != null
+                            ? <span className={sig.actual_market_return >= 0 ? 'text-risk-green' : 'text-risk-red'}>
+                                {sig.actual_market_return >= 0 ? '+' : ''}{sig.actual_market_return.toFixed(2)}%
+                              </span>
+                            : <span className="text-muted">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted max-w-[280px] truncate">{sig.details ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1072,6 +1121,20 @@ export default function RuleDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const isDailyOnlyRule = rule ? DAILY_ONLY_TYPES.has(rule.rule_type) : false;
+
+  // For daily-only rule types (nakshatra_vara, tithi_alone, eclipse), signals carry
+  // actual_market_return instead of transits. Fetch these to power the backtest charts.
+  const { data: signalTransits = [] } = useQuery({
+    queryKey: ['rule-engine', 'signal-returns', ruleId],
+    queryFn: () => fetchSignalReturns(ruleId),
+    enabled: !isNaN(ruleId) && isDailyOnlyRule,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Charts use transit data when available, falling back to signal-derived transits
+  const chartsData = transits.length > 0 ? transits : signalTransits;
+
   const { data: upcomingTransits = [] } = useQuery({
     queryKey: ['rule-engine', 'transits-upcoming', ruleId],
     queryFn: () => fetchUpcomingTransits(ruleId),
@@ -1121,6 +1184,7 @@ export default function RuleDetail() {
     qc.invalidateQueries({ queryKey: ['rule-engine', 'transits', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'transits-upcoming', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence', ruleId] });
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-returns', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-counts'] });
     const inserted = discoveryStatus.signals_inserted;
     const errs = discoveryStatus.errors;
@@ -1444,17 +1508,24 @@ export default function RuleDetail() {
 
           {conf != null ? (
             <>
+              {isDailyOnlyRule && signalTransits.length > 0 && (
+                <div className="px-3 py-2 rounded-lg bg-accent-indigo/8 border border-accent-indigo/20">
+                  <span className="text-[11px] font-mono text-accent-indigo/80">
+                    Daily-signal rule — each bar = one trading day · return = same-day Nifty close-to-close
+                  </span>
+                </div>
+              )}
               <PerTransitBarChart
-                transits={transits}
+                transits={chartsData}
                 highlightId={highlightTransitId}
                 onHighlight={setHighlightTransitId}
               />
-              <BacktestStatGrid conf={conf} transits={transits} />
+              <BacktestStatGrid conf={conf} transits={chartsData} isDaily={isDailyOnlyRule} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                <DistributionChart transits={transits} />
-                <AlphaChart transits={transits} />
+                <DistributionChart transits={chartsData} />
+                <AlphaChart transits={chartsData} />
               </div>
-              {transits.length >= 1 && <RegimeGrid transits={transits} />}
+              {chartsData.length >= 1 && <RegimeGrid transits={chartsData} />}
             </>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-6 rounded-xl border border-kd-border bg-kd-elevated/30">

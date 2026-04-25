@@ -154,6 +154,12 @@ class QueryBuilder {
     return this;
   }
 
+  /** NOT NULL filter */
+  notNull(column: string): this {
+    this.state.params.append(column, 'not.is.null');
+    return this;
+  }
+
   /** Request total row count — PostgREST returns it in Content-Range header */
   withCount(): this {
     this._withCount = true;
