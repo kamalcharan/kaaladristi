@@ -1481,6 +1481,8 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
 
     print("DEBUG: about to import rule_discovery", flush=True)
     try:
+        import scripts.rule_discovery as _rd_mod  # noqa: PLC0415
+        _rd_mod._PANCHANG_SCHEMA_PRINTED = False   # reset diag flag for fresh run
         (discover_rule, load_vocabulary, build_vedh_map, get_panchak_nakshatras,
          should_group_transits, detect_transits, insert_transits) = _import_discover_rule()
     except ImportError as exc:
