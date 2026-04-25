@@ -15,6 +15,9 @@ export interface MarketWeatherProps {
       turning: number;
       mixed: number;
       total: number;
+      avg_pos_conf: number;
+      avg_neg_conf: number;
+      avg_trn_conf: number;
     };
     roc: {
       roc_13: number;
@@ -90,6 +93,9 @@ const sampleData: MarketWeatherProps = {
       turning: 0,
       mixed: 0,
       total: 5,
+      avg_pos_conf: 73.4,
+      avg_neg_conf: 55.0,
+      avg_trn_conf: 0,
     },
     roc: {
       roc_13: 0.86,
@@ -309,21 +315,21 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
 function BarsSection({ data }: { data: MarketWeatherProps }) {
   const { astro, roc, breadth } = data.components;
 
-  // Bar fill = conviction of dominant signal; color = direction
+  // Bar fill = avg confidence of dominant-direction signals; color = direction
   let astroNorm: number;
   let astroBarLabel: string;
   let astroColorOverride: string | undefined;
   if (astro.total === 0) {
     astroNorm = 0; astroBarLabel = '—'; astroColorOverride = undefined;
   } else if (astro.turning > astro.positive && astro.turning > astro.negative) {
-    astroNorm = astro.turning / astro.total; astroBarLabel = 'Inflection'; astroColorOverride = '#D4A853';
+    astroNorm = astro.avg_trn_conf / 100; astroBarLabel = 'Inflection'; astroColorOverride = '#D4A853';
   } else if (astro.positive >= astro.negative) {
-    astroNorm = astro.positive / astro.total;
-    astroBarLabel = astroNorm >= 0.6 ? 'Positive' : 'Mod. Positive';
+    astroNorm = astro.avg_pos_conf / 100;
+    astroBarLabel = astro.avg_pos_conf >= 60 ? 'Positive' : 'Mod. Positive';
     astroColorOverride = '#22c55e';
   } else {
-    astroNorm = astro.negative / astro.total;
-    astroBarLabel = astroNorm >= 0.6 ? 'Negative' : 'Mod. Negative';
+    astroNorm = astro.avg_neg_conf / 100;
+    astroBarLabel = astro.avg_neg_conf >= 60 ? 'Negative' : 'Mod. Negative';
     astroColorOverride = '#ef4444';
   }
 
