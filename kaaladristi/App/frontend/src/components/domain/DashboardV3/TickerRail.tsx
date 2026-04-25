@@ -46,7 +46,7 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerData>
     .in('index_id', ids)
     .lte('trade_date', date)
     .order('trade_date', { ascending: false })
-    .limit(ids.length * 2)   // 2 rows per index for safety
+    .limit(ids.length * 10)  // enough rows across staggered trade dates
     .execute();
 
   type EodRow = { index_id: number; trade_date: string; close: number; prev_close: number | null; pct_chng: number | null };
