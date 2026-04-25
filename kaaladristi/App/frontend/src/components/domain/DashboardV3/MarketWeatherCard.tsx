@@ -220,11 +220,12 @@ interface BarRowProps {
   rightSub?: string;
   arrowGlyph?: string;
   arrowColor?: string;
+  colorOverride?: string;
 }
 
-function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColor }: BarRowProps) {
+function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColor, colorOverride }: BarRowProps) {
   const pct = Math.round(normalized * 100);
-  const color = barColor(normalized);
+  const color = colorOverride ?? barColor(normalized);
 
   return (
     <div
@@ -307,8 +308,25 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
 
 function BarsSection({ data }: { data: MarketWeatherProps }) {
   const { astro, roc, breadth } = data.components;
-  const astroNorm = astro.score / 100;
-  const astroBarLabel = astroNorm >= 0.60 ? 'Positive' : astroNorm >= 0.45 ? 'Mixed' : 'Negative';
+
+  // Bar fill = conviction of dominant signal; color = direction
+  let astroNorm: number;
+  let astroBarLabel: string;
+  let astroColorOverride: string | undefined;
+  if (astro.total === 0) {
+    astroNorm = 0; astroBarLabel = '—'; astroColorOverride = undefined;
+  } else if (astro.turning > astro.positive && astro.turning > astro.negative) {
+    astroNorm = astro.turning / astro.total; astroBarLabel = 'Inflection'; astroColorOverride = '#D4A853';
+  } else if (astro.positive >= astro.negative) {
+    astroNorm = astro.positive / astro.total;
+    astroBarLabel = astroNorm >= 0.6 ? 'Positive' : 'Mod. Positive';
+    astroColorOverride = '#22c55e';
+  } else {
+    astroNorm = astro.negative / astro.total;
+    astroBarLabel = astroNorm >= 0.6 ? 'Negative' : 'Mod. Negative';
+    astroColorOverride = '#ef4444';
+  }
+
   const { glyph: arrowGlyph, color: arrowColor } = rocArrow(roc.roc_13, roc.roc_13_prev);
   const rocText = rocLabel(roc.roc_13);
   const bLabel = breadthLabel(breadth.breadth_score);
@@ -319,6 +337,7 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
         label="Astro Signals"
         normalized={astroNorm}
         rightLabel={astroBarLabel}
+        colorOverride={astroColorOverride}
       />
       <BarRow
         label="Momentum"
