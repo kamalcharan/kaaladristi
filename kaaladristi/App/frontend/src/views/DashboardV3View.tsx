@@ -69,22 +69,26 @@ export default function DashboardV3View() {
       {/* ── TodaysSky — always visible ── */}
       <TodaysSky date={selectedDate} />
 
-      {/* ── STANDARD + TERMINAL: 3-column signal row ── */}
+      {/* ── STANDARD + TERMINAL: hero row — weather card + signals + outlook ── */}
       {density !== 'calm' && (
         <div
           className="grid gap-4 mb-4"
-          style={{ gridTemplateColumns: '1fr 2fr 1fr' }}
+          style={{ gridTemplateColumns: '320px 1fr 1fr' }}
         >
-          <CurrentSkyRail date={selectedDate} />
+          {/* Hero: Astro-Technical Alignment */}
+          <MarketWeatherCard date={selectedDate} />
+
           <PingsColumn date={selectedDate} />
           <SixDayOutlookCompact date={selectedDate} />
         </div>
       )}
 
-      {/* ── Market Weather Card — always visible (sample data, layout approval) ── */}
-      <div className="mb-4" style={{ maxWidth: 420 }}>
-        <MarketWeatherCard />
-      </div>
+      {/* ── STANDARD + TERMINAL: sky rail below hero ── */}
+      {density !== 'calm' && (
+        <div className="mb-4">
+          <CurrentSkyRail date={selectedDate} />
+        </div>
+      )}
 
       {/* ── TERMINAL only: ambient gauges + sector rotation ── */}
       {density === 'terminal' && (

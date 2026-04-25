@@ -986,6 +986,124 @@ def panchang_week(from_date: str = Query(..., alias='from'),
     return result
 
 
+# ── Dashboard Composite ────────────────────────────────────────────────────
+
+_COMPOSITE_ASTRO_SQL = """
+    SELECT r.outcome, s.strength, c.confidence_score
+    FROM km_rule_signals s
+    JOIN  km_astro_rule_master  r ON r.id = s.rule_id
+    LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
+    WHERE s.date = %s AND r.is_active = TRUE AND r.is_deleted = FALSE
+"""
+
+_COMPOSITE_ROC_SQL = """
+    SELECT trade_date, roc_13
+    FROM km_breadth_roc
+    WHERE trade_date <= %s
+    ORDER BY trade_date DESC
+    LIMIT 2
+"""
+
+_COMPOSITE_BREADTH_SQL = """
+    SELECT breadth_score
+    FROM km_market_breadth
+    WHERE trade_date <= %s
+    ORDER BY trade_date DESC
+    LIMIT 1
+"""
+
+_BULLISH_SET = frozenset({'strong_bullish', 'bullish', 'mild_bullish'})
+_BEARISH_SET = frozenset({'strong_bearish', 'bearish', 'mild_bearish'})
+
+
+@app.get('/api/dashboard/composite')
+def dashboard_composite(date: str = Query(default=None)):
+    """
+    Compute Astro-Technical Alignment composite score for a given date.
+    Components: astro rule signals, breadth ROC momentum, market breadth.
+    Returns MarketWeatherProps-shaped JSON.
+    """
+    if date is None:
+        date = str(datetime.now().date())
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(status_code=400, detail='date must be YYYY-MM-DD')
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(_COMPOSITE_ASTRO_SQL, (date,))
+            astro_rows = cur.fetchall()
+
+            cur.execute(_COMPOSITE_ROC_SQL, (date,))
+            roc_rows = cur.fetchall()
+
+            cur.execute(_COMPOSITE_BREADTH_SQL, (date,))
+            breadth_row = cur.fetchone()
+    except Exception as e:
+        log.error(f'dashboard_composite error for {date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+    # ── Astro component ────────────────────────────────────────────────────
+    positive = sum(1 for r in astro_rows if r['outcome'] in _BULLISH_SET)
+    negative = sum(1 for r in astro_rows if r['outcome'] in _BEARISH_SET)
+    turning  = sum(1 for r in astro_rows if r['outcome'] == 'turning')
+    mixed    = sum(1 for r in astro_rows if r['outcome'] not in _BULLISH_SET and r['outcome'] not in _BEARISH_SET and r['outcome'] != 'turning')
+    total    = len(astro_rows)
+    astro_norm = (positive / total) if total > 0 else 0.5
+    astro_score = round(astro_norm * 100, 1)
+
+    # ── ROC component ──────────────────────────────────────────────────────
+    roc_13      = float(roc_rows[0]['roc_13']) if roc_rows else 0.0
+    roc_13_prev = float(roc_rows[1]['roc_13']) if len(roc_rows) > 1 else roc_13
+    # Normalize ROC: clamp [-5, +5] → [0, 1]
+    roc_norm = max(0.0, min(1.0, (roc_13 + 5.0) / 10.0))
+
+    # ── Breadth component ──────────────────────────────────────────────────
+    breadth_raw  = float(breadth_row['breadth_score']) if breadth_row and breadth_row['breadth_score'] is not None else 50.0
+    breadth_norm = breadth_raw / 100.0
+
+    # ── Composite (weighted: astro 50%, roc 25%, breadth 25%) ─────────────
+    composite = round((astro_norm * 0.50 + roc_norm * 0.25 + breadth_norm * 0.25) * 100)
+
+    def _label(score: int) -> tuple[str, str]:
+        if score > 70: return 'High Positive Alignment', '☀️'
+        if score > 60: return 'Moderate Positive',       '🌤'
+        if score > 45: return 'Mixed Signals',           '🌥'
+        if score > 35: return 'Moderate Negative',       '🌦'
+        return           'High Negative Alignment',      '🌧'
+
+    label, icon = _label(composite)
+
+    return {
+        'date':            date,
+        'composite_score': composite,
+        'composite_label': label,
+        'composite_icon':  icon,
+        'components': {
+            'astro': {
+                'score':    astro_score,
+                'positive': positive,
+                'negative': negative,
+                'mixed':    mixed + turning,
+                'total':    total,
+            },
+            'roc': {
+                'roc_13':      round(roc_13, 4),
+                'roc_13_prev': round(roc_13_prev, 4),
+                'normalized':  round(roc_norm, 4),
+            },
+            'breadth': {
+                'breadth_score': round(breadth_raw, 2),
+                'normalized':    round(breadth_norm, 4),
+            },
+        },
+    }
+
+
 # ── Astro Market-Book ─────────────────────────────────────────────────────
 
 _astro_cache: dict[str, object] = {}

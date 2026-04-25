@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+
 // ── Part 1: Types, helpers, sample data ──────────────────────────────────────
 
 export interface MarketWeatherProps {
@@ -35,13 +37,13 @@ function barColor(normalized: number): string {
   return '#ef4444';
 }
 
-// ── Helper: momentum arrow from ROC delta ─────────────────────────────────────
+// ── Helper: momentum arrow + color from ROC delta ────────────────────────────
 
-function rocArrow(roc_13: number, roc_13_prev: number): string {
+function rocArrow(roc_13: number, roc_13_prev: number): { glyph: string; color: string } {
   const delta = roc_13 - roc_13_prev;
-  if (delta > 0.1)  return '↗';
-  if (delta < -0.1) return '↘';
-  return '→';
+  if (delta > 0.1)  return { glyph: '↗', color: '#22c55e' };
+  if (delta < -0.1) return { glyph: '↘', color: '#ef4444' };
+  return { glyph: '→', color: '#D4A853' };
 }
 
 // ── Helper: composite score → label + icon ────────────────────────────────────
@@ -200,7 +202,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
             color: 'var(--text-faint)',
           }}
         >
-          Based on {data.components.astro.total} active signal{data.components.astro.total !== 1 ? 's' : ''}
+          Based on {data.components.astro.total} rule signal{data.components.astro.total !== 1 ? 's' : ''}
         </span>
       </div>
     </div>
@@ -214,9 +216,11 @@ interface BarRowProps {
   normalized: number;
   rightLabel: string;
   rightSub?: string;
+  arrowGlyph?: string;
+  arrowColor?: string;
 }
 
-function BarRow({ label, normalized, rightLabel, rightSub }: BarRowProps) {
+function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColor }: BarRowProps) {
   const pct = Math.round(normalized * 100);
   const color = barColor(normalized);
 
@@ -285,14 +289,13 @@ function BarRow({ label, normalized, rightLabel, rightSub }: BarRowProps) {
           {rightLabel}
         </span>
         {rightSub && (
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--text-faint)',
-            }}
-          >
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>
             {rightSub}
+          </span>
+        )}
+        {arrowGlyph && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: arrowColor ?? 'var(--text-faint)', lineHeight: 1 }}>
+            {arrowGlyph}
           </span>
         )}
       </div>
@@ -303,7 +306,7 @@ function BarRow({ label, normalized, rightLabel, rightSub }: BarRowProps) {
 function BarsSection({ data }: { data: MarketWeatherProps }) {
   const { astro, roc, breadth } = data.components;
   const astroNorm = astro.score / 100;
-  const arrow = rocArrow(roc.roc_13, roc.roc_13_prev);
+  const { glyph: arrowGlyph, color: arrowColor } = rocArrow(roc.roc_13, roc.roc_13_prev);
   const rocText = rocLabel(roc.roc_13);
   const bLabel = breadthLabel(breadth.breadth_score);
 
@@ -318,7 +321,9 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
         label="Momentum"
         normalized={roc.normalized}
         rightLabel={rocText}
-        rightSub={`${roc.roc_13 > 0 ? '+' : ''}${roc.roc_13.toFixed(2)} ${arrow}`}
+        rightSub={`${roc.roc_13 > 0 ? '+' : ''}${roc.roc_13.toFixed(2)}`}
+        arrowGlyph={arrowGlyph}
+        arrowColor={arrowColor}
       />
       <BarRow
         label="Breadth"
@@ -388,11 +393,28 @@ function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro
   );
 }
 
-// ── Root component ────────────────────────────────────────────────────────────
+// ── Data hook ─────────────────────────────────────────────────────────────────
 
-export default function MarketWeatherCard(props: Partial<MarketWeatherProps> = {}) {
-  const data: MarketWeatherProps = Object.keys(props).length ? (props as MarketWeatherProps) : sampleData;
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? 'http://localhost:8101';
 
+async function fetchComposite(date: string): Promise<MarketWeatherProps> {
+  const res = await fetch(`${PIPELINE_API}/api/dashboard/composite?date=${encodeURIComponent(date)}`);
+  if (!res.ok) throw new Error(`composite ${res.status}`);
+  return res.json() as Promise<MarketWeatherProps>;
+}
+
+export function useMarketWeather(date: string) {
+  return useQuery({
+    queryKey: ['market_weather', date],
+    queryFn: () => fetchComposite(date),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!date,
+  });
+}
+
+// ── Card shell ────────────────────────────────────────────────────────────────
+
+function CardShell({ data }: { data: MarketWeatherProps }) {
   return (
     <div
       style={{
@@ -409,4 +431,54 @@ export default function MarketWeatherCard(props: Partial<MarketWeatherProps> = {
       <FooterTally astro={data.components.astro} />
     </div>
   );
+}
+
+// ── Root component ────────────────────────────────────────────────────────────
+
+interface MarketWeatherCardProps {
+  date?: string;
+}
+
+export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {}) {
+  const { data, isLoading, isError } = useMarketWeather(date ?? '');
+  const display = data ?? sampleData;
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid rgba(212,168,83,0.20)',
+          borderRadius: 14,
+          overflow: 'hidden',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+          padding: '48px 20px',
+          textAlign: 'center',
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+          LOADING…
+        </span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    // Fall back to sample data with a subtle indicator
+    return (
+      <div style={{ position: 'relative' }}>
+        <CardShell data={sampleData} />
+        <div style={{
+          position: 'absolute', top: 8, right: 12,
+          fontFamily: 'var(--font-mono)', fontSize: 8,
+          color: 'var(--text-faint)', letterSpacing: '0.1em',
+        }}>
+          SAMPLE
+        </div>
+      </div>
+    );
+  }
+
+  return <CardShell data={display} />;
 }
