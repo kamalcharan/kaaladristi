@@ -278,7 +278,7 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
     return Math.round(sorted.reduce((s, t) => s + (t.duration_days ?? 0), 0) / sorted.length);
   }, [sorted]);
 
-  if (sorted.length < 2) return null;
+  if (sorted.length < 1) return null;
 
   const n = sorted.length;
   const chartW = W - PAD.l - PAD.r;
@@ -290,6 +290,11 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
   const maxAbs     = Math.max(...returns.map(Math.abs), 1);
   const paddedMax  = maxAbs * 1.18;
   const avgReturn  = returns.reduce((s, v) => s + v, 0) / n;
+  const medianReturn = (() => {
+    const s = [...returns].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+  })();
 
   const slotW = chartW / n;
   const barW  = Math.max(3, Math.min(slotW * 0.62, 18));
@@ -315,17 +320,19 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
   const endYear     = parseInt(sorted[n - 1].start_date.slice(0, 4));
   const windowYears = endYear - startYear;
   const today       = new Date().toISOString().slice(0, 10);
+  const windowLabel = windowYears > 0 ? `${windowYears}Y window` : sorted[0].start_date.slice(0, 7);
 
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
       <div className="px-5 pt-4 pb-2">
         <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1.5">
-          Per-Transit Performance · {n} events · {windowYears}Y window · as of {today}
+          Per-Transit Performance · {n} event{n !== 1 ? 's' : ''} · {windowLabel} · as of {today}
         </p>
         <p className="font-display text-xl text-white leading-snug">
           Each bar is{' '}
           <em className="not-italic text-accent-gold font-medium">one transit</em>
-          {' '}— the rule fires, runs for ~{avgDuration}d, and ends. Between events, nothing is held.
+          {' '}— the rule fires{avgDuration > 0 ? `, runs for ~${avgDuration}d,` : ''} and ends. Between events, nothing is held.
+          {n < 5 && <span className="text-[11px] font-sans font-normal text-muted ml-2">({n} event{n !== 1 ? 's' : ''} — more history accumulates over time)</span>}
         </p>
       </div>
 
@@ -373,8 +380,8 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
                 strokeWidth={isPos ? 0 : 1.2}
                 opacity={dim ? 0.15 : isHl ? 1 : 0.82}
               />
-              {/* Match dot row below chart area */}
-              <circle cx={x} cy={chartBotY + 9} r={2.5}
+              {/* Match dot at zero baseline */}
+              <circle cx={x} cy={ret >= 0 ? baseline + 8 : baseline - 8} r={2.2}
                 fill={
                   t.matched === true  ? 'var(--bull)' :
                   t.matched === false ? 'var(--bear)' :
@@ -421,10 +428,13 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
           <span className="w-2 h-2 rounded-full bg-risk-green shrink-0"/>
           Matched ·
           <span className="w-2 h-2 rounded-full bg-risk-red shrink-0 mx-1"/>
-          Unmatched (dots below)
+          Unmatched (dot at baseline)
         </span>
         <span className="text-[10px] font-mono text-accent-gold">
-          {`— AVG ${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}% (dashed)`}
+          {`— AVG ${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}%`}
+        </span>
+        <span className="text-[10px] font-mono text-accent-indigo/80">
+          {`MED ${medianReturn >= 0 ? '+' : ''}${medianReturn.toFixed(1)}%`}
         </span>
         <span className="text-[10px] font-mono text-muted ml-auto">click bar to highlight row</span>
       </div>
@@ -538,6 +548,185 @@ function RegimeGrid({ transits }: { transits: RuleTransit[] }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ── Distribution Chart ────────────────────────────────────────────────────────
+
+const DIST_BUCKETS = [
+  { lo: -15, hi: -10 },
+  { lo: -10, hi: -5 },
+  { lo: -5,  hi:  0 },
+  { lo:  0,  hi:  5 },
+  { lo:  5,  hi: 10 },
+  { lo: 10,  hi: 20 },
+  { lo: 20,  hi: 40 },
+];
+
+function DistributionChart({ transits }: { transits: RuleTransit[] }) {
+  const W = 540, H = 190;
+  const PAD = { l: 30, r: 20, t: 36, b: 44 };
+
+  const returns = transits
+    .filter(t => t.nifty_return_pct != null)
+    .map(t => t.nifty_return_pct!);
+
+  if (returns.length === 0) return null;
+
+  const counts = DIST_BUCKETS.map(b => ({
+    ...b,
+    count: returns.filter(r => r >= b.lo && r < b.hi).length,
+    isNeg: b.hi <= 0,
+  }));
+
+  const maxCount = Math.max(...counts.map(c => c.count), 1);
+  const avg = returns.reduce((s, v) => s + v, 0) / returns.length;
+
+  const chartW = W - PAD.l - PAD.r;
+  const chartH = H - PAD.t - PAD.b;
+  const barSlot = chartW / DIST_BUCKETS.length;
+  const chartBotY = PAD.t + chartH;
+
+  const fullRange = DIST_BUCKETS[DIST_BUCKETS.length - 1].hi - DIST_BUCKETS[0].lo;
+  const avgClipped = Math.max(DIST_BUCKETS[0].lo, Math.min(DIST_BUCKETS[DIST_BUCKETS.length - 1].hi, avg));
+  const avgLineX = PAD.l + ((avgClipped - DIST_BUCKETS[0].lo) / fullRange) * chartW;
+
+  return (
+    <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
+      <div className="px-4 pt-4 pb-1">
+        <p className="text-[10px] font-mono text-muted uppercase tracking-wider">Return Distribution · {returns.length} transits</p>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
+        {counts.map((b, i) => {
+          const bH = (b.count / maxCount) * chartH;
+          const bX = PAD.l + i * barSlot;
+          const color = b.isNeg ? 'var(--bear)' : 'var(--bull)';
+          return (
+            <g key={i}>
+              {bH > 0 && (
+                <rect x={bX + 2} y={chartBotY - bH} width={barSlot - 4} height={bH}
+                  fill={color} opacity={0.72}/>
+              )}
+              {b.count > 0 && (
+                <text x={bX + barSlot / 2} y={chartBotY - bH - 5}
+                  fill="rgba(148,163,184,0.75)" fontFamily="monospace" fontSize="9" textAnchor="middle">
+                  {b.count}
+                </text>
+              )}
+              <text x={bX + barSlot / 2} y={chartBotY + 14}
+                fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="middle">
+                {b.lo >= 0 ? `+${b.lo}` : `${b.lo}`}
+              </text>
+            </g>
+          );
+        })}
+        <text x={W - PAD.r} y={chartBotY + 14}
+          fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
+          +40
+        </text>
+        <line x1={PAD.l} y1={chartBotY} x2={W - PAD.r} y2={chartBotY}
+          stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"/>
+        <line x1={avgLineX} y1={PAD.t} x2={avgLineX} y2={chartBotY}
+          stroke="var(--gold)" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.8"/>
+        <text x={avgLineX + 3} y={PAD.t + 11}
+          fill="var(--gold)" fontFamily="monospace" fontSize="8.5">
+          {`AVG ${avg >= 0 ? '+' : ''}${avg.toFixed(1)}%`}
+        </text>
+      </svg>
+      <div className="px-4 pb-3 border-t border-kd-border/30 pt-2">
+        <p className="text-[10px] font-mono text-muted italic">
+          Are wins spread across many transits, or do a few outliers inflate the average?
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Alpha Chart ───────────────────────────────────────────────────────────────
+
+function AlphaChart({ transits }: { transits: RuleTransit[] }) {
+  const W = 540, H = 190;
+  const PAD = { l: 52, r: 80, t: 36, b: 44 };
+
+  const scored = useMemo(() =>
+    [...transits]
+      .filter(t => t.nifty_return_pct != null)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    [transits]
+  );
+
+  if (scored.length < 2) return null;
+
+  const returns = scored.map(t => t.nifty_return_pct!);
+  const avg = returns.reduce((s, v) => s + v, 0) / returns.length;
+  // Alpha here = deviation from mean (how each transit beats/misses the rule's own avg)
+  const alphas = returns.map(r => r - avg);
+  const maxAbsAlpha = Math.max(...alphas.map(Math.abs), 0.5);
+  const paddedMax = maxAbsAlpha * 1.2;
+
+  const chartW = W - PAD.l - PAD.r;
+  const chartH = H - PAD.t - PAD.b;
+  const chartBotY = PAD.t + chartH;
+  const baseline = PAD.t + chartH / 2;
+  const n = scored.length;
+  const barSlot = chartW / n;
+  const barW = Math.max(3, Math.min(barSlot * 0.65, 16));
+
+  const yFor = (v: number) => baseline - (v / paddedMax) * (chartH / 2);
+  const xFor = (i: number) => PAD.l + (i + 0.5) * barSlot;
+
+  const tickStep = paddedMax > 5 ? 5 : 2;
+  const ticks: number[] = [];
+  for (let v = -Math.ceil(paddedMax / tickStep) * tickStep; v <= paddedMax; v += tickStep) ticks.push(v);
+
+  return (
+    <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
+      <div className="px-4 pt-4 pb-1">
+        <p className="text-[10px] font-mono text-muted uppercase tracking-wider">Return vs Average (α) · {n} transits</p>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
+        {ticks.map(v => {
+          const y = yFor(v);
+          if (y < PAD.t || y > chartBotY) return null;
+          return (
+            <g key={v}>
+              <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
+                stroke={v === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)'}
+                strokeWidth={v === 0 ? 0.8 : 0.5} strokeDasharray={v === 0 ? undefined : '3 6'}/>
+              <text x={PAD.l - 5} y={y + 3.5}
+                fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
+                {v > 0 ? `+${v}%` : `${v}%`}
+              </text>
+            </g>
+          );
+        })}
+        {alphas.map((alpha, i) => {
+          const x = xFor(i);
+          const isPos = alpha >= 0;
+          const barTop = isPos ? yFor(alpha) : baseline;
+          const barH = Math.max(1.5, Math.abs(yFor(alpha) - baseline));
+          return (
+            <rect key={i}
+              x={x - barW / 2} y={barTop} width={barW} height={barH}
+              fill={isPos ? 'var(--bull)' : 'none'}
+              stroke={isPos ? 'none' : 'var(--bear)'}
+              strokeWidth={isPos ? 0 : 1.2}
+              opacity={0.75}
+            />
+          );
+        })}
+        {/* avg line = 0 baseline already at center; show label on right */}
+        <text x={W - PAD.r + 6} y={baseline + 4}
+          fill="var(--gold)" fontFamily="monospace" fontSize="8.5">
+          AVG
+        </text>
+      </svg>
+      <div className="px-4 pb-3 border-t border-kd-border/30 pt-2">
+        <p className="text-[10px] font-mono text-muted italic">
+          Green = transit beat the rule's average · Red = missed · Centred on {avg >= 0 ? '+' : ''}{avg.toFixed(1)}% avg
+        </p>
       </div>
     </div>
   );
@@ -1261,7 +1450,11 @@ export default function RuleDetail() {
                 onHighlight={setHighlightTransitId}
               />
               <BacktestStatGrid conf={conf} transits={transits} />
-              {transits.length >= 3 && <RegimeGrid transits={transits} />}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <DistributionChart transits={transits} />
+                <AlphaChart transits={transits} />
+              </div>
+              {transits.length >= 1 && <RegimeGrid transits={transits} />}
             </>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-6 rounded-xl border border-kd-border bg-kd-elevated/30">
