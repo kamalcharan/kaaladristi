@@ -46,6 +46,10 @@ async function fetchSearchIndex(): Promise<SearchItem[]> {
       .execute(),
   ]);
 
+  if (indexRes.error && equityRes.error) {
+    throw new Error(indexRes.error.message || 'Search index fetch failed');
+  }
+
   const items: SearchItem[] = [];
 
   // Indices
@@ -138,7 +142,7 @@ export default function SearchStrip() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Fetch search index (cached 10 min)
-  const { data: searchIndex } = useQuery({
+  const { data: searchIndex, isLoading, isError } = useQuery({
     queryKey: ['search-index'],
     queryFn: fetchSearchIndex,
     staleTime: 10 * 60 * 1000,
@@ -267,8 +271,22 @@ export default function SearchStrip() {
         )}
       </div>
 
+      {/* Loading hint */}
+      {isOpen && query.length >= 2 && isLoading && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-kd-card border border-kd-border rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 px-4 py-4 text-center">
+          <p className="text-xs text-muted">Loading search index…</p>
+        </div>
+      )}
+
+      {/* Error hint */}
+      {isOpen && query.length >= 2 && isError && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-kd-card border border-kd-border rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 px-4 py-4 text-center">
+          <p className="text-xs" style={{ color: 'var(--risk-red)' }}>Search unavailable — check connection</p>
+        </div>
+      )}
+
       {/* Dropdown results */}
-      {isOpen && results.length > 0 && (
+      {isOpen && !isLoading && !isError && results.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-kd-card border border-kd-border rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 max-h-[400px] overflow-y-auto">
           {results.map((item, i) => (
             <button
@@ -327,7 +345,7 @@ export default function SearchStrip() {
       )}
 
       {/* No results hint */}
-      {isOpen && query.length >= 2 && results.length === 0 && (
+      {isOpen && !isLoading && !isError && query.length >= 2 && results.length === 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-kd-card border border-kd-border rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50 px-4 py-6 text-center">
           <p className="text-xs text-muted">No matches for &ldquo;{query}&rdquo;</p>
         </div>
