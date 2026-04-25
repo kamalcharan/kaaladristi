@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '@/stores/appStore';
+import { dashboardDate } from '@/stores/appStore';
 import { useDashboardPings } from '@/hooks/useDashboardPings';
 import {
   TodaysSky,
@@ -13,31 +14,35 @@ import {
   MarketWeatherCard,
   type Density,
 } from '@/components/domain/DashboardV3';
+import TickerRail    from '@/components/domain/DashboardV3/TickerRail';
+import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function DashboardV3View() {
-  const [density, setDensity] = useState<Density>('standard');
+  const [density, setDensity] = useState<Density>('terminal');
   const { selectedDate } = useAppStore();
-  const { pings } = useDashboardPings(selectedDate);
+
+  // After 7 PM IST use next trading day; weekends always show Monday
+  const displayDate = dashboardDate();
+
+  const { pings } = useDashboardPings(displayDate);
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: 100 }}>
 
       {/* ── Sub-header: date + density toggle ── */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.16em',
-              color: 'var(--text-faint)',
-              textTransform: 'uppercase',
-              marginBottom: 4,
-            }}
-          >
-            {new Date(selectedDate + 'T00:00:00Z').toLocaleDateString('en-IN', {
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.16em',
+            color: 'var(--text-faint)',
+            textTransform: 'uppercase',
+            marginBottom: 4,
+          }}>
+            {new Date(displayDate + 'T00:00:00Z').toLocaleDateString('en-IN', {
               weekday: 'long',
               day: 'numeric',
               month: 'long',
@@ -46,17 +51,15 @@ export default function DashboardV3View() {
             })}{' '}
             · End of Day
           </div>
-          <h1
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 28,
-              fontWeight: 500,
-              letterSpacing: '-0.02em',
-              lineHeight: 1.05,
-              color: 'var(--text-primary)',
-              margin: 0,
-            }}
-          >
+          <h1 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 28,
+            fontWeight: 500,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.05,
+            color: 'var(--text-primary)',
+            margin: 0,
+          }}>
             Today&apos;s{' '}
             <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
               Read
@@ -66,36 +69,47 @@ export default function DashboardV3View() {
         <DensityToggle density={density} onChange={setDensity} />
       </div>
 
-      {/* ── TodaysSky — always visible ── */}
-      <TodaysSky date={selectedDate} />
+      {/* ── ROW 0: Ticker Rail — always visible ── */}
+      <TickerRail date={displayDate} />
 
-      {/* ── STANDARD + TERMINAL: hero row — weather card + signals + outlook ── */}
+      {/* ── ROW 1: TodaysSky — always visible ── */}
+      <TodaysSky date={displayDate} />
+
+      {/* ── ROW 2: Hero 3-col — calm hidden ── */}
       {density !== 'calm' && (
         <div
           className="grid gap-4 mb-4"
           style={{ gridTemplateColumns: '320px 1fr 1fr' }}
         >
-          {/* Hero: Astro-Technical Alignment */}
-          <MarketWeatherCard date={selectedDate} />
-
-          <PingsColumn date={selectedDate} />
-          <SixDayOutlookCompact date={selectedDate} />
+          <MarketWeatherCard date={displayDate} />
+          <PingsColumn date={displayDate} />
+          <SixDayOutlookCompact date={displayDate} />
         </div>
       )}
 
-      {/* ── STANDARD + TERMINAL: sky rail below hero ── */}
+      {/* ── ROW 3: Sky Rail — calm hidden ── */}
       {density !== 'calm' && (
         <div className="mb-4">
-          <CurrentSkyRail date={selectedDate} />
+          <CurrentSkyRail date={displayDate} />
         </div>
       )}
 
-      {/* ── TERMINAL only: ambient gauges + sector rotation ── */}
-      {density === 'terminal' && (
-        <>
+      {/* ── ROW 4: Breadth gauges + Sector Rotation — standard + terminal ── */}
+      {density !== 'calm' && (
+        <div
+          className="grid gap-4 mb-4"
+          style={{ gridTemplateColumns: '1fr 2fr' }}
+        >
           <AmbientGauges />
           <SectorRotationFlow />
-        </>
+        </div>
+      )}
+
+      {/* ── ROW 5: Rule Signals (Nak-Vara first) — terminal only ── */}
+      {density === 'terminal' && (
+        <div className="mb-4">
+          <NakVaraSignals date={displayDate} />
+        </div>
       )}
 
       {/* ── Action Island ── */}
