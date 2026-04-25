@@ -902,7 +902,7 @@ _WEEK_SIGNALS_SQL = """
 """
 
 _PANCHANG_WEEK_SQL = """
-    SELECT date, vara, nakshatra_name, tithi, yoga, paksha,
+    SELECT date, vara, nakshatra_name, tithi_name, yoga_name, paksha,
            dlnl_match, is_ekadashi, is_purnima
     FROM km_daily_panchang
     WHERE date BETWEEN %s AND %s
@@ -965,8 +965,8 @@ def panchang_week(from_date: str = Query(..., alias='from'),
             'date':            ds,
             'vara':            prow.get('vara'),
             'nakshatra_name':  prow.get('nakshatra_name'),
-            'tithi':           prow.get('tithi'),
-            'yoga':            prow.get('yoga'),
+            'tithi_name':      prow.get('tithi_name'),
+            'yoga_name':       prow.get('yoga_name'),
             'paksha':          prow.get('paksha'),
             'dlnl_match':      prow.get('dlnl_match'),
             'is_ekadashi':     prow.get('is_ekadashi'),
