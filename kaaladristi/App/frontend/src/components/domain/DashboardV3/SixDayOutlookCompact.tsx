@@ -9,9 +9,10 @@ function shiftDate(iso: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
-function nextTradingDays(fromDate: string, count: number): string[] {
+function tradingDaysFrom(startDate: string, count: number): string[] {
   const days: string[] = [];
-  let cursor = fromDate;
+  // Start one day before so startDate itself can be included if it's a trading day
+  let cursor = shiftDate(startDate, -1);
   while (days.length < count) {
     cursor = shiftDate(cursor, 1);
     const dow = new Date(cursor + 'T00:00:00Z').getUTCDay();
@@ -142,7 +143,7 @@ interface SixDayOutlookCompactProps {
 }
 
 export default function SixDayOutlookCompact({ date }: SixDayOutlookCompactProps) {
-  const days = nextTradingDays(date, 6);
+  const days = tradingDaysFrom(date, 6);
 
   const fromDate = days[0];
   const toDate   = days[days.length - 1];
