@@ -24,6 +24,8 @@ const SERIF = "'Cormorant Garamond','Playfair Display',serif";
 const MONO  = "'JetBrains Mono','Geist Mono',ui-monospace,monospace";
 const SANS  = "'DM Sans','Inter',system-ui,sans-serif";
 
+const INVITE_CODE = 'bharathavarsha';
+
 type AuthMode = 'login' | 'register' | 'forgot';
 
 export default function LoginPage() {
@@ -38,11 +40,35 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Invite-code gate
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteInput, setInviteInput] = useState('');
+  const [inviteError, setInviteError] = useState('');
+
   useEffect(() => {
     if (user) navigate('/dashboard', { replace: true });
   }, [user, navigate]);
 
   const reset = (mode: AuthMode) => { setAuthMode(mode); setError(''); setSuccess(''); };
+
+  const handleTabClick = (mode: AuthMode) => {
+    if (mode === 'register') {
+      setInviteInput(''); setInviteError('');
+      setShowInviteModal(true);
+    } else {
+      reset(mode);
+    }
+  };
+
+  const handleInviteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inviteInput.trim().toLowerCase() === INVITE_CODE) {
+      setShowInviteModal(false);
+      reset('register');
+    } else {
+      setInviteError('Invalid invite code. Please check and try again.');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +104,75 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: SANS, WebkitFontSmoothing: 'antialiased', overflowX: 'hidden' }}>
+
+      {/* ── Invite-code modal ──────────────────────────────────────────────── */}
+      {showInviteModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(7,7,12,.85)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}
+          onClick={() => setShowInviteModal(false)}>
+          <div style={{
+            background: C.card, border: `1px solid ${C.rule}`,
+            padding: '40px 36px', width: '100%', maxWidth: 400,
+          }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+              <p style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase', color: C.g1, margin: '0 0 10px' }}>
+                Beta Access
+              </p>
+              <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 28, color: C.ink1, margin: '0 0 8px', lineHeight: 1.2 }}>
+                Enter Invite Code
+              </h2>
+              <p style={{ fontFamily: SANS, fontSize: 13, color: C.ink3, margin: 0 }}>
+                DristiQ is currently invite-only.<br/>Enter the code you received to register.
+              </p>
+            </div>
+
+            <form onSubmit={handleInviteSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontFamily: MONO, fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase', color: C.ink4, marginBottom: 8 }}>
+                  Invite Code
+                </label>
+                <input
+                  type="text" autoFocus
+                  value={inviteInput} onChange={e => { setInviteInput(e.target.value); setInviteError(''); }}
+                  placeholder="enter code"
+                  style={{ ...inputStyle, letterSpacing: '.08em' }}
+                  onFocus={e => (e.currentTarget.style.borderColor = C.g2)}
+                  onBlur={e => (e.currentTarget.style.borderColor = C.rule)}
+                />
+              </div>
+
+              {inviteError && (
+                <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', color: '#ef4444', fontFamily: SANS, fontSize: 12 }}>
+                  {inviteError}
+                </div>
+              )}
+
+              <button type="submit" style={{
+                padding: '13px 0', marginTop: 4,
+                background: `linear-gradient(180deg,rgba(226,185,111,.92),rgba(201,168,76,.92))`,
+                border: `1px solid ${C.g2}`,
+                color: '#0a0a12', fontFamily: SANS, fontSize: 13, letterSpacing: '.1em',
+                textTransform: 'uppercase', fontWeight: 600, cursor: 'pointer',
+              }}>
+                Verify &amp; Continue
+              </button>
+
+              <button type="button" onClick={() => setShowInviteModal(false)} style={{
+                padding: '10px 0', background: 'none', border: 'none',
+                fontFamily: MONO, fontSize: 9, letterSpacing: '.16em', textTransform: 'uppercase',
+                color: C.ink4, cursor: 'pointer',
+              }}>
+                Cancel
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Background layers */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
@@ -128,7 +223,7 @@ export default function LoginPage() {
             {authMode !== 'forgot' && (
               <div style={{ display: 'flex', gap: 0, marginBottom: 28, border: `1px solid ${C.rule}` }}>
                 {(['login', 'register'] as AuthMode[]).map((m, i) => (
-                  <button key={m} onClick={() => reset(m)} style={{
+                  <button key={m} onClick={() => handleTabClick(m)} style={{
                     flex: 1, padding: '11px 0',
                     background: authMode === m ? C.rs : 'transparent',
                     border: 'none', borderRight: i === 0 ? `1px solid ${C.rule}` : 'none',
