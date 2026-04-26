@@ -460,9 +460,8 @@ function TodayStructureTab({ date }: { date: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <MarketWeatherCard date={date} />
 
-      {/* Period toggle — shared window for both Breadth and ROC charts */}
+      {/* Period toggle — at the top, controls both Breadth and ROC charts */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -515,6 +514,8 @@ function TodayStructureTab({ date }: { date: string }) {
           Controls both charts below
         </span>
       </div>
+
+      <MarketWeatherCard date={date} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <MarketBreadthChart days={days} />
