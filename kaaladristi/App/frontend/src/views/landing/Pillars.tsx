@@ -60,6 +60,31 @@ function ShieldGlyph() {
   );
 }
 
+function ScannerGlyph() {
+  // Horizontal scan lines over a 3×3 dot grid — "filtering" visual
+  const dots: [number, number][] = [
+    [18,20],[32,20],[46,20],
+    [18,32],[32,32],[46,32],
+    [18,44],[32,44],[46,44],
+  ];
+  return (
+    <svg viewBox="0 0 64 64" width="64" height="64">
+      <circle cx="32" cy="32" r="26" fill="none" stroke={C.g3} strokeWidth="0.6" strokeDasharray="1 3"/>
+      {dots.map(([x,y],i) => (
+        <circle key={i} cx={x} cy={y} r={1.4} fill={C.g3}/>
+      ))}
+      {/* Highlighted dots — those "passing" the scan */}
+      <circle cx="32" cy="20" r="2.2" fill={C.g1}/>
+      <circle cx="46" cy="32" r="2.2" fill={C.g1}/>
+      <circle cx="18" cy="44" r="2.2" fill={C.g1}/>
+      {/* Scan sweep line */}
+      <line x1="12" y1="32" x2="52" y2="32" stroke={C.g1} strokeWidth="0.5" opacity="0.5"/>
+      {/* ✦ marker top-right */}
+      <text x="50" y="17" textAnchor="middle" fontFamily="JetBrains Mono,monospace" fontSize="8" fill={C.g1} opacity="0.9">✦</text>
+    </svg>
+  );
+}
+
 // ── Lens glyphs (for the "two lenses" row) ────────────────────────────────
 function AncientLens() {
   return (
@@ -100,7 +125,7 @@ const PILLARS = [
   { n:'02.A', glyph:<MoonGlyph/>,     title:'Panchāṅgam Atmosphere Engine',   body:'Daily Tithi, Nakṣatra, Yoga, Karaṇa and Vāra — mapped to historical market behavior patterns on Indian indices. Know the atmospheric character of every trading day.',          meta:'5 time-cycle axes · NIFTY · BANKNIFTY · SENSEX' },
   { n:'02.B', glyph:<ChartGlyph/>,    title:'Astro-Technical Confluence',      body:'When Vedic time signals and classical technical setups — breakouts, momentum, volume surges — align on the same day, that is your window of heightened atmospheric attention.',    meta:'14 classical patterns · 27 Nakṣatra states' },
   { n:'02.C', glyph:<CalendarGlyph/>, title:'Astro Calendar — 2026 and beyond',body:'Key astronomical events pre-mapped to the market calendar — know the high-attention windows months in advance. Time cycles repeat. Be prepared.',                                meta:'Forward-mapped through 2030' },
-  { n:'02.D', glyph:<ShieldGlyph/>,   title:'Code Tagging Intelligence',       body:'Automated pattern detection on BSE/NSE scrips — surfaced contextually as risk-awareness badges. Trade with full atmospheric awareness.',                                          meta:'4,200+ scrips · continuous tagging' },
+  { n:'02.D', glyph:<ScannerGlyph/>,  title:'Scanner — Atmospheric Stock Intelligence', body:'Eight precision scans across 1,380+ NSE equities. Each scan combines classical technical filters — MagicRS relative strength, institutional flow, Wyckoff accumulation patterns, breakout detection — with the day\'s atmospheric window. Stocks that pass both gates are surfaced with the VaNi ✦ opportunity flag.', subtext:'Not a buy list. A filtered attention list — within today\'s conditions.', meta:'8 scan presets · 1,380+ scrips · VaNi ✦ flagged' },
 ];
 
 export function Pillars() {
@@ -144,7 +169,10 @@ export function Pillars() {
                   <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.24em', color:C.ink4 }}>§ {p.n}</div>
                 </div>
                 <h3 style={{ fontFamily:SERIF, fontSize:30, color:C.ink1, margin:'0 0 18px', lineHeight:1.12, letterSpacing:'-0.01em', maxWidth:'18ch' }}>{p.title}</h3>
-                <p style={{ margin:'0 0 24px', color:C.ink2, fontSize:14.5, lineHeight:1.6, maxWidth:'42ch', fontFamily:SANS }}>{p.body}</p>
+                <p style={{ margin:'0 0 16px', color:C.ink2, fontSize:14.5, lineHeight:1.6, maxWidth:'42ch', fontFamily:SANS }}>{p.body}</p>
+                {'subtext' in p && p.subtext && (
+                  <p style={{ margin:'0 0 24px', color:C.g2, fontSize:12.5, lineHeight:1.5, maxWidth:'42ch', fontFamily:SANS, fontStyle:'italic' }}>{p.subtext}</p>
+                )}
                 <hr style={{ border:0, height:1, background:C.rs, margin:'0 0 16px' }}/>
                 <div style={{ fontFamily:MONO, fontSize:10, letterSpacing:'.18em', color:C.g2 }}>{p.meta}</div>
               </div>

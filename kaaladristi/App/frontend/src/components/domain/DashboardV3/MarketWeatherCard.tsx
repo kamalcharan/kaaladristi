@@ -151,14 +151,30 @@ function fmtHistDate(iso: string): string {
   });
 }
 
-// Injected once; prefixed to avoid clashing with other animations.
 const HISTORY_CSS = `
-  @keyframes kd-pulse-opacity {
-    0%, 100% { opacity: 0.5; }
-    50%       { opacity: 1.0; }
+  @keyframes kd-hist-glow {
+    0%, 100% {
+      opacity: 0.55;
+      transform: scale(1);
+      text-shadow: 0 0 4px rgba(212,168,83,0.3);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.35);
+      text-shadow: 0 0 12px rgba(212,168,83,0.95), 0 0 24px rgba(212,168,83,0.5);
+    }
   }
-  .kd-hist-pulse { animation: kd-pulse-opacity 2s ease-in-out infinite; }
-  .kd-hist-pulse.seen { animation: none; opacity: 0.7; }
+  .kd-hist-pulse {
+    display: inline-block;
+    animation: kd-hist-glow 1.6s ease-in-out infinite;
+    color: #D4A853;
+  }
+  .kd-hist-pulse.seen {
+    animation: none;
+    transform: none;
+    opacity: 0.8;
+    text-shadow: none;
+  }
   .kd-hist-chevron { transition: transform 0.25s ease; }
   .kd-hist-chevron.open { transform: rotate(180deg); }
 `;
@@ -625,7 +641,7 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
         >
           <span
             className={`kd-hist-pulse${clicked ? ' seen' : ''}`}
-            style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--gold)' }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}
           >
             ◈
           </span>
