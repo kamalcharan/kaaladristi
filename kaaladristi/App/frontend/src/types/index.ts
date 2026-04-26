@@ -339,6 +339,16 @@ export interface ConfluenceHeatmap {
   pattern:    ConfluencePattern | null;
 }
 
+// ── Confluence Timeline (from /api/confluence/timeline) ──
+
+export interface ConfluenceTimelineEntry {
+  trade_date:     string;
+  nifty_return:   number | null;
+  breadth_score:  number | null;
+  roc_13:         number | null;
+  nakvar_outcome: 'bullish' | 'bearish' | null;
+}
+
 // ── Index Catalog (from mv_index_catalog) ──
 
 export interface IndexCatalogItem {

@@ -2750,6 +2750,51 @@ def confluence_heatmap(date: str = None):
     except Exception as exc:
         log.error(f'confluence_heatmap error for {date}: {exc}')
         raise HTTPException(status_code=500, detail=str(exc))
+@app.get('/api/confluence/timeline')
+def confluence_timeline(days: int = 30):
+    """
+    Returns the last N trading days with nak-vara signal, breadth score,
+    ROC-13, and NIFTY 50 pct_chng — used by the day-by-day dot grid.
+    """
+    try:
+        conn = _conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    i.trade_date,
+                    i.pct_chng          AS nifty_return,
+                    b.breadth_score,
+                    br.roc_13,
+                    (
+                        SELECT CASE
+                                   WHEN r.outcome IN ('strong_bullish','bullish','mild_bullish') THEN 'bullish'
+                                   WHEN r.outcome IN ('strong_bearish','bearish','mild_bearish') THEN 'bearish'
+                                   ELSE NULL
+                               END
+                        FROM  km_rule_signals      s2
+                        JOIN  km_astro_rule_master r  ON r.id = s2.rule_id
+                        WHERE s2.date       = i.trade_date
+                          AND r.rule_type   = 'nakshatra_vara'
+                          AND r.is_active   = TRUE
+                        ORDER BY s2.strength DESC
+                        LIMIT 1
+                    ) AS nakvar_outcome
+                FROM  km_index_eod    i
+                LEFT JOIN km_market_breadth b  ON b.trade_date  = i.trade_date
+                LEFT JOIN km_breadth_roc    br ON br.trade_date = i.trade_date
+                WHERE i.index_id  = 1
+                  AND i.pct_chng IS NOT NULL
+                ORDER BY i.trade_date DESC
+                LIMIT %(days)s
+            """, {'days': max(1, min(days, 120))})
+            rows = cur.fetchall()
+        conn.close()
+        return _stringify_dates(list(reversed(rows)))
+    except Exception as exc:
+        log.error(f'confluence_timeline error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 def equity_magic_rs(symbol: str, from_date: str = '2025-01-01'):
     """Return Long + Short MagicRS time-series for one equity symbol."""
     try:
