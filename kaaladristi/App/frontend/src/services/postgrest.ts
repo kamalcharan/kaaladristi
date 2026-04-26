@@ -99,7 +99,6 @@ class QueryBuilder {
 
   select(columns: string = '*'): this {
     this.state.params.set('select', columns);
-    this.state.method = 'GET';
     return this;
   }
 
