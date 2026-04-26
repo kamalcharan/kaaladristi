@@ -1,77 +1,59 @@
+# DristiQ — product stack
+# Joins vikuna-net to reach shared postgres, postgrest, llm-server
+# vikuna-nginx handles all HTTP routing via conf.d/dristiq.conf
+
 services:
 
-  # ── PostgREST — REST API layer over PostgreSQL ─────────────────────────────
-  postgrest:
-    image: postgrest/postgrest:v12.2.3
-    restart: unless-stopped
-    environment:
-      PGRST_DB_URI:        "${DB_PRIMARY}"       # reuse existing env var
-      PGRST_DB_SCHEMA:     "public"
-      PGRST_DB_ANON_ROLE:  "anon"
-      PGRST_JWT_SECRET:    "${JWT_SECRET}"
-      PGRST_SERVER_PORT:   "3000"
-      PGRST_LOG_LEVEL:     "error"
-    networks:
-      - kd_net
-    # Not exposed to host — accessed only via nginx proxy
-
-  # ── Pipeline API — FastAPI + APScheduler ──────────────────────────────────
+  # ── Pipeline API v1 — FastAPI + APScheduler (legacy, keep running) ─────────
   pipeline-api:
     build:
       context: ./App/backend
       dockerfile: Dockerfile
+    container_name: kd-pipeline-api
     restart: unless-stopped
-    env_file:
-      - ./App/frontend/.env   # DB_PRIMARY, JWT_SECRET, BREEZE_* etc.
     environment:
-      DATABASE_URL: "${DB_PRIMARY}"   # explicit alias so lib/config.py finds it
+      DATABASE_URL: "postgresql://kd_app:${KD_APP_PASSWORD}@vikuna-postgres:5432/kaala_dristi_db"
+      LLM_BASE_URL: "http://llm-server:8080/v1"
     volumes:
-      - pipeline_data:/app/data       # persist bhav audit trail
+      - pipeline_data:/app/data
     networks:
-      - kd_net
-    # Not exposed to host — accessed only via nginx proxy
+      - vikuna-net
 
-  # ── Pipeline v2 API — FastAPI + worker subprocess ─────────────────────────
-  # Parallel to pipeline-api while v2 is proven. Shares the same image;
-  # command override points uvicorn at pipeline2_api:app on port 8101.
+  # ── Pipeline API v2 — FastAPI (active, port 8101) ──────────────────────────
   pipeline-api2:
     build:
       context: ./App/backend
       dockerfile: Dockerfile
+    container_name: kd-pipeline-api2
     restart: unless-stopped
-    env_file:
-      - ./App/frontend/.env
     environment:
-      DATABASE_URL: "${DB_PRIMARY}"
+      DATABASE_URL: "postgresql://kd_app:${KD_APP_PASSWORD}@vikuna-postgres:5432/kaala_dristi_db"
+      LLM_BASE_URL: "http://llm-server:8080/v1"
     volumes:
       - pipeline_data:/app/data
     command: ["uvicorn", "pipeline2_api:app", "--host", "0.0.0.0", "--port", "8101", "--workers", "1"]
     networks:
-      - kd_net
+      - vikuna-net
 
-  # ── Nginx — serves frontend + reverse proxy ────────────────────────────────
-  nginx:
+  # ── Frontend — React SPA served by nginx:alpine ────────────────────────────
+  kd-frontend:
     build:
       context: .
       dockerfile: nginx/Dockerfile
       args:
-        VITE_POSTGREST_URL:    "http://${VPS_IP}/db"
-        VITE_PIPELINE_API_URL: "http://${VPS_IP}"
+        VITE_POSTGREST_URL:    "/db"
+        VITE_PIPELINE_API_URL: ""
         VITE_ANON_KEY:         "${VITE_ANON_KEY:-}"
         GEMINI_API_KEY:        "${GEMINI_API_KEY:-}"
+    container_name: kd-frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - postgrest
-      - pipeline-api
-      - pipeline-api2
     networks:
-      - kd_net
+      - vikuna-net
 
 volumes:
   pipeline_data:
 
 networks:
-  kd_net:
-    driver: bridge
+  vikuna-net:
+    external: true
+    name: vikuna-net
