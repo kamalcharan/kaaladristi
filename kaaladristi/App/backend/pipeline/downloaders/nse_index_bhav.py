@@ -108,8 +108,10 @@ def _safe_float(val) -> float | None:
     if val is None:
         return None
     try:
-        v = str(val).strip().replace(',', '').replace('-', '')
-        return round(float(v), 2) if v else None
+        v = str(val).strip().replace(',', '')
+        if not v or v == '-':  # NSE uses bare '-' as null marker
+            return None
+        return round(float(v), 2)
     except (ValueError, TypeError):
         return None
 
@@ -118,8 +120,10 @@ def _safe_int(val) -> int | None:
     if val is None:
         return None
     try:
-        v = str(val).strip().replace(',', '').replace('-', '')
-        return int(float(v)) if v else None
+        v = str(val).strip().replace(',', '')
+        if not v or v == '-':  # NSE uses bare '-' as null marker
+            return None
+        return int(float(v))
     except (ValueError, TypeError):
         return None
 
