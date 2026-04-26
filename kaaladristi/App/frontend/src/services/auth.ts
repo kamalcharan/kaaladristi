@@ -143,7 +143,9 @@ export async function getProfile(): Promise<KmProfile | null> {
   return data as KmProfile | null;
 }
 
-/** Update profile for current user. */
+/** Update profile for current user.
+ *  Uses upsert so it works whether or not the km_profiles row already exists
+ *  (e.g. immediately after a fresh registration). */
 export async function updateProfile(
   updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded'>>,
 ) {
@@ -151,8 +153,7 @@ export async function updateProfile(
   if (!user) throw new Error('Not authenticated');
 
   const { data, error } = await from('km_profiles')
-    .update(updates)
-    .eq('id', user.id)
+    .upsert({ id: user.id, email: user.email, ...updates })
     .select('*')
     .single()
     .execute();

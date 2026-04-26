@@ -221,6 +221,17 @@ class QueryBuilder {
     return this;
   }
 
+  /** POST with resolution=merge-duplicates — creates if absent, updates if present */
+  upsert(data: Record<string, unknown>): this {
+    this.state.method = 'POST';
+    this.state.body = data;
+    this.state.headers = {
+      ...this.state.headers,
+      'Prefer': 'return=representation,resolution=merge-duplicates',
+    };
+    return this;
+  }
+
   update(data: Record<string, unknown>): this {
     this.state.method = 'PATCH';
     this.state.body = data;
