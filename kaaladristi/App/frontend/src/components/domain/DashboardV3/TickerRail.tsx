@@ -12,8 +12,6 @@ interface TickerConfig {
 interface TickerData {
   trade_date: string;
   close: number;
-  pct_chng: number | null;
-  prev_close: number | null;
   rsi_14: number | null;
   magic_rs: number | null;
   magic_ma: number | null;
@@ -58,7 +56,7 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerEntry
       if (!id) return;
 
       const { data: rows } = await from('km_index_eod')
-        .select('trade_date,close,prev_close,pct_chng,rsi_14,magic_rs,magic_ma,magic_rs_zone')
+        .select('trade_date,close,rsi_14,magic_rs,magic_ma,magic_rs_zone')
         .eq('index_id', id)
         .lte('trade_date', date)
         .order('trade_date', { ascending: false })
@@ -149,15 +147,12 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
   const close = data?.close ?? null;
   const rsi   = data?.rsi_14 ?? null;
 
-  // Prefer DB pct_chng, then compute from actual previous row close (most accurate),
-  // then fall back to DB prev_close column (may be stale/wrong)
-  const displayPct: number | null = data?.pct_chng ?? (
+  // DB pct_chng and prev_close are both unreliable (wrong prev reference in pipeline).
+  // Always compute from the actual adjacent row fetched via limit(2).
+  const displayPct: number | null =
     close != null && prev?.close != null && prev.close !== 0
       ? ((close - prev.close) / prev.close) * 100
-      : close != null && data?.prev_close != null && data.prev_close !== 0
-        ? ((close - data.prev_close) / data.prev_close) * 100
-        : null
-  );
+      : null;
 
   // Zone: prefer current row, fall back to previous row (magic_rs may not be computed yet)
   const zone =
