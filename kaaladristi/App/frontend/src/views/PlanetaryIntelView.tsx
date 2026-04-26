@@ -246,32 +246,76 @@ const IMPACT_WEIGHTS: Record<string, number> = {
   mild_bearish:  -1,
   bearish:       -1,
   strong_bearish:-2,
+  // 'turning' absent → contributes 0 to net score
 };
 
-interface DaySignal {
-  color: string;
-  label: string;
-  isTurning: boolean;
+function eventDurationDays(e: AstroCalendarEvent): number {
+  if (!e.end_date || e.end_date === e.start_date) return 1;
+  const ms = new Date(e.end_date).getTime() - new Date(e.start_date).getTime();
+  return Math.round(ms / 86_400_000) + 1;
 }
 
-function getDaySignal(events: AstroCalendarEvent[]): DaySignal | null {
-  if (events.length === 0) return null;
-  if (events.some(e => e.market_impact === 'turning')) {
-    return { color: '#f59e0b', label: 'Turning Date', isTurning: true };
-  }
-  const score = events.reduce((sum, e) => sum + (IMPACT_WEIGHTS[e.market_impact] ?? 0), 0);
-  if (score >= 2)  return { color: '#15803d', label: 'Strong Positive', isTurning: false };
-  if (score === 1) return { color: '#22c55e', label: 'Positive',        isTurning: false };
-  if (score === 0) return { color: '#6b7280', label: 'Mixed/Neutral',   isTurning: false };
-  if (score === -1) return { color: '#ef4444', label: 'Negative',       isTurning: false };
-  return              { color: '#991b1b', label: 'Strong Negative',     isTurning: false };
+function netScore(evts: AstroCalendarEvent[]): number {
+  return evts.reduce((sum, e) => sum + (IMPACT_WEIGHTS[e.market_impact] ?? 0), 0);
+}
+
+function macroBg(macroEvts: AstroCalendarEvent[]): string {
+  if (macroEvts.length === 0) return 'transparent';
+  const score = netScore(macroEvts);
+  if (score >= 1)  return 'rgba(34,197,94,0.12)';
+  if (score <= -1) return 'rgba(239,68,68,0.12)';
+  return 'transparent';
+}
+
+function scoreToColor(score: number): string {
+  if (score >= 2)  return '#15803d';
+  if (score === 1) return '#22c55e';
+  if (score === 0) return '#6b7280';
+  if (score === -1) return '#ef4444';
+  return '#991b1b';
+}
+
+function scoreToLabel(score: number): string {
+  if (score >= 2)  return 'Strong Positive';
+  if (score === 1) return 'Positive';
+  if (score === 0) return 'Neutral';
+  if (score === -1) return 'Negative';
+  return 'Strong Negative';
 }
 
 interface TooltipState {
-  events: AstroCalendarEvent[];
-  signal: DaySignal;
+  macroEvents: AstroCalendarEvent[];
+  dailyEvents: AstroCalendarEvent[];
+  isTurning: boolean;
   x: number;
   y: number;
+}
+
+function TooltipEventRow({ evt }: { evt: AstroCalendarEvent }) {
+  const color = impactColor(evt.market_impact);
+  const text = evt.inference ?? evt.narrative ?? null;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: text ? 2 : 0 }}>
+        {evt.market_impact === 'turning' ? (
+          <Zap style={{ width: 7, height: 7, color: '#f59e0b', flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        )}
+        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3, flex: 1 }}>
+          {evt.display_name}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+          {impactLabel(evt.market_impact)}
+        </span>
+      </div>
+      {text && (
+        <div style={{ paddingLeft: 13, fontFamily: 'var(--font-sans)', fontSize: 10.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          {text}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CalendarGrid({
@@ -292,24 +336,30 @@ function CalendarGrid({
   const offset = getFirstWeekdayOffset(year, month);
   const totalCells = Math.ceil((offset + numDays) / 7) * 7;
 
-  const eventsByDate = useMemo(() => {
-    const map: Record<string, AstroCalendarEvent[]> = {};
+  // For each day: split into macro (>7d) and daily (≤7d)
+  const cellData = useMemo(() => {
+    const map: Record<string, { macro: AstroCalendarEvent[]; daily: AstroCalendarEvent[] }> = {};
     for (let d = 1; d <= numDays; d++) {
       const iso = toIsoDate(year, month, d);
-      const dayEvts = events.filter(e => {
+      const all = events.filter(e => {
         const end = e.end_date ?? e.start_date;
         return iso >= e.start_date && iso <= end;
       });
-      if (dayEvts.length > 0) map[iso] = dayEvts;
+      if (all.length === 0) continue;
+      map[iso] = {
+        macro: all.filter(e => eventDurationDays(e) > 7),
+        daily: all.filter(e => eventDurationDays(e) <= 7),
+      };
     }
     return map;
   }, [events, year, month, numDays]);
 
-  function onCellEnter(dayEvents: AstroCalendarEvent[], signal: DaySignal, ev: React.MouseEvent) {
+  function onEnter(data: { macro: AstroCalendarEvent[]; daily: AstroCalendarEvent[] }, ev: React.MouseEvent) {
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    setTooltip({ events: dayEvents, signal, x: ev.clientX, y: ev.clientY });
+    const isTurning = [...data.macro, ...data.daily].some(e => e.market_impact === 'turning');
+    setTooltip({ macroEvents: data.macro, dailyEvents: data.daily, isTurning, x: ev.clientX, y: ev.clientY });
   }
-  function onCellLeave() {
+  function onLeave() {
     hideTimer.current = setTimeout(() => setTooltip(null), 80);
   }
 
@@ -339,11 +389,22 @@ function CalendarGrid({
           if (dayNum < 1 || dayNum > numDays) return <div key={`empty-${i}`} style={{ minHeight: 72 }} />;
 
           const iso = toIsoDate(year, month, dayNum);
-          const dayEvents = eventsByDate[iso] ?? [];
-          const signal = getDaySignal(dayEvents);
-          const isToday = iso === today;
-          const colIndex = i % 7;
-          const isWeekend = colIndex === 5 || colIndex === 6;
+          const data       = cellData[iso];
+          const macroEvts  = data?.macro ?? [];
+          const dailyEvts  = data?.daily ?? [];
+          const allEvts    = [...macroEvts, ...dailyEvts];
+          const isTurning  = allEvts.some(e => e.market_impact === 'turning');
+          const dScore     = dailyEvts.length > 0 ? netScore(dailyEvts) : null;
+          const hasAny     = allEvts.length > 0;
+
+          const isToday    = iso === today;
+          const colIndex   = i % 7;
+          const isWeekend  = colIndex === 5 || colIndex === 6;
+
+          // Layer 1: macro tint (green/red/transparent)
+          const bg = macroBg(macroEvts);
+          // Layer 2: dot color from daily net score (only if not turning)
+          const dotColor = (!isTurning && dScore !== null) ? scoreToColor(dScore) : null;
 
           return (
             <div
@@ -355,7 +416,9 @@ function CalendarGrid({
                   ? '1px solid rgba(212,168,75,0.65)'
                   : '1px solid rgba(255,255,255,0.05)',
                 borderRadius: 6,
-                background: isToday
+                background: bg !== 'transparent' && !isWeekend
+                  ? bg
+                  : isToday
                   ? 'rgba(212,168,75,0.04)'
                   : isWeekend
                   ? 'rgba(255,255,255,0.01)'
@@ -363,17 +426,16 @@ function CalendarGrid({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                cursor: signal ? 'default' : 'default',
               }}
-              onMouseEnter={signal ? ev => onCellEnter(dayEvents, signal, ev) : undefined}
-              onMouseLeave={signal ? onCellLeave : undefined}
+              onMouseEnter={hasAny ? ev => onEnter(data!, ev) : undefined}
+              onMouseLeave={hasAny ? onLeave : undefined}
             >
               {/* Date number */}
               <span style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
                 fontWeight: isToday ? 700 : 400,
-                color: isToday ? '#D4A853' : isWeekend ? 'rgba(255,255,255,0.2)' : 'var(--text-secondary)',
+                color: isToday ? '#D4A853' : isWeekend ? 'rgba(255,255,255,0.18)' : 'var(--text-secondary)',
                 lineHeight: 1,
                 marginBottom: 8,
                 alignSelf: 'flex-start',
@@ -381,57 +443,77 @@ function CalendarGrid({
                 {dayNum}
               </span>
 
-              {/* Single day signal indicator */}
-              {signal && (
-                signal.isTurning ? (
-                  <Zap style={{ width: 18, height: 18, color: '#f59e0b' }} />
-                ) : (
-                  <div style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: '50%',
-                    background: signal.color,
-                    opacity: signal.color === '#6b7280' ? 0.5 : 0.85,
-                    flexShrink: 0,
-                  }} />
-                )
-              )}
+              {/* Layer 2 indicator */}
+              {isTurning ? (
+                <Zap style={{ width: 18, height: 18, color: '#f59e0b' }} />
+              ) : dotColor !== null ? (
+                <div style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: dotColor,
+                  opacity: dotColor === '#6b7280' ? 0.45 : 0.85,
+                  flexShrink: 0,
+                }} />
+              ) : null}
             </div>
           );
         })}
       </div>
 
-      {/* Net signal legend */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', marginTop: 14, alignItems: 'center' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-          Net Signal
-        </span>
-        {[
-          { color: '#15803d', label: 'Strong Positive' },
-          { color: '#22c55e', label: 'Positive' },
-          { color: '#6b7280', label: 'Neutral' },
-          { color: '#ef4444', label: 'Negative' },
-          { color: '#991b1b', label: 'Strong Negative' },
-        ].map(({ color, label }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, opacity: color === '#6b7280' ? 0.5 : 0.85 }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>{label}</span>
+      {/* Two-row legend */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 16 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', minWidth: 110 }}>
+            Background tint
+          </span>
+          {[
+            { bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.35)',    label: 'Bullish macro' },
+            { bg: 'rgba(239,68,68,0.12)',    border: 'rgba(239,68,68,0.35)',    label: 'Bearish macro' },
+            { bg: 'rgba(255,255,255,0.03)',  border: 'rgba(255,255,255,0.1)',   label: 'Neutral' },
+          ].map(({ bg, border, label }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ width: 14, height: 10, borderRadius: 2, background: bg, border: `1px solid ${border}` }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>{label}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', minWidth: 110 }}>
+            Dot
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', opacity: 0.85 }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>Positive event</span>
           </div>
-        ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Zap style={{ width: 10, height: 10, color: '#f59e0b' }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>Turning Date</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', opacity: 0.85 }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>Negative event</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Zap style={{ width: 10, height: 10, color: '#f59e0b' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>Turning date</span>
+          </div>
         </div>
       </div>
 
       {/* Hover tooltip */}
-      {tooltip && (
-        <div
-          style={{
+      {tooltip && (() => {
+        const ms = netScore(tooltip.macroEvents);
+        const nonTurningDaily = tooltip.dailyEvents.filter(e => e.market_impact !== 'turning');
+        const ds = netScore(nonTurningDaily);
+        const hasMacro = tooltip.macroEvents.length > 0;
+        const hasDaily = tooltip.dailyEvents.length > 0;
+        const macroLabel = ms >= 1 ? 'Bullish Macro' : ms <= -1 ? 'Bearish Macro' : 'Neutral Macro';
+        const macroColor = ms >= 1 ? '#22c55e' : ms <= -1 ? '#ef4444' : '#6b7280';
+        const macroBgColor = ms >= 1 ? 'rgba(34,197,94,0.18)' : ms <= -1 ? 'rgba(239,68,68,0.18)' : 'rgba(255,255,255,0.04)';
+
+        return (
+          <div style={{
             position: 'fixed',
-            left: Math.min(tooltip.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 300),
+            left: Math.min(tooltip.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 310),
             top: tooltip.y - 10,
-            width: 290,
+            width: 300,
             background: 'var(--card)',
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 10,
@@ -439,69 +521,69 @@ function CalendarGrid({
             zIndex: 9999,
             pointerEvents: 'none',
             boxShadow: '0 8px 32px rgba(0,0,0,0.65)',
-          }}
-        >
-          {/* Individual events */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {tooltip.events.map(evt => {
-              const color = impactColor(evt.market_impact);
-              const text = evt.inference ?? evt.narrative ?? null;
-              return (
-                <div key={evt.id}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: text ? 3 : 0 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3, flex: 1 }}>
-                      {evt.display_name}
-                    </span>
-                    <span style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 8,
-                      color,
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      flexShrink: 0,
-                    }}>
-                      {impactLabel(evt.market_impact)}
+          }}>
+            {/* Layer 1 — Macro */}
+            {hasMacro && (
+              <div style={{ marginBottom: hasDaily ? 10 : 0 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#475569', marginBottom: 6 }}>
+                  Macro Transits (&gt;7d)
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {tooltip.macroEvents.map(e => <TooltipEventRow key={e.id} evt={e} />)}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7 }}>
+                  <div style={{ width: 14, height: 10, borderRadius: 2, background: macroBgColor, border: `1px solid ${macroColor}40` }} />
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, color: macroColor, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {macroLabel}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {hasMacro && hasDaily && <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', marginBottom: 10 }} />}
+
+            {/* Layer 2 — Daily */}
+            {hasDaily && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#475569', marginBottom: 6 }}>
+                  Daily Events (≤7d)
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {tooltip.dailyEvents.map(e => <TooltipEventRow key={e.id} evt={e} />)}
+                </div>
+                {!tooltip.isTurning && nonTurningDaily.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: scoreToColor(ds), opacity: 0.85 }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, color: scoreToColor(ds), textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      {scoreToLabel(ds)}
                     </span>
                   </div>
-                  {text && (
-                    <div style={{ paddingLeft: 14, fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-                      {text}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Net summary */}
-          <div style={{
-            marginTop: 10,
-            paddingTop: 8,
-            borderTop: '1px solid rgba(255,255,255,0.07)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
-          }}>
-            {tooltip.signal.isTurning ? (
-              <Zap style={{ width: 11, height: 11, color: '#f59e0b', flexShrink: 0 }} />
-            ) : (
-              <div style={{ width: 9, height: 9, borderRadius: '50%', background: tooltip.signal.color, flexShrink: 0 }} />
+                )}
+              </div>
             )}
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9,
-              fontWeight: 700,
-              color: tooltip.signal.color,
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-            }}>
-              Net: {tooltip.signal.label}
-            </span>
+
+            {/* Combined read */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 8, display: 'flex', alignItems: 'center', gap: 7 }}>
+              {tooltip.isTurning ? (
+                <>
+                  <Zap style={{ width: 11, height: 11, color: '#f59e0b', flexShrink: 0 }} />
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                    Turning Date{hasMacro ? ` · ${macroLabel}` : ''}
+                  </span>
+                </>
+              ) : (
+                <>
+                  {hasMacro && <div style={{ width: 14, height: 10, borderRadius: 2, background: macroBgColor, border: `1px solid ${macroColor}40`, flexShrink: 0 }} />}
+                  {hasDaily && nonTurningDaily.length > 0 && <div style={{ width: 8, height: 8, borderRadius: '50%', background: scoreToColor(ds), opacity: 0.85, flexShrink: 0 }} />}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8.5, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {[hasMacro ? macroLabel : null, hasDaily && nonTurningDaily.length > 0 ? scoreToLabel(ds) : null].filter(Boolean).join(' · ')}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
