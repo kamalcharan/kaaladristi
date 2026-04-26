@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
 async function pingBackend(): Promise<true> {
   const res = await fetch(`${PIPELINE_API}/api/pipeline2/health`, { signal: AbortSignal.timeout(4000) });

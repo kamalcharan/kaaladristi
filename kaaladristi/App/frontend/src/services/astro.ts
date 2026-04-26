@@ -1,7 +1,7 @@
 import { from } from './postgrest';
 import type { AstroSignal, AstroTransit } from '@/types';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
 export async function fetchAstroTransits(from_date: string, to_date: string): Promise<AstroTransit[]> {
   const params = new URLSearchParams({ from_date, to_date });

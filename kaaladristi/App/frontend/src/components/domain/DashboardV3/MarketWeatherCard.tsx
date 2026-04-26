@@ -563,7 +563,7 @@ function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro
 
 // ── Data hook ─────────────────────────────────────────────────────────────────
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? 'http://localhost:8101';
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
 
 async function fetchComposite(date: string): Promise<MarketWeatherProps> {
   const res = await fetch(`${PIPELINE_API}/api/dashboard/composite?date=${encodeURIComponent(date)}`);

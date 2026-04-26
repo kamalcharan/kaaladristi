@@ -7,7 +7,7 @@ import {
   IMPACT_OPTIONS,
 } from '@/constants/signalScale';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
 // Re-export so callers can use the canonical scale directly
 export type { MarketImpact };

@@ -88,7 +88,7 @@ function ruleTypeLabel(rt: string): string {
 
 // ── Data fetch ────────────────────────────────────────────────────────────────
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? 'http://localhost:8101';
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
 
 async function fetchPanchangFull(date: string): Promise<PanchangFull | null> {
   const res = await fetch(`${PIPELINE_API}/api/panchang/daily?date=${encodeURIComponent(date)}`);

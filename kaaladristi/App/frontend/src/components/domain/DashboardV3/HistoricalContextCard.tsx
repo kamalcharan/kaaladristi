@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? 'http://localhost:8101';
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

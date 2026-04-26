@@ -1,7 +1,7 @@
 import { from } from './postgrest';
 import { toIso, getDaysInMonth } from '@/lib/dateUtils';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
 export interface AstroCalendarEvent {
   id: number;

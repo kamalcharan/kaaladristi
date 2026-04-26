@@ -20,7 +20,7 @@ import type {
   VaniOpportunityConfig,
 } from '@/types';
 
-const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || 'http://localhost:8101';
+const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 
 // ── Scan Definitions ───────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { fetchDiscoveryStatus, cancelDiscovery } from '@/pages/RuleEngine/discoveryService';
 import { useBackendStatus } from '@/hooks';
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
 interface ConfidenceState {
   running: boolean;

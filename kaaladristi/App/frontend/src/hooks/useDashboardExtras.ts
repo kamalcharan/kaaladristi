@@ -37,7 +37,7 @@ export function useBreadthRoc(days = 66) {
 }
 
 export function useBreadthRocInsight() {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['breadth_roc_insight'],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
@@ -51,7 +51,7 @@ export function useBreadthRocInsight() {
 }
 
 export function useBreadthInsight() {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['breadth_insight'],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
@@ -65,7 +65,7 @@ export function useBreadthInsight() {
 }
 
 export function usePanchangInsight(date: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['panchang_insight', date],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
@@ -80,7 +80,7 @@ export function usePanchangInsight(date: string) {
 }
 
 export function useInstrumentInsight(id: number, type: string = 'index', date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['instrument_insight', type, id, date],
     queryFn: async (): Promise<{
@@ -100,7 +100,7 @@ export function useInstrumentInsight(id: number, type: string = 'index', date?: 
 }
 
 export function useMarketPulseInsight(date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['market_pulse_insight', date],
     queryFn: async (): Promise<{

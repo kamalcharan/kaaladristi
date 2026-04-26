@@ -17,7 +17,7 @@ const STATUS_CONFIG: Record<string, { color: string; label: string; pulse?: bool
 };
 
 export default function PipelineStatusDot() {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8101';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   const navigate = useNavigate();
 
   const { data } = useQuery<CoverageSummary>({

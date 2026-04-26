@@ -83,7 +83,7 @@ interface WeekDay {
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? 'http://localhost:8101';
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL as string | undefined)?.trim() ?? '';
 
 async function fetchPanchangWeek(from: string, to: string): Promise<WeekDay[]> {
   const res = await fetch(`${PIPELINE_API}/api/panchang/week?from=${from}&to=${to}`);
