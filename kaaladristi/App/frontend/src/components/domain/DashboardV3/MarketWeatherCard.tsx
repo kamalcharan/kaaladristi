@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 // ── Part 1: Types, helpers, sample data ──────────────────────────────────────
@@ -120,6 +121,132 @@ const sampleData: MarketWeatherProps = {
     },
   },
 };
+
+// ── Historical context types + helpers ───────────────────────────────────────
+
+interface HistoricalContext {
+  available: boolean;
+  conditions?: {
+    vara: string;
+    nakshatra: string;
+    nakshatra_lord: string;
+    paksha: string;
+    breadth_regime: string;
+  };
+  historical?: {
+    occurrences: number;
+    positive_pct: number | null;
+    avg_return: number | null;
+    recent: { date: string; return: number }[];
+  };
+}
+
+function fmtReturn(val: number): string {
+  return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`;
+}
+
+function fmtHistDate(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  });
+}
+
+const HISTORY_CSS = `
+  @keyframes kd-hist-glow {
+    0%, 100% {
+      opacity: 0.55;
+      transform: scale(1);
+      text-shadow: 0 0 4px rgba(212,168,83,0.3);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.35);
+      text-shadow: 0 0 12px rgba(212,168,83,0.95), 0 0 24px rgba(212,168,83,0.5);
+    }
+  }
+  .kd-hist-pulse {
+    display: inline-block;
+    animation: kd-hist-glow 1.6s ease-in-out infinite;
+    color: #D4A853;
+  }
+  .kd-hist-pulse.seen {
+    animation: none;
+    transform: none;
+    opacity: 0.8;
+    text-shadow: none;
+  }
+  .kd-hist-chevron { transition: transform 0.25s ease; }
+  .kd-hist-chevron.open { transform: rotate(180deg); }
+`;
+
+// ── HistoryPanel: renders inside the expandable section ──────────────────────
+
+function HistoryPanel({ ctx }: { ctx: HistoricalContext }) {
+  if (!ctx.available || !ctx.conditions || !ctx.historical) {
+    return (
+      <div style={{ fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', padding: '4px 0 8px' }}>
+        No panchāṅgam data for this date
+      </div>
+    );
+  }
+  const { conditions: c, historical: h } = ctx;
+  return (
+    <div style={{ fontFamily: 'var(--font-mono)' }}>
+      {/* Condition line */}
+      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2, lineHeight: 1.5 }}>
+        {c.vara} · {c.nakshatra_lord} Nakshatra · {c.paksha}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 12 }}>
+        Breadth: {c.breadth_regime}
+      </div>
+
+      {h.occurrences === 0 ? (
+        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 12 }}>
+          No historical data for this combination
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 16px', marginBottom: 12 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Similar days since 2007</span>
+            <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+              {h.occurrences < 20 ? `${h.occurrences} (limited data)` : h.occurrences}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Nifty positive</span>
+            <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+              {h.positive_pct !== null ? `${h.positive_pct.toFixed(1)}%` : '—'}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>Average day return</span>
+            <span style={{ fontSize: 11, color: 'var(--text-primary)' }}>
+              {h.avg_return !== null ? fmtReturn(h.avg_return) : '—'}
+            </span>
+          </div>
+
+          {h.recent.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 5 }}>
+                Recent occurrences
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {h.recent.map(r => (
+                  <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>{fmtHistDate(r.date)}</span>
+                    <span style={{ color: 'var(--text-primary)' }}>{fmtReturn(r.return)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <span style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+          Historical data only. Not a forecast.
+        </span>
+      </div>
+    </div>
+  );
+}
 
 // ── Part 2: Header section ────────────────────────────────────────────────────
 
@@ -455,22 +582,130 @@ export function useMarketWeather(date: string) {
 
 // ── Card shell ────────────────────────────────────────────────────────────────
 
-function CardShell({ data }: { data: MarketWeatherProps }) {
+function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
+  const [open, setOpen] = useState(false);
+  const [clicked, setClicked] = useState(false);
+  const [histCtx, setHistCtx] = useState<HistoricalContext | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
+
+  const handleTrigger = async () => {
+    if (!clicked) setClicked(true);
+    if (!histCtx && !histLoading) {
+      setHistLoading(true);
+      try {
+        const res = await fetch(`${PIPELINE_API}/api/dashboard/context?date=${encodeURIComponent(date)}`);
+        if (res.ok) setHistCtx(await res.json());
+      } catch {
+        setHistCtx({ available: false });
+      } finally {
+        setHistLoading(false);
+      }
+    }
+    setOpen(o => !o);
+  };
+
   return (
-    <div
-      style={{
-        background: 'var(--card)',
-        border: '1px solid rgba(212,168,83,0.20)',
-        borderRadius: 14,
-        overflow: 'hidden',
-        backdropFilter: 'blur(12px)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(212,168,83,0.08)',
-      }}
-    >
-      <CardHeader data={data} />
-      <BarsSection data={data} />
-      <FooterTally astro={data.components.astro} />
-    </div>
+    <>
+      <style dangerouslySetInnerHTML={{ __html: HISTORY_CSS }} />
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid rgba(212,168,83,0.20)',
+          borderRadius: 14,
+          overflow: 'hidden',
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(212,168,83,0.08)',
+        }}
+      >
+        <CardHeader data={data} />
+        <BarsSection data={data} />
+        <FooterTally astro={data.components.astro} />
+
+        {/* ── Trigger row ── */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleTrigger}
+          onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleTrigger()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 20px',
+            cursor: 'pointer',
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            userSelect: 'none',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          <span
+            className={`kd-hist-pulse${clicked ? ' seen' : ''}`}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}
+          >
+            ◈
+          </span>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: 'var(--text-faint)',
+              flex: 1,
+            }}
+          >
+            Historical Pattern
+          </span>
+          {histLoading ? (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-faint)' }}>…</span>
+          ) : (
+            <svg
+              className={`kd-hist-chevron${open ? ' open' : ''}`}
+              width="12" height="12" viewBox="0 0 12 12"
+              fill="none" stroke="var(--text-faint)" strokeWidth="1.8"
+            >
+              <path d="M2 4l4 4 4-4" />
+            </svg>
+          )}
+        </div>
+
+        {/* ── Expandable history panel — grid trick for smooth animation ── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateRows: open ? '1fr' : '0fr',
+            transition: 'grid-template-rows 0.28s ease',
+          }}
+        >
+          <div style={{ overflow: 'hidden' }}>
+            {histCtx && (
+              <div
+                style={{
+                  padding: '14px 20px 16px',
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  background: 'rgba(0,0,0,0.15)',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    letterSpacing: '0.2em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-faint)',
+                    marginBottom: 12,
+                  }}
+                >
+                  Historical Context
+                </div>
+                <HistoryPanel ctx={histCtx} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -523,5 +758,5 @@ export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {})
     );
   }
 
-  return <CardShell data={data} />;
+  return <CardShell data={data} date={date ?? ''} />;
 }
