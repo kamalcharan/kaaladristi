@@ -2626,15 +2626,15 @@ def confluence_heatmap(date: str = None):
         conn = _conn()
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
 
-            # 1. Today's breadth
+            # 1. Today's breadth (exact date — shown in conditions panel, may be null on non-trading days)
             cur.execute(
                 'SELECT breadth_score FROM km_market_breadth WHERE trade_date = %s', (date,)
             )
             brow = cur.fetchone()
-            breadth_score   = float(brow['breadth_score']) if brow else None
-            b_regime        = _breadth_regime(breadth_score) if breadth_score is not None else None
+            breadth_score = float(brow['breadth_score']) if brow else None
+            b_regime      = _breadth_regime(breadth_score) if breadth_score is not None else None
 
-            # 2. Today's ROC
+            # 2. Today's ROC (exact date — shown in conditions panel, may be null on non-trading days)
             cur.execute(
                 'SELECT roc_13, sma_breadth FROM km_breadth_roc WHERE trade_date = %s', (date,)
             )
@@ -2643,14 +2643,32 @@ def confluence_heatmap(date: str = None):
             sma_breadth = float(rrow['sma_breadth']) if rrow and rrow['sma_breadth'] is not None else None
             r_regime    = _roc_regime(roc_13) if roc_13 is not None else None
 
-            # Decelerating/accelerating vs SMA
+            # Crossover direction vs SMA
             if roc_13 is not None and sma_breadth is not None:
-                if roc_13 > 0:
-                    roc_direction = 'accelerating' if roc_13 > sma_breadth else 'decelerating'
-                else:
-                    roc_direction = 'recovering' if roc_13 > sma_breadth else 'deepening'
+                roc_direction = ('accelerating' if roc_13 > sma_breadth else 'decelerating') if roc_13 > 0 \
+                           else ('recovering'   if roc_13 > sma_breadth else 'deepening')
             else:
                 roc_direction = None
+
+            # 2b. Most recent breadth/ROC regime for the pattern lookup
+            #     (uses latest available trading-day data — may differ from today on weekends/holidays)
+            if b_regime is None:
+                cur.execute(
+                    'SELECT breadth_score FROM km_market_breadth WHERE trade_date < %s ORDER BY trade_date DESC LIMIT 1', (date,)
+                )
+                brow2 = cur.fetchone()
+                b_regime_pattern = _breadth_regime(float(brow2['breadth_score'])) if brow2 else None
+            else:
+                b_regime_pattern = b_regime
+
+            if r_regime is None:
+                cur.execute(
+                    'SELECT roc_13 FROM km_breadth_roc WHERE trade_date < %s ORDER BY trade_date DESC LIMIT 1', (date,)
+                )
+                rrow2 = cur.fetchone()
+                r_regime_pattern = _roc_regime(float(rrow2['roc_13'])) if rrow2 and rrow2['roc_13'] is not None else None
+            else:
+                r_regime_pattern = r_regime
 
             # 3. Today's dominant nak-vara signal
             cur.execute("""
@@ -2688,19 +2706,20 @@ def confluence_heatmap(date: str = None):
             vara            = prow['vara']          if prow else None
             nakshatra_lord  = prow['nakshatra_lord'] if prow else None
 
-            # 5. 3-way historical pattern
+            # 5. 3-way historical pattern — uses most-recent-available regime for breadth/ROC
+            #    (conditions panel values may be null on weekends; pattern still runs off latest regime)
             pattern = None
-            if b_regime and r_regime and nakvar_outcome:
+            if b_regime_pattern and r_regime_pattern and nakvar_outcome:
                 cur.execute(_HEATMAP_PATTERN_SQL, {
-                    'breadth_regime': b_regime,
-                    'roc_regime':     r_regime,
+                    'breadth_regime': b_regime_pattern,
+                    'roc_regime':     r_regime_pattern,
                     'nakvar_outcome': nakvar_outcome,
                 })
                 patt = cur.fetchone()
                 if patt and patt['signal_count']:
                     pattern = {
-                        'breadth_regime':   b_regime,
-                        'roc_regime':       r_regime,
+                        'breadth_regime':   b_regime_pattern,
+                        'roc_regime':       r_regime_pattern,
                         'nakvar_outcome':   nakvar_outcome,
                         'signal_count':     int(patt['signal_count']),
                         'positive_day_pct': float(patt['positive_day_pct']) if patt['positive_day_pct'] else None,

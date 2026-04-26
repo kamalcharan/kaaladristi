@@ -142,7 +142,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
         fontFamily: 'var(--font-mono)',
         fontSize: 11,
       }}>
-        Pattern unavailable — breadth &amp; ROC data requires an active trading day
+        No pattern data — insufficient historical instances for this combination
       </div>
     );
   }
@@ -414,7 +414,7 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
       {/* Section 2 — Historical Pattern */}
       <Section
         title="Historical Pattern"
-        sub="3-way confluence: same breadth × ROC × astro combination, 30 years of NSE data"
+        sub="3-way confluence: most-recent breadth regime × ROC regime × today's astro signal — 30 years of NSE data"
       >
         {isLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#475569' }}>
