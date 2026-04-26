@@ -4,224 +4,276 @@ import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard';
 import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
 import { dashboardDate } from '@/stores/appStore';
-import { useConfluenceHistorical } from '@/hooks';
-import type { ConfluenceCell, ConfluenceData } from '@/types';
+import { useConfluenceHeatmap } from '@/hooks';
+import { Loader2, AlertCircle } from 'lucide-react';
+import type { ConfluenceConditions, ConfluencePattern } from '@/types';
 
-// ── Static sample data (real research numbers, used when API unavailable) ────
+// ── Period control ────────────────────────────────────────────────────────────
 
-const SAMPLE_DATA: ConfluenceData = {
-  total_signals: 7457,
-  breadth_rows: [
-    // Positive (bullish) outcome
-    { outcome: 'bullish', breadth_regime: 'Depressed', roc_regime: null, signal_count: 312,  positive_day_pct: 44.2, avg_day_return: -0.21 },
-    { outcome: 'bullish', breadth_regime: 'Moderate',  roc_regime: null, signal_count: 2180, positive_day_pct: 51.4, avg_day_return:  0.05 },
-    { outcome: 'bullish', breadth_regime: 'Elevated',  roc_regime: null, signal_count: 3280, positive_day_pct: 56.3, avg_day_return:  0.19 },
-    // Negative (bearish) outcome
-    { outcome: 'bearish', breadth_regime: 'Depressed', roc_regime: null, signal_count: 460,  positive_day_pct: 36.1, avg_day_return: -0.35 },
-    { outcome: 'bearish', breadth_regime: 'Moderate',  roc_regime: null, signal_count: 934,  positive_day_pct: 49.3, avg_day_return: -0.07 },
-    { outcome: 'bearish', breadth_regime: 'Elevated',  roc_regime: null, signal_count: 393,  positive_day_pct: 63.9, avg_day_return:  0.20 },
-  ],
-  roc_rows: [
-    // Positive (bullish) outcome
-    { outcome: 'bullish', breadth_regime: null, roc_regime: 'Contracting', signal_count: 48,   positive_day_pct: 41.7, avg_day_return: -0.44 },
-    { outcome: 'bullish', breadth_regime: null, roc_regime: 'Negative',    signal_count: 1182, positive_day_pct: 47.8, avg_day_return: -0.02 },
-    { outcome: 'bullish', breadth_regime: null, roc_regime: 'Positive',    signal_count: 3792, positive_day_pct: 56.3, avg_day_return:  0.19 },
-    { outcome: 'bullish', breadth_regime: null, roc_regime: 'Expanding',   signal_count: 748,  positive_day_pct: 59.2, avg_day_return:  0.31 },
-    // Negative (bearish) outcome
-    { outcome: 'bearish', breadth_regime: null, roc_regime: 'Contracting', signal_count: 36,   positive_day_pct: 33.3, avg_day_return: -0.61 },
-    { outcome: 'bearish', breadth_regime: null, roc_regime: 'Negative',    signal_count: 446,  positive_day_pct: 43.0, avg_day_return: -0.22 },
-    { outcome: 'bearish', breadth_regime: null, roc_regime: 'Positive',    signal_count: 1154, positive_day_pct: 51.0, avg_day_return:  0.04 },
-    { outcome: 'bearish', breadth_regime: null, roc_regime: 'Expanding',   signal_count: 151,  positive_day_pct: 57.6, avg_day_return:  0.14 },
-  ],
-};
+const VIEW_PERIODS = [
+  { label: '30D', days: 22 },
+  { label: '60D', days: 44 },
+  { label: '90D', days: 66 },
+] as const;
+type ViewPeriodLabel = typeof VIEW_PERIODS[number]['label'];
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
-function cellColor(pct: number | null, small: boolean): string {
-  if (small || pct == null) return '#64748b';
+function breadthRegimeColor(regime: string | null): string {
+  if (regime === 'Elevated') return '#22c55e';
+  if (regime === 'Depressed') return '#ef4444';
+  return '#f59e0b';
+}
+
+function rocRegimeColor(regime: string | null): string {
+  if (regime === 'Expanding') return '#22c55e';
+  if (regime === 'Positive')  return '#10b981';
+  if (regime === 'Negative')  return '#f97316';
+  return '#ef4444';
+}
+
+function nakvarColor(outcome: string | null): string {
+  if (outcome === 'bullish') return '#22c55e';
+  if (outcome === 'bearish') return '#ef4444';
+  return '#64748b';
+}
+
+function patternColor(pct: number | null): string {
+  if (pct == null) return '#64748b';
   if (pct >= 65) return '#22c55e';
   if (pct >= 55) return '#14b8a6';
   if (pct >= 45) return '#f59e0b';
   return '#ef4444';
 }
 
-// ── Lookup helper ─────────────────────────────────────────────────────────────
-
-function makeLookup(rows: ConfluenceCell[], dim: 'breadth_regime' | 'roc_regime') {
-  const m: Record<string, Record<string, ConfluenceCell>> = {};
-  for (const r of rows) {
-    const key = r[dim];
-    if (!key) continue;
-    if (!m[r.outcome]) m[r.outcome] = {};
-    m[r.outcome][key] = r;
-  }
-  return m;
+function fmtRoc(v: number | null): string {
+  if (v == null) return '—';
+  return v >= 0 ? `+${v.toFixed(4)}` : v.toFixed(4);
 }
 
-// ── Matrix cell ───────────────────────────────────────────────────────────────
+// ── Condition card ────────────────────────────────────────────────────────────
 
-function MatrixCell({ row }: { row: ConfluenceCell | undefined }) {
-  if (!row) {
-    return (
-      <td style={{ padding: '12px 16px', textAlign: 'center', color: '#334155', fontSize: 11 }}>—</td>
-    );
-  }
-
-  const small = row.signal_count < 20;
-  const pct   = row.positive_day_pct;
-  const color = cellColor(pct, small);
-  const bg    = `${color}14`;
-  const ret   = row.avg_day_return;
-
+function CondCard({
+  label, value, valueSub, badge, badgeColor, rows,
+}: {
+  label: string;
+  value: string;
+  valueSub?: string;
+  badge: string;
+  badgeColor: string;
+  rows?: { k: string; v: string; color?: string }[];
+}) {
+  const bg = `${badgeColor}0d`;
+  const border = `${badgeColor}28`;
   return (
-    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+    <div style={{
+      background: bg,
+      border: `1px solid ${border}`,
+      borderRadius: 10,
+      padding: '16px 18px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+    }}>
       <div style={{
-        display: 'inline-flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 3,
-        background: bg,
-        border: `1px solid ${color}30`,
-        borderRadius: 8,
-        padding: '8px 14px',
-        minWidth: 90,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 8,
+        letterSpacing: '0.18em',
+        textTransform: 'uppercase',
+        color: '#475569',
       }}>
-        {/* primary stat — positive_day_pct */}
+        {label}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: badgeColor, lineHeight: 1 }}>
+            {value}
+          </div>
+          {valueSub && (
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#64748b', marginTop: 3 }}>
+              {valueSub}
+            </div>
+          )}
+        </div>
         <div style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 18,
-          fontWeight: 700,
-          color,
-          lineHeight: 1,
-        }}>
-          {pct != null ? `${pct.toFixed(1)}%` : '—'}
-          {small && <span style={{ fontSize: 10, marginLeft: 3 }}>⚠</span>}
-        </div>
-
-        {/* signal count */}
-        <div style={{
-          fontFamily: 'var(--font-sans)',
           fontSize: 10,
-          color: '#64748b',
-          lineHeight: 1,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: badgeColor,
+          background: `${badgeColor}18`,
+          border: `1px solid ${badgeColor}38`,
+          borderRadius: 5,
+          padding: '4px 10px',
+          whiteSpace: 'nowrap',
         }}>
-          {row.signal_count.toLocaleString()} signals
+          {badge}
         </div>
-
-        {/* avg day return */}
-        {ret != null && (
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            color: ret >= 0 ? '#22c55e' : '#ef4444',
-            lineHeight: 1,
-          }}>
-            avg {ret >= 0 ? '+' : ''}{ret.toFixed(2)}%
-          </div>
-        )}
       </div>
-    </td>
-  );
-}
 
-// ── Matrix tables ─────────────────────────────────────────────────────────────
-
-const BREADTH_COLS = ['Depressed', 'Moderate', 'Elevated'] as const;
-const ROC_COLS     = ['Contracting', 'Negative', 'Positive', 'Expanding'] as const;
-const OUTCOMES     = ['bullish', 'bearish'] as const;
-
-const OUTCOME_LABEL: Record<string, string> = {
-  bullish: 'Positive Astro',
-  bearish: 'Negative Astro',
-};
-
-const TH: React.CSSProperties = {
-  padding: '9px 10px',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 9,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  color: '#475569',
-  textAlign: 'center',
-  borderBottom: '1px solid rgba(255,255,255,0.06)',
-  whiteSpace: 'nowrap',
-};
-
-const ROW_HDR: React.CSSProperties = {
-  padding: '10px 16px',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 10,
-  letterSpacing: '0.06em',
-  color: 'var(--text-secondary)',
-  whiteSpace: 'nowrap',
-  borderRight: '1px solid rgba(255,255,255,0.06)',
-  verticalAlign: 'middle',
-};
-
-function BreadthMatrix({ lookup }: { lookup: Record<string, Record<string, ConfluenceCell>> }) {
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th style={{ ...TH, textAlign: 'left', minWidth: 130 }}>Astro Signal</th>
-          {BREADTH_COLS.map(c => <th key={c} style={TH}>{c} Breadth</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {OUTCOMES.map(o => (
-          <tr key={o} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-            <td style={ROW_HDR}>{OUTCOME_LABEL[o]}</td>
-            {BREADTH_COLS.map(c => <MatrixCell key={c} row={lookup[o]?.[c]} />)}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function RocMatrix({ lookup }: { lookup: Record<string, Record<string, ConfluenceCell>> }) {
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th style={{ ...TH, textAlign: 'left', minWidth: 130 }}>Astro Signal</th>
-          {ROC_COLS.map(c => <th key={c} style={TH}>{c} ROC</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {OUTCOMES.map(o => (
-          <tr key={o} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-            <td style={ROW_HDR}>{OUTCOME_LABEL[o]}</td>
-            {ROC_COLS.map(c => <MatrixCell key={c} row={lookup[o]?.[c]} />)}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-// ── Legend ────────────────────────────────────────────────────────────────────
-
-function MatrixLegend() {
-  return (
-    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-      {[
-        { color: '#22c55e', label: '≥ 65% positive days' },
-        { color: '#14b8a6', label: '55–64%' },
-        { color: '#f59e0b', label: '45–54%' },
-        { color: '#ef4444', label: '< 45%' },
-        { color: '#64748b', label: 'n < 20 — small sample ⚠' },
-      ].map(i => (
-        <div key={i.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: 8, height: 8, borderRadius: 2, background: i.color, flexShrink: 0 }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#475569' }}>{i.label}</span>
+      {rows && rows.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          {rows.map(r => (
+            <div key={r.k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#475569' }}>{r.k}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: r.color ?? '#94a3b8', fontWeight: 600 }}>{r.v}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
 
-// ── Insight callout cards ─────────────────────────────────────────────────────
+// ── Historical Pattern Block ──────────────────────────────────────────────────
+
+function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
+  if (!pattern) {
+    return (
+      <div style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px dashed rgba(255,255,255,0.08)',
+        borderRadius: 10,
+        padding: '24px',
+        textAlign: 'center',
+        color: '#475569',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+      }}>
+        No historical pattern match — insufficient data for this 3-way combination
+      </div>
+    );
+  }
+
+  const pct    = pattern.positive_day_pct;
+  const ret    = pattern.avg_day_return;
+  const color  = patternColor(pct);
+  const bg     = `${color}0d`;
+  const border = `${color}28`;
+
+  return (
+    <div style={{
+      background: bg,
+      border: `1px solid ${border}`,
+      borderRadius: 10,
+      padding: '20px 22px',
+    }}>
+      {/* Regime labels */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {[
+          { k: 'BREADTH', v: pattern.breadth_regime },
+          { k: 'ROC',     v: pattern.roc_regime },
+          { k: 'ASTRO',   v: pattern.nakvar_outcome.toUpperCase() },
+        ].map(t => (
+          <div
+            key={t.k}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.12em',
+              padding: '3px 9px',
+              borderRadius: 4,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: '#94a3b8',
+            }}
+          >
+            {t.k}: <span style={{ color: '#cbd5e1' }}>{t.v}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color, lineHeight: 1 }}>
+            {pct != null ? `${pct.toFixed(1)}%` : '—'}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#475569', marginTop: 3 }}>
+            Positive Days
+          </div>
+        </div>
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: (ret ?? 0) >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1 }}>
+            {ret != null ? `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#475569', marginTop: 3 }}>
+            Avg Day Return
+          </div>
+        </div>
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: '#94a3b8', lineHeight: 1 }}>
+            {pattern.signal_count.toLocaleString()}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#475569', marginTop: 3 }}>
+            Historical Signals
+          </div>
+        </div>
+      </div>
+
+      {pattern.signal_count < 20 && (
+        <div style={{ marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 9, color: '#f59e0b' }}>
+          ⚠ Small sample — interpret with caution
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Conditions panel (3 cards) ────────────────────────────────────────────────
+
+function ConditionsPanel({ cond }: { cond: ConfluenceConditions }) {
+  const breadthColor = breadthRegimeColor(cond.breadth_regime);
+  const rocColor     = rocRegimeColor(cond.roc_regime);
+  const nakColor     = nakvarColor(cond.nakvar_outcome);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+      {/* Breadth Card */}
+      <CondCard
+        label="Market Breadth"
+        value={cond.breadth_score != null ? cond.breadth_score.toFixed(1) : '—'}
+        valueSub="Breadth Score (0–100)"
+        badge={cond.breadth_regime ?? '—'}
+        badgeColor={breadthColor}
+        rows={[
+          { k: 'Threshold', v: '>55 Elevated · <35 Depressed', color: '#64748b' },
+        ]}
+      />
+
+      {/* ROC-13 Card */}
+      <CondCard
+        label="Momentum (ROC-13)"
+        value={fmtRoc(cond.roc_13)}
+        valueSub="Rate of Change · 13-period"
+        badge={cond.roc_regime ?? '—'}
+        badgeColor={rocColor}
+        rows={[
+          { k: 'SMA (5)', v: fmtRoc(cond.sma_breadth) },
+          { k: 'Direction', v: cond.roc_direction ?? '—', color: rocColor },
+        ]}
+      />
+
+      {/* Nak-Vara Card */}
+      <CondCard
+        label="Astro Signal (Nak-Vara)"
+        value={cond.nakvar_outcome ? cond.nakvar_outcome.toUpperCase() : '—'}
+        valueSub={cond.nakvar_rule_name ?? cond.nakvar_rule_code ?? 'No dominant signal'}
+        badge={cond.nakvar_outcome ? `${cond.nakvar_outcome.toUpperCase()} SIGNAL` : 'NEUTRAL'}
+        badgeColor={nakColor}
+        rows={[
+          { k: 'Vara (weekday)', v: cond.vara ?? '—' },
+          { k: 'Nakshatra Lord', v: cond.nakshatra_lord ?? '—' },
+          ...(cond.nakvar_conf != null ? [{ k: 'Confidence', v: `${(cond.nakvar_conf * 100).toFixed(0)}%` }] : []),
+        ]}
+      />
+    </div>
+  );
+}
+
+// ── Insight callout cards (reworded as Historical Observations) ───────────────
 
 interface InsightCard {
   color:   string;
@@ -234,7 +286,7 @@ interface InsightCard {
   verdict: string;
 }
 
-const INSIGHTS: InsightCard[] = [
+const OBSERVATIONS: InsightCard[] = [
   {
     color:   '#ef4444',
     icon:    '▼',
@@ -243,34 +295,34 @@ const INSIGHTS: InsightCard[] = [
     acc:     '35–37%',
     ret:     'avg −0.31% to −0.35%',
     n:       '772 signal days',
-    verdict: 'When breadth is depressed and momentum is negative, positive astro signals fail. Market internals dominate — avoid directional trades in this regime.',
+    verdict: 'When breadth is depressed and momentum is negative, positive astro signals fail. Market internals dominate — the historical edge disappears entirely in this regime.',
   },
   {
     color:   '#22c55e',
     icon:    '▲',
     title:   'Elevated Breadth + Positive ROC + Positive Astro',
-    sub:     'Strongest positive confluence',
+    sub:     'Strongest positive confluence observed',
     acc:     '56.3%',
     ret:     'avg +0.19%',
     n:       '1,292 signals',
-    verdict: 'When all three layers align — broad participation, expanding short-term momentum, and positive astro — the probability of a positive trading day is highest across the system.',
+    verdict: 'When all three layers align — broad participation, expanding short-term momentum, and positive astro — the historical frequency of a positive trading day is highest across the system.',
   },
   {
     color:   '#f59e0b',
     icon:    '◈',
     title:   'Elevated Breadth overrides Negative Astro',
-    sub:     'Market internals dominate — 63.9% positive days despite bearish signal',
+    sub:     'Structural breadth dominated negative signals — 63.9% positive days',
     acc:     '63.9%',
     ret:     'avg +0.20%',
     n:       '393 signals',
-    verdict: 'Negative astro in an elevated breadth regime still produces positive market days at 63.9% frequency. Structural breadth is a stronger force than the astro signal alone.',
+    verdict: 'Negative astro in an elevated breadth regime historically still produced positive market days at 63.9% frequency. This suggests structural breadth is a stronger force than the astro signal in isolation.',
   },
 ];
 
-function InsightCallouts() {
+function HistoricalObservations() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-      {INSIGHTS.map(ins => (
+      {OBSERVATIONS.map(ins => (
         <div
           key={ins.title}
           style={{
@@ -333,80 +385,68 @@ function Section({ title, sub, children }: { title: string; sub?: string; childr
 
 // ── Tab 2 — Historical Confluence ─────────────────────────────────────────────
 
-function HistoricalConfluenceTab() {
-  const { data: liveData, isError } = useConfluenceHistorical();
-
-  const d: ConfluenceData = (liveData && liveData.breadth_rows.length > 0) ? liveData : SAMPLE_DATA;
-  const isLive = liveData && liveData.breadth_rows.length > 0;
-
-  const breadthLookup = makeLookup(d.breadth_rows, 'breadth_regime');
-  const rocLookup     = makeLookup(d.roc_rows,     'roc_regime');
+function HistoricalConfluenceTab({ date }: { date: string }) {
+  const { data, isLoading, isError } = useConfluenceHeatmap(date);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* Source badge + stat */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 9,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          padding: '3px 10px',
-          borderRadius: 4,
-          background: isLive ? 'rgba(34,197,94,0.10)' : 'rgba(245,158,11,0.10)',
-          color: isLive ? '#22c55e' : '#f59e0b',
-          border: `1px solid ${isLive ? 'rgba(34,197,94,0.30)' : 'rgba(245,158,11,0.30)'}`,
-          flexShrink: 0,
-        }}>
-          {isLive ? 'Live DB' : 'Research Sample'}
-        </div>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#D4A853' }}>
-          {d.total_signals.toLocaleString()}
-        </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#475569' }}>
-          NAK-VARA signals · 30 years · NSE NIFTY 50
-        </span>
-        {isError && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#ef4444', marginLeft: 4 }}>
-            · API unavailable
-          </span>
-        )}
-      </div>
-
-      {/* Matrix 1: Astro × Breadth */}
+      {/* Section 1 — Current Conditions */}
       <Section
-        title="Astro × Breadth Regime"
-        sub="% of positive NIFTY days when nak-vara signal aligns with EMA breadth regime"
+        title="Today's Conditions"
+        sub={`Breadth, momentum, and astro state as of ${date}`}
       >
-        <div style={{ overflowX: 'auto' }}>
-          <BreadthMatrix lookup={breadthLookup} />
-        </div>
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <MatrixLegend />
-        </div>
-      </Section>
-
-      {/* Matrix 2: Astro × ROC */}
-      <Section
-        title="Astro × ROC Momentum Regime"
-        sub="% of positive NIFTY days when nak-vara signal aligns with ROC-13 momentum state"
-      >
-        <div style={{ overflowX: 'auto' }}>
-          <RocMatrix lookup={rocLookup} />
-        </div>
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#334155', marginBottom: 8 }}>
-            ROC regime: Contracting (ROC &lt; −1) · Negative (−1 to 0) · Positive (0 to +1) · Expanding (&gt;+1)
+        {isLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#475569' }}>
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#818cf8' }} />
+            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading conditions…</span>
           </div>
-          <MatrixLegend />
-        </div>
+        ) : isError || !data ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#ef4444' }}>
+            <AlertCircle className="w-4 h-4" />
+            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Could not load conditions — backend may be offline</span>
+          </div>
+        ) : (
+          <ConditionsPanel cond={data.conditions} />
+        )}
       </Section>
 
-      {/* Insight callouts */}
-      <Section title="Key Confluence Patterns" sub="What 30 years of nak-vara signals reveal about market structure">
-        <InsightCallouts />
+      {/* Section 2 — Historical Pattern */}
+      <Section
+        title="Historical Pattern"
+        sub="3-way confluence: same breadth × ROC × astro combination, 30 years of NSE data"
+      >
+        {isLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#475569' }}>
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#818cf8' }} />
+            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading pattern…</span>
+          </div>
+        ) : (
+          <PatternBlock pattern={data?.pattern ?? null} />
+        )}
       </Section>
+
+      {/* Historical Observations */}
+      <Section title="Historical Observations" sub="What 30 years of nak-vara signals reveal about market structure">
+        <HistoricalObservations />
+      </Section>
+
+      {/* Footer disclaimer */}
+      <div style={{
+        fontFamily: 'var(--font-sans)',
+        fontSize: 10,
+        color: '#334155',
+        lineHeight: 1.6,
+        padding: '12px 16px',
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid rgba(255,255,255,0.04)',
+        borderRadius: 8,
+      }}>
+        <strong style={{ color: '#475569' }}>Disclaimer:</strong> These patterns are historical observations derived from
+        backtested nak-vara astro signals combined with NSE NIFTY 50 breadth and momentum data. Past frequencies do not
+        guarantee future outcomes. All figures represent statistical tendencies across a large sample — individual days
+        will deviate. This data is educational and should not be used as the sole basis for any trading decision.
+      </div>
 
     </div>
   );
@@ -415,13 +455,54 @@ function HistoricalConfluenceTab() {
 // ── Tab 1 — Today's Structure ─────────────────────────────────────────────────
 
 function TodayStructureTab({ date }: { date: string }) {
+  const [period, setPeriod] = useState<ViewPeriodLabel>('60D');
+  const days = VIEW_PERIODS.find(p => p.label === period)!.days;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <MarketWeatherCard date={date} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <MarketBreadthChart />
-        <BreadthRocChart />
+
+      {/* Period toggle shared across both charts */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#475569' }}>
+          Chart Window
+        </span>
+        <div style={{
+          display: 'flex',
+          gap: 2,
+          padding: '3px',
+          background: 'var(--card)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: 8,
+        }}>
+          {VIEW_PERIODS.map(p => (
+            <button
+              key={p.label}
+              onClick={() => setPeriod(p.label)}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '4px 12px',
+                borderRadius: 5,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                background: period === p.label ? '#818cf8' : 'transparent',
+                color: period === p.label ? '#fff' : '#475569',
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <MarketBreadthChart days={days} />
+        <BreadthRocChart days={days} />
+      </div>
+
       <NakVaraSignals date={date} />
     </div>
   );
@@ -492,7 +573,7 @@ export default function MarketStructureView() {
       </div>
 
       {activeTab === 'today'      && <TodayStructureTab date={date} />}
-      {activeTab === 'historical' && <HistoricalConfluenceTab />}
+      {activeTab === 'historical' && <HistoricalConfluenceTab date={date} />}
     </div>
   );
 }

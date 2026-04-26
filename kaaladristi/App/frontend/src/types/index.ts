@@ -306,6 +306,39 @@ export interface ConfluenceData {
 // keep alias so legacy references don't break
 export type ConfluenceRow = ConfluenceCell;
 
+// ── Confluence Heatmap — today's conditions + 3-way historical pattern ──
+
+export interface ConfluenceConditions {
+  breadth_score:    number | null;
+  breadth_regime:   string | null;
+  roc_13:           number | null;
+  sma_breadth:      number | null;
+  roc_regime:       string | null;
+  roc_direction:    string | null;   // 'accelerating' | 'decelerating' | 'recovering' | 'deepening'
+  nakvar_outcome:   string | null;   // 'bullish' | 'bearish'
+  nakvar_rule_code: string | null;
+  nakvar_rule_name: string | null;
+  nakvar_strength:  number | null;
+  nakvar_conf:      number | null;
+  vara:             string | null;
+  nakshatra_lord:   string | null;
+}
+
+export interface ConfluencePattern {
+  breadth_regime:   string;
+  roc_regime:       string;
+  nakvar_outcome:   string;
+  signal_count:     number;
+  positive_day_pct: number | null;
+  avg_day_return:   number | null;
+}
+
+export interface ConfluenceHeatmap {
+  date:       string;
+  conditions: ConfluenceConditions;
+  pattern:    ConfluencePattern | null;
+}
+
 // ── Index Catalog (from mv_index_catalog) ──
 
 export interface IndexCatalogItem {
