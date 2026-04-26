@@ -81,7 +81,7 @@ export default function LoginPage() {
       } else if (authMode === 'register') {
         if (!fullName.trim()) { setError('Please enter your full name'); setIsSubmitting(false); return; }
         await signUp(email, password, fullName.trim());
-        navigate('/setup');
+        navigate('/dashboard');
       } else {
         await signIn(email, password);
         navigate('/dashboard');

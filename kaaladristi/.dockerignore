@@ -1,0 +1,26 @@
+# Exclude local env files from Docker build context.
+# Vite VITE_* vars must come from docker-compose build args, not from .env files,
+# so that VPS builds never bake in localhost URLs.
+.env
+.env.*
+!.env.example
+
+# Git and editor noise
+.git
+.gitignore
+*.md
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build artifacts
+App/frontend/dist/
+App/frontend/node_modules/
