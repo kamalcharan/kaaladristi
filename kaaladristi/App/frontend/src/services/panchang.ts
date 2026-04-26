@@ -1,5 +1,5 @@
 import { from } from './postgrest';
-import type { DailyPanchang, MarketBreadthDay, BreadthRocDay, ConfluenceData, ConfluenceHeatmap } from '@/types';
+import type { DailyPanchang, MarketBreadthDay, BreadthRocDay, ConfluenceData, ConfluenceHeatmap, ConfluenceTimelineEntry } from '@/types';
 
 const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
 
@@ -40,4 +40,10 @@ export async function fetchConfluenceHistorical(): Promise<ConfluenceData> {
   const res = await fetch(`${PIPELINE_API}/api/confluence/historical`);
   if (!res.ok) throw new Error(`[confluence] HTTP ${res.status}`);
   return res.json() as Promise<ConfluenceData>;
+}
+
+export async function fetchConfluenceTimeline(days: number): Promise<ConfluenceTimelineEntry[]> {
+  const res = await fetch(`${PIPELINE_API}/api/confluence/timeline?days=${days}`);
+  if (!res.ok) throw new Error(`[confluence/timeline] HTTP ${res.status}`);
+  return res.json() as Promise<ConfluenceTimelineEntry[]>;
 }

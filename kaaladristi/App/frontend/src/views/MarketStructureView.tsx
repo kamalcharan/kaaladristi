@@ -3,19 +3,11 @@ import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard';
 import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
+import ConfluenceDotGrid from '@/components/domain/ConfluenceDotGrid';
 import { dashboardDate } from '@/stores/appStore';
 import { useConfluenceHeatmap } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { ConfluenceConditions, ConfluencePattern } from '@/types';
-
-// ── Period control ────────────────────────────────────────────────────────────
-
-const VIEW_PERIODS = [
-  { label: '30D', days: 22 },
-  { label: '60D', days: 44 },
-  { label: '90D', days: 66 },
-] as const;
-type ViewPeriodLabel = typeof VIEW_PERIODS[number]['label'];
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
@@ -391,6 +383,9 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
+      {/* Day-by-day signal grid */}
+      <ConfluenceDotGrid />
+
       {/* Section 1 — Current Conditions */}
       <Section
         title="Today's Conditions"
@@ -455,72 +450,13 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
 // ── Tab 1 — Today's Structure ─────────────────────────────────────────────────
 
 function TodayStructureTab({ date }: { date: string }) {
-  const [period, setPeriod] = useState<ViewPeriodLabel>('60D');
-  const days = VIEW_PERIODS.find(p => p.label === period)!.days;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <MarketWeatherCard date={date} />
-
-      {/* Period toggle — shared window for both Breadth and ROC charts */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '10px 14px',
-        background: 'var(--card)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 10,
-      }}>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          color: '#94a3b8',
-          flexShrink: 0,
-        }}>
-          Chart Window
-        </span>
-        <div style={{
-          display: 'flex',
-          gap: 4,
-          padding: '3px',
-          background: 'rgba(0,0,0,0.25)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 8,
-        }}>
-          {VIEW_PERIODS.map(p => (
-            <button
-              key={p.label}
-              onClick={() => setPeriod(p.label)}
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                fontWeight: 700,
-                padding: '5px 16px',
-                borderRadius: 6,
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                background: period === p.label ? '#818cf8' : 'transparent',
-                color: period === p.label ? '#fff' : '#94a3b8',
-              }}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#475569' }}>
-          Controls both charts below
-        </span>
-      </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <MarketBreadthChart days={days} />
-        <BreadthRocChart days={days} />
+        <MarketBreadthChart />
+        <BreadthRocChart />
       </div>
-
       <NakVaraSignals date={date} />
     </div>
   );

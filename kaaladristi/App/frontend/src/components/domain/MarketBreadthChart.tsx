@@ -91,9 +91,9 @@ function BreadthTooltip({ active, payload, label }: any) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function MarketBreadthChart({ days: externalDays }: { days?: number } = {}) {
+export default function MarketBreadthChart() {
   const [period, setPeriod] = useState<PeriodLabel>('66D');
-  const days = externalDays ?? PERIODS.find(p => p.label === period)!.days;
+  const days = PERIODS.find(p => p.label === period)!.days;
 
   const { data = [], isLoading, isError } = useMarketBreadth(days);
   const latest = data[data.length - 1];
@@ -115,25 +115,23 @@ export default function MarketBreadthChart({ days: externalDays }: { days?: numb
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
-          {/* Period buttons — hidden when controlled externally */}
-          {externalDays == null && (
-            <div className="flex items-center gap-0.5 bg-kd-elevated rounded-lg p-0.5">
-              {PERIODS.map(p => (
-                <button
-                  key={p.label}
-                  onClick={() => setPeriod(p.label)}
-                  className={cn(
-                    'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
-                    period === p.label
-                      ? 'bg-accent-indigo text-white'
-                      : 'text-muted hover:text-[var(--text-secondary)]',
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Period buttons */}
+          <div className="flex items-center gap-0.5 bg-kd-elevated rounded-lg p-0.5">
+            {PERIODS.map(p => (
+              <button
+                key={p.label}
+                onClick={() => setPeriod(p.label)}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-[10px] font-bold transition-all',
+                  period === p.label
+                    ? 'bg-accent-indigo text-white'
+                    : 'text-muted hover:text-[var(--text-secondary)]',
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
 
           {/* EMA stats */}
           <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
