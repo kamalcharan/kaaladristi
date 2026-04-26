@@ -288,14 +288,23 @@ export interface BreadthRocDay {
 
 // ── Confluence Historical (from /api/confluence/historical) ──
 
-export interface ConfluenceRow {
-  outcome:        string;          // 'bullish' | 'bearish' (DB value)
-  breadth_regime: string | null;   // 'Depressed' | 'Moderate' | 'Elevated'
-  roc_regime:     string | null;   // 'Contracting' | 'Negative' | 'Positive' | 'Expanding'
-  transits:       number;
-  accuracy_pct:   number | null;
-  avg_return:     number | null;
+export interface ConfluenceCell {
+  outcome:          string;          // 'bullish' | 'bearish' (DB value)
+  breadth_regime:   string | null;   // 'Depressed' | 'Moderate' | 'Elevated'
+  roc_regime:       string | null;   // 'Contracting' | 'Negative' | 'Positive' | 'Expanding'
+  signal_count:     number;
+  positive_day_pct: number | null;   // % of days where NIFTY pct_chng > 0
+  avg_day_return:   number | null;   // avg same-day NIFTY pct_chng
 }
+
+export interface ConfluenceData {
+  breadth_rows:  ConfluenceCell[];
+  roc_rows:      ConfluenceCell[];
+  total_signals: number;
+}
+
+// keep alias so legacy references don't break
+export type ConfluenceRow = ConfluenceCell;
 
 // ── Index Catalog (from mv_index_catalog) ──
 

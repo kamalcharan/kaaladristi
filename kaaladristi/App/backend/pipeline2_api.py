@@ -2480,51 +2480,87 @@ def _rs_signal(long_zone: str | None, short_zone: str | None) -> str:
 
 _confluence_cache: dict | None = None  # cache busted on restart only
 
-_CONFLUENCE_SQL = """
+# NAK-VARA only, same-day NIFTY 50 (index_id=1) pct_chng.
+# GROUP BY outcome × breadth_regime
+_CONFLUENCE_BREADTH_SQL = """
     SELECT
+        r.outcome,
         CASE WHEN b.breadth_score > 55 THEN 'Elevated'
              WHEN b.breadth_score > 35 THEN 'Moderate'
-             ELSE 'Depressed' END          AS breadth_regime,
+             ELSE 'Depressed' END                       AS breadth_regime,
+        COUNT(*)                                         AS signal_count,
+        ROUND(
+            COUNT(*) FILTER (WHERE i.pct_chng > 0)::NUMERIC /
+            NULLIF(COUNT(*), 0) * 100
+        , 1)                                             AS positive_day_pct,
+        ROUND(AVG(i.pct_chng)::NUMERIC, 2)              AS avg_day_return
+    FROM  km_rule_signals       s
+    JOIN  km_astro_rule_master  r  ON r.id  = s.rule_id
+    JOIN  km_market_breadth     b  ON b.trade_date = s.date
+    JOIN  km_breadth_roc        br ON br.trade_date = s.date
+    JOIN  km_index_eod          i  ON i.trade_date  = s.date
+                                  AND i.index_id    = 1
+    WHERE r.rule_type = 'nakshatra_vara'
+      AND r.outcome   IN ('bullish', 'bearish')
+      AND i.pct_chng  IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1, 2
+"""
+
+# GROUP BY outcome × roc_regime
+_CONFLUENCE_ROC_SQL = """
+    SELECT
+        r.outcome,
         CASE WHEN br.roc_13 > 1  THEN 'Expanding'
              WHEN br.roc_13 > 0  THEN 'Positive'
              WHEN br.roc_13 > -1 THEN 'Negative'
-             ELSE 'Contracting' END        AS roc_regime,
-        r.outcome,
-        COUNT(DISTINCT s.id)               AS transits,
-        ROUND(AVG(s.actual_market_return)::NUMERIC, 2) AS avg_return,
+             ELSE 'Contracting' END                      AS roc_regime,
+        COUNT(*)                                         AS signal_count,
         ROUND(
-            COUNT(*) FILTER (WHERE s.matched = true)::NUMERIC /
-            NULLIF(COUNT(*) FILTER (WHERE s.matched IS NOT NULL), 0) * 100
-        , 1)                               AS accuracy_pct
+            COUNT(*) FILTER (WHERE i.pct_chng > 0)::NUMERIC /
+            NULLIF(COUNT(*), 0) * 100
+        , 1)                                             AS positive_day_pct,
+        ROUND(AVG(i.pct_chng)::NUMERIC, 2)              AS avg_day_return
     FROM  km_rule_signals       s
-    JOIN  km_astro_rule_master  r  ON r.id = s.rule_id
+    JOIN  km_astro_rule_master  r  ON r.id  = s.rule_id
     JOIN  km_market_breadth     b  ON b.trade_date = s.date
     JOIN  km_breadth_roc        br ON br.trade_date = s.date
-    WHERE s.actual_market_return IS NOT NULL
-      AND r.outcome IN ('bullish', 'bearish')
-    GROUP BY 1, 2, 3
-    ORDER BY 1, 2, 3
+    JOIN  km_index_eod          i  ON i.trade_date  = s.date
+                                  AND i.index_id    = 1
+    WHERE r.rule_type = 'nakshatra_vara'
+      AND r.outcome   IN ('bullish', 'bearish')
+      AND i.pct_chng  IS NOT NULL
+    GROUP BY 1, 2
+    ORDER BY 1, 2
 """
 
 
 @app.get('/api/confluence/historical')
 def confluence_historical():
     """
-    Returns per-cell accuracy and avg return for the Astro × Breadth/ROC confluence matrices.
-    Result is a flat list of rows grouped by (outcome, breadth_regime, roc_regime).
-    Cached in-process (historical data doesn't change intraday).
+    NAK-VARA signals × same-day NIFTY 50 pct_chng, grouped into two
+    2D matrices (outcome × breadth_regime, outcome × roc_regime).
+    Returns { breadth_rows, roc_rows, total_signals }.
+    Cached in-process (historical data is stable intraday).
     """
     global _confluence_cache
     if _confluence_cache is not None:
         return _confluence_cache
 
     try:
-        rows = _db_query(_CONFLUENCE_SQL)
+        breadth_rows = _db_query(_CONFLUENCE_BREADTH_SQL)
+        roc_rows     = _db_query(_CONFLUENCE_ROC_SQL)
     except Exception as exc:
         log.error(f'confluence_historical error: {exc}')
         raise HTTPException(status_code=500, detail=str(exc))
 
-    result = [_stringify_dates(r) for r in rows]
+    total = sum(int(r['signal_count']) for r in breadth_rows)
+
+    result = {
+        'breadth_rows':  [_stringify_dates(r) for r in breadth_rows],
+        'roc_rows':      [_stringify_dates(r) for r in roc_rows],
+        'total_signals': total,
+    }
     _confluence_cache = result
     return result
 
