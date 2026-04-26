@@ -8,7 +8,7 @@ import {
   fetchMonthEvents, fetchMonthSignals, fetchKeyEvents,
   createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
 } from '@/services/astroCalendar';
-import type { AstroCalendarEvent, AstroDailySignal, AstroCalendarPayload } from '@/services/astroCalendar';
+import type { AstroCalendarEvent, AstroDailySignal, AstroCalendarPayload, SignalItem } from '@/services/astroCalendar';
 import { SIGNAL_CLASSES as ASTRO_SIGNAL_CLASSES, SIGNAL_LABELS as ASTRO_SIGNAL_LABELS, impactToColor, IMPACT_OPTIONS } from '@/constants/signalScale';
 import {
   MONTH_ABBR, MONTH_FULL, DAY_ABBR,
@@ -27,6 +27,17 @@ const BIAS: Record<string, { fill: string; border: string; label: string }> = {
   bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Bearish'     },
   strong_bearish: { fill: 'rgba(217,80,68,0.80)',   border: 'var(--bear)',   label: 'Strong Bear' },
   closed:         { fill: 'rgba(46,42,34,0.35)',    border: 'transparent',   label: 'Closed'      },
+};
+
+const OUTCOME_MAP: Record<string, { label: string; color: string }> = {
+  strong_bullish: { label: 'High +ve',   color: '#22c55e' },
+  bullish:        { label: 'Positive',   color: '#22c55e' },
+  mild_bullish:   { label: 'Mod. +ve',   color: '#86efac' },
+  turning:        { label: 'Inflection', color: '#D4A853' },
+  neutral:        { label: 'Neutral',    color: 'var(--text-faint)' },
+  mild_bearish:   { label: 'Mod. -ve',   color: '#fca5a5' },
+  bearish:        { label: 'Negative',   color: '#ef4444' },
+  strong_bearish: { label: 'High -ve',   color: '#ef4444' },
 };
 
 function getBias(signal: AstroDailySignal | undefined, isWeekend: boolean) {
@@ -183,6 +194,20 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
           letterSpacing: '0.04em',
         }}>
           {bias.label}
+        </div>
+      )}
+
+      {/* Nak-vara rule count badge */}
+      {!isWeekend && signal && signal.signals.length > 0 && (
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 8,
+          color: 'var(--text-faint)',
+          textAlign: 'center',
+          marginTop: 2,
+          letterSpacing: '0.06em',
+        }}>
+          {signal.signals.length} nak-vara rule{signal.signals.length !== 1 ? 's' : ''}
         </div>
       )}
 
@@ -532,6 +557,52 @@ function DayInspector({
           </div>
         )}
       </div>
+
+      {/* Nak-vara rules */}
+      {signal && signal.signals.length > 0 && (
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 8.5, letterSpacing: '0.2em',
+            color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8,
+          }}>
+            Nak-Vara Rules · {signal.signals.length}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {signal.signals.map((s: SignalItem) => {
+              const om = OUTCOME_MAP[s.outcome] ?? { label: s.outcome, color: 'var(--text-faint)' };
+              return (
+                <div key={s.rule_id} style={{ borderLeft: `2px solid ${om.color}40`, paddingLeft: 10 }}>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 3 }}>
+                    {s.rule_name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
+                      letterSpacing: '0.1em', textTransform: 'uppercase',
+                      color: om.color,
+                      background: `${om.color}18`,
+                      border: `1px solid ${om.color}40`,
+                      borderRadius: 3, padding: '1px 5px',
+                    }}>
+                      {om.label}
+                    </span>
+                    {s.confidence != null && (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.06em' }}>
+                        {s.confidence.toFixed(0)}% conf
+                      </span>
+                    )}
+                    {s.probability_label && (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', letterSpacing: '0.06em' }}>
+                        · {s.probability_label}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Events list */}
       <div style={{ padding: '14px 18px', maxHeight: 440, overflowY: 'auto' }}>

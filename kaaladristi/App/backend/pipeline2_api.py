@@ -21,7 +21,7 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -722,7 +722,8 @@ def _stringify_dates(row: dict) -> dict:
 
 # ── Panchangam ────────────────────────────────────────────────────────────
 
-_panchang_cache: dict[str, dict] = {}
+_panchang_cache: dict[str, dict] = {}       # bare panchang (legacy, kept for internal use)
+_panchang_full_cache: dict[str, dict] = {}  # enriched: panchang + signals + summary
 
 _PANCHANG_SQL = """
     SELECT
@@ -736,23 +737,402 @@ _PANCHANG_SQL = """
     WHERE today.date = %s
 """
 
+_PANCHANG_SIGNALS_SQL = """
+    SELECT
+        r.id              AS rule_id,
+        r.rule_code,
+        r.display_name    AS rule_name,
+        r.rule_type,
+        r.outcome,
+        r.probability_label,
+        r.scope,
+        s.strength,
+        s.conditions_snapshot,
+        c.confidence_score,
+        c.avg_return_matched,
+        c.total_occurrences
+    FROM km_rule_signals s
+    JOIN  km_astro_rule_master r  ON r.id = s.rule_id
+    LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
+    WHERE s.date = %s
+      AND r.is_active = TRUE
+    ORDER BY c.confidence_score DESC NULLS LAST, s.strength DESC
+"""
+
+_TRADING_DAY_SQL = """
+    SELECT COUNT(*) AS cnt
+    FROM km_index_eod
+    WHERE trade_date = %s
+      AND index_id = (SELECT id FROM km_index_symbols WHERE name = 'NIFTY 50' LIMIT 1)
+"""
+
+# Outcome groupings for the 8-value scale
+_BULLISH_OUTCOMES = frozenset({'strong_bullish', 'bullish', 'mild_bullish'})
+_BEARISH_OUTCOMES = frozenset({'strong_bearish', 'bearish', 'mild_bearish'})
+
 
 @app.get('/api/panchang/daily')
 def panchang_daily(date: str = None):
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    today = datetime.now(tz=tz_ist).date()
+
     if not date:
-        date = datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d')
-    if date in _panchang_cache:
-        return _panchang_cache[date]
+        date = today.strftime('%Y-%m-%d')
+
+    # Enriched cache — skip today so freshly-run signals appear immediately
+    if date in _panchang_full_cache:
+        return _panchang_full_cache[date]
+
     try:
-        rows = _db_query(_PANCHANG_SQL, (date,))
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f'Invalid date format: {date}')
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # ── 1. Panchang row ──────────────────────────────────────────
+            cur.execute(_PANCHANG_SQL, (date,))
+            panchang_row = cur.fetchone()
+            if not panchang_row:
+                raise HTTPException(status_code=404, detail=f'No panchang data for {date}')
+            panchang_data = _stringify_dates(dict(panchang_row))
+
+            # ── 2. Rule signals for this date ────────────────────────────
+            cur.execute(_PANCHANG_SIGNALS_SQL, (date,))
+            signals = []
+            bullish = bearish = volatile = turning = neutral = 0
+            confidence_scores = []
+
+            for r in cur.fetchall():
+                outcome = r['outcome'] or 'neutral'
+                conf = float(r['confidence_score']) if r['confidence_score'] is not None else None
+                signals.append({
+                    'rule_id':           r['rule_id'],
+                    'rule_code':         r['rule_code'],
+                    'rule_name':         r['rule_name'],
+                    'rule_type':         r['rule_type'],
+                    'outcome':           outcome,
+                    'probability_label': r['probability_label'],
+                    'scope':             r['scope'],
+                    'strength':          r['strength'],
+                    'conditions_snapshot': r['conditions_snapshot'],
+                    'confidence_score':  conf,
+                    'avg_return':        float(r['avg_return_matched']) if r['avg_return_matched'] is not None else None,
+                    'total_occurrences': r['total_occurrences'],
+                })
+                if outcome in _BULLISH_OUTCOMES:   bullish  += 1
+                elif outcome in _BEARISH_OUTCOMES: bearish  += 1
+                elif outcome == 'volatile':        volatile += 1
+                elif outcome == 'turning':         turning  += 1
+                else:                              neutral  += 1
+                if conf is not None:
+                    confidence_scores.append(conf)
+
+            # ── 3. Is this a trading day? ────────────────────────────────
+            if date_obj > today:
+                is_trading_day = None
+            else:
+                cur.execute(_TRADING_DAY_SQL, (date,))
+                td = cur.fetchone()
+                is_trading_day = bool(td['cnt'] > 0) if td else False
+
+    except HTTPException:
+        raise
     except Exception as e:
         log.error(f'panchang_daily error for {date}: {e}')
         raise HTTPException(status_code=500, detail=str(e))
-    if not rows:
-        raise HTTPException(status_code=404, detail=f'No panchang data for {date}')
-    row = _stringify_dates(rows[0])
-    _panchang_cache[date] = row
-    return row
+    finally:
+        conn.close()
+
+    result = {
+        **panchang_data,
+        'is_trading_day': is_trading_day,
+        'signals': signals,
+        'summary': {
+            'total_signals': len(signals),
+            'bullish':       bullish,
+            'bearish':       bearish,
+            'volatile':      volatile,
+            'turning':       turning,
+            'neutral':       neutral,
+            'avg_confidence': round(sum(confidence_scores) / len(confidence_scores), 1)
+                              if confidence_scores else None,
+        },
+    }
+
+    # Cache past dates only — today's signals may still be updating after discovery
+    if date_obj < today:
+        _panchang_full_cache[date] = result
+
+    return result
+
+
+_WEEK_SIGNALS_SQL = """
+    SELECT
+        s.date,
+        COUNT(*)                                                          AS total_signals,
+        COUNT(*) FILTER (WHERE r.outcome IN ('strong_bullish','bullish','mild_bullish'))  AS bullish,
+        COUNT(*) FILTER (WHERE r.outcome IN ('strong_bearish','bearish','mild_bearish'))  AS bearish,
+        COUNT(*) FILTER (WHERE r.outcome = 'turning')                                     AS turning,
+        COUNT(*) FILTER (WHERE r.outcome = 'neutral')                                     AS neutral,
+        ROUND(AVG(c.confidence_score)::numeric, 1)                       AS avg_confidence,
+        MAX(s.strength)                                                   AS peak_strength,
+        json_agg(
+            json_build_object(
+                'rule_id',        r.id,
+                'rule_code',      r.rule_code,
+                'rule_name',      r.display_name,
+                'rule_type',      r.rule_type,
+                'outcome',        r.outcome,
+                'strength',       s.strength,
+                'confidence',     c.confidence_score,
+                'probability_label', r.probability_label
+            )
+            ORDER BY c.confidence_score DESC NULLS LAST, s.strength DESC
+        ) AS signals
+    FROM km_rule_signals s
+    JOIN  km_astro_rule_master  r ON r.id = s.rule_id
+    LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
+    WHERE s.date BETWEEN %s AND %s
+      AND r.is_active = TRUE
+      AND r.is_deleted = FALSE
+      AND r.rule_type = 'nakshatra_vara'
+    GROUP BY s.date
+    ORDER BY s.date
+"""
+
+_PANCHANG_WEEK_SQL = """
+    SELECT date, vara, nakshatra_name, tithi_name, yoga_name, paksha,
+           dlnl_match, is_ekadashi, is_purnima
+    FROM km_daily_panchang
+    WHERE date BETWEEN %s AND %s
+    ORDER BY date
+"""
+
+_IS_TRADING_WEEK_SQL = """
+    SELECT DISTINCT trade_date FROM km_index_eod
+    WHERE trade_date BETWEEN %s AND %s
+      AND index_id = (SELECT id FROM km_index_symbols WHERE name = 'NIFTY 50' LIMIT 1)
+"""
+
+
+@app.get('/api/panchang/week')
+def panchang_week(from_date: str = Query(..., alias='from'),
+                  to_date: str  = Query(..., alias='to')):
+    """
+    Per-day rule signal summary for a date range (max 31 days).
+    Returns list of {date, vara, nakshatra_name, tithi, is_trading_day,
+                     total_signals, bullish, bearish, turning, neutral,
+                     avg_confidence, peak_strength, signals[]}.
+    """
+    try:
+        from_obj = datetime.strptime(from_date, '%Y-%m-%d').date()
+        to_obj   = datetime.strptime(to_date,   '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Dates must be YYYY-MM-DD')
+
+    if (to_obj - from_obj).days > 31:
+        raise HTTPException(status_code=400, detail='Range must be ≤ 31 days')
+    if to_obj < from_obj:
+        raise HTTPException(status_code=400, detail='to must be ≥ from')
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(_PANCHANG_WEEK_SQL, (from_date, to_date))
+            panchang_rows = {str(r['date']): dict(r) for r in cur.fetchall()}
+
+            cur.execute(_WEEK_SIGNALS_SQL, (from_date, to_date))
+            signal_rows = {str(r['date']): dict(r) for r in cur.fetchall()}
+
+            cur.execute(_IS_TRADING_WEEK_SQL, (from_date, to_date))
+            trading_days = {str(r['trade_date']) for r in cur.fetchall()}
+    except Exception as e:
+        log.error(f'panchang_week error {from_date}→{to_date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+    # Build one entry per calendar day in range
+    result = []
+    day = from_obj
+    while day <= to_obj:
+        ds = str(day)
+        prow = panchang_rows.get(ds, {})
+        srow = signal_rows.get(ds, {})
+
+        result.append({
+            'date':            ds,
+            'vara':            prow.get('vara'),
+            'nakshatra_name':  prow.get('nakshatra_name'),
+            'tithi_name':      prow.get('tithi_name'),
+            'yoga_name':       prow.get('yoga_name'),
+            'paksha':          prow.get('paksha'),
+            'dlnl_match':      prow.get('dlnl_match'),
+            'is_ekadashi':     prow.get('is_ekadashi'),
+            'is_purnima':      prow.get('is_purnima'),
+            'is_trading_day':  ds in trading_days,
+            'total_signals':   int(srow.get('total_signals', 0)),
+            'bullish':         int(srow.get('bullish', 0)),
+            'bearish':         int(srow.get('bearish', 0)),
+            'turning':         int(srow.get('turning', 0)),
+            'neutral':         int(srow.get('neutral', 0)),
+            'avg_confidence':  float(srow['avg_confidence']) if srow.get('avg_confidence') is not None else None,
+            'peak_strength':   int(srow['peak_strength']) if srow.get('peak_strength') is not None else None,
+            'signals':         srow.get('signals') or [],
+        })
+        day += timedelta(days=1)
+
+    return result
+
+
+# ── Dashboard Composite ────────────────────────────────────────────────────
+
+_COMPOSITE_ASTRO_SQL = """
+    SELECT r.outcome, r.display_name AS rule_name, s.strength, c.confidence_score
+    FROM km_rule_signals s
+    JOIN  km_astro_rule_master  r ON r.id = s.rule_id
+    LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
+    WHERE s.date = %s
+      AND r.is_active = TRUE
+      AND r.is_deleted = FALSE
+      AND r.rule_type = 'nakshatra_vara'
+"""
+
+_COMPOSITE_ROC_SQL = """
+    SELECT trade_date, roc_13
+    FROM km_breadth_roc
+    WHERE trade_date <= %s
+    ORDER BY trade_date DESC
+    LIMIT 2
+"""
+
+_COMPOSITE_BREADTH_SQL = """
+    SELECT breadth_score
+    FROM km_market_breadth
+    WHERE trade_date <= %s
+    ORDER BY trade_date DESC
+    LIMIT 1
+"""
+
+_BULLISH_SET = frozenset({'strong_bullish', 'bullish', 'mild_bullish'})
+_BEARISH_SET = frozenset({'strong_bearish', 'bearish', 'mild_bearish'})
+
+
+@app.get('/api/dashboard/composite')
+def dashboard_composite(date: str = Query(default=None)):
+    """
+    Compute Astro-Technical Alignment composite score for a given date.
+    Components: astro rule signals, breadth ROC momentum, market breadth.
+    Returns MarketWeatherProps-shaped JSON.
+    """
+    if date is None:
+        date = str(datetime.now().date())
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(status_code=400, detail='date must be YYYY-MM-DD')
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(_COMPOSITE_ASTRO_SQL, (date,))
+            astro_rows = cur.fetchall()
+
+            cur.execute(_COMPOSITE_ROC_SQL, (date,))
+            roc_rows = cur.fetchall()
+
+            cur.execute(_COMPOSITE_BREADTH_SQL, (date,))
+            breadth_row = cur.fetchone()
+    except Exception as e:
+        log.error(f'dashboard_composite error for {date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+    # ── Astro component ────────────────────────────────────────────────────
+    pos_rows = [r for r in astro_rows if r['outcome'] in _BULLISH_SET]
+    neg_rows = [r for r in astro_rows if r['outcome'] in _BEARISH_SET]
+    trn_rows = [r for r in astro_rows if r['outcome'] == 'turning']
+    positive = len(pos_rows)
+    negative = len(neg_rows)
+    turning  = len(trn_rows)
+    mixed    = len(astro_rows) - positive - negative - turning
+    total    = len(astro_rows)
+
+    def _avg_conf(rows: list) -> float:
+        confs = [float(r['confidence_score']) for r in rows if r['confidence_score'] is not None]
+        return round(sum(confs) / len(confs), 1) if confs else 0.0
+
+    avg_pos_conf = _avg_conf(pos_rows)
+    avg_neg_conf = _avg_conf(neg_rows)
+    avg_trn_conf = _avg_conf(trn_rows)
+
+    # Astro bar = average confidence of the dominant-direction signals
+    if total == 0:
+        astro_norm = 0.5
+        astro_score = 50.0
+    elif turning > positive and turning > negative:
+        astro_score = avg_trn_conf
+        astro_norm  = avg_trn_conf / 100.0
+    elif positive >= negative:
+        astro_score = avg_pos_conf
+        astro_norm  = avg_pos_conf / 100.0
+    else:
+        astro_score = avg_neg_conf
+        astro_norm  = avg_neg_conf / 100.0
+
+    # ── ROC component ──────────────────────────────────────────────────────
+    roc_13      = float(roc_rows[0]['roc_13']) if roc_rows else 0.0
+    roc_13_prev = float(roc_rows[1]['roc_13']) if len(roc_rows) > 1 else roc_13
+    # Normalize ROC: clamp [-5, +5] → [0, 1]
+    roc_norm = max(0.0, min(1.0, (roc_13 + 5.0) / 10.0))
+
+    # ── Breadth component ──────────────────────────────────────────────────
+    breadth_raw  = float(breadth_row['breadth_score']) if breadth_row and breadth_row['breadth_score'] is not None else 50.0
+    breadth_norm = breadth_raw / 100.0
+
+    # ── Composite (weighted: astro 50%, roc 25%, breadth 25%) ─────────────
+    composite = round((astro_norm * 0.50 + roc_norm * 0.25 + breadth_norm * 0.25) * 100)
+
+    def _label(score: int) -> tuple[str, str]:
+        if score > 70: return 'High Positive Alignment', '☀️'
+        if score > 60: return 'Moderate Positive',       '🌤'
+        if score > 45: return 'Mixed Signals',           '🌥'
+        if score > 35: return 'Moderate Negative',       '🌦'
+        return           'High Negative Alignment',      '🌧'
+
+    label, icon = _label(composite)
+
+    return {
+        'date':            date,
+        'composite_score': composite,
+        'composite_label': label,
+        'composite_icon':  icon,
+        'components': {
+            'astro': {
+                'score':        astro_score,
+                'positive':     positive,
+                'negative':     negative,
+                'turning':      turning,
+                'mixed':        mixed,
+                'total':        total,
+                'avg_pos_conf': avg_pos_conf,
+                'avg_neg_conf': avg_neg_conf,
+                'avg_trn_conf': avg_trn_conf,
+            },
+            'roc': {
+                'roc_13':      round(roc_13, 4),
+                'roc_13_prev': round(roc_13_prev, 4),
+                'normalized':  round(roc_norm, 4),
+            },
+            'breadth': {
+                'breadth_score': round(breadth_raw, 2),
+                'normalized':    round(breadth_norm, 4),
+            },
+        },
+    }
 
 
 # ── Astro Market-Book ─────────────────────────────────────────────────────
@@ -1541,7 +1921,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                 rule['conditions'] = {}
 
             try:
-                matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks)
+                matched_rows = discover_rule(conn, rule, vedh_map, panchak_naks, vocab)
                 print(f"DEBUG [{rule['rule_code']}]: discover_rule → {len(matched_rows)} rows, should_group={should_group_transits(rule)}", flush=True)
 
                 strength = {'Very High': 5, 'High': 4, 'Reasonable': 3, 'Low': 2}.get(
@@ -1561,7 +1941,7 @@ def _run_discovery_bg(mode: str, rule_id: int | None = None):
                             "(date, rule_id, signal, strength, details, conditions_snapshot) "
                             "VALUES %s ON CONFLICT (date, rule_id) DO NOTHING",
                             _data)
-                        inserted = cur.rowcount
+                        inserted = len(_data)
                 conn.commit()
                 _discovery_state['signals_inserted'] += inserted
 
@@ -1901,7 +2281,7 @@ def discovery_diagnose():
     if test_rule:
         t0 = _t.monotonic()
         try:
-            matched = discover_rule(conn, test_rule, vedh_map, panchak_naks)
+            matched = discover_rule(conn, test_rule, vedh_map, panchak_naks, vocab)
             report['test_rule_ms'] = round((_t.monotonic() - t0) * 1000)
             report['test_rule'] = test_rule['rule_code']
             report['test_rule_matched'] = len(matched)
