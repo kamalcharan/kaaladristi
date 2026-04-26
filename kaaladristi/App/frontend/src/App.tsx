@@ -30,6 +30,7 @@ import DataPipelinePage from '@/pages/DataPipeline';
 import PanchangView from '@/views/PanchangView';
 import AdminPanchangView from '@/views/AdminPanchangView';
 import { RuleList, RuleDetail } from '@/pages/RuleEngine';
+import MarketStructureView from '@/views/MarketStructureView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -120,6 +121,7 @@ function AppRoutes() {
           <Route path="/data-pipeline" element={<DataPipelinePage />} />
           <Route path="/panchang" element={<PanchangView />} />
           <Route path="/admin/panchang" element={<AdminPanchangView />} />
+          <Route path="/market-structure" element={<MarketStructureView />} />
           <Route path="/rules" element={<RuleList />} />
           <Route path="/rules/:id" element={<RuleDetail />} />
         </Route>
