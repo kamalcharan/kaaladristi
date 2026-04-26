@@ -238,8 +238,38 @@ function useMonthEvents(year: number, month: number) {
 
 // ── Calendar grid view ────────────────────────────────────────────────────────
 
+const IMPACT_WEIGHTS: Record<string, number> = {
+  strong_bullish: 2,
+  bullish:        1,
+  mild_bullish:   1,
+  neutral:        0,
+  mild_bearish:  -1,
+  bearish:       -1,
+  strong_bearish:-2,
+};
+
+interface DaySignal {
+  color: string;
+  label: string;
+  isTurning: boolean;
+}
+
+function getDaySignal(events: AstroCalendarEvent[]): DaySignal | null {
+  if (events.length === 0) return null;
+  if (events.some(e => e.market_impact === 'turning')) {
+    return { color: '#f59e0b', label: 'Turning Date', isTurning: true };
+  }
+  const score = events.reduce((sum, e) => sum + (IMPACT_WEIGHTS[e.market_impact] ?? 0), 0);
+  if (score >= 2)  return { color: '#15803d', label: 'Strong Positive', isTurning: false };
+  if (score === 1) return { color: '#22c55e', label: 'Positive',        isTurning: false };
+  if (score === 0) return { color: '#6b7280', label: 'Mixed/Neutral',   isTurning: false };
+  if (score === -1) return { color: '#ef4444', label: 'Negative',       isTurning: false };
+  return              { color: '#991b1b', label: 'Strong Negative',     isTurning: false };
+}
+
 interface TooltipState {
   events: AstroCalendarEvent[];
+  signal: DaySignal;
   x: number;
   y: number;
 }
@@ -259,11 +289,9 @@ function CalendarGrid({
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const numDays = getDaysInMonth(year, month);
-  // getFirstWeekdayOffset returns Mon-first offset (0=Mon ... 6=Sun)
   const offset = getFirstWeekdayOffset(year, month);
   const totalCells = Math.ceil((offset + numDays) / 7) * 7;
 
-  // Map each day → events active on that day (point events + transits spanning the day)
   const eventsByDate = useMemo(() => {
     const map: Record<string, AstroCalendarEvent[]> = {};
     for (let d = 1; d <= numDays; d++) {
@@ -277,9 +305,9 @@ function CalendarGrid({
     return map;
   }, [events, year, month, numDays]);
 
-  function onCellEnter(dayEvents: AstroCalendarEvent[], ev: React.MouseEvent) {
+  function onCellEnter(dayEvents: AstroCalendarEvent[], signal: DaySignal, ev: React.MouseEvent) {
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    setTooltip({ events: dayEvents, x: ev.clientX, y: ev.clientY });
+    setTooltip({ events: dayEvents, signal, x: ev.clientX, y: ev.clientY });
   }
   function onCellLeave() {
     hideTimer.current = setTimeout(() => setTooltip(null), 80);
@@ -312,9 +340,8 @@ function CalendarGrid({
 
           const iso = toIsoDate(year, month, dayNum);
           const dayEvents = eventsByDate[iso] ?? [];
+          const signal = getDaySignal(dayEvents);
           const isToday = iso === today;
-          const hasTurning = dayEvents.some(e => e.market_impact === 'turning');
-          // In Mon-first grid: col 0=Mon...4=Fri, 5=Sat, 6=Sun
           const colIndex = i % 7;
           const isWeekend = colIndex === 5 || colIndex === 6;
 
@@ -323,7 +350,7 @@ function CalendarGrid({
               key={iso}
               style={{
                 minHeight: 72,
-                padding: '6px 5px 5px',
+                padding: '7px 6px 6px',
                 border: isToday
                   ? '1px solid rgba(212,168,75,0.65)'
                   : '1px solid rgba(255,255,255,0.05)',
@@ -333,92 +360,68 @@ function CalendarGrid({
                   : isWeekend
                   ? 'rgba(255,255,255,0.01)'
                   : 'transparent',
-                cursor: dayEvents.length > 0 ? 'default' : 'default',
-                position: 'relative',
-              }}
-              onMouseEnter={dayEvents.length > 0 ? ev => onCellEnter(dayEvents, ev) : undefined}
-              onMouseLeave={dayEvents.length > 0 ? onCellLeave : undefined}
-            >
-              {/* Day number + turning icon */}
-              <div style={{
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                gap: 2,
-                marginBottom: 5,
+                cursor: signal ? 'default' : 'default',
+              }}
+              onMouseEnter={signal ? ev => onCellEnter(dayEvents, signal, ev) : undefined}
+              onMouseLeave={signal ? onCellLeave : undefined}
+            >
+              {/* Date number */}
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: isToday ? 700 : 400,
+                color: isToday ? '#D4A853' : isWeekend ? 'rgba(255,255,255,0.2)' : 'var(--text-secondary)',
                 lineHeight: 1,
+                marginBottom: 8,
+                alignSelf: 'flex-start',
               }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  fontWeight: isToday ? 700 : 400,
-                  color: isToday ? '#D4A853' : isWeekend ? 'rgba(255,255,255,0.2)' : 'var(--text-secondary)',
-                }}>
-                  {dayNum}
-                </span>
-                {hasTurning && (
-                  <span title="Turning date" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    <Zap style={{ width: 9, height: 9, color: '#f59e0b', flexShrink: 0 }} />
-                  </span>
-                )}
-              </div>
+                {dayNum}
+              </span>
 
-              {/* Event dots */}
-              {dayEvents.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                  {dayEvents.slice(0, 7).map(evt => (
-                    <div
-                      key={evt.id}
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: impactColor(evt.market_impact),
-                        opacity: evt.market_impact === 'neutral' ? 0.45 : 0.82,
-                        flexShrink: 0,
-                      }}
-                    />
-                  ))}
-                  {dayEvents.length > 7 && (
-                    <span style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 7,
-                      color: 'var(--text-faint)',
-                      alignSelf: 'center',
-                    }}>
-                      +{dayEvents.length - 7}
-                    </span>
-                  )}
-                </div>
+              {/* Single day signal indicator */}
+              {signal && (
+                signal.isTurning ? (
+                  <Zap style={{ width: 18, height: 18, color: '#f59e0b' }} />
+                ) : (
+                  <div style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    background: signal.color,
+                    opacity: signal.color === '#6b7280' ? 0.5 : 0.85,
+                    flexShrink: 0,
+                  }} />
+                )
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Dot color legend */}
+      {/* Net signal legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', marginTop: 14, alignItems: 'center' }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-          Legend
+          Net Signal
         </span>
         {[
-          { key: 'strong_bullish', label: 'Strong Bull' },
-          { key: 'bullish',        label: 'Bullish' },
-          { key: 'turning',        label: 'Turning ⚡' },
-          { key: 'neutral',        label: 'Neutral' },
-          { key: 'bearish',        label: 'Bearish' },
-          { key: 'strong_bearish', label: 'Strong Bear' },
-        ].map(({ key, label }) => (
-          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: impactColor(key),
-              opacity: key === 'neutral' ? 0.45 : 0.82,
-            }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>
-              {label}
-            </span>
+          { color: '#15803d', label: 'Strong Positive' },
+          { color: '#22c55e', label: 'Positive' },
+          { color: '#6b7280', label: 'Neutral' },
+          { color: '#ef4444', label: 'Negative' },
+          { color: '#991b1b', label: 'Strong Negative' },
+        ].map(({ color, label }) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, opacity: color === '#6b7280' ? 0.5 : 0.85 }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>{label}</span>
           </div>
         ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Zap style={{ width: 10, height: 10, color: '#f59e0b' }} />
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)' }}>Turning Date</span>
+        </div>
       </div>
 
       {/* Hover tooltip */}
@@ -426,9 +429,9 @@ function CalendarGrid({
         <div
           style={{
             position: 'fixed',
-            left: Math.min(tooltip.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 290),
+            left: Math.min(tooltip.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 300),
             top: tooltip.y - 10,
-            width: 270,
+            width: 290,
             background: 'var(--card)',
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 10,
@@ -438,37 +441,65 @@ function CalendarGrid({
             boxShadow: '0 8px 32px rgba(0,0,0,0.65)',
           }}
         >
-          {tooltip.events.map((evt, idx) => {
-            const color = impactColor(evt.market_impact);
-            const text = evt.inference ?? evt.narrative ?? null;
-            return (
-              <div key={evt.id} style={{ marginBottom: idx < tooltip.events.length - 1 ? 10 : 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: text ? 3 : 0 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
-                    {evt.display_name}
-                  </span>
-                  <span style={{
-                    marginLeft: 'auto',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 8,
-                    color,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    flexShrink: 0,
-                  }}>
-                    {impactLabel(evt.market_impact)}
-                  </span>
-                </div>
-                {text && (
-                  <div style={{ paddingLeft: 14, fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-                    {text}
+          {/* Individual events */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {tooltip.events.map(evt => {
+              const color = impactColor(evt.market_impact);
+              const text = evt.inference ?? evt.narrative ?? null;
+              return (
+                <div key={evt.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: text ? 3 : 0 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3, flex: 1 }}>
+                      {evt.display_name}
+                    </span>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 8,
+                      color,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      flexShrink: 0,
+                    }}>
+                      {impactLabel(evt.market_impact)}
+                    </span>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  {text && (
+                    <div style={{ paddingLeft: 14, fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                      {text}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Net summary */}
+          <div style={{
+            marginTop: 10,
+            paddingTop: 8,
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 7,
+          }}>
+            {tooltip.signal.isTurning ? (
+              <Zap style={{ width: 11, height: 11, color: '#f59e0b', flexShrink: 0 }} />
+            ) : (
+              <div style={{ width: 9, height: 9, borderRadius: '50%', background: tooltip.signal.color, flexShrink: 0 }} />
+            )}
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              fontWeight: 700,
+              color: tooltip.signal.color,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+            }}>
+              Net: {tooltip.signal.label}
+            </span>
+          </div>
         </div>
       )}
     </div>
