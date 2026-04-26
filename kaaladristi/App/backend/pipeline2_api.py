@@ -2626,17 +2626,17 @@ def confluence_heatmap(date: str = None):
         conn = _conn()
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
 
-            # 1. Most recent breadth (≤ today — handles weekends/holidays)
+            # 1. Today's breadth
             cur.execute(
-                'SELECT breadth_score FROM km_market_breadth WHERE trade_date <= %s ORDER BY trade_date DESC LIMIT 1', (date,)
+                'SELECT breadth_score FROM km_market_breadth WHERE trade_date = %s', (date,)
             )
             brow = cur.fetchone()
             breadth_score   = float(brow['breadth_score']) if brow else None
             b_regime        = _breadth_regime(breadth_score) if breadth_score is not None else None
 
-            # 2. Most recent ROC (≤ today — handles weekends/holidays)
+            # 2. Today's ROC
             cur.execute(
-                'SELECT roc_13, sma_breadth FROM km_breadth_roc WHERE trade_date <= %s ORDER BY trade_date DESC LIMIT 1', (date,)
+                'SELECT roc_13, sma_breadth FROM km_breadth_roc WHERE trade_date = %s', (date,)
             )
             rrow = cur.fetchone()
             roc_13      = float(rrow['roc_13'])      if rrow and rrow['roc_13']      is not None else None

@@ -142,7 +142,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
         fontFamily: 'var(--font-mono)',
         fontSize: 11,
       }}>
-        No historical pattern match — insufficient data for this 3-way combination
+        Pattern unavailable — breadth &amp; ROC data requires an active trading day
       </div>
     );
   }
