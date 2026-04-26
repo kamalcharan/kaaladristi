@@ -2565,7 +2565,172 @@ def confluence_historical():
     return result
 
 
-@app.get('/api/equity/magicrs')
+# ── Confluence heatmap — today's conditions + matching 3-way pattern ──────────
+
+def _breadth_regime(score: float) -> str:
+    if score > 55: return 'Elevated'
+    if score > 35: return 'Moderate'
+    return 'Depressed'
+
+def _roc_regime(roc: float) -> str:
+    if roc > 1:  return 'Expanding'
+    if roc > 0:  return 'Positive'
+    if roc > -1: return 'Negative'
+    return 'Contracting'
+
+def _normalize_outcome(outcome: str) -> str | None:
+    if outcome in ('strong_bullish', 'bullish', 'mild_bullish'): return 'bullish'
+    if outcome in ('strong_bearish', 'bearish', 'mild_bearish'): return 'bearish'
+    return None
+
+_HEATMAP_PATTERN_SQL = """
+    SELECT
+        COUNT(*)                                              AS signal_count,
+        ROUND(
+            COUNT(*) FILTER (WHERE i.pct_chng > 0)::NUMERIC /
+            NULLIF(COUNT(*), 0) * 100
+        , 1)                                                  AS positive_day_pct,
+        ROUND(AVG(i.pct_chng)::NUMERIC, 2)                   AS avg_day_return
+    FROM  km_rule_signals       s
+    JOIN  km_astro_rule_master  r  ON r.id  = s.rule_id
+    JOIN  km_market_breadth     b  ON b.trade_date = s.date
+    JOIN  km_breadth_roc        br ON br.trade_date = s.date
+    JOIN  km_index_eod          i  ON i.trade_date  = s.date
+                                  AND i.index_id    = 1
+    WHERE r.rule_type = 'nakshatra_vara'
+      AND i.pct_chng  IS NOT NULL
+      AND CASE WHEN b.breadth_score > 55 THEN 'Elevated'
+               WHEN b.breadth_score > 35 THEN 'Moderate'
+               ELSE 'Depressed' END = %(breadth_regime)s
+      AND CASE WHEN br.roc_13 > 1  THEN 'Expanding'
+               WHEN br.roc_13 > 0  THEN 'Positive'
+               WHEN br.roc_13 > -1 THEN 'Negative'
+               ELSE 'Contracting' END = %(roc_regime)s
+      AND CASE WHEN r.outcome IN ('strong_bullish','bullish','mild_bullish') THEN 'bullish'
+               WHEN r.outcome IN ('strong_bearish','bearish','mild_bearish') THEN 'bearish'
+               ELSE NULL END = %(nakvar_outcome)s
+"""
+
+
+@app.get('/api/confluence/heatmap')
+def confluence_heatmap(date: str = None):
+    """
+    Returns today's market conditions (breadth, ROC, dominant nak-vara signal)
+    plus the 3-way historical pattern for that combination.
+    """
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    if not date:
+        date = datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
+
+    try:
+        conn = _conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+
+            # 1. Today's breadth
+            cur.execute(
+                'SELECT breadth_score FROM km_market_breadth WHERE trade_date = %s', (date,)
+            )
+            brow = cur.fetchone()
+            breadth_score   = float(brow['breadth_score']) if brow else None
+            b_regime        = _breadth_regime(breadth_score) if breadth_score is not None else None
+
+            # 2. Today's ROC
+            cur.execute(
+                'SELECT roc_13, sma_breadth FROM km_breadth_roc WHERE trade_date = %s', (date,)
+            )
+            rrow = cur.fetchone()
+            roc_13      = float(rrow['roc_13'])      if rrow and rrow['roc_13']      is not None else None
+            sma_breadth = float(rrow['sma_breadth']) if rrow and rrow['sma_breadth'] is not None else None
+            r_regime    = _roc_regime(roc_13) if roc_13 is not None else None
+
+            # Decelerating/accelerating vs SMA
+            if roc_13 is not None and sma_breadth is not None:
+                if roc_13 > 0:
+                    roc_direction = 'accelerating' if roc_13 > sma_breadth else 'decelerating'
+                else:
+                    roc_direction = 'recovering' if roc_13 > sma_breadth else 'deepening'
+            else:
+                roc_direction = None
+
+            # 3. Today's dominant nak-vara signal
+            cur.execute("""
+                SELECT r.rule_code, r.display_name AS rule_name, r.outcome,
+                       s.strength, c.confidence_score, c.total_occurrences
+                FROM  km_rule_signals      s
+                JOIN  km_astro_rule_master r ON r.id = s.rule_id
+                LEFT JOIN km_rule_confidence c ON c.rule_id = s.rule_id
+                WHERE s.date = %s
+                  AND r.rule_type = 'nakshatra_vara'
+                  AND r.is_active = TRUE
+                ORDER BY c.confidence_score DESC NULLS LAST, s.strength DESC
+                LIMIT 1
+            """, (date,))
+            nrow = cur.fetchone()
+
+            nakvar_outcome   = None
+            nakvar_rule_code = None
+            nakvar_rule_name = None
+            nakvar_strength  = None
+            nakvar_conf      = None
+            if nrow:
+                nakvar_outcome   = _normalize_outcome(nrow['outcome'] or '')
+                nakvar_rule_code = nrow['rule_code']
+                nakvar_rule_name = nrow['rule_name']
+                nakvar_strength  = nrow['strength']
+                nakvar_conf      = float(nrow['confidence_score']) if nrow['confidence_score'] else None
+
+            # 4. Vara + nakshatra from panchang
+            cur.execute(
+                'SELECT vara, vara_lord, nakshatra_name, nakshatra_lord FROM km_daily_panchang WHERE date = %s',
+                (date,)
+            )
+            prow = cur.fetchone()
+            vara            = prow['vara']          if prow else None
+            nakshatra_lord  = prow['nakshatra_lord'] if prow else None
+
+            # 5. 3-way historical pattern
+            pattern = None
+            if b_regime and r_regime and nakvar_outcome:
+                cur.execute(_HEATMAP_PATTERN_SQL, {
+                    'breadth_regime': b_regime,
+                    'roc_regime':     r_regime,
+                    'nakvar_outcome': nakvar_outcome,
+                })
+                patt = cur.fetchone()
+                if patt and patt['signal_count']:
+                    pattern = {
+                        'breadth_regime':   b_regime,
+                        'roc_regime':       r_regime,
+                        'nakvar_outcome':   nakvar_outcome,
+                        'signal_count':     int(patt['signal_count']),
+                        'positive_day_pct': float(patt['positive_day_pct']) if patt['positive_day_pct'] else None,
+                        'avg_day_return':   float(patt['avg_day_return'])   if patt['avg_day_return']   else None,
+                    }
+
+        conn.close()
+        return {
+            'date': date,
+            'conditions': {
+                'breadth_score':    breadth_score,
+                'breadth_regime':   b_regime,
+                'roc_13':           roc_13,
+                'sma_breadth':      sma_breadth,
+                'roc_regime':       r_regime,
+                'roc_direction':    roc_direction,
+                'nakvar_outcome':   nakvar_outcome,
+                'nakvar_rule_code': nakvar_rule_code,
+                'nakvar_rule_name': nakvar_rule_name,
+                'nakvar_strength':  nakvar_strength,
+                'nakvar_conf':      nakvar_conf,
+                'vara':             vara,
+                'nakshatra_lord':   nakshatra_lord,
+            },
+            'pattern': pattern,
+        }
+
+    except Exception as exc:
+        log.error(f'confluence_heatmap error for {date}: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
 def equity_magic_rs(symbol: str, from_date: str = '2025-01-01'):
     """Return Long + Short MagicRS time-series for one equity symbol."""
     try:

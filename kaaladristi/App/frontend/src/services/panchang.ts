@@ -1,5 +1,5 @@
 import { from } from './postgrest';
-import type { DailyPanchang, MarketBreadthDay, BreadthRocDay, ConfluenceData } from '@/types';
+import type { DailyPanchang, MarketBreadthDay, BreadthRocDay, ConfluenceData, ConfluenceHeatmap } from '@/types';
 
 const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
 
@@ -28,6 +28,12 @@ export async function fetchBreadthRoc(days = 66): Promise<BreadthRocDay[]> {
     .execute();
   if (error) throw new Error(`[km_breadth_roc] ${error.message}`);
   return ((data ?? []) as BreadthRocDay[]).reverse();
+}
+
+export async function fetchConfluenceHeatmap(date: string): Promise<ConfluenceHeatmap> {
+  const res = await fetch(`${PIPELINE_API}/api/confluence/heatmap?date=${encodeURIComponent(date)}`);
+  if (!res.ok) throw new Error(`[confluence/heatmap] HTTP ${res.status}`);
+  return res.json() as Promise<ConfluenceHeatmap>;
 }
 
 export async function fetchConfluenceHistorical(): Promise<ConfluenceData> {
