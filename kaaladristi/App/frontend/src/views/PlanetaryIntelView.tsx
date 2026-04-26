@@ -239,13 +239,13 @@ function useMonthEvents(year: number, month: number) {
 // ── Calendar grid view ────────────────────────────────────────────────────────
 
 const IMPACT_WEIGHTS: Record<string, number> = {
-  strong_bullish: 2,
-  bullish:        1,
-  mild_bullish:   1,
-  neutral:        0,
-  mild_bearish:  -1,
-  bearish:       -1,
-  strong_bearish:-2,
+  strong_bullish:  2,
+  bullish:         1,
+  mild_bullish:    0.5,
+  neutral:         0,
+  mild_bearish:   -0.5,
+  bearish:        -1,
+  strong_bearish: -2,
   // 'turning' absent → contributes 0 to net score
 };
 
@@ -268,18 +268,18 @@ function macroBg(macroEvts: AstroCalendarEvent[]): string {
 }
 
 function scoreToColor(score: number): string {
-  if (score >= 2)  return '#15803d';
-  if (score === 1) return '#22c55e';
-  if (score === 0) return '#6b7280';
-  if (score === -1) return '#ef4444';
-  return '#991b1b';
+  if (score >= 2)  return '#15803d'; // strong positive
+  if (score > 0)   return '#22c55e'; // positive (0.5, 1, 1.5)
+  if (score === 0) return '#6b7280'; // neutral
+  if (score > -2)  return '#ef4444'; // negative (-0.5, -1, -1.5)
+  return '#991b1b';                  // strong negative
 }
 
 function scoreToLabel(score: number): string {
   if (score >= 2)  return 'Strong Positive';
-  if (score === 1) return 'Positive';
+  if (score > 0)   return 'Positive';
   if (score === 0) return 'Neutral';
-  if (score === -1) return 'Negative';
+  if (score > -2)  return 'Negative';
   return 'Strong Negative';
 }
 
