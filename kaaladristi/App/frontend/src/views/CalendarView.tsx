@@ -1554,7 +1554,7 @@ export default function DCCalendarView() {
 
                     {/* Footer */}
                     <p className="text-[10px] text-muted text-right mt-4 mono">
-                      Kāla-Drishti · {events.length} events · {MONTH_FULL[month - 1]} {year}
+                      DristiQ · {events.length} events · {MONTH_FULL[month - 1]} {year}
                     </p>
                   </div>
 

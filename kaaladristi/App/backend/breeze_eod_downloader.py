@@ -317,7 +317,7 @@ def main():
     from_dt = parse_date(args.from_date) if args.from_date else to_dt - timedelta(days=args.days)
 
     print('=' * 60)
-    print('KALA-DRISHTI EOD DOWNLOADER (ICICI Breeze)')
+    print('DRISTIQ EOD DOWNLOADER (ICICI Breeze)')
     print('=' * 60)
     print(f'  Mode   : {args.mode}')
     print(f'  Period : {from_dt.strftime("%Y-%m-%d")} to {to_dt.strftime("%Y-%m-%d")}')

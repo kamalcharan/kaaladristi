@@ -1136,7 +1136,7 @@ def process_one(db):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='Kāla-Drishti Job Worker')
+    parser = argparse.ArgumentParser(description='DristiQ Job Worker')
     parser.add_argument('--watch', nargs='?', const=5, type=int,
                         help='Poll continuously (default: every 5 seconds)')
     args = parser.parse_args()

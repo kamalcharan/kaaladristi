@@ -165,7 +165,7 @@ export default function VisualPulsePage() {
             fontSize: 13, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
             color: 'var(--text-primary)', letterSpacing: 2,
           }}>
-            K\u0101la-Drishti
+            DristiQ
           </span>
           <span style={{
             fontSize: 15, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,

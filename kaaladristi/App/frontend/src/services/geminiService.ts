@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { DayRiskReport, MarketSymbol, HistoricalProof } from "@/types";
 
-const SYSTEM_INSTRUCTION = `You are Kala-Drishti AI.
+const SYSTEM_INSTRUCTION = `You are DristiQ AI.
 Provide professional time-cycle risk intelligence for financial markets.
 Output: Strict JSON.`;
 
