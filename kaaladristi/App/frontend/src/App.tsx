@@ -30,6 +30,8 @@ import DataPipelinePage from '@/pages/DataPipeline';
 import PanchangView from '@/views/PanchangView';
 import AdminPanchangView from '@/views/AdminPanchangView';
 import { RuleList, RuleDetail } from '@/pages/RuleEngine';
+import MarketStructureView from '@/views/MarketStructureView';
+import PlanetaryIntelView from '@/views/PlanetaryIntelView';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,7 +56,7 @@ function AppRoutes() {
     return (
       <div className="min-h-screen bg-kd-bg flex flex-col items-center justify-center gap-4">
         <Loader2 className="w-8 h-8 text-accent-indigo animate-spin" />
-        <p className="text-sm text-muted">Connecting to Kala-Drishti...</p>
+        <p className="text-sm text-muted">Connecting to DristiQ...</p>
       </div>
     );
   }
@@ -120,6 +122,8 @@ function AppRoutes() {
           <Route path="/data-pipeline" element={<DataPipelinePage />} />
           <Route path="/panchang" element={<PanchangView />} />
           <Route path="/admin/panchang" element={<AdminPanchangView />} />
+          <Route path="/market-structure" element={<MarketStructureView />} />
+          <Route path="/planetary-intel" element={<PlanetaryIntelView />} />
           <Route path="/rules" element={<RuleList />} />
           <Route path="/rules/:id" element={<RuleDetail />} />
         </Route>

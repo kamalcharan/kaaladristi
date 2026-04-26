@@ -13,7 +13,6 @@ interface TickerData {
   trade_date: string;
   close: number;
   pct_chng: number | null;
-  prev_close: number | null;
   rsi_14: number | null;
   magic_rs: number | null;
   magic_ma: number | null;
@@ -58,7 +57,7 @@ async function fetchTickerData(date: string): Promise<Record<string, TickerEntry
       if (!id) return;
 
       const { data: rows } = await from('km_index_eod')
-        .select('trade_date,close,prev_close,pct_chng,rsi_14,magic_rs,magic_ma,magic_rs_zone')
+        .select('trade_date,close,pct_chng,rsi_14,magic_rs,magic_ma,magic_rs_zone')
         .eq('index_id', id)
         .lte('trade_date', date)
         .order('trade_date', { ascending: false })
@@ -104,39 +103,39 @@ function rsiColor(rsi: number | null): string {
 
 function deriveZone(magic_rs: number | null, magic_ma: number | null): string | null {
   if (magic_rs == null || magic_ma == null) return null;
-  const diff = Math.abs(magic_rs - magic_ma);
-  // Index RS values are ~±3 scale (vs equities ~±20), use proportionally lower thresholds
-  const THRESHOLD = 1.0;
-  if (magic_rs > magic_ma) {
-    if (diff > THRESHOLD * 1.5) return 'Strong Bull';
-    if (diff > THRESHOLD)       return 'Mild Bull';
-    return 'Neutral';
-  } else {
-    if (diff > THRESHOLD * 1.5) return 'Strong Bear';
-    if (diff > THRESHOLD)       return 'Mild Bear';
-    return 'Neutral';
-  }
+  // Index RS values are ~±3 scale — proportionally lower thresholds than equity
+  const diff = magic_rs - magic_ma;
+  if (diff >  1.5) return 'Strong Bull';
+  if (diff >  1.0) return 'Mild Bull';
+  if (diff >  0)   return 'Neutral Bull';
+  if (diff < -1.5) return 'Strong Bear';
+  if (diff < -1.0) return 'Mild Bear';
+  return 'Neutral Bear';
 }
 
 function zoneColor(zone: string | null): string {
   switch (zone) {
-    case 'Strong Bull': return '#22c55e';
-    case 'Mild Bull':   return '#86efac';
-    case 'Neutral':     return 'var(--text-faint)';
-    case 'Mild Bear':   return '#fca5a5';
-    case 'Strong Bear': return '#ef4444';
-    default:            return 'var(--text-faint)';
+    case 'Strong Bull':  return '#22c55e';
+    case 'Mild Bull':    return '#86efac';
+    case 'Neutral Bull': return '#bbf7d0';
+    case 'Neutral':      return 'var(--text-faint)'; // legacy
+    case 'Neutral Bear': return '#fecaca';
+    case 'Mild Bear':    return '#fca5a5';
+    case 'Strong Bear':  return '#ef4444';
+    default:             return 'var(--text-faint)';
   }
 }
 
 function zoneShort(zone: string | null): string {
   switch (zone) {
-    case 'Strong Bull': return 'S.Bull';
-    case 'Mild Bull':   return 'M.Bull';
-    case 'Neutral':     return 'Neut';
-    case 'Mild Bear':   return 'M.Bear';
-    case 'Strong Bear': return 'S.Bear';
-    default:            return '—';
+    case 'Strong Bull':  return 'S.Bull';
+    case 'Mild Bull':    return 'M.Bull';
+    case 'Neutral Bull': return 'N.Bull';
+    case 'Neutral':      return 'Neut';   // legacy
+    case 'Neutral Bear': return 'N.Bear';
+    case 'Mild Bear':    return 'M.Bear';
+    case 'Strong Bear':  return 'S.Bear';
+    default:             return '—';
   }
 }
 
@@ -149,15 +148,14 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
   const close = data?.close ?? null;
   const rsi   = data?.rsi_14 ?? null;
 
-  // Prefer DB pct_chng, then compute from actual previous row close (most accurate),
-  // then fall back to DB prev_close column (may be stale/wrong)
-  const displayPct: number | null = data?.pct_chng ?? (
-    close != null && prev?.close != null && prev.close !== 0
-      ? ((close - prev.close) / prev.close) * 100
-      : close != null && data?.prev_close != null && data.prev_close !== 0
-        ? ((close - data.prev_close) / data.prev_close) * 100
-        : null
-  );
+  // Prefer DB pct_chng (correct after migration 068 fixed the sign bug in the pipeline).
+  // Fall back to computing from the prev row for dates not yet covered by the migration.
+  const displayPct: number | null =
+    data?.pct_chng != null
+      ? data.pct_chng
+      : close != null && prev?.close != null && prev.close !== 0
+        ? ((close - prev.close) / prev.close) * 100
+        : null;
 
   // Zone: prefer current row, fall back to previous row (magic_rs may not be computed yet)
   const zone =

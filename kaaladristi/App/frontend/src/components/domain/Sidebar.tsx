@@ -18,7 +18,8 @@ const navSections: NavSection[] = [
       { to: '/scanner',             glyph: '⊙', label: 'Scanner' },
       { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition' },
       { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch' },
-      { to: '/astro-calendar',      glyph: '☽', label: 'Planetary Intel' },
+      { to: '/market-structure',     glyph: '⊞', label: 'Market Structure' },
+      { to: '/planetary-intel',     glyph: '☽', label: 'Planetary Intel' },
       { to: '/panchang',            glyph: '☿', label: 'Panchang' },
       { to: '/pulse/1',             glyph: '◌', label: 'Visual Pulse' },
     ],
@@ -110,7 +111,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               lineHeight: 1.2,
             }}
           >
-            Kāla-<em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Drishti</em>
+            Dristi<em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Q</em>
           </div>
           <div
             style={{

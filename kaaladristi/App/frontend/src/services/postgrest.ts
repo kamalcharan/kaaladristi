@@ -17,7 +17,7 @@ const anonKey = (
 
 if (!postgrestUrl) {
   console.error(
-    '[Kala-Drishti] PostgREST URL missing!\n' +
+    '[DristiQ] PostgREST URL missing!\n' +
     '  VITE_POSTGREST_URL:', postgrestUrl ? 'set' : 'MISSING', '\n' +
     '  Make sure .env file exists in App/frontend/ with this value.'
   );
@@ -34,7 +34,7 @@ function resolveBase(url: string): string {
 
 const BASE_URL = resolveBase(postgrestUrl || '');
 
-console.log('[Kala-Drishti] PostgREST URL:', BASE_URL || '(not set)');
+console.log('[DristiQ] PostgREST URL:', BASE_URL || '(not set)');
 
 /** Get current auth token (JWT from localStorage, or anon key) */
 function getAuthToken(): string {
