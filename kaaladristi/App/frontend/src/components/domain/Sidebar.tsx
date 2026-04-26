@@ -110,7 +110,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               lineHeight: 1.2,
             }}
           >
-            Kāla-<em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Drishti</em>
+            Dristi<em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Q</em>
           </div>
           <div
             style={{

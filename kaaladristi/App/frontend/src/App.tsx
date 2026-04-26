@@ -54,7 +54,7 @@ function AppRoutes() {
     return (
       <div className="min-h-screen bg-kd-bg flex flex-col items-center justify-center gap-4">
         <Loader2 className="w-8 h-8 text-accent-indigo animate-spin" />
-        <p className="text-sm text-muted">Connecting to Kala-Drishti...</p>
+        <p className="text-sm text-muted">Connecting to DristiQ...</p>
       </div>
     );
   }

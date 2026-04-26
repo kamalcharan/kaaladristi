@@ -139,7 +139,7 @@ async def lifespan(app: FastAPI):
         log.info('worker subprocess stopped')
 
 
-app = FastAPI(title='Kāla-Drishti Pipeline v2 API', version='2.0.0', lifespan=lifespan)
+app = FastAPI(title='DristiQ Pipeline v2 API', version='2.0.0', lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

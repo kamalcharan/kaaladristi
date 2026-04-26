@@ -398,7 +398,7 @@ def backfill_isin_from_bse(sb, bse_equities):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Seed BSE equities and MCX commodities into Kāla-Drishti'
+        description='Seed BSE equities and MCX commodities into DristiQ'
     )
     parser.add_argument('--dry-run', action='store_true',
                         help='Show what would be inserted without writing to DB')

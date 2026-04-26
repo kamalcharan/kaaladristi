@@ -461,7 +461,7 @@ def show_status(db, days: int = 14):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Kāla-Drishti Daily Data Pipeline'
+        description='DristiQ Daily Data Pipeline'
     )
     parser.add_argument('--date', type=str, default=None,
                         help='Trade date (YYYY-MM-DD). Default: last trading day')
