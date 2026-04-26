@@ -10,6 +10,7 @@ import {
   DensityToggle,
   ActionIsland,
   MarketWeatherCard,
+  HistoricalContextCard,
   type Density,
 } from '@/components/domain/DashboardV3';
 import TickerRail        from '@/components/domain/DashboardV3/TickerRail';
@@ -66,13 +67,16 @@ export default function DashboardV3View() {
       {/* ── ROW 0: Ticker Rail — always visible ── */}
       <TickerRail date={displayDate} />
 
-      {/* ── ROW 1: Astro-Technical Alignment (65%) + Panchangam (35%) — always visible ── */}
+      {/* ── ROW 1: Astro-Technical Alignment (65%) + Panchangam + Historical Context (35%) ── */}
       <div
         className="grid gap-4 mb-4"
         style={{ gridTemplateColumns: '65fr 35fr' }}
       >
         <MarketWeatherCard date={displayDate} />
-        <PanchangamCard date={displayDate} />
+        <div className="flex flex-col gap-4">
+          <PanchangamCard date={displayDate} />
+          <HistoricalContextCard date={displayDate} />
+        </div>
       </div>
 
       {/* ── ROW 2: Market Breadth + ROC charts — calm hidden ── */}

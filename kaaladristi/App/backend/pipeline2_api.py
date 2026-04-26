@@ -1170,6 +1170,120 @@ _ASTRO_RANGE_SQL = """
 """
 
 
+@app.get('/api/dashboard/context')
+def dashboard_context(date: str = Query(default=None)):
+    """
+    Historical context for a given date: same vara + nakshatra_lord + paksha + breadth regime.
+    Returns occurrence count, positive%, avg return, and last 5 matching dates with NIFTY returns.
+    """
+    if date is None:
+        date = datetime.now(tz=__import__('zoneinfo').ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d')
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        raise HTTPException(status_code=400, detail='date must be YYYY-MM-DD')
+
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT vara, nakshatra_name, nakshatra_lord, paksha, tithi_name, dlnl_match
+            FROM km_daily_panchang
+            WHERE date = %s
+        """, (date,))
+        panchang = cur.fetchone()
+        if not panchang:
+            cur.close()
+            return {"available": False}
+
+        vara, nak_name, nak_lord, paksha, tithi, dlnl = panchang
+
+        cur.execute("""
+            SELECT breadth_score,
+                CASE WHEN breadth_score > 55 THEN 'Elevated'
+                     WHEN breadth_score > 35 THEN 'Moderate'
+                     ELSE 'Depressed' END AS regime
+            FROM km_market_breadth
+            WHERE trade_date <= %s
+            ORDER BY trade_date DESC LIMIT 1
+        """, (date,))
+        breadth_row = cur.fetchone()
+        breadth_score = float(breadth_row[0]) if breadth_row else None
+        breadth_regime = breadth_row[1] if breadth_row else 'Unknown'
+
+        _regime_case = """
+            CASE WHEN b.breadth_score > 55 THEN 'Elevated'
+                 WHEN b.breadth_score > 35 THEN 'Moderate'
+                 ELSE 'Depressed' END
+        """
+
+        cur.execute(f"""
+            SELECT
+                COUNT(*) AS occurrences,
+                ROUND(AVG(e.pct_chng)::numeric, 2) AS avg_return,
+                ROUND(
+                    COUNT(*) FILTER (WHERE e.pct_chng > 0)::numeric
+                    / NULLIF(COUNT(*), 0) * 100
+                , 1) AS positive_pct
+            FROM km_daily_panchang p
+            JOIN km_market_breadth b ON b.trade_date = p.date
+            JOIN km_index_eod e ON e.trade_date = p.date AND e.index_id = 1
+            WHERE p.vara = %s
+              AND p.nakshatra_lord = %s
+              AND p.paksha = %s
+              AND {_regime_case} = %s
+              AND p.date < %s
+              AND e.pct_chng IS NOT NULL
+        """, (vara, nak_lord, paksha, breadth_regime, date))
+        stats = cur.fetchone()
+        occurrences = int(stats[0]) if stats else 0
+        avg_return   = float(stats[1]) if stats and stats[1] is not None else None
+        positive_pct = float(stats[2]) if stats and stats[2] is not None else None
+
+        cur.execute(f"""
+            SELECT p.date, e.pct_chng
+            FROM km_daily_panchang p
+            JOIN km_market_breadth b ON b.trade_date = p.date
+            JOIN km_index_eod e ON e.trade_date = p.date AND e.index_id = 1
+            WHERE p.vara = %s
+              AND p.nakshatra_lord = %s
+              AND p.paksha = %s
+              AND {_regime_case} = %s
+              AND p.date < %s
+              AND e.pct_chng IS NOT NULL
+            ORDER BY p.date DESC
+            LIMIT 5
+        """, (vara, nak_lord, paksha, breadth_regime, date))
+        recent = [{"date": str(r[0]), "return": float(r[1])} for r in cur.fetchall()]
+        cur.close()
+
+    except Exception as e:
+        log.error(f'dashboard_context error for {date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+    return {
+        "available": True,
+        "date": date,
+        "conditions": {
+            "vara": vara,
+            "nakshatra": nak_name,
+            "nakshatra_lord": nak_lord,
+            "paksha": paksha,
+            "breadth_regime": breadth_regime,
+            "breadth_score": breadth_score,
+        },
+        "historical": {
+            "occurrences": occurrences,
+            "positive_pct": positive_pct,
+            "avg_return": avg_return,
+            "recent": recent,
+        },
+    }
+
+
 @app.get('/api/astro/daily-signal')
 def astro_daily_signal(date: str = None):
     if not date:
