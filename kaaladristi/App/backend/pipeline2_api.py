@@ -2789,7 +2789,7 @@ def confluence_timeline(days: int = 30):
             """, {'days': max(1, min(days, 120))})
             rows = cur.fetchall()
         conn.close()
-        return _stringify_dates(list(reversed(rows)))
+        return [_stringify_dates(dict(r)) for r in reversed(rows)]
     except Exception as exc:
         log.error(f'confluence_timeline error: {exc}')
         raise HTTPException(status_code=500, detail=str(exc))
