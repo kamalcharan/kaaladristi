@@ -41,9 +41,22 @@ try:
         assemble_instrument_context,
         assemble_market_pulse_context,
     )
+    from lib.vani_intents import INTENTS as _VANI_INTENTS, get_intents_for_page as _get_intents_for_page  # noqa: E402
+    from lib.vani_assemblers import (                         # noqa: E402
+        assemble_dashboard_context,
+        format_user_message,
+        assemble_astro_calendar_context,
+        format_astro_user_message,
+        assemble_industry_transition_context,
+        format_industry_user_message,
+        assemble_equity_context,
+        format_equity_user_message,
+    )
     _AI_OPTIONAL_OK = True
 except ImportError:
     _AI_SKILLS = {}
+    _VANI_INTENTS = {}
+    _get_intents_for_page = lambda page: {}  # noqa: E731
     _ai_complete = lambda **_: None  # noqa: E731
     _AI_ENABLED = False
     _AI_OPTIONAL_OK = False
@@ -190,6 +203,14 @@ class CalendarMarkRequest(BaseModel):
 
 class VaNiDailyRequest(BaseModel):
     date: Optional[str] = None    # YYYY-MM-DD; defaults to today (IST)
+
+
+class VaNiAskRequest(BaseModel):
+    intent_id: str
+    date: Optional[str] = None          # YYYY-MM-DD; defaults to today (IST)
+    entity_type: Optional[str] = None   # 'equity' | 'index'
+    entity_id: Optional[int] = None
+    page_context: Optional[str] = None
 
 
 # Dependency order for the 'all' backfill — downloads first (so EOD data
@@ -1667,6 +1688,7 @@ def panchang_note_delete(note_id: int):
 _insight_cache: dict[str, object] = {}
 
 _vani_cache: dict[str, dict] = {}
+_intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
 _VANI_CACHE_TTL_HOURS = 24
 
 _VANI_SYSTEM_PROMPT = """You are VaNi (Vāṇī), the voice of knowledge for DristiQ — \
@@ -3084,4 +3106,171 @@ def vani_daily(req: VaNiDailyRequest):
 
     _vani_cache[date_str] = {'text': interpretation, 'cached_at': datetime.now()}
     return {'date': date_str, 'interpretation': interpretation, 'cached': False}
+
+
+# ── VaNi Intent System ────────────────────────────────────────────────────────
+
+def _llm_call(system: str, user: str, max_tokens: int) -> str | None:
+    """Call LLM: try ai_client first, fall back to LLM_BASE_URL direct call."""
+    result = _ai_complete(system=system, user=user, max_tokens=max_tokens)
+    if result is not None:
+        return result
+    llm_base = os.getenv('LLM_BASE_URL', '').rstrip('/')
+    if not llm_base:
+        return None
+    try:
+        import requests as _req
+        resp = _req.post(
+            f'{llm_base}/chat/completions',
+            json={
+                'messages': [
+                    {'role': 'system', 'content': system},
+                    {'role': 'user',   'content': user},
+                ],
+                'max_tokens': max_tokens,
+                'temperature': 0.4,
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        return resp.json()['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        log.error(f'VaNi LLM_BASE_URL call failed: {e}')
+        return None
+
+
+@app.get('/api/vani/intents')
+def vani_intents(page: str = 'dashboard'):
+    """Return available intents for a given page, keyed for the frontend."""
+    page_intents = _get_intents_for_page(page)
+    return [
+        {'intent_id': k, 'label': v.label, 'page': v.page}
+        for k, v in page_intents.items()
+    ]
+
+
+@app.post('/api/vani/ask')
+def vani_ask(req: VaNiAskRequest):
+    """
+    Execute a VaNi intent and return a natural-language response.
+
+    Request:  { intent_id, date?, entity_type?, entity_id?, page_context? }
+    Response: { intent_id, date, response, ai, cached, provider, error? }
+    """
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
+    intent_id = req.intent_id
+
+    # Look up intent definition
+    intent = _VANI_INTENTS.get(intent_id)
+    if not intent:
+        return {
+            'intent_id': intent_id, 'date': date_str,
+            'response': None, 'ai': False, 'cached': False,
+            'provider': None, 'error': f'Unknown intent: {intent_id}',
+        }
+
+    # Cache check — key includes entity so different stocks don't collide
+    cache_key = f'{intent_id}:{date_str}:{req.entity_id or ""}'
+    cached_entry = _intent_cache.get(cache_key)
+    if cached_entry:
+        age_h = (datetime.now() - cached_entry['cached_at']).total_seconds() / 3600
+        if age_h < intent.cache_ttl_hours:
+            return {
+                'intent_id': intent_id, 'date': date_str,
+                'response': cached_entry['text'],
+                'ai': True, 'cached': True,
+                'provider': cached_entry.get('provider'),
+            }
+
+    # Assemble context + format user message based on intent page group
+    db = _db()
+    try:
+        prefix = intent_id.split('.')[0]
+
+        if prefix == 'dashboard':
+            ctx = assemble_dashboard_context(db, date_str)
+            user_msg = format_user_message(intent_id, ctx) if ctx else None
+
+        elif prefix == 'astro_calendar':
+            ctx = assemble_astro_calendar_context(db, date_str)
+            user_msg = format_astro_user_message(intent_id, ctx) if ctx else None
+
+        elif prefix == 'industry_transition':
+            ctx = assemble_industry_transition_context(db, date_str)
+            user_msg = format_industry_user_message(intent_id, ctx) if ctx else None
+
+        elif prefix == 'equity':
+            if not req.entity_id:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': None, 'ai': False, 'cached': False,
+                    'provider': None, 'error': 'entity_id required for equity intents',
+                }
+            ctx = assemble_equity_context(
+                db,
+                entity_id=req.entity_id,
+                page_context=req.page_context,
+                target_date=date_str,
+                entity_type=req.entity_type or 'equity',
+            )
+            user_msg = format_equity_user_message(intent_id, ctx) if ctx else None
+
+        else:
+            return {
+                'intent_id': intent_id, 'date': date_str,
+                'response': None, 'ai': False, 'cached': False,
+                'provider': None, 'error': f'No assembler for intent prefix: {prefix}',
+            }
+
+    except Exception as e:
+        log.error(f'vani_ask assembler error [{intent_id}]: {e}')
+        return {
+            'intent_id': intent_id, 'date': date_str,
+            'response': None, 'ai': False, 'cached': False,
+            'provider': None, 'error': 'Context assembly failed',
+        }
+
+    if not user_msg:
+        return {
+            'intent_id': intent_id, 'date': date_str,
+            'response': None, 'ai': False, 'cached': False,
+            'provider': None, 'error': 'No data available for this date',
+        }
+
+    # Call LLM
+    provider = os.getenv('AI_PROVIDER', 'local')
+    response_text = _llm_call(
+        system=intent.system_prompt,
+        user=user_msg,
+        max_tokens=intent.max_tokens,
+    )
+
+    if not response_text:
+        return {
+            'intent_id': intent_id, 'date': date_str,
+            'response': None, 'ai': False, 'cached': False,
+            'provider': None, 'error': 'LLM unavailable',
+        }
+
+    _intent_cache[cache_key] = {
+        'text': response_text,
+        'cached_at': datetime.now(),
+        'provider': provider,
+    }
+    return {
+        'intent_id': intent_id, 'date': date_str,
+        'response': response_text,
+        'ai': True, 'cached': False,
+        'provider': provider,
+    }
+
+
+@app.delete('/api/vani/cache')
+def vani_cache_clear(intent_id: str):
+    """Admin: clear cached response for a specific intent (all dates/entities)."""
+    removed = [k for k in list(_intent_cache.keys()) if k.startswith(f'{intent_id}:')]
+    for k in removed:
+        del _intent_cache[k]
+    return {'cleared': len(removed), 'intent_id': intent_id}
 
