@@ -101,10 +101,12 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
     visible.forEach((d, i) => {
       const zone = d.magic_rs_zone;
       let fillColor: string | null = null;
-      if (zone === 'Strong Bull') fillColor = colGreen + '0D'; // 5% opacity
-      else if (zone === 'Mild Bull') fillColor = colGreen + '08'; // 3% opacity
-      else if (zone === 'Mild Bear') fillColor = colRed + '08';
-      else if (zone === 'Strong Bear') fillColor = colRed + '0D';
+      if (zone === 'Strong Bull')       fillColor = colGreen + '0D';
+      else if (zone === 'Mild Bull')    fillColor = colGreen + '08';
+      else if (zone === 'Neutral Bull') fillColor = colGreen + '04';
+      else if (zone === 'Neutral Bear') fillColor = colRed + '04';
+      else if (zone === 'Mild Bear')    fillColor = colRed + '08';
+      else if (zone === 'Strong Bear')  fillColor = colRed + '0D';
 
       if (fillColor) {
         ctx.fillStyle = fillColor;

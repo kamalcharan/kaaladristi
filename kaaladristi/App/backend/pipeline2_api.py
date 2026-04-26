@@ -2462,3 +2462,68 @@ def confidence_yearly(rule_id: int):
     except Exception as exc:
         raise HTTPException(500, f'Yearly confidence query failed: {exc}')
 
+
+# ── MagicRS ───────────────────────────────────────────────────────────────────
+
+def _rs_signal(long_zone: str | None, short_zone: str | None) -> str:
+    long_positive  = 'Bull' in (long_zone  or '')
+    short_positive = 'Bull' in (short_zone or '')
+    if long_positive and short_positive:
+        return 'Strong Alignment'
+    elif not long_positive and short_positive:
+        return 'Emerging Recovery'
+    elif long_positive and not short_positive:
+        return 'Tactical Pullback'
+    else:
+        return 'Negative Alignment'
+
+
+@app.get('/api/equity/magicrs')
+def equity_magic_rs(symbol: str, from_date: str = '2025-01-01'):
+    """Return Long + Short MagicRS time-series for one equity symbol."""
+    try:
+        conn = _conn()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT e.trade_date,
+                       e.magic_rs, e.magic_ma, e.magic_rs_zone,
+                       e.magic_rs_short, e.magic_rs_short_ma, e.magic_rs_short_zone
+                FROM km_equity_eod e
+                JOIN km_equity_symbols s ON s.id = e.equity_id
+                WHERE s.symbol = %s
+                  AND e.trade_date >= %s
+                ORDER BY e.trade_date ASC
+            """, (symbol, from_date))
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+
+        if not rows:
+            return {'symbol': symbol, 'data': [], 'latest': None}
+
+        for r in rows:
+            if hasattr(r['trade_date'], 'isoformat'):
+                r['trade_date'] = r['trade_date'].isoformat()
+            for k in ('magic_rs', 'magic_ma', 'magic_rs_short', 'magic_rs_short_ma'):
+                if r[k] is not None:
+                    r[k] = float(r[k])
+
+        latest     = rows[-1]
+        long_zone  = latest.get('magic_rs_zone')
+        short_zone = latest.get('magic_rs_short_zone')
+
+        return {
+            'symbol': symbol,
+            'data': rows,
+            'latest': {
+                'long_rs':    latest.get('magic_rs'),
+                'long_ma':    latest.get('magic_ma'),
+                'long_zone':  long_zone,
+                'short_rs':   latest.get('magic_rs_short'),
+                'short_ma':   latest.get('magic_rs_short_ma'),
+                'short_zone': short_zone,
+                'signal':     _rs_signal(long_zone, short_zone),
+            },
+        }
+    except Exception as exc:
+        raise HTTPException(500, f'Magic RS query failed: {exc}')
+
