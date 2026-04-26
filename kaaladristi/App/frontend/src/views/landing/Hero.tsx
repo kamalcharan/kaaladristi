@@ -40,7 +40,7 @@ export function Hero({ atmo, loading }: { atmo: Atmo | null; loading: boolean })
             </FadeUp>
             <FadeUp delay={80}>
               <h1 style={{ fontFamily:SERIF, fontWeight:400, color:C.ink1, fontSize:'clamp(42px,6.4vw,92px)', lineHeight:1.02, letterSpacing:'-0.02em', margin:0 }}>
-                Where Bharat's<br/>
+                Where Bharath's<br/>
                 <em style={{ fontStyle:'italic', color:C.g1 }}>ancient sky</em><br/>
                 meets the<br/>
                 <em style={{ fontStyle:'italic' }}>modern market.</em>
