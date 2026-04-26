@@ -6,6 +6,7 @@ import {
   PanchangamCard, MarketBreadthChart, BreadthRocChart, SevenDayStrip,
   SectorRotationStrip, IndexWatchlist, MagicRsLeaderboard,
   AstroSignalBadge, AstroSignalWeekPanel, AstroIntelligencePanel,
+  VaNiCard,
 } from '@/components/domain';
 
 interface DashboardViewProps {
@@ -43,7 +44,12 @@ export default function DashboardView({ report }: DashboardViewProps) {
         <PanchangamCard date={report.date} />
       </div>
 
-      {/* ═══ Row 1b: Astro Signal — Week Ahead (full width) ═══ */}
+      {/* ═══ Row 1b: VaNi Atmospheric Reading (full width) ═══ */}
+      <div className="mb-5">
+        <VaNiCard date={report.date} />
+      </div>
+
+      {/* ═══ Row 1c: Astro Signal — Week Ahead (full width) ═══ */}
       <div className="mb-5">
         <AstroSignalWeekPanel date={report.date} />
       </div>

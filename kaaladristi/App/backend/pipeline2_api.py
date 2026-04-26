@@ -188,6 +188,10 @@ class CalendarMarkRequest(BaseModel):
     exchange: Optional[str] = None  # None → apply to both NSE and BSE
 
 
+class VaNiDailyRequest(BaseModel):
+    date: Optional[str] = None    # YYYY-MM-DD; defaults to today (IST)
+
+
 # Dependency order for the 'all' backfill — downloads first (so EOD data
 # exists before any compute), then the compute DAG. 14 jobs total.
 BACKFILL_ALL_ORDER = [
@@ -1661,6 +1665,27 @@ def panchang_note_delete(note_id: int):
 # ── VaNi AI Endpoints ─────────────────────────────────────────────────────
 
 _insight_cache: dict[str, object] = {}
+
+_vani_cache: dict[str, dict] = {}
+_VANI_CACHE_TTL_HOURS = 24
+
+_VANI_SYSTEM_PROMPT = """You are VaNi (Vāṇī), the voice of knowledge for DristiQ — \
+a Vedic astronomical market intelligence platform for Indian traders.
+
+Your role: Generate factual, educational, non-predictive explanations of astronomical \
+conditions and their historical correlation with NSE market behavior.
+
+Rules:
+- Never use: buy, sell, bullish, bearish, up, down, rise, fall
+- Use: positive correlation, negative correlation, historically associated, \
+  recorded instances, atmospheric conditions
+- Always cite data when available (occurrences, %)
+- Maximum 4 sentences
+- End with macro backdrop context
+- Use astronomical terminology: vara, nakshatra, tithi, paksha, combust, \
+  retrograde, conjunction, vedh
+- Tone: scholarly, observational, non-advisory
+- Language: English with Sanskrit terms where natural"""
 _db_singleton = None
 
 
@@ -2956,4 +2981,107 @@ def equity_magic_rs(symbol: str, from_date: str = '2025-01-01'):
         }
     except Exception as exc:
         raise HTTPException(500, f'Magic RS query failed: {exc}')
+
+
+# ── VaNi Daily Interpretation ─────────────────────────────────────────────────
+
+@app.post('/api/vani/daily')
+def vani_daily(req: VaNiDailyRequest):
+    """
+    Generate a VaNi atmospheric reading for a given date.
+    Builds a prompt from panchang + rule signal counts, then calls the configured
+    LLM (AI_ENABLED path) or falls back to the local LLM at LLM_BASE_URL.
+    Results are cached for VANI_CACHE_TTL_HOURS hours.
+    """
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
+
+    # Serve from cache if fresh
+    if date_str in _vani_cache:
+        cached = _vani_cache[date_str]
+        if datetime.now() - cached['cached_at'] < timedelta(hours=_VANI_CACHE_TTL_HOURS):
+            return {'date': date_str, 'interpretation': cached['text'], 'cached': True}
+
+    # Fetch panchang + signal counts from DB
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT vara, vara_lord, nakshatra_name, nakshatra_lord,
+                       tithi_name, yoga_name, paksha
+                FROM km_daily_panchang
+                WHERE date = %s
+            """, (date_str,))
+            panchang = cur.fetchone()
+
+            cur.execute("""
+                SELECT
+                    COUNT(*)                                                              AS total,
+                    COUNT(*) FILTER (WHERE r.outcome IN
+                        ('strong_bullish','bullish','mild_bullish'))                     AS positive,
+                    COUNT(*) FILTER (WHERE r.outcome IN
+                        ('strong_bearish','bearish','mild_bearish'))                     AS negative
+                FROM km_rule_signals s
+                JOIN km_astro_rule_master r ON r.id = s.rule_id
+                WHERE s.date = %s
+                  AND r.is_active  = TRUE
+                  AND r.is_deleted = FALSE
+            """, (date_str,))
+            sig_row = cur.fetchone()
+    except Exception as e:
+        log.error(f'vani_daily DB error for {date_str}: {e}')
+        return {'date': date_str, 'interpretation': 'VaNi is unavailable at this time.', 'cached': False}
+    finally:
+        conn.close()
+
+    if not panchang:
+        return {'date': date_str, 'interpretation': 'No panchang data available for this date.', 'cached': False}
+
+    vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
+    total    = int(sig_row[0]) if sig_row else 0
+    positive = int(sig_row[1]) if sig_row else 0
+    negative = int(sig_row[2]) if sig_row else 0
+
+    user_msg = (
+        f"Astronomical conditions for {date_str}:\n"
+        f"Vara: {vara} (lord: {vara_lord})\n"
+        f"Nakshatra: {nak_name} (lord: {nak_lord})\n"
+        f"Tithi: {tithi} · {paksha} Paksha\n"
+        f"Yoga: {yoga}\n\n"
+        f"Rule signals today: {total} active\n"
+        f"Breakdown: {positive} positive · {negative} negative\n\n"
+        f"Generate a 3-4 sentence VaNi interpretation."
+    )
+
+    # Try existing AI client (AI_ENABLED + AI_PROVIDER + AI_API_KEY configured)
+    interpretation = _ai_complete(system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300)
+
+    # Fallback: direct call to local LLM via LLM_BASE_URL (OpenAI-compatible)
+    if interpretation is None:
+        llm_base = os.getenv('LLM_BASE_URL', '').rstrip('/')
+        if llm_base:
+            try:
+                import requests as _req
+                resp = _req.post(
+                    f'{llm_base}/chat/completions',
+                    json={
+                        'messages': [
+                            {'role': 'system', 'content': _VANI_SYSTEM_PROMPT},
+                            {'role': 'user',   'content': user_msg},
+                        ],
+                        'max_tokens': 300,
+                        'temperature': 0.4,
+                    },
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                interpretation = resp.json()['choices'][0]['message']['content'].strip()
+            except Exception as e:
+                log.error(f'VaNi LLM fallback failed: {e}')
+
+    if not interpretation:
+        interpretation = 'VaNi is unavailable at this time.'
+
+    _vani_cache[date_str] = {'text': interpretation, 'cached_at': datetime.now()}
+    return {'date': date_str, 'interpretation': interpretation, 'cached': False}
 
