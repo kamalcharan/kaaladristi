@@ -3110,6 +3110,43 @@ def vani_daily(req: VaNiDailyRequest):
 
 # ── VaNi Intent System ────────────────────────────────────────────────────────
 
+# Single system prompt for all /api/vani/ask calls.
+# Gemma 2.8B hallucinates when given loose instructions — these absolute rules
+# override whatever per-intent focus text is in vani_intents.py.
+_VANI_ASK_SYSTEM = (
+    "You are VaNi, an atmospheric intelligence narrator for DristiQ — "
+    "a Vedic astronomical market intelligence platform for Indian traders.\n\n"
+    "ABSOLUTE RULES — never violate these:\n"
+    "1. ONLY use data explicitly provided in the user message below. Never invent, "
+    "assume, or extrapolate any numbers, sector names, company names, planet positions, "
+    "nakshatra names, percentages, or dates not explicitly stated.\n"
+    "2. NEVER use these words: buy, sell, long, short, invest, recommend, predict, "
+    "forecast, bullish, bearish, up, down, rise, fall, rally, correction, target.\n"
+    "3. REPLACE directional words with: recorded, observed, historically associated, "
+    "atmospheric conditions, noted correlation, registered.\n"
+    "4. Write exactly 3-4 sentences. No lists. No bullet points. No headers.\n"
+    "5. If any data field says N/A, missing, or unavailable — skip it entirely. "
+    "Do not substitute or guess.\n"
+    "6. End with one sentence referencing the macro backdrop using only transit "
+    "data provided.\n"
+    "7. If the provided data is insufficient to generate a meaningful response, "
+    'output exactly: "Insufficient atmospheric data for this period."\n\n'
+    "Tone: scholarly, calm, observational. Non-advisory. Educational only.\n"
+    "Language: English with Sanskrit astronomical terms where they appear in the data."
+)
+
+
+def _wrap_vani_user_msg(user_msg: str) -> str:
+    """Wrap every vani/ask user message with grounding delimiters."""
+    return (
+        "Narrate the following data only. "
+        "Do not add anything not listed below.\n\n"
+        "[DATA START]\n"
+        + user_msg +
+        "\n[DATA END]"
+    )
+
+
 def _llm_call(system: str, user: str, max_tokens: int) -> str | None:
     """Call LLM: try ai_client first, fall back to LLM_BASE_URL direct call."""
     result = _ai_complete(system=system, user=user, max_tokens=max_tokens)
@@ -3238,11 +3275,12 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': 'No data available for this date',
         }
 
-    # Call LLM
+    # Call LLM — use the single anti-hallucination system prompt for all intents;
+    # wrap user_msg with grounding delimiters so Gemma can't drift outside the data.
     provider = os.getenv('AI_PROVIDER', 'local')
     response_text = _llm_call(
-        system=intent.system_prompt,
-        user=user_msg,
+        system=_VANI_ASK_SYSTEM,
+        user=_wrap_vani_user_msg(user_msg),
         max_tokens=intent.max_tokens,
     )
 
