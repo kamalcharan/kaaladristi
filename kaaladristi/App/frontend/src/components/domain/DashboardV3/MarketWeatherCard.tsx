@@ -23,6 +23,7 @@ export interface MarketWeatherProps {
       roc_13: number;
       roc_13_prev: number;
       normalized: number;
+      sma_breadth?: number;
     };
     breadth: {
       breadth_score: number;
@@ -39,6 +40,16 @@ function barColor(normalized: number): string {
   if (normalized >= 0.45) return '#f59e0b';
   if (normalized >= 0.35) return '#f97316';
   return '#ef4444';
+}
+
+// ── Helper: ROC crossover color ───────────────────────────────────────────────
+
+function rocCrossoverColor(roc_13: number, sma_breadth: number | undefined): string {
+  const s = sma_breadth ?? 0;
+  if (roc_13 > 0 && roc_13 > s) return '#22c55e';   // accelerating — green
+  if (roc_13 > 0 && roc_13 <= s) return '#f97316';  // decelerating — orange
+  if (roc_13 <= 0 && roc_13 > s) return '#f59e0b';  // recovering — amber
+  return '#ef4444';                                   // falling — red
 }
 
 // ── Helper: momentum arrow + color from ROC delta ────────────────────────────
@@ -101,6 +112,7 @@ const sampleData: MarketWeatherProps = {
       roc_13: 0.86,
       roc_13_prev: 1.09,
       normalized: 0.50,
+      sma_breadth: 1.09,
     },
     breadth: {
       breadth_score: 51.57,
@@ -352,6 +364,7 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
         rightSub={`${roc.roc_13 > 0 ? '+' : ''}${roc.roc_13.toFixed(2)}`}
         arrowGlyph={arrowGlyph}
         arrowColor={arrowColor}
+        colorOverride={rocCrossoverColor(roc.roc_13, roc.sma_breadth)}
       />
       <BarRow
         label="Breadth"
