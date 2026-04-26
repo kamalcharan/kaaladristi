@@ -286,6 +286,69 @@ export interface BreadthRocDay {
   stock_count: number | null;
 }
 
+// ── Confluence Historical (from /api/confluence/historical) ──
+
+export interface ConfluenceCell {
+  outcome:          string;          // 'bullish' | 'bearish' (DB value)
+  breadth_regime:   string | null;   // 'Depressed' | 'Moderate' | 'Elevated'
+  roc_regime:       string | null;   // 'Contracting' | 'Negative' | 'Positive' | 'Expanding'
+  signal_count:     number;
+  positive_day_pct: number | null;   // % of days where NIFTY pct_chng > 0
+  avg_day_return:   number | null;   // avg same-day NIFTY pct_chng
+}
+
+export interface ConfluenceData {
+  breadth_rows:  ConfluenceCell[];
+  roc_rows:      ConfluenceCell[];
+  total_signals: number;
+}
+
+// keep alias so legacy references don't break
+export type ConfluenceRow = ConfluenceCell;
+
+// ── Confluence Heatmap — today's conditions + 3-way historical pattern ──
+
+export interface ConfluenceConditions {
+  breadth_score:    number | null;
+  breadth_regime:   string | null;
+  roc_13:           number | null;
+  sma_breadth:      number | null;
+  roc_regime:       string | null;
+  roc_direction:    string | null;   // 'accelerating' | 'decelerating' | 'recovering' | 'deepening'
+  nakvar_outcome:   string | null;   // 'bullish' | 'bearish'
+  nakvar_rule_code: string | null;
+  nakvar_rule_name: string | null;
+  nakvar_strength:  number | null;
+  nakvar_conf:      number | null;
+  vara:             string | null;
+  nakshatra_lord:   string | null;
+}
+
+export interface ConfluencePattern {
+  breadth_regime:   string;
+  roc_regime:       string;
+  nakvar_outcome:   string;
+  signal_count:     number;
+  positive_day_pct: number | null;
+  avg_day_return:   number | null;
+}
+
+export interface ConfluenceHeatmap {
+  date:       string;
+  conditions: ConfluenceConditions;
+  pattern:    ConfluencePattern | null;
+}
+
+// ── Confluence Timeline (from /api/confluence/timeline) ──
+
+export interface ConfluenceTimelineEntry {
+  trade_date:     string;
+  nifty_return:   number | null;
+  breadth_score:  number | null;
+  roc_13:         number | null;
+  nakvar_outcome: 'bullish' | 'bearish' | null;
+}
+
 // ── Index Catalog (from mv_index_catalog) ──
 
 export interface IndexCatalogItem {

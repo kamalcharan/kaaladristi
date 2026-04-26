@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc } from '@/services/panchang';
+import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc, fetchConfluenceHistorical, fetchConfluenceHeatmap, fetchConfluenceTimeline } from '@/services/panchang';
 import { fetchAstroSignal, fetchAstroWeek, fetchAstroTransits } from '@/services/astro';
 import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
@@ -175,5 +175,33 @@ export function useActiveIndexes() {
       return rows.filter(r => r.is_active && r.record_count > 0);
     },
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useConfluenceHeatmap(date: string) {
+  return useQuery({
+    queryKey: ['confluence_heatmap', date],
+    queryFn: () => fetchConfluenceHeatmap(date),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!date,
+    retry: false,
+  });
+}
+
+export function useConfluenceHistorical() {
+  return useQuery({
+    queryKey: ['confluence_historical'],
+    queryFn: fetchConfluenceHistorical,
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useConfluenceTimeline(days: number) {
+  return useQuery({
+    queryKey: ['confluence_timeline', days],
+    queryFn: () => fetchConfluenceTimeline(days),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }

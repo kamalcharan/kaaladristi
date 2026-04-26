@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play, WifiOff, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play, WifiOff, X, Eraser } from 'lucide-react';
 import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast, ToastContainer } from '@/components/ui';
@@ -9,7 +9,7 @@ import { useBackendStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
-import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery } from './discoveryService';
+import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery, dropRuleSignals } from './discoveryService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +53,21 @@ interface RuleSignal {
   strength: number | null;
   details: string | null;
   matched: boolean | null;
+  actual_market_return: number | null;
+  partial_day: boolean | null;
+}
+
+const DAILY_ONLY_TYPES = new Set(['nakshatra_vara', 'tithi_alone', 'eclipse']);
+
+function signalToTransit(s: RuleSignal): RuleTransit {
+  return {
+    id: s.id,
+    start_date: s.date,
+    end_date: s.date,
+    duration_days: 1,
+    nifty_return_pct: s.actual_market_return,
+    matched: s.matched,
+  };
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -120,7 +135,7 @@ async function fetchRuleSignals(ruleId: number, page: number): Promise<SignalsPa
   const today = new Date().toISOString().split('T')[0];
   const offset = page * PAGE_SIZE;
   const { data, error, count } = await from('km_rule_signals')
-    .select('id,date,signal,strength,details,matched')
+    .select('id,date,signal,strength,details,matched,actual_market_return,partial_day')
     .eq('rule_id', ruleId)
     .lte('date', today)
     .order('date', { ascending: false })
@@ -129,6 +144,20 @@ async function fetchRuleSignals(ruleId: number, page: number): Promise<SignalsPa
     .execute();
   if (error) throw new Error(error.message);
   return { rows: (data as RuleSignal[]) ?? [], total: count ?? 0 };
+}
+
+async function fetchSignalReturns(ruleId: number): Promise<RuleTransit[]> {
+  const today = new Date().toISOString().split('T')[0];
+  const { data, error } = await from('km_rule_signals')
+    .select('id,date,matched,actual_market_return,partial_day')
+    .eq('rule_id', ruleId)
+    .lte('date', today)
+    .notNull('actual_market_return')
+    .order('date', { ascending: false })
+    .limit(300)
+    .execute();
+  if (error) throw new Error(error.message);
+  return ((data as RuleSignal[]) ?? []).map(signalToTransit);
 }
 
 async function fetchUpcomingSignals(ruleId: number): Promise<RuleSignal[]> {
@@ -145,12 +174,13 @@ async function fetchUpcomingSignals(ruleId: number): Promise<RuleSignal[]> {
 }
 
 async function fetchRuleTransits(ruleId: number): Promise<RuleTransit[]> {
+  const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await from('km_rule_transits')
     .select('id,start_date,end_date,duration_days,nifty_return_pct,matched')
     .eq('rule_id', ruleId)
-    .lte('end_date', new Date().toISOString().slice(0, 10))
+    .lte('start_date', today)   // include ongoing transits (end_date may be in future)
     .order('start_date', { ascending: false })
-    .limit(20)
+    .limit(100)
     .execute();
   if (error) throw new Error(error.message);
   return (data as RuleTransit[]) ?? [];
@@ -228,6 +258,8 @@ function ConditionsBlock({ conditions }: { conditions: Record<string, unknown> |
   );
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function confidenceColor(score: number | null): string {
   if (score == null) return 'text-muted';
   if (score >= 70) return 'text-risk-green';
@@ -246,170 +278,770 @@ function fmtPct(v: number | null, decimals = 1): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
 }
 
-function ConfidenceSummary({ conf }: { conf: RuleConfidence }) {
-  const cards = [
-    {
-      label: 'Historical Transits',
-      value: conf.historical_transits != null ? String(conf.historical_transits) : '—',
-      color: 'text-secondary',
-    },
-    {
-      label: 'Matched',
-      value: conf.matched_count != null && conf.total_occurrences != null
-        ? `${conf.matched_count}/${conf.total_occurrences}`
-        : conf.matched_count != null ? String(conf.matched_count) : '—',
-      color: 'text-secondary',
-    },
-    {
-      label: 'Confidence Score',
-      value: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—',
-      color: confidenceColor(conf.confidence_score),
-    },
-    {
-      label: 'Avg Return',
-      value: fmtPct(conf.avg_return_all),
-      color: returnColor(conf.avg_return_all),
-    },
+function regimeOf(ret: number | null): 'bull' | 'side' | 'bear' {
+  if (ret == null) return 'side';
+  if (ret > 1.5) return 'bull';
+  if (ret < -1.5) return 'bear';
+  return 'side';
+}
+
+// ── Per-Transit Bar Chart ─────────────────────────────────────────────────────
+
+function PerTransitBarChart({ transits, highlightId, onHighlight }: {
+  transits: RuleTransit[];
+  highlightId: number | null;
+  onHighlight: (id: number | null) => void;
+}) {
+  const W = 1100, H = 320;
+  const PAD = { l: 52, r: 114, t: 30, b: 58 };
+
+  const sorted = useMemo(() =>
+    [...transits]
+      .filter(t => t.nifty_return_pct != null)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    [transits]
+  );
+
+  const avgDuration = useMemo(() => {
+    if (sorted.length === 0) return 0;
+    return Math.round(sorted.reduce((s, t) => s + (t.duration_days ?? 0), 0) / sorted.length);
+  }, [sorted]);
+
+  if (sorted.length < 1) return null;
+
+  const n = sorted.length;
+  const chartW = W - PAD.l - PAD.r;
+  const chartH = H - PAD.t - PAD.b;
+  const chartBotY = PAD.t + chartH;
+  const baseline  = PAD.t + chartH / 2;
+
+  const returns = sorted.map(t => t.nifty_return_pct ?? 0);
+  const maxAbs     = Math.max(...returns.map(Math.abs), 1);
+  const paddedMax  = maxAbs * 1.18;
+  const avgReturn  = returns.reduce((s, v) => s + v, 0) / n;
+  const medianReturn = (() => {
+    const s = [...returns].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+  })();
+
+  const slotW = chartW / n;
+  const barW  = Math.max(3, Math.min(slotW * 0.62, 18));
+
+  const yForRet  = (ret: number) => baseline - (ret / paddedMax) * (chartH / 2);
+  const xForIdx  = (i: number)   => PAD.l + (i + 0.5) * slotW;
+  const avgLineY = yForRet(avgReturn);
+
+  // Y-axis ticks
+  const tickStep = paddedMax > 20 ? 10 : paddedMax > 9 ? 5 : 2;
+  const ticks: number[] = [];
+  for (let v = -Math.ceil(paddedMax / tickStep) * tickStep; v <= paddedMax; v += tickStep) ticks.push(v);
+
+  // Year labels — first bar of each year
+  const yearMarks: Array<{ year: number; x: number }> = [];
+  let prevYear = -1;
+  sorted.forEach((t, i) => {
+    const yr = parseInt(t.start_date.slice(0, 4));
+    if (yr !== prevYear) { yearMarks.push({ year: yr, x: xForIdx(i) }); prevYear = yr; }
+  });
+
+  const startYear   = parseInt(sorted[0].start_date.slice(0, 4));
+  const endYear     = parseInt(sorted[n - 1].start_date.slice(0, 4));
+  const windowYears = endYear - startYear;
+  const today       = new Date().toISOString().slice(0, 10);
+  const windowLabel = windowYears > 0 ? `${windowYears}Y window` : sorted[0].start_date.slice(0, 7);
+
+  return (
+    <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
+      <div className="px-5 pt-4 pb-2">
+        <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1.5">
+          Per-Transit Performance · {n} event{n !== 1 ? 's' : ''} · {windowLabel} · as of {today}
+        </p>
+        <p className="font-display text-xl text-white leading-snug">
+          Each bar is{' '}
+          <em className="not-italic text-accent-gold font-medium">one transit</em>
+          {' '}— the rule fires{avgDuration > 0 ? `, runs for ~${avgDuration}d,` : ''} and ends. Between events, nothing is held.
+          {n < 5 && <span className="text-[11px] font-sans font-normal text-muted ml-2">({n} event{n !== 1 ? 's' : ''} — more history accumulates over time)</span>}
+        </p>
+      </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
+        {/* Grid lines */}
+        {ticks.map(v => {
+          const y = yForRet(v);
+          if (y < PAD.t || y > chartBotY) return null;
+          return (
+            <g key={v}>
+              <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
+                stroke={v === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.04)'}
+                strokeWidth={v === 0 ? 0.9 : 0.5}
+                strokeDasharray={v === 0 ? undefined : '3 6'}
+              />
+              <text x={PAD.l - 5} y={y + 3.5}
+                fill="rgba(148,163,184,0.45)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
+                {v > 0 ? `+${v}%` : `${v}%`}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Bars + match dots */}
+        {sorted.map((t, i) => {
+          const ret   = t.nifty_return_pct ?? 0;
+          const x     = xForIdx(i);
+          const isPos = ret >= 0;
+          const barTop = isPos ? yForRet(ret) : baseline;
+          const barH   = Math.max(1.5, Math.abs(yForRet(ret) - baseline));
+          const isHl  = highlightId === t.id;
+          const dim   = highlightId != null && !isHl;
+
+          return (
+            <g key={t.id} style={{ cursor: 'pointer' }} onClick={() => onHighlight(isHl ? null : t.id)}>
+              {isHl && (
+                <line x1={x} y1={PAD.t} x2={x} y2={chartBotY}
+                  stroke="var(--gold)" strokeWidth="0.7" strokeDasharray="2 3" opacity="0.55"/>
+              )}
+              {/* Bar: filled green for positive, hollow red for negative */}
+              <rect
+                x={x - barW / 2} y={barTop} width={barW} height={barH}
+                fill={isPos ? 'var(--bull)' : 'none'}
+                stroke={isPos ? 'none' : 'var(--bear)'}
+                strokeWidth={isPos ? 0 : 1.2}
+                opacity={dim ? 0.15 : isHl ? 1 : 0.82}
+              />
+              {/* Match dot at zero baseline */}
+              <circle cx={x} cy={ret >= 0 ? baseline + 8 : baseline - 8} r={2.2}
+                fill={
+                  t.matched === true  ? 'var(--bull)' :
+                  t.matched === false ? 'var(--bear)' :
+                  'rgba(255,255,255,0.12)'
+                }
+                opacity={dim ? 0.18 : 0.9}
+              />
+            </g>
+          );
+        })}
+
+        {/* Avg return dashed line + label */}
+        {avgLineY > PAD.t && avgLineY < chartBotY && (
+          <>
+            <line x1={PAD.l} y1={avgLineY} x2={W - PAD.r} y2={avgLineY}
+              stroke="var(--gold)" strokeWidth="1.2" strokeDasharray="5 4" opacity="0.75"/>
+            <text x={W - PAD.r + 7} y={avgLineY + 4}
+              fill="var(--gold)" fontFamily="monospace" fontSize="9" letterSpacing="0.5">
+              {`AVG ${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}%`}
+            </text>
+          </>
+        )}
+
+        {/* Year labels */}
+        {yearMarks.map(({ year, x }) => (
+          <text key={year} x={x} y={H - 8}
+            fill="rgba(148,163,184,0.38)" fontFamily="monospace" fontSize="9" textAnchor="middle">
+            {year}
+          </text>
+        ))}
+      </svg>
+
+      {/* Reading guide */}
+      <div className="px-4 py-2.5 border-t border-kd-border/30 flex items-center gap-5 flex-wrap">
+        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+          <span className="w-2.5 h-2.5 bg-risk-green shrink-0 opacity-80"/>
+          Positive return
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+          <span className="w-2.5 h-2.5 border border-risk-red shrink-0"/>
+          Negative return
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] font-mono text-muted">
+          <span className="w-2 h-2 rounded-full bg-risk-green shrink-0"/>
+          Matched ·
+          <span className="w-2 h-2 rounded-full bg-risk-red shrink-0 mx-1"/>
+          Unmatched (dot at baseline)
+        </span>
+        <span className="text-[10px] font-mono text-accent-gold">
+          {`— AVG ${avgReturn >= 0 ? '+' : ''}${avgReturn.toFixed(1)}%`}
+        </span>
+        <span className="text-[10px] font-mono text-accent-indigo/80">
+          {`MED ${medianReturn >= 0 ? '+' : ''}${medianReturn.toFixed(1)}%`}
+        </span>
+        <span className="text-[10px] font-mono text-muted ml-auto">click bar to highlight row</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Stat Grid ─────────────────────────────────────────────────────────────────
+
+function BacktestStatGrid({ conf, transits, isDaily = false }: {
+  conf: RuleConfidence; transits: RuleTransit[]; isDaily?: boolean;
+}) {
+  const occ = isDaily ? 'signals' : 'transits';
+  const n = conf.total_occurrences ?? 0;
+  const confQual = n < 20 ? 'MODERATE' : n < 50 ? 'STRONG' : 'VERY STRONG';
+  const hitRate = conf.matched_count != null && n > 0
+    ? `${((conf.matched_count / n) * 100).toFixed(0)}% hit rate`
+    : '';
+
+  // Best/worst dates from local data
+  const scored = transits.filter(t => t.nifty_return_pct != null);
+  const bestT  = scored.reduce<RuleTransit | null>((b, t) =>
+    b == null || (t.nifty_return_pct ?? -Infinity) > (b.nifty_return_pct ?? -Infinity) ? t : b, null);
+  const worstT = scored.reduce<RuleTransit | null>((b, t) =>
+    b == null || (t.nifty_return_pct ?? Infinity) < (b.nifty_return_pct ?? Infinity) ? t : b, null);
+
+  const top = [
+    { k: 'CONFIDENCE',  v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—', sub: `${confQual} · n=${n}`, color: confidenceColor(conf.confidence_score), big: true },
+    { k: 'HISTORICAL',  v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: n > 0 ? `${n} scored` : '', color: 'text-white' },
+    { k: 'MATCHED',     v: conf.matched_count != null && n > 0 ? `${conf.matched_count}/${n}` : '—', sub: hitRate, color: 'text-accent-gold' },
+    { k: 'AVG RETURN',  v: fmtPct(conf.avg_return_all), sub: `All ${occ}`, color: returnColor(conf.avg_return_all) },
+    { k: 'AVG MATCHED', v: fmtPct(conf.avg_return_matched), sub: conf.matched_count != null ? `${conf.matched_count} ${occ}` : '', color: 'text-risk-green' },
+  ];
+  const bot = [
+    { k: 'AVG UNMATCHED', v: fmtPct(conf.avg_return_unmatched), sub: conf.matched_count != null && n > 0 ? `${n - conf.matched_count} ${occ}` : '', color: 'text-risk-red/70' },
+    { k: isDaily ? 'BEST DAY'  : 'BEST TRANSIT',  v: fmtPct(conf.best_return),  sub: bestT?.start_date  ?? '', color: 'text-risk-green' },
+    { k: isDaily ? 'WORST DAY' : 'WORST TRANSIT', v: fmtPct(conf.worst_return), sub: worstT?.start_date ?? '', color: 'text-risk-red/70' },
+    { k: 'AVG DURATION', v: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', sub: isDaily ? 'Per signal' : 'Window length', color: 'text-secondary' },
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {cards.map(({ label, value, color }) => (
-          <div key={label} className="flex flex-col items-center justify-center gap-1 py-4 rounded-xl border border-kd-border bg-kd-elevated/40 text-center">
-            <span className={cn('text-2xl font-semibold tabular-nums', color)}>{value}</span>
-            <span className="text-[11px] text-muted font-mono">{label}</span>
+    <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
+      {/* Top row — Confidence gets extra width */}
+      <div className="grid grid-cols-2 sm:grid-cols-[1.3fr_1fr_1fr_1fr_1fr] divide-y sm:divide-y-0 divide-x divide-kd-border/50">
+        {top.map((s, i) => (
+          <div key={i} className="px-4 py-5">
+            <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-2">{s.k}</p>
+            <p className={cn('font-mono font-semibold tabular-nums leading-none', i === 0 ? 'text-3xl' : 'text-xl', s.color)}>{s.v}</p>
+            {s.sub && <p className="text-[10px] font-mono text-muted mt-1.5">{s.sub}</p>}
           </div>
         ))}
       </div>
-
-      <div className="rounded-xl border border-kd-border bg-kd-elevated/20 px-4 py-3 space-y-3">
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Avg when matched', value: fmtPct(conf.avg_return_matched), color: returnColor(conf.avg_return_matched) },
-            { label: 'Avg when not matched', value: fmtPct(conf.avg_return_unmatched), color: returnColor(conf.avg_return_unmatched) },
-            { label: 'Avg duration', value: conf.avg_duration_days != null ? `${conf.avg_duration_days.toFixed(1)}d` : '—', color: 'text-secondary' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex flex-col items-center gap-0.5 text-center">
-              <span className={cn('text-sm font-semibold tabular-nums', color)}>{value}</span>
-              <span className="text-[10px] font-mono text-muted">{label}</span>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-4 pt-2 border-t border-kd-border/40">
-          {[
-            { label: 'Best transit', value: fmtPct(conf.best_return), color: returnColor(conf.best_return) },
-            { label: 'Worst transit', value: fmtPct(conf.worst_return), color: returnColor(conf.worst_return) },
-            { label: 'Total scored', value: conf.total_occurrences != null ? `${conf.total_occurrences} transits` : '—', color: 'text-muted' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex flex-col items-center gap-0.5 text-center">
-              <span className={cn('text-sm font-semibold tabular-nums', color)}>{value}</span>
-              <span className="text-[10px] font-mono text-muted">{label}</span>
-            </div>
-          ))}
-        </div>
+      {/* Bottom row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-kd-border/50 border-t border-kd-border/50">
+        {bot.map((s, i) => (
+          <div key={i} className="px-4 py-3">
+            <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">{s.k}</p>
+            <p className={cn('font-mono text-lg font-semibold tabular-nums', s.color)}>{s.v}</p>
+            {s.sub && <p className="text-[10px] font-mono text-muted mt-1">{s.sub}</p>}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function YearlyTable({ rows }: { rows: RuleConfidenceYearly[] }) {
-  if (rows.length === 0) return null;
-  const recent = rows.slice(0, 15);
+// ── Regime Grid ───────────────────────────────────────────────────────────────
+
+function RegimeGrid({ transits }: { transits: RuleTransit[] }) {
+  const regimes = useMemo(() => {
+    const done = transits.filter(t => t.nifty_return_pct != null);
+    return (['bull', 'side', 'bear'] as const).map(regime => {
+      const sub = done.filter(t => regimeOf(t.nifty_return_pct) === regime);
+      const matched = sub.filter(t => t.matched === true);
+      const avg = sub.length
+        ? sub.reduce((s, t) => s + (t.nifty_return_pct ?? 0), 0) / sub.length
+        : 0;
+      return { regime, count: sub.length, matched: matched.length, avg };
+    });
+  }, [transits]);
+
+  const maxCount = Math.max(...regimes.map(r => r.count), 1);
+
+  const CFG = {
+    bull: { label: 'Bull Regime', accent: 'text-risk-green',  bar: 'bg-risk-green'  },
+    side: { label: 'Sideways',    accent: 'text-risk-amber',  bar: 'bg-risk-amber'  },
+    bear: { label: 'Bear Regime', accent: 'text-risk-red/80', bar: 'bg-risk-red'    },
+  } as const;
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-kd-border">
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr className="border-b border-kd-border bg-kd-elevated/60">
-            {['Year', 'Transits', 'Matched', 'Win%', 'Avg Return', 'Avg Days'].map(h => (
-              <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {recent.map(row => (
-            <tr key={row.year} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
-              <td className="px-3 py-2 text-xs font-mono text-secondary tabular-nums">{row.year}</td>
-              <td className="px-3 py-2 text-xs tabular-nums text-center">{row.transits}</td>
-              <td className="px-3 py-2 text-xs tabular-nums text-center">{row.matched}</td>
-              <td className="px-3 py-2 text-xs tabular-nums text-center">
-                <span className={confidenceColor(row.win_pct)}>
-                  {row.win_pct != null ? `${row.win_pct.toFixed(1)}%` : '—'}
-                </span>
-              </td>
-              <td className="px-3 py-2 text-xs tabular-nums text-center">
-                <span className={returnColor(row.avg_return)}>{fmtPct(row.avg_return)}</span>
-              </td>
-              <td className="px-3 py-2 text-xs tabular-nums text-center text-muted">
-                {row.avg_duration != null ? `${row.avg_duration.toFixed(1)}d` : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="rounded-xl border border-kd-border bg-kd-card p-4">
+      <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-3">Performance by Market Regime</p>
+      <div className="grid grid-cols-3 gap-3">
+        {regimes.map(r => {
+          const c = CFG[r.regime];
+          return (
+            <div key={r.regime} className="rounded-lg border border-kd-border bg-kd-elevated/50 px-3 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className={cn('text-[10px] font-mono uppercase tracking-wider', c.accent)}>{c.label}</span>
+                <span className="text-[10px] font-mono text-muted">n={r.count}</span>
+              </div>
+              <p className={cn('text-xl font-mono font-semibold tabular-nums', r.avg >= 0 ? 'text-risk-green' : 'text-risk-red/80')}>
+                {fmtPct(r.avg)}
+              </p>
+              <p className="text-[10px] font-mono text-muted mt-1">
+                {r.matched}/{r.count} matched · {r.count ? ((r.matched / r.count) * 100).toFixed(0) : 0}% hit
+              </p>
+              <div className="mt-2.5 h-1 rounded-full bg-kd-border/60">
+                <div
+                  className={cn('h-1 rounded-full opacity-50', c.bar)}
+                  style={{ width: `${(r.count / maxCount) * 100}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function TransitTable({ transits, upcoming = false }: { transits: RuleTransit[]; upcoming?: boolean }) {
-  if (transits.length === 0) return null;
+// ── Distribution Chart ────────────────────────────────────────────────────────
+
+const DIST_BUCKETS = [
+  { lo: -15, hi: -10 },
+  { lo: -10, hi: -5 },
+  { lo: -5,  hi:  0 },
+  { lo:  0,  hi:  5 },
+  { lo:  5,  hi: 10 },
+  { lo: 10,  hi: 20 },
+  { lo: 20,  hi: 40 },
+];
+
+function DistributionChart({ transits }: { transits: RuleTransit[] }) {
+  const W = 540, H = 190;
+  const PAD = { l: 30, r: 20, t: 36, b: 44 };
+
+  const returns = transits
+    .filter(t => t.nifty_return_pct != null)
+    .map(t => t.nifty_return_pct!);
+
+  if (returns.length === 0) return null;
+
+  const counts = DIST_BUCKETS.map(b => ({
+    ...b,
+    count: returns.filter(r => r >= b.lo && r < b.hi).length,
+    isNeg: b.hi <= 0,
+  }));
+
+  const maxCount = Math.max(...counts.map(c => c.count), 1);
+  const avg = returns.reduce((s, v) => s + v, 0) / returns.length;
+
+  const chartW = W - PAD.l - PAD.r;
+  const chartH = H - PAD.t - PAD.b;
+  const barSlot = chartW / DIST_BUCKETS.length;
+  const chartBotY = PAD.t + chartH;
+
+  const fullRange = DIST_BUCKETS[DIST_BUCKETS.length - 1].hi - DIST_BUCKETS[0].lo;
+  const avgClipped = Math.max(DIST_BUCKETS[0].lo, Math.min(DIST_BUCKETS[DIST_BUCKETS.length - 1].hi, avg));
+  const avgLineX = PAD.l + ((avgClipped - DIST_BUCKETS[0].lo) / fullRange) * chartW;
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-kd-border">
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr className="border-b border-kd-border bg-kd-elevated/60">
-            {['Start', 'End', 'Days', ...(upcoming ? [] : ['Return', 'Matched'])].map(h => (
-              <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {transits.map(t => (
-            <tr key={t.id} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
-              <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{t.start_date}</td>
-              <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{t.end_date}</td>
-              <td className="px-3 py-2 text-xs tabular-nums text-center text-muted">{t.duration_days}</td>
-              {!upcoming && (
-                <>
+    <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
+      <div className="px-4 pt-4 pb-1">
+        <p className="text-[10px] font-mono text-muted uppercase tracking-wider">Return Distribution · {returns.length} transits</p>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
+        {counts.map((b, i) => {
+          const bH = (b.count / maxCount) * chartH;
+          const bX = PAD.l + i * barSlot;
+          const color = b.isNeg ? 'var(--bear)' : 'var(--bull)';
+          return (
+            <g key={i}>
+              {bH > 0 && (
+                <rect x={bX + 2} y={chartBotY - bH} width={barSlot - 4} height={bH}
+                  fill={color} opacity={0.72}/>
+              )}
+              {b.count > 0 && (
+                <text x={bX + barSlot / 2} y={chartBotY - bH - 5}
+                  fill="rgba(148,163,184,0.75)" fontFamily="monospace" fontSize="9" textAnchor="middle">
+                  {b.count}
+                </text>
+              )}
+              <text x={bX + barSlot / 2} y={chartBotY + 14}
+                fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="middle">
+                {b.lo >= 0 ? `+${b.lo}` : `${b.lo}`}
+              </text>
+            </g>
+          );
+        })}
+        <text x={W - PAD.r} y={chartBotY + 14}
+          fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
+          +40
+        </text>
+        <line x1={PAD.l} y1={chartBotY} x2={W - PAD.r} y2={chartBotY}
+          stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"/>
+        <line x1={avgLineX} y1={PAD.t} x2={avgLineX} y2={chartBotY}
+          stroke="var(--gold)" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.8"/>
+        <text x={avgLineX + 3} y={PAD.t + 11}
+          fill="var(--gold)" fontFamily="monospace" fontSize="8.5">
+          {`AVG ${avg >= 0 ? '+' : ''}${avg.toFixed(1)}%`}
+        </text>
+      </svg>
+      <div className="px-4 pb-3 border-t border-kd-border/30 pt-2">
+        <p className="text-[10px] font-mono text-muted italic">
+          Are wins spread across many transits, or do a few outliers inflate the average?
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Alpha Chart ───────────────────────────────────────────────────────────────
+
+function AlphaChart({ transits }: { transits: RuleTransit[] }) {
+  const W = 540, H = 190;
+  const PAD = { l: 52, r: 80, t: 36, b: 44 };
+
+  const scored = useMemo(() =>
+    [...transits]
+      .filter(t => t.nifty_return_pct != null)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    [transits]
+  );
+
+  if (scored.length < 2) return null;
+
+  const returns = scored.map(t => t.nifty_return_pct!);
+  const avg = returns.reduce((s, v) => s + v, 0) / returns.length;
+  // Alpha here = deviation from mean (how each transit beats/misses the rule's own avg)
+  const alphas = returns.map(r => r - avg);
+  const maxAbsAlpha = Math.max(...alphas.map(Math.abs), 0.5);
+  const paddedMax = maxAbsAlpha * 1.2;
+
+  const chartW = W - PAD.l - PAD.r;
+  const chartH = H - PAD.t - PAD.b;
+  const chartBotY = PAD.t + chartH;
+  const baseline = PAD.t + chartH / 2;
+  const n = scored.length;
+  const barSlot = chartW / n;
+  const barW = Math.max(3, Math.min(barSlot * 0.65, 16));
+
+  const yFor = (v: number) => baseline - (v / paddedMax) * (chartH / 2);
+  const xFor = (i: number) => PAD.l + (i + 0.5) * barSlot;
+
+  const tickStep = paddedMax > 5 ? 5 : 2;
+  const ticks: number[] = [];
+  for (let v = -Math.ceil(paddedMax / tickStep) * tickStep; v <= paddedMax; v += tickStep) ticks.push(v);
+
+  return (
+    <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
+      <div className="px-4 pt-4 pb-1">
+        <p className="text-[10px] font-mono text-muted uppercase tracking-wider">Return vs Average (α) · {n} transits</p>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block' }}>
+        {ticks.map(v => {
+          const y = yFor(v);
+          if (y < PAD.t || y > chartBotY) return null;
+          return (
+            <g key={v}>
+              <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
+                stroke={v === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)'}
+                strokeWidth={v === 0 ? 0.8 : 0.5} strokeDasharray={v === 0 ? undefined : '3 6'}/>
+              <text x={PAD.l - 5} y={y + 3.5}
+                fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
+                {v > 0 ? `+${v}%` : `${v}%`}
+              </text>
+            </g>
+          );
+        })}
+        {alphas.map((alpha, i) => {
+          const x = xFor(i);
+          const isPos = alpha >= 0;
+          const barTop = isPos ? yFor(alpha) : baseline;
+          const barH = Math.max(1.5, Math.abs(yFor(alpha) - baseline));
+          return (
+            <rect key={i}
+              x={x - barW / 2} y={barTop} width={barW} height={barH}
+              fill={isPos ? 'var(--bull)' : 'none'}
+              stroke={isPos ? 'none' : 'var(--bear)'}
+              strokeWidth={isPos ? 0 : 1.2}
+              opacity={0.75}
+            />
+          );
+        })}
+        {/* avg line = 0 baseline already at center; show label on right */}
+        <text x={W - PAD.r + 6} y={baseline + 4}
+          fill="var(--gold)" fontFamily="monospace" fontSize="8.5">
+          AVG
+        </text>
+      </svg>
+      <div className="px-4 pb-3 border-t border-kd-border/30 pt-2">
+        <p className="text-[10px] font-mono text-muted italic">
+          Green = transit beat the rule's average · Red = missed · Centred on {avg >= 0 ? '+' : ''}{avg.toFixed(1)}% avg
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Tabbed detail panel ───────────────────────────────────────────────────────
+
+function BacktestTabs({
+  transits, upcomingTransits,
+  signals, upcomingSignals,
+  signalsPage, setSignalsPage, signalsTotal,
+  yearlyConf,
+  highlightId, onHighlight,
+}: {
+  transits: RuleTransit[];
+  upcomingTransits: RuleTransit[];
+  signals: RuleSignal[];
+  upcomingSignals: RuleSignal[];
+  signalsPage: number;
+  setSignalsPage: (fn: (p: number) => number) => void;
+  signalsTotal: number;
+  yearlyConf: RuleConfidenceYearly[];
+  highlightId: number | null;
+  onHighlight: (id: number | null) => void;
+}) {
+  const [tab, setTab] = useState<'transits' | 'upcoming' | 'signals' | 'occurrences' | 'yearly'>('transits');
+  const totalPages = Math.ceil(signalsTotal / PAGE_SIZE);
+
+  const tabs = [
+    { key: 'transits'    as const, label: `Transits · ${transits.length}` },
+    { key: 'upcoming'    as const, label: `Upcoming · ${upcomingTransits.length}` },
+    { key: 'signals'     as const, label: `Next Signals · ${upcomingSignals.length}` },
+    { key: 'occurrences' as const, label: `Daily · ${signalsTotal.toLocaleString()}` },
+    ...(yearlyConf.length > 0 ? [{ key: 'yearly' as const, label: `Year-by-Year · ${yearlyConf.length}` }] : []),
+  ];
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="rounded-xl border border-kd-border bg-kd-card overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex items-center justify-between border-b border-kd-border/60 px-1 overflow-x-auto">
+        <div className="flex">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={cn(
+                'px-4 py-3 text-[11px] font-mono uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors',
+                tab === t.key
+                  ? 'border-accent-gold text-accent-gold'
+                  : 'border-transparent text-muted hover:text-secondary',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Transits tab */}
+      {tab === 'transits' && (
+        transits.length === 0
+          ? <p className="px-4 py-6 text-sm text-muted text-center">No transits recorded — run discovery to populate</p>
+          : <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-kd-border bg-kd-elevated/60">
+                  {['Start', 'End', 'Days', 'Nifty Return', 'Regime', 'Matched'].map(h => (
+                    <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {transits.map(t => {
+                  const isActive  = t.nifty_return_pct == null && t.end_date >= today;
+                  const regime    = regimeOf(t.nifty_return_pct);
+                  const isHl      = highlightId === t.id;
+                  const regimeCfg = { bull: 'text-risk-green', side: 'text-risk-amber', bear: 'text-risk-red/70' } as const;
+                  return (
+                    <tr
+                      key={t.id}
+                      onClick={() => onHighlight(isHl ? null : t.id)}
+                      className={cn(
+                        'border-b border-kd-border/40 cursor-pointer transition-colors',
+                        isHl ? 'bg-accent-gold/8 border-l-2 border-l-accent-gold' : 'hover:bg-kd-elevated/40',
+                      )}
+                    >
+                      <td className="px-3 py-2.5 text-xs font-mono text-secondary whitespace-nowrap">{t.start_date}</td>
+                      <td className="px-3 py-2.5 text-xs font-mono text-secondary whitespace-nowrap">{t.end_date}</td>
+                      <td className="px-3 py-2.5 text-xs tabular-nums text-center text-muted">{t.duration_days}</td>
+                      <td className="px-3 py-2.5 text-xs tabular-nums text-center">
+                        {isActive
+                          ? <span className="text-risk-amber font-mono animate-pulse">◉ LIVE</span>
+                          : <span className={returnColor(t.nifty_return_pct)}>{fmtPct(t.nifty_return_pct)}</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-[10px] font-mono uppercase">
+                        <span className={cn(regimeCfg[regime])}>{regime}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-center">
+                        {isActive
+                          ? <span className="text-risk-amber font-mono text-[10px]">ACTIVE</span>
+                          : <span className={t.matched === true ? 'text-risk-green' : t.matched === false ? 'text-risk-red/60' : 'text-muted'}>
+                              {t.matched === true ? '✓ Match' : t.matched === false ? '✕ Miss' : '—'}
+                            </span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+      )}
+
+      {/* Upcoming tab */}
+      {tab === 'upcoming' && (
+        upcomingTransits.length === 0
+          ? <p className="px-4 py-6 text-sm text-muted text-center">No upcoming transits in data range</p>
+          : <div className="overflow-x-auto">
+              {/* Header */}
+              <div className="grid grid-cols-[120px_120px_70px_1fr_100px_1fr] gap-2.5 px-4 py-2.5 border-b border-kd-border bg-kd-elevated/60">
+                {['START', 'END', 'DAYS', 'AGING', 'STRENGTH', 'NOTE'].map(h => (
+                  <span key={h} className="text-[9.5px] font-mono text-muted uppercase tracking-wider">{h}</span>
+                ))}
+              </div>
+              {upcomingTransits.map(t => {
+                const inDays  = Math.round((new Date(t.start_date + 'T00:00:00').getTime() - Date.now()) / 86400000);
+                const agingPct = Math.max(5, 100 - Math.min(100, inDays / 10));
+                const agingColor = inDays < 30 ? 'text-accent-gold' : inDays < 180 ? 'text-secondary' : 'text-muted';
+                const agingBar   = inDays < 30 ? 'bg-accent-gold' : inDays < 180 ? 'bg-secondary' : 'bg-kd-border';
+                const stars   = inDays < 7 ? 5 : inDays < 30 ? 4 : inDays < 180 ? 3 : 2;
+                const note    = inDays < 7 ? 'Imminent — watch' : inDays < 90 ? 'Future window' : 'Long window — rare';
+                return (
+                  <div key={t.id} className="grid grid-cols-[120px_120px_70px_1fr_100px_1fr] gap-2.5 items-center px-4 py-3 border-b border-kd-border/40 hover:bg-kd-elevated/30 transition-colors">
+                    <span className="font-mono text-[12.5px] text-white tabular-nums">{t.start_date}</span>
+                    <span className="font-mono text-[12.5px] text-secondary tabular-nums">{t.end_date}</span>
+                    <span className="font-mono text-xs text-muted tabular-nums">{t.duration_days}d</span>
+                    <span className="flex items-center gap-2">
+                      <span className={cn('font-mono text-[13px] tabular-nums font-medium', agingColor)}>in {inDays}d</span>
+                      <div className="flex-1 h-[3px] bg-kd-border/50 rounded-full overflow-hidden">
+                        <div className={cn('h-full rounded-full opacity-70', agingBar)} style={{ width: `${agingPct}%` }}/>
+                      </div>
+                    </span>
+                    <span className="text-accent-gold text-sm tracking-wider">{'★'.repeat(stars)}</span>
+                    <span className={cn('text-xs', inDays < 7 ? 'text-accent-gold italic' : 'text-muted')}>{note}</span>
+                  </div>
+                );
+              })}
+          </div>
+      )}
+
+      {/* Next Signals tab */}
+      {tab === 'signals' && (
+        upcomingSignals.length === 0
+          ? <p className="px-4 py-6 text-sm text-muted text-center">No upcoming signals in data range</p>
+          : <div className="p-4 flex flex-wrap gap-3">
+              {upcomingSignals.map((s, i) => {
+                const dt = new Date(s.date + 'T00:00:00');
+                const inDays = Math.round((dt.getTime() - Date.now()) / 86400000);
+                const isNext = i === 0;
+                return (
+                  <div key={s.id} className={cn(
+                    'min-w-[140px] px-4 py-3 border',
+                    isNext
+                      ? 'border-accent-gold/40 bg-accent-gold/5'
+                      : 'border-kd-border bg-kd-elevated/30',
+                  )}>
+                    <p className={cn('font-mono text-[10px] uppercase tracking-wider mb-1', isNext ? 'text-accent-gold' : 'text-muted')}>
+                      {isNext ? `Next · in ${inDays}d` : `T+${inDays}d`}
+                    </p>
+                    <p className="font-mono text-lg font-medium text-white">{s.date}</p>
+                    <p className="font-mono text-[10px] text-muted mt-1 uppercase">
+                      {dt.toLocaleDateString('en-US', { weekday: 'long' })}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+      )}
+
+      {/* Occurrences tab */}
+      {tab === 'occurrences' && (
+        signals.length === 0 && signalsTotal === 0
+          ? <p className="px-4 py-6 text-sm text-muted text-center">No signals recorded — run discovery to populate</p>
+          : <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-kd-border bg-kd-elevated/60">
+                      {['Date', 'Signal', 'Strength', 'Nifty', 'Details'].map(h => (
+                        <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {signals.map(sig => (
+                      <tr key={sig.id} className={cn(
+                        'border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors',
+                        sig.partial_day && 'opacity-70'
+                      )}>
+                        <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">
+                          {sig.date}
+                          {sig.partial_day && (
+                            <span className="ml-1.5 text-[9px] font-mono text-risk-amber/70 border border-risk-amber/30 rounded px-1">
+                              partial
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-secondary capitalize">{sig.signal ?? '—'}</td>
+                        <td className="px-3 py-2 text-xs tabular-nums text-center">
+                          {sig.strength != null ? <span className="text-accent-gold">{sig.strength}</span> : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-xs tabular-nums text-center">
+                          {sig.actual_market_return != null
+                            ? <span className={sig.actual_market_return >= 0 ? 'text-risk-green' : 'text-risk-red'}>
+                                {sig.actual_market_return >= 0 ? '+' : ''}{sig.actual_market_return.toFixed(2)}%
+                              </span>
+                            : <span className="text-muted">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted max-w-[280px] truncate">{sig.details ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-kd-border/40">
+                  <button
+                    onClick={() => setSignalsPage(p => p - 1)}
+                    disabled={signalsPage === 0}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5"/> Prev
+                  </button>
+                  <span className="text-[11px] font-mono text-muted">
+                    Page {signalsPage + 1} of {totalPages} · {signalsTotal.toLocaleString()} total
+                  </span>
+                  <button
+                    onClick={() => setSignalsPage(p => p + 1)}
+                    disabled={signalsPage >= totalPages - 1}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    Next <ChevronRight className="w-3.5 h-3.5"/>
+                  </button>
+                </div>
+              )}
+          </div>
+      )}
+
+      {/* Year-by-Year tab */}
+      {tab === 'yearly' && yearlyConf.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-kd-border bg-kd-elevated/60">
+                {['Year', 'Transits', 'Matched', 'Win %', 'Avg Return', 'Avg Days'].map(h => (
+                  <th key={h} className="text-left text-[10px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {yearlyConf.slice(0, 15).map(row => (
+                <tr key={row.year} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
+                  <td className="px-3 py-2 text-xs font-mono text-secondary tabular-nums">{row.year}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-center">{row.transits}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-center">{row.matched}</td>
                   <td className="px-3 py-2 text-xs tabular-nums text-center">
-                    <span className={returnColor(t.nifty_return_pct)}>{fmtPct(t.nifty_return_pct)}</span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-center">
-                    <span className={t.matched === true ? 'text-risk-green' : t.matched === false ? 'text-risk-red/60' : 'text-muted'}>
-                      {t.matched === true ? '✓' : t.matched === false ? '✗' : '—'}
+                    <span className={confidenceColor(row.win_pct)}>
+                      {row.win_pct != null ? `${row.win_pct.toFixed(1)}%` : '—'}
                     </span>
                   </td>
-                </>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function UpcomingTransitCards({ transits }: { transits: RuleTransit[] }) {
-  const shown = transits.slice(0, 3);
-  if (shown.length === 0) {
-    return <p className="text-xs text-muted px-1">No upcoming transits in data range</p>;
-  }
-  return (
-    <div className="space-y-2">
-      {shown.map(t => {
-        const fmt = (iso: string) =>
-          new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        return (
-          <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-kd-border bg-kd-elevated/40">
-            <span className="text-sm font-mono text-secondary">{fmt(t.start_date)} – {fmt(t.end_date)}</span>
-            <span className="text-xs text-muted">({t.duration_days} days)</span>
-          </div>
-        );
-      })}
+                  <td className="px-3 py-2 text-xs tabular-nums text-center">
+                    <span className={returnColor(row.avg_return)}>{fmtPct(row.avg_return)}</span>
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-center text-muted">
+                    {row.avg_duration != null ? `${row.avg_duration.toFixed(1)}d` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -440,12 +1072,16 @@ export default function RuleDetail() {
   const [saveError, setSaveError] = useState<string | null>(null);
   // Delete confirmation: first click arms, second click within 3s fires
   const [deleteArmed, setDeleteArmed] = useState(false);
+  // Drop signals confirmation: same two-step pattern
+  const [dropArmed, setDropArmed] = useState(false);
   // Track when a background discovery job is running for this page
   const [trackingDiscovery, setTrackingDiscovery] = useState(false);
   // Job ID of the discovery we started — used to avoid reacting to a stale cached status
   const [startedJobId, setStartedJobId] = useState<string | null>(null);
   // Signals pagination (0-indexed)
   const [signalsPage, setSignalsPage] = useState(0);
+  // Highlight a transit on the equity chart + table
+  const [highlightTransitId, setHighlightTransitId] = useState<number | null>(null);
 
   const backendStatus = useBackendStatus();
 
@@ -484,6 +1120,20 @@ export default function RuleDetail() {
     enabled: !isNaN(ruleId),
     staleTime: 5 * 60 * 1000,
   });
+
+  const isDailyOnlyRule = rule ? DAILY_ONLY_TYPES.has(rule.rule_type) : false;
+
+  // For daily-only rule types (nakshatra_vara, tithi_alone, eclipse), signals carry
+  // actual_market_return instead of transits. Fetch these to power the backtest charts.
+  const { data: signalTransits = [] } = useQuery({
+    queryKey: ['rule-engine', 'signal-returns', ruleId],
+    queryFn: () => fetchSignalReturns(ruleId),
+    enabled: !isNaN(ruleId) && isDailyOnlyRule,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Charts use transit data when available, falling back to signal-derived transits
+  const chartsData = transits.length > 0 ? transits : signalTransits;
 
   const { data: upcomingTransits = [] } = useQuery({
     queryKey: ['rule-engine', 'transits-upcoming', ruleId],
@@ -534,13 +1184,17 @@ export default function RuleDetail() {
     qc.invalidateQueries({ queryKey: ['rule-engine', 'transits', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'transits-upcoming', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence', ruleId] });
+    qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-returns', ruleId] });
     qc.invalidateQueries({ queryKey: ['rule-engine', 'signal-counts'] });
     const inserted = discoveryStatus.signals_inserted;
-    const errors = discoveryStatus.errors.length;
-    if (errors > 0) {
-      toast('error', `Discovery finished with ${errors} error(s)`);
+    const errs = discoveryStatus.errors;
+    if (errs.length > 0) {
+      const first = errs[0];
+      const extra = errs.length > 1 ? ` (+${errs.length - 1} more)` : '';
+      toast('error', `Discovery error — ${first.rule_code}: ${first.error}${extra}`);
     } else {
-      toast('success', `Discovery complete — ${inserted.toLocaleString()} signals inserted`);
+      const transits = discoveryStatus.transits_inserted ?? 0;
+      toast('success', `Discovery complete — ${inserted.toLocaleString()} signals, ${transits} transits`);
     }
   }, [discoveryStatus, trackingDiscovery, startedJobId, ruleId, qc, toast, setSignalsPage]);
 
@@ -597,6 +1251,32 @@ export default function RuleDetail() {
     },
     onError: (err: Error) => toast('error', err.message),
   });
+
+  // ── Drop signals mutation ──
+  const dropSignalsMutation = useMutation({
+    mutationFn: () => dropRuleSignals(ruleId),
+    onSuccess: (data) => {
+      setDropArmed(false);
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'signals', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'signals-upcoming', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'transits', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'transits-upcoming', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence', ruleId] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'confidence-yearly', ruleId] });
+      toast('success', `Cleared ${data.signals_deleted} signals · ${data.transits_deleted} transits — run discovery to repopulate`);
+    },
+    onError: (err: Error) => { setDropArmed(false); toast('error', `Drop failed: ${err.message}`); },
+  });
+
+  const handleDropSignals = () => {
+    if (dropArmed) {
+      dropSignalsMutation.mutate();
+      setDropArmed(false);
+    } else {
+      setDropArmed(true);
+      setTimeout(() => setDropArmed(false), 3000);
+    }
+  };
 
   // ── Cancel mutation ──
   const cancelMutation = useMutation({
@@ -698,6 +1378,24 @@ export default function RuleDetail() {
               </button>
             )}
 
+            {/* Drop Signals (two-step confirm) */}
+            <button
+              onClick={handleDropSignals}
+              disabled={dropSignalsMutation.isPending || isDiscoveryRunning}
+              title="Delete all signals, transits and confidence for this rule so you can re-run discovery from scratch"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all disabled:opacity-50',
+                dropArmed
+                  ? 'text-white bg-risk-red/60 border-risk-red animate-pulse'
+                  : 'text-muted border-kd-border hover:text-risk-red/70 hover:border-risk-red/30',
+              )}
+            >
+              {dropSignalsMutation.isPending
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Eraser className="w-3.5 h-3.5" />}
+              {dropArmed ? 'Confirm Drop?' : 'Drop Signals'}
+            </button>
+
             {/* Clone */}
             <button
               onClick={() => { setSaveError(null); setModalMode('clone'); }}
@@ -733,72 +1431,102 @@ export default function RuleDetail() {
 
         {/* Header card */}
         <div className="rounded-xl border border-kd-border bg-kd-card p-5 space-y-4">
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="flex-1 min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xs text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-2 py-0.5 rounded">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex-1 min-w-0">
+              {/* Pills row */}
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="font-mono text-[10px] tracking-wider text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-2.5 py-1 rounded">
                   {rule.rule_code}
                 </span>
-                <span className="text-[11px] font-mono text-muted border border-kd-border bg-kd-elevated px-1.5 py-0.5 rounded">
+                <span className="font-mono text-[10px] tracking-wider text-accent-indigo border border-accent-indigo/30 bg-accent-indigo/8 px-2.5 py-1 rounded uppercase">
                   {RULE_TYPE_LABELS[rule.rule_type] ?? rule.rule_type}
                 </span>
+                <OutcomeBadge outcome={outcome} />
                 {!rule.is_active && (
-                  <span className="text-[11px] font-mono text-risk-red/70 border border-risk-red/20 bg-risk-red/10 px-1.5 py-0.5 rounded">
+                  <span className="font-mono text-[10px] text-risk-red/70 border border-risk-red/20 bg-risk-red/10 px-2.5 py-1 rounded uppercase tracking-wider">
                     Inactive
                   </span>
                 )}
+                <span className="font-mono text-[10px] text-muted tracking-wider ml-1">
+                  BENCHMARK · NIFTY 50
+                </span>
               </div>
-              <h1 className="text-base font-semibold text-white leading-snug mt-1">{rule.display_name}</h1>
+              {/* Large serif title */}
+              <h1 className="font-display text-3xl font-medium text-white leading-tight tracking-tight">
+                {rule.display_name}
+              </h1>
+              {/* Italic remarks inline */}
+              {rule.remarks && (
+                <p className="text-sm text-muted italic mt-1.5 leading-relaxed">{rule.remarks}</p>
+              )}
             </div>
-            <OutcomeBadge outcome={outcome} />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-kd-border/40">
-            <div>
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Probability</p>
-              <p className="text-sm text-secondary">{rule.probability_label ?? rule.probability ?? '—'}</p>
+          {/* Conditions inline as key → value chips */}
+          {rule.conditions && Object.keys(rule.conditions).length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-kd-border/40">
+              <span className="font-mono text-[10px] text-muted uppercase tracking-wider shrink-0">Conditions</span>
+              {Object.entries(rule.conditions).map(([k, v]) => (
+                <span key={k} className="inline-flex items-center gap-2 px-3 py-1 border border-kd-border/60 bg-kd-elevated/30 text-xs">
+                  <span className="font-mono text-[10px] text-muted uppercase tracking-wider">{k}</span>
+                  <span className="text-secondary">{Array.isArray(v) ? v.join(', ') : String(v)}</span>
+                </span>
+              ))}
             </div>
-            <div>
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Data Source</p>
-              <span className={cn('inline-flex items-center gap-1 text-sm', rule.data_source !== 'unavailable' ? 'text-risk-green/70' : 'text-muted')}>
-                <span className={cn('w-1.5 h-1.5 rounded-full', rule.data_source !== 'unavailable' ? 'bg-risk-green/70' : 'bg-kd-border')} />
+          )}
+
+          {/* Scope + data source row */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-3 border-t border-kd-border/40">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Scope</span>
+              <ScopeChips scope={rule.scope} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Source</span>
+              <span className={cn('inline-flex items-center gap-1.5 text-xs', rule.data_source !== 'unavailable' ? 'text-risk-green/70' : 'text-muted')}>
+                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', rule.data_source !== 'unavailable' ? 'bg-risk-green/70' : 'bg-kd-border')} />
                 {rule.data_source === 'user_defined' ? 'Custom' : rule.data_source ?? '—'}
               </span>
             </div>
-            <div className="col-span-2">
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Scope</p>
-              <ScopeChips scope={rule.scope} />
-            </div>
+            {(rule.probability_label ?? rule.probability) && (
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-muted uppercase tracking-wider">Probability</span>
+                <span className="text-xs text-secondary">{rule.probability_label ?? rule.probability}</span>
+              </div>
+            )}
           </div>
-
-          {rule.remarks && (
-            <div className="pt-3 border-t border-kd-border/40">
-              <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1">Remarks</p>
-              <p className="text-sm text-secondary leading-relaxed">{rule.remarks}</p>
-            </div>
-          )}
         </div>
 
-        {/* Conditions */}
-        <section>
-          <h2 className="text-sm font-medium text-secondary mb-2">Conditions</h2>
-          <div className="rounded-xl border border-kd-border bg-kd-card p-4">
-            <ConditionsBlock conditions={rule.conditions} />
-          </div>
-        </section>
-
         {/* Backtesting */}
-        <section>
-          <h2 className="text-sm font-medium text-secondary mb-2">
-            Backtesting
+        <section className="space-y-3">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-sm font-medium text-secondary">Backtesting</h2>
             {conf?.last_computed_at && (
-              <span className="ml-2 text-[11px] font-mono text-muted font-normal">
-                as of {conf.last_computed_at.slice(0, 10)}
-              </span>
+              <span className="text-[11px] font-mono text-muted">as of {conf.last_computed_at.slice(0, 10)}</span>
             )}
-          </h2>
-          {conf?.confidence_score != null ? (
-            <ConfidenceSummary conf={conf} />
+          </div>
+
+          {conf != null ? (
+            <>
+              {isDailyOnlyRule && signalTransits.length > 0 && (
+                <div className="px-3 py-2 rounded-lg bg-accent-indigo/8 border border-accent-indigo/20">
+                  <span className="text-[11px] font-mono text-accent-indigo/80">
+                    Daily-signal rule — each bar = one trading day · return = same-day Nifty close-to-close
+                  </span>
+                </div>
+              )}
+              <PerTransitBarChart
+                transits={chartsData}
+                highlightId={highlightTransitId}
+                onHighlight={setHighlightTransitId}
+              />
+              <BacktestStatGrid conf={conf} transits={chartsData} isDaily={isDailyOnlyRule} />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <DistributionChart transits={chartsData} />
+                <AlphaChart transits={chartsData} />
+              </div>
+              {chartsData.length >= 1 && <RegimeGrid transits={chartsData} />}
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-6 rounded-xl border border-kd-border bg-kd-elevated/30">
               <p className="text-sm text-muted">Run discovery and confidence scoring to populate data</p>
@@ -814,143 +1542,19 @@ export default function RuleDetail() {
           )}
         </section>
 
-        {/* Year-by-year breakdown */}
-        {yearlyConf.length > 0 && (
-          <section>
-            <h2 className="text-sm font-medium text-secondary mb-2">
-              Year-by-Year
-              <span className="ml-2 text-[11px] font-mono text-muted font-normal">last {Math.min(yearlyConf.length, 15)} years</span>
-            </h2>
-            <YearlyTable rows={yearlyConf} />
-          </section>
-        )}
-
-        {/* Transit History */}
-        <section>
-          <h2 className="text-sm font-medium text-secondary mb-2">Historical Transits (last 20)</h2>
-          {transits.length > 0 ? (
-            <TransitTable transits={transits} />
-          ) : (
-            <div className="flex items-center justify-center h-20 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
-              No transits recorded — run discovery to populate
-            </div>
-          )}
-        </section>
-
-        {/* Upcoming transits */}
-        <section>
-          <h2 className="text-sm font-medium text-secondary mb-2">Upcoming</h2>
-          <UpcomingTransitCards transits={upcomingTransits} />
-        </section>
-
-        {/* Historical occurrences (signals) */}
-        <section>
-          {(() => {
-            const { rows: signals, total: signalsTotal } = signalsData;
-            const totalPages = Math.ceil(signalsTotal / PAGE_SIZE);
-            const startItem = signalsTotal === 0 ? 0 : signalsPage * PAGE_SIZE + 1;
-            const endItem = Math.min((signalsPage + 1) * PAGE_SIZE, signalsTotal);
-
-            return (
-              <>
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-sm font-medium text-secondary">Historical Occurrences</h2>
-                  {signalsTotal > 0 && (
-                    <span className="text-[11px] font-mono text-muted">
-                      Showing {startItem.toLocaleString()}–{endItem.toLocaleString()} of {signalsTotal.toLocaleString()}
-                    </span>
-                  )}
-                </div>
-
-                {signals.length === 0 && signalsTotal === 0 ? (
-                  <div className="flex items-center justify-center h-24 rounded-xl border border-kd-border bg-kd-elevated/30 text-muted text-sm">
-                    No signals recorded — run rule discovery to populate
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="overflow-x-auto rounded-xl border border-kd-border">
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b border-kd-border bg-kd-elevated/60">
-                            {['Date', 'Signal', 'Strength', 'Details', 'Matched'].map(h => (
-                              <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {signals.map(sig => (
-                            <tr key={sig.id} className="border-b border-kd-border/40 hover:bg-kd-elevated/40 transition-colors">
-                              <td className="px-3 py-2 text-xs font-mono text-secondary whitespace-nowrap">{sig.date}</td>
-                              <td className="px-3 py-2 text-xs text-secondary capitalize">{sig.signal ?? '—'}</td>
-                              <td className="px-3 py-2 text-xs tabular-nums text-center">
-                                {sig.strength != null ? <span className="text-risk-amber">{sig.strength}</span> : '—'}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-muted max-w-[260px] truncate">{sig.details ?? '—'}</td>
-                              <td className="px-3 py-2 text-xs text-center">
-                                <span className={sig.matched === true ? 'text-risk-green' : sig.matched === false ? 'text-risk-red/60' : 'text-muted'}>
-                                  {sig.matched === true ? '✓' : sig.matched === false ? '✗' : '—'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-between px-1">
-                        <button
-                          onClick={() => setSignalsPage(p => p - 1)}
-                          disabled={signalsPage === 0}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5" /> Prev
-                        </button>
-                        <span className="text-[11px] font-mono text-muted">
-                          Page {signalsPage + 1} of {totalPages}
-                        </span>
-                        <button
-                          onClick={() => setSignalsPage(p => p + 1)}
-                          disabled={signalsPage >= totalPages - 1}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          Next <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            );
-          })()}
-        </section>
-
-        {/* Upcoming signals */}
-        <section>
-          <h2 className="text-sm font-medium text-secondary mb-2">Upcoming Signals</h2>
-          {upcomingSignals.length === 0 ? (
-            <p className="text-xs text-muted px-1">No upcoming signals in data range</p>
-          ) : (
-            <div className="space-y-1">
-              <p className="text-xs text-secondary px-1">
-                Next occurrence:{' '}
-                <span className="text-accent-indigo font-mono">
-                  {new Date(upcomingSignals[0].date + 'T00:00:00').toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                  })}
-                </span>
-              </p>
-              {upcomingSignals.length > 1 && (
-                <p className="text-[11px] font-mono text-muted px-1">
-                  +{upcomingSignals.length - 1} more within range:{' '}
-                  {upcomingSignals.slice(1).map(s => s.date).join(', ')}
-                </p>
-              )}
-            </div>
-          )}
-        </section>
+        {/* Tabbed detail panel */}
+        <BacktestTabs
+          transits={transits}
+          upcomingTransits={upcomingTransits}
+          signals={signalsData.rows}
+          upcomingSignals={upcomingSignals}
+          signalsPage={signalsPage}
+          setSignalsPage={setSignalsPage}
+          signalsTotal={signalsData.total}
+          yearlyConf={yearlyConf}
+          highlightId={highlightTransitId}
+          onHighlight={setHighlightTransitId}
+        />
       </div>
 
       {/* Edit / Clone Modal */}

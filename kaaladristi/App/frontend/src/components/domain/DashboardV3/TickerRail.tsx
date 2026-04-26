@@ -1,0 +1,289 @@
+import { useQuery } from '@tanstack/react-query';
+import { from } from '@/services/postgrest';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface TickerConfig {
+  name: string;
+  label: string;
+  isVix: boolean;
+}
+
+interface TickerData {
+  trade_date: string;
+  close: number;
+  pct_chng: number | null;
+  rsi_14: number | null;
+  magic_rs: number | null;
+  magic_ma: number | null;
+  magic_rs_zone: string | null;
+}
+
+interface TickerEntry {
+  current: TickerData;
+  prev: TickerData | null;
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const TICKERS: TickerConfig[] = [
+  { name: 'NIFTY 50',   label: 'NIFTY 50',   isVix: false },
+  { name: 'NIFTY BANK', label: 'NIFTY BANK', isVix: false },
+  { name: 'NIFTY 500',  label: 'NIFTY 500',  isVix: false },
+  { name: 'India VIX',  label: 'INDIA VIX',  isVix: true  },
+];
+
+// ── Data fetch — two rows per index so we can compute real pct change ──────────
+
+async function fetchTickerData(date: string): Promise<Record<string, TickerEntry>> {
+  // 1. Resolve symbol IDs
+  const { data: symbols } = await from('km_index_symbols')
+    .select('id,name')
+    .in('name', TICKERS.map(t => t.name))
+    .execute();
+
+  if (!symbols || symbols.length === 0) return {};
+
+  type SymRow = { id: number; name: string };
+  const idMap: Record<string, number> = {};
+  for (const s of symbols as SymRow[]) idMap[s.name] = s.id;
+
+  // 2. Fetch 2 most-recent rows per index — row[0] = current, row[1] = prev
+  const result: Record<string, TickerEntry> = {};
+
+  await Promise.all(
+    TICKERS.map(async ticker => {
+      const id = idMap[ticker.name];
+      if (!id) return;
+
+      const { data: rows } = await from('km_index_eod')
+        .select('trade_date,close,pct_chng,rsi_14,magic_rs,magic_ma,magic_rs_zone')
+        .eq('index_id', id)
+        .lte('trade_date', date)
+        .order('trade_date', { ascending: false })
+        .limit(2)
+        .execute();
+
+      const typedRows = (rows as TickerData[] | null) ?? [];
+      if (typedRows.length > 0) {
+        result[ticker.name] = {
+          current: typedRows[0],
+          prev:    typedRows[1] ?? null,
+        };
+      }
+    }),
+  );
+
+  return result;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmt(val: number): string {
+  return val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function changeColor(pct: number | null, isVix: boolean): string {
+  if (pct == null) return 'var(--text-faint)';
+  const positive = isVix ? pct < 0 : pct > 0;
+  const negative = isVix ? pct > 0 : pct < 0;
+  if (positive) return '#22c55e';
+  if (negative) return '#ef4444';
+  return 'var(--text-faint)';
+}
+
+function rsiColor(rsi: number | null): string {
+  if (rsi == null) return 'var(--text-faint)';
+  if (rsi >= 70) return '#ef4444';
+  if (rsi >= 60) return '#f59e0b';
+  if (rsi >= 40) return '#22c55e';
+  if (rsi >= 30) return '#f59e0b';
+  return '#ef4444';
+}
+
+function deriveZone(magic_rs: number | null, magic_ma: number | null): string | null {
+  if (magic_rs == null || magic_ma == null) return null;
+  // Index RS values are ~±3 scale — proportionally lower thresholds than equity
+  const diff = magic_rs - magic_ma;
+  if (diff >  1.5) return 'Strong Bull';
+  if (diff >  1.0) return 'Mild Bull';
+  if (diff >  0)   return 'Neutral Bull';
+  if (diff < -1.5) return 'Strong Bear';
+  if (diff < -1.0) return 'Mild Bear';
+  return 'Neutral Bear';
+}
+
+function zoneColor(zone: string | null): string {
+  switch (zone) {
+    case 'Strong Bull':  return '#22c55e';
+    case 'Mild Bull':    return '#86efac';
+    case 'Neutral Bull': return '#bbf7d0';
+    case 'Neutral':      return 'var(--text-faint)'; // legacy
+    case 'Neutral Bear': return '#fecaca';
+    case 'Mild Bear':    return '#fca5a5';
+    case 'Strong Bear':  return '#ef4444';
+    default:             return 'var(--text-faint)';
+  }
+}
+
+function zoneShort(zone: string | null): string {
+  switch (zone) {
+    case 'Strong Bull':  return 'S.Bull';
+    case 'Mild Bull':    return 'M.Bull';
+    case 'Neutral Bull': return 'N.Bull';
+    case 'Neutral':      return 'Neut';   // legacy
+    case 'Neutral Bear': return 'N.Bear';
+    case 'Mild Bear':    return 'M.Bear';
+    case 'Strong Bear':  return 'S.Bear';
+    default:             return '—';
+  }
+}
+
+// ── Single card ───────────────────────────────────────────────────────────────
+
+function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) {
+  const data = entry?.current;
+  const prev = entry?.prev;
+
+  const close = data?.close ?? null;
+  const rsi   = data?.rsi_14 ?? null;
+
+  // Prefer DB pct_chng (correct after migration 068 fixed the sign bug in the pipeline).
+  // Fall back to computing from the prev row for dates not yet covered by the migration.
+  const displayPct: number | null =
+    data?.pct_chng != null
+      ? data.pct_chng
+      : close != null && prev?.close != null && prev.close !== 0
+        ? ((close - prev.close) / prev.close) * 100
+        : null;
+
+  // Zone: prefer current row, fall back to previous row (magic_rs may not be computed yet)
+  const zone =
+    data?.magic_rs_zone
+    ?? deriveZone(data?.magic_rs ?? null, data?.magic_ma ?? null)
+    ?? prev?.magic_rs_zone
+    ?? deriveZone(prev?.magic_rs ?? null, prev?.magic_ma ?? null);
+
+  // magic_rs for display: use current if available, else prev
+  const displayMagicRs = data?.magic_rs ?? prev?.magic_rs ?? null;
+
+  const changeClr = changeColor(displayPct, ticker.isVix);
+
+  return (
+    <div style={{
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      padding: '10px 14px 8px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2,
+      minWidth: 0,
+      flex: 1,
+    }}>
+      {/* Label */}
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 9,
+        letterSpacing: '0.14em',
+        color: 'var(--text-faint)',
+        textTransform: 'uppercase',
+      }}>
+        {ticker.label}
+      </span>
+
+      {/* Close */}
+      <span style={{
+        fontFamily: 'var(--font-display)',
+        fontSize: 20,
+        fontWeight: 500,
+        letterSpacing: '-0.02em',
+        lineHeight: 1.1,
+        color: close != null ? 'var(--text-primary)' : 'var(--text-faint)',
+      }}>
+        {close != null ? fmt(close) : '—'}
+      </span>
+
+      {/* Change */}
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        fontWeight: 600,
+        color: changeClr,
+      }}>
+        {displayPct != null
+          ? `${displayPct > 0 ? '▲' : displayPct < 0 ? '▼' : '—'} ${Math.abs(displayPct).toFixed(2)}%`
+          : '—'}
+      </span>
+
+      {/* RSI + MagicRS zone — hide for VIX */}
+      {!ticker.isVix && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: 'var(--text-faint)',
+            letterSpacing: '0.08em',
+          }}>
+            RSI{' '}
+            <span style={{ color: rsiColor(rsi), fontWeight: 600 }}>
+              {rsi != null ? rsi.toFixed(0) : '—'}
+            </span>
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.12)', fontSize: 10 }}>│</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: zoneColor(zone),
+            letterSpacing: '0.06em',
+          }}>
+            ● {zoneShort(zone)}
+            {displayMagicRs != null && (
+              <span style={{ color: 'var(--text-faint)', marginLeft: 3 }}>
+                {displayMagicRs > 0 ? '+' : ''}{displayMagicRs.toFixed(1)}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Trade date — clearly visible so stale data is obvious */}
+      {data?.trade_date && (
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 8,
+          color: 'var(--text-faint)',
+          letterSpacing: '0.08em',
+          marginTop: 2,
+        }}>
+          {new Date(data.trade_date + 'T00:00:00Z').toLocaleDateString('en-IN', {
+            day: 'numeric', month: 'short', timeZone: 'UTC',
+          })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Rail ──────────────────────────────────────────────────────────────────────
+
+export default function TickerRail({ date }: { date: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['ticker_rail', date],
+    queryFn: () => fetchTickerData(date),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!date,
+  });
+
+  return (
+    <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+      {TICKERS.map(ticker => (
+        <Card
+          key={ticker.name}
+          ticker={ticker}
+          entry={isLoading ? undefined : data?.[ticker.name]}
+        />
+      ))}
+    </div>
+  );
+}

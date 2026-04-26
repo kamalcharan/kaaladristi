@@ -11,6 +11,7 @@ export interface DiscoveryStatus {
   rules_total: number;
   rules_done: number;
   signals_inserted: number;
+  transits_inserted: number;
   current_rule_code: string | null;
   phase: string | null;
   errors: { rule_code: string; error: string }[];
@@ -82,6 +83,11 @@ export async function runCleanDiscovery(): Promise<{ job_id: string; signals_del
 
 export async function computeConfidence(): Promise<{ job_id: string }> {
   const res = await postJson(`${PIPELINE_API}/api/confidence/compute`);
+  return res.json();
+}
+
+export async function dropRuleSignals(ruleId: number): Promise<{ signals_deleted: number; transits_deleted: number }> {
+  const res = await postJson(`${PIPELINE_API}/api/discovery/rule/${ruleId}/drop-signals`);
   return res.json();
 }
 

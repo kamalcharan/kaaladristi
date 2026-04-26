@@ -17,7 +17,7 @@ const anonKey = (
 
 if (!postgrestUrl) {
   console.error(
-    '[Kala-Drishti] PostgREST URL missing!\n' +
+    '[DristiQ] PostgREST URL missing!\n' +
     '  VITE_POSTGREST_URL:', postgrestUrl ? 'set' : 'MISSING', '\n' +
     '  Make sure .env file exists in App/frontend/ with this value.'
   );
@@ -34,7 +34,7 @@ function resolveBase(url: string): string {
 
 const BASE_URL = resolveBase(postgrestUrl || '');
 
-console.log('[Kala-Drishti] PostgREST URL:', BASE_URL || '(not set)');
+console.log('[DristiQ] PostgREST URL:', BASE_URL || '(not set)');
 
 /** Get current auth token (JWT from localStorage, or anon key) */
 function getAuthToken(): string {
@@ -126,7 +126,8 @@ class QueryBuilder {
 
   /** IN filter: column IN (val1, val2, ...) */
   in(column: string, values: (string | number)[]): this {
-    this.state.params.append(column, `in.(${values.join(',')})`);
+    const formatted = values.map(v => typeof v === 'string' ? `"${v}"` : v);
+    this.state.params.append(column, `in.(${formatted.join(',')})`);
     return this;
   }
 
@@ -151,6 +152,12 @@ class QueryBuilder {
   /** IS filter for null/true/false */
   is(column: string, value: 'null' | 'true' | 'false'): this {
     this.state.params.append(column, `is.${value}`);
+    return this;
+  }
+
+  /** NOT NULL filter */
+  notNull(column: string): this {
+    this.state.params.append(column, 'not.is.null');
     return this;
   }
 

@@ -11,6 +11,7 @@ import RuleFormModal, { emptyForm, type FormMode } from './RuleFormModal';
 import { createRule, toggleRuleActive, type AstroRuleFull } from './ruleService';
 import DiscoveryPanel from './DiscoveryPanel';
 import { fetchSignalCounts } from './discoveryService';
+import { IMPACT_OPTIONS, SIGNAL_LABELS } from '@/constants/signalScale';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,12 +53,46 @@ const RULE_TYPE_LABELS: Record<string, string> = {
 };
 
 const OUTCOME_STYLES: Record<string, { bg: string; text: string; border: string }> = {
-  bullish:  { bg: 'bg-risk-green/15',    text: 'text-risk-green',    border: 'border-risk-green/30'    },
-  bearish:  { bg: 'bg-risk-red/15',      text: 'text-risk-red',      border: 'border-risk-red/30'      },
-  volatile: { bg: 'bg-risk-amber/15',    text: 'text-risk-amber',    border: 'border-risk-amber/30'    },
-  turning:  { bg: 'bg-accent-indigo/12', text: 'text-accent-indigo', border: 'border-accent-indigo/30' },
-  neutral:  { bg: 'bg-kd-elevated',      text: 'text-secondary',     border: 'border-kd-border'        },
+  strong_bullish: { bg: 'bg-risk-green/20',    text: 'text-risk-green',    border: 'border-risk-green/40'    },
+  bullish:        { bg: 'bg-risk-green/15',    text: 'text-risk-green',    border: 'border-risk-green/30'    },
+  mild_bullish:   { bg: 'bg-risk-green/8',     text: 'text-risk-green/70', border: 'border-risk-green/20'    },
+  neutral:        { bg: 'bg-kd-elevated',      text: 'text-secondary',     border: 'border-kd-border'        },
+  turning:        { bg: 'bg-risk-amber/12',    text: 'text-risk-amber',    border: 'border-risk-amber/30'    },
+  mild_bearish:   { bg: 'bg-risk-red/8',       text: 'text-risk-red/70',   border: 'border-risk-red/20'      },
+  bearish:        { bg: 'bg-risk-red/15',      text: 'text-risk-red',      border: 'border-risk-red/30'      },
+  strong_bearish: { bg: 'bg-risk-red/20',      text: 'text-risk-red',      border: 'border-risk-red/40'      },
+  volatile:       { bg: 'bg-risk-amber/15',    text: 'text-risk-amber',    border: 'border-risk-amber/30'    },
 };
+
+// Prefix symbols for each outcome (shown in filter dropdown + badge)
+const OUTCOME_PREFIX: Record<string, string> = {
+  strong_bullish: '▲▲',
+  bullish:        '▲',
+  mild_bullish:   '△',
+  neutral:        '·',
+  turning:        '◈',
+  mild_bearish:   '▽',
+  bearish:        '▼',
+  strong_bearish: '▼▼',
+  volatile:       '⚡',
+};
+
+// All outcome values in display order (calendar 8 + volatile for rule-engine)
+const ALL_OUTCOMES = [...IMPACT_OPTIONS, 'volatile'] as const;
+
+function outcomeLabel(outcome: string): string {
+  return SIGNAL_LABELS[outcome] ?? (outcome.charAt(0).toUpperCase() + outcome.slice(1));
+}
+
+// Confidence score bands
+const CONFIDENCE_BANDS = [
+  { value: '',        label: 'All Confidence' },
+  { value: '76-100',  label: '76 – 100  Strong' },
+  { value: '51-75',   label: '51 – 75   Moderate' },
+  { value: '26-50',   label: '26 – 50   Weak' },
+  { value: '0-25',    label: '0 – 25    Inverse?' },
+  { value: 'unscored',label: 'Not Scored' },
+] as const;
 
 const PROB_STYLES: Record<string, string> = {
   'Very High': 'text-risk-green',
@@ -95,9 +130,11 @@ function effectiveOutcome(rule: AstroRule): string {
 
 function OutcomeBadge({ outcome }: { outcome: string }) {
   const s = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.neutral;
+  const prefix = OUTCOME_PREFIX[outcome];
   return (
-    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border', s.bg, s.text, s.border)}>
-      {outcome.charAt(0).toUpperCase() + outcome.slice(1)}
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border', s.bg, s.text, s.border)}>
+      {prefix && <span className="opacity-70 text-[9px]">{prefix}</span>}
+      {outcomeLabel(outcome)}
     </span>
   );
 }
@@ -179,9 +216,10 @@ interface Filters {
   outcome: string;
   probability: string;
   dataSource: string;
+  confidenceRange: string;
 }
 
-const EMPTY_FILTERS: Filters = { search: '', ruleType: '', outcome: '', probability: '', dataSource: '' };
+const EMPTY_FILTERS: Filters = { search: '', ruleType: '', outcome: '', probability: '', dataSource: '', confidenceRange: '' };
 
 function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filters) => void }) {
   const set = (key: keyof Filters) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -219,14 +257,21 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filt
       </select>
       <select value={filters.outcome} onChange={set('outcome')} style={selStyle}>
         <option value="">All Outcomes</option>
-        {['bullish', 'bearish', 'volatile', 'turning'].map(o => (
-          <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>
+        {ALL_OUTCOMES.map(o => (
+          <option key={o} value={o}>
+            {(OUTCOME_PREFIX[o] ?? '')} {outcomeLabel(o)}
+          </option>
         ))}
       </select>
       <select value={filters.probability} onChange={set('probability')} style={selStyle}>
         <option value="">All Probabilities</option>
         {['Very High', 'High', 'Reasonable', 'Low'].map(p => (
           <option key={p} value={p}>{p}</option>
+        ))}
+      </select>
+      <select value={filters.confidenceRange} onChange={set('confidenceRange')} style={selStyle}>
+        {CONFIDENCE_BANDS.map(b => (
+          <option key={b.value} value={b.value}>{b.label}</option>
         ))}
       </select>
       <select value={filters.dataSource} onChange={set('dataSource')} style={selStyle}>
@@ -382,8 +427,17 @@ export default function RuleList() {
     if (filters.outcome)  list = list.filter(r => effectiveOutcome(r) === filters.outcome);
     if (filters.probability) list = list.filter(r => r.probability_label === filters.probability);
     if (filters.dataSource) list = list.filter(r => r.data_source === filters.dataSource);
+    if (filters.confidenceRange) {
+      list = list.filter(r => {
+        const score = confMap.get(r.id)?.confidence_score;
+        if (filters.confidenceRange === 'unscored') return score == null;
+        if (score == null) return false;
+        const [lo, hi] = filters.confidenceRange.split('-').map(Number);
+        return score >= lo && score <= hi;
+      });
+    }
     return list;
-  }, [rules, filters]);
+  }, [rules, filters, confMap]);
 
   if (!isAdmin) return <AdminGuard />;
 

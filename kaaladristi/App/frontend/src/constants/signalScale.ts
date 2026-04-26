@@ -63,11 +63,13 @@ export const IMPACT_OPTIONS: MarketImpact[] = [
 // ── 2. MagicRS Zones (Title Case — as stored in DB) ──────────────────────────
 
 export const ZONE_LABELS: Record<string, { label: string; color: string }> = {
-  'Strong Bull': { label: 'Strong Bull', color: 'text-risk-green' },
-  'Mild Bull':   { label: 'Mild Bull',   color: 'text-risk-green/70' },
-  'Neutral':     { label: 'Neutral',     color: 'text-muted' },
-  'Mild Bear':   { label: 'Mild Bear',   color: 'text-risk-red/70' },
-  'Strong Bear': { label: 'Strong Bear', color: 'text-risk-red' },
+  'Strong Bull':  { label: 'Strong Bull',  color: 'text-risk-green' },
+  'Mild Bull':    { label: 'Mild Bull',    color: 'text-risk-green/70' },
+  'Neutral Bull': { label: 'Neutral Bull', color: 'text-risk-green/40' },
+  'Neutral':      { label: 'Neutral',      color: 'text-muted' },         // legacy
+  'Neutral Bear': { label: 'Neutral Bear', color: 'text-risk-red/40' },
+  'Mild Bear':    { label: 'Mild Bear',    color: 'text-risk-red/70' },
+  'Strong Bear':  { label: 'Strong Bear',  color: 'text-risk-red' },
 };
 
 // ── 3. Flow Types (UPPER_SNAKE — as stored in DB) ─────────────────────────────

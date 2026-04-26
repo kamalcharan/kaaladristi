@@ -17,6 +17,6 @@ COPY . .
 # Persist downloaded bhav copies across restarts
 VOLUME ["/app/data"]
 
-EXPOSE 8100
+EXPOSE 8101
 
-CMD ["uvicorn", "pipeline_api:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
+CMD ["uvicorn", "pipeline2_api:app", "--host", "0.0.0.0", "--port", "8101", "--workers", "1"]

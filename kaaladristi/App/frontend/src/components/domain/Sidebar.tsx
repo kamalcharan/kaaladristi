@@ -6,33 +6,36 @@ import { signOut } from '@/services/auth';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
 // Glyphs are Fraunces/Unicode characters, matching dashboard-LOCKED.html
-type NavItem = { to: string; glyph: string; label: string };
-type NavSection = { heading: string; items: NavItem[] };
+type NavItem = { to: string; glyph: string; label: string; adminOnly?: boolean };
+type NavSection = { heading: string; items: NavItem[]; adminHeading?: boolean };
 
 const navSections: NavSection[] = [
   {
     heading: 'View',
     items: [
-      { to: '/dashboard',           glyph: '◉', label: 'Dashboard' },
-      { to: '/markets',             glyph: '◎', label: 'Markets' },
-      { to: '/scanner',             glyph: '⊙', label: 'Scanner' },
-      { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition' },
-      { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch' },
-      { to: '/astro-calendar',      glyph: '☽', label: 'Planetary Intel' },
-      { to: '/panchang',            glyph: '☿', label: 'Panchang' },
-      { to: '/pulse/1',             glyph: '◌', label: 'Visual Pulse' },
+      { to: '/dashboard',      glyph: '◉', label: 'Dashboard' },
+      { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
+      { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
+      { to: '/planetary-intel', glyph: '☽', label: 'Planetary Intel' },
     ],
   },
   {
-    heading: 'Author',
+    heading: 'Admin',
+    adminHeading: true,
     items: [
-      { to: '/inference',    glyph: '✎', label: 'Inference DB' },
-      { to: '/rule-eval',    glyph: '⊛', label: 'Rule Eval' },
-
-      { to: '/transmission', glyph: '⇝', label: 'Risk Transmission' },
-      { to: '/history',      glyph: '↺', label: 'Backtest' },
-      { to: '/settings',     glyph: '◈', label: 'Settings' },
-      { to: '/data-pipeline',glyph: '▦', label: 'Data Pipeline' },
+      { to: '/markets',             glyph: '◎', label: 'Markets',             adminOnly: true },
+      { to: '/industry-transition', glyph: '⇌', label: 'Industry Transition', adminOnly: true },
+      { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch',  adminOnly: true },
+      { to: '/panchang',            glyph: '☿', label: 'Panchang',            adminOnly: true },
+      { to: '/pulse/1',             glyph: '◌', label: 'Visual Pulse',        adminOnly: true },
+      { to: '/inference',           glyph: '✎', label: 'Inference DB',        adminOnly: true },
+      { to: '/rule-eval',           glyph: '⊛', label: 'Rule Eval',           adminOnly: true },
+      { to: '/transmission',        glyph: '⇝', label: 'Risk Transmission',   adminOnly: true },
+      { to: '/history',             glyph: '↺', label: 'Backtest',            adminOnly: true },
+      { to: '/settings',            glyph: '◈', label: 'Settings',            adminOnly: true },
+      { to: '/data-pipeline',       glyph: '▦', label: 'Data Pipeline',       adminOnly: true },
+      { to: '/admin/panchang',      glyph: '⊟', label: 'Panchang Admin',      adminOnly: true },
+      { to: '/rules',               glyph: '⊠', label: 'Rule Engine',         adminOnly: true },
     ],
   },
 ];
@@ -110,7 +113,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               lineHeight: 1.2,
             }}
           >
-            Kāla-<em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Drishti</em>
+            Dristi<em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Q</em>
           </div>
           <div
             style={{
@@ -169,161 +172,91 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* ── Nav sections ── */}
       <div className="flex flex-col flex-1 overflow-y-auto no-scrollbar" style={{ gap: '0' }}>
-        {navSections.map((section, si) => (
-          <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
-            {/* Section heading */}
-            {!collapsed && (
-              <div
-                style={{
-                  padding: '0 12px 8px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  color: 'var(--text-faint)',
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {section.heading}
-              </div>
-            )}
+        {navSections.map((section, si) => {
+          const visibleItems = section.items.filter(item => !item.adminOnly || isAdmin);
+          if (visibleItems.length === 0) return null;
+          return (
+            <div key={section.heading} style={{ marginTop: si > 0 ? '24px' : '0' }}>
+              {/* Section heading */}
+              {!collapsed && (
+                <div
+                  style={{
+                    padding: '0 12px 8px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    color: section.adminHeading ? 'var(--indigo)' : 'var(--text-faint)',
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    opacity: section.adminHeading ? 0.8 : 1,
+                  }}
+                >
+                  {section.heading}
+                </div>
+              )}
 
-            {/* Nav items */}
-            {section.items.map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                title={item.label}
-                style={({ isActive }) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: collapsed ? 0 : '11px',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  padding: collapsed ? '9px 0' : '9px 12px',
-                  borderRadius: '8px',
-                  color: isActive ? 'var(--gold-soft)' : 'var(--text-muted)',
-                  fontSize: '13.5px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.18s',
-                  marginBottom: '1px',
-                  background: isActive ? 'var(--gold-bg)' : 'transparent',
-                  textDecoration: 'none',
-                })}
-                onMouseEnter={e => {
-                  const el = e.currentTarget as HTMLElement;
-                  if (!el.dataset.active) {
-                    el.style.background = 'rgba(255,255,255,0.04)';
+              {/* Nav items */}
+              {visibleItems.map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  title={item.label}
+                  style={({ isActive }) => ({
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: collapsed ? 0 : '11px',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    padding: collapsed ? '9px 0' : '9px 12px',
+                    borderRadius: '8px',
+                    color: isActive
+                      ? (section.adminHeading ? 'var(--indigo)' : 'var(--gold-soft)')
+                      : 'var(--text-muted)',
+                    fontSize: '13.5px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.18s',
+                    marginBottom: '1px',
+                    background: isActive
+                      ? (section.adminHeading ? 'rgba(99,102,241,0.12)' : 'var(--gold-bg)')
+                      : 'transparent',
+                    textDecoration: 'none',
+                  })}
+                  onMouseEnter={e => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.background = section.adminHeading
+                      ? 'rgba(99,102,241,0.08)'
+                      : 'rgba(255,255,255,0.04)';
                     el.style.color = 'var(--text-secondary)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget as HTMLElement;
-                  if (!el.dataset.active) {
-                    el.style.background = el.getAttribute('data-isactive') === 'true' ? 'var(--gold-bg)' : 'transparent';
-                    el.style.color = el.getAttribute('data-isactive') === 'true' ? 'var(--gold-soft)' : 'var(--text-muted)';
-                  }
-                }}
-              >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-display)',
-                        fontSize: '14px',
-                        width: '16px',
-                        textAlign: 'center',
-                        opacity: isActive ? 1 : 0.75,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {item.glyph}
-                    </span>
-                    {!collapsed && (
-                      <span className="truncate leading-none">{item.label}</span>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        ))}
-
-        {/* ── Admin section (admin-only) ── */}
-        {isAdmin && (
-          <div style={{ marginTop: '24px' }}>
-            {!collapsed && (
-              <div
-                style={{
-                  padding: '0 12px 8px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  color: 'var(--indigo)',
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  opacity: 0.8,
-                }}
-              >
-                Admin
-              </div>
-            )}
-            {[
-              { to: '/admin/panchang', glyph: '⊞', label: 'Panchang Admin' },
-              { to: '/rules',         glyph: '⊟', label: 'Rule Engine'    },
-            ].map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                title={item.label}
-                style={({ isActive }) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: collapsed ? 0 : '11px',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  padding: collapsed ? '9px 0' : '9px 12px',
-                  borderRadius: '8px',
-                  color: isActive ? 'var(--indigo)' : 'var(--text-muted)',
-                  fontSize: '13.5px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.18s',
-                  marginBottom: '1px',
-                  background: isActive ? 'rgba(99,102,241,0.12)' : 'transparent',
-                  textDecoration: 'none',
-                })}
-                onMouseEnter={e => {
-                  const el = e.currentTarget as HTMLElement;
-                  el.style.background = 'rgba(99,102,241,0.08)';
-                  el.style.color = 'var(--text-secondary)';
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget as HTMLElement;
-                  el.style.background = 'transparent';
-                  el.style.color = 'var(--text-muted)';
-                }}
-              >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-display)',
-                        fontSize: '14px',
-                        width: '16px',
-                        textAlign: 'center',
-                        opacity: isActive ? 1 : 0.75,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {item.glyph}
-                    </span>
-                    {!collapsed && (
-                      <span className="truncate leading-none">{item.label}</span>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        )}
+                  }}
+                  onMouseLeave={e => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.background = 'transparent';
+                    el.style.color = 'var(--text-muted)';
+                  }}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-display)',
+                          fontSize: '14px',
+                          width: '16px',
+                          textAlign: 'center',
+                          opacity: isActive ? 1 : 0.75,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {item.glyph}
+                      </span>
+                      {!collapsed && (
+                        <span className="truncate leading-none">{item.label}</span>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Footer: user + date ── */}

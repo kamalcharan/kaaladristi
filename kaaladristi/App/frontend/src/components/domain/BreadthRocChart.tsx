@@ -75,8 +75,16 @@ export default function BreadthRocChart() {
 
   const { data = [], isLoading, isError } = useBreadthRoc(days);
   const latest = data[data.length - 1];
-  const bullish = (latest?.roc_13 ?? 0) >= 0;
-  const smaConfirms = (latest?.sma_breadth ?? 0) >= 0 === bullish;
+
+  // 4-state ROC status based on crossover relationship
+  const rocStatus = (() => {
+    const r = latest?.roc_13 ?? 0;
+    const s = latest?.sma_breadth ?? 0;
+    if (r > 0 && r > s) return { label: 'Bull ✓',    style: { background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.4)' } };
+    if (r > 0 && r <= s) return { label: 'Caution',  style: { background: 'rgba(249,115,22,0.12)', color: '#f97316', border: '1px solid rgba(249,115,22,0.4)' } };
+    if (r <= 0 && r > s)  return { label: 'Recovering', style: { background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' } };
+    return                       { label: 'Bear',     style: { background: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)'  } };
+  })();
 
   // Dynamic Y domain with some padding
   const allVals = data.flatMap(d => [d.roc_13, d.roc_55, d.sma_breadth].filter((v): v is number => v != null));
@@ -121,7 +129,7 @@ export default function BreadthRocChart() {
             <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
               <div className="text-center">
                 <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 13</div>
-                <div className={cn('text-[12px] font-bold mono', bullish ? 'text-risk-green' : 'text-risk-red')}>
+                <div className={cn('text-[12px] font-bold mono', (latest.roc_13 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.roc_13)}
                 </div>
               </div>
@@ -142,14 +150,11 @@ export default function BreadthRocChart() {
 
           {/* Bias badge */}
           {latest && (
-            <span className={cn(
-              'px-2.5 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-wider',
-              bullish
-                ? 'bg-risk-green/10 text-risk-green border-risk-green/40'
-                : 'bg-risk-red/10 text-risk-red border-risk-red/40',
-            )}>
-              {bullish ? 'Bull' : 'Bear'}
-              {smaConfirms ? ' ✓' : ' ⚠'}
+            <span
+              style={rocStatus.style}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider"
+            >
+              {rocStatus.label}
             </span>
           )}
         </div>

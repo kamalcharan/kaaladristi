@@ -5,7 +5,7 @@ import type { ThemeConfig } from '../types';
 
 export const KaalaDrishtiTheme: ThemeConfig = {
   id: 'kaaladristi',
-  name: 'Kāla-Drishti',
+  name: 'DristiQ',
   colors: {
     brand: {
       primary:   '#818cf8',  // --indigo (was #6366f1)

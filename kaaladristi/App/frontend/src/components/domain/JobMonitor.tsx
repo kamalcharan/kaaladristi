@@ -79,14 +79,17 @@ export default function JobMonitor() {
   const confidenceRunning = confidence?.running ?? false;
   const anyRunning = discoveryRunning || confidenceRunning;
   const isOffline = backendStatus === 'offline';
+  const discoveryErrors = discovery?.errors?.length ?? 0;
+  const hasErrors = discoveryErrors > 0 || !!confidence?.error;
+  const justFinished = !anyRunning && (discovery?.finished_at || confidence?.finished_at);
 
-  // Auto-expand when a job starts
+  // Auto-expand when a job starts or finishes with errors
   useEffect(() => {
-    if (anyRunning) setExpanded(true);
-  }, [anyRunning]);
+    if (anyRunning || hasErrors) setExpanded(true);
+  }, [anyRunning, hasErrors]);
 
-  // Nothing to show when online and idle
-  if (!isOffline && !anyRunning && !expanded) return null;
+  // Hide only when online, idle, no errors, and user hasn't manually expanded
+  if (!isOffline && !anyRunning && !hasErrors && !expanded) return null;
 
   const pill = isOffline ? (
     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-risk-red/15 border border-risk-red/30 text-risk-red/80 text-xs font-medium cursor-pointer"
@@ -99,11 +102,20 @@ export default function JobMonitor() {
       onClick={() => setExpanded(v => !v)}>
       <Loader2 className="w-3.5 h-3.5 animate-spin" />
       {discoveryRunning
-        ? discovery!.rules_total === 0
-          ? `Discovery · ${discovery!.phase ?? 'starting'}…`
-          : `Discovery · ${discovery!.rules_done}/${discovery!.rules_total} rules`
+        ? discovery!.phase === 'confidence_scoring'
+          ? `Confidence scoring · ${confidence?.signals_scored ?? 0} scored`
+          : discovery!.rules_total === 0
+            ? `Discovery · ${discovery!.phase ?? 'starting'}…`
+            : `Discovery · ${discovery!.rules_done}/${discovery!.rules_total} rules`
         : `Confidence scoring · ${confidence!.signals_scored} scored`}
       {expanded ? <ChevronDown className="w-3 h-3 ml-1" /> : <ChevronUp className="w-3 h-3 ml-1" />}
+    </div>
+  ) : hasErrors ? (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-risk-red/15 border border-risk-red/30 text-risk-red/80 text-xs font-medium cursor-pointer"
+      onClick={() => setExpanded(v => !v)}>
+      <XCircle className="w-3.5 h-3.5" />
+      {discoveryErrors} error{discoveryErrors !== 1 ? 's' : ''} — click to review
+      <X className="w-3 h-3 ml-1" onClick={e => { e.stopPropagation(); setExpanded(false); }} />
     </div>
   ) : (
     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-kd-elevated border border-kd-border text-muted text-xs cursor-pointer"
@@ -170,7 +182,12 @@ export default function JobMonitor() {
 
               {discoveryRunning && discovery && (
                 <>
-                  {discovery.rules_total === 0 ? (
+                  {discovery.phase === 'confidence_scoring' ? (
+                    <div className="flex items-center gap-2 text-[11px] text-risk-green/80 py-1">
+                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                      <span>Confidence scoring — scoring transits…</span>
+                    </div>
+                  ) : discovery.rules_total === 0 ? (
                     <div className="flex items-center gap-2 text-[11px] text-risk-amber/80 py-1">
                       <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                       <span className="capitalize">{discovery.phase ?? 'Starting'}…</span>
@@ -178,43 +195,64 @@ export default function JobMonitor() {
                   ) : (
                     <ProgressBar done={discovery.rules_done} total={discovery.rules_total} />
                   )}
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <p className="text-muted">Rules</p>
-                      <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total || '?'}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted">Signals inserted</p>
-                      <p className="text-secondary font-mono">{discovery.signals_inserted.toLocaleString()}</p>
-                    </div>
-                    {discovery.current_rule_code && (
-                      <div className="col-span-2">
-                        <p className="text-muted">Current rule</p>
-                        <p className="text-accent-indigo/80 font-mono truncate">{discovery.current_rule_code}</p>
+                  {discovery.phase !== 'confidence_scoring' && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <p className="text-muted">Rules</p>
+                          <p className="text-secondary font-mono">{discovery.rules_done} / {discovery.rules_total || '?'}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted">Signals</p>
+                          <p className="text-secondary font-mono">{discovery.signals_inserted.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted">Transits</p>
+                          <p className="text-secondary font-mono">{(discovery.transits_inserted ?? 0).toLocaleString()}</p>
+                        </div>
+                        {discovery.current_rule_code && (
+                          <div className="col-span-2">
+                            <p className="text-muted">Current rule</p>
+                            <p className="text-accent-indigo/80 font-mono truncate">{discovery.current_rule_code}</p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {!cancelMutation.isPending && !discovery.cancel_requested && (
-                    <button
-                      onClick={() => cancelMutation.mutate()}
-                      className="w-full mt-1 px-3 py-1.5 text-xs text-risk-red/70 border border-risk-red/30 bg-risk-red/10 rounded-lg hover:bg-risk-red/20 transition-all"
-                    >
-                      Cancel Discovery
-                    </button>
-                  )}
-                  {(cancelMutation.isPending || discovery.cancel_requested) && (
-                    <p className="text-[11px] text-risk-amber text-center">Cancel requested — finishing current rule…</p>
+                      {!cancelMutation.isPending && !discovery.cancel_requested && (
+                        <button
+                          onClick={() => cancelMutation.mutate()}
+                          className="w-full mt-1 px-3 py-1.5 text-xs text-risk-red/70 border border-risk-red/30 bg-risk-red/10 rounded-lg hover:bg-risk-red/20 transition-all"
+                        >
+                          Cancel Discovery
+                        </button>
+                      )}
+                      {(cancelMutation.isPending || discovery.cancel_requested) && (
+                        <p className="text-[11px] text-risk-amber text-center">Cancel requested — finishing current rule…</p>
+                      )}
+                    </>
                   )}
                 </>
               )}
 
               {!discoveryRunning && discovery?.finished_at && (
-                <div className="text-[11px] text-muted space-y-0.5">
-                  <p>{discovery.signals_inserted.toLocaleString()} signals inserted · {discovery.rules_done} rules</p>
-                  {(discovery.errors?.length ?? 0) > 0 && (
-                    <p className="text-risk-red/70">{discovery.errors.length} error(s)</p>
-                  )}
+                <div className="text-[11px] text-muted space-y-1.5">
+                  <p>{discovery.signals_inserted.toLocaleString()} signals · {(discovery.transits_inserted ?? 0).toLocaleString()} transits · {discovery.rules_done} rules</p>
                   <p>Finished {new Date(discovery.finished_at).toLocaleTimeString()}</p>
+                  {(discovery.errors?.length ?? 0) > 0 && (
+                    <div className="mt-1 rounded-lg border border-risk-red/25 bg-risk-red/8 divide-y divide-risk-red/15 overflow-hidden">
+                      <p className="px-2.5 py-1.5 text-risk-red/80 font-medium flex items-center gap-1.5">
+                        <XCircle className="w-3 h-3 shrink-0" />
+                        {discovery.errors.length} rule{discovery.errors.length !== 1 ? 's' : ''} failed
+                      </p>
+                      <div className="max-h-36 overflow-y-auto">
+                        {discovery.errors.map((e, i) => (
+                          <div key={i} className="px-2.5 py-1.5 flex flex-col gap-0.5">
+                            <span className="font-mono text-risk-red/70">{e.rule_code}</span>
+                            <span className="text-muted leading-snug">{e.error}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

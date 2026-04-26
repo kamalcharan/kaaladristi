@@ -27,3 +27,4 @@ export { default as VaNiTrigger } from './VaNiTrigger';
 export { default as AstroSignalBadge } from './AstroSignalBadge';
 export { default as AstroSignalWeekPanel } from './AstroSignalWeekPanel';
 export { default as AstroIntelligencePanel } from './AstroIntelligencePanel';
+export { default as VaNiCard } from './VaNiCard';
