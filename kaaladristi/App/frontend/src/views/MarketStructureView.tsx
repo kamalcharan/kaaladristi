@@ -462,17 +462,32 @@ function TodayStructureTab({ date }: { date: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <MarketWeatherCard date={date} />
 
-      {/* Period toggle shared across both charts */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#475569' }}>
+      {/* Period toggle — shared window for both Breadth and ROC charts */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 14px',
+        background: 'var(--card)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 10,
+      }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: '#94a3b8',
+          flexShrink: 0,
+        }}>
           Chart Window
         </span>
         <div style={{
           display: 'flex',
-          gap: 2,
+          gap: 4,
           padding: '3px',
-          background: 'var(--card)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(0,0,0,0.25)',
+          border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: 8,
         }}>
           {VIEW_PERIODS.map(p => (
@@ -481,21 +496,24 @@ function TodayStructureTab({ date }: { date: string }) {
               onClick={() => setPeriod(p.label)}
               style={{
                 fontFamily: 'var(--font-mono)',
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: 700,
-                padding: '4px 12px',
-                borderRadius: 5,
+                padding: '5px 16px',
+                borderRadius: 6,
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s',
                 background: period === p.label ? '#818cf8' : 'transparent',
-                color: period === p.label ? '#fff' : '#475569',
+                color: period === p.label ? '#fff' : '#94a3b8',
               }}
             >
               {p.label}
             </button>
           ))}
         </div>
+        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#475569' }}>
+          Controls both charts below
+        </span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
