@@ -311,7 +311,7 @@ FIELDNAMES = ['DATE', 'DAY', 'TITHI', 'MOON RASHI', 'NAKSHATRA', 'NAK LORD', 'RE
 
 def main():
     print('=' * 65)
-    print('  DristiQ Panchang Generator — Full Year 2026')
+    print('  KaalaDristi Panchang Generator — Full Year 2026')
     print('  Ayanamsa: Lahiri Sidereal | Time: 09:15 IST')
     print('=' * 65)
 

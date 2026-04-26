@@ -32,7 +32,7 @@ class Skill(NamedTuple):
 # ── Identity Preamble (shared across all skills) ──────────────────────────────
 
 _IDENTITY = (
-    "You are the AI intelligence layer of DristiQ, "
+    "You are the AI intelligence layer of Kāla-Drishti, "
     "a deterministic market risk platform for Indian equity markets. "
     "Your role is to translate astronomical and market cycle data into "
     "structured, educational risk context for professional traders. "
@@ -216,7 +216,7 @@ _MARKET_PULSE_SYSTEM = (
 # ── Skill: Data Health Insight ──────────────────────────────────────────────
 
 _DATA_HEALTH_SYSTEM = (
-    "You are the data operations advisor for DristiQ, "
+    "You are the data operations advisor for Kāla-Drishti, "
     "a market intelligence platform for Indian equity markets. "
     "Your role is to interpret data pipeline health status and provide "
     "clear, actionable guidance on what needs to be fixed. "

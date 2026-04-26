@@ -458,7 +458,7 @@ def main():
     from_date = args.from_date
 
     print('=' * 60)
-    print('DRISTIQ HISTORICAL DOWNLOADER (Yahoo Finance)')
+    print('KALA-DRISHTI HISTORICAL DOWNLOADER (Yahoo Finance)')
     print('=' * 60)
     print(f'  Mode     : {args.mode}')
     print(f'  Exchange : {args.exchange or "ALL"}')

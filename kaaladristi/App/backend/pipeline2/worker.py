@@ -464,7 +464,7 @@ def _is_connection_error(exc: Exception) -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='DristiQ pipeline v2 worker')
+    parser = argparse.ArgumentParser(description='Kāla-Drishti pipeline v2 worker')
     parser.add_argument('--watch', nargs='?', const=3, type=int,
                         help='Poll continuously (default: every 3s)')
     args = parser.parse_args()

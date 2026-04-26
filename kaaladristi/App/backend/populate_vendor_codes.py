@@ -671,7 +671,7 @@ def main():
     args = parser.parse_args()
 
     print('=' * 60)
-    print('DRISTIQ VENDOR CODE MAPPER')
+    print('KALA-DRISHTI VENDOR CODE MAPPER')
     print('=' * 60)
 
     # Init database
