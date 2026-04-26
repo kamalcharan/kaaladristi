@@ -1,15 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-// Module-level flag — persists for the lifetime of the JS bundle (i.e. the session).
-// Resets only on full page reload, never on navigation.
+// Module-level flag — persists for the lifetime of the JS bundle (one browser session).
+// Must NOT be set inside useState initializer: React.StrictMode calls lazy initializers
+// twice, so the flag would be true on the second call and the modal would never open.
+// useEffect fires once after commit and its state update survives the Strict Mode
+// simulated remount, making it the correct place to trigger the one-time show.
 let welcomeShown = false;
 
 export default function BetaWelcomeModal() {
-  const [isOpen, setIsOpen] = useState(() => {
-    if (welcomeShown) return false;
-    welcomeShown = true;
-    return true;
-  });
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!welcomeShown) {
+      welcomeShown = true;
+      setIsOpen(true);
+    }
+  }, []);
 
   if (!isOpen) return null;
 
