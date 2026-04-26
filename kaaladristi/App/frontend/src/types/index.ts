@@ -286,6 +286,17 @@ export interface BreadthRocDay {
   stock_count: number | null;
 }
 
+// ── Confluence Historical (from /api/confluence/historical) ──
+
+export interface ConfluenceRow {
+  outcome:        string;          // 'bullish' | 'bearish' (DB value)
+  breadth_regime: string | null;   // 'Depressed' | 'Moderate' | 'Elevated'
+  roc_regime:     string | null;   // 'Contracting' | 'Negative' | 'Positive' | 'Expanding'
+  transits:       number;
+  accuracy_pct:   number | null;
+  avg_return:     number | null;
+}
+
 // ── Index Catalog (from mv_index_catalog) ──
 
 export interface IndexCatalogItem {

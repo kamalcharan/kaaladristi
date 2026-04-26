@@ -2478,6 +2478,57 @@ def _rs_signal(long_zone: str | None, short_zone: str | None) -> str:
         return 'Negative Alignment'
 
 
+_confluence_cache: dict | None = None  # cache busted on restart only
+
+_CONFLUENCE_SQL = """
+    SELECT
+        CASE WHEN b.breadth_score > 55 THEN 'Elevated'
+             WHEN b.breadth_score > 35 THEN 'Moderate'
+             ELSE 'Depressed' END          AS breadth_regime,
+        CASE WHEN br.roc_13 > 1  THEN 'Expanding'
+             WHEN br.roc_13 > 0  THEN 'Positive'
+             WHEN br.roc_13 > -1 THEN 'Negative'
+             ELSE 'Contracting' END        AS roc_regime,
+        r.outcome,
+        COUNT(DISTINCT s.id)               AS transits,
+        ROUND(AVG(s.actual_market_return)::NUMERIC, 2) AS avg_return,
+        ROUND(
+            COUNT(*) FILTER (WHERE s.matched = true)::NUMERIC /
+            NULLIF(COUNT(*) FILTER (WHERE s.matched IS NOT NULL), 0) * 100
+        , 1)                               AS accuracy_pct
+    FROM  km_rule_signals       s
+    JOIN  km_astro_rule_master  r  ON r.id = s.rule_id
+    JOIN  km_market_breadth     b  ON b.trade_date = s.date
+    JOIN  km_breadth_roc        br ON br.trade_date = s.date
+    WHERE s.actual_market_return IS NOT NULL
+      AND r.outcome IN ('bullish', 'bearish')
+    GROUP BY 1, 2, 3
+    ORDER BY 1, 2, 3
+"""
+
+
+@app.get('/api/confluence/historical')
+def confluence_historical():
+    """
+    Returns per-cell accuracy and avg return for the Astro × Breadth/ROC confluence matrices.
+    Result is a flat list of rows grouped by (outcome, breadth_regime, roc_regime).
+    Cached in-process (historical data doesn't change intraday).
+    """
+    global _confluence_cache
+    if _confluence_cache is not None:
+        return _confluence_cache
+
+    try:
+        rows = _db_query(_CONFLUENCE_SQL)
+    except Exception as exc:
+        log.error(f'confluence_historical error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    result = [_stringify_dates(r) for r in rows]
+    _confluence_cache = result
+    return result
+
+
 @app.get('/api/equity/magicrs')
 def equity_magic_rs(symbol: str, from_date: str = '2025-01-01'):
     """Return Long + Short MagicRS time-series for one equity symbol."""
