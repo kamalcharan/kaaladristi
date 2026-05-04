@@ -39,11 +39,16 @@ import {
   inWindow,
   deriveSessionQuality,
 } from '@/services/intradayTime';
+import { resolveConflict, type LpDot } from '@/services/conflictEngine';
+import { computeConfluence } from '@/services/confluenceScore';
 import IntradayHeader from './IntradayHeader';
 import MarketClosedBanner from './MarketClosedBanner';
 import TopStrip from './TopStrip';
 import AlertStrip from './AlertStrip';
 import PanchangBand from './PanchangBand';
+import ConfluenceDial from './ConfluenceDial';
+import ConflictEngineCard from './ConflictEngineCard';
+import LPBadge from './LPBadge';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -134,6 +139,32 @@ export default function IntradayPage() {
   const inRahu    = inWindow(nowMin, rahuWin);
   const inAbhijit = inWindow(nowMin, abhijitWin);
   const sq = deriveSessionQuality(astroSignal?.net_signal);
+
+  // ── Dev-only LP toggle (Cycle 4 QA — hide once webhook lands) ──
+  // Cycles through null → BUY 8 SVD → BUY 8 SYD → SELL -7 → AVOID test
+  // for visual coverage of all 7 conflict cases. Lives in dev only.
+  const [lpDebug, setLpDebug] = useState<{ score: number | null; dot: LpDot }>(
+    { score: null, dot: null },
+  );
+  const isDev = import.meta.env.DEV;
+
+  // ── Cycle 4 derived state — conflict + confluence ──
+  const conflict = useMemo(() => resolveConflict({
+    sq,
+    inRahu,
+    inAbhijit,
+    yoga: panchang?.yoga_name ?? null,
+    lpScore: lpDebug.score,
+    lpDot: lpDebug.dot,
+  }), [sq, inRahu, inAbhijit, panchang?.yoga_name, lpDebug.score, lpDebug.dot]);
+
+  const confluence = useMemo(() => computeConfluence({
+    lpScore: lpDebug.score,
+    sq,
+    inRahu,
+    inAbhijit,
+    planScore: planScore?.plan_score ?? 0,
+  }), [lpDebug.score, sq, inRahu, inAbhijit, planScore?.plan_score]);
 
   // Local UI state
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -246,6 +277,8 @@ export default function IntradayPage() {
         nowMin={nowMin}
         inRahu={inRahu}
         inAbhijit={inAbhijit}
+        verdictLabel={conflict.label}
+        verdictColor={conflict.color}
       />
 
       {/* Panchang band */}
@@ -319,11 +352,53 @@ export default function IntradayPage() {
               />
             )}
 
-            <PlaceholderCard title="Confluence Score"        cycle="Cycle 4" />
-            <PlaceholderCard title="Conflict Engine"         cycle="Cycle 4" />
+            <ConfluenceDial breakdown={confluence} />
+            <ConflictEngineCard result={conflict} />
             <PlaceholderCard title="Panchang"                cycle="Cycle 5" />
             <PlaceholderCard title="Planets"                 cycle="Cycle 5" />
-            <PlaceholderCard title="LP + FIN Bridge"         cycle="Cycle 5 (LP webhook pending)" />
+            <LPBadge lpScore={lpDebug.score} lpDot={lpDebug.dot} />
+
+            {/* Dev-only LP signal toggle — for QA of all 7 conflict cases */}
+            {isDev && (
+              <div style={{
+                border: '1px dashed var(--accent-violet, #9B6BC0)',
+                borderRadius: 4, padding: 8, marginTop: 4,
+                background: 'rgba(155, 107, 192, 0.06)',
+              }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+                  color: 'var(--accent-violet, #9B6BC0)', letterSpacing: '0.1em',
+                  marginBottom: 6,
+                }}>DEV · MOCK LP SIGNAL</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {[
+                    { label: 'Off',          score: null, dot: null },
+                    { label: 'BUY 8',        score: 8,    dot: null },
+                    { label: 'BUY 8 + SVD',  score: 8,    dot: 'SVD' as LpDot },
+                    { label: 'BUY 8 + SBD',  score: 8,    dot: 'SBD' as LpDot },
+                    { label: 'BUY 8 + SYD',  score: 8,    dot: 'SYD' as LpDot },
+                    { label: 'SELL -8',      score: -8,   dot: null },
+                    { label: 'NO TRADE 0',   score: 0,    dot: null },
+                  ].map(opt => (
+                    <button
+                      key={opt.label}
+                      onClick={() => setLpDebug({ score: opt.score, dot: opt.dot })}
+                      style={{
+                        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+                        padding: '3px 6px', borderRadius: 2, cursor: 'pointer',
+                        background: lpDebug.score === opt.score && lpDebug.dot === opt.dot
+                          ? 'var(--accent-violet, #9B6BC0)'
+                          : 'transparent',
+                        color: lpDebug.score === opt.score && lpDebug.dot === opt.dot
+                          ? 'var(--kd-bg)'
+                          : 'var(--text-muted)',
+                        border: '1px solid var(--accent-violet, #9B6BC0)',
+                      }}
+                    >{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {planScore && (
               <div style={{

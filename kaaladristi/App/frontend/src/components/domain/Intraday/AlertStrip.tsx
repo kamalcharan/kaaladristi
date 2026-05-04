@@ -10,14 +10,24 @@ import { nextEvent, parseTimeToMinutes, type EventInputs } from '@/services/intr
 import type { PanchangDailyResponse } from '@/hooks/useIntraday';
 
 interface AlertStripProps {
-  panchang:  PanchangDailyResponse | null;
-  nowMin:    number;
-  inRahu:    boolean;
-  inAbhijit: boolean;
+  panchang:     PanchangDailyResponse | null;
+  nowMin:       number;
+  inRahu:       boolean;
+  inAbhijit:    boolean;
+  verdictLabel?: string;
+  verdictColor?: 'red' | 'green' | 'amber' | 'teal' | 'dim';
 }
 
+const VERDICT_COLOR_VAR: Record<NonNullable<AlertStripProps['verdictColor']>, string> = {
+  red:   'var(--risk-red)',
+  green: 'var(--risk-green)',
+  amber: 'var(--risk-amber)',
+  teal:  'var(--accent-teal, #40B8C8)',
+  dim:   'var(--text-muted)',
+};
+
 export default function AlertStrip({
-  panchang, nowMin, inRahu, inAbhijit,
+  panchang, nowMin, inRahu, inAbhijit, verdictLabel, verdictColor,
 }: AlertStripProps) {
 
   const ev: EventInputs = {
@@ -81,10 +91,13 @@ export default function AlertStrip({
       <span style={{ color: leftColor, fontWeight: inRahu || inAbhijit ? 700 : 400 }}>
         {leftLabel}
       </span>
-      {/* Cycle 4 will fill the right side with the conflict-engine verdict */}
-      <span style={{ color: 'var(--text-faint)', fontSize: 9 }}>
-        {/* placeholder for verdict */}
-      </span>
+      {/* Conflict engine verdict (Cycle 4) */}
+      {verdictLabel && verdictColor && (
+        <span style={{
+          color: VERDICT_COLOR_VAR[verdictColor],
+          fontWeight: 700, letterSpacing: '0.04em',
+        }}>{verdictLabel}</span>
+      )}
     </div>
   );
 }
