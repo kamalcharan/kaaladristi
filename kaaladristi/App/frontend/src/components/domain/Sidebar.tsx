@@ -28,6 +28,7 @@ const navSections: NavSection[] = [
       { to: '/manipulation-watch',  glyph: '⊘', label: 'Manipulation Watch',  adminOnly: true },
       { to: '/panchang',            glyph: '☿', label: 'Panchang',            adminOnly: true },
       { to: '/pulse/1',             glyph: '◌', label: 'Visual Pulse',        adminOnly: true },
+      { to: '/intraday/1',          glyph: '◐', label: 'Intraday',             adminOnly: true },
       { to: '/inference',           glyph: '✎', label: 'Inference DB',        adminOnly: true },
       { to: '/rule-eval',           glyph: '⊛', label: 'Rule Eval',           adminOnly: true },
       { to: '/transmission',        glyph: '⇝', label: 'Risk Transmission',   adminOnly: true },

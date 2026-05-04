@@ -23,6 +23,7 @@ import CalendarView from '@/views/CalendarView';
 import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
+import { IntradayPage } from '@/components/domain/Intraday';
 import ScanView from '@/views/ScanView';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
@@ -113,6 +114,7 @@ function AppRoutes() {
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />
+          <Route path="/intraday/:indexId" element={<IntradayPage />} />
           <Route path="/scan" element={<Navigate to="/scanner" replace />} />
           <Route path="/scanner" element={<ScanView />} />
           <Route path="/scanner/:presetId" element={<ScanView />} />
