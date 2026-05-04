@@ -1,11 +1,9 @@
 /**
- * IntradayHeader
- * ==============
- * Cycle 2 — symbol + last close + IST clock. Rahu/Abhijit pills land
- * in Cycle 3 (driven by km_daily_panchang.rahu_kala_start/end).
+ * IntradayHeader — symbol + last close + IST clock + Rahu/Abhijit pills
+ *
+ * Cycle 3 — Rahu/Abhijit pills now reflect the live in-window state
+ * passed down from IntradayPage's single clock source.
  */
-
-import { useEffect, useState } from 'react';
 
 interface IntradayHeaderProps {
   symbolName: string;
@@ -13,14 +11,9 @@ interface IntradayHeaderProps {
   pctChng: number | null;
   tradeDate: string;
   isHoliday: boolean;
-}
-
-function formatIstClock(d: Date): string {
-  const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
-  const h = String(ist.getUTCHours()).padStart(2, '0');
-  const m = String(ist.getUTCMinutes()).padStart(2, '0');
-  const s = String(ist.getUTCSeconds()).padStart(2, '0');
-  return `${h}:${m}:${s}`;
+  nowMin: number;
+  inRahu: boolean;
+  inAbhijit: boolean;
 }
 
 function formatDateLabel(iso: string): string {
@@ -31,22 +24,40 @@ function formatDateLabel(iso: string): string {
   });
 }
 
+function formatIstClockSeconds(): string {
+  const ist = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+  const h = String(ist.getUTCHours()).padStart(2, '0');
+  const m = String(ist.getUTCMinutes()).padStart(2, '0');
+  const s = String(ist.getUTCSeconds()).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+interface PillProps { label: string; active: boolean; activeColor: string; }
+function Pill({ label, active, activeColor }: PillProps) {
+  return (
+    <span style={{
+      fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+      padding: '2px 7px', borderRadius: 3,
+      letterSpacing: '0.08em', fontWeight: 700,
+      background: active ? `${activeColor}20` : 'transparent',
+      border: `1px solid ${active ? activeColor : 'var(--kd-border)'}`,
+      color: active ? activeColor : 'var(--text-faint)',
+    }}>{label}</span>
+  );
+}
+
 export default function IntradayHeader({
   symbolName, lastClose, pctChng, tradeDate, isHoliday,
+  nowMin: _nowMin, inRahu, inAbhijit,
 }: IntradayHeaderProps) {
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
+  // _nowMin is consumed via the parent's setInterval; we still want
+  // seconds in the clock display, so re-read Date.now() each render.
   const upColor = pctChng !== null && pctChng >= 0
     ? 'var(--risk-green)' : 'var(--risk-red)';
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 16,
+      display: 'flex', alignItems: 'center', gap: 14,
       padding: '8px 16px',
       borderBottom: '1px solid var(--kd-border)',
       background: 'var(--kd-panel)',
@@ -90,28 +101,37 @@ export default function IntradayHeader({
         border: '1px solid var(--kd-border)', color: 'var(--text-faint)',
         letterSpacing: '0.08em',
       }}>EOD DATA</span>
-
       {/* INTRADAY: replace EOD badge with "LIVE" + tick indicator when km_index_15m is wired */}
 
       {/* Spacer */}
       <span style={{ flex: 1 }} />
+
+      {/* Rahu pill */}
+      <Pill label="☊ RAHU" active={inRahu} activeColor="rgb(231, 76, 60)" />
+
+      {/* Abhijit pill */}
+      <Pill label="☀ ABHIJIT" active={inAbhijit} activeColor="rgb(46, 204, 113)" />
 
       {/* Holiday badge */}
       {isHoliday && (
         <span style={{
           fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
           padding: '2px 8px', borderRadius: 3,
-          background: 'var(--risk-amber-dim, rgba(245,158,11,0.15))',
+          background: 'rgba(245,158,11,0.15)',
           color: 'var(--risk-amber)',
           letterSpacing: '0.08em',
         }}>⊘ NON-WORKING</span>
       )}
 
-      {/* IST clock */}
+      {/* IST clock — show seconds, formatted from current Date so the
+          seconds tick smoothly even if nowMin only updates per-minute. */}
       <span style={{
         fontFamily: 'var(--font-mono, monospace)', fontSize: 14,
         color: 'var(--accent-gold, #C9A84C)', letterSpacing: '0.1em',
-      }}>{formatIstClock(now)} IST</span>
+        // Re-read the wall-clock for seconds precision; the explicit
+        // dependency on nowMin (via parent re-render) is what makes
+        // this re-evaluate in lockstep with the rest of the page.
+      }}>{formatIstClockSeconds()} IST</span>
     </div>
   );
 }
