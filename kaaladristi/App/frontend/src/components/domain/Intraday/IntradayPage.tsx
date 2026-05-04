@@ -1,13 +1,13 @@
 /**
  * IntradayPage — DristiQ Intraday Cockpit
  * ========================================
- * Cycle 2 — page shell, chart reuse, sidebar placeholders.
+ * Cycle 3 — adds top strip, alert strip, panchang band, live
+ *           Rahu/Abhijit pills. Single setInterval clock source
+ *           drives every time-aware child.
  *
- * Cycle 3 will add: TopStrip 9-cell, AlertStrip, PanchangBand,
- *                   Rahu/Abhijit live pills.
  * Cycle 4 will add: ConflictEngine card, ConfluenceDial.
- * Cycle 5 will add: Panchang/Planets sidebar tables, 4 indicator panels,
- *                   LP placeholder.
+ * Cycle 5 will add: Panchang/Planets sidebar tables, 4 indicator
+ *                   panels, LP placeholder.
  *
  * Spec: docs/dristiq/intraday_page_spec.md
  */
@@ -33,8 +33,17 @@ import {
   VaNiHeader,
   VaNiSentence,
 } from '@/components/domain/VisualPulse';
+import {
+  currentIstMinutes,
+  buildWindow,
+  inWindow,
+  deriveSessionQuality,
+} from '@/services/intradayTime';
 import IntradayHeader from './IntradayHeader';
 import MarketClosedBanner from './MarketClosedBanner';
+import TopStrip from './TopStrip';
+import AlertStrip from './AlertStrip';
+import PanchangBand from './PanchangBand';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -100,8 +109,31 @@ export default function IntradayPage() {
   // Bars + DC inferences (reuse existing VP infrastructure)
   const { bars, dcInferences, isLoading, error } = useVisualPulse(numId);
 
-  // Panchang + plan score for the resolved trading date
-  const { panchang, planScore } = useIntraday(lastTradingDate);
+  // Panchang + plan score + astro signal for the resolved trading date
+  const { panchang, planScore, astroSignal } = useIntraday(lastTradingDate);
+
+  // ── Single clock source ──
+  // One setInterval here drives every time-aware child via nowMin prop.
+  // 1Hz update is enough for per-second precision in cursor + window
+  // membership transitions.
+  const [nowMin, setNowMin] = useState<number>(() => currentIstMinutes());
+  useEffect(() => {
+    const t = setInterval(() => setNowMin(currentIstMinutes()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Derived live state
+  const rahuWin = useMemo(
+    () => buildWindow(panchang?.rahu_kala_start ?? null, panchang?.rahu_kala_end ?? null),
+    [panchang?.rahu_kala_start, panchang?.rahu_kala_end],
+  );
+  const abhijitWin = useMemo(
+    () => buildWindow(panchang?.abhijit_start ?? null, panchang?.abhijit_end ?? null),
+    [panchang?.abhijit_start, panchang?.abhijit_end],
+  );
+  const inRahu    = inWindow(nowMin, rahuWin);
+  const inAbhijit = inWindow(nowMin, abhijitWin);
+  const sq = deriveSessionQuality(astroSignal?.net_signal);
 
   // Local UI state
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -110,18 +142,16 @@ export default function IntradayPage() {
   // Default to latest bar when data loads
   const effectiveIdx = activeIndex ?? (bars.length > 0 ? bars.length - 1 : 0);
 
-  // Pre-compute dots for all bars (so TimelineSlider can render coloured cells)
+  // Pre-compute dots + correlation history
   const dotsHistory: DotSignals[] = useMemo(() => {
     return bars.map((b, i) => computeDots(b, i > 0 ? bars[i - 1] : null));
   }, [bars]);
 
-  // Correlation history — use Balanced style for Cycle 2 (style toggle is Cycle 5)
   const corrHistory: CorrelationState[] = useMemo(() => {
     if (bars.length === 0) return [];
     return computeCorrHistory(bars, dcInferences, 'Balanced');
   }, [bars, dcInferences]);
 
-  // Snapshot for VaNiSentence corrState
   const snapshot = useMemo(() => {
     if (bars.length === 0) return null;
     return computePulseSnapshot(bars, effectiveIdx, dcInferences, 'Balanced');
@@ -136,7 +166,6 @@ export default function IntradayPage() {
     }, 180);
   }, []);
 
-  // Reset activeIndex when bars change (e.g. switching index)
   useEffect(() => { setActiveIndex(null); }, [numId]);
 
   // ── Loading / Error / Empty ──
@@ -180,24 +209,51 @@ export default function IntradayPage() {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: 'auto auto 1fr 58px',
+      gridTemplateRows: 'auto auto auto auto auto 1fr 58px',
       height: '100%',
       overflow: 'hidden',
       background: 'var(--kd-bg)',
     }}>
-      {/* Header bar */}
+      {/* Header */}
       <IntradayHeader
         symbolName={indexName}
         lastClose={lastClose}
         pctChng={pctChng}
         tradeDate={lastTradingDate}
         isHoliday={isHoliday}
+        nowMin={nowMin}
+        inRahu={inRahu}
+        inAbhijit={inAbhijit}
       />
 
       {/* Holiday banner (only when isHoliday) */}
       {isHoliday
         ? <MarketClosedBanner fallbackDate={lastTradingDate} />
-        : <div />}
+        : <div style={{ display: 'none' }} />}
+
+      {/* Top strip */}
+      <TopStrip
+        panchang={panchang}
+        astroSignal={astroSignal}
+        nowMin={nowMin}
+        inRahu={inRahu}
+        inAbhijit={inAbhijit}
+      />
+
+      {/* Alert strip */}
+      <AlertStrip
+        panchang={panchang}
+        nowMin={nowMin}
+        inRahu={inRahu}
+        inAbhijit={inAbhijit}
+      />
+
+      {/* Panchang band */}
+      <PanchangBand
+        panchang={panchang}
+        nowMin={nowMin}
+        sq={sq}
+      />
 
       {/* Body — chart left, sidebar right */}
       <div style={{
@@ -240,7 +296,6 @@ export default function IntradayPage() {
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}>
-          {/* VaNi */}
           <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--kd-border)' }}>
             <VaNiHeader
               date={bar.trade_date}
@@ -264,14 +319,12 @@ export default function IntradayPage() {
               />
             )}
 
-            {/* Placeholders — populated in later cycles */}
             <PlaceholderCard title="Confluence Score"        cycle="Cycle 4" />
             <PlaceholderCard title="Conflict Engine"         cycle="Cycle 4" />
             <PlaceholderCard title="Panchang"                cycle="Cycle 5" />
             <PlaceholderCard title="Planets"                 cycle="Cycle 5" />
             <PlaceholderCard title="LP + FIN Bridge"         cycle="Cycle 5 (LP webhook pending)" />
 
-            {/* Cycle 1 sanity strip — proves data layer is wired */}
             {planScore && (
               <div style={{
                 marginTop: 4, padding: '6px 8px',
@@ -283,19 +336,6 @@ export default function IntradayPage() {
                 plan_score={planScore.plan_score.toFixed(2)} ·
                 {' '}rules={planScore.contributing_rules} ·
                 {' '}calibrated={planScore.is_calibrated ? 'yes' : 'no'}
-              </div>
-            )}
-            {panchang && (
-              <div style={{
-                padding: '6px 8px',
-                background: 'var(--kd-panel, rgba(255,255,255,0.02))',
-                border: '1px solid var(--kd-border)', borderRadius: 4,
-                fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
-                color: 'var(--text-muted)', letterSpacing: '0.05em',
-              }}>
-                vara={panchang.vara} · yoga={panchang.yoga_name ?? '—'} ·
-                {' '}rahu={panchang.rahu_kala_start ?? '—'}–{panchang.rahu_kala_end ?? '—'} ·
-                {' '}abh={panchang.abhijit_start ?? '—'}–{panchang.abhijit_end ?? '—'}
               </div>
             )}
           </div>

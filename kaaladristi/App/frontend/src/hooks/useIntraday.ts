@@ -6,9 +6,10 @@
  *     incl. the M072 columns: rahu_kala_start/end, abhijit_start/end,
  *     yoga_end_ist, yoga_end_next_day
  *   - Plan score (/api/intraday/plan-score) — Cycle 1 endpoint
+ *   - Astro daily signal (/api/astro/daily-signal) — net_signal +
+ *     turning_date drive session quality derivation in Cycle 3
  *
- * Cycle 2: returns raw payloads. Conflict engine + confluence math
- * land in Cycle 4.
+ * Conflict engine + confluence math land in Cycle 4.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -65,6 +66,23 @@ interface PlanScoreResponse {
   is_calibrated: boolean;
 }
 
+interface AstroDailySignalResponse {
+  trade_date: string;
+  net_signal: string | null;
+  net_score: number | null;
+  turning_date: boolean;
+  active_event_count: number;
+  primary_event: string | null;
+  secondary_event: string | null;
+  active_events: Array<{
+    id: number;
+    display_name: string;
+    market_impact: string;
+    start_date: string;
+    end_date: string | null;
+  }>;
+}
+
 async function fetchPanchang(date: string): Promise<PanchangDailyResponse> {
   const url = `${API_BASE}/api/panchang/daily?date=${date}`;
   const res = await fetch(url);
@@ -76,6 +94,14 @@ async function fetchPlanScore(date: string): Promise<PlanScoreResponse> {
   const url = `${API_BASE}/api/intraday/plan-score?date=${date}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Plan score fetch failed: ${res.status}`);
+  return res.json();
+}
+
+async function fetchAstroSignal(date: string): Promise<AstroDailySignalResponse | null> {
+  const url = `${API_BASE}/api/astro/daily-signal?date=${date}`;
+  const res = await fetch(url);
+  if (res.status === 404) return null; // no signal computed yet — not an error
+  if (!res.ok) throw new Error(`Astro signal fetch failed: ${res.status}`);
   return res.json();
 }
 
@@ -94,12 +120,27 @@ export function useIntraday(date: string | null) {
     enabled: !!date,
   });
 
+  const astroQuery = useQuery({
+    queryKey: ['intraday-astro-signal', date],
+    queryFn: () => fetchAstroSignal(date!),
+    staleTime: 30 * 60 * 1000,
+    enabled: !!date,
+  });
+
   return {
     panchang: panchangQuery.data ?? null,
     planScore: planScoreQuery.data ?? null,
-    isLoading: panchangQuery.isLoading || planScoreQuery.isLoading,
-    error: panchangQuery.error || planScoreQuery.error,
+    astroSignal: astroQuery.data ?? null,
+    isLoading:
+      panchangQuery.isLoading ||
+      planScoreQuery.isLoading ||
+      astroQuery.isLoading,
+    error: panchangQuery.error || planScoreQuery.error || astroQuery.error,
   };
 }
 
-export type { PanchangDailyResponse, PlanScoreResponse };
+export type {
+  PanchangDailyResponse,
+  PlanScoreResponse,
+  AstroDailySignalResponse,
+};
