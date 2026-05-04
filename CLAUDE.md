@@ -62,7 +62,7 @@ kaaladristi/
 | `dc_lookup` | Lookup values for DC inferences |
 | `km_profiles` | User profiles + roles (RLS-controlled) |
 
-Latest migration: **062** (`km_migration_062_rule_engine_schema.sql`)
+Latest migration: **072** (`km_migration_072_panchang_windows_columns.sql`)
 
 | Table | Description |
 |---|---|
@@ -125,7 +125,7 @@ BREEZE_SESSION_TOKEN=...
 
 - **Stack**: React 18, TypeScript, Vite, Tailwind CSS, React Query, Recharts, lightweight-charts
 - **Theme**: Driven by `VITE_THEME` env var — 3 themes in `src/config/theme/themes/`
-- **Routes/Views**: Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings, Visual Pulse (Index), Visual Pulse (Equity), Manipulation Watch, Industry Transition
+- **Routes/Views**: Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
 - **Settings sub-pages**: Index Catalog, Equity Catalog, Commodity Catalog, Market Data Hub, Pipeline Dashboard
 
 ### Equity Visual Pulse (`/pulse/equity/:equityId`)
@@ -142,6 +142,28 @@ Shares atomic components (chart, astro strip, slider, 4 sidebar cards) but adds:
 Equity-only components: `components/domain/VisualPulse/equity/`
 Data hook: `hooks/useEquityVisualPulse.ts` (metadata + 130 bars + DC inferences + industry context)
 Scan check: `hooks/useScanPresence.ts` (runs all 6 scans to check membership)
+
+### Intraday Cockpit (`/intraday/:indexId`)
+
+Time-aware decision page modeled on Finastro Screen 1. EOD-now,
+intraday-ready (every intraday-specific element has a `// INTRADAY:`
+marker for future swap when `km_index_15m` is populated).
+
+Components: `components/domain/Intraday/`
+- `IntradayPage` — shell w/ single 1Hz clock source
+- `IntradayHeader` — symbol + price + IST clock + Rahu/Abhijit pills
+- `TopStrip` — 9-cell panchang strip (Session/Yoga/Tithi/Moon/YogaCh/Rahu/Abhijit/Time/LP)
+- `AlertStrip` — next event resolver + active-window banner + verdict
+- `PanchangBand` — SVG timeline 09:15–15:30 with zones + cursor
+- `ConfluenceDial` — SVG ring 0–10 + 3-bar breakdown (Tech/Panchang/Planetary)
+- `ConflictEngineCard` — 7-case verdict with stats citation
+- `PanchangSidebar`, `PlanetsSidebar` — 9-graha table (canonical Vedic order)
+- `IndicatorPanels` — 4 collapsible (Confluence / Order Flow+RSSI / Smart Money / Magic RS)
+- `LPBadge` — placeholder until LP webhook lands
+
+Pure logic: `services/conflictEngine.ts`, `services/confluenceScore.ts`, `services/intradayTime.ts`
+Data hooks: `hooks/useIntraday.ts`, `hooks/useLastTradingDate.ts`, `hooks/usePlanetaryPositions.ts`
+Spec: `docs/dristiq/intraday_page_spec.md`
 
 ### Running locally
 ```bash
