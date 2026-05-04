@@ -1,13 +1,16 @@
 /**
  * IntradayPage — DristiQ Intraday Cockpit
  * ========================================
- * Cycle 3 — adds top strip, alert strip, panchang band, live
- *           Rahu/Abhijit pills. Single setInterval clock source
- *           drives every time-aware child.
+ * Cycle 5 — feature-complete:
+ *   - Header, top strip, alert strip, panchang band (Cycle 3)
+ *   - Confluence dial, conflict engine card, LP placeholder (Cycle 4)
+ *   - Panchang/Planets sidebar tables, 4 indicator panels below
+ *     chart, guidance footer (Cycle 5)
  *
- * Cycle 4 will add: ConflictEngine card, ConfluenceDial.
- * Cycle 5 will add: Panchang/Planets sidebar tables, 4 indicator
- *                   panels, LP placeholder.
+ * Single setInterval(1Hz) drives all time-aware children via
+ * nowMin prop. Reuses VisualPulseChart, AstroStrip, TimelineSlider,
+ * CorrelationCard, OrderFlowCard, SmartMoneyCard, DivergenceCard,
+ * MagicRsSubchart, VaNiHeader, VaNiSentence verbatim.
  *
  * Spec: docs/dristiq/intraday_page_spec.md
  */
@@ -25,6 +28,8 @@ import {
   computeDots,
   type DotSignals,
   type CorrelationState,
+  type TradingStyle,
+  type PulseBar,
 } from '@/services/visualPulseEngine';
 import {
   VisualPulseChart,
@@ -33,6 +38,7 @@ import {
   VaNiHeader,
   VaNiSentence,
 } from '@/components/domain/VisualPulse';
+import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 import {
   currentIstMinutes,
   buildWindow,
@@ -49,6 +55,19 @@ import PanchangBand from './PanchangBand';
 import ConfluenceDial from './ConfluenceDial';
 import ConflictEngineCard from './ConflictEngineCard';
 import LPBadge from './LPBadge';
+import PanchangSidebar from './PanchangSidebar';
+import PlanetsSidebar from './PlanetsSidebar';
+import IndicatorPanels from './IndicatorPanels';
+
+function buildSmHistory(bars: PulseBar[], dotsHistory: DotSignals[]): SmartMoneyBar[] {
+  return bars.map((b, i) => ({
+    sm: b.sniper_inst ?? 0,
+    fm: b.sniper_hot ?? 0,
+    isSVD: dotsHistory[i]?.isSVD ?? false,
+    isSBD: dotsHistory[i]?.isSBD ?? false,
+    isSYD: dotsHistory[i]?.isSYD ?? false,
+  }));
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -169,24 +188,49 @@ export default function IntradayPage() {
   // Local UI state
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [isFading, setIsFading] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
 
   // Default to latest bar when data loads
   const effectiveIdx = activeIndex ?? (bars.length > 0 ? bars.length - 1 : 0);
 
-  // Pre-compute dots + correlation history
+  // Pre-compute dots + correlation history (style-aware)
   const dotsHistory: DotSignals[] = useMemo(() => {
     return bars.map((b, i) => computeDots(b, i > 0 ? bars[i - 1] : null));
   }, [bars]);
 
   const corrHistory: CorrelationState[] = useMemo(() => {
     if (bars.length === 0) return [];
-    return computeCorrHistory(bars, dcInferences, 'Balanced');
-  }, [bars, dcInferences]);
+    return computeCorrHistory(bars, dcInferences, selectedStyle);
+  }, [bars, dcInferences, selectedStyle]);
 
   const snapshot = useMemo(() => {
     if (bars.length === 0) return null;
-    return computePulseSnapshot(bars, effectiveIdx, dcInferences, 'Balanced');
-  }, [bars, effectiveIdx, dcInferences]);
+    return computePulseSnapshot(bars, effectiveIdx, dcInferences, selectedStyle);
+  }, [bars, effectiveIdx, dcInferences, selectedStyle]);
+
+  // ── History slices for indicator panels (last 30/20 bars up to active) ──
+  const smHistory: SmartMoneyBar[] = useMemo(() => {
+    const start = Math.max(0, effectiveIdx - 29);
+    return buildSmHistory(
+      bars.slice(start, effectiveIdx + 1),
+      dotsHistory.slice(start, effectiveIdx + 1),
+    );
+  }, [bars, effectiveIdx, dotsHistory]);
+
+  const rssHistory: number[] = useMemo(() => {
+    const start = Math.max(0, effectiveIdx - 19);
+    return bars.slice(start, effectiveIdx + 1).map(b => b.rss_value ?? 0);
+  }, [bars, effectiveIdx]);
+
+  const priceHistory: number[] = useMemo(() => {
+    const start = Math.max(0, effectiveIdx - 19);
+    return bars.slice(start, effectiveIdx + 1).map(b => b.close);
+  }, [bars, effectiveIdx]);
+
+  const rsiHistory: number[] = useMemo(() => {
+    const start = Math.max(0, effectiveIdx - 19);
+    return bars.slice(start, effectiveIdx + 1).map(b => b.rsi_14 ?? 50);
+  }, [bars, effectiveIdx]);
 
   // Slider change with fade
   const handleSliderChange = useCallback((idx: number) => {
@@ -240,7 +284,7 @@ export default function IntradayPage() {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateRows: 'auto auto auto auto auto 1fr 58px',
+      gridTemplateRows: 'auto auto auto auto auto 1fr 58px auto',
       height: '100%',
       overflow: 'hidden',
       background: 'var(--kd-bg)',
@@ -294,34 +338,56 @@ export default function IntradayPage() {
         gridTemplateColumns: '1fr 300px',
         minHeight: 0, overflow: 'hidden',
       }}>
-        {/* Left pane — chart + astro strip */}
+        {/* Left pane — chart + astro strip + indicator panels */}
         <div style={{
           display: 'flex', flexDirection: 'column',
-          padding: '12px 16px', overflow: 'hidden',
+          overflowY: 'auto',
           borderRight: '1px solid var(--kd-border)',
         }}>
+          {/* Chart area — fixed minimum height so panels can co-exist */}
           <div style={{
-            fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
-            color: 'var(--text-faint)', letterSpacing: '0.1em',
-            marginBottom: 6,
+            display: 'flex', flexDirection: 'column',
+            padding: '12px 16px',
+            minHeight: 420,
+            flexShrink: 0,
           }}>
-            {indexName} · {bars.length} BARS · Bar {effectiveIdx + 1} {isNow ? '(NOW)' : ''}
+            <div style={{
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+              color: 'var(--text-faint)', letterSpacing: '0.1em',
+              marginBottom: 6,
+            }}>
+              {indexName} · {bars.length} BARS · Bar {effectiveIdx + 1} {isNow ? '(NOW)' : ''}
+            </div>
+
+            <div style={{ flex: 1, minHeight: 320 }}>
+              <VisualPulseChart
+                bars={bars}
+                activeIndex={effectiveIdx}
+                corrHistory={corrHistory}
+                dotsHistory={dotsHistory}
+              />
+            </div>
+
+            <AstroStrip dcInferences={dcInferences} activeDate={bar.trade_date} />
+
+            {/* INTRADAY: when km_index_15m is populated, swap VisualPulseChart
+                for an intraday 5-min chart and TimelineSlider semantics shift
+                from "scrub days" to "scrub today's bars". */}
           </div>
 
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <VisualPulseChart
-              bars={bars}
-              activeIndex={effectiveIdx}
-              corrHistory={corrHistory}
-              dotsHistory={dotsHistory}
-            />
-          </div>
-
-          <AstroStrip dcInferences={dcInferences} activeDate={bar.trade_date} />
-
-          {/* INTRADAY: when km_index_15m is populated, swap VisualPulseChart
-              for an intraday 5-min chart and TimelineSlider semantics shift
-              from "scrub days" to "scrub today's bars". */}
+          {/* 4 collapsible indicator panels */}
+          <IndicatorPanels
+            snapshot={snapshot}
+            bars={bars}
+            effectiveIdx={effectiveIdx}
+            selectedStyle={selectedStyle}
+            onStyleChange={setSelectedStyle}
+            smHistory={smHistory}
+            rssHistory={rssHistory}
+            priceHistory={priceHistory}
+            rsiHistory={rsiHistory}
+            symbolName={indexName}
+          />
         </div>
 
         {/* Right sidebar — VaNi + placeholders */}
@@ -354,8 +420,8 @@ export default function IntradayPage() {
 
             <ConfluenceDial breakdown={confluence} />
             <ConflictEngineCard result={conflict} />
-            <PlaceholderCard title="Panchang"                cycle="Cycle 5" />
-            <PlaceholderCard title="Planets"                 cycle="Cycle 5" />
+            <PanchangSidebar panchang={panchang} />
+            <PlanetsSidebar date={lastTradingDate} />
             <LPBadge lpScore={lpDebug.score} lpDot={lpDebug.dot} />
 
             {/* Dev-only LP signal toggle — for QA of all 7 conflict cases */}
@@ -400,7 +466,8 @@ export default function IntradayPage() {
               </div>
             )}
 
-            {planScore && (
+            {/* Dev-only sanity strip — verifies Cycle 1 wiring. Hidden in prod. */}
+            {isDev && planScore && (
               <div style={{
                 marginTop: 4, padding: '6px 8px',
                 background: 'var(--kd-panel, rgba(255,255,255,0.02))',
@@ -426,6 +493,31 @@ export default function IntradayPage() {
         onChange={handleSliderChange}
       />
       {/* INTRADAY: TimelineSlider semantics change to scrub today's 5-min bars */}
+
+      {/* Guidance footer */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '6px 16px', flexWrap: 'wrap', gap: 8,
+        borderTop: '1px solid var(--kd-border)',
+        background: 'var(--kd-panel, rgba(0,0,0,0.2))',
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
+        color: 'var(--text-faint)', letterSpacing: '0.04em',
+      }}>
+        <span>
+          {conflict.color === 'green' && '▲ ENTER — '}
+          {conflict.color === 'red'   && '✕ SKIP — '}
+          {conflict.color === 'amber' && '⚠ CAUTION — '}
+          {conflict.color === 'teal'  && '◈ WATCH — '}
+          <span style={{ color: 'var(--text-muted)' }}>{conflict.action}</span>
+        </span>
+        <span style={{ color: 'var(--text-faint)' }}>
+          EOD Data · Ujjain · Lahiri · Sidereal
+        </span>
+        <span>
+          km_daily_panchang · km_planetary_positions · km_index_eod
+        </span>
+        {/* INTRADAY: center label changes to "15-Min Data · Live" when wired */}
+      </div>
     </div>
   );
 }
