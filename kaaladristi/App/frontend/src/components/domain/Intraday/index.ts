@@ -7,3 +7,6 @@ export { default as PanchangBand } from './PanchangBand';
 export { default as ConfluenceDial } from './ConfluenceDial';
 export { default as ConflictEngineCard } from './ConflictEngineCard';
 export { default as LPBadge } from './LPBadge';
+export { default as PanchangSidebar } from './PanchangSidebar';
+export { default as PlanetsSidebar } from './PlanetsSidebar';
+export { default as IndicatorPanels } from './IndicatorPanels';

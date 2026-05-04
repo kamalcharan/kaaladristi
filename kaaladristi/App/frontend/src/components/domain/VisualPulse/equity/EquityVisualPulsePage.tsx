@@ -36,7 +36,7 @@ import {
   VaNiSentence,
 } from '../index';
 import type { SmartMoneyBar } from '../SmartMoneyCard';
-import MagicRsSubchart from './MagicRsSubchart';
+import MagicRsSubchart from '../MagicRsSubchart';
 import MultiTimeframePills from './MultiTimeframePills';
 import PumpDumpBanner, { scanBarsForManipulation } from './PumpDumpBanner';
 import ScanPresenceCard from './ScanPresenceCard';

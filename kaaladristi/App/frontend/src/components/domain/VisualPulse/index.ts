@@ -7,4 +7,5 @@ export { default as VaNiSentence } from './VaNiSentence';
 export { default as VisualPulseChart } from './VisualPulseChart';
 export { default as AstroStrip } from './AstroStrip';
 export { default as TimelineSlider } from './TimelineSlider';
+export { default as MagicRsSubchart } from './MagicRsSubchart';
 export { default as VisualPulsePage } from './VisualPulsePage';
