@@ -128,7 +128,7 @@ export default function IndicatorPanels({
       <PanelShell
         title="Confluence"
         accentColor="var(--accent-teal, #40B8C8)"
-        summary={`${snapshot.corrState} · astro ${snapshot.astroScore.toFixed(1)} · tech ${snapshot.techScore.toFixed(1)} · sm ${snapshot.smScore.toFixed(1)}`}
+        summary={`${snapshot.corrState.state} · astro ${snapshot.astroScore.toFixed(1)} · tech ${snapshot.techScore.toFixed(1)} · sm ${snapshot.smScore.toFixed(1)}`}
       >
         <CorrelationCard
           astroScore={snapshot.astroScore}
