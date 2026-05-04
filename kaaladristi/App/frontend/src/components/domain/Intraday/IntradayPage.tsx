@@ -133,20 +133,33 @@ export default function IntradayPage() {
   // Bars + DC inferences (reuse existing VP infrastructure)
   const { bars, dcInferences, isLoading, error } = useVisualPulse(numId);
 
-  // Panchang + plan score + astro signal for the resolved trading date
-  const { panchang, planScore, astroSignal } = useIntraday(lastTradingDate);
+  // ── Slider state (declared early so activeBarDate can use it) ──
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [isFading, setIsFading] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
+
+  // Default to latest bar when data loads
+  const effectiveIdx = activeIndex ?? (bars.length > 0 ? bars.length - 1 : 0);
+
+  // ── Bar-aware data ──
+  // The page is bar-centric: scrubbing the slider re-fetches panchang,
+  // plan_score, and astro signal for the active bar's date. The header
+  // IST clock stays live; everything else (incl. Rahu/Abhijit pills)
+  // reflects "is current time of day inside the ACTIVE BAR's window".
+  // When slider is at NOW (most common), activeBarDate === today and
+  // everything coincides. Scrubbing back asks "what would my decision
+  // look like if I were trading on this past date".
+  const activeBarDate = bars[effectiveIdx]?.trade_date ?? lastTradingDate;
+  const { panchang, planScore, astroSignal } = useIntraday(activeBarDate);
 
   // ── Single clock source ──
-  // One setInterval here drives every time-aware child via nowMin prop.
-  // 1Hz update is enough for per-second precision in cursor + window
-  // membership transitions.
   const [nowMin, setNowMin] = useState<number>(() => currentIstMinutes());
   useEffect(() => {
     const t = setInterval(() => setNowMin(currentIstMinutes()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Derived live state
+  // Window membership against the active bar's windows
   const rahuWin = useMemo(
     () => buildWindow(panchang?.rahu_kala_start ?? null, panchang?.rahu_kala_end ?? null),
     [panchang?.rahu_kala_start, panchang?.rahu_kala_end],
@@ -184,14 +197,6 @@ export default function IntradayPage() {
     inAbhijit,
     planScore: planScore?.plan_score ?? 0,
   }), [lpDebug.score, sq, inRahu, inAbhijit, planScore?.plan_score]);
-
-  // Local UI state
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [isFading, setIsFading] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
-
-  // Default to latest bar when data loads
-  const effectiveIdx = activeIndex ?? (bars.length > 0 ? bars.length - 1 : 0);
 
   // Pre-compute dots + correlation history (style-aware)
   const dotsHistory: DotSignals[] = useMemo(() => {
@@ -294,7 +299,7 @@ export default function IntradayPage() {
         symbolName={indexName}
         lastClose={lastClose}
         pctChng={pctChng}
-        tradeDate={lastTradingDate}
+        tradeDate={activeBarDate}
         isHoliday={isHoliday}
         nowMin={nowMin}
         inRahu={inRahu}
@@ -421,7 +426,7 @@ export default function IntradayPage() {
             <ConfluenceDial breakdown={confluence} />
             <ConflictEngineCard result={conflict} />
             <PanchangSidebar panchang={panchang} />
-            <PlanetsSidebar date={lastTradingDate} />
+            <PlanetsSidebar date={activeBarDate} />
             <LPBadge lpScore={lpDebug.score} lpDot={lpDebug.dot} />
 
             {/* Dev-only LP signal toggle — for QA of all 7 conflict cases */}
