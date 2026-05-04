@@ -1194,6 +1194,36 @@ _ASTRO_RANGE_SQL = """
     ORDER BY s.trade_date
 """
 
+# Intraday Plan Score — sum of strength × signed direction across active
+# planetary rules on a date (see docs/dristiq/intraday_page_spec.md §6).
+# Mirrored verbatim in scripts/calibrate_plan_score.py.
+_PLAN_SCORE_RAW_SQL = """
+    SELECT
+      COALESCE(SUM(
+        CASE
+          WHEN s.signal IN ('strong_bullish','bullish')   THEN  s.strength
+          WHEN s.signal =  'mild_bullish'                 THEN  s.strength * 0.5
+          WHEN s.signal =  'mild_bearish'                 THEN -s.strength * 0.5
+          WHEN s.signal IN ('strong_bearish','bearish')   THEN -s.strength
+          ELSE 0
+        END
+      ), 0)::NUMERIC AS plan_raw,
+      COUNT(*)        AS contributing_rules
+    FROM km_rule_signals      s
+    JOIN km_astro_rule_master r ON r.id = s.rule_id
+    WHERE s.date = %s
+      AND r.is_active   = TRUE
+      AND r.is_deleted  = FALSE
+      AND r.rule_type IN ('planet_state','planet_transit',
+                          'planet_conjunction','vedh','eclipse')
+"""
+
+_PLAN_SCORE_NORMALIZER_SQL = """
+    SELECT normalizer, sample_count, percentile, computed_at
+    FROM km_score_calibration
+    WHERE score_name = 'intraday_plan_score'
+"""
+
 
 @app.get('/api/dashboard/context')
 def dashboard_context(date: str = Query(default=None)):
@@ -1375,6 +1405,60 @@ def astro_transits(from_date: str = None, to_date: str = None):
     result = [_stringify_dates(r) for r in rows]
     _astro_cache[cache_key] = result
     return result
+
+
+# ── Intraday Plan Score (data-driven planetary contribution) ─────────────
+
+@app.get('/api/intraday/plan-score')
+def intraday_plan_score(date: str = None):
+    """Plan Score for a single date.
+
+    Returns plan_raw (signed strength sum), contributing_rules (int),
+    normalizer (NUMERIC from km_score_calibration), and plan_score
+    (clamped to [-2, 2] = plan_raw / normalizer * 2).
+    """
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    if not date:
+        date = datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
+    try:
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f'Invalid date format: {date}')
+
+    try:
+        raw_rows = _db_query(_PLAN_SCORE_RAW_SQL, (date,))
+        norm_rows = _db_query(_PLAN_SCORE_NORMALIZER_SQL)
+    except Exception as e:
+        log.error(f'intraday_plan_score error for {date}: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+
+    raw = raw_rows[0] if raw_rows else {'plan_raw': 0, 'contributing_rules': 0}
+    plan_raw = float(raw['plan_raw'] or 0)
+    contributing = int(raw['contributing_rules'] or 0)
+
+    normalizer = None
+    calibrated_at = None
+    if norm_rows:
+        normalizer = float(norm_rows[0]['normalizer'])
+        calibrated_at = norm_rows[0]['computed_at'].isoformat() \
+            if norm_rows[0]['computed_at'] else None
+
+    if normalizer and normalizer > 0:
+        scaled = plan_raw / normalizer * 2.0
+        plan_score = max(-2.0, min(2.0, scaled))
+    else:
+        # Calibration not yet run — fall back to raw, capped, with warning flag.
+        plan_score = max(-2.0, min(2.0, plan_raw))
+
+    return {
+        'date': date_obj.isoformat(),
+        'plan_raw': round(plan_raw, 4),
+        'contributing_rules': contributing,
+        'normalizer': round(normalizer, 4) if normalizer else None,
+        'plan_score': round(plan_score, 4),
+        'calibrated_at': calibrated_at,
+        'is_calibrated': normalizer is not None,
+    }
 
 
 # ── Astro Calendar CRUD (admin only) ─────────────────────────────────────
