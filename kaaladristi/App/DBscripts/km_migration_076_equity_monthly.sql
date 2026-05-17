@@ -147,12 +147,12 @@ BEGIN
     MIN(e.low)                               AS low,
     (ARRAY_AGG(e.close ORDER BY e.trade_date DESC))[1] AS close,
     SUM(e.volume)::BIGINT                    AS volume,
-    SUM(e.traded_value)                      AS total_value,
+    SUM(e.value_cr)                          AS total_value,
     COUNT(*)::INT                            AS bar_count,
-    -- Delivery
-    SUM(e.deliv_qty)::BIGINT                 AS deliv_qty,
-    SUM(e.deliv_value_cr)                    AS deliv_value_cr,
-    AVG(e.deliv_pct)                         AS avg_deliv_pct,
+    -- Delivery (deliv_value_cr is not stored; computed as delivery_qty*close/1e7)
+    SUM(e.delivery_qty)::BIGINT              AS deliv_qty,
+    SUM(e.delivery_qty * e.close / 10000000.0) AS deliv_value_cr,
+    AVG(e.delivery_pct)                      AS avg_deliv_pct,
     -- 52-week levels
     MAX(e.w52_high)                          AS w52_high,
     MIN(e.w52_low)                           AS w52_low
