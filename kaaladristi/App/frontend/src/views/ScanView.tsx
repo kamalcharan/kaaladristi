@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, ChevronLeft } from 'lucide-react';
+import { Loader2, ChevronLeft, Download } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
@@ -8,6 +8,7 @@ import { StockCard } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
+import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
 import type { ScanDefinition, ScanStock } from '@/types';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -146,6 +147,47 @@ function ActionIsland({ children }: { children: React.ReactNode }) {
     }}>
       {children}
     </div>
+  );
+}
+
+// ── Download XLS button ───────────────────────────────────────
+
+function DownloadXlsButton({
+  stocks,
+  scanName,
+  variant = 'default',
+}: {
+  stocks: ScanStock[];
+  scanName: string;
+  variant?: ScanVariant;
+}) {
+  if (stocks.length === 0) return null;
+  return (
+    <button
+      onClick={() => downloadScanXls(stocks, scanName, variant)}
+      title={`Download ${stocks.length} rows as Excel`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '5px',
+        padding: '5px 12px', borderRadius: '100px',
+        border: '1px solid var(--border)',
+        background: 'transparent',
+        color: 'var(--text-muted)',
+        fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+        fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+        whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+        (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-strong)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
+        (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+      }}
+    >
+      <Download style={{ width: '12px', height: '12px' }} />
+      XLS
+    </button>
   );
 }
 
@@ -395,6 +437,7 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
   const [vaniOnly, setVaniOnly] = useState(false);
 
   const vaniCount = useMemo(() => stocks.filter((s) => s.vaniOpportunity).length, [stocks]);
+  const exportStocks = useMemo(() => vaniOnly ? stocks.filter((s) => s.vaniOpportunity) : stocks, [stocks, vaniOnly]);
 
   const sorted = useMemo(() => {
     let arr = vaniOnly ? stocks.filter((s) => s.vaniOpportunity) : stocks;
@@ -448,6 +491,7 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
               </button>
             );
           })}
+          <DownloadXlsButton stocks={exportStocks} scanName={preset.name} variant="conviction_flow" />
         </div>
       </div>
 
@@ -553,6 +597,8 @@ function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
     return sortBSStocks(arr, sortKey, sortDir);
   }, [stocks, sortKey, sortDir, vaniOnly]);
 
+  const exportStocks = useMemo(() => vaniOnly ? stocks.filter((s) => s.vaniOpportunity) : stocks, [stocks, vaniOnly]);
+
   const toggleSort = (key: BSSortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortKey(key); setSortDir('desc'); }
@@ -600,6 +646,7 @@ function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
               </button>
             );
           })}
+          <DownloadXlsButton stocks={exportStocks} scanName={preset.name} variant="breakout_surge" />
         </div>
       </div>
 
@@ -677,6 +724,11 @@ function ScannerResults({ presetId }: { presetId: string }) {
     if (oppFilter) arr = arr.filter((s) => s.vaniOpportunity);
     return sortStocks(arr, sortKey, sortDir);
   }, [stocks, sortKey, sortDir, oppFilter]);
+
+  const exportStocks = useMemo(
+    () => oppFilter ? (stocks ?? []).filter((s) => s.vaniOpportunity) : (stocks ?? []),
+    [stocks, oppFilter],
+  );
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -823,6 +875,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
               </button>
             );
           })}
+          <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
         </div>
       </div>
 
