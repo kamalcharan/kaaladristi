@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS km_equity_monthly (
   equity_id    INT         NOT NULL REFERENCES km_equity_symbols(id),
   month_start  DATE        NOT NULL,   -- YYYY-MM-01
   month_end    DATE        NOT NULL,   -- Last trading day of that month
+  trade_date   DATE,                   -- = month_end; satisfies table-parameterised RPCs
 
   -- OHLCV aggregated from daily rows
   open         NUMERIC,
@@ -132,7 +133,7 @@ BEGIN
   v_month_end   := (v_month_start + INTERVAL '1 month - 1 day')::DATE;
 
   INSERT INTO km_equity_monthly (
-    equity_id, month_start, month_end,
+    equity_id, month_start, month_end, trade_date,
     open, high, low, close, volume, total_value, bar_count,
     deliv_qty, deliv_value_cr, avg_deliv_pct,
     w52_high, w52_low
@@ -141,6 +142,7 @@ BEGIN
     e.equity_id,
     v_month_start                            AS month_start,
     MAX(e.trade_date)                        AS month_end,
+    MAX(e.trade_date)                        AS trade_date,
     -- OHLCV
     (ARRAY_AGG(e.open  ORDER BY e.trade_date))[1]     AS open,
     MAX(e.high)                              AS high,
@@ -162,7 +164,8 @@ BEGIN
     AND e.close IS NOT NULL
   GROUP BY e.equity_id
   ON CONFLICT (equity_id, month_start) DO UPDATE SET
-    month_end       = EXCLUDED.month_end,
+    month_end             = EXCLUDED.month_end,
+    trade_date            = EXCLUDED.trade_date,
     open            = EXCLUDED.open,
     high            = EXCLUDED.high,
     low             = EXCLUDED.low,

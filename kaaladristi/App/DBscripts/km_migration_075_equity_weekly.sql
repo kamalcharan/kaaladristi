@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS km_equity_weekly (
   equity_id    INT         NOT NULL REFERENCES km_equity_symbols(id),
   week_start   DATE        NOT NULL,   -- ISO Monday
   week_end     DATE        NOT NULL,   -- Last trading day of that week (Friday or earlier)
+  trade_date   DATE,                   -- = week_end; satisfies table-parameterised RPCs
 
   -- OHLCV aggregated from daily rows
   open         NUMERIC,
@@ -131,7 +132,7 @@ BEGIN
   v_week_start := DATE_TRUNC('week', p_trade_date)::DATE;
 
   INSERT INTO km_equity_weekly (
-    equity_id, week_start, week_end,
+    equity_id, week_start, week_end, trade_date,
     open, high, low, close, volume, total_value, bar_count,
     deliv_qty, deliv_value_cr, avg_deliv_pct,
     w52_high, w52_low
@@ -140,6 +141,7 @@ BEGIN
     e.equity_id,
     v_week_start                           AS week_start,
     MAX(e.trade_date)                      AS week_end,
+    MAX(e.trade_date)                      AS trade_date,
     -- OHLCV
     (ARRAY_AGG(e.open  ORDER BY e.trade_date))[1]    AS open,
     MAX(e.high)                            AS high,
@@ -161,7 +163,8 @@ BEGIN
     AND e.close IS NOT NULL
   GROUP BY e.equity_id
   ON CONFLICT (equity_id, week_start) DO UPDATE SET
-    week_end        = EXCLUDED.week_end,
+    week_end              = EXCLUDED.week_end,
+    trade_date            = EXCLUDED.trade_date,
     open            = EXCLUDED.open,
     high            = EXCLUDED.high,
     low             = EXCLUDED.low,
