@@ -87,7 +87,8 @@ CREATE TABLE IF NOT EXISTS km_equity_weekly (
   magic_ma        NUMERIC,
   magic_rs_zone   TEXT
     CHECK (magic_rs_zone IS NULL OR magic_rs_zone IN (
-      'Strong Bull', 'Mild Bull', 'Neutral', 'Mild Bear', 'Strong Bear'
+      'Strong Bull', 'Mild Bull', 'Neutral Bull',
+      'Neutral', 'Neutral Bear', 'Mild Bear', 'Strong Bear'
     )),
 
   -- Flow intelligence columns (written by compute_flow_intelligence)
