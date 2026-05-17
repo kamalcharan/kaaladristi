@@ -912,7 +912,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
                 {restStocks.length > 0 && (
                   <>
                     <ScanSectionLabel>
-                      All Results · {sorted.length} stock{sorted.length !== 1 ? 's' : ''}
+                      All Results · {restStocks.length} stock{restStocks.length !== 1 ? 's' : ''}
                     </ScanSectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {restStocks.map((stock) => (
