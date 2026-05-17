@@ -45,6 +45,7 @@ from pipeline.utils.trading_calendar import (
     mark_day_status, get_missing_dates, last_trading_day,
 )
 from pipeline.utils.step_tracker import StepTracker
+from pipeline.compute import compute_index_returns, aggregate_weekly_bars, aggregate_monthly_bars
 from pipeline.utils.nse_session import NseSession
 from pipeline.downloaders.nse_bhav import download_nse_bhav, download_nse_delivery
 from pipeline.downloaders.bse_bhav import download_bse_bhav
@@ -312,10 +313,9 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     if not skip_indicators:
         tracker.start('index_returns')
         try:
-            result = db.rpc('compute_all_index_returns', {
-                'p_from_date': str(trade_date - timedelta(days=5)),
-            })
-            ir_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            ir_count = compute_index_returns(
+                db, from_date=trade_date - timedelta(days=5),
+            )
             tracker.complete('index_returns', rows=ir_count)
         except Exception as e:
             tracker.fail('index_returns', str(e))
@@ -324,21 +324,10 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     if not skip_indicators and is_week_end(trade_date):
         tracker.start('equity_weekly')
         try:
-            result = db.rpc('aggregate_equity_weekly', {'p_trade_date': str(trade_date)})
-            ew_count = result[0].get('aggregate_equity_weekly', 0) if result else 0
+            ew_count = aggregate_weekly_bars(
+                db, from_date=trade_date, run_indicators=True, verbose=True,
+            )
             tracker.complete('equity_weekly', rows=ew_count)
-            if ew_count:
-                print(f'  [weekly] Aggregated {ew_count} equity weekly bars')
-                # Run indicator chain on the new weekly rows
-                db.rpc('compute_all_pending_indicators', {
-                    'p_table': 'km_equity_weekly', 'p_id_col': 'equity_id',
-                })
-                db.rpc('compute_all_magic_rs', {
-                    'p_table': 'km_equity_weekly', 'p_id_col': 'equity_id',
-                })
-                db.rpc('compute_all_flow_intelligence', {
-                    'p_table': 'km_equity_weekly', 'p_id_col': 'equity_id',
-                })
         except Exception as e:
             tracker.fail('equity_weekly', str(e))
 
@@ -346,20 +335,10 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     if not skip_indicators and is_month_end(trade_date):
         tracker.start('equity_monthly')
         try:
-            result = db.rpc('aggregate_equity_monthly', {'p_trade_date': str(trade_date)})
-            em_count = result[0].get('aggregate_equity_monthly', 0) if result else 0
+            em_count = aggregate_monthly_bars(
+                db, from_date=trade_date, run_indicators=True, verbose=True,
+            )
             tracker.complete('equity_monthly', rows=em_count)
-            if em_count:
-                print(f'  [monthly] Aggregated {em_count} equity monthly bars')
-                db.rpc('compute_all_pending_indicators', {
-                    'p_table': 'km_equity_monthly', 'p_id_col': 'equity_id',
-                })
-                db.rpc('compute_all_magic_rs', {
-                    'p_table': 'km_equity_monthly', 'p_id_col': 'equity_id',
-                })
-                db.rpc('compute_all_flow_intelligence', {
-                    'p_table': 'km_equity_monthly', 'p_id_col': 'equity_id',
-                })
         except Exception as e:
             tracker.fail('equity_monthly', str(e))
 
@@ -552,6 +531,16 @@ def main():
     parser.add_argument('--force', action='store_true',
                         help='Force re-run even if already completed')
 
+    # ── Standalone compute / backfill modes ──
+    parser.add_argument('--compute-returns', action='store_true',
+                        help='Standalone: fill ret_5d/22d/66d in km_index_eod and exit')
+    parser.add_argument('--backfill-weekly', action='store_true',
+                        help='Standalone: backfill km_equity_weekly from --from date and exit')
+    parser.add_argument('--backfill-monthly', action='store_true',
+                        help='Standalone: backfill km_equity_monthly from --from date and exit')
+    parser.add_argument('--no-indicators', action='store_true',
+                        help='Skip indicator chain in backfill modes')
+
     args = parser.parse_args()
 
     print('=' * 60)
@@ -564,6 +553,44 @@ def main():
     # Status mode
     if args.status:
         show_status(db)
+        return
+
+    # ── Standalone compute / backfill modes ──────────────────────────────────
+    # These bypass the download pipeline and are safe to run at any time.
+
+    if args.compute_returns:
+        from_dt = date.fromisoformat(args.date_from) if args.date_from else None
+        print(f'\n  Computing index returns{f" from {from_dt}" if from_dt else " (all NULL rows)"}...')
+        n = compute_index_returns(db, from_date=from_dt, verbose=True)
+        print(f'  Done — {n:,} rows updated.\n')
+        return
+
+    if args.backfill_weekly:
+        if not args.date_from:
+            print('  --backfill-weekly requires --from YYYY-MM-DD')
+            sys.exit(1)
+        from_dt = date.fromisoformat(args.date_from)
+        print(f'\n  Backfilling km_equity_weekly from {from_dt}...')
+        n = aggregate_weekly_bars(
+            db, from_date=from_dt,
+            run_indicators=not args.no_indicators,
+            verbose=True,
+        )
+        print(f'  Done — {n:,} weekly rows upserted.\n')
+        return
+
+    if args.backfill_monthly:
+        if not args.date_from:
+            print('  --backfill-monthly requires --from YYYY-MM-DD')
+            sys.exit(1)
+        from_dt = date.fromisoformat(args.date_from)
+        print(f'\n  Backfilling km_equity_monthly from {from_dt}...')
+        n = aggregate_monthly_bars(
+            db, from_date=from_dt,
+            run_indicators=not args.no_indicators,
+            verbose=True,
+        )
+        print(f'  Done — {n:,} monthly rows upserted.\n')
         return
 
     # Determine date(s) to process
