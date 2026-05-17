@@ -69,9 +69,10 @@ def run_indicator_chain(
         print(f'    [chain] magic_rs (from {mrs_from}) → {table}')
 
     mrs_result = db.rpc('compute_all_magic_rs', {
-        'p_table':      table,
-        'p_id_col':     id_col,
-        'p_from_date':  str(mrs_from),
+        'p_table':         table,
+        'p_id_col':        id_col,
+        'p_benchmark_id':  None,          # auto-detects NIFTY 500
+        'p_from_date':     str(mrs_from),
     })
     results['magic_rs'] = sum(r.get('rows_updated', 0) for r in (mrs_result or []))
 
