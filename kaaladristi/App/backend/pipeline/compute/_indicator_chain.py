@@ -29,30 +29,13 @@ def _get_nifty500_id(db) -> int | None:
 
 def _pending_symbol_ids(db, table: str, id_col: str, from_date: date | None) -> list[int]:
     """Return distinct symbol IDs that still have magic_rs_zone IS NULL."""
-    # PostgREST filter: magic_rs_zone=is.null and optionally trade_date>=from_date
-    filters: dict = {'magic_rs_zone': 'is.null'}
+    sql = f'SELECT DISTINCT {id_col} FROM {table} WHERE magic_rs_zone IS NULL'
+    params: list = []
     if from_date:
-        # PostgREST gte filter — use raw query params
-        rows = db.select(
-            table,
-            id_col,
-            extra_params={
-                'magic_rs_zone': 'is.null',
-                'trade_date': f'gte.{from_date}',
-                'select': id_col,
-            },
-        )
-    else:
-        rows = db.select(table, id_col, filters={'magic_rs_zone': 'is.null'})
-
-    seen = set()
-    ids = []
-    for r in (rows or []):
-        v = r.get(id_col)
-        if v is not None and v not in seen:
-            seen.add(v)
-            ids.append(v)
-    return ids
+        sql += ' AND trade_date >= %s'
+        params.append(from_date)
+    rows = db.execute(sql, params or None)
+    return [r[id_col] for r in (rows or []) if r.get(id_col) is not None]
 
 
 def run_indicator_chain(
