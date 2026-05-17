@@ -32,6 +32,7 @@ Usage
 import os
 import sys
 import argparse
+import calendar
 from datetime import date, datetime, timedelta
 
 # Add backend dir to path
@@ -57,6 +58,21 @@ from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
+
+
+def is_week_end(d: date) -> bool:
+    """True if d is a Friday (ISO weekday 5).
+
+    The weekly aggregate is triggered on Fridays regardless of whether
+    tomorrow is a trading day — the pipeline always runs on trading days,
+    and Friday is the natural ISO week boundary.
+    """
+    return d.isoweekday() == 5
+
+
+def is_month_end(d: date) -> bool:
+    """True if d is the last calendar day of its month."""
+    return d.day == calendar.monthrange(d.year, d.month)[1]
 
 
 def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
@@ -291,6 +307,61 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.complete('industry_composites', rows=ic_count, rows_expected=max(ic_count, 40))
         except Exception as e:
             tracker.fail('industry_composites', str(e))
+
+    # ── Step 6d: Index returns (ret_5d / ret_22d / ret_66d) ──
+    if not skip_indicators:
+        tracker.start('index_returns')
+        try:
+            result = db.rpc('compute_all_index_returns', {
+                'p_from_date': str(trade_date - timedelta(days=5)),
+            })
+            ir_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            tracker.complete('index_returns', rows=ir_count)
+        except Exception as e:
+            tracker.fail('index_returns', str(e))
+
+    # ── Step 6e: Weekly equity aggregate (Fridays only) ──
+    if not skip_indicators and is_week_end(trade_date):
+        tracker.start('equity_weekly')
+        try:
+            result = db.rpc('aggregate_equity_weekly', {'p_trade_date': str(trade_date)})
+            ew_count = result[0].get('aggregate_equity_weekly', 0) if result else 0
+            tracker.complete('equity_weekly', rows=ew_count)
+            if ew_count:
+                print(f'  [weekly] Aggregated {ew_count} equity weekly bars')
+                # Run indicator chain on the new weekly rows
+                db.rpc('compute_all_pending_indicators', {
+                    'p_table': 'km_equity_weekly', 'p_id_col': 'equity_id',
+                })
+                db.rpc('compute_all_magic_rs', {
+                    'p_table': 'km_equity_weekly', 'p_id_col': 'equity_id',
+                })
+                db.rpc('compute_all_flow_intelligence', {
+                    'p_table': 'km_equity_weekly', 'p_id_col': 'equity_id',
+                })
+        except Exception as e:
+            tracker.fail('equity_weekly', str(e))
+
+    # ── Step 6f: Monthly equity aggregate (last calendar day only) ──
+    if not skip_indicators and is_month_end(trade_date):
+        tracker.start('equity_monthly')
+        try:
+            result = db.rpc('aggregate_equity_monthly', {'p_trade_date': str(trade_date)})
+            em_count = result[0].get('aggregate_equity_monthly', 0) if result else 0
+            tracker.complete('equity_monthly', rows=em_count)
+            if em_count:
+                print(f'  [monthly] Aggregated {em_count} equity monthly bars')
+                db.rpc('compute_all_pending_indicators', {
+                    'p_table': 'km_equity_monthly', 'p_id_col': 'equity_id',
+                })
+                db.rpc('compute_all_magic_rs', {
+                    'p_table': 'km_equity_monthly', 'p_id_col': 'equity_id',
+                })
+                db.rpc('compute_all_flow_intelligence', {
+                    'p_table': 'km_equity_monthly', 'p_id_col': 'equity_id',
+                })
+        except Exception as e:
+            tracker.fail('equity_monthly', str(e))
 
     # ── Step 7: Refresh views ──
     tracker.start('views')
