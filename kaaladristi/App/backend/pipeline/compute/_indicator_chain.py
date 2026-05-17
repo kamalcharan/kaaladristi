@@ -15,11 +15,32 @@ Date scoping (migration 039):
                                     provided; pass both for full backfill.
   compute_all_flow_intelligence   — pass both or neither.
   compute_all_magic_rs            — p_from_date required (migration 038).
+
+Chunking:
+  For backfills spanning years, compute_all_pending_indicators is split into
+  annual chunks so each DB call stays under ~15 minutes. magic_rs and
+  flow_intelligence run once at the end (they have their own NULL filtering).
 """
 
 from __future__ import annotations
 
 from datetime import date, timedelta
+
+
+def _year_chunks(from_date: date, to_date: date) -> list[tuple[date, date]]:
+    """Split [from_date, to_date] into calendar-year slices."""
+    chunks = []
+    y = from_date.year
+    while True:
+        chunk_start = max(from_date, date(y, 1, 1))
+        chunk_end   = min(to_date,   date(y, 12, 31))
+        if chunk_start > to_date:
+            break
+        chunks.append((chunk_start, chunk_end))
+        y += 1
+        if chunk_start > chunk_end:
+            break
+    return chunks
 
 
 def run_indicator_chain(
@@ -32,13 +53,15 @@ def run_indicator_chain(
     """
     Run the full indicator chain on a derived timeframe table.
 
+    For backfills spanning multiple years, compute_all_pending_indicators
+    is chunked by calendar year so each call stays under ~15 minutes and
+    progress is visible between chunks.
+
     Args:
         db:        Database client.
         table:     Target table, e.g. 'km_equity_weekly'.
         id_col:    Symbol ID column, e.g. 'equity_id'.
-        from_date: Earliest date to process. Pass the backfill start date
-                   (e.g. date(2020, 1, 1)) for full coverage; None defaults
-                   to the last 90 days.
+        from_date: Earliest date to process. None = last 90 days.
         verbose:   Print progress.
 
     Returns:
@@ -47,37 +70,47 @@ def run_indicator_chain(
     today = date.today()
     results = {'indicators': 0, 'magic_rs': 0, 'flow': 0}
 
-    # ── 1. Standard indicators ────────────────────────────────
-    if verbose:
-        window = f'{from_date} → {today}' if from_date else 'last 90 days'
-        print(f'    [chain] indicators ({window}) → {table}')
-
-    ind_kwargs: dict = {'p_table': table, 'p_id_col': id_col}
+    # ── 1. Standard indicators — chunked by year ──────────────
     if from_date is not None:
-        ind_kwargs['p_from_date'] = str(from_date)
-        ind_kwargs['p_to_date']   = str(today)
-
-    ind_result = db.rpc('compute_all_pending_indicators', ind_kwargs)
-    results['indicators'] = sum(r.get('rows_updated', 0) for r in (ind_result or []))
+        chunks = _year_chunks(from_date, today)
+        for chunk_start, chunk_end in chunks:
+            if verbose:
+                print(f'    [chain] indicators {chunk_start} → {chunk_end} → {table}')
+            ind_result = db.rpc('compute_all_pending_indicators', {
+                'p_table':      table,
+                'p_id_col':     id_col,
+                'p_from_date':  str(chunk_start),
+                'p_to_date':    str(chunk_end),
+            })
+            n = sum(r.get('rows_updated', 0) for r in (ind_result or []))
+            results['indicators'] += n
+            if verbose:
+                print(f'      → {n:,} rows updated')
+    else:
+        if verbose:
+            print(f'    [chain] indicators (last 90 days) → {table}')
+        ind_result = db.rpc('compute_all_pending_indicators', {
+            'p_table':  table,
+            'p_id_col': id_col,
+        })
+        results['indicators'] = sum(r.get('rows_updated', 0) for r in (ind_result or []))
 
     # ── 2. MagicRS ────────────────────────────────────────────
-    # Migration 039 restored cross-table routing: for non-index tables
-    # compute_all_magic_rs automatically uses km_index_eod for NIFTY 500.
-    # p_from_date is required (migration 038 removed the NULL fallback).
+    # p_from_date is required; auto-detects NIFTY 500 benchmark
+    # and routes cross-table lookup (migration 039).
     mrs_from = from_date if from_date is not None else (today - timedelta(days=90))
     if verbose:
         print(f'    [chain] magic_rs (from {mrs_from}) → {table}')
 
     mrs_result = db.rpc('compute_all_magic_rs', {
-        'p_table':         table,
-        'p_id_col':        id_col,
-        'p_benchmark_id':  None,          # auto-detects NIFTY 500
-        'p_from_date':     str(mrs_from),
+        'p_table':        table,
+        'p_id_col':       id_col,
+        'p_benchmark_id': None,
+        'p_from_date':    str(mrs_from),
     })
     results['magic_rs'] = sum(r.get('rows_updated', 0) for r in (mrs_result or []))
 
     # ── 3. Flow intelligence ──────────────────────────────────
-    # Requires both dates or neither (migration 039).
     if verbose:
         print(f'    [chain] flow_intelligence → {table}')
 
@@ -90,3 +123,4 @@ def run_indicator_chain(
     results['flow'] = sum(r.get('rows_updated', 0) for r in (flow_result or []))
 
     return results
+
