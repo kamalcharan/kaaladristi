@@ -574,8 +574,9 @@ function buildScanStock(
   const sym = bundle.symbols.get(equityId);
   if (!eod || !sym) return null;
 
-  // Guard: exclude stocks with missing or zero EMA20
-  if (!eod.ema_20 || eod.ema_20 === 0) return null;
+  // Stocks without a computed EMA20 have insufficient history (< 20 bars).
+  // ema_20 = 0 does not occur in the DB — the SQL formula never writes 0.
+  if (eod.ema_20 == null) return null;
 
   // Guard: treat unrecognised zone values as null
   if (eod.magic_rs_zone && !VALID_ZONES.has(eod.magic_rs_zone)) {
@@ -922,7 +923,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
-    if (!eod || !eod.ema_20 || eod.ema_20 <= 0) continue;
+    if (!eod || eod.ema_20 == null || eod.ema_20 <= 0) continue;
 
     const history = bundle.eodHistory.get(id) ?? [];
     if (history.length < 5) continue; // need at least 5 bars for 5D average
