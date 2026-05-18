@@ -181,10 +181,6 @@ def main():
     parser.add_argument('--force', action='store_true', help='Re-fetch even if mcap_cr already set')
     args = parser.parse_args()
 
-    if 'KD_DB_PASSWORD' not in os.environ:
-        print('ERROR: KD_DB_PASSWORD not set')
-        sys.exit(1)
-
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
