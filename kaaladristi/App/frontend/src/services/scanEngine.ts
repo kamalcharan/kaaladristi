@@ -20,6 +20,8 @@ import type {
   VaniOpportunityConfig,
 } from '@/types';
 
+export type ScanTimeframe = 'daily' | 'weekly' | 'monthly';
+
 const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 
 // ── Scan Definitions ───────────────────────────────────────────
@@ -31,6 +33,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries',
     tooltip: 'Stocks where multiple positive conditions are converging — strong relative strength, accumulation patterns, recent institutional fingerprints, in rotating-in or leading industries. Not a buy recommendation.',
     limit: 25,
+    universe: 'NSE_BSE',
   },
   {
     id: 'power_sell',
@@ -38,30 +41,35 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries',
     tooltip: 'Stocks where multiple negative conditions are converging — weakness, distribution, selling pressure, in rotating-out industries. Not a sell recommendation.',
     limit: 25,
+    universe: 'NSE_BSE',
   },
   {
     id: 'smart_money',
     name: 'Smart Money Loading',
     description: 'Industries with heavy accumulation and rising institutional presence',
     limit: 25,
+    universe: 'NSE_ONLY',
   },
   {
     id: 'fresh_breakout',
     name: 'Fresh Breakouts',
     description: 'Stocks breaking above recent highs with strong volume in leading industries',
     limit: 25,
+    universe: 'NSE_ONLY',
   },
   {
     id: 'quiet_accumulation',
     name: 'Quiet Accumulation',
     description: 'Under-the-radar industries where smart money is quietly building positions',
     limit: 25,
+    universe: 'NSE_ONLY',
   },
   {
     id: 'distribution_warning',
     name: 'Distribution Warnings',
     description: 'Previously strong stocks showing signs of institutional exit',
     limit: 25,
+    universe: 'NSE_BSE',
   },
   {
     id: 'conviction_flow',
@@ -69,6 +77,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     description: 'Stocks where 5-day delivery value is outpacing the 22-day norm — rising institutional commitment',
     tooltip: 'delivery_surge_x = avg_amt_5d / avg_amt_22d. Surge > 1.5× means recent delivery is accelerating vs baseline. VaNi gate: surge > 2×, price near EMA20, avg_amt_22d > 2 Cr.',
     limit: 50,
+    universe: 'NSE_ONLY',
   },
   {
     id: 'breakout_surge',
@@ -76,6 +85,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     description: 'NSE stocks breaking above 20-day highs with RVOL > 2× — fresh momentum with institutional volume',
     tooltip: 'Close > 20-day high + RVOL > 2 + Close > 100. VaNi gate: RVOL > 5, 0–5% above breakout level, RSI < 75, price within 15% of EMA20.',
     limit: 50,
+    universe: 'NSE_ONLY',
   },
 ];
 
@@ -97,6 +107,14 @@ const DEFAULT_OPP_CONFIG: OppConfig = {
   rvol_min: 0.3,  // lowered — volume scale discontinuity bug suppresses rvol artificially
 };
 
+interface IndexReturn {
+  ret_5d: number | null;
+  ret_22d: number | null;
+  ret_66d: number | null;
+}
+
+const VALID_ZONES = new Set(['Strong Bull', 'Mild Bull', 'Neutral', 'Mild Bear', 'Strong Bear']);
+
 interface ScanDataBundle {
   industries: IndustryEodRow[];
   industriesHistory: Map<string, IndustryEodRow[]>; // industry → rows by date desc
@@ -105,9 +123,12 @@ interface ScanDataBundle {
   eodHistory: Map<number, EquityEodSnapshot[]>; // equity_id → rows by date desc
   latestDate: string | null;
   oppConfigMap: Map<string, OppConfig>; // presetId → config
+  nifty50Returns: IndexReturn | null;
+  nifty500Returns: IndexReturn | null;
+  timeframe: ScanTimeframe;
 }
 
-let _cachedBundle: { data: ScanDataBundle; fetchedAt: number } | null = null;
+const _bundleCache = new Map<ScanTimeframe, { data: ScanDataBundle; fetchedAt: number }>();
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
 
 // Session-level config cache — presetId → OppConfig, fetched once per page load.
