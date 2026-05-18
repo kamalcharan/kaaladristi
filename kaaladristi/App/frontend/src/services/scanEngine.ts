@@ -202,7 +202,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_symbols')
-      .select('id,symbol,company_name,industry,exchange,isin,is_active')
+      .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
       .is('is_active', 'true')
       .limit(8000)
       .execute(),
@@ -326,7 +326,7 @@ async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<Scan
       .execute(),
 
     from('km_equity_symbols')
-      .select('id,symbol,company_name,industry,exchange,isin,is_active')
+      .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
       .is('is_active', 'true')
       .limit(8000)
       .execute(),
@@ -1214,7 +1214,7 @@ async function loadManipulationData(lookbackDays: number): Promise<ManipulationW
 
   const [symbolRes, eodRes] = await Promise.all([
     from('km_equity_symbols')
-      .select('id,symbol,company_name,industry,exchange,isin,is_active')
+      .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
       .is('is_active', 'true')
       .limit(8000)
       .execute(),
