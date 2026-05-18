@@ -488,6 +488,19 @@ export interface ScanStock {
   atr_14: number | null;
   delivery_pct: number | null;
   w52_high: number | null;
+  // Sprint 3 additions
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  mcap_cr: number | null;
+  avg_amt_66d: number | null;
+  xAmt: number | null;
+  rel_5d_n50: number | null;
+  rel_22d_n50: number | null;
+  rel_66d_n50: number | null;
+  rel_5d_n500: number | null;
+  rel_22d_n500: number | null;
+  rel_66d_n500: number | null;
   // Computed fields
   magicRsTrend: (boolean | null)[];
   reward: number | null;
@@ -515,6 +528,7 @@ export interface ScanDefinition {
   description: string;
   tooltip?: string;
   limit: number;
+  universe: 'NSE_ONLY' | 'NSE_BSE';
 }
 
 export interface VaniOpportunityConfig {
@@ -557,6 +571,7 @@ export interface EquitySymbolRow {
   exchange: string | null;
   isin: string | null;
   is_active: boolean;
+  mcap_cr: number | null;
 }
 
 export interface EquityEodSnapshot {

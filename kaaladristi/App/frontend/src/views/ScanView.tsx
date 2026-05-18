@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, ChevronLeft, Download } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
-import { SCAN_PRESETS, type ExchangeFilter } from '@/services/scanEngine';
+import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe } from '@/services/scanEngine';
 import { StockCard } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
@@ -68,27 +68,41 @@ const REL_BAR: Record<number, { width: string; color: string; opacity: number }>
 
 // ── Exchange Tabs (shared) ─────────────────────────────────────
 
-function ExchangeTabs({ value, onChange }: { value: ExchangeFilter; onChange: (f: ExchangeFilter) => void }) {
+function ExchangeTabs({
+  value,
+  onChange,
+  disabledOptions = [],
+}: {
+  value: ExchangeFilter;
+  onChange: (f: ExchangeFilter) => void;
+  disabledOptions?: ExchangeFilter[];
+}) {
   return (
     <div style={{
       display: 'flex', gap: '2px', padding: '4px',
       background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '100px',
     }}>
-      {(['combined', 'NSE', 'BSE'] as ExchangeFilter[]).map((ex) => (
-        <button
-          key={ex}
-          onClick={() => onChange(ex)}
-          style={{
-            padding: '6px 16px', borderRadius: '100px', border: 'none',
-            background: value === ex ? 'rgba(255,255,255,0.06)' : 'transparent',
-            color: value === ex ? 'var(--text-primary)' : 'var(--text-muted)',
-            fontSize: '12px', fontWeight: 500, cursor: 'pointer',
-            fontFamily: 'var(--font-body)', transition: 'all 0.15s',
-          }}
-        >
-          {ex === 'combined' ? 'Combined' : ex}
-        </button>
-      ))}
+      {(['combined', 'NSE', 'BSE'] as ExchangeFilter[]).map((ex) => {
+        const isDisabled = disabledOptions.includes(ex);
+        return (
+          <button
+            key={ex}
+            onClick={() => !isDisabled && onChange(ex)}
+            disabled={isDisabled}
+            style={{
+              padding: '6px 16px', borderRadius: '100px', border: 'none',
+              background: value === ex ? 'rgba(255,255,255,0.06)' : 'transparent',
+              color: value === ex ? 'var(--text-primary)' : 'var(--text-muted)',
+              fontSize: '12px', fontWeight: 500,
+              fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+              opacity: isDisabled ? 0.3 : 1,
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {ex === 'combined' ? 'Combined' : ex}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -317,43 +331,39 @@ function ScannerLanding() {
                   </span>
                 </button>
 
-                {/* W — Weekly: coming soon */}
-                <span
-                  title="Weekly · coming soon"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}
-                >
-                  <span style={{
-                    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
-                    background: 'transparent',
-                    border: '1px solid var(--border-strong)',
-                    opacity: 0.35,
-                  }} />
-                  <span style={{
-                    fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600,
-                    color: 'var(--text-faint)', opacity: 0.4,
-                  }}>
-                    W
+                {/* W — Weekly */}
+                {preset.universe === 'NSE_ONLY' ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/scanner/${preset.id}?timeframe=weekly`); }}
+                    title="Weekly scan"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'var(--indigo)', opacity: 0.7 }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--indigo)', opacity: 0.8 }}>W</span>
+                  </button>
+                ) : (
+                  <span title="Weekly · coming soon" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', opacity: 0.35 }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--text-faint)', opacity: 0.4 }}>W</span>
                   </span>
-                </span>
+                )}
 
-                {/* M — Monthly: coming soon */}
-                <span
-                  title="Monthly · coming soon"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}
-                >
-                  <span style={{
-                    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
-                    background: 'transparent',
-                    border: '1px solid var(--border-strong)',
-                    opacity: 0.35,
-                  }} />
-                  <span style={{
-                    fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600,
-                    color: 'var(--text-faint)', opacity: 0.4,
-                  }}>
-                    M
+                {/* M — Monthly */}
+                {preset.universe === 'NSE_ONLY' ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/scanner/${preset.id}?timeframe=monthly`); }}
+                    title="Monthly scan"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'var(--indigo)', opacity: 0.7 }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--indigo)', opacity: 0.8 }}>M</span>
+                  </button>
+                ) : (
+                  <span title="Monthly · coming soon" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', opacity: 0.35 }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--text-faint)', opacity: 0.4 }}>M</span>
                   </span>
-                </span>
+                )}
               </div>
 
               {/* Relevance bar */}
@@ -429,9 +439,11 @@ function sortCFStocks(stocks: ScanStock[], key: CFSortKey, dir: SortDir): ScanSt
 
 // ── Conviction Flow results (server-side RPC, different columns) ───────────
 
-function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
-  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
-  const { data: stocks = [], isLoading, error } = useScan('conviction_flow', exchangeFilter);
+function ConvictionFlowResults({ preset, timeframe }: { preset: ScanDefinition; timeframe: ScanTimeframe }) {
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('NSE');
+  const isNseOnly = preset.universe === 'NSE_ONLY' && timeframe !== 'daily';
+  const disabledExchangeOptions: ExchangeFilter[] = isNseOnly ? ['combined', 'BSE'] : [];
+  const { data: stocks = [], isLoading, error } = useScan('conviction_flow', exchangeFilter, timeframe);
   const [sortKey, setSortKey] = useState<CFSortKey>('delivery_surge_x');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [vaniOnly, setVaniOnly] = useState(false);
@@ -458,7 +470,7 @@ function ConvictionFlowResults({ preset }: { preset: ScanDefinition }) {
       }}>
         {/* Left: exchange tabs + VaNi toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} />
+          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
           <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
         </div>
 
@@ -583,9 +595,11 @@ function sortBSStocks(stocks: ScanStock[], key: BSSortKey, dir: SortDir): ScanSt
 
 // ── Breakout Surge results ────────────────────────────────────
 
-function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
-  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
-  const { data: stocks = [], isLoading, error } = useScan('breakout_surge', exchangeFilter);
+function BreakoutSurgeResults({ preset, timeframe }: { preset: ScanDefinition; timeframe: ScanTimeframe }) {
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('NSE');
+  const isNseOnly = preset.universe === 'NSE_ONLY' && timeframe !== 'daily';
+  const disabledExchangeOptions: ExchangeFilter[] = isNseOnly ? ['combined', 'BSE'] : [];
+  const { data: stocks = [], isLoading, error } = useScan('breakout_surge', exchangeFilter, timeframe);
   const [sortKey, setSortKey] = useState<BSSortKey>('rvol');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [vaniOnly, setVaniOnly] = useState(false);
@@ -613,7 +627,7 @@ function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
       }}>
         {/* Left: exchange tabs + VaNi toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} />
+          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
           <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
         </div>
 
@@ -701,6 +715,8 @@ function BreakoutSurgeResults({ preset }: { preset: ScanDefinition }) {
 
 function ScannerResults({ presetId }: { presetId: string }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const timeframe = (searchParams.get('timeframe') ?? 'daily') as ScanTimeframe;
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const [sortKey, setSortKey] = useState<SortKey>('magic_rs');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -708,10 +724,13 @@ function ScannerResults({ presetId }: { presetId: string }) {
 
   const { data: presets = SCAN_PRESETS } = useScanPresets();
   const preset = presets.find((p) => p.id === presetId);
+  const isNseOnly = preset?.universe === 'NSE_ONLY' && timeframe !== 'daily';
+  const disabledExchangeOptions: ExchangeFilter[] = isNseOnly ? ['combined', 'BSE'] : [];
 
   const { data: stocks, isLoading, error } = useScan(
     preset ? presetId : (presets[0]?.id ?? presetId),
     exchangeFilter,
+    timeframe,
   );
 
   const oppCount = useMemo(
@@ -772,7 +791,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
         }}>
           {preset.name}{' '}
           <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
-            · Daily
+            · {timeframe === 'weekly' ? 'Weekly' : timeframe === 'monthly' ? 'Monthly' : 'Daily'}
           </em>
         </h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
@@ -787,7 +806,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <ConvictionFlowResults preset={preset} />
+        <ConvictionFlowResults preset={preset} timeframe={timeframe} />
       </div>
     );
   }
@@ -797,7 +816,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <BreakoutSurgeResults preset={preset} />
+        <BreakoutSurgeResults preset={preset} timeframe={timeframe} />
       </div>
     );
   }
@@ -829,7 +848,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
         }}>
           {preset.name}{' '}
           <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
-            · Daily
+            · {timeframe === 'weekly' ? 'Weekly' : timeframe === 'monthly' ? 'Monthly' : 'Daily'}
           </em>
         </h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
@@ -843,7 +862,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
         marginBottom: '20px', gap: '16px', flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} />
+          <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
           <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />
         </div>
 
