@@ -21,6 +21,9 @@ Usage (from App/backend/):
   # Force re-fetch even if already populated:
   python scripts/populate_mcap.py --force
 
+  # Skip NSE pass (already done), just copy BSE via ISIN:
+  python scripts/populate_mcap.py --bse-only
+
 DB connection is read from App/.env (DB_PRIMARY) or App/frontend/.env automatically.
 """
 
@@ -42,7 +45,7 @@ def _load_env():
     try:
         from dotenv import load_dotenv
     except ImportError:
-        return  # dotenv not installed — rely on env vars already set
+        return
     for candidate in [
         os.path.join(_APP_DIR, '.env'),
         os.path.join(_APP_DIR, 'frontend', '.env'),
@@ -57,9 +60,11 @@ _load_env()
 
 NSE_QUOTE_URL = 'https://www.nseindia.com/api/quote-equity?symbol={symbol}'
 
-RATE_LIMIT_MIN = 0.8   # seconds between requests
-RATE_LIMIT_MAX = 1.4
-COMMIT_EVERY   = 50    # batch commit size
+RATE_LIMIT_MIN   = 1.2   # seconds between requests (slightly slower = more stable)
+RATE_LIMIT_MAX   = 2.0
+COMMIT_EVERY     = 50
+COOLDOWN_AFTER   = 3     # consecutive failures before a long pause
+COOLDOWN_SECONDS = 45    # pause duration when NSE starts blocking
 
 
 # ── DB connection ─────────────────────────────────────────────────────────────
@@ -88,6 +93,7 @@ def get_conn():
 # ── NSE Session ───────────────────────────────────────────────────────────────
 
 import requests
+from requests.exceptions import Timeout, ConnectionError as ReqConnError
 
 _HEADERS = {
     'User-Agent': (
@@ -123,11 +129,21 @@ def _init_session():
         try:
             r = _session.get(url, timeout=30)
             if len(_session.cookies) > 0:
-                print(f'  [nse] Session ready ({len(_session.cookies)} cookies from {url})')
+                print(f'  [nse] Session ready ({len(_session.cookies)} cookies)')
                 return
         except Exception:
             continue
-    print('  [nse] WARNING: no cookies — NSE may block requests')
+    print('  [nse] WARNING: no cookies obtained — NSE may block requests')
+
+
+def _reset_session(wait: float = 0):
+    global _session
+    _session = None
+    if wait:
+        print(f'  [nse] Cooling down {wait:.0f}s before retrying...', flush=True)
+        time.sleep(wait)
+    _init_session()
+    time.sleep(3)
 
 
 def fetch_quote(symbol: str) -> dict | None:
@@ -136,25 +152,36 @@ def fetch_quote(symbol: str) -> dict | None:
         _init_session()
 
     url = NSE_QUOTE_URL.format(symbol=symbol)
-    for attempt in range(3):
+    for attempt in range(4):
         try:
-            r = _session.get(url, timeout=20)
+            r = _session.get(url, timeout=25)
+
             if r.status_code == 404:
-                return None
-            if r.status_code == 403:
-                print(f'    403 — refreshing session (attempt {attempt+1})')
-                _session = None
-                _init_session()
-                time.sleep(5)
+                return None  # symbol genuinely not on NSE
+
+            if r.status_code in (403, 429):
+                wait = 15 + attempt * 10
+                print(f' {r.status_code} — refreshing session (wait {wait}s)', end='', flush=True)
+                _reset_session(wait=wait)
                 continue
+
             r.raise_for_status()
             return r.json()
+
+        except (Timeout, ReqConnError) as e:
+            # Timeout = NSE blocked us; refresh session and back off
+            wait = 20 + attempt * 15
+            print(f' timeout — refreshing session (wait {wait}s)', end='', flush=True)
+            _reset_session(wait=wait)
+
         except requests.RequestException as e:
-            if attempt < 2:
-                time.sleep(3 * (attempt + 1))
+            if attempt < 3:
+                time.sleep(5 * (attempt + 1))
             else:
-                print(f'    FAIL after 3 attempts: {e}')
+                print(f'    FAIL: {e}')
                 return None
+
+    print(f'    FAIL after 4 attempts')
     return None
 
 
@@ -193,6 +220,7 @@ def run_nse_pass(conn, dry_run: bool, force: bool):
     skipped = 0
     failed = []
     pending = []
+    consecutive_fails = 0
 
     def flush():
         if dry_run or not pending:
@@ -212,18 +240,27 @@ def run_nse_pass(conn, dry_run: bool, force: bool):
         symbol = row['symbol']
         print(f'  [{i}/{total}] {symbol}', end='', flush=True)
 
+        # Cool-down if NSE has been blocking us repeatedly
+        if consecutive_fails >= COOLDOWN_AFTER:
+            print(f'\n  [{consecutive_fails} consecutive failures] Pausing {COOLDOWN_SECONDS}s...', flush=True)
+            _reset_session(wait=COOLDOWN_SECONDS)
+            consecutive_fails = 0
+
         data = fetch_quote(symbol)
         if data is None:
-            print(' — not found on NSE')
+            print(' — not found')
             skipped += 1
+            consecutive_fails += 1
         else:
             mcap = extract_mcap(data)
             if mcap is None:
                 print(' — mcap extract failed')
                 failed.append(symbol)
+                consecutive_fails += 1
             else:
                 print(f' — ₹{mcap:,.1f} Cr')
                 done += 1
+                consecutive_fails = 0
                 pending.append((mcap, sym_id))
 
         if len(pending) >= COMMIT_EVERY:
@@ -233,7 +270,7 @@ def run_nse_pass(conn, dry_run: bool, force: bool):
         time.sleep(random.uniform(RATE_LIMIT_MIN, RATE_LIMIT_MAX))
 
     flush()
-    print(f'\nNSE done: {done} updated, {skipped} not on NSE, {len(failed)} failed')
+    print(f'\nNSE done: {done} updated, {skipped} not found, {len(failed)} failed')
     if failed:
         print(f'  Failed: {", ".join(failed)}')
 
@@ -241,18 +278,11 @@ def run_nse_pass(conn, dry_run: bool, force: bool):
 # ── Pass 2: BSE via ISIN ──────────────────────────────────────────────────────
 
 def run_bse_pass(conn, dry_run: bool, force: bool):
-    """
-    Copy mcap_cr from the NSE row to the BSE row for dual-listed stocks.
-    Matching key: isin (same company listed on both exchanges).
-    BSE-only stocks (no NSE counterpart) are reported as remaining.
-    """
     print('\n=== Pass 2: BSE (copy from NSE via ISIN) ===')
 
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
     where_bse = "mcap_cr IS NULL" if not force else "TRUE"
 
-    # One UPDATE: join BSE rows to NSE rows on ISIN, copy mcap_cr
     sql_update = f"""
         UPDATE km_equity_symbols bse
         SET    mcap_cr = nse.mcap_cr
@@ -267,7 +297,6 @@ def run_bse_pass(conn, dry_run: bool, force: bool):
     """
 
     if dry_run:
-        # Count what would be updated
         sql_count = f"""
             SELECT count(*) AS n
             FROM   km_equity_symbols bse
@@ -285,7 +314,6 @@ def run_bse_pass(conn, dry_run: bool, force: bool):
         conn.commit()
         print(f'  Copied mcap_cr to {updated} BSE rows via ISIN match.')
 
-    # Report BSE-only stocks with no ISIN match (truly BSE-only, not dual-listed)
     cur.execute("""
         SELECT count(*) AS n
         FROM   km_equity_symbols bse
@@ -303,7 +331,7 @@ def run_bse_pass(conn, dry_run: bool, force: bool):
     if remaining:
         print(f'  {remaining} BSE-only stocks still have no mcap_cr (no NSE ISIN match).')
     else:
-        print('  All BSE stocks covered.')
+        print('  All active BSE stocks covered.')
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
