@@ -1,31 +1,11 @@
 -- ============================================================
--- Migration 084 · Fix aggregate universe for weekly/monthly
+-- Migration 085 · Fix magic_rs_ma → magic_rs_sma144 in aggregate RPCs
 --
--- Problem: aggregate_equity_weekly / _monthly (migration 080)
--- used DISTINCT ON scoped to each week's km_equity_eod rows.
--- That approach includes every equity_id that traded that week,
--- producing 6,142 rows (NSE + BSE duplicates for the same stock).
---
--- Root cause: the CTE joined km_equity_eod first, then deduplicated
--- by ISIN only within the rows that had EOD data that week. Stocks
--- listed on both NSE and BSE can have different equity_ids, so both
--- slipped through when one exchange had data and the other didn't.
---
--- Fix: derive the canonical universe from km_equity_symbols master
--- (ISIN-keyed, NSE-preferred) once per aggregation call, then filter
--- km_equity_eod to those equity_ids only. Same logic as v_equity_eod_deduped.
--- Result: stable ~1,380-stock universe every week/month.
---
--- TRUNCATE: both tables are cleared; re-run full historical backfill
--- after applying this migration.
+-- Migration 084 used magic_rs_ma in the ON CONFLICT DO UPDATE SET
+-- clause but the column is named magic_rs_sma144 on both tables.
 -- ============================================================
 
 BEGIN;
-
-TRUNCATE TABLE km_equity_weekly;
-TRUNCATE TABLE km_equity_monthly;
-
--- ── aggregate_equity_weekly ───────────────────────────────────
 
 CREATE OR REPLACE FUNCTION aggregate_equity_weekly(
   p_trade_date DATE
@@ -106,8 +86,6 @@ BEGIN
 END;
 $$;
 
-
--- ── aggregate_equity_monthly ──────────────────────────────────
 
 CREATE OR REPLACE FUNCTION aggregate_equity_monthly(
   p_trade_date DATE
@@ -190,8 +168,6 @@ BEGIN
 END;
 $$;
 
-
--- ── Permissions ───────────────────────────────────────────────
 
 GRANT EXECUTE ON FUNCTION aggregate_equity_weekly(DATE)  TO authenticated, kd_app, anon;
 GRANT EXECUTE ON FUNCTION aggregate_equity_monthly(DATE) TO authenticated, kd_app, anon;
