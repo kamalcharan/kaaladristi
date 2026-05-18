@@ -574,8 +574,11 @@ function buildScanStock(
   const sym = bundle.symbols.get(equityId);
   if (!eod || !sym) return null;
 
-  // Guard: exclude stocks with missing or zero EMA20
-  if (!eod.ema_20 || eod.ema_20 === 0) return null;
+  // Normalize ema_20: treat null/undefined as null but do NOT filter on ema_20 === 0
+  // Root cause of ema_20 = 0 is under investigation — filtering here empties all scans.
+  if (eod.ema_20 === null || eod.ema_20 === undefined) {
+    eod.ema_20 = null;
+  }
 
   // Guard: treat unrecognised zone values as null
   if (eod.magic_rs_zone && !VALID_ZONES.has(eod.magic_rs_zone)) {
@@ -922,7 +925,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 
   for (const [id] of bundle.latestEod) {
     const eod = bundle.latestEod.get(id);
-    if (!eod || !eod.ema_20 || eod.ema_20 <= 0) continue;
+    if (!eod) continue;
 
     const history = bundle.eodHistory.get(id) ?? [];
     if (history.length < 5) continue; // need at least 5 bars for 5D average
@@ -943,8 +946,11 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     const delivery_surge_x = avg_amt_22d > 0 ? avg_amt_5d / avg_amt_22d : 0;
     if (delivery_surge_x <= 1.5) continue;
 
-    const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
-    if (d_pct < -8 || d_pct > 8) continue;
+    // Guard against ema_20 = 0 (root cause under investigation — skip d_pct filter when unreliable)
+    const d_pct = (eod.ema_20 && eod.ema_20 > 0)
+      ? ((eod.close - eod.ema_20) / eod.ema_20) * 100
+      : null;
+    if (d_pct !== null && (d_pct < -8 || d_pct > 8)) continue;
 
     const stock = buildScanStock(id, bundle); // VaNi computed inline below
     if (!stock) continue;
