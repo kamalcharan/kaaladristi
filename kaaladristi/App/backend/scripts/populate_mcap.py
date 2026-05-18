@@ -8,15 +8,16 @@ Source: NSE quote-equity API
 Resumable: skips symbols where mcap_cr IS NOT NULL.
 Rate-limited to ~1 req/sec (NSE anti-bot).
 
-Usage:
-  cd App/backend
-  KD_DB_PASSWORD=... python scripts/populate_mcap.py
+Usage (from App/backend/):
+  python scripts/populate_mcap.py
 
   # Dry run (no DB writes):
-  KD_DB_PASSWORD=... python scripts/populate_mcap.py --dry-run
+  python scripts/populate_mcap.py --dry-run
 
   # Force re-fetch even if already populated:
-  KD_DB_PASSWORD=... python scripts/populate_mcap.py --force
+  python scripts/populate_mcap.py --force
+
+DB connection is read from App/.env (DB_PRIMARY) or App/frontend/.env automatically.
 """
 
 import os
@@ -27,12 +28,28 @@ import argparse
 import psycopg2
 import psycopg2.extras
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ── Auto-load .env ────────────────────────────────────────────────────────────
 
-DB_HOST = '187.127.136.65'
-DB_PORT = 5432
-DB_NAME = 'kaala_dristi_db'
-DB_USER = 'postgres'
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_DIR = os.path.dirname(_HERE)
+_APP_DIR = os.path.dirname(_BACKEND_DIR)
+
+def _load_env():
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return  # dotenv not installed — rely on env vars already set
+    for candidate in [
+        os.path.join(_APP_DIR, '.env'),
+        os.path.join(_APP_DIR, 'frontend', '.env'),
+        os.path.join(_BACKEND_DIR, '.env'),
+    ]:
+        if os.path.isfile(candidate):
+            load_dotenv(candidate, override=False)
+
+_load_env()
+
+# ── Config ────────────────────────────────────────────────────────────────────
 
 NSE_QUOTE_URL = 'https://www.nseindia.com/api/quote-equity?symbol={symbol}'
 
@@ -44,10 +61,25 @@ COMMIT_EVERY   = 50    # batch commit size
 # ── DB connection ─────────────────────────────────────────────────────────────
 
 def get_conn():
+    # Prefer full DSN (DB_PRIMARY / DATABASE_URL)
+    dsn = (
+        os.getenv('DB_PRIMARY', '').strip() or
+        os.getenv('DATABASE_URL', '').strip()
+    )
+    if dsn:
+        return psycopg2.connect(dsn)
+
+    # Fallback: individual params with KD_DB_PASSWORD
+    password = os.getenv('KD_DB_PASSWORD', '').strip()
+    if not password:
+        print('ERROR: No DB connection found.')
+        print('  Set DB_PRIMARY in App/.env  (e.g. postgresql://postgres:pass@host/dbname)')
+        print('  or set KD_DB_PASSWORD env var for the legacy direct-connect mode.')
+        sys.exit(1)
     return psycopg2.connect(
-        host=DB_HOST, port=DB_PORT,
-        dbname=DB_NAME, user=DB_USER,
-        password=os.environ['KD_DB_PASSWORD'],
+        host='187.127.136.65', port=5432,
+        dbname='kaala_dristi_db', user='postgres',
+        password=password,
     )
 
 
