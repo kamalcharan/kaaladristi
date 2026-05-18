@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { executeScan, getAllScanCounts, fetchScanPresets, SCAN_PRESETS, type ExchangeFilter, type ScanCountsResult } from '@/services/scanEngine';
+import { executeScan, getAllScanCounts, fetchScanPresets, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult } from '@/services/scanEngine';
 import type { ScanStock, ScanDefinition } from '@/types';
 
-export function useScan(scanId: string, exchangeFilter: ExchangeFilter = 'combined') {
+export function useScan(
+  scanId: string,
+  exchangeFilter: ExchangeFilter = 'combined',
+  timeframe: ScanTimeframe = 'daily',
+) {
   return useQuery<ScanStock[]>({
-    queryKey: ['scan', scanId, exchangeFilter],
-    queryFn: () => executeScan(scanId, exchangeFilter),
+    queryKey: ['scan', scanId, exchangeFilter, timeframe],
+    queryFn: () => executeScan(scanId, exchangeFilter, timeframe),
     staleTime: 3 * 60 * 1000,
     retry: 1,
   });
@@ -14,7 +18,7 @@ export function useScan(scanId: string, exchangeFilter: ExchangeFilter = 'combin
 export function useAllScanCounts(exchangeFilter: ExchangeFilter = 'combined') {
   return useQuery<ScanCountsResult>({
     queryKey: ['scan_counts', exchangeFilter],
-    queryFn: () => getAllScanCounts(exchangeFilter),
+    queryFn: () => getAllScanCounts(exchangeFilter, 'daily'), // landing always daily
     staleTime: 3 * 60 * 1000,
     retry: 1,
   });

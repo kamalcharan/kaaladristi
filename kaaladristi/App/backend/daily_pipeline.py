@@ -32,6 +32,7 @@ Usage
 import os
 import sys
 import argparse
+import calendar
 from datetime import date, datetime, timedelta
 
 # Add backend dir to path
@@ -44,6 +45,7 @@ from pipeline.utils.trading_calendar import (
     mark_day_status, get_missing_dates, last_trading_day,
 )
 from pipeline.utils.step_tracker import StepTracker
+from pipeline.compute import compute_index_returns, aggregate_weekly_bars, aggregate_monthly_bars
 from pipeline.utils.nse_session import NseSession
 from pipeline.downloaders.nse_bhav import download_nse_bhav, download_nse_delivery
 from pipeline.downloaders.bse_bhav import download_bse_bhav
@@ -57,6 +59,21 @@ from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
+
+
+def is_week_end(d: date) -> bool:
+    """True if d is a Friday (ISO weekday 5).
+
+    The weekly aggregate is triggered on Fridays regardless of whether
+    tomorrow is a trading day — the pipeline always runs on trading days,
+    and Friday is the natural ISO week boundary.
+    """
+    return d.isoweekday() == 5
+
+
+def is_month_end(d: date) -> bool:
+    """True if d is the last calendar day of its month."""
+    return d.day == calendar.monthrange(d.year, d.month)[1]
 
 
 def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
@@ -292,6 +309,39 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             tracker.fail('industry_composites', str(e))
 
+    # ── Step 6d: Index returns (ret_5d / ret_22d / ret_66d) ──
+    if not skip_indicators:
+        tracker.start('index_returns')
+        try:
+            ir_count = compute_index_returns(
+                db, from_date=trade_date - timedelta(days=5),
+            )
+            tracker.complete('index_returns', rows=ir_count)
+        except Exception as e:
+            tracker.fail('index_returns', str(e))
+
+    # ── Step 6e: Weekly equity aggregate (Fridays only) ──
+    if not skip_indicators and is_week_end(trade_date):
+        tracker.start('equity_weekly')
+        try:
+            ew_count = aggregate_weekly_bars(
+                db, from_date=trade_date, run_indicators=True, verbose=True,
+            )
+            tracker.complete('equity_weekly', rows=ew_count)
+        except Exception as e:
+            tracker.fail('equity_weekly', str(e))
+
+    # ── Step 6f: Monthly equity aggregate (last calendar day only) ──
+    if not skip_indicators and is_month_end(trade_date):
+        tracker.start('equity_monthly')
+        try:
+            em_count = aggregate_monthly_bars(
+                db, from_date=trade_date, run_indicators=True, verbose=True,
+            )
+            tracker.complete('equity_monthly', rows=em_count)
+        except Exception as e:
+            tracker.fail('equity_monthly', str(e))
+
     # ── Step 7: Refresh views ──
     tracker.start('views')
     try:
@@ -481,6 +531,16 @@ def main():
     parser.add_argument('--force', action='store_true',
                         help='Force re-run even if already completed')
 
+    # ── Standalone compute / backfill modes ──
+    parser.add_argument('--compute-returns', action='store_true',
+                        help='Standalone: fill ret_5d/22d/66d in km_index_eod and exit')
+    parser.add_argument('--backfill-weekly', action='store_true',
+                        help='Standalone: backfill km_equity_weekly from --from date and exit')
+    parser.add_argument('--backfill-monthly', action='store_true',
+                        help='Standalone: backfill km_equity_monthly from --from date and exit')
+    parser.add_argument('--no-indicators', action='store_true',
+                        help='Skip indicator chain in backfill modes')
+
     args = parser.parse_args()
 
     print('=' * 60)
@@ -493,6 +553,44 @@ def main():
     # Status mode
     if args.status:
         show_status(db)
+        return
+
+    # ── Standalone compute / backfill modes ──────────────────────────────────
+    # These bypass the download pipeline and are safe to run at any time.
+
+    if args.compute_returns:
+        from_dt = date.fromisoformat(args.date_from) if args.date_from else None
+        print(f'\n  Computing index returns{f" from {from_dt}" if from_dt else " (all NULL rows)"}...')
+        n = compute_index_returns(db, from_date=from_dt, verbose=True)
+        print(f'  Done — {n:,} rows updated.\n')
+        return
+
+    if args.backfill_weekly:
+        if not args.date_from:
+            print('  --backfill-weekly requires --from YYYY-MM-DD')
+            sys.exit(1)
+        from_dt = date.fromisoformat(args.date_from)
+        print(f'\n  Backfilling km_equity_weekly from {from_dt}...')
+        n = aggregate_weekly_bars(
+            db, from_date=from_dt,
+            run_indicators=not args.no_indicators,
+            verbose=True,
+        )
+        print(f'  Done — {n:,} weekly rows upserted.\n')
+        return
+
+    if args.backfill_monthly:
+        if not args.date_from:
+            print('  --backfill-monthly requires --from YYYY-MM-DD')
+            sys.exit(1)
+        from_dt = date.fromisoformat(args.date_from)
+        print(f'\n  Backfilling km_equity_monthly from {from_dt}...')
+        n = aggregate_monthly_bars(
+            db, from_date=from_dt,
+            run_indicators=not args.no_indicators,
+            verbose=True,
+        )
+        print(f'  Done — {n:,} monthly rows upserted.\n')
         return
 
     # Determine date(s) to process
