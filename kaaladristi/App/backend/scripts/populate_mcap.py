@@ -24,6 +24,9 @@ Usage (from App/backend/):
   # Skip NSE pass (already done), just copy BSE via ISIN:
   python scripts/populate_mcap.py --bse-only
 
+  # Print raw API response for first symbol (to inspect field names):
+  python scripts/populate_mcap.py --debug
+
 DB connection is read from App/.env (DB_PRIMARY) or App/frontend/.env automatically.
 """
 
@@ -32,8 +35,10 @@ import sys
 import time
 import random
 import argparse
+import json
 import psycopg2
 import psycopg2.extras
+from urllib.parse import quote as urlquote
 
 # ── Auto-load .env ────────────────────────────────────────────────────────────
 
@@ -58,13 +63,13 @@ _load_env()
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-NSE_QUOTE_URL = 'https://www.nseindia.com/api/quote-equity?symbol={symbol}'
+NSE_QUOTE_BASE   = 'https://www.nseindia.com/api/quote-equity'
 
-RATE_LIMIT_MIN   = 1.2   # seconds between requests (slightly slower = more stable)
+RATE_LIMIT_MIN   = 1.2
 RATE_LIMIT_MAX   = 2.0
 COMMIT_EVERY     = 50
-COOLDOWN_AFTER   = 3     # consecutive failures before a long pause
-COOLDOWN_SECONDS = 45    # pause duration when NSE starts blocking
+COOLDOWN_AFTER   = 3
+COOLDOWN_SECONDS = 45
 
 
 # ── DB connection ─────────────────────────────────────────────────────────────
@@ -133,14 +138,14 @@ def _init_session():
                 return
         except Exception:
             continue
-    print('  [nse] WARNING: no cookies obtained — NSE may block requests')
+    print('  [nse] WARNING: no cookies obtained')
 
 
 def _reset_session(wait: float = 0):
     global _session
     _session = None
     if wait:
-        print(f'  [nse] Cooling down {wait:.0f}s before retrying...', flush=True)
+        print(f'  [nse] Cooling down {wait:.0f}s...', flush=True)
         time.sleep(wait)
     _init_session()
     time.sleep(3)
@@ -151,13 +156,16 @@ def fetch_quote(symbol: str) -> dict | None:
     if _session is None:
         _init_session()
 
-    url = NSE_QUOTE_URL.format(symbol=symbol)
+    # Pass symbol as query param so requests handles URL encoding (&, spaces, etc.)
+    url = NSE_QUOTE_BASE
+    params = {'symbol': symbol}
+
     for attempt in range(4):
         try:
-            r = _session.get(url, timeout=25)
+            r = _session.get(url, params=params, timeout=25)
 
             if r.status_code == 404:
-                return None  # symbol genuinely not on NSE
+                return None
 
             if r.status_code in (403, 429):
                 wait = 15 + attempt * 10
@@ -168,8 +176,7 @@ def fetch_quote(symbol: str) -> dict | None:
             r.raise_for_status()
             return r.json()
 
-        except (Timeout, ReqConnError) as e:
-            # Timeout = NSE blocked us; refresh session and back off
+        except (Timeout, ReqConnError):
             wait = 20 + attempt * 15
             print(f' timeout — refreshing session (wait {wait}s)', end='', flush=True)
             _reset_session(wait=wait)
@@ -187,20 +194,75 @@ def fetch_quote(symbol: str) -> dict | None:
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 
-def extract_mcap(data: dict) -> float | None:
-    try:
-        price = data.get('priceInfo', {}).get('lastPrice')
-        issued = data.get('securityInfo', {}).get('issuedSize')
-        if price and issued and float(price) > 0 and int(issued) > 0:
-            return round(float(price) * int(issued) / 1e7, 2)
-    except (TypeError, ValueError, KeyError):
-        pass
+_debug_dumped = False   # print raw response once on first extraction failure
+
+def extract_mcap(data: dict, symbol: str = '', debug: bool = False) -> float | None:
+    global _debug_dumped
+
+    # Try all known field paths NSE has used across API versions
+    price = (
+        _dig(data, 'priceInfo', 'lastPrice') or
+        _dig(data, 'priceInfo', 'close') or
+        _dig(data, 'priceInfo', 'previousClose')
+    )
+    issued = (
+        _dig(data, 'securityInfo', 'issuedSize') or
+        _dig(data, 'securityInfo', 'issuedCap') or
+        _dig(data, 'industryInfo', 'issuedSize') or
+        _dig(data, 'metadata', 'issuedSize')
+    )
+
+    # Some responses carry a pre-computed marketCap in Crores directly
+    direct_mcap = (
+        _dig(data, 'priceInfo', 'marketCap') or
+        _dig(data, 'securityInfo', 'marketCap') or
+        _dig(data, 'metadata', 'pdMarketCap')
+    )
+
+    if direct_mcap:
+        try:
+            v = float(str(direct_mcap).replace(',', ''))
+            if v > 0:
+                # NSE sometimes returns this in Lakhs — if < 500 it's likely Cr already
+                # heuristic: NIFTY50 min mcap ~10,000 Cr; if value < 50 assume it's in 1000Cr
+                return round(v, 2)
+        except (ValueError, TypeError):
+            pass
+
+    if price and issued:
+        try:
+            p = float(str(price).replace(',', ''))
+            s = float(str(issued).replace(',', ''))
+            if p > 0 and s > 0:
+                return round(p * s / 1e7, 2)
+        except (ValueError, TypeError):
+            pass
+
+    # Dump raw response once to help debug field names
+    if not _debug_dumped or debug:
+        _debug_dumped = True
+        print(f'\n  [DEBUG] extract_mcap failed for {symbol}. Top-level keys: {list(data.keys())}')
+        for k, v in data.items():
+            if isinstance(v, dict):
+                print(f'    {k}: {list(v.keys())}')
+            else:
+                print(f'    {k}: {repr(v)[:120]}')
+
     return None
+
+
+def _dig(d: dict, *keys):
+    """Safe nested dict lookup."""
+    for k in keys:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+    return d if d not in (None, '', 0) else None
 
 
 # ── Pass 1: NSE ───────────────────────────────────────────────────────────────
 
-def run_nse_pass(conn, dry_run: bool, force: bool):
+def run_nse_pass(conn, dry_run: bool, force: bool, debug: bool):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     where = "exchange = 'NSE' AND is_active = true"
@@ -240,7 +302,6 @@ def run_nse_pass(conn, dry_run: bool, force: bool):
         symbol = row['symbol']
         print(f'  [{i}/{total}] {symbol}', end='', flush=True)
 
-        # Cool-down if NSE has been blocking us repeatedly
         if consecutive_fails >= COOLDOWN_AFTER:
             print(f'\n  [{consecutive_fails} consecutive failures] Pausing {COOLDOWN_SECONDS}s...', flush=True)
             _reset_session(wait=COOLDOWN_SECONDS)
@@ -252,7 +313,7 @@ def run_nse_pass(conn, dry_run: bool, force: bool):
             skipped += 1
             consecutive_fails += 1
         else:
-            mcap = extract_mcap(data)
+            mcap = extract_mcap(data, symbol=symbol, debug=debug)
             if mcap is None:
                 print(' — mcap extract failed')
                 failed.append(symbol)
@@ -339,14 +400,15 @@ def run_bse_pass(conn, dry_run: bool, force: bool):
 def main():
     parser = argparse.ArgumentParser(description='Populate mcap_cr in km_equity_symbols')
     parser.add_argument('--dry-run', action='store_true', help='Fetch but do not write to DB')
-    parser.add_argument('--force', action='store_true', help='Re-fetch even if mcap_cr already set')
-    parser.add_argument('--bse-only', action='store_true', help='Skip NSE fetch, run BSE ISIN copy only')
+    parser.add_argument('--force',   action='store_true', help='Re-fetch even if mcap_cr already set')
+    parser.add_argument('--bse-only',action='store_true', help='Skip NSE fetch, run BSE ISIN copy only')
+    parser.add_argument('--debug',   action='store_true', help='Print raw API response on every extraction failure')
     args = parser.parse_args()
 
     conn = get_conn()
 
     if not args.bse_only:
-        run_nse_pass(conn, dry_run=args.dry_run, force=args.force)
+        run_nse_pass(conn, dry_run=args.dry_run, force=args.force, debug=args.debug)
 
     run_bse_pass(conn, dry_run=args.dry_run, force=args.force)
 
