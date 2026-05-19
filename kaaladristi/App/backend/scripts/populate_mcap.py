@@ -27,7 +27,7 @@ Usage (from App/backend/):
   # Print actual field values on every extraction failure:
   python scripts/populate_mcap.py --debug
 
-  # Diagnose BSE ISIN coverage before running BSE pass:
+  # Full BSE diagnostics (isin coverage on both sides, join count):
   python scripts/populate_mcap.py --bse-diag
 
 DB connection is read from App/.env (DB_PRIMARY) or App/frontend/.env automatically.
@@ -69,7 +69,7 @@ NSE_QUOTE_BASE   = 'https://www.nseindia.com/api/quote-equity'
 RATE_LIMIT_MIN   = 1.2
 RATE_LIMIT_MAX   = 2.0
 COMMIT_EVERY     = 50
-COOLDOWN_AFTER   = 3     # consecutive real failures before pause
+COOLDOWN_AFTER   = 3
 COOLDOWN_SECONDS = 45
 
 
@@ -156,8 +156,8 @@ def fetch_quote(symbol: str):
     """
     Returns:
       dict   — valid quote response
-      None   — symbol not found / NSE server error for this symbol (skip, don't penalise)
-      'FAIL' — network/session failure (counts as consecutive failure)
+      None   — symbol not found / NSE server error (skip, don't penalise)
+      'FAIL' — network/session failure (counts toward consecutive_fails)
     """
     global _session
     if _session is None:
@@ -182,9 +182,8 @@ def fetch_quote(symbol: str):
             r.raise_for_status()
             data = r.json()
 
-            # NSE returns {"error":[],"message":"TypeError..."} for bad/delisted symbols
             if 'error' in data and 'message' in data and 'priceInfo' not in data:
-                return None  # treat as not found — don't penalise consecutive_fails
+                return None
 
             return data
 
@@ -207,7 +206,6 @@ def fetch_quote(symbol: str):
 # ── Parser ────────────────────────────────────────────────────────────────────
 
 def _val(d: dict, *keys):
-    """Safe nested dict lookup — returns raw value (including 0/None)."""
     for k in keys:
         if not isinstance(d, dict):
             return None
@@ -240,9 +238,9 @@ def extract_mcap(data: dict, symbol: str = '', debug: bool = False) -> float | N
         return round(price * issued / 1e7, 2)
 
     if debug:
-        lp    = _val(data, 'priceInfo', 'lastPrice')
-        pc    = _val(data, 'priceInfo', 'previousClose')
-        iss   = _val(data, 'securityInfo', 'issuedSize')
+        lp  = _val(data, 'priceInfo', 'lastPrice')
+        pc  = _val(data, 'priceInfo', 'previousClose')
+        iss = _val(data, 'securityInfo', 'issuedSize')
         print(f'\n  [DEBUG] {symbol}: lastPrice={lp!r}  previousClose={pc!r}  issuedSize={iss!r}')
 
     return None
@@ -267,11 +265,11 @@ def run_nse_pass(conn, dry_run: bool, force: bool, debug: bool):
         return
 
     done = 0
-    not_found = 0       # NSE error / delisted — silent skip
-    suspended = 0       # found but price/shares = 0
-    net_fails = 0       # network failures
+    not_found = 0
+    suspended = 0
+    net_fails = 0
     pending = []
-    consecutive_fails = 0  # only network failures trigger cooldown
+    consecutive_fails = 0
 
     def flush():
         if dry_run or not pending:
@@ -299,22 +297,17 @@ def run_nse_pass(conn, dry_run: bool, force: bool, debug: bool):
         result = fetch_quote(symbol)
 
         if result is None:
-            # Delisted / NSE server error for this symbol — skip quietly
             print(' — skipped (NSE error/delisted)')
             not_found += 1
-            # do NOT increment consecutive_fails
-
         elif result == 'FAIL':
             print(' — network failure')
             net_fails += 1
             consecutive_fails += 1
-
         else:
             mcap = extract_mcap(result, symbol=symbol, debug=debug)
             if mcap is None:
                 print(' — suspended (price or shares = 0)')
                 suspended += 1
-                # do NOT increment consecutive_fails — this is a data issue, not a network issue
             else:
                 print(f' — ₹{mcap:,.1f} Cr')
                 done += 1
@@ -335,29 +328,63 @@ def run_nse_pass(conn, dry_run: bool, force: bool, debug: bool):
 # ── Pass 2: BSE via ISIN ──────────────────────────────────────────────────────
 
 def run_bse_diag(conn):
-    """Print ISIN coverage stats to explain BSE pass results."""
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    # NSE side
     cur.execute("""
         SELECT
-          count(*)                                      AS nse_total,
-          count(*) FILTER (WHERE mcap_cr IS NOT NULL)  AS nse_with_mcap,
-          count(*) FILTER (WHERE isin    IS NOT NULL)  AS nse_with_isin,
+          count(*)                                                          AS nse_total,
+          count(*) FILTER (WHERE mcap_cr IS NOT NULL)                      AS nse_with_mcap,
+          count(*) FILTER (WHERE isin    IS NOT NULL)                      AS nse_with_isin,
           count(*) FILTER (WHERE mcap_cr IS NOT NULL AND isin IS NOT NULL) AS nse_both
         FROM km_equity_symbols
         WHERE exchange = 'NSE' AND is_active = true
     """)
     r = cur.fetchone()
-    print(f'\n  NSE rows: {r["nse_total"]} total | '
+    print(f'\n  NSE: {r["nse_total"]} total | '
           f'{r["nse_with_mcap"]} have mcap_cr | '
           f'{r["nse_with_isin"]} have isin | '
-          f'{r["nse_both"]} have both (these feed the BSE copy)')
+          f'{r["nse_both"]} have both')
 
+    # BSE side
     cur.execute("""
-        SELECT count(*) AS n
+        SELECT
+          count(*)                                         AS bse_total,
+          count(*) FILTER (WHERE isin IS NOT NULL)        AS bse_with_isin,
+          count(*) FILTER (WHERE mcap_cr IS NOT NULL)     AS bse_with_mcap
         FROM km_equity_symbols
         WHERE exchange = 'BSE' AND is_active = true
     """)
-    print(f'  BSE rows: {cur.fetchone()["n"]} active')
+    r = cur.fetchone()
+    print(f'  BSE: {r["bse_total"]} total | '
+          f'{r["bse_with_isin"]} have isin | '
+          f'{r["bse_with_mcap"]} already have mcap_cr')
+
+    # Actual join count (what the UPDATE would touch)
+    cur.execute("""
+        SELECT count(*) AS n
+        FROM   km_equity_symbols bse
+        JOIN   km_equity_symbols nse ON nse.isin = bse.isin
+        WHERE  bse.exchange = 'BSE' AND bse.is_active = true AND bse.mcap_cr IS NULL
+          AND  nse.exchange = 'NSE'
+          AND  nse.isin     IS NOT NULL
+          AND  nse.mcap_cr  IS NOT NULL
+    """)
+    join_count = cur.fetchone()['n']
+    print(f'  Join matches (would be copied): {join_count}')
+
+    # Sample 3 BSE rows to check their isin values
+    cur.execute("""
+        SELECT symbol, isin, mcap_cr
+        FROM   km_equity_symbols
+        WHERE  exchange = 'BSE' AND is_active = true
+        ORDER BY id
+        LIMIT 5
+    """)
+    rows = cur.fetchall()
+    print(f'  Sample BSE rows:')
+    for row in rows:
+        print(f'    symbol={row["symbol"]}  isin={row["isin"]!r}  mcap_cr={row["mcap_cr"]}')
 
 
 def run_bse_pass(conn, dry_run: bool, force: bool):
@@ -382,16 +409,7 @@ def run_bse_pass(conn, dry_run: bool, force: bool):
     """
 
     if dry_run:
-        sql_count = f"""
-            SELECT count(*) AS n
-            FROM   km_equity_symbols bse
-            JOIN   km_equity_symbols nse ON nse.isin = bse.isin
-            WHERE  bse.exchange = 'BSE' AND bse.is_active = true AND bse.{where_bse}
-              AND  nse.exchange = 'NSE' AND nse.isin IS NOT NULL AND nse.mcap_cr IS NOT NULL
-        """
-        cur.execute(sql_count)
-        n = cur.fetchone()['n']
-        print(f'  [dry-run] Would copy mcap_cr to {n} BSE rows via ISIN match.')
+        print('  [dry-run] Skipping actual UPDATE (see join count above).')
     else:
         cur2 = conn.cursor()
         cur2.execute(sql_update)
@@ -426,7 +444,7 @@ def main():
     parser.add_argument('--dry-run',  action='store_true', help='Fetch but do not write to DB')
     parser.add_argument('--force',    action='store_true', help='Re-fetch even if mcap_cr already set')
     parser.add_argument('--bse-only', action='store_true', help='Skip NSE fetch, run BSE ISIN copy only')
-    parser.add_argument('--bse-diag', action='store_true', help='Show ISIN coverage stats only, then exit')
+    parser.add_argument('--bse-diag', action='store_true', help='Show BSE/NSE isin coverage and join count, then exit')
     parser.add_argument('--debug',    action='store_true', help='Print actual field values on extraction failure')
     args = parser.parse_args()
 
