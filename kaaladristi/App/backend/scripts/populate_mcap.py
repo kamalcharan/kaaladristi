@@ -546,13 +546,13 @@ def main():
         conn.close()
         return
 
-    if not args.bse_only and not args.bse3_only:
+    if not (args.bse_only or args.bse3_only):
         run_nse_pass(conn, args.dry_run, args.force, args.debug)
 
-    if not args.nse_only and not args.bse3_only:
+    if not (args.nse_only or args.bse3_only):
         run_bse_isin_pass(conn, args.dry_run, args.force)
 
-    if not args.nse_only and not (args.bse_only and not args.bse3_only):
+    if not args.nse_only:
         run_bse3_pass(conn, args.dry_run, args.force, args.debug)
 
     conn.close()
