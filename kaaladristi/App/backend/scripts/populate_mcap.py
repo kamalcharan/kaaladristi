@@ -8,8 +8,7 @@ Pass 2 — BSE  : copies mcap_cr from matching NSE row via ISIN (dual-listed sto
 
 Pass 3 — BSE-only: hits BSE scrip-header API for stocks with no NSE ISIN match.
   GET https://api.bseindia.com/BseIndiaAPI/api/getScripHeaderData/w?Debtflag=&scripcode={CODE}&seriesid=
-  mcap_cr = Mktcap field (BSE returns it in Crores directly)
-  Fallback: CMP × Noofshares / 1e7
+  Response shape: {CurrRate:{LTP,..}, Cmpname:{..}, Header:{..}, CompResp:{..}}
 
 All passes are resumable (skip symbols where mcap_cr IS NOT NULL).
 
@@ -21,7 +20,7 @@ Usage (from App/backend/):
   python scripts/populate_mcap.py --dry-run  # no DB writes
   python scripts/populate_mcap.py --force    # re-fetch even if already set
   python scripts/populate_mcap.py --bse-diag # show coverage stats and exit
-  python scripts/populate_mcap.py --debug    # print raw BSE response for first 3 calls
+  python scripts/populate_mcap.py --debug    # print FULL JSON for first 3 valid BSE stocks
 
 DB connection: reads DB_PRIMARY from App/.env automatically.
 """
@@ -31,6 +30,7 @@ import sys
 import time
 import random
 import argparse
+import json
 import psycopg2
 import psycopg2.extras
 
@@ -58,21 +58,16 @@ _load_env()
 # ── Config ────────────────────────────────────────────────────────────────────
 
 NSE_QUOTE_BASE  = 'https://www.nseindia.com/api/quote-equity'
-
-# BSE endpoints to try in order — first success wins
-BSE_ENDPOINTS = [
-    'https://api.bseindia.com/BseIndiaAPI/api/getScripHeaderData/w',
-    'https://api.bseindia.com/BseIndiaAPI/api/QuoteData',
-]
+BSE_SCRIP_BASE  = 'https://api.bseindia.com/BseIndiaAPI/api/getScripHeaderData/w'
 
 NSE_RATE_MIN    = 1.2
 NSE_RATE_MAX    = 2.0
-BSE_RATE_MIN    = 0.5
-BSE_RATE_MAX    = 1.0
+BSE_RATE_MIN    = 0.4
+BSE_RATE_MAX    = 0.8
 COMMIT_EVERY    = 50
-COOLDOWN_AFTER  = 3
+COOLDOWN_AFTER  = 5     # BSE: more tolerance before cooldown (many inactive codes)
 NSE_COOLDOWN    = 45
-BSE_COOLDOWN    = 20
+BSE_COOLDOWN    = 15
 
 
 # ── DB connection ─────────────────────────────────────────────────────────────
@@ -109,7 +104,7 @@ def _val(d, *keys):
     return d
 
 def _to_float(v) -> float | None:
-    if v is None:
+    if v is None or v == '-' or v == '':
         return None
     try:
         f = float(str(v).replace(',', '').strip())
@@ -231,7 +226,7 @@ _BSE_HEADERS = {
     'Referer': 'https://www.bseindia.com/',
 }
 _bse_session = None
-_bse_raw_printed = 0   # print raw response for first 3 calls in debug mode
+_bse_valid_printed = 0   # how many valid BSE responses we've printed in debug mode
 
 def _bse_init():
     global _bse_session
@@ -247,88 +242,100 @@ def _bse_reset(wait=0):
     _bse_init()
     time.sleep(1)
 
+# Sentinel returned when LTP is "-" / stock has no trading data (not a network error)
+_BSE_NO_DATA = 'NO_DATA'
+
 def fetch_bse_quote(scrip_code: str, debug: bool = False):
-    """Try each BSE endpoint in order. Returns dict | None | 'FAIL'."""
-    global _bse_session, _bse_raw_printed
+    """
+    Returns:
+      dict      — valid response with trading data
+      NO_DATA   — BSE knows the scrip but LTP is '-' (inactive/delisted)
+      None      — scrip not found / empty response
+      'FAIL'    — network failure
+    """
+    global _bse_session, _bse_valid_printed
     if _bse_session is None:
         _bse_init()
 
-    for endpoint in BSE_ENDPOINTS:
-        params = {'Debtflag': '', 'scripcode': scrip_code, 'seriesid': ''}
-        for attempt in range(3):
-            try:
-                r = _bse_session.get(endpoint, params=params, timeout=20)
+    params = {'Debtflag': '', 'scripcode': scrip_code, 'seriesid': ''}
+    for attempt in range(3):
+        try:
+            r = _bse_session.get(BSE_SCRIP_BASE, params=params, timeout=20)
 
-                if debug and _bse_raw_printed < 3:
-                    _bse_raw_printed += 1
-                    print(f'\n  [BSE RAW] {scrip_code} → {endpoint}')
-                    print(f'    status={r.status_code}')
-                    print(f'    body={r.text[:300]!r}')
-
-                if r.status_code == 404:
-                    break  # try next endpoint
-
-                if r.status_code in (403, 429):
-                    _bse_reset(wait=10 + attempt * 10)
-                    continue
-
-                r.raise_for_status()
-
-                # Try to parse JSON
-                try:
-                    data = r.json()
-                except Exception:
-                    break  # not JSON, try next endpoint
-
-                # Reject empty / clearly invalid responses
-                if not data:
-                    break
-
-                # Accept if it has ANY recognisable field
-                if isinstance(data, dict) and any(k in data for k in (
-                    'Mktcap', 'CMP', 'Noofshares', 'NSCRIPS', 'IssuedShares',
-                    'MarketCap', 'mktcap', 'scripCode', 'ScripCode',
-                )):
-                    return data
-
-                # Unknown shape — print it once then skip
-                if debug and _bse_raw_printed <= 3:
-                    _bse_raw_printed += 1
-                    print(f'\n  [BSE UNKNOWN SHAPE] {scrip_code}: keys={list(data.keys())[:10]}')
-
-                break  # try next endpoint
-
-            except (Timeout, ReqConnError):
+            if r.status_code == 404:
+                return None
+            if r.status_code in (403, 429):
                 _bse_reset(wait=10 + attempt * 10)
-            except requests.RequestException:
-                if attempt < 2:
-                    time.sleep(3)
-                else:
-                    break  # try next endpoint
+                continue
+            r.raise_for_status()
 
-    return None   # all endpoints exhausted — treat as not found (not a network fail)
+            try:
+                data = r.json()
+            except Exception:
+                return None
+
+            if not data or not isinstance(data, dict):
+                return None
+
+            # BSE response shape: {CurrRate:{LTP,..}, Cmpname:{..}, Header:{..}, CompResp:{..}}
+            ltp = _val(data, 'CurrRate', 'LTP')
+
+            # Print full JSON for first 3 valid (non-dash) responses in debug mode
+            if debug and ltp not in (None, '-', '') and _bse_valid_printed < 3:
+                _bse_valid_printed += 1
+                print(f'\n  [BSE FULL JSON] {scrip_code} (valid stock):')
+                print(json.dumps(data, indent=2)[:3000])
+
+            if ltp in (None, '-', ''):
+                # Scrip exists in BSE but no trading data (inactive/warrant/index)
+                return _BSE_NO_DATA
+
+            return data
+
+        except (Timeout, ReqConnError):
+            _bse_reset(wait=10 + attempt * 10)
+        except requests.RequestException:
+            if attempt < 2:
+                time.sleep(3)
+            else:
+                return 'FAIL'
+
+    return 'FAIL'
 
 
-def extract_bse_mcap(data, scrip='', debug=False):
-    # Direct market cap field (BSE returns in Crores)
-    mcap = _to_float(_val(data, 'Mktcap')) or _to_float(_val(data, 'MarketCap')) or _to_float(_val(data, 'mktcap'))
-    if mcap:
-        return round(mcap, 2)
+def extract_bse_mcap(data, scrip='', debug=False) -> float | None:
+    """
+    Extract mcap from BSE getScripHeaderData response.
+    BSE shape: {CurrRate:{LTP,..}, Header:{Mktcap or NoOfShares,..}, ..}
+    We don't know Header's full keys yet — debug mode will reveal them.
+    """
+    # Try direct mcap fields (various casings BSE has used)
+    for path in (
+        ('Header', 'Mktcap'), ('Header', 'MktCap'), ('Header', 'MarketCap'),
+        ('Header', 'mktcap'), ('CompResp', 'Mktcap'), ('CompResp', 'MktCap'),
+    ):
+        mcap = _to_float(_val(data, *path))
+        if mcap:
+            return round(mcap, 2)
 
-    # Fallback: price × shares
-    price  = _to_float(_val(data, 'CMP'))
-    shares = (
-        _to_float(_val(data, 'Noofshares')) or
-        _to_float(_val(data, 'NSCRIPS')) or
-        _to_float(_val(data, 'IssuedShares'))
-    )
-    if price and shares:
-        return round(price * shares / 1e7, 2)
+    # Fallback: LTP × shares
+    price = _to_float(_val(data, 'CurrRate', 'LTP'))
+    for path in (
+        ('Header', 'NoOfShares'), ('Header', 'Noofshares'), ('Header', 'IssuedShares'),
+        ('Header', 'IssuedCap'), ('Header', 'NSCRIPS'),
+        ('CompResp', 'NoOfShares'), ('CompResp', 'Noofshares'),
+    ):
+        shares = _to_float(_val(data, *path))
+        if price and shares:
+            return round(price * shares / 1e7, 2)
 
+    # Still failed — dump Header and CompResp keys+values for inspection
     if debug:
-        print(f'\n  [BSE EXTRACT FAIL] {scrip}: keys={list(data.keys())}')
-        for k, v in list(data.items())[:15]:
-            print(f'    {k}: {v!r}')
+        for section in ('Header', 'CompResp'):
+            sec = data.get(section)
+            if isinstance(sec, dict):
+                print(f'\n  [BSE EXTRACT FAIL] {scrip} → {section}: ', end='')
+                print({k: v for k, v in sec.items() if v not in (None, '-', '')})
 
     return None
 
@@ -434,7 +441,7 @@ def run_bse3_pass(conn, dry_run, force, debug):
         print('  Nothing to do.')
         return
 
-    done = not_found = no_mcap = net_fails = 0
+    done = no_data = no_mcap = net_fails = 0
     pending = []
     consec = 0
 
@@ -448,15 +455,23 @@ def run_bse3_pass(conn, dry_run, force, debug):
             consec = 0
 
         result = fetch_bse_quote(scrip, debug=debug)
-        if result is None:
-            print(' — not found'); not_found += 1; consec += 1
+
+        if result is _BSE_NO_DATA:
+            # Inactive/warrant/non-equity — silent skip, don't penalise
+            print(' — inactive'); no_data += 1
+
+        elif result is None:
+            # Scrip not found — also silent skip
+            print(' — not found'); no_data += 1
+
         elif result == 'FAIL':
             print(' — network fail'); net_fails += 1; consec += 1
+
         else:
             consec = 0
             mcap = extract_bse_mcap(result, scrip, debug)
             if mcap is None:
-                print(' — no mcap data'); no_mcap += 1
+                print(' — no mcap fields'); no_mcap += 1
             else:
                 print(f' — ₹{mcap:,.1f} Cr'); done += 1
                 pending.append((mcap, row['id']))
@@ -467,8 +482,8 @@ def run_bse3_pass(conn, dry_run, force, debug):
         time.sleep(random.uniform(BSE_RATE_MIN, BSE_RATE_MAX))
 
     _flush(conn, pending, dry_run)
-    print(f'\nBSE-only done: {done} updated | {not_found} not found | '
-          f'{no_mcap} no mcap data | {net_fails} net-fail')
+    print(f'\nBSE-only done: {done} updated | {no_data} inactive/not-found | '
+          f'{no_mcap} no mcap fields | {net_fails} net-fail')
 
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────
@@ -520,7 +535,8 @@ def main():
     p.add_argument('--bse-only',  action='store_true', help='Pass 2+3 only')
     p.add_argument('--bse3-only', action='store_true', help='Pass 3 only (BSE-only stocks)')
     p.add_argument('--bse-diag',  action='store_true', help='Show coverage stats and exit')
-    p.add_argument('--debug',     action='store_true', help='Print raw BSE responses for first 3 calls')
+    p.add_argument('--debug',     action='store_true',
+                   help='Print full JSON for first 3 BSE stocks with valid LTP')
     args = p.parse_args()
 
     conn = get_conn()
@@ -530,13 +546,13 @@ def main():
         conn.close()
         return
 
-    if not args.bse_only and not args.bse3_only:
+    if not (args.bse_only or args.bse3_only):
         run_nse_pass(conn, args.dry_run, args.force, args.debug)
 
-    if not args.nse_only and not args.bse3_only:
+    if not (args.nse_only or args.bse3_only):
         run_bse_isin_pass(conn, args.dry_run, args.force)
 
-    if not args.nse_only and not (args.bse_only and not args.bse3_only):
+    if not args.nse_only:
         run_bse3_pass(conn, args.dry_run, args.force, args.debug)
 
     conn.close()
