@@ -86,7 +86,7 @@ def parse_nse_bhav(csv_path: str, trade_date: date) -> list[dict]:
     Parse NSE CM bhav copy CSV.
     Returns list of normalized dicts with: symbol, open, high, low, close,
     prev_close, volume, value_cr, trade_date.
-    Filters to EQ series only.
+    Filters to NSE_VALID_SERIES (EQ, BE, BZ, SM).
     """
     records = []
 
