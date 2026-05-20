@@ -151,7 +151,7 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
                 'categories': [r['category'] for r in fiidii_records],
             })
             print(f'  [fii_dii] {fiidii_count} records upserted '
-                  f'({', '.join(r["category"] + "=" + str(r["net_value"]) for r in fiidii_records)})')
+                  f'({", ".join(r["category"] + "=" + str(r["net_value"]) for r in fiidii_records)})')
         else:
             tracker.skip('fii_dii', 'No FII/DII data for this date')
     except Exception as e:
