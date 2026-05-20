@@ -89,7 +89,3 @@ PIPELINE_STEPS = [
     'indicators',
     'views',
 ]
-
-# ── Valid Series to Include (NSE bhav copy has multiple series) ────────────────
-
-NSE_VALID_SERIES = {'EQ', 'BE', 'BZ', 'SM'}  # EQ=equity, BE=book entry, BZ=trade-to-trade, SM=NSE Emerge/SME

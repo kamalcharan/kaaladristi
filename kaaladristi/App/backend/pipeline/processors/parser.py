@@ -6,8 +6,6 @@ Handles column name variations across different NSE file formats.
 import csv
 from datetime import date
 
-from pipeline.config import NSE_VALID_SERIES
-
 
 def _safe_float(val) -> float | None:
     if val is None:
@@ -86,7 +84,7 @@ def parse_nse_bhav(csv_path: str, trade_date: date) -> list[dict]:
     Parse NSE CM bhav copy CSV.
     Returns list of normalized dicts with: symbol, open, high, low, close,
     prev_close, volume, value_cr, trade_date.
-    Filters to NSE_VALID_SERIES (EQ, BE, BZ, SM).
+    All CM-segment series are included; SymbolMatcher filters to known symbols.
     """
     records = []
 
@@ -94,10 +92,6 @@ def parse_nse_bhav(csv_path: str, trade_date: date) -> list[dict]:
         reader = csv.DictReader(f)
         for raw in reader:
             row = _normalize_row(raw, _NSE_BHAV_MAP)
-
-            series = (row.get('series') or '').strip().upper()
-            if series not in NSE_VALID_SERIES:
-                continue
 
             symbol = (row.get('symbol') or '').strip().upper()
             if not symbol:
@@ -148,10 +142,6 @@ def parse_nse_delivery(csv_path: str) -> dict[str, dict]:
         reader = csv.DictReader(f)
         for raw in reader:
             row = _normalize_row(raw, _NSE_DELIV_MAP)
-
-            series = (row.get('series') or '').strip().upper()
-            if series not in NSE_VALID_SERIES:
-                continue
 
             symbol = (row.get('symbol') or '').strip().upper()
             if not symbol:
