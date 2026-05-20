@@ -59,6 +59,7 @@ _load_env()
 
 NSE_QUOTE_BASE  = 'https://www.nseindia.com/api/quote-equity'
 BSE_SCRIP_BASE  = 'https://api.bseindia.com/BseIndiaAPI/api/getScripHeaderData/w'
+BSE_MKTSUM_BASE = 'https://api.bseindia.com/BseIndiaAPI/api/getEQMktSummary/w'
 
 NSE_RATE_MIN    = 1.2
 NSE_RATE_MAX    = 2.0
@@ -226,7 +227,8 @@ _BSE_HEADERS = {
     'Referer': 'https://www.bseindia.com/',
 }
 _bse_session = None
-_bse_valid_printed = 0   # how many valid BSE responses we've printed in debug mode
+_bse_valid_printed = 0    # how many getScripHeaderData responses printed in debug mode
+_bse_mktsum_printed = 0   # how many getEQMktSummary responses printed in debug mode
 
 def _bse_init():
     global _bse_session
@@ -234,7 +236,7 @@ def _bse_init():
     _bse_session.headers.update(_BSE_HEADERS)
 
 def _bse_reset(wait=0):
-    global _bse_session
+    global _bse_session, _bse_valid_printed, _bse_mktsum_printed
     _bse_session = None
     if wait:
         print(f'  [bse] Cooling {wait:.0f}s...', flush=True)
@@ -303,39 +305,83 @@ def fetch_bse_quote(scrip_code: str, debug: bool = False):
     return 'FAIL'
 
 
-def extract_bse_mcap(data, scrip='', debug=False) -> float | None:
+def fetch_bse_mktsum(scrip_code: str, debug: bool = False) -> dict | None:
     """
-    Extract mcap from BSE getScripHeaderData response.
-    BSE shape: {CurrRate:{LTP,..}, Header:{Mktcap or NoOfShares,..}, ..}
-    We don't know Header's full keys yet — debug mode will reveal them.
+    GET getEQMktSummary — BSE market summary (market cap, P/E, P/B, shares outstanding).
+    Returns dict or None. Never raises.
     """
-    # Try direct mcap fields (various casings BSE has used)
-    for path in (
-        ('Header', 'Mktcap'), ('Header', 'MktCap'), ('Header', 'MarketCap'),
-        ('Header', 'mktcap'), ('CompResp', 'Mktcap'), ('CompResp', 'MktCap'),
-    ):
-        mcap = _to_float(_val(data, *path))
-        if mcap:
-            return round(mcap, 2)
+    global _bse_session, _bse_mktsum_printed
+    if _bse_session is None:
+        _bse_init()
+    try:
+        r = _bse_session.get(
+            BSE_MKTSUM_BASE,
+            params={'scripcode': scrip_code, 'seriesid': 'EQ', 'flag': '0'},
+            timeout=15,
+        )
+        if not r.ok:
+            return None
+        data = r.json()
+        # Normalise: some BSE APIs return a list
+        if isinstance(data, list):
+            data = data[0] if data else None
+        if not isinstance(data, dict) or not data:
+            return None
+        if debug and _bse_mktsum_printed < 3:
+            _bse_mktsum_printed += 1
+            print(f'\n  [BSE MKTSUM JSON] {scrip_code}:')
+            print(json.dumps(data, indent=2)[:2000])
+        return data
+    except Exception:
+        return None
 
-    # Fallback: LTP × shares
-    price = _to_float(_val(data, 'CurrRate', 'LTP'))
-    for path in (
-        ('Header', 'NoOfShares'), ('Header', 'Noofshares'), ('Header', 'IssuedShares'),
-        ('Header', 'IssuedCap'), ('Header', 'NSCRIPS'),
-        ('CompResp', 'NoOfShares'), ('CompResp', 'Noofshares'),
-    ):
-        shares = _to_float(_val(data, *path))
-        if price and shares:
-            return round(price * shares / 1e7, 2)
 
-    # Still failed — dump Header and CompResp keys+values for inspection
+def extract_bse_mcap(header_data, mktsum=None, scrip='', debug=False) -> float | None:
+    """
+    Extract mcap (₹ Cr) from BSE API responses.
+    header_data — getScripHeaderData response (has CurrRate.LTP but no shares)
+    mktsum      — getEQMktSummary response (may have Mktcap / NoOfShares)
+    """
+    # ── Try direct mcap from mktsum ───────────────────────────────────────────
+    if isinstance(mktsum, dict):
+        for key in ('Mktcap', 'MktCap', 'MarketCap', 'mktcap', 'Mkt_Cap',
+                    'MarketCapitalization', 'Mcap'):
+            mcap = _to_float(mktsum.get(key))
+            if mcap:
+                return round(mcap, 2)
+
+    # ── Fallback: LTP × shares ────────────────────────────────────────────────
+    price = _to_float(_val(header_data, 'CurrRate', 'LTP'))
+
+    # Shares can come from mktsum or (unlikely) Header
+    share_sources = []
+    if isinstance(mktsum, dict):
+        share_sources.append(mktsum)
+    share_sources.append(header_data.get('Header', {}))
+
+    share_keys = (
+        'NoOfShares', 'Noofshares', 'IssuedShares', 'IssuedCap',
+        'TotalSharesIssued', 'OutstandingShares', 'FreeFloat',
+    )
+    for src in share_sources:
+        if not isinstance(src, dict):
+            continue
+        for key in share_keys:
+            shares = _to_float(src.get(key))
+            if price and shares:
+                return round(price * shares / 1e7, 2)
+
+    # ── Debug dump ────────────────────────────────────────────────────────────
     if debug:
+        if isinstance(mktsum, dict):
+            non_empty = {k: v for k, v in mktsum.items() if v not in (None, '-', '', 0)}
+            print(f'\n  [MKTSUM FAIL] {scrip}: {non_empty}')
         for section in ('Header', 'CompResp'):
-            sec = data.get(section)
+            sec = header_data.get(section)
             if isinstance(sec, dict):
-                print(f'\n  [BSE EXTRACT FAIL] {scrip} → {section}: ', end='')
-                print({k: v for k, v in sec.items() if v not in (None, '-', '')})
+                non_empty = {k: v for k, v in sec.items() if v not in (None, '-', '')}
+                if non_empty:
+                    print(f'\n  [HEADER FAIL] {scrip} → {section}: {list(non_empty.keys())}')
 
     return None
 
@@ -469,7 +515,8 @@ def run_bse3_pass(conn, dry_run, force, debug):
 
         else:
             consec = 0
-            mcap = extract_bse_mcap(result, scrip, debug)
+            mktsum = fetch_bse_mktsum(scrip, debug=debug)
+            mcap = extract_bse_mcap(result, mktsum, scrip, debug)
             if mcap is None:
                 print(' — no mcap fields'); no_mcap += 1
             else:
