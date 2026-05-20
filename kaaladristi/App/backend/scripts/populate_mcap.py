@@ -6,9 +6,10 @@ Pass 1 — NSE  : hits NSE quote-equity API per symbol.
 
 Pass 2 — BSE  : copies mcap_cr from matching NSE row via ISIN (dual-listed stocks).
 
-Pass 3 — BSE-only: hits BSE scrip-header API for stocks with no NSE ISIN match.
-  GET https://api.bseindia.com/BseIndiaAPI/api/getScripHeaderData/w?Debtflag=&scripcode={CODE}&seriesid=
-  Response shape: {CurrRate:{LTP,..}, Cmpname:{..}, Header:{..}, CompResp:{..}}
+Pass 3 — BSE-only: for each BSE scrip:
+  - Fetch BSE getScripHeaderData to get LTP (inactive check) + Cmpname.ShortN
+  - Use ShortN.upper() as NSE symbol → fetch NSE quote for mcap (works for dual-listed)
+  - If NSE 404 (genuinely BSE-only): try BSE getEQMktSummary as fallback
 
 All passes are resumable (skip symbols where mcap_cr IS NOT NULL).
 
@@ -20,7 +21,7 @@ Usage (from App/backend/):
   python scripts/populate_mcap.py --dry-run  # no DB writes
   python scripts/populate_mcap.py --force    # re-fetch even if already set
   python scripts/populate_mcap.py --bse-diag # show coverage stats and exit
-  python scripts/populate_mcap.py --debug    # print FULL JSON for first 3 valid BSE stocks
+  python scripts/populate_mcap.py --debug    # verbose BSE JSON output
 
 DB connection: reads DB_PRIMARY from App/.env automatically.
 """
@@ -66,7 +67,7 @@ NSE_RATE_MAX    = 2.0
 BSE_RATE_MIN    = 0.4
 BSE_RATE_MAX    = 0.8
 COMMIT_EVERY    = 50
-COOLDOWN_AFTER  = 5     # BSE: more tolerance before cooldown (many inactive codes)
+COOLDOWN_AFTER  = 5
 NSE_COOLDOWN    = 45
 BSE_COOLDOWN    = 15
 
@@ -227,8 +228,8 @@ _BSE_HEADERS = {
     'Referer': 'https://www.bseindia.com/',
 }
 _bse_session = None
-_bse_valid_printed = 0    # how many getScripHeaderData responses printed in debug mode
-_bse_mktsum_printed = 0   # how many getEQMktSummary responses printed in debug mode
+_bse_valid_printed = 0
+_bse_mktsum_printed = 0
 
 def _bse_init():
     global _bse_session
@@ -244,16 +245,11 @@ def _bse_reset(wait=0):
     _bse_init()
     time.sleep(1)
 
-# Sentinel returned when LTP is "-" / stock has no trading data (not a network error)
 _BSE_NO_DATA = 'NO_DATA'
 
 def fetch_bse_quote(scrip_code: str, debug: bool = False):
     """
-    Returns:
-      dict      — valid response with trading data
-      NO_DATA   — BSE knows the scrip but LTP is '-' (inactive/delisted)
-      None      — scrip not found / empty response
-      'FAIL'    — network failure
+    Returns dict (has LTP + Cmpname.ShortN), NO_DATA (LTP='-'), None, or 'FAIL'.
     """
     global _bse_session, _bse_valid_printed
     if _bse_session is None:
@@ -263,35 +259,26 @@ def fetch_bse_quote(scrip_code: str, debug: bool = False):
     for attempt in range(3):
         try:
             r = _bse_session.get(BSE_SCRIP_BASE, params=params, timeout=20)
-
             if r.status_code == 404:
                 return None
             if r.status_code in (403, 429):
                 _bse_reset(wait=10 + attempt * 10)
                 continue
             r.raise_for_status()
-
             try:
                 data = r.json()
             except Exception:
                 return None
-
             if not data or not isinstance(data, dict):
                 return None
 
-            # BSE response shape: {CurrRate:{LTP,..}, Cmpname:{..}, Header:{..}, CompResp:{..}}
             ltp = _val(data, 'CurrRate', 'LTP')
-
-            # Print full JSON for first 3 valid (non-dash) responses in debug mode
             if debug and ltp not in (None, '-', '') and _bse_valid_printed < 3:
                 _bse_valid_printed += 1
-                print(f'\n  [BSE FULL JSON] {scrip_code} (valid stock):')
-                print(json.dumps(data, indent=2)[:3000])
+                print(f'\n  [BSE JSON] {scrip_code}: {json.dumps(data, indent=2)[:2000]}')
 
             if ltp in (None, '-', ''):
-                # Scrip exists in BSE but no trading data (inactive/warrant/index)
                 return _BSE_NO_DATA
-
             return data
 
         except (Timeout, ReqConnError):
@@ -306,10 +293,7 @@ def fetch_bse_quote(scrip_code: str, debug: bool = False):
 
 
 def fetch_bse_mktsum(scrip_code: str, debug: bool = False) -> dict | None:
-    """
-    GET getEQMktSummary — BSE market summary (market cap, P/E, P/B, shares outstanding).
-    Returns dict or None. Never raises.
-    """
+    """GET getEQMktSummary — may have Mktcap / NoOfShares for BSE-only stocks."""
     global _bse_session, _bse_mktsum_printed
     if _bse_session is None:
         _bse_init()
@@ -322,67 +306,40 @@ def fetch_bse_mktsum(scrip_code: str, debug: bool = False) -> dict | None:
         if not r.ok:
             return None
         data = r.json()
-        # Normalise: some BSE APIs return a list
         if isinstance(data, list):
             data = data[0] if data else None
         if not isinstance(data, dict) or not data:
             return None
         if debug and _bse_mktsum_printed < 3:
             _bse_mktsum_printed += 1
-            print(f'\n  [BSE MKTSUM JSON] {scrip_code}:')
-            print(json.dumps(data, indent=2)[:2000])
+            print(f'\n  [BSE MKTSUM] {scrip_code}: {json.dumps(data, indent=2)[:1500]}')
         return data
     except Exception:
         return None
 
 
 def extract_bse_mcap(header_data, mktsum=None, scrip='', debug=False) -> float | None:
-    """
-    Extract mcap (₹ Cr) from BSE API responses.
-    header_data — getScripHeaderData response (has CurrRate.LTP but no shares)
-    mktsum      — getEQMktSummary response (may have Mktcap / NoOfShares)
-    """
-    # ── Try direct mcap from mktsum ───────────────────────────────────────────
+    """Extract mcap from BSE mktsum (direct) or LTP×shares fallback."""
     if isinstance(mktsum, dict):
-        for key in ('Mktcap', 'MktCap', 'MarketCap', 'mktcap', 'Mkt_Cap',
-                    'MarketCapitalization', 'Mcap'):
+        for key in ('Mktcap', 'MktCap', 'MarketCap', 'mktcap', 'Mkt_Cap', 'Mcap'):
             mcap = _to_float(mktsum.get(key))
             if mcap:
                 return round(mcap, 2)
 
-    # ── Fallback: LTP × shares ────────────────────────────────────────────────
     price = _to_float(_val(header_data, 'CurrRate', 'LTP'))
-
-    # Shares can come from mktsum or (unlikely) Header
-    share_sources = []
-    if isinstance(mktsum, dict):
-        share_sources.append(mktsum)
-    share_sources.append(header_data.get('Header', {}))
-
-    share_keys = (
-        'NoOfShares', 'Noofshares', 'IssuedShares', 'IssuedCap',
-        'TotalSharesIssued', 'OutstandingShares', 'FreeFloat',
-    )
-    for src in share_sources:
+    for src in ([mktsum] if isinstance(mktsum, dict) else []) + [header_data.get('Header', {})]:
         if not isinstance(src, dict):
             continue
-        for key in share_keys:
+        for key in ('NoOfShares', 'Noofshares', 'IssuedShares', 'IssuedCap',
+                    'TotalSharesIssued', 'OutstandingShares'):
             shares = _to_float(src.get(key))
             if price and shares:
                 return round(price * shares / 1e7, 2)
 
-    # ── Debug dump ────────────────────────────────────────────────────────────
-    if debug:
-        if isinstance(mktsum, dict):
-            non_empty = {k: v for k, v in mktsum.items() if v not in (None, '-', '', 0)}
-            print(f'\n  [MKTSUM FAIL] {scrip}: {non_empty}')
-        for section in ('Header', 'CompResp'):
-            sec = header_data.get(section)
-            if isinstance(sec, dict):
-                non_empty = {k: v for k, v in sec.items() if v not in (None, '-', '')}
-                if non_empty:
-                    print(f'\n  [HEADER FAIL] {scrip} → {section}: {list(non_empty.keys())}')
-
+    if debug and isinstance(mktsum, dict):
+        non_empty = {k: v for k, v in mktsum.items() if v not in (None, '-', '', 0)}
+        if non_empty:
+            print(f'\n  [MKTSUM keys] {scrip}: {list(non_empty.keys())}')
     return None
 
 
@@ -463,7 +420,7 @@ def run_bse_isin_pass(conn, dry_run, force):
         print(f'  [dry-run] Would copy to {cur.fetchone()["n"]} BSE rows.')
 
 
-# ── Pass 3: BSE-only via BSE scrip API ────────────────────────────────────────
+# ── Pass 3: BSE-only via NSE (ShortN) + BSE mktsum fallback ──────────────────
 
 def run_bse3_pass(conn, dry_run, force, debug):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -482,7 +439,7 @@ def run_bse3_pass(conn, dry_run, force, debug):
     """)
     symbols = cur.fetchall()
     total = len(symbols)
-    print(f'\n=== Pass 3: BSE-only ({total} symbols via BSE API) ===')
+    print(f'\n=== Pass 3: BSE-only ({total} symbols) ===')
     if total == 0:
         print('  Nothing to do.')
         return
@@ -496,41 +453,57 @@ def run_bse3_pass(conn, dry_run, force, debug):
         print(f'  [{i}/{total}] {scrip}', end='', flush=True)
 
         if consec >= COOLDOWN_AFTER:
-            print(f'\n  Pausing {BSE_COOLDOWN}s after {consec} failures...', flush=True)
+            print(f'\n  Pausing {BSE_COOLDOWN}s...', flush=True)
             _bse_reset(wait=BSE_COOLDOWN)
             consec = 0
 
         result = fetch_bse_quote(scrip, debug=debug)
+        called_nse = False
 
-        if result is _BSE_NO_DATA:
-            # Inactive/warrant/non-equity — silent skip, don't penalise
+        if result is _BSE_NO_DATA or result is None:
             print(' — inactive'); no_data += 1
-
-        elif result is None:
-            # Scrip not found — also silent skip
-            print(' — not found'); no_data += 1
 
         elif result == 'FAIL':
             print(' — network fail'); net_fails += 1; consec += 1
 
         else:
             consec = 0
-            mktsum = fetch_bse_mktsum(scrip, debug=debug)
-            mcap = extract_bse_mcap(result, mktsum, scrip, debug)
+            mcap = None
+
+            # BSE ShortN is the NSE ticker for dual-listed stocks (e.g. "aegislog" → "AEGISLOG")
+            # Many BSE rows lack ISIN, so Pass 2 missed them — this catches them.
+            short_n = (_val(result, 'Cmpname', 'ShortN') or '').strip().upper()
+            if short_n:
+                called_nse = True
+                nse_data = fetch_nse_quote(short_n)
+                if nse_data and nse_data != 'FAIL':
+                    mcap = extract_nse_mcap(nse_data)
+
+            # Fallback: BSE mktsum (for genuinely BSE-only stocks)
             if mcap is None:
-                print(' — no mcap fields'); no_mcap += 1
+                mktsum = fetch_bse_mktsum(scrip, debug=debug)
+                mcap = extract_bse_mcap(result, mktsum, scrip, debug)
+
+            if mcap is None:
+                print(' — no data'); no_mcap += 1
             else:
-                print(f' — ₹{mcap:,.1f} Cr'); done += 1
+                src = f'NSE:{short_n}' if called_nse else 'BSE'
+                print(f' — ₹{mcap:,.1f} Cr ({src})'); done += 1
                 pending.append((mcap, row['id']))
 
         if len(pending) >= COMMIT_EVERY:
             _flush(conn, pending, dry_run)
             print(f'  [db] committed {COMMIT_EVERY} rows')
-        time.sleep(random.uniform(BSE_RATE_MIN, BSE_RATE_MAX))
+
+        # Respect NSE rate limit when NSE was called; lighter otherwise
+        if called_nse:
+            time.sleep(random.uniform(NSE_RATE_MIN, NSE_RATE_MAX))
+        else:
+            time.sleep(random.uniform(BSE_RATE_MIN, BSE_RATE_MAX))
 
     _flush(conn, pending, dry_run)
-    print(f'\nBSE-only done: {done} updated | {no_data} inactive/not-found | '
-          f'{no_mcap} no mcap fields | {net_fails} net-fail')
+    print(f'\nBSE-only done: {done} updated | {no_data} inactive | '
+          f'{no_mcap} no data | {net_fails} net-fail')
 
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────
@@ -582,8 +555,7 @@ def main():
     p.add_argument('--bse-only',  action='store_true', help='Pass 2+3 only')
     p.add_argument('--bse3-only', action='store_true', help='Pass 3 only (BSE-only stocks)')
     p.add_argument('--bse-diag',  action='store_true', help='Show coverage stats and exit')
-    p.add_argument('--debug',     action='store_true',
-                   help='Print full JSON for first 3 BSE stocks with valid LTP')
+    p.add_argument('--debug',     action='store_true', help='Verbose BSE JSON output')
     args = p.parse_args()
 
     conn = get_conn()
