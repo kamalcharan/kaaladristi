@@ -3,8 +3,14 @@ import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition } from '
 import type { CatalogItem } from '@/constants/catalogItems'
 import { getCatalogItem } from '@/constants/catalogItems'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
+import { useAuthStore } from '@/stores/authStore'
 
 const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 // ── Debounce ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +77,9 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
   loadFramework: async (userId: string) => {
     set({ isLoading: true, error: null })
     try {
-      const res = await fetch(`${pipelineUrl}/api/framework/${userId}`)
+      const res = await fetch(`${pipelineUrl}/api/framework/${userId}`, {
+        headers: authHeaders(),
+      })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: UserFramework = await res.json()
       set({ framework: data, isLoading: false })
@@ -89,7 +97,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     try {
       const res = await fetch(`${pipelineUrl}/api/framework/${framework.user_id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(framework),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
