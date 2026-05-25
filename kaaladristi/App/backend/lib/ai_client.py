@@ -165,7 +165,7 @@ def _primary_complete(
     req = build(system, user, max_tokens, temperature)
     log.info(f"AI request → {req['url']} | model={req['json'].get('model')} | provider={AI_PROVIDER}")
     try:
-        resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=30)
+        resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=90)
         resp.raise_for_status()
         return parse(resp.json())
     except _requests.HTTPError as e:
@@ -195,7 +195,7 @@ def _fallback_complete(
         resp = _requests.post(
             f"{_LLM_BASE_URL}/chat/completions",
             json=body,
-            timeout=30,
+            timeout=90,
         )
         resp.raise_for_status()
         return _openai_parse(resp.json())
