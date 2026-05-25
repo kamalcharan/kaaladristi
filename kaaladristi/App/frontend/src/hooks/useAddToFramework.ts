@@ -20,8 +20,8 @@ export function useAddToFramework() {
     if (!item) return { success: false, reason: 'unknown_item' }
 
     // Tier gate — callers check reason: 'tier_gate' and render the upgrade prompt
-    const userTier = profile?.tier as string | undefined
-    if (item.tier_required === 'paid' && !PAID_TIERS.includes(userTier as never)) {
+    // profile.tier undefined → treated as 'free' (no paid access)
+    if (item.tier_required === 'paid' && !PAID_TIERS.includes(profile?.tier as never)) {
       return { success: false, reason: 'tier_gate' }
     }
 
