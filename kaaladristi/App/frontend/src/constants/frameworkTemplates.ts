@@ -9,7 +9,8 @@ export interface FrameworkTemplate {
 }
 
 // ── Investor ──────────────────────────────────────────────────────────────────
-// Six-Day Outlook + MagicRS + Panchak (overlay) + Conviction Flow
+// MagicRS + Panchak panel (current status) + Six-Day Outlook + Conviction Flow
+// Panchak also lives in chart_overlays as an astro_zone shading the price chart.
 
 const INVESTOR: FrameworkTemplate = {
   id: 'vani_investor',
@@ -21,6 +22,14 @@ const INVESTOR: FrameworkTemplate = {
       catalog_item_id: 'magic_rs',
       placement: 'panel_block',
       grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'astro_rule',
+      catalog_item_id: 'astro_rule:panchak',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 4, row_end: 7 },
       config: {},
       added_by: 'vani',
     },
@@ -47,7 +56,7 @@ const INVESTOR: FrameworkTemplate = {
 }
 
 // ── Trader ────────────────────────────────────────────────────────────────────
-// EMA 20 (overlay) + RSI 14 + Breadth ROC + Conviction Flow
+// EMA 20 + SMA 50 (both chart overlays) + RSI 14 + Breadth ROC + Conviction Flow
 
 const TRADER: FrameworkTemplate = {
   id: 'vani_trader',
@@ -81,6 +90,7 @@ const TRADER: FrameworkTemplate = {
   ],
   chart_overlays: [
     { catalog_item_id: 'ema_20', type: 'indicator_line', visible: true },
+    { catalog_item_id: 'sma_50', type: 'indicator_line', visible: true },
   ],
 }
 
