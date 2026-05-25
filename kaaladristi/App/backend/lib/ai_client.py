@@ -42,9 +42,6 @@ _PROVIDER_BASE: dict[str, str] = {
     "openai":    "https://api.openai.com",
 }
 
-log.info(f"ai_client loaded: enabled={AI_ENABLED} provider={AI_PROVIDER} model={AI_MODEL} base_url={_BASE_URL or '(default)'}")
-
-
 # ── Request builders ──────────────────────────────────────────────────────────
 
 def _anthropic_req(system: str, user: str, max_tokens: int,
@@ -163,7 +160,6 @@ def _primary_complete(
         return None
 
     req = build(system, user, max_tokens, temperature)
-    log.info(f"AI request → {req['url']} | model={req['json'].get('model')} | provider={AI_PROVIDER}")
     try:
         resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=90)
         resp.raise_for_status()
