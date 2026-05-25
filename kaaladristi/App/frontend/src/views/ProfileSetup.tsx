@@ -707,7 +707,7 @@ function Screen4({ onComplete }: S4Props) {
 export default function ProfileSetup() {
   const navigate = useNavigate()
   const { profile, refreshProfile, setProfile } = useAuthStore()
-  const { loadFramework, applyTemplate, addInstrument, framework } = useFrameworkStore()
+  const { loadFramework, applyTemplate, saveFramework, addInstrument, framework } = useFrameworkStore()
 
   const [step,        setStep]        = useState<Step>(1)
   const [icp,         setIcp]         = useState<ICP | null>(null)
@@ -757,6 +757,7 @@ export default function ProfileSetup() {
     try {
       const template = getTemplateForICP(icp, blend)
       applyTemplate(template)
+      await saveFramework()
       await updateProfile({ onboarded: true })
       try { await refreshProfile() } catch {
         if (profile) setProfile({ ...profile, onboarded: true })
