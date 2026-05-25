@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import MasterFrameworksSection from '@/components/domain/Catalog/MasterFrameworksSection'
 
 const CATALOG_SECTIONS = [
   { id: 'master_frameworks', label: 'Master Frameworks' },
@@ -84,7 +85,7 @@ export default function CatalogPage() {
 
       {/* Right content area */}
       <div className="flex-1 overflow-auto" style={{ padding: 32 }}>
-        {active === 'master_frameworks' && <div>Coming</div>}
+        {active === 'master_frameworks' && <MasterFrameworksSection />}
         {active === 'astro_rules'       && <div>Coming</div>}
         {active === 'indicators'        && <div>Coming</div>}
         {active === 'widgets'           && <div>Coming</div>}
