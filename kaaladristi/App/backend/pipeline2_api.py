@@ -698,22 +698,6 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
     return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
 
 
-@app.get('/api/vani-opportunity/config')
-def vani_opportunity_config():
-    """Return all active VaNi Opportunity config rows (one per direction)."""
-    conn = _conn()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                "SELECT id,config_name,description,is_active,applies_to_presets,"
-                "parameters,created_at,updated_at "
-                "FROM kd_vani_opportunity_config WHERE is_active = true ORDER BY id"
-            )
-            return cur.fetchall() or []
-    finally:
-        conn.close()
-
-
 @app.get('/api/scan/presets')
 def scan_presets():
     """Return all active scan preset definitions ordered by sort_order."""
