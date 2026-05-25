@@ -13,6 +13,7 @@ const navSections: NavSection[] = [
   {
     heading: 'View',
     items: [
+      { to: '/workspace',      glyph: '⊞', label: 'Workspace' },
       { to: '/dashboard',      glyph: '◉', label: 'Dashboard' },
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },

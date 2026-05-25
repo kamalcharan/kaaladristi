@@ -167,9 +167,12 @@ class QueryBuilder {
     return this;
   }
 
-  order(column: string, opts?: { ascending?: boolean }): this {
-    const dir = opts?.ascending === false ? 'desc' : 'asc';
-    this.state.params.append('order', `${column}.${dir}`);
+  order(column: string, opts?: { ascending?: boolean; nullsFirst?: boolean }): this {
+    const dir   = opts?.ascending === false ? 'desc' : 'asc';
+    const nulls = opts?.nullsFirst === true ? '.nullsfirst'
+                : opts?.nullsFirst === false ? '.nullslast'
+                : '';
+    this.state.params.append('order', `${column}.${dir}${nulls}`);
     return this;
   }
 

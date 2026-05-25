@@ -2,8 +2,15 @@ import { create } from 'zustand'
 import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition } from '@/types/framework'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { getCatalogItem } from '@/constants/catalogItems'
+import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
+import { useAuthStore } from '@/stores/authStore'
 
 const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 // ── Debounce ──────────────────────────────────────────────────────────────────
 
@@ -56,6 +63,7 @@ interface FrameworkStore {
   removeInstrument: (symbol: string) => void
   isBlockActive: (catalogItemId: string) => boolean
   isOverlayActive: (catalogItemId: string) => boolean
+  applyTemplate: (template: FrameworkTemplate) => void
 }
 
 export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
@@ -69,7 +77,9 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
   loadFramework: async (userId: string) => {
     set({ isLoading: true, error: null })
     try {
-      const res = await fetch(`${pipelineUrl}/api/framework/${userId}`)
+      const res = await fetch(`${pipelineUrl}/api/framework/${userId}`, {
+        headers: authHeaders(),
+      })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: UserFramework = await res.json()
       set({ framework: data, isLoading: false })
@@ -87,7 +97,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     try {
       const res = await fetch(`${pipelineUrl}/api/framework/${framework.user_id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(framework),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -200,6 +210,32 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
             chart_overlays: s.framework.chart_overlays.map(o =>
               o.catalog_item_id === catalogItemId ? { ...o, visible: !o.visible } : o
             ),
+            version: s.framework.version + 1,
+          }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  // ── Template application ───────────────────────────────────────────────────
+
+  applyTemplate: (template: FrameworkTemplate) => {
+    const { framework, saveFramework } = get()
+    if (!framework) return
+    const now = new Date().toISOString()
+    const blocks: FrameworkBlock[] = template.blocks.map(b => ({
+      ...b,
+      id: crypto.randomUUID(),
+      added_by: 'vani' as const,
+      added_at: now,
+    }))
+    set(s => ({
+      framework: s.framework
+        ? {
+            ...s.framework,
+            blocks,
+            chart_overlays: template.chart_overlays,
+            template_id: template.id,
             version: s.framework.version + 1,
           }
         : null,
