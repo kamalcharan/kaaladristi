@@ -3436,6 +3436,19 @@ def _framework_conn():
     return psycopg2.connect(db_url)
 
 
+def _set_user_context(cur, user_id: str) -> None:
+    """Set request.jwt.claims so the RLS policy passes for direct psycopg2 connections.
+
+    The user_frameworks RLS policy checks:
+      current_setting('request.jwt.claims', true)::json->>'sub'
+    PostgREST sets this automatically; direct connections must set it manually.
+    """
+    cur.execute(
+        "SELECT set_config('request.jwt.claims', %s, true)",
+        (json.dumps({'sub': user_id}),),
+    )
+
+
 @app.get('/api/framework/{user_id}')
 def get_framework(
     user_id: str,
@@ -3448,6 +3461,7 @@ def get_framework(
     conn = _framework_conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _set_user_context(cur, user_id)
             cur.execute(
                 'SELECT * FROM user_frameworks WHERE user_id = %s::uuid LIMIT 1',
                 (user_id,),
@@ -3490,6 +3504,7 @@ def create_framework(
     conn = _framework_conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _set_user_context(cur, user_id)
             cur.execute(
                 """
                 INSERT INTO user_frameworks
@@ -3536,6 +3551,7 @@ def update_framework(
     conn = _framework_conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _set_user_context(cur, user_id)
             updates = []
             params: list = []
 
