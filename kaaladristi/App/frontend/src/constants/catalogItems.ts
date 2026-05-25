@@ -150,7 +150,7 @@ const WIDGETS: CatalogItem[] = [
     db_table: ['km_equity_eod', 'km_index_eod'],
     db_column: 'magic_rs',  // also reads magic_ma, magic_rs_zone — never legacy magicrs_value
     applicable_to: ['equity', 'index'],
-    tier_required: 'paid',
+    tier_required: 'free',
   },
   {
     id: 'breadth_roc',
@@ -173,7 +173,7 @@ const WIDGETS: CatalogItem[] = [
     db_table: ['km_equity_eod', 'km_index_eod'],
     db_column: 'sniper_inst',  // also reads sniper_hot — never legacy sniper_banker / sniper_hotmoney
     applicable_to: ['equity', 'index'],
-    tier_required: 'paid',
+    tier_required: 'free',
   },
   {
     id: 'conviction_flow',
