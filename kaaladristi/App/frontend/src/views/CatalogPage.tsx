@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MasterFrameworksSection from '@/components/domain/Catalog/MasterFrameworksSection'
 import IndicatorsSection from '@/components/domain/Catalog/IndicatorsSection'
 import WidgetsSection from '@/components/domain/Catalog/WidgetsSection'
+import AstroRulesSection from '@/components/domain/Catalog/AstroRulesSection'
 
 const CATALOG_SECTIONS = [
   { id: 'master_frameworks', label: 'Master Frameworks' },
@@ -88,7 +89,7 @@ export default function CatalogPage() {
       {/* Right content area */}
       <div className="flex-1 overflow-auto" style={{ padding: 32 }}>
         {active === 'master_frameworks' && <MasterFrameworksSection />}
-        {active === 'astro_rules'       && <div>Coming</div>}
+        {active === 'astro_rules'       && <AstroRulesSection />}
         {active === 'indicators'        && <IndicatorsSection />}
         {active === 'widgets'           && <WidgetsSection />}
         {active === 'scanners'          && <div>Coming</div>}
