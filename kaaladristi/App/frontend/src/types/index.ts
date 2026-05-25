@@ -146,6 +146,7 @@ export interface KmProfile {
   onboarded: boolean;
   created_at: string;
   updated_at: string;
+  tier?: string;        // subscription tier — undefined treated as 'free'
 }
 
 // ── Index / Equity Symbol Tables (new restructured schema) ──

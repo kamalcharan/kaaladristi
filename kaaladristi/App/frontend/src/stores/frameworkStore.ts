@@ -1,0 +1,249 @@
+import { create } from 'zustand'
+import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition } from '@/types/framework'
+import type { CatalogItem } from '@/constants/catalogItems'
+import { getCatalogItem } from '@/constants/catalogItems'
+
+const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+
+// ── Debounce ──────────────────────────────────────────────────────────────────
+
+let _saveTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleSave(saveFn: () => Promise<void>) {
+  if (_saveTimer) clearTimeout(_saveTimer)
+  _saveTimer = setTimeout(() => { saveFn() }, 800)
+}
+
+// ── Default framework ─────────────────────────────────────────────────────────
+
+function makeDefault(userId: string): Omit<UserFramework, 'id' | 'created_at' | 'updated_at'> {
+  return {
+    user_id: userId,
+    name: 'My Framework',
+    version: 1,
+    instruments: ['NIFTY50'],
+    blocks: [],
+    chart_overlays: [],
+    tier_at_creation: 'free',
+  }
+}
+
+// ── Next grid position — simple row-append ────────────────────────────────────
+// New blocks occupy a 2-column slot, 1 row tall, appending below existing blocks.
+
+function nextGridPosition(blocks: FrameworkBlock[]): GridPosition {
+  const maxRow = blocks.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
+  return { col_start: 1, col_end: 7, row_start: maxRow, row_end: maxRow + 1 }
+}
+
+// ── Store ─────────────────────────────────────────────────────────────────────
+
+interface FrameworkStore {
+  framework: UserFramework | null
+  isLoading: boolean
+  isSaving: boolean
+  error: string | null
+
+  loadFramework: (userId: string) => Promise<void>
+  saveFramework: () => Promise<void>
+  addBlock: (item: CatalogItem, config?: Record<string, unknown>) => void
+  removeBlock: (blockId: string) => void
+  updateBlockPosition: (blockId: string, position: GridPosition) => void
+  addOverlay: (item: CatalogItem) => void
+  removeOverlay: (catalogItemId: string) => void
+  toggleOverlayVisibility: (catalogItemId: string) => void
+  addInstrument: (symbol: string) => void
+  removeInstrument: (symbol: string) => void
+  isBlockActive: (catalogItemId: string) => boolean
+  isOverlayActive: (catalogItemId: string) => boolean
+}
+
+export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
+  framework: null,
+  isLoading: false,
+  isSaving: false,
+  error: null,
+
+  // ── Load ───────────────────────────────────────────────────────────────────
+
+  loadFramework: async (userId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const res = await fetch(`${pipelineUrl}/api/framework/${userId}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data: UserFramework = await res.json()
+      set({ framework: data, isLoading: false })
+    } catch (err) {
+      set({ error: String(err), isLoading: false })
+    }
+  },
+
+  // ── Save (called by debounce — never call directly from mutation actions) ──
+
+  saveFramework: async () => {
+    const { framework } = get()
+    if (!framework) return
+    set({ isSaving: true })
+    try {
+      const res = await fetch(`${pipelineUrl}/api/framework/${framework.user_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(framework),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const updated: UserFramework = await res.json()
+      // Sync server-assigned version + updated_at back into local state
+      set(s => ({
+        isSaving: false,
+        framework: s.framework ? { ...s.framework, version: updated.version, updated_at: updated.updated_at } : null,
+      }))
+    } catch (err) {
+      set({ isSaving: false, error: String(err) })
+    }
+  },
+
+  // ── Block mutations ────────────────────────────────────────────────────────
+
+  addBlock: (item: CatalogItem, config: Record<string, unknown> = {}) => {
+    const { framework, saveFramework } = get()
+    if (!framework) return
+
+    // Idempotent — don't add the same catalog item twice
+    if (framework.blocks.some(b => b.catalog_item_id === item.id)) return
+
+    const block: FrameworkBlock = {
+      id: crypto.randomUUID(),
+      type: item.block_type,
+      catalog_item_id: item.id,
+      placement: item.placement,
+      grid_position: nextGridPosition(framework.blocks),
+      config,
+      added_by: 'user',
+      added_at: new Date().toISOString(),
+    }
+
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, blocks: [...s.framework.blocks, block], version: s.framework.version + 1 }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  removeBlock: (blockId: string) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, blocks: s.framework.blocks.filter(b => b.id !== blockId), version: s.framework.version + 1 }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  updateBlockPosition: (blockId: string, position: GridPosition) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? {
+            ...s.framework,
+            blocks: s.framework.blocks.map(b => b.id === blockId ? { ...b, grid_position: position } : b),
+            version: s.framework.version + 1,
+          }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  // ── Overlay mutations ──────────────────────────────────────────────────────
+
+  addOverlay: (item: CatalogItem) => {
+    const { framework, saveFramework } = get()
+    if (!framework) return
+
+    // Idempotent
+    if (framework.chart_overlays.some(o => o.catalog_item_id === item.id)) return
+
+    // overlay_type must be present for chart_overlay items — guaranteed by catalog
+    const overlayType = item.overlay_type
+    if (!overlayType) return
+
+    const overlay: ChartOverlay = {
+      catalog_item_id: item.id,
+      type: overlayType,
+      visible: true,
+    }
+
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, chart_overlays: [...s.framework.chart_overlays, overlay], version: s.framework.version + 1 }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  removeOverlay: (catalogItemId: string) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, chart_overlays: s.framework.chart_overlays.filter(o => o.catalog_item_id !== catalogItemId), version: s.framework.version + 1 }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  toggleOverlayVisibility: (catalogItemId: string) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? {
+            ...s.framework,
+            chart_overlays: s.framework.chart_overlays.map(o =>
+              o.catalog_item_id === catalogItemId ? { ...o, visible: !o.visible } : o
+            ),
+            version: s.framework.version + 1,
+          }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  // ── Instrument mutations ───────────────────────────────────────────────────
+
+  addInstrument: (symbol: string) => {
+    const { framework, saveFramework } = get()
+    if (!framework || framework.instruments.includes(symbol)) return
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, instruments: [...s.framework.instruments, symbol], version: s.framework.version + 1 }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  removeInstrument: (symbol: string) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, instruments: s.framework.instruments.filter(i => i !== symbol), version: s.framework.version + 1 }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  // ── Derived active checks — O(1) via Set built on first access ────────────
+
+  isBlockActive: (catalogItemId: string) => {
+    const { framework } = get()
+    if (!framework) return false
+    return framework.blocks.some(b => b.catalog_item_id === catalogItemId)
+  },
+
+  isOverlayActive: (catalogItemId: string) => {
+    const { framework } = get()
+    if (!framework) return false
+    return framework.chart_overlays.some(o => o.catalog_item_id === catalogItemId)
+  },
+}))
+
+// Re-export getCatalogItem so callers can resolve items without a separate import
+export { getCatalogItem }

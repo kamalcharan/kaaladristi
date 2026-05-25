@@ -10,12 +10,8 @@ import ProtectedRoute from '@/components/domain/ProtectedRoute';
 import LandingPage from '@/views/LandingPage';
 import LoginPage from '@/views/LoginPage';
 import ProfileSetup from '@/views/ProfileSetup';
-import DashboardPage from '@/views/DashboardPage';
 import DashboardV3Page from '@/views/DashboardV3Page';
 import MarketsView from '@/views/MarketsView';
-
-import TransmissionView from '@/views/TransmissionView';
-import BacktestView from '@/views/BacktestView';
 import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
 import RuleEvalView from '@/views/RuleEvalView';
@@ -103,14 +99,10 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<DashboardV3Page />} />
-          <Route path="/dashboard-v1" element={<DashboardPage />} />
           <Route path="/markets" element={<MarketsView />} />
-
-          <Route path="/transmission" element={<TransmissionView />} />
           <Route path="/inference" element={<InferenceView />} />
           <Route path="/rule-eval" element={<RuleEvalView />} />
           <Route path="/astro-calendar" element={<CalendarView />} />
-          <Route path="/history" element={<BacktestView />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />

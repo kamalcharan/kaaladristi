@@ -78,6 +78,19 @@ Latest migration: **072** (`km_migration_072_panchang_windows_columns.sql`)
 | `km_planetary_aspects` | Daily planetary aspects (planet_1, planet_2, aspect_type, orb, exact) |
 | `km_rule_signals` | Discovered rule signal instances (date, rule_id, signal, strength, details, conditions_snapshot, actual_market_return, matched) |
 | `km_rule_confidence` | Per-rule backtested confidence (rule_id PK, total_occurrences, matched_count, confidence_score) |
+| `km_rule_transits` | Contiguous transit periods per rule; start_date, end_date, duration_days, nifty_return_pct, matched (migration 064) |
+| `km_rule_confidence_yearly` | Per-year win-rate breakdown per rule; transits, matched, win_pct, avg_return, avg_duration (migration 064) |
+| `km_astro_events` | Per-day astro event log; event_type, planet, from_value, to_value, severity (migration 071) |
+| `km_candidate_rules` | Proposed-rule staging area before promotion to km_astro_rule_master; 12 rows (migration 071) |
+| `km_daily_snapshots` | Per-day per-symbol JSONB snapshot store; one row per (date, symbol) (migration 071) |
+| `km_factor_correlation_stats` | Factor × index volatility/return correlation stats; 29 rows (migration 071) |
+| `km_indicator_compute_log` | Pipeline run log for indicator compute jobs; tracks symbols_count, rows_computed, status (migration 071) |
+| `km_moon_intraday` | Intraday moon position 09:15–15:30 IST; longitude, nakshatra, gandanta flag; 59,900 rows (migration 071) |
+| `km_risk_scores` | Risk Engine 4-dim composite output per (date, symbol); structural, momentum, volatility, deception, regime (migration 071) |
+| `km_rules` | Legacy/technical rules registry (18 rows) — distinct from km_astro_rule_master; pre-migration discipline (migration 071) |
+| `km_sector_sensitivity` | Per factor_type × sector sensitivity pct (migration 071) |
+| `km_technical_signals` | Technical signal instances per (asset_type, symbol_id, trade_date, signal_type) — schema only, never populated (migration 071) |
+| `km_score_calibration` | Score normalizer registry; one row per score_name, stores divisor/percentile for Plan Score etc. (migration 072) |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -276,7 +289,72 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **063**.
+Next migration number: **089**.
+
+---
+
+## Framework System
+
+The Framework is the user-configurable layer that lets traders build their own view of the market by adding indicators, widgets, scanners, and astro overlays.
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `App/frontend/src/constants/frameworkConstants.ts` | Single source of truth for all enum-like types — `BlockType`, `PlacementType`, `ChartOverlayType`, `DataSourceType`, `TierType`, etc. |
+| `App/frontend/src/constants/catalogItems.ts` | Static registry of all known indicators and widgets (`CATALOG_ITEMS`, `CATALOG_MAP`, helpers) |
+| `App/frontend/src/types/framework.ts` | TypeScript interfaces: `UserFramework`, `FrameworkBlock`, `ChartOverlay`, `GridPosition`, `PartialFramework` |
+| `App/frontend/src/stores/frameworkStore.ts` | Zustand store — all framework state and mutations |
+| `App/frontend/src/hooks/useAddToFramework.ts` | Public hook for adding items — handles tier gate and placement routing |
+| `App/backend/lib/auth.py` | `get_current_user_id()` FastAPI dependency — verifies HS256 JWT, returns `sub` as UUID string |
+
+### Database
+
+**`user_frameworks`** table — migration 088, `kaala_dristi_db`.
+Schema: `id` (UUID PK), `user_id` (UUID), `name`, `version` (server-incremented), `instruments` (TEXT[]), `blocks` (JSONB), `chart_overlays` (JSONB), `template_id`, `tier_at_creation`.
+RLS enabled — users can only read/write their own row.
+
+API endpoints (all JWT-protected, caller_id must match path user_id):
+- `GET  /api/framework/{user_id}` — fetch or auto-create default
+- `POST /api/framework/{user_id}` — explicit create
+- `PUT  /api/framework/{user_id}` — update; server controls `version` and `updated_at`
+
+### Constants-First Rule
+
+**Never define block types, placement types, tier types, or data source types inline in components.** Always import from `frameworkConstants.ts`. Adding a new type means editing that file only — all consuming code picks it up automatically.
+
+```typescript
+// WRONG — inline string literal
+if (item.placement === 'chart_overlay') { ... }
+
+// RIGHT — always import the constant
+import { PLACEMENT_TYPES } from '@/constants/frameworkConstants'
+```
+
+### Active State Rule
+
+**`isBlockActive(catalogItemId)` and `isOverlayActive(catalogItemId)` from `useFrameworkStore` are the single source of truth for whether an item is active in the framework.** No component, hook, or service should independently derive this from `blocks[]` or `chart_overlays[]` — always call these two functions.
+
+### Adding a New Catalog Item
+
+1. Add the `CatalogItem` entry to `CATALOG_ITEMS` in `catalogItems.ts`
+2. Use only canonical column names — never legacy aliases (see below)
+3. Set `applicable_to`, `tier_required`, `placement`, and `overlay_type` correctly
+4. Astro rules are **not** in `catalogItems.ts` — they come from `km_astro_rule_master` dynamically
+
+### Legacy Column Aliases — Never Use in New Code
+
+`km_index_eod` contains old column names from early migrations. These are duplicates of the canonical columns and must never be referenced in new frontend or backend code:
+
+| Legacy alias | Canonical column |
+|---|---|
+| `magicrs_value` | `magic_rs` |
+| `magicma_value` | `magic_ma` |
+| `sniper_banker` | `sniper_inst` |
+| `sniper_hotmoney` | `sniper_hot` |
+| `accum_dist` | `accum_distrib` |
+| `vacuum_status` | `vacuum_flag` |
+| `flow_meaning` | `flow_type` |
 
 ---
 

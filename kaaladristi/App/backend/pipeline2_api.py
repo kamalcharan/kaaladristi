@@ -10,10 +10,12 @@ Run:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
 import sys
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
@@ -21,7 +23,7 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -30,13 +32,14 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
+from lib.auth import get_current_user_id as _get_current_user_id  # noqa: E402
 from lib.config import DATABASE_URL  # noqa: E402
 from lib.db_client import get_db as _get_db  # noqa: E402
 
 # Optional AI / assembler modules — gracefully absent if not installed
 try:
     from lib.ai_prompts import SKILLS as _AI_SKILLS          # noqa: E402
-    from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED  # noqa: E402
+    from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
     from lib.data_assemblers import (                         # noqa: E402
         assemble_instrument_context,
         assemble_market_pulse_context,
@@ -59,7 +62,13 @@ except ImportError:
     _get_intents_for_page = lambda page: {}  # noqa: E731
     _ai_complete = lambda **_: None  # noqa: E731
     _AI_ENABLED = False
+    _AI_MODEL = ""
     _AI_OPTIONAL_OK = False
+
+try:
+    from app.middleware.interaction_logger import log_llm_interaction as _log_interaction  # noqa: E402
+except ImportError:
+    _log_interaction = lambda **_: None  # noqa: E731
 
 from pipeline2 import health as v2_health  # noqa: E402
 from pipeline2 import scheduler as v2_scheduler  # noqa: E402
@@ -203,6 +212,11 @@ class CalendarMarkRequest(BaseModel):
 
 class VaNiDailyRequest(BaseModel):
     date: Optional[str] = None    # YYYY-MM-DD; defaults to today (IST)
+
+
+class VaNiFeedbackRequest(BaseModel):
+    log_id: str
+    rating: int   # 1 | -1
 
 
 class VaNiAskRequest(BaseModel):
@@ -696,22 +710,6 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
     """Recompute ROC breadth oscillator for missing dates."""
     background_tasks.add_task(_refresh_breadth_roc)
     return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
-
-
-@app.get('/api/vani-opportunity/config')
-def vani_opportunity_config():
-    """Return all active VaNi Opportunity config rows (one per direction)."""
-    conn = _conn()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                "SELECT id,config_name,description,is_active,applies_to_presets,"
-                "parameters,created_at,updated_at "
-                "FROM kd_vani_opportunity_config WHERE is_active = true ORDER BY id"
-            )
-            return cur.fetchall() or []
-    finally:
-        conn.close()
 
 
 @app.get('/api/scan/presets')
@@ -1840,10 +1838,23 @@ def panchang_insight(date: str):
     skill = _AI_SKILLS.get("panchang_insight")
     if not skill:
         return {"date": date, "insight": None, "ai": False}
-    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    _t0 = time.monotonic()
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency = int((time.monotonic() - _t0) * 1000)
+    log_id: str | None = None
     if insight:
         _insight_cache[date] = insight
-    return {"date": date, "insight": insight, "ai": insight is not None}
+        log_id = _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/panchang-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={k: str(v) for k, v in p.items() if v is not None},
+            model_version=_AI_MODEL,
+            latency_ms=_latency,
+        )
+    return {"date": date, "insight": insight, "ai": insight is not None, "log_id": log_id}
 
 
 @app.get('/api/ai/breadth-insight')
@@ -1885,7 +1896,7 @@ def breadth_insight(date: str = None):
     skill = _AI_SKILLS.get("breadth_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
-    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     return {"date": target_date, "insight": insight, "ai": insight is not None}
@@ -1928,7 +1939,7 @@ def breadth_roc_insight():
     skill = _AI_SKILLS.get("breadth_roc_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
-    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     return {"date": target_date, "insight": insight, "ai": insight is not None}
@@ -1950,7 +1961,7 @@ def instrument_insight(id: int, type: str = 'index', date: str = None):
         return {"id": id, "type": type, "date": date, "insight": None, "ai": False, "alignment": ""}
     from pipeline_api import _fmt_instrument_msg  # reuse formatting helper
     user_msg = _fmt_instrument_msg(ctx)
-    insight  = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight  = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     alignment = ctx.get('alignment', {}).get('status', '')
@@ -1973,7 +1984,7 @@ def market_pulse_insight(date: str = None):
         return {"date": date, "insight": None, "ai": False, "astro_direction": ""}
     from pipeline_api import _fmt_market_pulse_msg  # reuse formatting helper
     user_msg      = _fmt_market_pulse_msg(ctx)
-    insight       = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight       = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     astro_dir = ctx.get('astro', {}).get('direction', '')
@@ -3159,37 +3170,35 @@ def vani_daily(req: VaNiDailyRequest):
         f"Generate a 3-4 sentence VaNi interpretation."
     )
 
-    # Try existing AI client (AI_ENABLED + AI_PROVIDER + AI_API_KEY configured)
-    interpretation = _ai_complete(system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300)
+    _t0 = time.monotonic()
+    interpretation = _ai_complete(
+        system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300,
+        temperature=0.4, no_think=True,
+    )
+    _latency = int((time.monotonic() - _t0) * 1000)
 
-    # Fallback: direct call to local LLM via LLM_BASE_URL (OpenAI-compatible)
-    if interpretation is None:
-        llm_base = os.getenv('LLM_BASE_URL', '').rstrip('/')
-        if llm_base:
-            try:
-                import requests as _req
-                resp = _req.post(
-                    f'{llm_base}/chat/completions',
-                    json={
-                        'messages': [
-                            {'role': 'system', 'content': _VANI_SYSTEM_PROMPT},
-                            {'role': 'user',   'content': user_msg},
-                        ],
-                        'max_tokens': 300,
-                        'temperature': 0.4,
-                    },
-                    timeout=30,
-                )
-                resp.raise_for_status()
-                interpretation = resp.json()['choices'][0]['message']['content'].strip()
-            except Exception as e:
-                log.error(f'VaNi LLM fallback failed: {e}')
-
-    if not interpretation:
+    log_id: str | None = None
+    if interpretation:
+        log_id = _log_interaction(
+            product="dristiq",
+            endpoint="/api/vani/daily",
+            user_input=user_msg,
+            llm_response=interpretation,
+            system_prompt=_VANI_SYSTEM_PROMPT,
+            context_payload={
+                "vara": vara, "vara_lord": vara_lord,
+                "nakshatra": nak_name, "nakshatra_lord": nak_lord,
+                "tithi": tithi, "yoga": yoga, "paksha": paksha,
+                "total_signals": total, "positive": positive, "negative": negative,
+            },
+            model_version=_AI_MODEL,
+            latency_ms=_latency,
+        )
+    else:
         interpretation = 'VaNi is unavailable at this time.'
 
     _vani_cache[date_str] = {'text': interpretation, 'cached_at': datetime.now()}
-    return {'date': date_str, 'interpretation': interpretation, 'cached': False}
+    return {'date': date_str, 'interpretation': interpretation, 'cached': False, 'log_id': log_id}
 
 
 # ── VaNi Intent System ────────────────────────────────────────────────────────
@@ -3229,35 +3238,6 @@ def _wrap_vani_user_msg(user_msg: str) -> str:
         + user_msg +
         "\n[DATA END]"
     )
-
-
-def _llm_call(system: str, user: str, max_tokens: int) -> str | None:
-    """Call LLM: try ai_client first, fall back to LLM_BASE_URL direct call."""
-    result = _ai_complete(system=system, user=user, max_tokens=max_tokens)
-    if result is not None:
-        return result
-    llm_base = os.getenv('LLM_BASE_URL', '').rstrip('/')
-    if not llm_base:
-        return None
-    try:
-        import requests as _req
-        resp = _req.post(
-            f'{llm_base}/chat/completions',
-            json={
-                'messages': [
-                    {'role': 'system', 'content': system},
-                    {'role': 'user',   'content': user},
-                ],
-                'max_tokens': max_tokens,
-                'temperature': 0.4,
-            },
-            timeout=45,
-        )
-        resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        log.error(f'VaNi LLM_BASE_URL call failed: {e}')
-        return None
 
 
 @app.get('/api/vani/intents')
@@ -3360,13 +3340,18 @@ def vani_ask(req: VaNiAskRequest):
         }
 
     # Call LLM — use the single anti-hallucination system prompt for all intents;
-    # wrap user_msg with grounding delimiters so Gemma can't drift outside the data.
+    # wrap user_msg with grounding delimiters so the model can't drift outside the data.
     provider = os.getenv('AI_PROVIDER', 'local')
-    response_text = _llm_call(
+    _wrapped_msg = _wrap_vani_user_msg(user_msg)
+    _t0 = time.monotonic()
+    response_text = _ai_complete(
         system=_VANI_ASK_SYSTEM,
-        user=_wrap_vani_user_msg(user_msg),
+        user=_wrapped_msg,
         max_tokens=intent.max_tokens,
+        temperature=0.4,
+        no_think=True,
     )
+    _latency = int((time.monotonic() - _t0) * 1000)
 
     if not response_text:
         return {
@@ -3374,6 +3359,17 @@ def vani_ask(req: VaNiAskRequest):
             'response': None, 'ai': False, 'cached': False,
             'provider': None, 'error': 'LLM unavailable',
         }
+
+    log_id = _log_interaction(
+        product="dristiq",
+        endpoint="/api/vani/ask",
+        user_input=_wrapped_msg,
+        llm_response=response_text,
+        system_prompt=_VANI_ASK_SYSTEM,
+        context_payload=ctx if isinstance(ctx, dict) else None,
+        model_version=_AI_MODEL,
+        latency_ms=_latency,
+    )
 
     _intent_cache[cache_key] = {
         'text': response_text,
@@ -3385,6 +3381,7 @@ def vani_ask(req: VaNiAskRequest):
         'response': response_text,
         'ai': True, 'cached': False,
         'provider': provider,
+        'log_id': log_id,
     }
 
 
@@ -3396,3 +3393,192 @@ def vani_cache_clear(intent_id: str):
         del _intent_cache[k]
     return {'cleared': len(removed), 'intent_id': intent_id}
 
+
+@app.post('/api/vani/feedback')
+def vani_feedback(req: VaNiFeedbackRequest):
+    """Record a thumbs up/down rating for a logged VaNi interaction."""
+    if req.rating not in (1, -1):
+        raise HTTPException(status_code=400, detail="rating must be 1 or -1")
+    vani_db_url = os.getenv('VANI_DB_URL', '')
+    if not vani_db_url:
+        return {'ok': False, 'error': 'VANI_DB_URL not configured'}
+    try:
+        conn = psycopg2.connect(vani_db_url)
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE vn_interaction_log SET user_rating = %s WHERE id = %s::uuid",
+                    (req.rating, req.log_id),
+                )
+        conn.close()
+        return {'ok': True}
+    except Exception as e:
+        log.error(f'vani_feedback error: {e}')
+        return {'ok': False}
+
+
+
+# ── User Frameworks ───────────────────────────────────────────────────────────
+
+class FrameworkUpdateRequest(BaseModel):
+    name: str | None = None
+    instruments: list[str] | None = None
+    blocks: list[dict] | None = None
+    chart_overlays: list[dict] | None = None
+    template_id: str | None = None
+    tier_at_creation: str | None = None
+
+
+def _framework_conn():
+    db_url = DATABASE_URL
+    if not db_url:
+        raise HTTPException(status_code=500, detail='DATABASE_URL not configured')
+    return psycopg2.connect(db_url)
+
+
+@app.get('/api/framework/{user_id}')
+def get_framework(
+    user_id: str,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Fetch the user's framework. Creates a default empty one if none exists."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                'SELECT * FROM user_frameworks WHERE user_id = %s::uuid LIMIT 1',
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+            if row is None:
+                # Create default framework for new user
+                cur.execute(
+                    """
+                    INSERT INTO user_frameworks (user_id, name, instruments, blocks, chart_overlays)
+                    VALUES (%s::uuid, 'My Framework', ARRAY['NIFTY50'], '[]', '[]')
+                    RETURNING *
+                    """,
+                    (user_id,),
+                )
+                conn.commit()
+                row = cur.fetchone()
+
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'get_framework error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/framework/{user_id}')
+def create_framework(
+    user_id: str,
+    req: FrameworkUpdateRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Explicitly create a new framework (replaces any existing one)."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO user_frameworks
+                  (user_id, name, instruments, blocks, chart_overlays, template_id, tier_at_creation)
+                VALUES
+                  (%s::uuid, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                RETURNING *
+                """,
+                (
+                    user_id,
+                    req.name or 'My Framework',
+                    req.instruments or ['NIFTY50'],
+                    json.dumps(req.blocks or []),
+                    json.dumps(req.chart_overlays or []),
+                    req.template_id,
+                    req.tier_at_creation or 'free',
+                ),
+            )
+            conn.commit()
+            row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=409, detail='Framework already exists')
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'create_framework error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.put('/api/framework/{user_id}')
+def update_framework(
+    user_id: str,
+    req: FrameworkUpdateRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Full update (auto-save). Server increments version and sets updated_at."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            updates = []
+            params: list = []
+
+            if req.name is not None:
+                updates.append('name = %s')
+                params.append(req.name)
+            if req.instruments is not None:
+                updates.append('instruments = %s')
+                params.append(req.instruments)
+            if req.blocks is not None:
+                updates.append('blocks = %s')
+                params.append(json.dumps(req.blocks))
+            if req.chart_overlays is not None:
+                updates.append('chart_overlays = %s')
+                params.append(json.dumps(req.chart_overlays))
+            if req.template_id is not None:
+                updates.append('template_id = %s')
+                params.append(req.template_id)
+            if req.tier_at_creation is not None:
+                updates.append('tier_at_creation = %s')
+                params.append(req.tier_at_creation)
+
+            if not updates:
+                raise HTTPException(status_code=400, detail='No fields to update')
+
+            # version and updated_at always server-controlled
+            updates += ['version = version + 1', 'updated_at = NOW()']
+            params.append(user_id)
+
+            cur.execute(
+                f"UPDATE user_frameworks SET {', '.join(updates)} WHERE user_id = %s::uuid RETURNING *",
+                params,
+            )
+            conn.commit()
+            row = cur.fetchone()
+
+        if row is None:
+            raise HTTPException(status_code=404, detail='Framework not found')
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'update_framework error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()

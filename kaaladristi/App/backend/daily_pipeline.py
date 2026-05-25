@@ -598,11 +598,20 @@ def main():
         # Backfill mode
         from_dt = date.fromisoformat(args.date_from)
         to_dt = date.fromisoformat(args.date_to)
-        dates = get_missing_dates(db, from_dt, to_dt, args.exchange)
+        if args.force:
+            # --force: iterate all calendar dates in range, skip weekends
+            dates = []
+            d = from_dt
+            while d <= to_dt:
+                if not is_weekend(d):
+                    dates.append(d)
+                d += timedelta(days=1)
+        else:
+            dates = get_missing_dates(db, from_dt, to_dt, args.exchange)
         if not dates:
-            print(f'\n  No missing dates between {from_dt} and {to_dt}')
+            print(f'\n  No dates to process between {from_dt} and {to_dt}')
             return
-        print(f'\n  Backfill: {len(dates)} missing date(s) from {from_dt} to {to_dt}')
+        print(f'\n  Backfill: {len(dates)} date(s) from {from_dt} to {to_dt}{" (forced)" if args.force else ""}')
     elif args.date:
         target = date.fromisoformat(args.date)
         dates = [target]
@@ -659,7 +668,7 @@ def main():
                 err = f" — {s.get('error_msg', '')}" if s.get('error_msg') else ''
                 print(f'    {icon} {s["step"]:12} {rows:>12}  {dur:>8}{err}')
 
-            print(f'    {"─" * 40}')
+            print(f'    {"-" * 40}')
             print(f'    Steps: {completed} done, {failed} failed, {skipped} skipped')
             print(f'    Total: {total_rows:,} rows in {total_ms:,}ms')
 
