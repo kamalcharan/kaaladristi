@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Navigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
@@ -22,6 +23,17 @@ export default function WorkspacePage() {
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading your framework…</span>
       </div>
     )
+  }
+
+  // version === 1 means the framework was just auto-created and has never been saved.
+  // Any user interaction bumps it to 2+, so this redirect only fires for a fresh account.
+  if (
+    framework &&
+    framework.version === 1 &&
+    framework.blocks.length === 0 &&
+    framework.chart_overlays.length === 0
+  ) {
+    return <Navigate to="/setup" replace />
   }
 
   if (error) {
