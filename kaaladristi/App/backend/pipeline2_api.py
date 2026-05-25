@@ -10,6 +10,7 @@ Run:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -3486,7 +3487,6 @@ def create_framework(
     if caller_id != user_id:
         raise HTTPException(status_code=403, detail='Forbidden')
 
-    import json
     conn = _framework_conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -3533,7 +3533,6 @@ def update_framework(
     if caller_id != user_id:
         raise HTTPException(status_code=403, detail='Forbidden')
 
-    import json
     conn = _framework_conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
