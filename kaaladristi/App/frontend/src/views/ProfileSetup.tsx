@@ -6,6 +6,7 @@ import { updateProfile } from '@/services/auth'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
+import { from } from '@/services/postgrest'
 
 type Step = 1 | 2 | 3 | 4
 type ICP  = 'investor' | 'trader' | 'both'
@@ -534,24 +535,55 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
 
 // ── Screen 4 — Instrument Selector (free tier only) ───────────────────────────
 
-const POPULAR_EQUITIES = [
-  'RELIANCE','HDFCBANK','INFY','TCS','ICICIBANK',
-  'SBIN','BAJFINANCE','HINDUNILVR','AXISBANK','KOTAKBANK',
-  'WIPRO','LT','MARUTI','SUNPHARMA','TATAMOTORS',
-  'ADANIPORTS','ULTRACEMCO','ASIANPAINT','TITAN','TECHM',
-  'NESTLEIND','POWERGRID','NTPC','INDUSINDBK','ONGC',
-]
+interface EqSuggestion { symbol: string; company_name: string | null; isin: string | null }
+
+async function fetchSuggestions(): Promise<EqSuggestion[]> {
+  // NSE-only, active, ordered by market cap descending (nulls at end).
+  // Fetching 60 to absorb any post-dedup shrinkage before slicing to 30.
+  const { data, error } = await from('km_equity_symbols')
+    .select('symbol,company_name,isin,exchange')
+    .is('is_active', 'true')
+    .eq('exchange', 'NSE')
+    .order('mcap_cr', { ascending: false, nullsFirst: false })
+    .limit(60)
+    .execute()
+
+  if (error || !data) return []
+
+  // Dedup by ISIN (NSE already preferred by the exchange filter, but guard anyway)
+  const seen = new Set<string>()
+  const out: EqSuggestion[] = []
+  for (const r of data as (EqSuggestion & { exchange: string })[]) {
+    const key = r.isin ?? r.symbol
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ symbol: r.symbol, company_name: r.company_name, isin: r.isin })
+  }
+  return out.slice(0, 30)
+}
 
 interface S4Props {
   onComplete: (symbols: string[]) => void
 }
 
 function Screen4({ onComplete }: S4Props) {
-  const [search,   setSearch]   = useState('')
-  const [selected, setSelected] = useState<string[]>([])
+  const [search,      setSearch]      = useState('')
+  const [selected,    setSelected]    = useState<string[]>([])
+  const [suggestions, setSuggestions] = useState<EqSuggestion[]>([])
+  const [loading,     setLoading]     = useState(true)
 
-  const filtered = POPULAR_EQUITIES
-    .filter(e => e.includes(search.toUpperCase().trim()) && !selected.includes(e))
+  useEffect(() => {
+    fetchSuggestions()
+      .then(setSuggestions)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const q = search.toUpperCase().trim()
+  const filtered = suggestions
+    .filter(e =>
+      !selected.includes(e.symbol) &&
+      (q === '' || e.symbol.includes(q) || (e.company_name ?? '').toUpperCase().includes(q))
+    )
     .slice(0, 8)
 
   function toggle(symbol: string) {
@@ -624,23 +656,29 @@ function Screen4({ onComplete }: S4Props) {
             outline:'none', fontFamily:'inherit' }} />
 
         {/* Suggestions */}
-        <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:28 }}>
-          {filtered.map(s => (
-            <button key={s} onClick={() => toggle(s)}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:28, minHeight:40 }}>
+          {loading && (
+            <span style={{ fontSize:12, color:'var(--text-muted)', animation:'text-in .4s ease both' }}>
+              Loading…
+            </span>
+          )}
+          {!loading && filtered.map(e => (
+            <button key={e.symbol} onClick={() => toggle(e.symbol)}
               disabled={selected.length >= 2}
+              title={e.company_name ?? e.symbol}
               style={{ padding:'6px 14px', borderRadius:100, cursor: selected.length >= 2 ? 'default' : 'pointer',
                 background:'rgba(13,17,23,1)', border:'1px solid rgba(255,255,255,.1)',
                 fontSize:12, color:'var(--text-primary)',
                 fontFamily:'var(--font-mono, monospace)',
                 opacity: selected.length >= 2 ? .4 : 1,
                 transition:'all .15s' }}
-              onMouseEnter={e => { if (selected.length < 2) (e.currentTarget).style.borderColor='rgba(255,255,255,.25)' }}
-              onMouseLeave={e => { (e.currentTarget).style.borderColor='rgba(255,255,255,.1)' }}>
-              {s}
+              onMouseEnter={e2 => { if (selected.length < 2) (e2.currentTarget).style.borderColor='rgba(255,255,255,.25)' }}
+              onMouseLeave={e2 => { (e2.currentTarget).style.borderColor='rgba(255,255,255,.1)' }}>
+              {e.symbol}
             </button>
           ))}
-          {filtered.length === 0 && search && (
-            <span style={{ fontSize:12, color:'var(--text-muted)' }}>No matches</span>
+          {!loading && filtered.length === 0 && q && (
+            <span style={{ fontSize:12, color:'var(--text-muted)' }}>No matches for "{search}"</span>
           )}
         </div>
 
