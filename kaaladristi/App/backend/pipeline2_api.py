@@ -14,6 +14,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
@@ -36,7 +37,7 @@ from lib.db_client import get_db as _get_db  # noqa: E402
 # Optional AI / assembler modules — gracefully absent if not installed
 try:
     from lib.ai_prompts import SKILLS as _AI_SKILLS          # noqa: E402
-    from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED  # noqa: E402
+    from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
     from lib.data_assemblers import (                         # noqa: E402
         assemble_instrument_context,
         assemble_market_pulse_context,
@@ -59,7 +60,13 @@ except ImportError:
     _get_intents_for_page = lambda page: {}  # noqa: E731
     _ai_complete = lambda **_: None  # noqa: E731
     _AI_ENABLED = False
+    _AI_MODEL = ""
     _AI_OPTIONAL_OK = False
+
+try:
+    from app.middleware.interaction_logger import log_llm_interaction as _log_interaction  # noqa: E402
+except ImportError:
+    _log_interaction = lambda **_: None  # noqa: E731
 
 from pipeline2 import health as v2_health  # noqa: E402
 from pipeline2 import scheduler as v2_scheduler  # noqa: E402
@@ -1824,9 +1831,21 @@ def panchang_insight(date: str):
     skill = _AI_SKILLS.get("panchang_insight")
     if not skill:
         return {"date": date, "insight": None, "ai": False}
+    _t0 = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency = int((time.monotonic() - _t0) * 1000)
     if insight:
         _insight_cache[date] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/panchang-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={k: str(v) for k, v in p.items() if v is not None},
+            model_version=_AI_MODEL,
+            latency_ms=_latency,
+        )
     return {"date": date, "insight": insight, "ai": insight is not None}
 
 
@@ -3143,12 +3162,30 @@ def vani_daily(req: VaNiDailyRequest):
         f"Generate a 3-4 sentence VaNi interpretation."
     )
 
+    _t0 = time.monotonic()
     interpretation = _ai_complete(
         system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300,
         temperature=0.4, no_think=True,
     )
+    _latency = int((time.monotonic() - _t0) * 1000)
 
-    if not interpretation:
+    if interpretation:
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/vani/daily",
+            user_input=user_msg,
+            llm_response=interpretation,
+            system_prompt=_VANI_SYSTEM_PROMPT,
+            context_payload={
+                "vara": vara, "vara_lord": vara_lord,
+                "nakshatra": nak_name, "nakshatra_lord": nak_lord,
+                "tithi": tithi, "yoga": yoga, "paksha": paksha,
+                "total_signals": total, "positive": positive, "negative": negative,
+            },
+            model_version=_AI_MODEL,
+            latency_ms=_latency,
+        )
+    else:
         interpretation = 'VaNi is unavailable at this time.'
 
     _vani_cache[date_str] = {'text': interpretation, 'cached_at': datetime.now()}
@@ -3296,13 +3333,16 @@ def vani_ask(req: VaNiAskRequest):
     # Call LLM — use the single anti-hallucination system prompt for all intents;
     # wrap user_msg with grounding delimiters so the model can't drift outside the data.
     provider = os.getenv('AI_PROVIDER', 'local')
+    _wrapped_msg = _wrap_vani_user_msg(user_msg)
+    _t0 = time.monotonic()
     response_text = _ai_complete(
         system=_VANI_ASK_SYSTEM,
-        user=_wrap_vani_user_msg(user_msg),
+        user=_wrapped_msg,
         max_tokens=intent.max_tokens,
         temperature=0.4,
         no_think=True,
     )
+    _latency = int((time.monotonic() - _t0) * 1000)
 
     if not response_text:
         return {
@@ -3310,6 +3350,17 @@ def vani_ask(req: VaNiAskRequest):
             'response': None, 'ai': False, 'cached': False,
             'provider': None, 'error': 'LLM unavailable',
         }
+
+    _log_interaction(
+        product="dristiq",
+        endpoint="/api/vani/ask",
+        user_input=_wrapped_msg,
+        llm_response=response_text,
+        system_prompt=_VANI_ASK_SYSTEM,
+        context_payload=ctx if isinstance(ctx, dict) else None,
+        model_version=_AI_MODEL,
+        latency_ms=_latency,
+    )
 
     _intent_cache[cache_key] = {
         'text': response_text,
