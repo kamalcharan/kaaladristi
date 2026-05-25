@@ -8,11 +8,19 @@ import {
 } from '@dnd-kit/core'
 import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
+import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
 
 const COLS = 12
 const ROWS = 10
 const CELL_HEIGHT_REM = 6
+
+const OVERLAY_DOT_COLOR: Record<string, string> = {
+  astro_zone:     '#c9a84c',
+  astro_marker:   '#c9a84c',
+  indicator_line: '#2dd4bf',
+  indicator_band: '#2dd4bf',
+}
 
 // ── Grid overlay (edit mode) ──────────────────────────────────────────────────
 
@@ -54,7 +62,7 @@ interface Props {
 
 export default function WorkspaceCanvas({ framework }: Props) {
   const [editMode, setEditMode] = useState(false)
-  const { removeBlock, updateBlockPosition, saveFramework } = useFrameworkStore()
+  const { removeBlock, updateBlockPosition, saveFramework, toggleOverlayVisibility } = useFrameworkStore()
 
   const sensors = useSensors(useSensor(PointerSensor, {
     activationConstraint: { distance: 8 },
@@ -100,20 +108,75 @@ export default function WorkspaceCanvas({ framework }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Canvas topbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-        padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,.07)',
-        flexShrink: 0, gap: 10 }}>
+      {/* ── Canvas topbar: overlay pills (left) + Edit Canvas (right) ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,.07)',
+        flexShrink: 0,
+      }}>
+        {/* Overlay pills */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          flex: 1, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none',
+        }}>
+          {framework.chart_overlays.map(o => {
+            const catalog = getCatalogItem(o.catalog_item_id)
+            const label   = catalog?.display_name ?? o.catalog_item_id.replace('astro_rule:', '')
+            const dot     = OVERLAY_DOT_COLOR[o.type] ?? '#7c6af7'
+            return (
+              <button
+                key={o.catalog_item_id}
+                onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
+                title={o.visible ? 'Click to hide' : 'Click to show'}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', borderRadius: 100, flexShrink: 0,
+                  border: '1px solid rgba(255,255,255,.1)',
+                  background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
+                  cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                  color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)',
+                  opacity: o.visible ? 1 : 0.4,
+                  transition: 'all .15s',
+                }}
+              >
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                  background: dot, opacity: o.visible ? 1 : 0.4,
+                }} />
+                {label}
+                <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 2 }}>
+                  {o.visible ? '👁' : '👁‍🗨'}
+                </span>
+              </button>
+            )
+          })}
+
+          {/* + overlay stub — Phase 3: opens Catalog drawer */}
+          {framework.chart_overlays.length > 0 && (
+            <button style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 100, flexShrink: 0,
+              border: '1px dashed rgba(255,255,255,.1)', background: 'transparent',
+              cursor: 'default', fontSize: 11,
+              color: 'rgba(255,255,255,.2)', fontFamily: 'var(--font-mono, monospace)',
+            }}>
+              + overlay
+            </button>
+          )}
+        </div>
+
+        {/* Edit Canvas / Done Editing */}
         <button
           onClick={() => editMode ? exitEditMode() : setEditMode(true)}
           style={{
-            padding: '6px 16px', borderRadius: 100, cursor: 'pointer',
+            padding: '6px 16px', borderRadius: 100, cursor: 'pointer', flexShrink: 0,
             fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
             border: editMode ? 'none' : '1px solid rgba(255,255,255,.1)',
             background: editMode ? '#7c6af7' : 'transparent',
             color: editMode ? '#fff' : 'var(--text-muted)',
             transition: 'all .2s ease',
-          }}>
+          }}
+        >
           {editMode ? 'Done Editing' : 'Edit Canvas'}
         </button>
       </div>

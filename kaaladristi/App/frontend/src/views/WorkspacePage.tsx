@@ -3,75 +3,6 @@ import { Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
-import { getCatalogItem } from '@/constants/catalogItems'
-
-// ── Overlay strip ─────────────────────────────────────────────────────────────
-
-function OverlayStrip() {
-  const { framework, toggleOverlayVisibility } = useFrameworkStore()
-  if (!framework || framework.chart_overlays.length === 0) return null
-
-  const overlays = framework.chart_overlays
-
-  const typeColor: Record<string, string> = {
-    astro_zone:     '#c9a84c',
-    astro_marker:   '#c9a84c',
-    indicator_line: '#2dd4bf',
-    indicator_band: '#2dd4bf',
-  }
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6,
-      padding: '6px 16px', borderBottom: '1px solid rgba(255,255,255,.05)',
-      overflowX: 'auto', flexShrink: 0,
-      // hide scrollbar
-      scrollbarWidth: 'none',
-    }}>
-      {overlays.map(o => {
-        const catalog = getCatalogItem(o.catalog_item_id)
-        const label   = catalog?.display_name ?? o.catalog_item_id.replace('astro_rule:', '')
-        const dot     = typeColor[o.type] ?? '#7c6af7'
-        return (
-          <button
-            key={o.catalog_item_id}
-            onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
-            title={o.visible ? 'Click to hide' : 'Click to show'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '4px 10px', borderRadius: 100, flexShrink: 0,
-              border: '1px solid rgba(255,255,255,.1)',
-              background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
-              cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-              color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)',
-              opacity: o.visible ? 1 : 0.4,
-              transition: 'all .15s',
-            }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%',
-              background: dot, flexShrink: 0,
-              opacity: o.visible ? 1 : 0.4 }} />
-            {label}
-            <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 2 }}>
-              {o.visible ? '👁' : '👁‍🗨'}
-            </span>
-          </button>
-        )
-      })}
-
-      {/* Stub: "+ overlay" — opens Catalog drawer in Phase 3 */}
-      <button
-        onClick={() => {/* Phase 3: open catalog drawer */}}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4,
-          padding: '4px 10px', borderRadius: 100, flexShrink: 0,
-          border: '1px dashed rgba(255,255,255,.1)', background: 'transparent',
-          cursor: 'default', fontSize: 11,
-          color: 'rgba(255,255,255,.2)', fontFamily: 'var(--font-mono, monospace)' }}>
-        + overlay
-      </button>
-    </div>
-  )
-}
-
-// ── WorkspacePage ─────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
   const { profile } = useAuthStore()
@@ -115,8 +46,8 @@ export default function WorkspacePage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* Page header */}
-      <div style={{ padding: '14px 20px 0', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+      <div style={{ padding: '14px 20px 10px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300,
             color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
             {framework!.name}
@@ -128,10 +59,7 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      {/* Overlay pill strip */}
-      <OverlayStrip />
-
-      {/* Canvas */}
+      {/* Canvas — topbar contains overlay pills + Edit Canvas button */}
       <WorkspaceCanvas framework={framework!} />
     </div>
   )
