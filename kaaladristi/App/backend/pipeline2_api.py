@@ -212,6 +212,11 @@ class VaNiDailyRequest(BaseModel):
     date: Optional[str] = None    # YYYY-MM-DD; defaults to today (IST)
 
 
+class VaNiFeedbackRequest(BaseModel):
+    log_id: str
+    rating: int   # 1 | -1
+
+
 class VaNiAskRequest(BaseModel):
     intent_id: str
     date: Optional[str] = None          # YYYY-MM-DD; defaults to today (IST)
@@ -1834,9 +1839,10 @@ def panchang_insight(date: str):
     _t0 = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     _latency = int((time.monotonic() - _t0) * 1000)
+    log_id: str | None = None
     if insight:
         _insight_cache[date] = insight
-        _log_interaction(
+        log_id = _log_interaction(
             product="dristiq",
             endpoint="/api/ai/panchang-insight",
             user_input=user_msg,
@@ -1846,7 +1852,7 @@ def panchang_insight(date: str):
             model_version=_AI_MODEL,
             latency_ms=_latency,
         )
-    return {"date": date, "insight": insight, "ai": insight is not None}
+    return {"date": date, "insight": insight, "ai": insight is not None, "log_id": log_id}
 
 
 @app.get('/api/ai/breadth-insight')
@@ -3169,8 +3175,9 @@ def vani_daily(req: VaNiDailyRequest):
     )
     _latency = int((time.monotonic() - _t0) * 1000)
 
+    log_id: str | None = None
     if interpretation:
-        _log_interaction(
+        log_id = _log_interaction(
             product="dristiq",
             endpoint="/api/vani/daily",
             user_input=user_msg,
@@ -3189,7 +3196,7 @@ def vani_daily(req: VaNiDailyRequest):
         interpretation = 'VaNi is unavailable at this time.'
 
     _vani_cache[date_str] = {'text': interpretation, 'cached_at': datetime.now()}
-    return {'date': date_str, 'interpretation': interpretation, 'cached': False}
+    return {'date': date_str, 'interpretation': interpretation, 'cached': False, 'log_id': log_id}
 
 
 # ── VaNi Intent System ────────────────────────────────────────────────────────
@@ -3351,7 +3358,7 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': 'LLM unavailable',
         }
 
-    _log_interaction(
+    log_id = _log_interaction(
         product="dristiq",
         endpoint="/api/vani/ask",
         user_input=_wrapped_msg,
@@ -3372,6 +3379,7 @@ def vani_ask(req: VaNiAskRequest):
         'response': response_text,
         'ai': True, 'cached': False,
         'provider': provider,
+        'log_id': log_id,
     }
 
 
@@ -3382,4 +3390,27 @@ def vani_cache_clear(intent_id: str):
     for k in removed:
         del _intent_cache[k]
     return {'cleared': len(removed), 'intent_id': intent_id}
+
+
+@app.post('/api/vani/feedback')
+def vani_feedback(req: VaNiFeedbackRequest):
+    """Record a thumbs up/down rating for a logged VaNi interaction."""
+    if req.rating not in (1, -1):
+        raise HTTPException(status_code=400, detail="rating must be 1 or -1")
+    vani_db_url = os.getenv('VANI_DB_URL', '')
+    if not vani_db_url:
+        return {'ok': False, 'error': 'VANI_DB_URL not configured'}
+    try:
+        conn = psycopg2.connect(vani_db_url)
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE vn_interaction_log SET user_rating = %s WHERE id = %s::uuid",
+                    (req.rating, req.log_id),
+                )
+        conn.close()
+        return {'ok': True}
+    except Exception as e:
+        log.error(f'vani_feedback error: {e}')
+        return {'ok': False}
 

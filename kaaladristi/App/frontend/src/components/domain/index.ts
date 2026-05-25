@@ -13,6 +13,7 @@ export { default as ActiveIndexScroll } from './ActiveIndexScroll';
 export { default as MarketBreadthChart } from './MarketBreadthChart';
 export { default as BreadthRocChart } from './BreadthRocChart';
 export { default as VaNiInsight } from './VaNiInsight';
+export { default as VaNiFeedback } from './VaNi/VaNiFeedback';
 export { default as SevenDayStrip } from './SevenDayStrip';
 export { default as MarketPulseCard } from './MarketPulseCard';
 export { default as InstrumentIntelligence } from './InstrumentIntelligence';

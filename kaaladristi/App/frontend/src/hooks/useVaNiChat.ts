@@ -34,6 +34,7 @@ export interface VaNiAskResponse {
   ai: boolean;
   cached: boolean;
   provider: string | null;
+  log_id?: string | null;
   error?: string;
 }
 
