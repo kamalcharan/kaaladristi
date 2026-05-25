@@ -78,6 +78,19 @@ Latest migration: **072** (`km_migration_072_panchang_windows_columns.sql`)
 | `km_planetary_aspects` | Daily planetary aspects (planet_1, planet_2, aspect_type, orb, exact) |
 | `km_rule_signals` | Discovered rule signal instances (date, rule_id, signal, strength, details, conditions_snapshot, actual_market_return, matched) |
 | `km_rule_confidence` | Per-rule backtested confidence (rule_id PK, total_occurrences, matched_count, confidence_score) |
+| `km_rule_transits` | Contiguous transit periods per rule; start_date, end_date, duration_days, nifty_return_pct, matched (migration 064) |
+| `km_rule_confidence_yearly` | Per-year win-rate breakdown per rule; transits, matched, win_pct, avg_return, avg_duration (migration 064) |
+| `km_astro_events` | Per-day astro event log; event_type, planet, from_value, to_value, severity (migration 071) |
+| `km_candidate_rules` | Proposed-rule staging area before promotion to km_astro_rule_master; 12 rows (migration 071) |
+| `km_daily_snapshots` | Per-day per-symbol JSONB snapshot store; one row per (date, symbol) (migration 071) |
+| `km_factor_correlation_stats` | Factor × index volatility/return correlation stats; 29 rows (migration 071) |
+| `km_indicator_compute_log` | Pipeline run log for indicator compute jobs; tracks symbols_count, rows_computed, status (migration 071) |
+| `km_moon_intraday` | Intraday moon position 09:15–15:30 IST; longitude, nakshatra, gandanta flag; 59,900 rows (migration 071) |
+| `km_risk_scores` | Risk Engine 4-dim composite output per (date, symbol); structural, momentum, volatility, deception, regime (migration 071) |
+| `km_rules` | Legacy/technical rules registry (18 rows) — distinct from km_astro_rule_master; pre-migration discipline (migration 071) |
+| `km_sector_sensitivity` | Per factor_type × sector sensitivity pct (migration 071) |
+| `km_technical_signals` | Technical signal instances per (asset_type, symbol_id, trade_date, signal_type) — schema only, never populated (migration 071) |
+| `km_score_calibration` | Score normalizer registry; one row per score_name, stores divisor/percentile for Plan Score etc. (migration 072) |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -276,7 +289,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **063**.
+Next migration number: **073**.
 
 ---
 
