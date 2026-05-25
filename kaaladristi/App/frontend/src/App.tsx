@@ -29,7 +29,8 @@ import AdminPanchangView from '@/views/AdminPanchangView';
 import { RuleList, RuleDetail } from '@/pages/RuleEngine';
 import MarketStructureView from '@/views/MarketStructureView';
 import PlanetaryIntelView from '@/views/PlanetaryIntelView';
-import WorkspacePage from '@/views/WorkspacePage';
+import WorkspacePage from '@/views/WorkspacePage'
+import CatalogPage from '@/views/CatalogPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -100,6 +101,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/dashboard" element={<DashboardV3Page />} />
           <Route path="/markets" element={<MarketsView />} />
           <Route path="/inference" element={<InferenceView />} />
