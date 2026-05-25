@@ -1824,7 +1824,7 @@ def panchang_insight(date: str):
     skill = _AI_SKILLS.get("panchang_insight")
     if not skill:
         return {"date": date, "insight": None, "ai": False}
-    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[date] = insight
     return {"date": date, "insight": insight, "ai": insight is not None}
@@ -1869,7 +1869,7 @@ def breadth_insight(date: str = None):
     skill = _AI_SKILLS.get("breadth_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
-    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     return {"date": target_date, "insight": insight, "ai": insight is not None}
@@ -1912,7 +1912,7 @@ def breadth_roc_insight():
     skill = _AI_SKILLS.get("breadth_roc_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
-    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     return {"date": target_date, "insight": insight, "ai": insight is not None}
@@ -1934,7 +1934,7 @@ def instrument_insight(id: int, type: str = 'index', date: str = None):
         return {"id": id, "type": type, "date": date, "insight": None, "ai": False, "alignment": ""}
     from pipeline_api import _fmt_instrument_msg  # reuse formatting helper
     user_msg = _fmt_instrument_msg(ctx)
-    insight  = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight  = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     alignment = ctx.get('alignment', {}).get('status', '')
@@ -1957,7 +1957,7 @@ def market_pulse_insight(date: str = None):
         return {"date": date, "insight": None, "ai": False, "astro_direction": ""}
     from pipeline_api import _fmt_market_pulse_msg  # reuse formatting helper
     user_msg      = _fmt_market_pulse_msg(ctx)
-    insight       = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens)
+    insight       = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
     if insight:
         _insight_cache[cache_key] = insight
     astro_dir = ctx.get('astro', {}).get('direction', '')
@@ -3143,31 +3143,10 @@ def vani_daily(req: VaNiDailyRequest):
         f"Generate a 3-4 sentence VaNi interpretation."
     )
 
-    # Try existing AI client (AI_ENABLED + AI_PROVIDER + AI_API_KEY configured)
-    interpretation = _ai_complete(system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300)
-
-    # Fallback: direct call to local LLM via LLM_BASE_URL (OpenAI-compatible)
-    if interpretation is None:
-        llm_base = os.getenv('LLM_BASE_URL', '').rstrip('/')
-        if llm_base:
-            try:
-                import requests as _req
-                resp = _req.post(
-                    f'{llm_base}/chat/completions',
-                    json={
-                        'messages': [
-                            {'role': 'system', 'content': _VANI_SYSTEM_PROMPT},
-                            {'role': 'user',   'content': user_msg},
-                        ],
-                        'max_tokens': 300,
-                        'temperature': 0.4,
-                    },
-                    timeout=30,
-                )
-                resp.raise_for_status()
-                interpretation = resp.json()['choices'][0]['message']['content'].strip()
-            except Exception as e:
-                log.error(f'VaNi LLM fallback failed: {e}')
+    interpretation = _ai_complete(
+        system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300,
+        temperature=0.4, no_think=True,
+    )
 
     if not interpretation:
         interpretation = 'VaNi is unavailable at this time.'
@@ -3213,35 +3192,6 @@ def _wrap_vani_user_msg(user_msg: str) -> str:
         + user_msg +
         "\n[DATA END]"
     )
-
-
-def _llm_call(system: str, user: str, max_tokens: int) -> str | None:
-    """Call LLM: try ai_client first, fall back to LLM_BASE_URL direct call."""
-    result = _ai_complete(system=system, user=user, max_tokens=max_tokens)
-    if result is not None:
-        return result
-    llm_base = os.getenv('LLM_BASE_URL', '').rstrip('/')
-    if not llm_base:
-        return None
-    try:
-        import requests as _req
-        resp = _req.post(
-            f'{llm_base}/chat/completions',
-            json={
-                'messages': [
-                    {'role': 'system', 'content': system},
-                    {'role': 'user',   'content': user},
-                ],
-                'max_tokens': max_tokens,
-                'temperature': 0.4,
-            },
-            timeout=45,
-        )
-        resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        log.error(f'VaNi LLM_BASE_URL call failed: {e}')
-        return None
 
 
 @app.get('/api/vani/intents')
@@ -3344,12 +3294,14 @@ def vani_ask(req: VaNiAskRequest):
         }
 
     # Call LLM — use the single anti-hallucination system prompt for all intents;
-    # wrap user_msg with grounding delimiters so Gemma can't drift outside the data.
+    # wrap user_msg with grounding delimiters so the model can't drift outside the data.
     provider = os.getenv('AI_PROVIDER', 'local')
-    response_text = _llm_call(
+    response_text = _ai_complete(
         system=_VANI_ASK_SYSTEM,
         user=_wrap_vani_user_msg(user_msg),
         max_tokens=intent.max_tokens,
+        temperature=0.4,
+        no_think=True,
     )
 
     if not response_text:
