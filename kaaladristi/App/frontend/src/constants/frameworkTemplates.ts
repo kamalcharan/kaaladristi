@@ -1,0 +1,207 @@
+import type { FrameworkBlock, ChartOverlay } from '@/types/framework'
+
+export interface FrameworkTemplate {
+  id: string
+  display_name: string
+  icp: 'investor' | 'trader' | 'hybrid_weighted' | 'hybrid_balanced'
+  blocks: Omit<FrameworkBlock, 'id' | 'added_at'>[]
+  chart_overlays: ChartOverlay[]
+}
+
+// ── Investor ──────────────────────────────────────────────────────────────────
+// Six-Day Outlook + MagicRS + Panchak (overlay) + Conviction Flow
+
+const INVESTOR: FrameworkTemplate = {
+  id: 'vani_investor',
+  display_name: 'Investor',
+  icp: 'investor',
+  blocks: [
+    {
+      type: 'widget',
+      catalog_item_id: 'magic_rs',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'six_day_outlook',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 7, row_end: 10 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'scanner',
+      catalog_item_id: 'conviction_flow',
+      placement: 'output_panel',
+      grid_position: { col_start: 1, col_end: 5, row_start: 9, row_end: 12 },
+      config: {},
+      added_by: 'vani',
+    },
+  ],
+  chart_overlays: [
+    { catalog_item_id: 'astro_rule:panchak', type: 'astro_zone', visible: true },
+  ],
+}
+
+// ── Trader ────────────────────────────────────────────────────────────────────
+// EMA 20 (overlay) + RSI 14 + Breadth ROC + Conviction Flow
+
+const TRADER: FrameworkTemplate = {
+  id: 'vani_trader',
+  display_name: 'Trader',
+  icp: 'trader',
+  blocks: [
+    {
+      type: 'indicator',
+      catalog_item_id: 'rsi_14',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'breadth_roc',
+      placement: 'panel_block',
+      grid_position: { col_start: 5, col_end: 13, row_start: 9, row_end: 12 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'scanner',
+      catalog_item_id: 'conviction_flow',
+      placement: 'output_panel',
+      grid_position: { col_start: 1, col_end: 5, row_start: 9, row_end: 12 },
+      config: {},
+      added_by: 'vani',
+    },
+  ],
+  chart_overlays: [
+    { catalog_item_id: 'ema_20', type: 'indicator_line', visible: true },
+  ],
+}
+
+// ── Hybrid Weighted (70/30+ Investor) ─────────────────────────────────────────
+// All 6 blocks: EMA 20 + MagicRS + Panchak + Conviction Flow + Breadth ROC + Six-Day Outlook
+
+const HYBRID_WEIGHTED: FrameworkTemplate = {
+  id: 'vani_hybrid_weighted',
+  display_name: 'Hybrid (Investor-leaning)',
+  icp: 'hybrid_weighted',
+  blocks: [
+    {
+      type: 'widget',
+      catalog_item_id: 'magic_rs',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'six_day_outlook',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 7, row_end: 10 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'scanner',
+      catalog_item_id: 'conviction_flow',
+      placement: 'output_panel',
+      grid_position: { col_start: 1, col_end: 5, row_start: 9, row_end: 12 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'breadth_roc',
+      placement: 'panel_block',
+      grid_position: { col_start: 5, col_end: 13, row_start: 9, row_end: 12 },
+      config: {},
+      added_by: 'vani',
+    },
+  ],
+  chart_overlays: [
+    { catalog_item_id: 'ema_20', type: 'indicator_line', visible: true },
+    { catalog_item_id: 'astro_rule:panchak', type: 'astro_zone', visible: true },
+  ],
+}
+
+// ── Hybrid Balanced (50/50) ───────────────────────────────────────────────────
+// 3 astro: Panchak (overlay) + Six-Day Outlook + MagicRS
+// 3 technical: EMA 20 (overlay) + RSI 14 + Breadth ROC
+
+const HYBRID_BALANCED: FrameworkTemplate = {
+  id: 'vani_hybrid_balanced',
+  display_name: 'Hybrid (Balanced)',
+  icp: 'hybrid_balanced',
+  blocks: [
+    {
+      type: 'widget',
+      catalog_item_id: 'magic_rs',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'indicator',
+      catalog_item_id: 'rsi_14',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 4, row_end: 7 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'six_day_outlook',
+      placement: 'panel_block',
+      grid_position: { col_start: 9, col_end: 13, row_start: 7, row_end: 10 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'breadth_roc',
+      placement: 'panel_block',
+      grid_position: { col_start: 5, col_end: 13, row_start: 9, row_end: 12 },
+      config: {},
+      added_by: 'vani',
+    },
+  ],
+  chart_overlays: [
+    { catalog_item_id: 'ema_20', type: 'indicator_line', visible: true },
+    { catalog_item_id: 'astro_rule:panchak', type: 'astro_zone', visible: true },
+  ],
+}
+
+// ── Registry ──────────────────────────────────────────────────────────────────
+
+export const FRAMEWORK_TEMPLATES: FrameworkTemplate[] = [
+  INVESTOR,
+  TRADER,
+  HYBRID_WEIGHTED,
+  HYBRID_BALANCED,
+]
+
+export const TEMPLATE_MAP: Record<string, FrameworkTemplate> = Object.fromEntries(
+  FRAMEWORK_TEMPLATES.map(t => [t.id, t])
+)
+
+/**
+ * Maps ICP answer + optional blend slider value to the right starter template.
+ * blend is the Investor % (10–90). blend >= 70 → weighted, else → balanced.
+ */
+export function getTemplateForICP(
+  icp: 'investor' | 'trader' | 'both',
+  blend?: number
+): FrameworkTemplate {
+  if (icp === 'investor') return INVESTOR
+  if (icp === 'trader') return TRADER
+  // 'both'
+  return (blend ?? 50) >= 70 ? HYBRID_WEIGHTED : HYBRID_BALANCED
+}
