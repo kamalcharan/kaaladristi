@@ -22,7 +22,7 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -31,6 +31,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
+from lib.auth import get_current_user_id as _get_current_user_id  # noqa: E402
 from lib.config import DATABASE_URL  # noqa: E402
 from lib.db_client import get_db as _get_db  # noqa: E402
 
@@ -3414,3 +3415,171 @@ def vani_feedback(req: VaNiFeedbackRequest):
         log.error(f'vani_feedback error: {e}')
         return {'ok': False}
 
+
+
+# ── User Frameworks ───────────────────────────────────────────────────────────
+
+class FrameworkUpdateRequest(BaseModel):
+    name: str | None = None
+    instruments: list[str] | None = None
+    blocks: list[dict] | None = None
+    chart_overlays: list[dict] | None = None
+    template_id: str | None = None
+    tier_at_creation: str | None = None
+
+
+def _framework_conn():
+    db_url = DATABASE_URL
+    if not db_url:
+        raise HTTPException(status_code=500, detail='DATABASE_URL not configured')
+    return psycopg2.connect(db_url)
+
+
+@app.get('/api/framework/{user_id}')
+def get_framework(
+    user_id: str,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Fetch the user's framework. Creates a default empty one if none exists."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                'SELECT * FROM user_frameworks WHERE user_id = %s::uuid LIMIT 1',
+                (user_id,),
+            )
+            row = cur.fetchone()
+
+            if row is None:
+                # Create default framework for new user
+                cur.execute(
+                    """
+                    INSERT INTO user_frameworks (user_id, name, instruments, blocks, chart_overlays)
+                    VALUES (%s::uuid, 'My Framework', ARRAY['NIFTY50'], '[]', '[]')
+                    RETURNING *
+                    """,
+                    (user_id,),
+                )
+                conn.commit()
+                row = cur.fetchone()
+
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'get_framework error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/framework/{user_id}')
+def create_framework(
+    user_id: str,
+    req: FrameworkUpdateRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Explicitly create a new framework (replaces any existing one)."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    import json
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO user_frameworks
+                  (user_id, name, instruments, blocks, chart_overlays, template_id, tier_at_creation)
+                VALUES
+                  (%s::uuid, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                RETURNING *
+                """,
+                (
+                    user_id,
+                    req.name or 'My Framework',
+                    req.instruments or ['NIFTY50'],
+                    json.dumps(req.blocks or []),
+                    json.dumps(req.chart_overlays or []),
+                    req.template_id,
+                    req.tier_at_creation or 'free',
+                ),
+            )
+            conn.commit()
+            row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=409, detail='Framework already exists')
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'create_framework error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.put('/api/framework/{user_id}')
+def update_framework(
+    user_id: str,
+    req: FrameworkUpdateRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Full update (auto-save). Server increments version and sets updated_at."""
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    import json
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            updates = []
+            params: list = []
+
+            if req.name is not None:
+                updates.append('name = %s')
+                params.append(req.name)
+            if req.instruments is not None:
+                updates.append('instruments = %s')
+                params.append(req.instruments)
+            if req.blocks is not None:
+                updates.append('blocks = %s')
+                params.append(json.dumps(req.blocks))
+            if req.chart_overlays is not None:
+                updates.append('chart_overlays = %s')
+                params.append(json.dumps(req.chart_overlays))
+            if req.template_id is not None:
+                updates.append('template_id = %s')
+                params.append(req.template_id)
+            if req.tier_at_creation is not None:
+                updates.append('tier_at_creation = %s')
+                params.append(req.tier_at_creation)
+
+            if not updates:
+                raise HTTPException(status_code=400, detail='No fields to update')
+
+            # version and updated_at always server-controlled
+            updates += ['version = version + 1', 'updated_at = NOW()']
+            params.append(user_id)
+
+            cur.execute(
+                f"UPDATE user_frameworks SET {', '.join(updates)} WHERE user_id = %s::uuid RETURNING *",
+                params,
+            )
+            conn.commit()
+            row = cur.fetchone()
+
+        if row is None:
+            raise HTTPException(status_code=404, detail='Framework not found')
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'update_framework error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
