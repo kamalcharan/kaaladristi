@@ -138,7 +138,7 @@ BREEZE_SESSION_TOKEN=...
 
 - **Stack**: React 18, TypeScript, Vite, Tailwind CSS, React Query, Recharts, lightweight-charts
 - **Theme**: Driven by `VITE_THEME` env var — 3 themes in `src/config/theme/themes/`
-- **Routes/Views**: Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
+- **Routes/Views**: **Workspace (`/workspace`)**, Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
 - **Settings sub-pages**: Index Catalog, Equity Catalog, Commodity Catalog, Market Data Hub, Pipeline Dashboard
 
 ### Equity Visual Pulse (`/pulse/equity/:equityId`)
@@ -303,9 +303,13 @@ The Framework is the user-configurable layer that lets traders build their own v
 |---|---|
 | `App/frontend/src/constants/frameworkConstants.ts` | Single source of truth for all enum-like types — `BlockType`, `PlacementType`, `ChartOverlayType`, `DataSourceType`, `TierType`, etc. |
 | `App/frontend/src/constants/catalogItems.ts` | Static registry of all known indicators and widgets (`CATALOG_ITEMS`, `CATALOG_MAP`, helpers) |
+| `App/frontend/src/constants/frameworkTemplates.ts` | 4 ICP starter templates (investor, trader, hybrid_weighted, hybrid_balanced) + `getTemplateForICP()` selector |
 | `App/frontend/src/types/framework.ts` | TypeScript interfaces: `UserFramework`, `FrameworkBlock`, `ChartOverlay`, `GridPosition`, `PartialFramework` |
-| `App/frontend/src/stores/frameworkStore.ts` | Zustand store — all framework state and mutations |
+| `App/frontend/src/stores/frameworkStore.ts` | Zustand store — all framework state and mutations; `applyTemplate()` action wholesale-replaces blocks/overlays with VaNi attribution |
 | `App/frontend/src/hooks/useAddToFramework.ts` | Public hook for adding items — handles tier gate and placement routing |
+| `App/frontend/src/views/WorkspacePage.tsx` | `/workspace` route — framework loader, overlay pill strip, page header, mounts WorkspaceCanvas |
+| `App/frontend/src/components/domain/Workspace/WorkspaceCanvas.tsx` | 12×10 CSS grid canvas, DnD drag-to-reposition (dnd-kit), edit mode with grid overlay + add-zone placeholders |
+| `App/frontend/src/components/domain/Workspace/WorkspaceBlock.tsx` | Individual block card — grid-positioned, VaNi glow, drag handle (edit mode), right-click context menu |
 | `App/backend/lib/auth.py` | `get_current_user_id()` FastAPI dependency — verifies HS256 JWT, returns `sub` as UUID string |
 
 ### Database
@@ -318,6 +322,39 @@ API endpoints (all JWT-protected, caller_id must match path user_id):
 - `GET  /api/framework/{user_id}` — fetch or auto-create default
 - `POST /api/framework/{user_id}` — explicit create
 - `PUT  /api/framework/{user_id}` — update; server controls `version` and `updated_at`
+
+### VaNi Onboarding (ProfileSetup.tsx)
+
+`views/ProfileSetup.tsx` is a 4-screen state machine (`Step = 1 | 2 | 3 | 4`):
+
+| Screen | Content | Tier gate |
+|---|---|---|
+| 1 | Morphing VaNi orb, name/phone pre-fill from `authStore.profile` | All users |
+| 2 | ICP question (Investor / Trader / Both + blend slider) | All users |
+| 3 | Block-by-block animation showing selected template, VaNi narration log | All users |
+| 4 | Equity selector — live query `km_equity_symbols` mcap_cr DESC, pick 2 | Free tier only; paid/beta go straight to `/workspace` |
+
+**Template selection** (`getTemplateForICP`): investor → INVESTOR, trader → TRADER, both + blend ≥ 70 → HYBRID_WEIGHTED, both + blend < 70 → HYBRID_BALANCED.
+
+**"Start here →"** calls `applyTemplate()` → `updateProfile({onboarded:true})` → free users go to Screen 4, paid/beta go to `/workspace`.
+
+### ICP Templates (frameworkTemplates.ts)
+
+| Template | Blocks | Chart overlays |
+|---|---|---|
+| INVESTOR | Market Breadth, Astro Calendar, MagicRS Index, Astro Panchak | EMA 20, Panchak (astro_zone) |
+| TRADER | Conviction Flow, RSI 14, Breadth ROC, MagicRS Index | EMA 20, SMA 50 |
+| HYBRID_WEIGHTED | Conviction Flow, Market Breadth, Astro Calendar, MagicRS Index, Breadth ROC | EMA 20, Panchak (astro_zone) |
+| HYBRID_BALANCED | Market Breadth, Conviction Flow, Breadth ROC, MagicRS Index, Astro Calendar, Astro Panchak | EMA 20, SMA 50, Panchak (astro_zone) |
+
+All blocks have `added_by: 'vani'` — rendered with purple glow + "VaNi ✦" badge in WorkspaceBlock.
+
+### Workspace Canvas
+
+- **Grid**: 12 columns × 10 rows, `CELL_HEIGHT_REM = 6`
+- **Drag**: `@dnd-kit/core` `PointerSensor` (activationConstraint: distance 8). `useDraggable` lives inside `WorkspaceBlock` — `setNodeRef` on block outer div, `listeners + attributes` on drag handle only. Never wrap blocks in a `display:contents` container (breaks dnd-kit bounding box).
+- **Edit mode**: shows GridOverlay + AddZone placeholders; "Done Editing" calls `saveFramework()`
+- **Overlay strip**: horizontal scrolling pills above canvas; `toggleOverlayVisibility(catalogItemId)` from `useFrameworkStore()` on click
 
 ### Constants-First Rule
 
