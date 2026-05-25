@@ -22,7 +22,7 @@ DATABASE_URL  = (
     os.getenv('DATABASE_URL', '').strip() or
     os.getenv('DB_PRIMARY', '').strip()      # Docker / shared env alias
 )
-JWT_SECRET = os.getenv('JWT_SECRET', '').strip()
+JWT_SECRET = os.getenv('JWT_SECRET', '').strip() or os.getenv('VITE_JWT_SECRET', '').strip()
 
 # Legacy Supabase env vars — map to PostgREST equivalents for backward compat
 # Scripts that still read VITE_SUPABASE_URL will get POSTGREST_URL instead
