@@ -13,6 +13,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import {
   createChart,
   createSeriesMarkers,
+  AreaSeries,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -28,6 +29,7 @@ import {
   LineStyle,
 } from 'lightweight-charts';
 import type { IndicatorRow } from '@/services/indicatorData';
+import type { ChartOverlay } from '@/types/framework';
 
 // ── SMA config ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -42,6 +44,7 @@ interface TradingChartProps {
   height?: number;
   compact?: boolean;  // hide RSI + Sniper panes (when Visual Pulse cards show them)
   highlightDate?: string | null;  // scroll chart to center on this date
+  overlays?: ChartOverlay[];
 }
 
 function toTime(dateStr: string): Time {
@@ -99,7 +102,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, highlightDate = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, highlightDate = null, overlays = [] }: TradingChartProps) {
   const mainRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
   const sniperRef = useRef<HTMLDivElement>(null);
@@ -326,6 +329,51 @@ export default function TradingChart({ data, height = 900, compact = false, high
     zeroLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 0 })));
 
     // ═══════════════════════════════════════════════════════════════════
+    // OVERLAYS — injected from framework.chart_overlays
+    // ═══════════════════════════════════════════════════════════════════
+
+    for (const overlay of overlays.filter(o => o.visible)) {
+      const color = overlay.color ?? '#7c6af7'
+
+      if (overlay.type === 'astro_zone') {
+        // TODO: wire astro date ranges from rule engine
+        const zoneSeries = mainChart.addSeries(AreaSeries, {
+          lineColor: 'transparent',
+          topColor: color + '22',
+          bottomColor: color + '08',
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        })
+        zoneSeries.setData([]) // TODO: date ranges from km_rule_transits
+      } else if (overlay.type === 'astro_marker') {
+        // TODO: wire astro event dates from rule engine
+        // createSeriesMarkers(candleSeries, []) deferred until km_astro_events is wired
+      } else if (overlay.type === 'indicator_line') {
+        // TODO: wire indicator values from overlay config
+        const lineSeries = mainChart.addSeries(LineSeries, {
+          color,
+          lineWidth: 1 as LineWidth,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        })
+        lineSeries.setData([]) // TODO: overlay config → LineData[]
+      } else if (overlay.type === 'indicator_band') {
+        // TODO: wire upper/lower band values from overlay config
+        const bandSeries = mainChart.addSeries(AreaSeries, {
+          lineColor: color,
+          topColor: color + '33',
+          bottomColor: color + '11',
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        })
+        bandSeries.setData([]) // TODO: overlay config → AreaData[]
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // SYNC TIME SCALES
     // ═══════════════════════════════════════════════════════════════════
 
@@ -341,7 +389,7 @@ export default function TradingChart({ data, height = 900, compact = false, high
     });
 
     mainChart.timeScale().fitContent();
-  }, [data, height, compact]);
+  }, [data, height, compact, overlays]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {

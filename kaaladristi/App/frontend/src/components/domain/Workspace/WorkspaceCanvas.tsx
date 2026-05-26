@@ -10,11 +10,15 @@ import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
+import WorkspaceChart from '@/components/workspace/WorkspaceChart'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
 
 const COLS = 12
 const ROWS = 10
 const CELL_HEIGHT_REM = 6
+
+// Chart cell spans rows 1-9 (9 rows) × 16px/rem base — passed to TradingChart height
+const CHART_HEIGHT_PX = 9 * CELL_HEIGHT_REM * 16
 
 const OVERLAY_DOT_COLOR: Record<string, string> = {
   astro_zone:     '#c9a84c',
@@ -248,6 +252,18 @@ export default function WorkspaceCanvas({ framework }: Props) {
                 </p>
               </div>
             )}
+
+            {/* Chart cell — col 1-8, row 1-9 */}
+            <div style={{
+              gridColumnStart: 1, gridColumnEnd: 9,
+              gridRowStart: 1, gridRowEnd: 10,
+              borderRadius: 10,
+              overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,.06)',
+              background: 'rgba(13,17,23,.9)',
+            }}>
+              <WorkspaceChart height={CHART_HEIGHT_PX} />
+            </div>
 
             {framework.blocks.map(block => (
               <WorkspaceBlock
