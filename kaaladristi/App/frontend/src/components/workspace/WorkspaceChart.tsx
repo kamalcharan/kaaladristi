@@ -81,7 +81,6 @@ export default function WorkspaceChart({ height }: Props) {
           data={data}
           height={height - HEADER_H}
           overlays={overlays}
-          compact
         />
       )}
     </div>
