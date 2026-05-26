@@ -4,9 +4,14 @@ import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
+import MagicRsWidget from './widgets/MagicRsWidget'
+import OrderFlowWidget from './widgets/OrderFlowWidget'
+import SmartMoneyWidget from './widgets/SmartMoneyWidget'
 import type { DeepDiveItem } from './DeepDivePanel'
 
 const TODAY = new Date().toISOString().slice(0, 10)
+
+const LIVE_WIDGETS = new Set(['breadth_roc', 'six_day_outlook', 'magic_rs', 'order_flow', 'smart_money'])
 
 // Widgets includes scanners (conviction_flow has block_type='scanner' but is in WIDGETS array)
 // getCatalogItemsByType('widget') covers all widget-placement items
@@ -156,13 +161,13 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
               </div>
 
               {/* Description or live preview */}
-              {item.id === 'breadth_roc' && !locked ? (
+              {LIVE_WIDGETS.has(item.id) && !locked ? (
                 <div style={{ marginBottom: 14, pointerEvents: 'none' }}>
-                  <BreadthRocChart />
-                </div>
-              ) : item.id === 'six_day_outlook' && !locked ? (
-                <div style={{ marginBottom: 14, pointerEvents: 'none' }}>
-                  <SixDayOutlookCompact date={TODAY} />
+                  {item.id === 'breadth_roc'     && <BreadthRocChart />}
+                  {item.id === 'six_day_outlook'  && <SixDayOutlookCompact date={TODAY} />}
+                  {item.id === 'magic_rs'         && <MagicRsWidget />}
+                  {item.id === 'order_flow'       && <OrderFlowWidget />}
+                  {item.id === 'smart_money'      && <SmartMoneyWidget />}
                 </div>
               ) : (
                 <p style={{
