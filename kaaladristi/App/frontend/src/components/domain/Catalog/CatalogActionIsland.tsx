@@ -20,16 +20,21 @@ export default function CatalogActionIsland() {
         opacity: hasItems ? 1 : 0,
         pointerEvents: hasItems ? 'auto' : 'none',
         transition: 'transform 0.35s cubic-bezier(0.22,1,0.36,1), opacity 0.25s ease',
-        background: 'rgba(11,17,32,0.95)',
-        backdropFilter: 'blur(12px)',
-        border: '1px solid rgba(255,255,255,0.1)',
+        background: 'rgba(8,12,24,0.97)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid var(--border-strong, rgba(255,255,255,0.18))',
         borderRadius: 100,
         padding: '10px 12px 10px 22px',
         display: 'flex',
         alignItems: 'center',
         gap: 14,
-        boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-        zIndex: 100,
+        boxShadow: [
+          '0 24px 60px rgba(0,0,0,0.65)',
+          '0 0 0 1px rgba(124,106,247,0.18)',
+          '0 8px 32px rgba(124,106,247,0.12)',
+        ].join(', '),
+        zIndex: 150,
       }}
     >
       {/* Summary */}
@@ -75,7 +80,7 @@ export default function CatalogActionIsland() {
       </div>
 
       {/* Divider */}
-      <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
+      <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
 
       {/* CTA */}
       <button
