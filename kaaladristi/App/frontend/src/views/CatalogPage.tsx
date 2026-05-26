@@ -5,6 +5,7 @@ import WidgetsSection from '@/components/domain/Catalog/WidgetsSection'
 import CatalogAstroSection from '@/components/domain/Catalog/CatalogAstroSection'
 import ScannersSection from '@/components/domain/Catalog/ScannersSection'
 import DeepDivePanel from '@/components/domain/Catalog/DeepDivePanel'
+import CatalogActionIsland from '@/components/domain/Catalog/CatalogActionIsland'
 import type { DeepDiveItem } from '@/components/domain/Catalog/DeepDivePanel'
 
 const CATALOG_SECTIONS = [
@@ -101,6 +102,9 @@ export default function CatalogPage() {
 
       {/* Deep dive panel — fixed slide-in, rendered at page level */}
       <DeepDivePanel item={selected} onClose={() => setSelected(null)} />
+
+      {/* Floating action island — appears once items are in the framework */}
+      <CatalogActionIsland />
 
     </div>
   )
