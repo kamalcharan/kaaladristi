@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { from } from '@/services/postgrest'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
@@ -149,7 +150,8 @@ function YearlyBars({ rows }: { rows: RuleConfYearly[] }) {
 
 // ── Mode A — Astro Rule body ──────────────────────────────────────────────────
 
-function AstroRuleBody({ item }: { item: DeepDiveAstroRule }) {
+function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: () => void }) {
+  const navigate = useNavigate()
   const { data: conf = null, isLoading: confLoading } = useQuery({
     queryKey: ['dp-conf', item.id],
     queryFn: () => fetchConf(item.id),
@@ -317,6 +319,38 @@ function AstroRuleBody({ item }: { item: DeepDiveAstroRule }) {
           </div>
         </div>
       )}
+
+      {/* Full Analysis secondary CTA */}
+      <button
+        onClick={() => { navigate(`/rules/${item.id}`); onClose() }}
+        style={{
+          display: 'block',
+          width: '100%',
+          padding: '9px 14px',
+          marginBottom: 18,
+          borderRadius: 8,
+          border: '1px solid rgba(124,106,247,0.28)',
+          background: 'rgba(124,106,247,0.06)',
+          color: '#8b7af8',
+          fontSize: 12,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          textAlign: 'center',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => {
+          const el = e.currentTarget as HTMLElement
+          el.style.borderColor = 'rgba(124,106,247,0.5)'
+          el.style.background = 'rgba(124,106,247,0.12)'
+        }}
+        onMouseLeave={e => {
+          const el = e.currentTarget as HTMLElement
+          el.style.borderColor = 'rgba(124,106,247,0.28)'
+          el.style.background = 'rgba(124,106,247,0.06)'
+        }}
+      >
+        Full Analysis →
+      </button>
 
       {/* VaNi placeholder */}
       <div style={{
@@ -628,7 +662,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           overflowY: 'auto',
           padding: '18px 20px',
         }}>
-          {item?.mode === 'astro_rule' && <AstroRuleBody item={item} />}
+          {item?.mode === 'astro_rule' && <AstroRuleBody item={item} onClose={onClose} />}
           {item?.mode === 'catalog_item' && <CatalogItemBody item={item.item} />}
         </div>
 
