@@ -2,7 +2,11 @@ import { getCatalogItemsByType } from '@/constants/catalogItems'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
+import BreadthRocChart from '@/components/domain/BreadthRocChart'
+import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
 import type { DeepDiveItem } from './DeepDivePanel'
+
+const TODAY = new Date().toISOString().slice(0, 10)
 
 // Widgets includes scanners (conviction_flow has block_type='scanner' but is in WIDGETS array)
 // getCatalogItemsByType('widget') covers all widget-placement items
@@ -151,16 +155,26 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
                 {item.display_name}
               </div>
 
-              {/* Description */}
-              <p style={{
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                lineHeight: 1.55,
-                marginBottom: 14,
-                opacity: locked ? 0.6 : 1,
-              }}>
-                {item.description}
-              </p>
+              {/* Description or live preview */}
+              {item.id === 'breadth_roc' && !locked ? (
+                <div style={{ marginBottom: 14, pointerEvents: 'none' }}>
+                  <BreadthRocChart />
+                </div>
+              ) : item.id === 'six_day_outlook' && !locked ? (
+                <div style={{ marginBottom: 14, pointerEvents: 'none' }}>
+                  <SixDayOutlookCompact date={TODAY} />
+                </div>
+              ) : (
+                <p style={{
+                  fontSize: 12,
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.55,
+                  marginBottom: 14,
+                  opacity: locked ? 0.6 : 1,
+                }}>
+                  {item.description}
+                </p>
+              )}
 
               {/* Stats row */}
               <div style={{
