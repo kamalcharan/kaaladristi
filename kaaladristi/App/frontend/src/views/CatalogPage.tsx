@@ -3,6 +3,7 @@ import MasterFrameworksSection from '@/components/domain/Catalog/MasterFramework
 import IndicatorsSection from '@/components/domain/Catalog/IndicatorsSection'
 import WidgetsSection from '@/components/domain/Catalog/WidgetsSection'
 import AstroRulesSection from '@/components/domain/Catalog/AstroRulesSection'
+import ScannersSection from '@/components/domain/Catalog/ScannersSection'
 import DeepDivePanel from '@/components/domain/Catalog/DeepDivePanel'
 import type { DeepDiveItem } from '@/components/domain/Catalog/DeepDivePanel'
 
@@ -95,7 +96,7 @@ export default function CatalogPage() {
         {active === 'astro_rules'       && <AstroRulesSection onSelect={setSelected} />}
         {active === 'indicators'        && <IndicatorsSection onSelect={setSelected} />}
         {active === 'widgets'           && <WidgetsSection    onSelect={setSelected} />}
-        {active === 'scanners'          && <div>Coming</div>}
+        {active === 'scanners'          && <ScannersSection />}
       </div>
 
       {/* Deep dive panel — fixed slide-in, rendered at page level */}
