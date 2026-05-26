@@ -226,7 +226,7 @@ export default function VisualPulsePage() {
 
         {/* Scrollable cards */}
         <div style={{
-          flex: 1, overflowY: 'auto', padding: '10px 14px',
+          flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 14px',
           display: 'flex', flexDirection: 'column', gap: 10,
           opacity: isFading ? 0.3 : 1,
           transition: 'opacity 0.15s ease',

@@ -10,6 +10,7 @@ import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
+import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
 
 const COLS = 12
 const ROWS = 10
@@ -39,16 +40,30 @@ function GridOverlay() {
 
 // ── Add-zone placeholder (edit mode, empty cells) ─────────────────────────────
 
-function AddZone({ col, row }: { col: number; row: number }) {
+function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () => void }) {
   return (
-    <div style={{
-      gridColumnStart: col, gridColumnEnd: col + 2,
-      gridRowStart: row, gridRowEnd: row + 1,
-      border: '1px dashed rgba(255,255,255,.07)', borderRadius: 8,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      cursor: 'default', minHeight: `${CELL_HEIGHT_REM}rem`,
-    }}>
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,.12)',
+    <div
+      onClick={onClick}
+      style={{
+        gridColumnStart: col, gridColumnEnd: col + 2,
+        gridRowStart: row, gridRowEnd: row + 1,
+        border: '1px dashed rgba(255,255,255,.07)', borderRadius: 8,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', minHeight: `${CELL_HEIGHT_REM}rem`,
+        transition: 'border-color 0.15s, background 0.15s',
+      }}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLElement
+        el.style.borderColor = 'rgba(124,106,247,0.35)'
+        el.style.background = 'rgba(124,106,247,0.04)'
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLElement
+        el.style.borderColor = 'rgba(255,255,255,.07)'
+        el.style.background = 'transparent'
+      }}
+    >
+      <span style={{ fontSize: 11, color: 'rgba(255,255,255,.18)',
         fontFamily: 'var(--font-mono, monospace)' }}>+ block</span>
     </div>
   )
@@ -62,6 +77,7 @@ interface Props {
 
 export default function WorkspaceCanvas({ framework }: Props) {
   const [editMode, setEditMode] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const { removeBlock, updateBlockPosition, saveFramework, toggleOverlayVisibility } = useFrameworkStore()
 
   const sensors = useSensors(useSensor(PointerSensor, {
@@ -151,18 +167,32 @@ export default function WorkspaceCanvas({ framework }: Props) {
             )
           })}
 
-          {/* + overlay stub — Phase 3: opens Catalog drawer */}
-          {framework.chart_overlays.length > 0 && (
-            <button style={{
+          {/* + overlay — opens Catalog drawer */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '4px 10px', borderRadius: 100, flexShrink: 0,
-              border: '1px dashed rgba(255,255,255,.1)', background: 'transparent',
-              cursor: 'default', fontSize: 11,
-              color: 'rgba(255,255,255,.2)', fontFamily: 'var(--font-mono, monospace)',
-            }}>
-              + overlay
-            </button>
-          )}
+              border: '1px dashed rgba(124,106,247,.3)', background: 'transparent',
+              cursor: 'pointer', fontSize: 11,
+              color: 'rgba(124,106,247,.7)', fontFamily: 'var(--font-mono, monospace)',
+              transition: 'all .15s',
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.borderColor = 'rgba(124,106,247,.6)'
+              el.style.color = '#8b7af8'
+              el.style.background = 'rgba(124,106,247,.06)'
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.borderColor = 'rgba(124,106,247,.3)'
+              el.style.color = 'rgba(124,106,247,.7)'
+              el.style.background = 'transparent'
+            }}
+          >
+            + overlay
+          </button>
         </div>
 
         {/* Edit Canvas / Done Editing */}
@@ -209,7 +239,12 @@ export default function WorkspaceCanvas({ framework }: Props) {
                 <p style={{ fontSize: 13, color: 'rgba(255,255,255,.25)',
                   textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
                   Your framework is empty.{' '}
-                  <span style={{ color: '#7c6af7' }}>Add blocks from the Catalog.</span>
+                  <span
+                    onClick={() => setDrawerOpen(true)}
+                    style={{ color: '#7c6af7', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Add blocks from the Catalog.
+                  </span>
                 </p>
               </div>
             )}
@@ -224,14 +259,16 @@ export default function WorkspaceCanvas({ framework }: Props) {
             ))}
 
             {editMode && isEmpty && [1, 3, 5, 7, 9, 11].map(col => (
-              <AddZone key={col} col={col} row={2} />
+              <AddZone key={col} col={col} row={2} onClick={() => setDrawerOpen(true)} />
             ))}
             {editMode && !isEmpty && (
-              <AddZone col={1} row={ROWS} />
+              <AddZone col={1} row={ROWS} onClick={() => setDrawerOpen(true)} />
             )}
           </div>
         </DndContext>
       </div>
+
+      <CatalogDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   )
 }
