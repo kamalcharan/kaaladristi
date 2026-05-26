@@ -166,6 +166,42 @@ export async function fetchIndicatorDataById(
   return (data ?? []) as IndicatorRow[];
 }
 
+// Symbol shorthand → km_index_symbols.name mapping
+const INDEX_SHORTHAND: Record<string, string> = {
+  NIFTY50:   'NIFTY 50',
+  NIFTY:     'NIFTY 50',
+  BANKNIFTY: 'NIFTY BANK',
+  NIFTYIT:   'NIFTY IT',
+  NIFTYFMCG: 'NIFTY FMCG',
+}
+
+/**
+ * Resolve a symbol string to EOD indicator data.
+ * Supports index shorthands (NIFTY50, BANKNIFTY…) and NSE equity ticker symbols.
+ */
+export async function fetchInstrumentEod(symbol: string, range: TimeRange): Promise<IndicatorRow[]> {
+  const upper = symbol.toUpperCase()
+  const indexName = INDEX_SHORTHAND[upper]
+
+  if (indexName) {
+    const { data: sym } = await from('km_index_symbols')
+      .select('id')
+      .eq('name', indexName)
+      .maybeSingle()
+      .execute()
+    if (sym) return fetchIndicatorDataById((sym as { id: number }).id, range)
+  }
+
+  const { data: eq } = await from('km_equity_symbols')
+    .select('id')
+    .eq('symbol', upper)
+    .maybeSingle()
+    .execute()
+  if (eq) return fetchEquityEodById((eq as { id: number }).id, range)
+
+  return []
+}
+
 /** Fetch full indicator data for an equity by its DB id (used by /chart/equity/:id).
  *  Same columns as index fetch — TradingChart renders SMA overlays, dots,
  *  RSI, Sniper Dragon, and MagicRS panes. */
