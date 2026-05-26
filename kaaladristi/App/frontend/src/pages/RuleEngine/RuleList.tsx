@@ -2,41 +2,19 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Search, Loader2, AlertCircle, Database, Plus, Lock } from 'lucide-react';
-import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/components/ui';
 import { ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { emptyForm, type FormMode } from './RuleFormModal';
-import { createRule, toggleRuleActive, type AstroRuleFull } from './ruleService';
+import { createRule, toggleRuleActive, fetchRules, fetchConfidence, type AstroRuleFull, type AstroRule, type RuleConfidence } from './ruleService';
 import DiscoveryPanel from './DiscoveryPanel';
 import { fetchSignalCounts } from './discoveryService';
 import { IMPACT_OPTIONS, SIGNAL_LABELS } from '@/constants/signalScale';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface AstroRule {
-  id: number;
-  rule_code: string;
-  rule_type: string;
-  display_name: string;
-  outcome: string | null;
-  base_bias: string | null;
-  scope: string[] | null;
-  probability_label: string | null;
-  data_source: string | null;
-  is_active: boolean;
-  remarks: string | null;
-}
-
-interface RuleConfidence {
-  rule_id: number;
-  confidence_score: number | null;
-}
-
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const RULE_TYPE_LABELS: Record<string, string> = {
+export const RULE_TYPE_LABELS: Record<string, string> = {
   nakshatra_vara:       'Nak·Vara',
   planet_transit:       'Transit',
   planet_state:         'P·State',
@@ -94,33 +72,12 @@ const CONFIDENCE_BANDS = [
   { value: 'unscored',label: 'Not Scored' },
 ] as const;
 
-const PROB_STYLES: Record<string, string> = {
+export const PROB_STYLES: Record<string, string> = {
   'Very High': 'text-risk-green',
   'High':      'text-risk-green/70',
   'Reasonable':'text-risk-amber',
   'Low':       'text-muted',
 };
-
-// ── Data fetching ─────────────────────────────────────────────────────────────
-
-async function fetchRules(): Promise<AstroRule[]> {
-  const { data, error } = await from('km_astro_rule_master')
-    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,remarks')
-    .is('is_deleted', 'false')
-    .order('rule_type')
-    .order('rule_code')
-    .execute();
-  if (error) throw new Error(error.message);
-  return (data as AstroRule[]) ?? [];
-}
-
-async function fetchConfidence(): Promise<RuleConfidence[]> {
-  const { data, error } = await from('km_rule_confidence')
-    .select('rule_id,confidence_score')
-    .execute();
-  if (error) throw new Error(error.message);
-  return (data as RuleConfidence[]) ?? [];
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -128,7 +85,7 @@ function effectiveOutcome(rule: AstroRule): string {
   return rule.outcome || rule.base_bias || 'neutral';
 }
 
-function OutcomeBadge({ outcome }: { outcome: string }) {
+export function OutcomeBadge({ outcome }: { outcome: string }) {
   const s = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.neutral;
   const prefix = OUTCOME_PREFIX[outcome];
   return (
@@ -139,7 +96,7 @@ function OutcomeBadge({ outcome }: { outcome: string }) {
   );
 }
 
-function TypeChip({ ruleType }: { ruleType: string }) {
+export function TypeChip({ ruleType }: { ruleType: string }) {
   return (
     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono border border-kd-border bg-kd-elevated text-muted">
       {RULE_TYPE_LABELS[ruleType] ?? ruleType}
@@ -147,7 +104,7 @@ function TypeChip({ ruleType }: { ruleType: string }) {
   );
 }
 
-function ConfidenceCell({ score }: { score: number | null | undefined }) {
+export function ConfidenceCell({ score }: { score: number | null | undefined }) {
   if (score == null) return <span className="text-muted text-xs font-mono">Not scored</span>;
   // score is already 0-100 (confidence_score column)
   const pct = Math.round(score);

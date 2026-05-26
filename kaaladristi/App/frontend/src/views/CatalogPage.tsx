@@ -2,7 +2,7 @@ import { useState } from 'react'
 import MasterFrameworksSection from '@/components/domain/Catalog/MasterFrameworksSection'
 import IndicatorsSection from '@/components/domain/Catalog/IndicatorsSection'
 import WidgetsSection from '@/components/domain/Catalog/WidgetsSection'
-import AstroRulesSection from '@/components/domain/Catalog/AstroRulesSection'
+import CatalogAstroSection from '@/components/domain/Catalog/CatalogAstroSection'
 import ScannersSection from '@/components/domain/Catalog/ScannersSection'
 import DeepDivePanel from '@/components/domain/Catalog/DeepDivePanel'
 import type { DeepDiveItem } from '@/components/domain/Catalog/DeepDivePanel'
@@ -93,7 +93,7 @@ export default function CatalogPage() {
       {/* Right content area */}
       <div className="flex-1 overflow-auto" style={{ padding: 32 }}>
         {active === 'master_frameworks' && <MasterFrameworksSection />}
-        {active === 'astro_rules'       && <AstroRulesSection onSelect={setSelected} />}
+        {active === 'astro_rules'       && <CatalogAstroSection onSelect={setSelected} />}
         {active === 'indicators'        && <IndicatorsSection onSelect={setSelected} />}
         {active === 'widgets'           && <WidgetsSection    onSelect={setSelected} />}
         {active === 'scanners'          && <ScannersSection />}

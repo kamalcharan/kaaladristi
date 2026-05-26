@@ -2,6 +2,26 @@ import { from } from '@/services/postgrest';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+// List-view type (subset of AstroRuleFull — used by RuleList and CatalogAstroSection)
+export interface AstroRule {
+  id: number;
+  rule_code: string;
+  rule_type: string;
+  display_name: string;
+  outcome: string | null;
+  base_bias: string | null;
+  scope: string[] | null;
+  probability_label: string | null;
+  data_source: string | null;
+  is_active: boolean;
+  remarks: string | null;
+}
+
+export interface RuleConfidence {
+  rule_id: number;
+  confidence_score: number | null;
+}
+
 export interface RuleInput {
   rule_code: string;
   rule_type: string;
@@ -34,6 +54,27 @@ export interface AstroRuleFull {
 }
 
 const TABLE = 'km_astro_rule_master';
+
+// ── Query functions ───────────────────────────────────────────────────────────
+
+export async function fetchRules(): Promise<AstroRule[]> {
+  const { data, error } = await from(TABLE)
+    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,remarks')
+    .is('is_deleted', 'false')
+    .order('rule_type')
+    .order('rule_code')
+    .execute();
+  if (error) throw new Error(error.message);
+  return (data as AstroRule[]) ?? [];
+}
+
+export async function fetchConfidence(): Promise<RuleConfidence[]> {
+  const { data, error } = await from('km_rule_confidence')
+    .select('rule_id,confidence_score')
+    .execute();
+  if (error) throw new Error(error.message);
+  return (data as RuleConfidence[]) ?? [];
+}
 
 // ── CRUD functions ────────────────────────────────────────────────────────────
 
