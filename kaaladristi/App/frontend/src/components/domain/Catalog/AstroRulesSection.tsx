@@ -4,6 +4,7 @@ import { from } from '@/services/postgrest'
 import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { useFrameworkStore } from '@/stores/frameworkStore'
+import type { DeepDiveItem } from './DeepDivePanel'
 
 // ── DB types ──────────────────────────────────────────────────────────────────
 
@@ -115,7 +116,11 @@ function ruleToCatalogItem(rule: AstroRuleRow): CatalogItem {
 
 // ── Section ───────────────────────────────────────────────────────────────────
 
-export default function AstroRulesSection() {
+interface AstroRulesSectionProps {
+  onSelect?: (item: DeepDiveItem) => void
+}
+
+export default function AstroRulesSection({ onSelect }: AstroRulesSectionProps) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
 
@@ -276,10 +281,22 @@ export default function AstroRulesSection() {
               return (
                 <tr
                   key={rule.id}
+                  onClick={() => onSelect?.({
+                    mode: 'astro_rule',
+                    id: rule.id,
+                    rule_code: rule.rule_code,
+                    rule_type: rule.rule_type,
+                    display_name: rule.display_name,
+                    outcome: rule.outcome,
+                    base_bias: rule.base_bias,
+                    probability_label: rule.probability_label,
+                    remarks: rule.remarks,
+                    conditions: null,
+                  })}
                   style={{
                     background: active ? 'rgba(45,212,191,0.03)' : 'transparent',
                     transition: 'background 0.12s',
-                    cursor: 'default',
+                    cursor: onSelect ? 'pointer' : 'default',
                   }}
                   onMouseEnter={e => {
                     if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.02)'

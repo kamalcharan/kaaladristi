@@ -3,6 +3,8 @@ import MasterFrameworksSection from '@/components/domain/Catalog/MasterFramework
 import IndicatorsSection from '@/components/domain/Catalog/IndicatorsSection'
 import WidgetsSection from '@/components/domain/Catalog/WidgetsSection'
 import AstroRulesSection from '@/components/domain/Catalog/AstroRulesSection'
+import DeepDivePanel from '@/components/domain/Catalog/DeepDivePanel'
+import type { DeepDiveItem } from '@/components/domain/Catalog/DeepDivePanel'
 
 const CATALOG_SECTIONS = [
   { id: 'master_frameworks', label: 'Master Frameworks' },
@@ -16,6 +18,7 @@ type CatalogSection = typeof CATALOG_SECTIONS[number]['id']
 
 export default function CatalogPage() {
   const [active, setActive] = useState<CatalogSection>('master_frameworks')
+  const [selected, setSelected] = useState<DeepDiveItem | null>(null)
 
   return (
     <div className="flex-1 flex overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -51,7 +54,7 @@ export default function CatalogPage() {
           return (
             <button
               key={section.id}
-              onClick={() => setActive(section.id)}
+              onClick={() => { setActive(section.id); setSelected(null) }}
               style={{
                 display: 'block',
                 width: '100%',
@@ -89,11 +92,14 @@ export default function CatalogPage() {
       {/* Right content area */}
       <div className="flex-1 overflow-auto" style={{ padding: 32 }}>
         {active === 'master_frameworks' && <MasterFrameworksSection />}
-        {active === 'astro_rules'       && <AstroRulesSection />}
-        {active === 'indicators'        && <IndicatorsSection />}
-        {active === 'widgets'           && <WidgetsSection />}
+        {active === 'astro_rules'       && <AstroRulesSection onSelect={setSelected} />}
+        {active === 'indicators'        && <IndicatorsSection onSelect={setSelected} />}
+        {active === 'widgets'           && <WidgetsSection    onSelect={setSelected} />}
         {active === 'scanners'          && <div>Coming</div>}
       </div>
+
+      {/* Deep dive panel — fixed slide-in, rendered at page level */}
+      <DeepDivePanel item={selected} onClose={() => setSelected(null)} />
 
     </div>
   )

@@ -2,10 +2,15 @@ import { getCatalogItemsByType } from '@/constants/catalogItems'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
+import type { DeepDiveItem } from './DeepDivePanel'
 
 const INDICATORS = getCatalogItemsByType('indicator')
 
-export default function IndicatorsSection() {
+interface IndicatorsSectionProps {
+  onSelect?: (item: DeepDiveItem) => void
+}
+
+export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) {
   const { profile } = useAuthStore()
   const { addToFramework, isBlockActive, isOverlayActive } = useAddToFramework()
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
@@ -45,6 +50,7 @@ export default function IndicatorsSection() {
           return (
             <div
               key={item.id}
+              onClick={() => onSelect?.({ mode: 'catalog_item', item })}
               style={{
                 border: `1px solid ${active ? 'rgba(45,212,191,0.28)' : 'var(--border)'}`,
                 borderRadius: 10,
@@ -52,6 +58,7 @@ export default function IndicatorsSection() {
                 padding: '14px 16px',
                 transition: 'border-color 0.2s, background 0.2s',
                 position: 'relative',
+                cursor: onSelect ? 'pointer' : 'default',
               }}
               onMouseEnter={e => {
                 if (!active) {

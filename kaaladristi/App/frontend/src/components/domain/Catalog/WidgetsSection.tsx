@@ -2,6 +2,7 @@ import { getCatalogItemsByType } from '@/constants/catalogItems'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
+import type { DeepDiveItem } from './DeepDivePanel'
 
 // Widgets includes scanners (conviction_flow has block_type='scanner' but is in WIDGETS array)
 // getCatalogItemsByType('widget') covers all widget-placement items
@@ -18,7 +19,11 @@ const ICONS: Record<string, string> = {
   six_day_outlook: '☽',
 }
 
-export default function WidgetsSection() {
+interface WidgetsSectionProps {
+  onSelect?: (item: DeepDiveItem) => void
+}
+
+export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
   const { profile } = useAuthStore()
   const { addToFramework, isBlockActive, isOverlayActive } = useAddToFramework()
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
@@ -59,6 +64,7 @@ export default function WidgetsSection() {
           return (
             <div
               key={item.id}
+              onClick={() => onSelect?.({ mode: 'catalog_item', item })}
               style={{
                 border: `1px solid ${
                   active  ? 'rgba(45,212,191,0.28)'         :
@@ -73,6 +79,7 @@ export default function WidgetsSection() {
                 transition: 'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
                 position: 'relative',
                 overflow: 'hidden',
+                cursor: onSelect ? 'pointer' : 'default',
               }}
               onMouseEnter={e => {
                 if (!active && !locked) {
