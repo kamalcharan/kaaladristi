@@ -4,6 +4,16 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { fetchInstrumentEod } from '@/services/indicatorData'
 import TradingChart from '@/components/charts/TradingChart'
 
+const DISPLAY_NAME: Record<string, string> = {
+  NIFTY50:   'NIFTY 50',
+  NIFTY:     'NIFTY 50',
+  BANKNIFTY: 'NIFTY BANK',
+  NIFTYIT:   'NIFTY IT',
+  NIFTYFMCG: 'NIFTY FMCG',
+}
+
+const HEADER_H = 36
+
 interface Props {
   height: number
 }
@@ -39,27 +49,42 @@ export default function WorkspaceChart({ height }: Props) {
     )
   }
 
-  if (isLoading) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%',
-      }}>
-        <span style={{
-          fontSize: 11, color: 'rgba(255,255,255,.2)',
-          fontFamily: 'var(--font-mono, monospace)',
-        }}>
-          Loading {symbol}…
-        </span>
-      </div>
-    )
-  }
+  const displayName = DISPLAY_NAME[symbol.toUpperCase()] ?? symbol.toUpperCase()
 
   return (
-    <TradingChart
-      data={data}
-      height={height}
-      overlays={overlays}
-      compact
-    />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Name strip */}
+      <div style={{
+        height: HEADER_H, flexShrink: 0,
+        display: 'flex', alignItems: 'center', padding: '0 14px',
+        borderBottom: '1px solid rgba(255,255,255,.06)',
+      }}>
+        <span style={{
+          fontSize: 13, fontWeight: 500, color: 'var(--text-primary)',
+          letterSpacing: '-0.01em',
+        }}>
+          {displayName}
+        </span>
+        {isLoading && (
+          <span style={{
+            marginLeft: 8, fontSize: 10, color: 'rgba(255,255,255,.2)',
+            fontFamily: 'var(--font-mono, monospace)',
+          }}>
+            loading…
+          </span>
+        )}
+      </div>
+
+      {/* Chart */}
+      {!isLoading && (
+        <TradingChart
+          data={data}
+          height={height - HEADER_H}
+          overlays={overlays}
+          compact
+        />
+      )}
+    </div>
   )
 }
+
