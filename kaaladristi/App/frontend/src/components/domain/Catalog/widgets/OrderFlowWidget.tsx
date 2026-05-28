@@ -1,12 +1,16 @@
 import { useMemo } from 'react'
-import { useNiftyPulse } from '@/hooks/useNiftyPulse'
+import { useInstrumentPulse } from '@/hooks/useInstrumentPulse'
 import OrderFlowCard from '@/components/domain/VisualPulse/OrderFlowCard'
 import { computeRssSignals } from '@/services/visualPulseEngine'
 
-const NARRATIVE = 'NIFTY 50 · Live'
+interface Props {
+  symbolId?:   number
+  symbolType?: 'index' | 'equity'
+  narrative?:  string
+}
 
-export default function OrderFlowWidget() {
-  const { bars, isLoading } = useNiftyPulse()
+export default function OrderFlowWidget({ symbolId = 1, symbolType = 'index', narrative = 'NIFTY 50 · Live' }: Props) {
+  const { bars, isLoading } = useInstrumentPulse(symbolId, symbolType)
 
   const idx = bars.length - 1
 
@@ -26,7 +30,7 @@ export default function OrderFlowWidget() {
       bar={bars[idx]}
       rss={rss}
       rssHistory={rssHistory}
-      narrative={NARRATIVE}
+      narrative={narrative}
     />
   )
 }

@@ -1,13 +1,17 @@
 import { useMemo } from 'react'
-import { useNiftyPulse } from '@/hooks/useNiftyPulse'
+import { useInstrumentPulse } from '@/hooks/useInstrumentPulse'
 import SmartMoneyCard, { type SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard'
 import { computeSmartMoney, computeDots } from '@/services/visualPulseEngine'
 import type { DotSignals } from '@/services/visualPulseEngine'
 
-const NARRATIVE = 'NIFTY 50 · Live'
+interface Props {
+  symbolId?:   number
+  symbolType?: 'index' | 'equity'
+  narrative?:  string
+}
 
-export default function SmartMoneyWidget() {
-  const { bars, isLoading } = useNiftyPulse()
+export default function SmartMoneyWidget({ symbolId = 1, symbolType = 'index', narrative = 'NIFTY 50 · Live' }: Props) {
+  const { bars, isLoading } = useInstrumentPulse(symbolId, symbolType)
 
   const idx = bars.length - 1
 
@@ -20,8 +24,8 @@ export default function SmartMoneyWidget() {
     if (bars.length === 0) return []
     const start = Math.max(0, idx - 29)
     return bars.slice(start, idx + 1).map((b, i) => ({
-      sm: b.sniper_inst ?? 0,
-      fm: b.sniper_hot ?? 0,
+      sm:    b.sniper_inst ?? 0,
+      fm:    b.sniper_hot  ?? 0,
       isSVD: dotsHistory[start + i]?.isSVD ?? false,
       isSBD: dotsHistory[start + i]?.isSBD ?? false,
       isSYD: dotsHistory[start + i]?.isSYD ?? false,
@@ -42,7 +46,7 @@ export default function SmartMoneyWidget() {
       smHistory={smHistory}
       sm={sm}
       dots={dotsHistory}
-      narrative={NARRATIVE}
+      narrative={narrative}
     />
   )
 }
