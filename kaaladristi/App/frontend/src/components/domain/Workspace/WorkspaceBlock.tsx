@@ -3,8 +3,6 @@ import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import type { FrameworkBlock } from '@/types/framework'
 import { getCatalogItem } from '@/constants/catalogItems'
-import { useFrameworkStore } from '@/stores/frameworkStore'
-import { useInstrumentResolution } from '@/hooks/useInstrumentResolution'
 import MagicRsWidget from '@/components/domain/Catalog/widgets/MagicRsWidget'
 import OrderFlowWidget from '@/components/domain/Catalog/widgets/OrderFlowWidget'
 import SmartMoneyWidget from '@/components/domain/Catalog/widgets/SmartMoneyWidget'
@@ -40,31 +38,17 @@ const LIVE_IDS = new Set([
 
 function BlockContent({
   catalogItemId,
-  symbolId,
-  symbolType,
   description,
 }: {
   catalogItemId: string
-  symbolId: number | null
-  symbolType: 'index' | 'equity' | null
   description: string | undefined
 }) {
-  if (LIVE_IDS.has(catalogItemId) && symbolId !== null && symbolType !== null) {
-    if (catalogItemId === 'magic_rs') {
-      return <MagicRsWidget symbolId={symbolId} symbolType={symbolType} />
-    }
-    if (catalogItemId === 'order_flow') {
-      return <OrderFlowWidget symbolId={symbolId} symbolType={symbolType} narrative="" />
-    }
-    if (catalogItemId === 'smart_money') {
-      return <SmartMoneyWidget symbolId={symbolId} symbolType={symbolType} narrative="" />
-    }
-    if (catalogItemId === 'breadth_roc') {
-      return <BreadthRocChart />
-    }
-    if (catalogItemId === 'six_day_outlook') {
-      return <SixDayOutlookCompact date={TODAY} />
-    }
+  if (LIVE_IDS.has(catalogItemId)) {
+    if (catalogItemId === 'magic_rs')        return <MagicRsWidget />
+    if (catalogItemId === 'order_flow')      return <OrderFlowWidget />
+    if (catalogItemId === 'smart_money')     return <SmartMoneyWidget />
+    if (catalogItemId === 'breadth_roc')     return <BreadthRocChart />
+    if (catalogItemId === 'six_day_outlook') return <SixDayOutlookCompact date={TODAY} />
   }
 
   // Placeholder for unimplemented blocks
@@ -87,12 +71,6 @@ export default function WorkspaceBlock({ block, editMode, onRemove }: Props) {
   const name    = catalog?.display_name ?? block.catalog_item_id
   const badge   = PLACEMENT_BADGE[block.placement] ?? PLACEMENT_BADGE.panel_block
   const icon    = TYPE_ICON[block.type] ?? '◎'
-
-  // Resolve instruments[0] to a numeric id + type
-  const symbol = useFrameworkStore(s => s.framework?.instruments?.[0] ?? null)
-  const { data: instrument } = useInstrumentResolution(symbol)
-  const symbolId   = instrument?.id   ?? null
-  const symbolType = instrument?.type ?? null
 
   // Drag — disabled when not in edit mode
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -211,8 +189,6 @@ export default function WorkspaceBlock({ block, editMode, onRemove }: Props) {
       {/* Live content or placeholder */}
       <BlockContent
         catalogItemId={block.catalog_item_id}
-        symbolId={symbolId}
-        symbolType={symbolType}
         description={catalog?.description}
       />
 
