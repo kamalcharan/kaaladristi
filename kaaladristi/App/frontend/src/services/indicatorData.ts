@@ -30,12 +30,12 @@ const INDICATOR_COLS = [
   'obv', 'obv_sma_20', 'rvol', 'tvol',
   'magic_rs', 'magic_rs_sma144', 'magic_ma', 'magic_rs_zone',
   'sniper_inst', 'sniper_hot', 'sniper_rsi',
-  'rss_value', 'rss_rsi',
+  'rss_value', 'rss_rsi', 'rss_spread',
   'pivot_pp', 'pivot_r1', 'pivot_r2', 'pivot_r3', 'pivot_s1', 'pivot_s2', 'pivot_s3',
   'chartink_emd_pct', 'chartink_emd_ok', 'chartink_ca_pct', 'chartink_ca_ok', 'chartink_vmac_ok', 'chartink_score',
   'dot_svd', 'dot_sbd', 'dot_syd',
   'swing_high', 'swing_low',
-  'flow_type', 'vacuum_flag', 'accum_distrib',
+  'flow_type', 'vacuum_flag', 'accum_distrib', 'volume_divergence_flag',
 ].join(',');
 
 export interface IndicatorRow {
@@ -80,6 +80,7 @@ export interface IndicatorRow {
   // RSS
   rss_value: number | null;
   rss_rsi: number | null;
+  rss_spread: number | null;
   // Pivots
   pivot_pp: number | null;
   pivot_r1: number | null;
@@ -106,6 +107,7 @@ export interface IndicatorRow {
   flow_type: string | null;
   vacuum_flag: string | null;
   accum_distrib: string | null;
+  volume_divergence_flag: string | null;
 }
 
 export async function fetchIndicatorData(

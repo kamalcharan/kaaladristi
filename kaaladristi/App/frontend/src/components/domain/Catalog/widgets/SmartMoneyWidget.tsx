@@ -1,19 +1,15 @@
 import { useMemo } from 'react'
-import { useInstrumentPulse } from '@/hooks/useInstrumentPulse'
+import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 import SmartMoneyCard, { type SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard'
 import { computeSmartMoney, computeDots } from '@/services/visualPulseEngine'
-import type { DotSignals } from '@/services/visualPulseEngine'
+import type { PulseBar, DotSignals } from '@/services/visualPulseEngine'
 
-interface Props {
-  symbolId?:   number
-  symbolType?: 'index' | 'equity'
-  narrative?:  string
-}
+export default function SmartMoneyWidget() {
+  const { data = [], isLoading } = useWorkspaceEod()
 
-export default function SmartMoneyWidget({ symbolId = 1, symbolType = 'index', narrative = 'NIFTY 50 · Live' }: Props) {
-  const { bars, isLoading } = useInstrumentPulse(symbolId, symbolType)
-
-  const idx = bars.length - 1
+  // IndicatorRow is a structural superset of PulseBar
+  const bars = data as unknown as PulseBar[]
+  const idx  = bars.length - 1
 
   const dotsHistory: DotSignals[] = useMemo(
     () => bars.map((b, i) => computeDots(b, i > 0 ? bars[i - 1] : null)),
@@ -32,10 +28,7 @@ export default function SmartMoneyWidget({ symbolId = 1, symbolType = 'index', n
     }))
   }, [bars, idx, dotsHistory])
 
-  const sm = useMemo(() => {
-    if (bars.length === 0) return null
-    return computeSmartMoney(bars, idx)
-  }, [bars, idx])
+  const sm = useMemo(() => bars.length === 0 ? null : computeSmartMoney(bars, idx), [bars, idx])
 
   if (isLoading || bars.length === 0 || !sm) {
     return <div style={{ height: 80 }} />
@@ -46,7 +39,7 @@ export default function SmartMoneyWidget({ symbolId = 1, symbolType = 'index', n
       smHistory={smHistory}
       sm={sm}
       dots={dotsHistory}
-      narrative={narrative}
+      narrative=""
     />
   )
 }

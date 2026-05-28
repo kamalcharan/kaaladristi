@@ -1,19 +1,14 @@
-import { useInstrumentPulse } from '@/hooks/useInstrumentPulse'
+import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 import MagicRsSubchart, { type MagicRsDataPoint } from '@/components/domain/VisualPulse/MagicRsSubchart'
 
-interface Props {
-  symbolId?:   number              // defaults to 1 (NIFTY 50) for Catalog preview
-  symbolType?: 'index' | 'equity'  // defaults to 'index'
-}
+export default function MagicRsWidget() {
+  const { data = [], isLoading } = useWorkspaceEod()
 
-export default function MagicRsWidget({ symbolId = 1, symbolType = 'index' }: Props) {
-  const { bars, isLoading } = useInstrumentPulse(symbolId, symbolType)
-
-  if (isLoading || bars.length === 0) {
+  if (isLoading || data.length === 0) {
     return <div style={{ height: 140 }} />
   }
 
-  const data: MagicRsDataPoint[] = bars.map(b => ({
+  const points: MagicRsDataPoint[] = data.map(b => ({
     trade_date:    b.trade_date,
     magic_rs:      b.magic_rs,
     magic_ma:      b.magic_ma,
@@ -22,8 +17,8 @@ export default function MagicRsWidget({ symbolId = 1, symbolType = 'index' }: Pr
 
   return (
     <MagicRsSubchart
-      data={data}
-      activeIndex={data.length - 1}
+      data={points}
+      activeIndex={points.length - 1}
       benchmarkLabel="NIFTY 500"
     />
   )
