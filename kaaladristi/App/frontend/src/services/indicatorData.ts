@@ -175,6 +175,32 @@ const INDEX_SHORTHAND: Record<string, string> = {
   NIFTYFMCG: 'NIFTY FMCG',
 }
 
+/** Resolve a symbol string to its numeric DB id and instrument type. */
+export async function resolveInstrumentId(
+  symbol: string,
+): Promise<{ id: number; type: 'index' | 'equity' } | null> {
+  const upper = symbol.toUpperCase()
+  const indexName = INDEX_SHORTHAND[upper]
+
+  if (indexName) {
+    const { data } = await from('km_index_symbols')
+      .select('id')
+      .eq('name', indexName)
+      .maybeSingle()
+      .execute()
+    if (data) return { id: (data as { id: number }).id, type: 'index' }
+  }
+
+  const { data } = await from('km_equity_symbols')
+    .select('id')
+    .eq('symbol', upper)
+    .maybeSingle()
+    .execute()
+  if (data) return { id: (data as { id: number }).id, type: 'equity' }
+
+  return null
+}
+
 /**
  * Resolve a symbol string to EOD indicator data.
  * Supports index shorthands (NIFTY50, BANKNIFTY…) and NSE equity ticker symbols.
