@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition } from '@/types/framework'
+import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition, InstrumentRef } from '@/types/framework'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { getCatalogItem } from '@/constants/catalogItems'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
@@ -35,12 +35,27 @@ function makeDefault(userId: string): Omit<UserFramework, 'id' | 'created_at' | 
   }
 }
 
-// ── Next grid position — simple row-append ────────────────────────────────────
-// New blocks occupy a 2-column slot, 1 row tall, appending below existing blocks.
+// ── Next grid position — appends to right sidebar (cols 9-12) ────────────────
 
 function nextGridPosition(blocks: FrameworkBlock[]): GridPosition {
-  const maxRow = blocks.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
-  return { col_start: 1, col_end: 7, row_start: maxRow, row_end: maxRow + 1 }
+  const nonChart = blocks.filter(b => b.type !== 'chart')
+  const maxRow = nonChart.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
+  return { col_start: 17, col_end: 25, row_start: maxRow, row_end: maxRow + 6 }
+}
+
+// ── Default NIFTY50 chart block for bootstrap ─────────────────────────────────
+
+function makeDefaultChartBlock(): FrameworkBlock {
+  return {
+    id: crypto.randomUUID(),
+    type: 'chart',
+    catalog_item_id: 'chart:1',
+    placement: 'panel_block',
+    grid_position: { col_start: 1, col_end: 17, row_start: 1, row_end: 19 },
+    config: { instrument: { symbol: 'NIFTY50', id: 1, type: 'index' } as InstrumentRef },
+    added_by: 'vani',
+    added_at: new Date().toISOString(),
+  }
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -59,6 +74,8 @@ interface FrameworkStore {
   addOverlay: (item: CatalogItem) => void
   removeOverlay: (catalogItemId: string) => void
   toggleOverlayVisibility: (catalogItemId: string) => void
+  updateOverlayColor: (catalogItemId: string, color: string) => void
+  addChartBlock: (instrument: InstrumentRef) => void
   addInstrument: (symbol: string) => void
   removeInstrument: (symbol: string) => void
   isBlockActive: (catalogItemId: string) => boolean
@@ -82,7 +99,16 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: UserFramework = await res.json()
-      set({ framework: data, isLoading: false })
+
+      // Bootstrap: inject NIFTY50 chart block if none present
+      if (!data.blocks.some(b => b.type === 'chart')) {
+        data.blocks = [...data.blocks, makeDefaultChartBlock()]
+        set({ framework: data, isLoading: false })
+        const { saveFramework } = get()
+        scheduleSave(saveFramework)
+      } else {
+        set({ framework: data, isLoading: false })
+      }
     } catch (err) {
       set({ error: String(err), isLoading: false })
     }
@@ -217,6 +243,22 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     scheduleSave(saveFramework)
   },
 
+  updateOverlayColor: (catalogItemId: string, color: string) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? {
+            ...s.framework,
+            chart_overlays: s.framework.chart_overlays.map(o =>
+              o.catalog_item_id === catalogItemId ? { ...o, color } : o
+            ),
+            version: s.framework.version + 1,
+          }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
   // ── Template application ───────────────────────────────────────────────────
 
   applyTemplate: (template: FrameworkTemplate) => {
@@ -238,6 +280,38 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
             template_id: template.id,
             version: s.framework.version + 1,
           }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  // ── Chart block mutations ──────────────────────────────────────────────────
+
+  addChartBlock: (instrument: InstrumentRef) => {
+    const { framework, saveFramework } = get()
+    if (!framework) return
+    // Don't add if this instrument already has a chart block
+    if (framework.blocks.some(b => b.type === 'chart' && b.catalog_item_id === `chart:${instrument.id}`)) return
+
+    // Find space to the right of or below existing chart blocks
+    const chartBlocks = framework.blocks.filter(b => b.type === 'chart')
+    const maxChartColEnd = chartBlocks.reduce((m, b) => Math.max(m, b.grid_position.col_end), 1)
+    const newColStart = Math.min(maxChartColEnd, 7)  // cap so there's sidebar room
+    const newColEnd = Math.min(newColStart + 6, 9)
+
+    const block: FrameworkBlock = {
+      id: crypto.randomUUID(),
+      type: 'chart',
+      catalog_item_id: `chart:${instrument.id}`,
+      placement: 'panel_block',
+      grid_position: { col_start: 1, col_end: newColEnd, row_start: 1, row_end: 10 },
+      config: { instrument },
+      added_by: 'user',
+      added_at: new Date().toISOString(),
+    }
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, blocks: [...s.framework.blocks, block], version: s.framework.version + 1 }
         : null,
     }))
     scheduleSave(saveFramework)

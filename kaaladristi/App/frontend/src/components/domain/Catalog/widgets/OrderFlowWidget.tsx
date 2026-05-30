@@ -1,20 +1,16 @@
 import { useMemo } from 'react'
-import { useNiftyPulse } from '@/hooks/useNiftyPulse'
+import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 import OrderFlowCard from '@/components/domain/VisualPulse/OrderFlowCard'
 import { computeRssSignals } from '@/services/visualPulseEngine'
-
-const NARRATIVE = 'NIFTY 50 · Live'
+import type { PulseBar } from '@/services/visualPulseEngine'
 
 export default function OrderFlowWidget() {
-  const { bars, isLoading } = useNiftyPulse()
+  const { visibleData, activeBarIndex, isLoading } = useWorkspaceEod()
 
-  const idx = bars.length - 1
+  const bars = visibleData as unknown as PulseBar[]
+  const idx  = activeBarIndex
 
-  const rss = useMemo(() => {
-    if (bars.length === 0) return null
-    return computeRssSignals(bars, idx)
-  }, [bars, idx])
-
+  const rss        = useMemo(() => bars.length === 0 ? null : computeRssSignals(bars, idx), [bars, idx])
   const rssHistory = useMemo(() => bars.map(b => b.rss_value ?? 0), [bars])
 
   if (isLoading || bars.length === 0 || !rss) {
@@ -26,7 +22,7 @@ export default function OrderFlowWidget() {
       bar={bars[idx]}
       rss={rss}
       rssHistory={rssHistory}
-      narrative={NARRATIVE}
+      narrative=""
     />
   )
 }

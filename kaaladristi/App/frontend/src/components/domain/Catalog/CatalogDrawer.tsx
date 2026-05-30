@@ -1,26 +1,40 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import IndicatorsSection from './IndicatorsSection'
 import WidgetsSection from './WidgetsSection'
 import CatalogAstroSection from './CatalogAstroSection'
 
-const TABS = [
+const ALL_TABS = [
   { id: 'indicators',  label: 'Indicators' },
   { id: 'widgets',     label: 'Widgets' },
   { id: 'astro_rules', label: 'Astro Rules' },
 ] as const
 
-type DrawerTab = typeof TABS[number]['id']
+const OVERLAY_TABS = [
+  { id: 'indicators',  label: 'Indicators' },
+  { id: 'astro_rules', label: 'Astro Rules' },
+] as const
+
+type DrawerTab = typeof ALL_TABS[number]['id']
 
 interface CatalogDrawerProps {
   isOpen: boolean
   onClose: () => void
-  initialTab?: DrawerTab
+  context?: 'overlay' | 'block'
 }
 
-export default function CatalogDrawer({ isOpen, onClose, initialTab = 'indicators' }: CatalogDrawerProps) {
+export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: CatalogDrawerProps) {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<DrawerTab>(initialTab)
+  const [activeTab, setActiveTab] = useState<DrawerTab>(
+    context === 'overlay' ? 'astro_rules' : 'indicators'
+  )
+
+  const TABS = context === 'overlay' ? OVERLAY_TABS : ALL_TABS
+
+  // Reset to appropriate default tab whenever drawer opens
+  useEffect(() => {
+    if (isOpen) setActiveTab(context === 'overlay' ? 'astro_rules' : 'indicators')
+  }, [isOpen, context])
 
   function handleFullCatalog() {
     navigate('/catalog')
@@ -47,15 +61,17 @@ export default function CatalogDrawer({ isOpen, onClose, initialTab = 'indicator
         style={{
           position: 'fixed',
           right: isOpen ? 0 : -460,
-          top: 0,
+          top: 72,
           bottom: 0,
           width: 440,
           background: 'var(--bg-card, #0d1117)',
           borderLeft: '1px solid var(--border)',
+          borderTop: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 200,
           transition: 'right 0.32s cubic-bezier(0.22,1,0.36,1)',
+          borderRadius: '12px 0 0 0',
         }}
       >
         {/* Header */}
@@ -138,13 +154,13 @@ export default function CatalogDrawer({ isOpen, onClose, initialTab = 'indicator
                   style={{
                     padding: '7px 14px',
                     fontSize: 12,
-                    fontWeight: 500,
+                    fontWeight: isActive ? 600 : 400,
                     fontFamily: 'inherit',
                     cursor: 'pointer',
                     border: 'none',
                     borderBottom: isActive ? '2px solid #7c6af7' : '2px solid transparent',
                     background: 'transparent',
-                    color: isActive ? '#8b7af8' : 'var(--text-muted)',
+                    color: isActive ? '#8b7af8' : 'rgba(255,255,255,0.45)',
                     marginBottom: -1,
                     transition: 'color 0.15s',
                   }}
@@ -165,7 +181,7 @@ export default function CatalogDrawer({ isOpen, onClose, initialTab = 'indicator
         }}>
           {activeTab === 'indicators'  && <IndicatorsSection />}
           {activeTab === 'widgets'     && <WidgetsSection />}
-          {activeTab === 'astro_rules' && <CatalogAstroSection />}
+          {activeTab === 'astro_rules' && <CatalogAstroSection compact />}
         </div>
       </div>
     </>

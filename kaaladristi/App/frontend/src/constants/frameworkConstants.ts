@@ -1,6 +1,6 @@
 // Block types — add new types here only, never inline
 export const BLOCK_TYPES = [
-  'indicator', 'widget', 'scanner', 'astro_rule', 'vani_correlation'
+  'indicator', 'widget', 'scanner', 'astro_rule', 'vani_correlation', 'chart'
 ] as const
 export type BlockType = typeof BLOCK_TYPES[number]
 

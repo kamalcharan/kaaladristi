@@ -24,18 +24,19 @@ function getStartDate(range: TimeRange): string | null {
 
 // Indicator columns to fetch — all that migration 005 added
 const INDICATOR_COLS = [
+  'ema_20', 'ema_60',
   'sma_8', 'sma_21', 'sma_50', 'sma_55', 'sma_89', 'sma_150', 'sma_200', 'sma_233',
   'rsi_14', 'rsi_9', 'mfi_14',
   'atr_10', 'atr_14', 'supertrend', 'supertrend_dir',
   'obv', 'obv_sma_20', 'rvol', 'tvol',
   'magic_rs', 'magic_rs_sma144', 'magic_ma', 'magic_rs_zone',
   'sniper_inst', 'sniper_hot', 'sniper_rsi',
-  'rss_value', 'rss_rsi',
+  'rss_value', 'rss_rsi', 'rss_spread',
   'pivot_pp', 'pivot_r1', 'pivot_r2', 'pivot_r3', 'pivot_s1', 'pivot_s2', 'pivot_s3',
   'chartink_emd_pct', 'chartink_emd_ok', 'chartink_ca_pct', 'chartink_ca_ok', 'chartink_vmac_ok', 'chartink_score',
   'dot_svd', 'dot_sbd', 'dot_syd',
   'swing_high', 'swing_low',
-  'flow_type', 'vacuum_flag', 'accum_distrib',
+  'flow_type', 'vacuum_flag', 'accum_distrib', 'volume_divergence_flag',
 ].join(',');
 
 export interface IndicatorRow {
@@ -45,6 +46,9 @@ export interface IndicatorRow {
   low: number;
   close: number;
   volume: number;
+  // EMAs
+  ema_20: number | null;
+  ema_60: number | null;
   // SMAs
   sma_8: number | null;
   sma_21: number | null;
@@ -80,6 +84,7 @@ export interface IndicatorRow {
   // RSS
   rss_value: number | null;
   rss_rsi: number | null;
+  rss_spread: number | null;
   // Pivots
   pivot_pp: number | null;
   pivot_r1: number | null;
@@ -106,6 +111,7 @@ export interface IndicatorRow {
   flow_type: string | null;
   vacuum_flag: string | null;
   accum_distrib: string | null;
+  volume_divergence_flag: string | null;
 }
 
 export async function fetchIndicatorData(
@@ -164,6 +170,68 @@ export async function fetchIndicatorDataById(
   if (error) throw new Error(error.message);
 
   return (data ?? []) as IndicatorRow[];
+}
+
+// Symbol shorthand → km_index_symbols.name mapping
+const INDEX_SHORTHAND: Record<string, string> = {
+  NIFTY50:   'NIFTY 50',
+  NIFTY:     'NIFTY 50',
+  BANKNIFTY: 'NIFTY BANK',
+  NIFTYIT:   'NIFTY IT',
+  NIFTYFMCG: 'NIFTY FMCG',
+}
+
+/** Resolve a symbol string to its numeric DB id and instrument type. */
+export async function resolveInstrumentId(
+  symbol: string,
+): Promise<{ id: number; type: 'index' | 'equity' } | null> {
+  const upper = symbol.toUpperCase()
+  const indexName = INDEX_SHORTHAND[upper]
+
+  if (indexName) {
+    const { data } = await from('km_index_symbols')
+      .select('id')
+      .eq('name', indexName)
+      .maybeSingle()
+      .execute()
+    if (data) return { id: (data as { id: number }).id, type: 'index' }
+  }
+
+  const { data } = await from('km_equity_symbols')
+    .select('id')
+    .eq('symbol', upper)
+    .maybeSingle()
+    .execute()
+  if (data) return { id: (data as { id: number }).id, type: 'equity' }
+
+  return null
+}
+
+/**
+ * Resolve a symbol string to EOD indicator data.
+ * Supports index shorthands (NIFTY50, BANKNIFTY…) and NSE equity ticker symbols.
+ */
+export async function fetchInstrumentEod(symbol: string, range: TimeRange): Promise<IndicatorRow[]> {
+  const upper = symbol.toUpperCase()
+  const indexName = INDEX_SHORTHAND[upper]
+
+  if (indexName) {
+    const { data: sym } = await from('km_index_symbols')
+      .select('id')
+      .eq('name', indexName)
+      .maybeSingle()
+      .execute()
+    if (sym) return fetchIndicatorDataById((sym as { id: number }).id, range)
+  }
+
+  const { data: eq } = await from('km_equity_symbols')
+    .select('id')
+    .eq('symbol', upper)
+    .maybeSingle()
+    .execute()
+  if (eq) return fetchEquityEodById((eq as { id: number }).id, range)
+
+  return []
 }
 
 /** Fetch full indicator data for an equity by its DB id (used by /chart/equity/:id).

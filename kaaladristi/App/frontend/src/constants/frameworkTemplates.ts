@@ -1,4 +1,4 @@
-import type { FrameworkBlock, ChartOverlay } from '@/types/framework'
+import type { FrameworkBlock, ChartOverlay, InstrumentRef } from '@/types/framework'
 
 export interface FrameworkTemplate {
   id: string
@@ -6,6 +6,20 @@ export interface FrameworkTemplate {
   icp: 'investor' | 'trader' | 'hybrid_weighted' | 'hybrid_balanced'
   blocks: Omit<FrameworkBlock, 'id' | 'added_at'>[]
   chart_overlays: ChartOverlay[]
+}
+
+// ── Shared chart block — NIFTY50, left 16 columns (24-col grid) ──────────────
+// All positions use 24×20 grid coordinates (old × 2 − 1).
+
+const NIFTY50_REF: InstrumentRef = { symbol: 'NIFTY50', id: 1, type: 'index' }
+
+const CHART_BLOCK: Omit<FrameworkBlock, 'id' | 'added_at'> = {
+  type: 'chart',
+  catalog_item_id: 'chart:1',
+  placement: 'panel_block',
+  grid_position: { col_start: 1, col_end: 17, row_start: 1, row_end: 19 },
+  config: { instrument: NIFTY50_REF },
+  added_by: 'vani',
 }
 
 // ── Investor ──────────────────────────────────────────────────────────────────
@@ -17,11 +31,12 @@ const INVESTOR: FrameworkTemplate = {
   display_name: 'Investor',
   icp: 'investor',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'widget',
       catalog_item_id: 'magic_rs',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 1, row_end: 7 },
       config: {},
       added_by: 'vani',
     },
@@ -29,7 +44,7 @@ const INVESTOR: FrameworkTemplate = {
       type: 'astro_rule',
       catalog_item_id: 'astro_rule:panchak',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 4, row_end: 7 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 7, row_end: 13 },
       config: {},
       added_by: 'vani',
     },
@@ -37,7 +52,7 @@ const INVESTOR: FrameworkTemplate = {
       type: 'widget',
       catalog_item_id: 'six_day_outlook',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 7, row_end: 10 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 13, row_end: 19 },
       config: {},
       added_by: 'vani',
     },
@@ -45,7 +60,15 @@ const INVESTOR: FrameworkTemplate = {
       type: 'scanner',
       catalog_item_id: 'conviction_flow',
       placement: 'output_panel',
-      grid_position: { col_start: 1, col_end: 5, row_start: 9, row_end: 12 },
+      grid_position: { col_start: 1, col_end: 9, row_start: 17, row_end: 23 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'chart_player',
+      placement: 'panel_block',
+      grid_position: { col_start: 1, col_end: 25, row_start: 21, row_end: 23 },
       config: {},
       added_by: 'vani',
     },
@@ -63,11 +86,12 @@ const TRADER: FrameworkTemplate = {
   display_name: 'Trader',
   icp: 'trader',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'indicator',
       catalog_item_id: 'rsi_14',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 1, row_end: 7 },
       config: {},
       added_by: 'vani',
     },
@@ -75,7 +99,7 @@ const TRADER: FrameworkTemplate = {
       type: 'widget',
       catalog_item_id: 'breadth_roc',
       placement: 'panel_block',
-      grid_position: { col_start: 5, col_end: 13, row_start: 9, row_end: 12 },
+      grid_position: { col_start: 9, col_end: 25, row_start: 17, row_end: 23 },
       config: {},
       added_by: 'vani',
     },
@@ -83,7 +107,15 @@ const TRADER: FrameworkTemplate = {
       type: 'scanner',
       catalog_item_id: 'conviction_flow',
       placement: 'output_panel',
-      grid_position: { col_start: 1, col_end: 5, row_start: 9, row_end: 12 },
+      grid_position: { col_start: 1, col_end: 9, row_start: 17, row_end: 23 },
+      config: {},
+      added_by: 'vani',
+    },
+    {
+      type: 'widget',
+      catalog_item_id: 'chart_player',
+      placement: 'panel_block',
+      grid_position: { col_start: 1, col_end: 25, row_start: 21, row_end: 23 },
       config: {},
       added_by: 'vani',
     },
@@ -102,11 +134,12 @@ const HYBRID_WEIGHTED: FrameworkTemplate = {
   display_name: 'Hybrid (Investor-leaning)',
   icp: 'hybrid_weighted',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'widget',
       catalog_item_id: 'magic_rs',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 1, row_end: 7 },
       config: {},
       added_by: 'vani',
     },
@@ -114,7 +147,7 @@ const HYBRID_WEIGHTED: FrameworkTemplate = {
       type: 'widget',
       catalog_item_id: 'six_day_outlook',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 7, row_end: 10 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 13, row_end: 19 },
       config: {},
       added_by: 'vani',
     },
@@ -122,7 +155,7 @@ const HYBRID_WEIGHTED: FrameworkTemplate = {
       type: 'scanner',
       catalog_item_id: 'conviction_flow',
       placement: 'output_panel',
-      grid_position: { col_start: 1, col_end: 5, row_start: 9, row_end: 12 },
+      grid_position: { col_start: 1, col_end: 9, row_start: 17, row_end: 23 },
       config: {},
       added_by: 'vani',
     },
@@ -130,7 +163,7 @@ const HYBRID_WEIGHTED: FrameworkTemplate = {
       type: 'widget',
       catalog_item_id: 'breadth_roc',
       placement: 'panel_block',
-      grid_position: { col_start: 5, col_end: 13, row_start: 9, row_end: 12 },
+      grid_position: { col_start: 9, col_end: 25, row_start: 17, row_end: 23 },
       config: {},
       added_by: 'vani',
     },
@@ -150,11 +183,12 @@ const HYBRID_BALANCED: FrameworkTemplate = {
   display_name: 'Hybrid (Balanced)',
   icp: 'hybrid_balanced',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'widget',
       catalog_item_id: 'magic_rs',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 1, row_end: 4 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 1, row_end: 7 },
       config: {},
       added_by: 'vani',
     },
@@ -162,7 +196,7 @@ const HYBRID_BALANCED: FrameworkTemplate = {
       type: 'indicator',
       catalog_item_id: 'rsi_14',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 4, row_end: 7 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 7, row_end: 13 },
       config: {},
       added_by: 'vani',
     },
@@ -170,7 +204,7 @@ const HYBRID_BALANCED: FrameworkTemplate = {
       type: 'widget',
       catalog_item_id: 'six_day_outlook',
       placement: 'panel_block',
-      grid_position: { col_start: 9, col_end: 13, row_start: 7, row_end: 10 },
+      grid_position: { col_start: 17, col_end: 25, row_start: 13, row_end: 19 },
       config: {},
       added_by: 'vani',
     },
@@ -178,7 +212,7 @@ const HYBRID_BALANCED: FrameworkTemplate = {
       type: 'widget',
       catalog_item_id: 'breadth_roc',
       placement: 'panel_block',
-      grid_position: { col_start: 5, col_end: 13, row_start: 9, row_end: 12 },
+      grid_position: { col_start: 9, col_end: 25, row_start: 17, row_end: 23 },
       config: {},
       added_by: 'vani',
     },

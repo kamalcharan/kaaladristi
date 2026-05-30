@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Loader2, AlertCircle, Database } from 'lucide-react'
-import { fetchRules, fetchConfidence, type AstroRule } from '@/pages/RuleEngine/ruleService'
+import { fetchCatalogRules, fetchConfidence, type AstroRule } from '@/pages/RuleEngine/ruleService'
 import { OutcomeBadge, TypeChip, ConfidenceCell, RULE_TYPE_LABELS, PROB_STYLES } from '@/pages/RuleEngine/RuleList'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
@@ -34,9 +34,10 @@ function effectiveOutcome(rule: AstroRule): string {
 
 interface CatalogAstroSectionProps {
   onSelect?: (item: DeepDiveItem) => void
+  compact?: boolean
 }
 
-export default function CatalogAstroSection({ onSelect }: CatalogAstroSectionProps) {
+export default function CatalogAstroSection({ onSelect, compact = false }: CatalogAstroSectionProps) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
 
@@ -44,8 +45,8 @@ export default function CatalogAstroSection({ onSelect }: CatalogAstroSectionPro
 
   // Shared query keys with RuleList — no duplicate network calls when both are mounted
   const { data: rules = [], isLoading, isError } = useQuery({
-    queryKey: ['rule-engine', 'rules'],
-    queryFn: fetchRules,
+    queryKey: ['rule-engine', 'catalog-rules'],
+    queryFn: fetchCatalogRules,
     staleTime: 5 * 60 * 1000,
   })
 
@@ -191,16 +192,19 @@ export default function CatalogAstroSection({ onSelect }: CatalogAstroSectionPro
           {rules.length === 0 ? 'No rules in database' : 'No rules match this filter.'}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)' }}>
+        <div style={{ borderRadius: 12, border: '1px solid var(--border)', overflowX: compact ? 'visible' : 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
-                {['Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', ''].map(col => (
+                {(compact
+                  ? ['Rule', 'Type', '']
+                  : ['Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', '']
+                ).map(col => (
                   <th
                     key={col}
                     style={{
                       padding: '9px 13px',
-                      textAlign: 'left',
+                      textAlign: col === '' ? 'right' : 'left',
                       fontSize: 9,
                       fontFamily: 'var(--font-mono, monospace)',
                       letterSpacing: '0.1em',
@@ -252,26 +256,39 @@ export default function CatalogAstroSection({ onSelect }: CatalogAstroSectionPro
                       (e.currentTarget as HTMLElement).style.background = active ? 'rgba(45,212,191,0.03)' : i % 2 === 0 ? '' : 'rgba(255,255,255,0.01)'
                     }}
                   >
-                    {/* Code */}
-                    <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontFamily: 'var(--font-mono, monospace)',
-                        fontSize: 11,
-                        color: '#8b7af8',
-                        background: 'rgba(124,106,247,0.10)',
-                        border: '1px solid rgba(124,106,247,0.20)',
-                        padding: '1px 6px',
-                        borderRadius: 3,
-                      }}>
-                        {rule.rule_code}
-                      </span>
-                    </td>
+                    {/* Code — full catalog only */}
+                    {!compact && (
+                      <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                        <span style={{
+                          fontFamily: 'var(--font-mono, monospace)',
+                          fontSize: 11,
+                          color: '#8b7af8',
+                          background: 'rgba(124,106,247,0.10)',
+                          border: '1px solid rgba(124,106,247,0.20)',
+                          padding: '1px 6px',
+                          borderRadius: 3,
+                        }}>
+                          {rule.rule_code}
+                        </span>
+                      </td>
+                    )}
 
                     {/* Rule name */}
-                    <td style={{ padding: '10px 13px', verticalAlign: 'middle', maxWidth: 260 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                        {rule.display_name}
-                      </span>
+                    <td style={{ padding: '10px 13px', verticalAlign: 'middle' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                          {rule.display_name}
+                        </span>
+                        {compact && (
+                          <span style={{
+                            fontFamily: 'var(--font-mono, monospace)',
+                            fontSize: 10,
+                            color: 'rgba(139,122,248,0.6)',
+                          }}>
+                            {rule.rule_code}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Type */}
@@ -279,24 +296,30 @@ export default function CatalogAstroSection({ onSelect }: CatalogAstroSectionPro
                       <TypeChip ruleType={rule.rule_type} />
                     </td>
 
-                    {/* Outcome */}
-                    <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                      <OutcomeBadge outcome={outcome} />
-                    </td>
+                    {/* Outcome — full catalog only */}
+                    {!compact && (
+                      <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                        <OutcomeBadge outcome={outcome} />
+                      </td>
+                    )}
 
-                    {/* Probability */}
-                    <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                      {rule.probability_label ? (
-                        <span className={cn('text-xs', PROB_STYLES[rule.probability_label] ?? 'text-muted')}>
-                          {rule.probability_label}
-                        </span>
-                      ) : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>}
-                    </td>
+                    {/* Probability — full catalog only */}
+                    {!compact && (
+                      <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                        {rule.probability_label ? (
+                          <span className={cn('text-xs', PROB_STYLES[rule.probability_label] ?? 'text-muted')}>
+                            {rule.probability_label}
+                          </span>
+                        ) : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>}
+                      </td>
+                    )}
 
-                    {/* Confidence */}
-                    <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                      <ConfidenceCell score={conf} />
-                    </td>
+                    {/* Confidence — full catalog only */}
+                    {!compact && (
+                      <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                        <ConfidenceCell score={conf} />
+                      </td>
+                    )}
 
                     {/* Add / Active */}
                     <td style={{ padding: '10px 13px', verticalAlign: 'middle', textAlign: 'right' }}>

@@ -9,6 +9,12 @@ export interface GridPosition {
   row_end: number
 }
 
+export interface InstrumentRef {
+  symbol: string
+  id: number
+  type: 'index' | 'equity'
+}
+
 export interface FrameworkBlock {
   id: string
   type: BlockType
