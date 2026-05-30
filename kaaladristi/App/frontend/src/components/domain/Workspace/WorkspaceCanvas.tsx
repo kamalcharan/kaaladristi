@@ -648,7 +648,6 @@ export default function WorkspaceCanvas({ framework }: Props) {
           key={`${a}:${b}`}
           itemA={a}
           itemB={b}
-          suppressed={suppressedPairs}
           onSuppress={handleSuppress}
         />
       ))}

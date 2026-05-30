@@ -5,34 +5,49 @@
  * overlay pair. Each monitor runs useCorrelationResult for one pair and
  * fires addVaNiBlock when conditions are met.
  *
- * Suppression is in-memory (local state in WorkspaceCanvas) — Phase 5 adds DB.
+ * Suppression is tracked in a useRef inside each monitor so the guard is
+ * synchronous — avoids the async-state race that causes infinite loops.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useCorrelationResult } from './useCorrelationResult'
 import type { CorrelationResult } from './useCorrelationResult'
 import type { FrameworkBlock } from '@/types/framework'
 
-/** Returns all pairs of visible overlay catalog_item_ids. */
+/**
+ * Returns all pairs of visible overlay catalog_item_ids.
+ * Uses a stable memo so the array reference only changes when overlay IDs
+ * actually change — prevents Zustand from force-re-rendering on unrelated
+ * store updates.
+ */
 export function useVisibleOverlayPairs(): Array<[string, string]> {
-  const overlays = useFrameworkStore(
-    s => s.framework?.chart_overlays.filter(o => o.visible) ?? [],
-  )
-  const pairs: Array<[string, string]> = []
-  for (let i = 0; i < overlays.length; i++) {
-    for (let j = i + 1; j < overlays.length; j++) {
-      pairs.push([overlays[i].catalog_item_id, overlays[j].catalog_item_id])
+  // Select only the IDs of visible overlays — primitives, stable comparison
+  const visibleIds = useFrameworkStore(s => {
+    const overlays = s.framework?.chart_overlays ?? []
+    return overlays
+      .filter(o => o.visible)
+      .map(o => o.catalog_item_id)
+      .join(',')   // string — stable reference when content doesn't change
+  })
+
+  return useMemo(() => {
+    if (!visibleIds) return []
+    const ids = visibleIds.split(',')
+    const pairs: Array<[string, string]> = []
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        pairs.push([ids[i], ids[j]])
+      }
     }
-  }
-  return pairs
+    return pairs
+  }, [visibleIds])
 }
 
 interface PairMonitorProps {
   itemA:       string
   itemB:       string
   benchmark?:  string
-  suppressed:  Set<string>
   onSuppress:  (key: string) => void
 }
 
@@ -40,11 +55,11 @@ interface PairMonitorProps {
  * Renders nothing. Watches one overlay pair and fires addVaNiBlock when
  * the correlation has ≥3 instances and is currently active.
  *
- * Mount one per pair inside WorkspaceCanvas. Uses a hook internally so
- * we avoid the hooks-in-loops rule.
+ * Uses a ref-based "has fired" guard so the guard is synchronous —
+ * React setState (async) would lose the race and allow re-entry.
  */
 export function ConfluencePairMonitor({
-  itemA, itemB, benchmark = 'NIFTY50', suppressed, onSuppress,
+  itemA, itemB, benchmark = 'NIFTY50', onSuppress,
 }: PairMonitorProps): null {
   const { result } = useCorrelationResult(itemA, itemB, benchmark)
   const addVaNiBlock  = useFrameworkStore(s => s.addVaNiBlock)
@@ -52,14 +67,17 @@ export function ConfluencePairMonitor({
     s => s.framework?.blocks.some(b => b.catalog_item_id === `vani_corr:${itemA}:${itemB}`) ?? false,
   )
 
+  // Synchronous guard — prevents re-entry before React state updates commit
+  const firedRef = useRef(false)
+
   useEffect(() => {
     if (!result) return
     if (!result.currently_active) return
     if (result.n_instances < 3) return
-
-    const suppKey = `${itemA}:${itemB}`
-    if (suppressed.has(suppKey)) return
     if (existingBlock) return
+    if (firedRef.current) return
+
+    firedRef.current = true   // synchronous — safe against concurrent effect runs
 
     const block: FrameworkBlock = {
       id:              crypto.randomUUID(),
@@ -67,13 +85,17 @@ export function ConfluencePairMonitor({
       catalog_item_id: `vani_corr:${itemA}:${itemB}`,
       placement:       'panel_block',
       grid_position:   { col_start: 17, col_end: 25, row_start: 1, row_end: 9 },
-      config:          { item_a: itemA, item_b: itemB, correlation_result: result as unknown as Record<string, unknown> },
-      added_by:        'vani',
-      added_at:        new Date().toISOString(),
+      config:          {
+        item_a: itemA,
+        item_b: itemB,
+        correlation_result: result as unknown as Record<string, unknown>,
+      },
+      added_by: 'vani',
+      added_at: new Date().toISOString(),
     }
     addVaNiBlock(block)
-    onSuppress(suppKey)
-  }, [result, existingBlock, suppressed])  // eslint-disable-line react-hooks/exhaustive-deps
+    onSuppress(`${itemA}:${itemB}`)
+  }, [result, existingBlock])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return null
 }
