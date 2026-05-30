@@ -268,7 +268,7 @@ function BlockContent({ block }: { block: FrameworkBlock }) {
   if (type === 'indicator' && placement === 'chart_overlay') return <ChartOnlyPlaceholder />
   if (type === 'astro_rule' && placement === 'chart_overlay') return <ChartOnlyPlaceholder />
 
-  if (type === 'widget') {
+  if (type === 'widget' || (type === 'indicator' && placement === 'panel_block')) {
     const WidgetComp = WIDGET_COMPONENT_MAP[cid]
     if (WidgetComp) return <WidgetComp />
   }
