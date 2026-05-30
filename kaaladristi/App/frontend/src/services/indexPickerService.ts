@@ -7,17 +7,17 @@ export interface IndexOption extends InstrumentRef {
 
 export async function fetchActiveIndices(): Promise<IndexOption[]> {
   const { data, error } = await from('km_index_symbols')
-    .select('id,symbol,display_name')
+    .select('id,name')
     .is('is_active', 'true')
-    .order('display_name', { ascending: true })
+    .order('name', { ascending: true })
     .execute()
 
   if (error || !data) return []
 
-  return (data as { id: number; symbol: string; display_name: string }[]).map(row => ({
-    id: row.id,
-    symbol: row.symbol,
-    display_name: row.display_name,
-    type: 'index' as const,
+  return (data as { id: number; name: string }[]).map(row => ({
+    id:           row.id,
+    symbol:       row.name,   // km_index_symbols.name is the canonical display string
+    display_name: row.name,
+    type:         'index' as const,
   }))
 }
