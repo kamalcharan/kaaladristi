@@ -2,9 +2,9 @@ import { useRef, useEffect } from 'react'
 import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 
 function rsiColor(value: number): string {
-  if (value >= 70) return '#ef4444'   // overbought — red
-  if (value <= 30) return '#10b981'   // oversold  — green
-  return '#6366f1'                    // neutral   — indigo
+  if (value >= 70) return '#ef4444'
+  if (value <= 30) return '#10b981'
+  return '#6366f1'
 }
 
 function rsiZone(value: number): string {
@@ -15,7 +15,7 @@ function rsiZone(value: number): string {
   return 'Neutral'
 }
 
-function Sparkline({ values }: { values: number[] }) {
+function Sparkline({ values, activeIdx }: { values: number[]; activeIdx: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -46,7 +46,7 @@ function Sparkline({ values }: { values: number[] }) {
     ctx.setLineDash([])
 
     // RSI line
-    const current = values[values.length - 1]
+    const current = values[activeIdx] ?? values[values.length - 1]
     ctx.strokeStyle = rsiColor(current)
     ctx.lineWidth = 1.5
     ctx.beginPath()
@@ -54,25 +54,37 @@ function Sparkline({ values }: { values: number[] }) {
       i === 0 ? ctx.moveTo(toX(i), toY(v)) : ctx.lineTo(toX(i), toY(v))
     })
     ctx.stroke()
-  }, [values])
+
+    // Crosshair vertical line at active index
+    if (activeIdx >= 0 && activeIdx < values.length) {
+      const ax = toX(activeIdx)
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+      ctx.lineWidth = 1
+      ctx.setLineDash([2, 3])
+      ctx.beginPath()
+      ctx.moveTo(ax, 0)
+      ctx.lineTo(ax, H)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
+  }, [values, activeIdx])
 
   return <canvas ref={canvasRef} width={260} height={60} style={{ width: '100%', height: 60 }} />
 }
 
 export default function RsiWidget() {
-  const { data = [], isLoading } = useWorkspaceEod()
+  const { visibleData, activeBarIndex, isLoading } = useWorkspaceEod()
 
-  if (isLoading || data.length === 0) {
+  if (isLoading || visibleData.length === 0) {
     return <div style={{ height: 100 }} />
   }
 
-  const rsiValues = data.map(b => b.rsi_14).filter((v): v is number => v != null)
+  const rsiValues = visibleData.map(b => b.rsi_14).filter((v): v is number => v != null)
   if (rsiValues.length === 0) return <div style={{ height: 100 }} />
 
-  const current  = rsiValues[rsiValues.length - 1]
-  const color    = rsiColor(current)
-  const zone     = rsiZone(current)
-  const sparkline = rsiValues.slice(-60)
+  const current = visibleData[activeBarIndex]?.rsi_14 ?? rsiValues[rsiValues.length - 1]
+  const color   = rsiColor(current)
+  const zone    = rsiZone(current)
 
   return (
     <div style={{ padding: '4px 12px 8px' }}>
@@ -99,8 +111,8 @@ export default function RsiWidget() {
           left: `${current}%` }} />
       </div>
 
-      {/* Sparkline */}
-      <Sparkline values={sparkline} />
+      {/* Sparkline — renders visible window, crosshair at activeBarIndex */}
+      <Sparkline values={rsiValues} activeIdx={activeBarIndex} />
     </div>
   )
 }

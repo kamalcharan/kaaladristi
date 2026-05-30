@@ -5,11 +5,10 @@ import { computeSmartMoney, computeDots } from '@/services/visualPulseEngine'
 import type { PulseBar, DotSignals } from '@/services/visualPulseEngine'
 
 export default function SmartMoneyWidget() {
-  const { data = [], isLoading } = useWorkspaceEod()
+  const { visibleData, activeBarIndex, isLoading } = useWorkspaceEod()
 
-  // IndicatorRow is a structural superset of PulseBar
-  const bars = data as unknown as PulseBar[]
-  const idx  = bars.length - 1
+  const bars = visibleData as unknown as PulseBar[]
+  const idx  = activeBarIndex
 
   const dotsHistory: DotSignals[] = useMemo(
     () => bars.map((b, i) => computeDots(b, i > 0 ? bars[i - 1] : null)),

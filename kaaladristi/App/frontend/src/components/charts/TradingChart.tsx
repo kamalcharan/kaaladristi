@@ -45,6 +45,9 @@ interface TradingChartProps {
   compact?: boolean;  // hide RSI + Sniper panes (when Visual Pulse cards show them)
   highlightDate?: string | null;  // scroll chart to center on this date
   overlays?: ChartOverlay[];
+  // Optional sync callbacks — used by workspace, ignored by ChartView
+  onVisibleRangeChange?: (from: string, to: string) => void;
+  onCrosshairMove?: (barIndex: number, date: string) => void;
 }
 
 function toTime(dateStr: string): Time {
@@ -102,7 +105,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, highlightDate = null, overlays = [] }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, highlightDate = null, overlays = [], onVisibleRangeChange, onCrosshairMove }: TradingChartProps) {
   const mainRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
   const sniperRef = useRef<HTMLDivElement>(null);
@@ -388,8 +391,27 @@ export default function TradingChart({ data, height = 900, compact = false, high
       });
     });
 
+    // ── Workspace sync callbacks (no-op when not provided) ──
+    if (onVisibleRangeChange) {
+      mainChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (!range) return;
+        const from = data[Math.max(0, Math.round(range.from))]?.trade_date;
+        const to   = data[Math.min(data.length - 1, Math.round(range.to))]?.trade_date;
+        if (from && to) onVisibleRangeChange(from, to);
+      });
+    }
+
+    if (onCrosshairMove) {
+      mainChart.subscribeCrosshairMove((param) => {
+        if (!param.time) return;
+        const date = param.time as string;
+        const idx  = data.findIndex(d => d.trade_date === date);
+        if (idx >= 0) onCrosshairMove(idx, date);
+      });
+    }
+
     mainChart.timeScale().fitContent();
-  }, [data, height, compact, overlays]);
+  }, [data, height, compact, overlays, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
