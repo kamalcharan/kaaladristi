@@ -133,7 +133,6 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
     },
     handleScroll: { mouseWheel: true, pressedMouseMove: true },
     handleScale: { mouseWheel: true, pinch: true },
-    watermark: { visible: false },
   };
 }
 
