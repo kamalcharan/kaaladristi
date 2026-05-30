@@ -10,21 +10,13 @@ import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
-import WorkspaceChart from '@/components/workspace/WorkspaceChart'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
+import InstrumentPickerModal from './InstrumentPickerModal'
 import { effectiveDotColor } from './overlayColors'
 
 const COLS            = 12
 const ROWS            = 10
 const CELL_HEIGHT_REM = 6
-const CHART_ROWS_DEFAULT = 9
-const CHART_COLS_DEFAULT = 8
-
-// Min/max bounds for chart panel
-const CHART_COLS_MIN = 4
-const CHART_COLS_MAX = 11
-const CHART_ROWS_MIN = 3
-const CHART_ROWS_MAX = ROWS
 
 // Preset swatches for the color picker
 const COLOR_PRESETS = [
@@ -158,6 +150,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
   const [picker, setPicker] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [instrumentPickerOpen, setInstrumentPickerOpen] = useState(false)
 
   // Block resize state
   const [resizingBlockId, setResizingBlockId] = useState<string | null>(null)
@@ -166,12 +159,6 @@ export default function WorkspaceCanvas({ framework }: Props) {
 
   // Maximize state
   const [maximizedBlockId, setMaximizedBlockId] = useState<string | null>(null)
-
-  // Chart panel size (local — not yet persisted to DB)
-  const [chartCols, setChartCols] = useState(CHART_COLS_DEFAULT)
-  const [chartRows, setChartRows] = useState(CHART_ROWS_DEFAULT)
-  const liveChartColsRef = useRef(CHART_COLS_DEFAULT)
-  const liveChartRowsRef = useRef(CHART_ROWS_DEFAULT)
 
   const {
     removeBlock, updateBlockPosition, saveFramework,
@@ -232,50 +219,6 @@ export default function WorkspaceCanvas({ framework }: Props) {
     document.addEventListener('mouseup', onUp)
   }
 
-  // ── Chart panel resize ──────────────────────────────────────────────────────
-  function handleChartColResizeStart(startX: number) {
-    const canvasEl = document.getElementById('workspace-grid')
-    if (!canvasEl) return
-    const colStep = canvasEl.getBoundingClientRect().width / COLS
-    const startCols = liveChartColsRef.current
-
-    function onMove(e: MouseEvent) {
-      const dCols = Math.round((e.clientX - startX) / colStep)
-      const next = Math.max(CHART_COLS_MIN, Math.min(CHART_COLS_MAX, startCols + dCols))
-      liveChartColsRef.current = next
-      setChartCols(next)
-    }
-
-    function onUp() {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }
-
-  function handleChartRowResizeStart(startY: number) {
-    const canvasEl = document.getElementById('workspace-grid')
-    if (!canvasEl) return
-    const rowStep = canvasEl.getBoundingClientRect().height / ROWS
-    const startRows = liveChartRowsRef.current
-
-    function onMove(e: MouseEvent) {
-      const dRows = Math.round((e.clientY - startY) / rowStep)
-      const next = Math.max(CHART_ROWS_MIN, Math.min(CHART_ROWS_MAX, startRows + dRows))
-      liveChartRowsRef.current = next
-      setChartRows(next)
-    }
-
-    function onUp() {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, delta } = event
@@ -313,7 +256,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
     saveFramework()
   }
 
-  const isEmpty = framework.blocks.length === 0
+  const isEmpty = !framework.blocks.some(b => b.type !== 'chart')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -428,6 +371,33 @@ export default function WorkspaceCanvas({ framework }: Props) {
           </button>
         </div>
 
+        {/* + index */}
+        <button
+          onClick={() => setInstrumentPickerOpen(true)}
+          style={{
+            padding: '6px 14px', borderRadius: 100, cursor: 'pointer', flexShrink: 0,
+            fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+            border: '1px dashed rgba(255,255,255,.15)',
+            background: 'transparent',
+            color: 'rgba(255,255,255,.4)',
+            transition: 'all .15s',
+          }}
+          onMouseEnter={e => {
+            const el = e.currentTarget as HTMLElement
+            el.style.borderColor = 'rgba(124,106,247,.5)'
+            el.style.color = '#8b7af8'
+            el.style.background = 'rgba(124,106,247,.06)'
+          }}
+          onMouseLeave={e => {
+            const el = e.currentTarget as HTMLElement
+            el.style.borderColor = 'rgba(255,255,255,.15)'
+            el.style.color = 'rgba(255,255,255,.4)'
+            el.style.background = 'transparent'
+          }}
+        >
+          + index
+        </button>
+
         {/* Edit Canvas / Done Editing */}
         <button
           onClick={() => editMode ? exitEditMode() : setEditMode(true)}
@@ -482,57 +452,6 @@ export default function WorkspaceCanvas({ framework }: Props) {
               </div>
             )}
 
-            {/* Chart cell — resizable via edge handles in edit mode */}
-            <div style={{
-              gridColumnStart: 1, gridColumnEnd: chartCols + 1,
-              gridRowStart: 1, gridRowEnd: chartRows + 1,
-              borderRadius: 10,
-              overflow: 'visible',
-              border: '1px solid rgba(255,255,255,.06)',
-              background: 'rgba(13,17,23,.9)',
-              position: 'relative',
-            }}>
-              <div style={{ borderRadius: 10, overflow: 'hidden', height: '100%' }}>
-                <WorkspaceChart height={chartRows * CELL_HEIGHT_REM * 16} />
-              </div>
-
-              {/* Right-edge resize handle (changes chart column width) */}
-              {editMode && (
-                <div
-                  onMouseDown={e => { e.preventDefault(); handleChartColResizeStart(e.clientX) }}
-                  title="Drag to resize chart width"
-                  style={{
-                    position: 'absolute', right: -5, top: '10%', bottom: '10%',
-                    width: 10, cursor: 'ew-resize', zIndex: 10,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 4,
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.35)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-                >
-                  <div style={{ width: 2, height: 32, borderRadius: 2, background: 'rgba(124,106,247,0.5)' }} />
-                </div>
-              )}
-
-              {/* Bottom-edge resize handle (changes chart row height) */}
-              {editMode && (
-                <div
-                  onMouseDown={e => { e.preventDefault(); handleChartRowResizeStart(e.clientY) }}
-                  title="Drag to resize chart height"
-                  style={{
-                    position: 'absolute', bottom: -5, left: '10%', right: '10%',
-                    height: 10, cursor: 'ns-resize', zIndex: 10,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 4,
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.35)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-                >
-                  <div style={{ height: 2, width: 48, borderRadius: 2, background: 'rgba(124,106,247,0.5)' }} />
-                </div>
-              )}
-            </div>
-
             {framework.blocks.map(block => {
               const isMaximized = maximizedBlockId === block.id
               const effectivePosition: GridPosition = isMaximized
@@ -555,11 +474,11 @@ export default function WorkspaceCanvas({ framework }: Props) {
               )
             })}
 
-            {editMode && isEmpty && [1, 3, 5, 7, 9, 11].map(col => (
-              <AddZone key={col} col={col} row={2} onClick={openBlockDrawer} />
-            ))}
+            {editMode && isEmpty && (
+              <AddZone col={9} row={1} onClick={openBlockDrawer} />
+            )}
             {editMode && !isEmpty && (
-              <AddZone col={1} row={ROWS} onClick={openBlockDrawer} />
+              <AddZone col={9} row={ROWS} onClick={openBlockDrawer} />
             )}
           </div>
         </DndContext>
@@ -584,6 +503,11 @@ export default function WorkspaceCanvas({ framework }: Props) {
           onSelect={c => updateOverlayColor(picker.id, c)}
           onClose={() => setPicker(null)}
         />
+      )}
+
+      {/* Instrument picker modal */}
+      {instrumentPickerOpen && (
+        <InstrumentPickerModal onClose={() => setInstrumentPickerOpen(false)} />
       )}
     </div>
   )
