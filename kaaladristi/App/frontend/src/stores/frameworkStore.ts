@@ -100,14 +100,38 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: UserFramework = await res.json()
 
+      // Deduplicate chart blocks: keep only one per catalog_item_id (largest by area).
+      // Fixes corrupt saved state from before the addChartBlock positioning fix.
+      const chartGroups = new Map<string, FrameworkBlock>()
+      for (const b of data.blocks) {
+        if (b.type !== 'chart') continue
+        const existing = chartGroups.get(b.catalog_item_id)
+        if (!existing) { chartGroups.set(b.catalog_item_id, b); continue }
+        const areaA = (existing.grid_position.col_end - existing.grid_position.col_start) *
+                      (existing.grid_position.row_end - existing.grid_position.row_start)
+        const areaB = (b.grid_position.col_end - b.grid_position.col_start) *
+                      (b.grid_position.row_end - b.grid_position.row_start)
+        if (areaB > areaA) chartGroups.set(b.catalog_item_id, b)
+      }
+      const deduped = [
+        ...data.blocks.filter(b => b.type !== 'chart'),
+        ...Array.from(chartGroups.values()),
+      ]
+      const needsSave = deduped.length !== data.blocks.length
+
       // Bootstrap: inject NIFTY50 chart block if none present
-      if (!data.blocks.some(b => b.type === 'chart')) {
-        data.blocks = [...data.blocks, makeDefaultChartBlock()]
+      if (!deduped.some(b => b.type === 'chart')) {
+        data.blocks = [...deduped, makeDefaultChartBlock()]
         set({ framework: data, isLoading: false })
         const { saveFramework } = get()
         scheduleSave(saveFramework)
       } else {
+        data.blocks = deduped
         set({ framework: data, isLoading: false })
+        if (needsSave) {
+          const { saveFramework } = get()
+          scheduleSave(saveFramework)
+        }
       }
     } catch (err) {
       set({ error: String(err), isLoading: false })
