@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Loader2, AlertCircle, Database } from 'lucide-react'
-import { fetchRules, fetchConfidence, type AstroRule } from '@/pages/RuleEngine/ruleService'
+import { fetchCatalogRules, fetchConfidence, type AstroRule } from '@/pages/RuleEngine/ruleService'
 import { OutcomeBadge, TypeChip, ConfidenceCell, RULE_TYPE_LABELS, PROB_STYLES } from '@/pages/RuleEngine/RuleList'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
@@ -44,8 +44,8 @@ export default function CatalogAstroSection({ onSelect }: CatalogAstroSectionPro
 
   // Shared query keys with RuleList — no duplicate network calls when both are mounted
   const { data: rules = [], isLoading, isError } = useQuery({
-    queryKey: ['rule-engine', 'rules'],
-    queryFn: fetchRules,
+    queryKey: ['rule-engine', 'catalog-rules'],
+    queryFn: fetchCatalogRules,
     staleTime: 5 * 60 * 1000,
   })
 

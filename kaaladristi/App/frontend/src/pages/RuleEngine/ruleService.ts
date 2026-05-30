@@ -14,6 +14,7 @@ export interface AstroRule {
   probability_label: string | null;
   data_source: string | null;
   is_active: boolean;
+  catalog_visible: boolean;
   remarks: string | null;
 }
 
@@ -59,8 +60,22 @@ const TABLE = 'km_astro_rule_master';
 
 export async function fetchRules(): Promise<AstroRule[]> {
   const { data, error } = await from(TABLE)
-    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,remarks')
+    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,catalog_visible,remarks')
     .is('is_deleted', 'false')
+    .order('rule_type')
+    .order('rule_code')
+    .execute();
+  if (error) throw new Error(error.message);
+  return (data as AstroRule[]) ?? [];
+}
+
+/** Catalog-only fetch: admin-approved rules visible to end users. */
+export async function fetchCatalogRules(): Promise<AstroRule[]> {
+  const { data, error } = await from(TABLE)
+    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,catalog_visible,remarks')
+    .is('is_deleted', 'false')
+    .eq('catalog_visible', 'true')
+    .eq('is_active', 'true')
     .order('rule_type')
     .order('rule_code')
     .execute();

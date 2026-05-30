@@ -20,12 +20,20 @@ const CELL_HEIGHT_REM = 6
 // Chart cell spans rows 1-9 (9 rows) × 16px/rem base — passed to TradingChart height
 const CHART_HEIGHT_PX = 9 * CELL_HEIGHT_REM * 16
 
-const OVERLAY_DOT_COLOR: Record<string, string> = {
+// Default dot color by overlay type — mirrors OVERLAY_DEFAULT_COLOR in TradingChart
+const OVERLAY_DEFAULT_DOT: Record<string, string> = {
   astro_zone:     '#c9a84c',
   astro_marker:   '#c9a84c',
   indicator_line: '#2dd4bf',
   indicator_band: '#2dd4bf',
 }
+
+// Preset swatches for the color picker
+const COLOR_PRESETS = [
+  '#FFD700', '#FFA500', '#FF6347', '#ef4444',
+  '#10b981', '#2dd4bf', '#6366f1', '#8b7af8',
+  '#c9a84c', '#f59e0b', '#e879f9', '#ffffff',
+]
 
 // ── Grid overlay (edit mode) ──────────────────────────────────────────────────
 
@@ -73,6 +81,70 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
   )
 }
 
+// ── Color picker popover ──────────────────────────────────────────────────────
+
+function ColorPicker({
+  current, onSelect, onClose,
+}: { current: string; onSelect: (c: string) => void; onClose: () => void }) {
+  return (
+    <>
+      {/* Click-away backdrop */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />
+      <div style={{
+        position: 'absolute', top: '100%', left: 0, marginTop: 6,
+        background: '#1a1f2e', border: '1px solid rgba(255,255,255,.12)',
+        borderRadius: 10, padding: 10, zIndex: 300,
+        boxShadow: '0 8px 24px rgba(0,0,0,.5)',
+        width: 164,
+      }}>
+        {/* Swatches */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4, marginBottom: 8 }}>
+          {COLOR_PRESETS.map(c => (
+            <button
+              key={c}
+              onClick={() => { onSelect(c); onClose() }}
+              title={c}
+              style={{
+                width: 20, height: 20, borderRadius: 4, border: 'none',
+                background: c, cursor: 'pointer',
+                outline: c === current ? '2px solid #fff' : '2px solid transparent',
+                outlineOffset: 1,
+                transition: 'outline 0.1s',
+              }}
+            />
+          ))}
+        </div>
+        {/* Hex input */}
+        <input
+          type="text"
+          defaultValue={current}
+          maxLength={7}
+          placeholder="#rrggbb"
+          onBlur={e => {
+            const val = e.target.value.trim()
+            if (/^#[0-9a-fA-F]{6}$/.test(val)) { onSelect(val); onClose() }
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              const val = (e.target as HTMLInputElement).value.trim()
+              if (/^#[0-9a-fA-F]{6}$/.test(val)) { onSelect(val); onClose() }
+            }
+          }}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '4px 6px', borderRadius: 5,
+            border: '1px solid rgba(255,255,255,.12)',
+            background: 'rgba(255,255,255,.05)',
+            color: 'rgba(255,255,255,.8)', fontSize: 10,
+            fontFamily: 'var(--font-mono, monospace)',
+            outline: 'none',
+          }}
+        />
+      </div>
+    </>
+  )
+}
+
 // ── Main canvas ───────────────────────────────────────────────────────────────
 
 interface Props {
@@ -82,11 +154,27 @@ interface Props {
 export default function WorkspaceCanvas({ framework }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { removeBlock, updateBlockPosition, saveFramework, toggleOverlayVisibility, removeOverlay } = useFrameworkStore()
+  const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
+  const [pickerOpenId, setPickerOpenId] = useState<string | null>(null)
+
+  const {
+    removeBlock, updateBlockPosition, saveFramework,
+    toggleOverlayVisibility, removeOverlay, updateOverlayColor,
+  } = useFrameworkStore()
 
   const sensors = useSensors(useSensor(PointerSensor, {
     activationConstraint: { distance: 8 },
   }))
+
+  function openOverlayDrawer() {
+    setDrawerContext('overlay')
+    setDrawerOpen(true)
+  }
+
+  function openBlockDrawer() {
+    setDrawerContext('block')
+    setDrawerOpen(true)
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, delta } = event
@@ -140,39 +228,58 @@ export default function WorkspaceCanvas({ framework }: Props) {
           flex: 1, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none',
         }}>
           {framework.chart_overlays.map(o => {
-            const catalog = getCatalogItem(o.catalog_item_id)
-            const label   = catalog?.display_name ?? o.catalog_item_id.replace('astro_rule:', '')
-            const dot     = OVERLAY_DOT_COLOR[o.type] ?? '#7c6af7'
+            const catalog  = getCatalogItem(o.catalog_item_id)
+            const label    = catalog?.display_name ?? o.catalog_item_id.replace('astro_rule:', '')
+            const dotColor = o.color ?? OVERLAY_DEFAULT_DOT[o.type] ?? '#7c6af7'
+            const isPickerOpen = pickerOpenId === o.catalog_item_id
+
             return (
               <div
                 key={o.catalog_item_id}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 0,
-                  borderRadius: 100, flexShrink: 0,
+                  borderRadius: 100, flexShrink: 0, position: 'relative',
                   border: '1px solid rgba(255,255,255,.1)',
                   background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
                   opacity: o.visible ? 1 : 0.4,
                   transition: 'all .15s',
                 }}
               >
+                {/* Color dot — click to open picker */}
+                <button
+                  onClick={e => { e.stopPropagation(); setPickerOpenId(isPickerOpen ? null : o.catalog_item_id) }}
+                  title="Change color"
+                  style={{
+                    width: 18, height: 18, marginLeft: 6, padding: 0,
+                    border: 'none', borderRadius: '50%', cursor: 'pointer',
+                    background: dotColor, flexShrink: 0,
+                    boxShadow: isPickerOpen ? `0 0 0 2px rgba(255,255,255,.4)` : 'none',
+                    transition: 'box-shadow .15s',
+                  }}
+                />
+                {isPickerOpen && (
+                  <ColorPicker
+                    current={dotColor}
+                    onSelect={c => updateOverlayColor(o.catalog_item_id, c)}
+                    onClose={() => setPickerOpenId(null)}
+                  />
+                )}
+
                 {/* Toggle visibility */}
                 <button
                   onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
                   title={o.visible ? 'Click to hide' : 'Click to show'}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '4px 8px 4px 10px', borderRadius: '100px 0 0 100px',
+                    display: 'inline-flex', alignItems: 'center',
+                    padding: '4px 6px 4px 4px',
                     border: 'none', background: 'transparent',
                     cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                     color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)',
                   }}
                 >
-                  <span style={{
-                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    background: dot, opacity: o.visible ? 1 : 0.4,
-                  }} />
                   {label}
                 </button>
+
                 {/* Remove overlay */}
                 <button
                   onClick={() => removeOverlay(o.catalog_item_id)}
@@ -194,9 +301,9 @@ export default function WorkspaceCanvas({ framework }: Props) {
             )
           })}
 
-          {/* + overlay — opens Catalog drawer */}
+          {/* + overlay — opens Catalog drawer in overlay context */}
           <button
-            onClick={() => setDrawerOpen(true)}
+            onClick={openOverlayDrawer}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '4px 10px', borderRadius: 100, flexShrink: 0,
@@ -267,7 +374,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                   textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
                   Your framework is empty.{' '}
                   <span
-                    onClick={() => setDrawerOpen(true)}
+                    onClick={openBlockDrawer}
                     style={{ color: '#7c6af7', cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     Add blocks from the Catalog.
@@ -298,16 +405,20 @@ export default function WorkspaceCanvas({ framework }: Props) {
             ))}
 
             {editMode && isEmpty && [1, 3, 5, 7, 9, 11].map(col => (
-              <AddZone key={col} col={col} row={2} onClick={() => setDrawerOpen(true)} />
+              <AddZone key={col} col={col} row={2} onClick={openBlockDrawer} />
             ))}
             {editMode && !isEmpty && (
-              <AddZone col={1} row={ROWS} onClick={() => setDrawerOpen(true)} />
+              <AddZone col={1} row={ROWS} onClick={openBlockDrawer} />
             )}
           </div>
         </DndContext>
       </div>
 
-      <CatalogDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <CatalogDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        context={drawerContext}
+      />
     </div>
   )
 }

@@ -59,6 +59,7 @@ interface FrameworkStore {
   addOverlay: (item: CatalogItem) => void
   removeOverlay: (catalogItemId: string) => void
   toggleOverlayVisibility: (catalogItemId: string) => void
+  updateOverlayColor: (catalogItemId: string, color: string) => void
   addInstrument: (symbol: string) => void
   removeInstrument: (symbol: string) => void
   isBlockActive: (catalogItemId: string) => boolean
@@ -209,6 +210,22 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
             ...s.framework,
             chart_overlays: s.framework.chart_overlays.map(o =>
               o.catalog_item_id === catalogItemId ? { ...o, visible: !o.visible } : o
+            ),
+            version: s.framework.version + 1,
+          }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  updateOverlayColor: (catalogItemId: string, color: string) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? {
+            ...s.framework,
+            chart_overlays: s.framework.chart_overlays.map(o =>
+              o.catalog_item_id === catalogItemId ? { ...o, color } : o
             ),
             version: s.framework.version + 1,
           }
