@@ -7,6 +7,7 @@ import MagicRsWidget from '@/components/domain/Catalog/widgets/MagicRsWidget'
 import OrderFlowWidget from '@/components/domain/Catalog/widgets/OrderFlowWidget'
 import SmartMoneyWidget from '@/components/domain/Catalog/widgets/SmartMoneyWidget'
 import RsiWidget from '@/components/domain/Catalog/widgets/RsiWidget'
+import WorkspaceTimelineWidget from '@/components/domain/Catalog/widgets/WorkspaceTimelineWidget'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
 
@@ -34,7 +35,7 @@ const PLACEMENT_BADGE: Record<string, { label: string; color: string; bg: string
 
 // Catalog item IDs that render live components in the workspace
 const LIVE_IDS = new Set([
-  'magic_rs', 'order_flow', 'smart_money', 'rsi_14', 'breadth_roc', 'six_day_outlook',
+  'magic_rs', 'order_flow', 'smart_money', 'rsi_14', 'breadth_roc', 'six_day_outlook', 'chart_player',
 ])
 
 function BlockContent({
@@ -49,6 +50,7 @@ function BlockContent({
     if (catalogItemId === 'order_flow')      return <OrderFlowWidget />
     if (catalogItemId === 'smart_money')     return <SmartMoneyWidget />
     if (catalogItemId === 'rsi_14')          return <RsiWidget />
+    if (catalogItemId === 'chart_player')    return <WorkspaceTimelineWidget />
     if (catalogItemId === 'breadth_roc')     return <BreadthRocChart />
     if (catalogItemId === 'six_day_outlook') return <SixDayOutlookCompact date={TODAY} />
   }

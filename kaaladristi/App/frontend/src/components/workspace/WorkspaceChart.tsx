@@ -32,12 +32,15 @@ export default function WorkspaceChart({ height }: Props) {
     enabled: !!symbol,
   })
 
-  const { setTotalBars, setActiveBarIndex, setVisibleRange } = useChartSyncStore()
+  const { setTotalBars, setActiveBarIndex, setVisibleRange, playerBarIndex } = useChartSyncStore()
 
   // Seed the store total once data arrives
   useEffect(() => {
     if (data.length > 0) setTotalBars(data.length)
   }, [data.length, setTotalBars])
+
+  // Resolve player seek position to a date — chart scrolls to show it
+  const playerDate = playerBarIndex != null ? (data[playerBarIndex]?.trade_date ?? null) : null
 
   const handleCrosshairMove = useCallback(
     (idx: number) => setActiveBarIndex(idx),
@@ -100,6 +103,7 @@ export default function WorkspaceChart({ height }: Props) {
           data={data}
           height={height - HEADER_H}
           overlays={overlays}
+          highlightDate={playerDate}
           onCrosshairMove={handleCrosshairMove}
           onVisibleRangeChange={handleVisibleRangeChange}
         />
