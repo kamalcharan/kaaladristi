@@ -14,9 +14,9 @@ import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
 import { effectiveDotColor } from './overlayColors'
 import { fetchActiveIndices, type IndexOption } from '@/services/indexPickerService'
 
-const COLS            = 12
-const ROWS            = 10
-const CELL_HEIGHT_REM = 6
+const COLS            = 24
+const ROWS            = 20
+const CELL_HEIGHT_REM = 3
 
 // Preset swatches for the color picker
 const COLOR_PRESETS = [
@@ -308,8 +308,8 @@ export default function WorkspaceCanvas({ framework }: Props) {
       const dRows = (dir === 'v' || dir === 'both') ? Math.round((e.clientY - startY) / rowStep) : 0
       const newPos: GridPosition = {
         ...startPos,
-        col_end: Math.max(startPos.col_start + 2, Math.min(COLS + 1, startPos.col_end + dCols)),
-        row_end: Math.max(startPos.row_start + 1, Math.min(ROWS + 1, startPos.row_end + dRows)),
+        col_end: Math.max(startPos.col_start + 4, Math.min(COLS + 1, startPos.col_end + dCols)),
+        row_end: Math.max(startPos.row_start + 2, Math.min(ROWS + 1, startPos.row_end + dRows)),
       }
       liveResizePosRef.current = newPos
       setResizingPos(newPos)
@@ -354,8 +354,8 @@ export default function WorkspaceCanvas({ framework }: Props) {
       row_end:   Math.max(2, Math.min(ROWS + 1, pos.row_end   + rowDelta)),
     }
 
-    if (newPos.col_end - newPos.col_start < 2) newPos.col_end = newPos.col_start + 2
-    if (newPos.row_end - newPos.row_start < 1) newPos.row_end = newPos.row_start + 1
+    if (newPos.col_end - newPos.col_start < 4) newPos.col_end = newPos.col_start + 4
+    if (newPos.row_end - newPos.row_start < 2) newPos.row_end = newPos.row_start + 2
 
     updateBlockPosition(String(active.id), newPos)
   }

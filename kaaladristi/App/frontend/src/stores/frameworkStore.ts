@@ -40,7 +40,7 @@ function makeDefault(userId: string): Omit<UserFramework, 'id' | 'created_at' | 
 function nextGridPosition(blocks: FrameworkBlock[]): GridPosition {
   const nonChart = blocks.filter(b => b.type !== 'chart')
   const maxRow = nonChart.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
-  return { col_start: 9, col_end: 13, row_start: maxRow, row_end: maxRow + 3 }
+  return { col_start: 17, col_end: 25, row_start: maxRow, row_end: maxRow + 6 }
 }
 
 // ── Default NIFTY50 chart block for bootstrap ─────────────────────────────────
@@ -51,7 +51,7 @@ function makeDefaultChartBlock(): FrameworkBlock {
     type: 'chart',
     catalog_item_id: 'chart:1',
     placement: 'panel_block',
-    grid_position: { col_start: 1, col_end: 9, row_start: 1, row_end: 10 },
+    grid_position: { col_start: 1, col_end: 17, row_start: 1, row_end: 19 },
     config: { instrument: { symbol: 'NIFTY50', id: 1, type: 'index' } as InstrumentRef },
     added_by: 'vani',
     added_at: new Date().toISOString(),
