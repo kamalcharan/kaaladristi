@@ -229,15 +229,206 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
 
 // ── VaNi correlation placeholder ──────────────────────────────
 
-function VaNiPlaceholder() {
+// ── VaNi Correlation Block renderer ──────────────────────────
+
+import type { CorrelationResult, CorrelationInstance } from '@/hooks/useCorrelationResult'
+
+// Catalog display names for overlay pills
+const OVERLAY_DISPLAY: Record<string, string> = {
+  ema_20: 'EMA 20', ema_60: 'EMA 60',
+  sma_50: 'SMA 50', sma_150: 'SMA 150', sma_200: 'SMA 200',
+  rsi_14: 'RSI 14', supertrend: 'SuperTrend',
+  magic_rs: 'MagicRS', order_flow: 'Order Flow', smart_money: 'Smart Money',
+  breadth_roc: 'Breadth ROC',
+}
+
+function overlayName(id: string): string {
+  if (id.startsWith('astro_rule:')) return id.slice('astro_rule:'.length).replace(/-/g, ' ')
+  return OVERLAY_DISPLAY[id] ?? id
+}
+
+function buildVaNiNote(result: CorrelationResult, itemA: string, itemB: string): string {
+  const direction = result.avg_return_5d >= 0 ? 'bullish' : 'bearish'
+  const strength  = Math.abs(result.avg_return_5d) >= 2 ? 'meaningfully' : 'mildly'
+  const a = overlayName(itemA)
+  const b = overlayName(itemB)
+  const bullPct = result.n_instances > 0
+    ? Math.round((result.bullish_count / result.n_instances) * 100) : 0
+
+  if (result.shape === 'EVENT_OVERLAP') {
+    return `When ${a} and ${b} overlap, markets have historically been ${strength} ${direction} — ${bullPct}% bullish across ${result.n_instances} instances (avg 5D: ${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%).`
+  }
+  if (result.shape === 'THRESHOLD_CROSS') {
+    return `${a} crossing its threshold during ${b} periods has produced ${strength} ${direction} outcomes — ${bullPct}% of ${result.n_instances} instances resolved bullishly.`
+  }
+  if (result.shape === 'EVENT_IN_STATE') {
+    return `${a} events occurring while ${b} is active have historically tilted ${direction} with ${bullPct}% bullish across ${result.n_instances} observations.`
+  }
+  return `This combination of ${a} + ${b} has co-occurred ${result.n_instances} times — ${bullPct}% resolved ${direction} (avg 5D: ${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%).`
+}
+
+function ReturnBar({ value }: { value: number | null }) {
+  if (value == null) return <span style={{ color: 'rgba(255,255,255,.25)', fontSize: 9 }}>—</span>
+  const color = value >= 0 ? '#10b981' : '#ef4444'
+  const w = Math.min(Math.abs(value) * 10, 100)
   return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '12px', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 20 }}>✦</div>
-      <span style={{ fontSize: 11, color: 'rgba(124,106,247,.6)', textAlign: 'center',
-        fontFamily: 'var(--font-mono,monospace)', letterSpacing: '0.04em' }}>
-        VaNi is watching…
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ width: 60, height: 4, borderRadius: 2, background: 'rgba(255,255,255,.08)', position: 'relative', flexShrink: 0 }}>
+        <div style={{ position: 'absolute', [value >= 0 ? 'left' : 'right']: 0, width: `${w}%`, height: '100%', background: color, borderRadius: 2 }} />
+      </div>
+      <span style={{ fontSize: 9, color, fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
+        {value >= 0 ? '+' : ''}{value.toFixed(2)}%
       </span>
+    </div>
+  )
+}
+
+function InstanceRow({ inst }: { inst: CorrelationInstance }) {
+  const outcome = (inst.return_5d ?? 0) >= 0 ? 'bull' : 'bear'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
+      borderBottom: '1px solid rgba(255,255,255,.04)', fontSize: 10 }}>
+      <span style={{ color: 'rgba(255,255,255,.5)', fontFamily: 'var(--font-mono,monospace)',
+        flexShrink: 0, width: 74 }}>{inst.start_date.slice(0, 10)}</span>
+      <span style={{ color: 'rgba(255,255,255,.3)', flexShrink: 0, width: 32 }}>{inst.duration_days}d</span>
+      <div style={{ flex: 1 }}><ReturnBar value={inst.return_5d} /></div>
+      <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, flexShrink: 0,
+        background: outcome === 'bull' ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.12)',
+        color: outcome === 'bull' ? '#10b981' : '#ef4444' }}>
+        {outcome}
+      </span>
+    </div>
+  )
+}
+
+function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onDismiss: () => void }) {
+  const result   = block.config.correlation_result as unknown as CorrelationResult | undefined
+  const itemA    = block.config.item_a as string
+  const itemB    = block.config.item_b as string
+  const [showAll, setShowAll] = React.useState(false)
+
+  if (!result) return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 11, color: 'rgba(255,255,255,.2)', fontFamily: 'var(--font-mono,monospace)' }}>
+      no correlation data
+    </div>
+  )
+
+  const note       = buildVaNiNote(result, itemA, itemB)
+  const bullPct    = result.n_instances > 0 ? (result.bullish_count / result.n_instances) * 100 : 50
+  const displayInstances = showAll ? result.instances : result.instances.slice(0, 5)
+  const hiddenCount = result.instances.length - 5
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column',
+      padding: '6px 12px 10px', gap: 10 }}>
+
+      {/* 1. Combination pills */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {[itemA, itemB].map((id, i) => (
+          <React.Fragment key={id}>
+            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4,
+              background: 'rgba(139,92,246,.14)', color: '#a78bfa',
+              border: '1px solid rgba(139,92,246,.25)', fontFamily: 'var(--font-mono,monospace)' }}>
+              {overlayName(id)}
+            </span>
+            {i === 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,.3)' }}>∩</span>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* 2. Status badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {result.currently_active ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10,
+            color: '#10b981', fontWeight: 600 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981',
+              boxShadow: '0 0 6px #10b981', display: 'inline-block',
+              animation: 'pulse 2s infinite' }} />
+            Active Now
+          </span>
+        ) : (
+          <span style={{ fontSize: 10, color: '#f59e0b' }}>Approaching</span>
+        )}
+        <span style={{ fontSize: 9, color: 'rgba(255,255,255,.25)',
+          fontFamily: 'var(--font-mono,monospace)' }}>
+          {result.n_instances} instances · {result.shape}
+        </span>
+      </div>
+
+      {/* 3. Stats row */}
+      <div style={{ display: 'flex', gap: 10 }}>
+        {[
+          { label: '5D avg',  val: `${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%` },
+          { label: '22D avg', val: `${result.avg_return_22d >= 0 ? '+' : ''}${result.avg_return_22d.toFixed(2)}%` },
+          { label: 'Bull',    val: `${result.bullish_count}/${result.n_instances}` },
+        ].map(({ label, val }) => (
+          <div key={label} style={{ background: 'rgba(255,255,255,.04)', borderRadius: 6,
+            padding: '4px 8px', flex: 1, textAlign: 'center' }}>
+            <div style={{ fontSize: 8, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase',
+              letterSpacing: '0.06em', marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+              fontFamily: 'var(--font-mono,monospace)' }}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 4. Outcome distribution bar */}
+      <div style={{ height: 6, borderRadius: 3, overflow: 'hidden',
+        background: 'rgba(239,68,68,.25)', position: 'relative' }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, height: '100%',
+          width: `${bullPct}%`, background: '#10b981', borderRadius: '3px 0 0 3px',
+          transition: 'width .3s' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 8, color: '#10b981' }}>{Math.round(bullPct)}% Bull</span>
+        <span style={{ fontSize: 8, color: '#ef4444' }}>{Math.round(100 - bullPct)}% Bear</span>
+      </div>
+
+      {/* 5. Instance list */}
+      <div>
+        <div style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', marginBottom: 4,
+          textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recent instances</div>
+        {displayInstances.map(inst => <InstanceRow key={inst.start_date} inst={inst} />)}
+        {!showAll && hiddenCount > 0 && (
+          <button onClick={() => setShowAll(true)}
+            style={{ fontSize: 9, color: '#8b7af8', background: 'none', border: 'none',
+              cursor: 'pointer', padding: '4px 0', fontFamily: 'var(--font-mono,monospace)' }}>
+            Show {hiddenCount} more →
+          </button>
+        )}
+      </div>
+
+      {/* 6. VaNi inference note */}
+      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', lineHeight: 1.6,
+        borderLeft: '2px solid rgba(139,92,246,.35)', paddingLeft: 8,
+        fontStyle: 'italic' }}>
+        {note}
+      </div>
+
+      {/* 7. Action row */}
+      <div style={{ display: 'flex', gap: 8, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,.06)' }}>
+        <button
+          title="Coming in Phase 3"
+          style={{ flex: 1, padding: '5px 0', fontSize: 9, borderRadius: 5,
+            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)',
+            color: 'rgba(255,255,255,.4)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
+          Mark on chart {/* TODO: Phase 3 chart markers */}
+        </button>
+        <button
+          title="Coming in Phase 5"
+          style={{ flex: 1, padding: '5px 0', fontSize: 9, borderRadius: 5,
+            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)',
+            color: 'rgba(255,255,255,.4)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
+          Save observation {/* TODO: Phase 5 persistence */}
+        </button>
+        <button onClick={onDismiss}
+          style={{ padding: '5px 10px', fontSize: 9, borderRadius: 5,
+            background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)',
+            color: '#f87171', cursor: 'pointer', fontFamily: 'var(--font-mono,monospace)' }}>
+          Dismiss
+        </button>
+      </div>
     </div>
   )
 }
@@ -258,7 +449,7 @@ function ChartOnlyPlaceholder() {
 
 // ── BlockContent switch ───────────────────────────────────────
 
-function BlockContent({ block }: { block: FrameworkBlock }) {
+function BlockContent({ block, onRemove }: { block: FrameworkBlock; onRemove: (id: string) => void }) {
   const { type, placement, catalog_item_id: cid } = block
 
   if (type === 'chart') {
@@ -282,7 +473,9 @@ function BlockContent({ block }: { block: FrameworkBlock }) {
     return <AstroRuleBlockContent ruleCode={ruleCode} />
   }
 
-  if (type === 'vani_correlation') return <VaNiPlaceholder />
+  if (type === 'vani_correlation') {
+    return <VaNiCorrelationBlock block={block} onDismiss={() => onRemove(block.id)} />
+  }
 
   // Fallback: show description or raw id
   const description = getCatalogItem(cid)?.description
@@ -450,7 +643,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
       </div>
 
       {/* Live content or placeholder */}
-      <BlockContent block={block} />
+      <BlockContent block={block} onRemove={onRemove} />
 
       {/* Resize handles — edit mode only, hidden when maximized */}
       {editMode && !isMaximized && (

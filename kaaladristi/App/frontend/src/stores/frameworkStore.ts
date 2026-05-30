@@ -76,6 +76,7 @@ interface FrameworkStore {
   toggleOverlayVisibility: (catalogItemId: string) => void
   updateOverlayColor: (catalogItemId: string, color: string) => void
   addChartBlock: (instrument: InstrumentRef) => void
+  addVaNiBlock: (block: FrameworkBlock) => void
   addInstrument: (symbol: string) => void
   removeInstrument: (symbol: string) => void
   isBlockActive: (catalogItemId: string) => boolean
@@ -351,6 +352,20 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     set(s => ({
       framework: s.framework
         ? { ...s.framework, blocks: [...updatedBlocks, block], version: s.framework.version + 1 }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  addVaNiBlock: (block: FrameworkBlock) => {
+    const { framework, saveFramework } = get()
+    if (!framework) return
+    // Idempotent — don't add the same catalog_item_id twice
+    if (framework.blocks.some(b => b.catalog_item_id === block.catalog_item_id)) return
+    // Insert at index 0 so it appears at the top of the right panel
+    set(s => ({
+      framework: s.framework
+        ? { ...s.framework, blocks: [block, ...s.framework.blocks], version: s.framework.version + 1 }
         : null,
     }))
     scheduleSave(saveFramework)
