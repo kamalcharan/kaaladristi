@@ -30,6 +30,7 @@ import {
 } from 'lightweight-charts';
 import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
+import type { AstroBand } from '@/services/astroOverlayService';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -66,9 +67,18 @@ interface TradingChartProps {
   workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
   highlightDate?: string | null;
   overlays?: ChartOverlay[];
+  astroBands?: AstroBand[];
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex.startsWith('#') || hex.length < 7) return `rgba(201,168,76,${alpha})`
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
 }
 
 function toTime(dateStr: string): Time {
@@ -126,11 +136,14 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], onVisibleRangeChange, onCrosshairMove }: TradingChartProps) {
-  const mainRef = useRef<HTMLDivElement>(null);
-  const rsiRef = useRef<HTMLDivElement>(null);
-  const sniperRef = useRef<HTMLDivElement>(null);
-  const magicRef = useRef<HTMLDivElement>(null);
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], onVisibleRangeChange, onCrosshairMove }: TradingChartProps) {
+  const mainRef      = useRef<HTMLDivElement>(null);
+  const rsiRef       = useRef<HTMLDivElement>(null);
+  const sniperRef    = useRef<HTMLDivElement>(null);
+  const magicRef     = useRef<HTMLDivElement>(null);
+  const bandCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mainChartRef  = useRef<IChartApi | null>(null);
+  const drawBandsRef  = useRef<(() => void) | null>(null);
 
   const chartsRef = useRef<IChartApi[]>([]);
 
@@ -426,6 +439,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
     }
 
     mainChart.timeScale().fitContent();
+
+    // Store ref so the bands canvas effect can reach the time scale
+    mainChartRef.current = mainChart;
+    // Trigger band redraw whenever the chart scrolls/zooms
+    mainChart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      drawBandsRef.current?.();
+    });
   }, [data, height, compact, workspaceMode, overlays, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
@@ -457,8 +477,93 @@ export default function TradingChart({ data, height = 900, compact = false, work
       window.removeEventListener('resize', handleResize);
       chartsRef.current.forEach((c) => c.remove());
       chartsRef.current = [];
+      mainChartRef.current = null;
     };
   }, [buildCharts]);
+
+  // ── Astro zone bands canvas overlay ────────────────────────────────────────
+  useEffect(() => {
+    const canvas = bandCanvasRef.current;
+
+    function draw() {
+      if (!canvas || !mainChartRef.current || !mainRef.current) return;
+      const { width, height: h } = mainRef.current.getBoundingClientRect();
+      if (width === 0 || h === 0) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width        = width * dpr;
+      canvas.height       = h * dpr;
+      canvas.style.width  = `${width}px`;
+      canvas.style.height = `${h}px`;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, h);
+
+      if (astroBands.length === 0) return;
+
+      const today = new Date().toISOString().slice(0, 10);
+      const ts    = mainChartRef.current.timeScale();
+
+      for (const band of astroBands) {
+        const x1 = ts.timeToCoordinate(band.from as Time);
+        const x2 = ts.timeToCoordinate(band.to   as Time);
+        if (x1 == null || x2 == null) continue;
+
+        const left  = Math.min(x1, x2);
+        const bw    = Math.max(Math.abs(x2 - x1), 2);
+        const isFuture = band.from > today;
+
+        let fillColor: string;
+        let borderColor: string;
+        let dashed = false;
+
+        if (band.matched === true) {
+          fillColor   = hexToRgba(band.color, 0.12);
+          borderColor = hexToRgba(band.color, 0.75);
+        } else if (band.matched === false) {
+          fillColor   = 'rgba(239,68,68,0.10)';
+          borderColor = 'rgba(239,68,68,0.55)';
+        } else if (isFuture) {
+          fillColor   = hexToRgba(band.color, 0.07);
+          borderColor = hexToRgba(band.color, 0.45);
+          dashed      = true;
+        } else {
+          // past, unbacktested
+          fillColor   = 'rgba(150,150,150,0.05)';
+          borderColor = 'rgba(150,150,150,0.2)';
+        }
+
+        ctx.fillStyle = fillColor;
+        ctx.fillRect(left, 0, bw, h);
+
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth   = 2;
+        ctx.setLineDash(dashed ? [4, 3] : []);
+        ctx.beginPath();
+        ctx.moveTo(left + 1, 0);
+        ctx.lineTo(left + 1, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    drawBandsRef.current = draw;
+    draw();
+
+    const ro = new ResizeObserver(draw);
+    if (mainRef.current) ro.observe(mainRef.current);
+
+    return () => {
+      ro.disconnect();
+      drawBandsRef.current = null;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
+  }, [astroBands]);
 
   return (
     <div className="space-y-0.5">
@@ -478,7 +583,17 @@ export default function TradingChart({ data, height = 900, compact = false, work
         </div>
       )}
 
-      <div ref={mainRef} className="rounded-xl overflow-hidden" />
+      <div style={{ position: 'relative' }}>
+        <div ref={mainRef} className="rounded-xl overflow-hidden" />
+        <canvas
+          ref={bandCanvasRef}
+          style={{
+            position: 'absolute', top: 0, left: 0,
+            pointerEvents: 'none', zIndex: 2,
+            borderRadius: 12,
+          }}
+        />
+      </div>
 
       {!workspaceMode && !compact && (
         <div className="relative">
