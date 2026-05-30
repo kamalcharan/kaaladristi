@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import type { FrameworkBlock, GridPosition } from '@/types/framework'
+import type { FrameworkBlock, GridPosition, InstrumentRef } from '@/types/framework'
 import { getCatalogItem } from '@/constants/catalogItems'
 import MagicRsWidget from '@/components/domain/Catalog/widgets/MagicRsWidget'
 import OrderFlowWidget from '@/components/domain/Catalog/widgets/OrderFlowWidget'
@@ -10,8 +10,17 @@ import RsiWidget from '@/components/domain/Catalog/widgets/RsiWidget'
 import WorkspaceTimelineWidget from '@/components/domain/Catalog/widgets/WorkspaceTimelineWidget'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
+import WorkspaceChart from '@/components/workspace/WorkspaceChart'
 
 const TODAY = new Date().toISOString().slice(0, 10)
+
+const CHART_DISPLAY: Record<string, string> = {
+  NIFTY50:   'NIFTY 50',
+  NIFTY:     'NIFTY 50',
+  BANKNIFTY: 'NIFTY BANK',
+  NIFTYIT:   'NIFTY IT',
+  NIFTYFMCG: 'NIFTY FMCG',
+}
 
 interface Props {
   block:             FrameworkBlock
@@ -30,6 +39,7 @@ const TYPE_ICON: Record<string, string> = {
   scanner:          '🔍',
   astro_rule:       '🪐',
   vani_correlation: '✦',
+  chart:            '📈',
 }
 
 const PLACEMENT_BADGE: Record<string, { label: string; color: string; bg: string }> = {
@@ -43,13 +53,15 @@ const LIVE_IDS = new Set([
   'magic_rs', 'order_flow', 'smart_money', 'rsi_14', 'breadth_roc', 'six_day_outlook', 'chart_player',
 ])
 
-function BlockContent({
-  catalogItemId,
-  description,
-}: {
-  catalogItemId: string
-  description: string | undefined
-}) {
+function BlockContent({ block }: { block: FrameworkBlock }) {
+  if (block.type === 'chart') {
+    const instrument = block.config.instrument as InstrumentRef
+    return <WorkspaceChart instrument={instrument} />
+  }
+
+  const { catalog_item_id: catalogItemId } = block
+  const description = getCatalogItem(catalogItemId)?.description
+
   if (LIVE_IDS.has(catalogItemId)) {
     if (catalogItemId === 'magic_rs')        return <MagicRsWidget />
     if (catalogItemId === 'order_flow')      return <OrderFlowWidget />
@@ -75,11 +87,18 @@ function BlockContent({
 }
 
 export default function WorkspaceBlock({ block, editMode, isDraggable, effectivePosition, isMaximized, onRemove, onResizeStart, onMaximize }: Props) {
-  const isVaNi  = block.added_by === 'vani'
+  const isChart = block.type === 'chart'
+  const isVaNi  = block.added_by === 'vani' && !isChart
   const catalog = getCatalogItem(block.catalog_item_id)
-  const name    = catalog?.display_name ?? block.catalog_item_id
-  const badge   = PLACEMENT_BADGE[block.placement] ?? PLACEMENT_BADGE.panel_block
   const icon    = TYPE_ICON[block.type] ?? '◎'
+
+  // For chart blocks, derive display name from the instrument config
+  const chartInstrument = isChart ? (block.config.instrument as InstrumentRef) : null
+  const name = isChart
+    ? (CHART_DISPLAY[chartInstrument?.symbol?.toUpperCase() ?? ''] ?? chartInstrument?.symbol ?? 'Chart')
+    : (catalog?.display_name ?? block.catalog_item_id)
+
+  const badge = PLACEMENT_BADGE[block.placement] ?? PLACEMENT_BADGE.panel_block
 
   // Drag — disabled when not isDraggable (covers edit-mode off AND resize-in-progress)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -166,20 +185,22 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {name}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-              padding: '1px 6px', borderRadius: 3, background: badge.bg, color: badge.color }}>
-              {badge.label}
-            </span>
-            {isVaNi && (
+          {!isChart && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-                padding: '1px 6px', borderRadius: 3,
-                background: 'rgba(124,106,247,.12)', color: '#7c6af7',
-                border: '1px solid rgba(124,106,247,.2)' }}>
-                VaNi ✦
+                padding: '1px 6px', borderRadius: 3, background: badge.bg, color: badge.color }}>
+                {badge.label}
               </span>
-            )}
-          </div>
+              {isVaNi && (
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                  padding: '1px 6px', borderRadius: 3,
+                  background: 'rgba(124,106,247,.12)', color: '#7c6af7',
+                  border: '1px solid rgba(124,106,247,.2)' }}>
+                  VaNi ✦
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Maximize / restore */}
@@ -213,10 +234,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
       </div>
 
       {/* Live content or placeholder */}
-      <BlockContent
-        catalogItemId={block.catalog_item_id}
-        description={catalog?.description}
-      />
+      <BlockContent block={block} />
 
       {/* Resize handles — edit mode only, hidden when maximized */}
       {editMode && !isMaximized && (

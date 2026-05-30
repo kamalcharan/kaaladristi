@@ -1,4 +1,4 @@
-import type { FrameworkBlock, ChartOverlay } from '@/types/framework'
+import type { FrameworkBlock, ChartOverlay, InstrumentRef } from '@/types/framework'
 
 export interface FrameworkTemplate {
   id: string
@@ -6,6 +6,19 @@ export interface FrameworkTemplate {
   icp: 'investor' | 'trader' | 'hybrid_weighted' | 'hybrid_balanced'
   blocks: Omit<FrameworkBlock, 'id' | 'added_at'>[]
   chart_overlays: ChartOverlay[]
+}
+
+// ── Shared chart block — NIFTY50, left 8 columns ─────────────────────────────
+
+const NIFTY50_REF: InstrumentRef = { symbol: 'NIFTY50', id: 1, type: 'index' }
+
+const CHART_BLOCK: Omit<FrameworkBlock, 'id' | 'added_at'> = {
+  type: 'chart',
+  catalog_item_id: 'chart:1',
+  placement: 'panel_block',
+  grid_position: { col_start: 1, col_end: 9, row_start: 1, row_end: 10 },
+  config: { instrument: NIFTY50_REF },
+  added_by: 'vani',
 }
 
 // ── Investor ──────────────────────────────────────────────────────────────────
@@ -17,6 +30,7 @@ const INVESTOR: FrameworkTemplate = {
   display_name: 'Investor',
   icp: 'investor',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'widget',
       catalog_item_id: 'magic_rs',
@@ -71,6 +85,7 @@ const TRADER: FrameworkTemplate = {
   display_name: 'Trader',
   icp: 'trader',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'indicator',
       catalog_item_id: 'rsi_14',
@@ -118,6 +133,7 @@ const HYBRID_WEIGHTED: FrameworkTemplate = {
   display_name: 'Hybrid (Investor-leaning)',
   icp: 'hybrid_weighted',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'widget',
       catalog_item_id: 'magic_rs',
@@ -166,6 +182,7 @@ const HYBRID_BALANCED: FrameworkTemplate = {
   display_name: 'Hybrid (Balanced)',
   icp: 'hybrid_balanced',
   blocks: [
+    CHART_BLOCK,
     {
       type: 'widget',
       catalog_item_id: 'magic_rs',
