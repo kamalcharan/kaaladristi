@@ -1,13 +1,15 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 
-function rsiColor(value: number): string {
+type Mode = 'rsi' | 'mfi'
+
+function oscColor(value: number): string {
   if (value >= 70) return '#ef4444'
   if (value <= 30) return '#10b981'
   return '#6366f1'
 }
 
-function rsiZone(value: number): string {
+function oscZone(value: number): string {
   if (value >= 70) return 'Overbought'
   if (value <= 30) return 'Oversold'
   if (value >= 55) return 'Bullish'
@@ -15,7 +17,7 @@ function rsiZone(value: number): string {
   return 'Neutral'
 }
 
-function Sparkline({ values, activeIdx }: { values: number[]; activeIdx: number }) {
+function Sparkline({ values, activeIdx, color }: { values: number[]; activeIdx: number; color: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -45,9 +47,8 @@ function Sparkline({ values, activeIdx }: { values: number[]; activeIdx: number 
     if (max > 70) { ctx.beginPath(); ctx.moveTo(0, y70); ctx.lineTo(W, y70); ctx.stroke() }
     ctx.setLineDash([])
 
-    // RSI line
-    const current = values[activeIdx] ?? values[values.length - 1]
-    ctx.strokeStyle = rsiColor(current)
+    // Oscillator line
+    ctx.strokeStyle = color
     ctx.lineWidth = 1.5
     ctx.beginPath()
     values.forEach((v, i) => {
@@ -67,37 +68,70 @@ function Sparkline({ values, activeIdx }: { values: number[]; activeIdx: number 
       ctx.stroke()
       ctx.setLineDash([])
     }
-  }, [values, activeIdx])
+  }, [values, activeIdx, color])
 
   return <canvas ref={canvasRef} width={260} height={60} style={{ width: '100%', height: 60 }} />
 }
 
 export default function RsiWidget() {
   const { visibleData, activeBarIndex, isLoading } = useWorkspaceEod()
+  const [mode, setMode] = useState<Mode>('rsi')
 
   if (isLoading || visibleData.length === 0) {
     return <div style={{ height: 100 }} />
   }
 
-  const rsiValues = visibleData.map(b => b.rsi_14).filter((v): v is number => v != null)
-  if (rsiValues.length === 0) return <div style={{ height: 100 }} />
+  const rawValues = visibleData
+    .map(b => mode === 'rsi' ? b.rsi_14 : b.mfi_14)
+    .filter((v): v is number => v != null)
 
-  const current = visibleData[activeBarIndex]?.rsi_14 ?? rsiValues[rsiValues.length - 1]
-  const color   = rsiColor(current)
-  const zone    = rsiZone(current)
+  if (rawValues.length === 0) return <div style={{ height: 100 }} />
+
+  const current = (mode === 'rsi'
+    ? visibleData[activeBarIndex]?.rsi_14
+    : visibleData[activeBarIndex]?.mfi_14) ?? rawValues[rawValues.length - 1]
+
+  const color = oscColor(current)
+  const zone  = oscZone(current)
 
   return (
     <div style={{ padding: '4px 12px 8px' }}>
-      {/* Value + zone */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 28, fontWeight: 600, fontFamily: 'var(--font-mono, monospace)',
-          color, lineHeight: 1 }}>
-          {current.toFixed(1)}
-        </span>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-          color, opacity: 0.7, letterSpacing: '0.05em' }}>
-          {zone}
-        </span>
+      {/* Header row: value + zone (left) | mode toggle (right) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 28, fontWeight: 600, fontFamily: 'var(--font-mono, monospace)',
+            color, lineHeight: 1 }}>
+            {current.toFixed(1)}
+          </span>
+          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            color, opacity: 0.7, letterSpacing: '0.05em' }}>
+            {zone}
+          </span>
+        </div>
+
+        {/* RSI / MFI pill toggle */}
+        <div style={{
+          display: 'flex', borderRadius: 6,
+          border: '1px solid rgba(255,255,255,0.1)',
+          overflow: 'hidden', flexShrink: 0,
+        }}>
+          {(['rsi', 'mfi'] as Mode[]).map(m => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              style={{
+                padding: '3px 8px', border: 'none', cursor: 'pointer',
+                fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                fontWeight: mode === m ? 600 : 400,
+                background: mode === m ? 'rgba(99,102,241,0.25)' : 'transparent',
+                color: mode === m ? '#a5b4fc' : 'rgba(255,255,255,0.3)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {m === 'rsi' ? 'RSI 14' : 'MFI 14'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Track bar */}
@@ -112,7 +146,7 @@ export default function RsiWidget() {
       </div>
 
       {/* Sparkline — renders visible window, crosshair at activeBarIndex */}
-      <Sparkline values={rsiValues} activeIdx={activeBarIndex} />
+      <Sparkline values={rawValues} activeIdx={activeBarIndex} color={color} />
     </div>
   )
 }
