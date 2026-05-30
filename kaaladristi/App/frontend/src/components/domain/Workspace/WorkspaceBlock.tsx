@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
+import { useQuery } from '@tanstack/react-query'
 import type { FrameworkBlock, GridPosition, InstrumentRef } from '@/types/framework'
 import { getCatalogItem } from '@/constants/catalogItems'
 import MagicRsWidget from '@/components/domain/Catalog/widgets/MagicRsWidget'
@@ -11,6 +12,9 @@ import WorkspaceTimelineWidget from '@/components/domain/Catalog/widgets/Workspa
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
 import WorkspaceChart from '@/components/workspace/WorkspaceChart'
+import { executeScan } from '@/services/scanEngine'
+import { from } from '@/services/postgrest'
+import { ZONE_LABELS } from '@/constants/signalScale'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -48,31 +52,240 @@ const PLACEMENT_BADGE: Record<string, { label: string; color: string; bg: string
   output_panel:  { label: 'Output Panel',  color: '#7c6af7', bg: 'rgba(124,106,247,.1)' },
 }
 
-// Catalog item IDs that render live components in the workspace
-const LIVE_IDS = new Set([
-  'magic_rs', 'order_flow', 'smart_money', 'rsi_14', 'breadth_roc', 'six_day_outlook', 'chart_player',
-])
+// Widget component map — catalog_item_id → component
+// Add new widget entries here; never inline them in BlockContent.
+const WIDGET_COMPONENT_MAP: Record<string, () => React.ReactElement> = {
+  magic_rs:        () => <MagicRsWidget />,
+  order_flow:      () => <OrderFlowWidget />,
+  smart_money:     () => <SmartMoneyWidget />,
+  rsi_14:          () => <RsiWidget />,
+  chart_player:    () => <WorkspaceTimelineWidget />,
+  breadth_roc:     () => <BreadthRocChart />,
+  six_day_outlook: () => <SixDayOutlookCompact date={TODAY} />,
+}
+
+// ── Scanner block content ─────────────────────────────────────
+
+function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['scan', catalogItemId, 'combined', 'daily'],
+    queryFn:  () => executeScan(catalogItemId, 'combined', 'daily'),
+    staleTime: 3 * 60_000,
+    retry: 1,
+  })
+
+  if (isLoading) return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 11, color: 'rgba(255,255,255,.2)', fontFamily: 'var(--font-mono,monospace)' }}>
+      scanning…
+    </div>
+  )
+
+  if (error || !data) return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 11, color: 'rgba(248,113,113,.4)', fontFamily: 'var(--font-mono,monospace)' }}>
+      error loading scan
+    </div>
+  )
+
+  const top5 = data.slice(0, 5)
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Count badge */}
+      <div style={{ padding: '4px 12px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)',
+          fontFamily: 'var(--font-mono,monospace)' }}>{data.length}</span>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,.35)', textTransform: 'uppercase',
+          letterSpacing: '0.06em' }}>matches</span>
+      </div>
+      {/* Top 5 rows */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
+        {top5.map(stock => {
+          const zone = stock.magic_rs_zone ?? ''
+          const zoneInfo = ZONE_LABELS[zone as keyof typeof ZONE_LABELS]
+          const pctColor = (stock.pct_chng ?? 0) >= 0 ? '#10b981' : '#ef4444'
+          return (
+            <div key={stock.equity_id} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '5px 6px', borderRadius: 6, marginBottom: 2,
+              background: 'rgba(255,255,255,.03)',
+              borderBottom: '1px solid rgba(255,255,255,.04)',
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+                flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {stock.symbol}
+              </span>
+              {zoneInfo && (
+                <span style={{ fontSize: 9, color: zoneInfo.color,
+                  fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
+                  {zoneInfo.label}
+                </span>
+              )}
+              <span style={{ fontSize: 10, fontWeight: 600, color: pctColor,
+                fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
+                {stock.pct_chng != null ? `${stock.pct_chng >= 0 ? '+' : ''}${stock.pct_chng.toFixed(1)}%` : '—'}
+              </span>
+            </div>
+          )
+        })}
+        {data.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 11,
+            color: 'rgba(255,255,255,.2)' }}>no matches today</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Astro rule panel block content ────────────────────────────
+
+interface RuleRow {
+  id: number
+  display_name: string
+  is_active: boolean
+  probability_label: string | null
+}
+
+interface SignalRow {
+  date: string
+  signal: string
+}
+
+function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
+  const { data: ruleData } = useQuery({
+    queryKey: ['astro-rule-meta', ruleCode],
+    queryFn: async () => {
+      const { data } = await from('km_astro_rule_master')
+        .select('id,display_name,is_active,probability_label')
+        .eq('rule_code', ruleCode)
+        .execute()
+      return (data as RuleRow[] | null)?.[0] ?? null
+    },
+    staleTime: 10 * 60_000,
+  })
+
+  const ruleId = ruleData?.id
+  const { data: nextSignal } = useQuery({
+    queryKey: ['astro-rule-next', ruleId],
+    enabled: ruleId != null,
+    queryFn: async () => {
+      const { data } = await from('km_rule_signals')
+        .select('date,signal')
+        .eq('rule_id', String(ruleId!))
+        .gte('date', TODAY)
+        .order('date', { ascending: true })
+        .limit(1)
+        .execute()
+      return (data as SignalRow[] | null)?.[0] ?? null
+    },
+    staleTime: 5 * 60_000,
+  })
+
+  const isActive = ruleData?.is_active ?? false
+  const probLabel = ruleData?.probability_label
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column',
+      justifyContent: 'center', padding: '8px 14px', gap: 8 }}>
+      {/* Active / Inactive pill */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+          padding: '2px 8px', borderRadius: 4,
+          background: isActive ? 'rgba(16,185,129,.12)' : 'rgba(248,113,113,.1)',
+          color: isActive ? '#10b981' : '#f87171',
+          border: `1px solid ${isActive ? 'rgba(16,185,129,.25)' : 'rgba(248,113,113,.2)'}`,
+        }}>
+          {isActive ? '● Active' : '○ Inactive'}
+        </span>
+        {probLabel && (
+          <span style={{ fontSize: 9, color: '#c9a84c',
+            fontFamily: 'var(--font-mono,monospace)' }}>{probLabel}</span>
+        )}
+      </div>
+      {/* Next occurrence */}
+      <div>
+        <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em',
+          color: 'rgba(255,255,255,.3)', marginBottom: 3 }}>Next occurrence</div>
+        {nextSignal
+          ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
+                fontFamily: 'var(--font-mono,monospace)' }}>{nextSignal.date}</span>
+              <span style={{ fontSize: 9, color: nextSignal.signal === 'bullish' ? '#10b981'
+                : nextSignal.signal === 'bearish' ? '#ef4444' : '#c9a84c' }}>
+                {nextSignal.signal}
+              </span>
+            </div>
+          )
+          : <span style={{ fontSize: 11, color: 'rgba(255,255,255,.2)',
+              fontFamily: 'var(--font-mono,monospace)' }}>none found</span>
+        }
+      </div>
+    </div>
+  )
+}
+
+// ── VaNi correlation placeholder ──────────────────────────────
+
+function VaNiPlaceholder() {
+  return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '12px', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 20 }}>✦</div>
+      <span style={{ fontSize: 11, color: 'rgba(124,106,247,.6)', textAlign: 'center',
+        fontFamily: 'var(--font-mono,monospace)', letterSpacing: '0.04em' }}>
+        VaNi is watching…
+      </span>
+    </div>
+  )
+}
+
+// ── Unimplemented / chart-only placeholder ────────────────────
+
+function ChartOnlyPlaceholder() {
+  return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '8px 12px' }}>
+      <span style={{ fontSize: 10, color: 'rgba(255,255,255,.15)',
+        fontFamily: 'var(--font-mono,monospace)', textAlign: 'center' }}>
+        renders on chart
+      </span>
+    </div>
+  )
+}
+
+// ── BlockContent switch ───────────────────────────────────────
 
 function BlockContent({ block }: { block: FrameworkBlock }) {
-  if (block.type === 'chart') {
-    const instrument = block.config.instrument as InstrumentRef
-    return <WorkspaceChart instrument={instrument} />
+  const { type, placement, catalog_item_id: cid } = block
+
+  if (type === 'chart') {
+    return <WorkspaceChart instrument={block.config.instrument as InstrumentRef} />
   }
 
-  const { catalog_item_id: catalogItemId } = block
-  const description = getCatalogItem(catalogItemId)?.description
+  if (type === 'indicator' && placement === 'chart_overlay') return <ChartOnlyPlaceholder />
+  if (type === 'astro_rule' && placement === 'chart_overlay') return <ChartOnlyPlaceholder />
 
-  if (LIVE_IDS.has(catalogItemId)) {
-    if (catalogItemId === 'magic_rs')        return <MagicRsWidget />
-    if (catalogItemId === 'order_flow')      return <OrderFlowWidget />
-    if (catalogItemId === 'smart_money')     return <SmartMoneyWidget />
-    if (catalogItemId === 'rsi_14')          return <RsiWidget />
-    if (catalogItemId === 'chart_player')    return <WorkspaceTimelineWidget />
-    if (catalogItemId === 'breadth_roc')     return <BreadthRocChart />
-    if (catalogItemId === 'six_day_outlook') return <SixDayOutlookCompact date={TODAY} />
+  if (type === 'widget') {
+    const WidgetComp = WIDGET_COMPONENT_MAP[cid]
+    if (WidgetComp) return <WidgetComp />
   }
 
-  // Placeholder for unimplemented blocks
+  if (type === 'scanner' && placement === 'output_panel') {
+    return <ScannerBlockContent catalogItemId={cid} />
+  }
+
+  if (type === 'astro_rule' && placement === 'panel_block') {
+    const ruleCode = cid.startsWith('astro_rule:') ? cid.slice('astro_rule:'.length) : cid
+    return <AstroRuleBlockContent ruleCode={ruleCode} />
+  }
+
+  if (type === 'vani_correlation') return <VaNiPlaceholder />
+
+  // Fallback: show description or raw id
+  const description = getCatalogItem(cid)?.description
   return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '8px 12px' }}>
@@ -80,15 +293,16 @@ function BlockContent({ block }: { block: FrameworkBlock }) {
         ? <span style={{ fontSize: 11, color: 'rgba(255,255,255,.2)', lineHeight: 1.5,
             textAlign: 'center' }}>{description}</span>
         : <span style={{ fontSize: 11, color: 'rgba(255,255,255,.12)',
-            fontFamily: 'var(--font-mono, monospace)' }}>{catalogItemId}</span>
+            fontFamily: 'var(--font-mono,monospace)' }}>{cid}</span>
       }
     </div>
   )
 }
 
 export default function WorkspaceBlock({ block, editMode, isDraggable, effectivePosition, isMaximized, onRemove, onResizeStart, onMaximize }: Props) {
-  const isChart = block.type === 'chart'
-  const isVaNi  = block.added_by === 'vani' && !isChart
+  const isChart      = block.type === 'chart'
+  const isVaNiCorr   = block.type === 'vani_correlation'
+  const isVaNi       = (block.added_by === 'vani' || isVaNiCorr) && !isChart
   const catalog = getCatalogItem(block.catalog_item_id)
   const icon    = TYPE_ICON[block.type] ?? '◎'
 
