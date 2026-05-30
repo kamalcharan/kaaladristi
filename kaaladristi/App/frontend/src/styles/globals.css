@@ -212,5 +212,3 @@ body::before {
   transform: translateY(0);
 }
 
-/* Hide lightweight-charts TradingView attribution logo */
-.tv-lightweight-charts { display: none !important; }
