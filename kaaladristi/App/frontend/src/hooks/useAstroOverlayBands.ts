@@ -5,6 +5,9 @@ import type { ChartOverlay } from '@/types/framework'
 import { fetchAstroBands, type AstroBand } from '@/services/astroOverlayService'
 import { ITEM_DEFAULT_COLOR, TYPE_DEFAULT_COLOR } from '@/components/domain/Workspace/overlayColors'
 
+// Stable empty reference — prevents new [] on every render when data is undefined
+const EMPTY_BANDS: AstroBand[] = []
+
 /** Returns AstroBand[] for all visible astro_zone overlays. */
 export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
   // Only visible astro_zone overlays
@@ -37,12 +40,12 @@ export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
     [overlayColors, since],
   )
 
-  const { data = [] } = useQuery({
+  const { data } = useQuery({
     queryKey,
     queryFn:  () => fetchAstroBands(overlayColors, since),
     staleTime: 5 * 60_000,
     enabled:  overlayColors.size > 0,
   })
 
-  return data
+  return data ?? EMPTY_BANDS
 }

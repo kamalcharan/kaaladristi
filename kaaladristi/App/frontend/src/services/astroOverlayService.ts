@@ -1,29 +1,32 @@
 import { from } from './postgrest'
 
 export interface AstroBand {
-  ruleCode:  string
-  from:      string   // YYYY-MM-DD
-  to:        string   // YYYY-MM-DD
-  matched:   boolean | null
-  color:     string   // user-picked overlay color
+  ruleCode:    string
+  displayName: string
+  from:        string   // YYYY-MM-DD
+  to:          string   // YYYY-MM-DD
+  matched:     boolean | null
+  color:       string   // user-picked overlay color
 }
 
-/** Resolve rule codes → DB ids in one request. */
-async function fetchRuleIdsByCode(
+interface RuleMeta { id: number; rule_code: string; display_name: string }
+
+/** Resolve rule codes → DB ids + display names in one request. */
+async function fetchRuleMetaByCode(
   ruleCodes: string[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, RuleMeta>> {
   if (ruleCodes.length === 0) return new Map()
 
   const { data, error } = await from('km_astro_rule_master')
-    .select('id,rule_code')
+    .select('id,rule_code,display_name')
     .in('rule_code', ruleCodes)
     .execute()
 
   if (error || !data) return new Map()
 
-  const map = new Map<string, number>()
-  for (const row of data as { id: number; rule_code: string }[]) {
-    map.set(row.rule_code, row.id)
+  const map = new Map<string, RuleMeta>()
+  for (const row of data as RuleMeta[]) {
+    map.set(row.rule_code, row)
   }
   return map
 }
@@ -42,13 +45,13 @@ export async function fetchAstroBands(
   const ruleCodes = Array.from(overlayColors.keys())
   if (ruleCodes.length === 0) return []
 
-  const codeToId = await fetchRuleIdsByCode(ruleCodes)
-  const ruleIds  = Array.from(codeToId.values())
+  const codeToMeta = await fetchRuleMetaByCode(ruleCodes)
+  const ruleIds    = Array.from(codeToMeta.values()).map(m => m.id)
   if (ruleIds.length === 0) return []
 
-  // Invert map: id → ruleCode
-  const idToCode = new Map<number, string>()
-  for (const [code, id] of codeToId) idToCode.set(id, code)
+  // Invert map: id → meta
+  const idToMeta = new Map<number, RuleMeta>()
+  for (const meta of codeToMeta.values()) idToMeta.set(meta.id, meta)
 
   const { data, error } = await from('km_rule_transits')
     .select('rule_id,start_date,end_date,matched')
@@ -66,14 +69,15 @@ export async function fetchAstroBands(
     end_date: string
     matched: boolean | null
   }[]) {
-    const ruleCode = idToCode.get(row.rule_id)
-    if (!ruleCode) continue
-    const color = overlayColors.get(ruleCode) ?? '#c9a84c'
+    const meta = idToMeta.get(row.rule_id)
+    if (!meta) continue
+    const color = overlayColors.get(meta.rule_code) ?? '#c9a84c'
     bands.push({
-      ruleCode,
-      from:    row.start_date,
-      to:      row.end_date,
-      matched: row.matched,
+      ruleCode:    meta.rule_code,
+      displayName: meta.display_name,
+      from:        row.start_date,
+      to:          row.end_date,
+      matched:     row.matched,
       color,
     })
   }
