@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import type { FrameworkBlock } from '@/types/framework'
+import type { FrameworkBlock, GridPosition } from '@/types/framework'
 import { getCatalogItem } from '@/constants/catalogItems'
 import MagicRsWidget from '@/components/domain/Catalog/widgets/MagicRsWidget'
 import OrderFlowWidget from '@/components/domain/Catalog/widgets/OrderFlowWidget'
@@ -14,9 +14,12 @@ import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookC
 const TODAY = new Date().toISOString().slice(0, 10)
 
 interface Props {
-  block:    FrameworkBlock
-  editMode: boolean
-  onRemove: (id: string) => void
+  block:             FrameworkBlock
+  editMode:          boolean
+  isDraggable:       boolean
+  effectivePosition: GridPosition
+  onRemove:          (id: string) => void
+  onResizeStart:     (blockId: string, startX: number, startY: number, startPos: GridPosition) => void
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -69,17 +72,17 @@ function BlockContent({
   )
 }
 
-export default function WorkspaceBlock({ block, editMode, onRemove }: Props) {
+export default function WorkspaceBlock({ block, editMode, isDraggable, effectivePosition, onRemove, onResizeStart }: Props) {
   const isVaNi  = block.added_by === 'vani'
   const catalog = getCatalogItem(block.catalog_item_id)
   const name    = catalog?.display_name ?? block.catalog_item_id
   const badge   = PLACEMENT_BADGE[block.placement] ?? PLACEMENT_BADGE.panel_block
   const icon    = TYPE_ICON[block.type] ?? '◎'
 
-  // Drag — disabled when not in edit mode
+  // Drag — disabled when not isDraggable (covers edit-mode off AND resize-in-progress)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id:       block.id,
-    disabled: !editMode,
+    disabled: !isDraggable,
   })
 
   // Right-click context menu
@@ -107,10 +110,10 @@ export default function WorkspaceBlock({ block, editMode, onRemove }: Props) {
       ref={setNodeRef}
       onContextMenu={handleContextMenu}
       style={{
-        gridColumnStart: block.grid_position.col_start,
-        gridColumnEnd:   block.grid_position.col_end,
-        gridRowStart:    block.grid_position.row_start,
-        gridRowEnd:      block.grid_position.row_end,
+        gridColumnStart: effectivePosition.col_start,
+        gridColumnEnd:   effectivePosition.col_end,
+        gridRowStart:    effectivePosition.row_start,
+        gridRowEnd:      effectivePosition.row_end,
         transform:       CSS.Translate.toString(transform),
         opacity:         isDragging ? 0.5 : 1,
         zIndex:          isDragging ? 100 : undefined,
@@ -195,6 +198,34 @@ export default function WorkspaceBlock({ block, editMode, onRemove }: Props) {
         catalogItemId={block.catalog_item_id}
         description={catalog?.description}
       />
+
+      {/* Resize handle — bottom-right corner, edit mode only */}
+      {editMode && (
+        <div
+          onMouseDown={e => {
+            e.preventDefault()
+            e.stopPropagation()
+            onResizeStart(block.id, e.clientX, e.clientY, block.grid_position)
+          }}
+          title="Drag to resize"
+          style={{
+            position: 'absolute', right: 0, bottom: 0,
+            width: 20, height: 20,
+            cursor: 'se-resize',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
+            padding: '3px',
+            zIndex: 10,
+          }}
+        >
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ opacity: 0.35, transition: 'opacity .15s' }}
+            onMouseEnter={e => { (e.currentTarget as SVGElement).style.opacity = '0.7' }}
+            onMouseLeave={e => { (e.currentTarget as SVGElement).style.opacity = '0.35' }}
+          >
+            <line x1="1" y1="9" x2="9" y2="1" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="5" y1="9" x2="9" y2="5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </div>
+      )}
 
       {/* Context menu */}
       {menuOpen && (
