@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   DndContext,
   PointerSensor,
@@ -11,8 +11,8 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
-import InstrumentPickerModal from './InstrumentPickerModal'
 import { effectiveDotColor } from './overlayColors'
+import { fetchActiveIndices, type IndexOption } from '@/services/indexPickerService'
 
 const COLS            = 12
 const ROWS            = 10
@@ -141,6 +141,115 @@ function ColorPicker({
 
 // ── Main canvas ───────────────────────────────────────────────────────────────
 
+// ── Index dropdown (attached to the + index button) ───────────────────────────
+
+function IndexDropdown({
+  anchorX, anchorY, framework: fw, onClose,
+}: {
+  anchorX: number; anchorY: number
+  framework: UserFramework
+  onClose: () => void
+}) {
+  const [indices, setIndices] = useState<IndexOption[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [search, setSearch]     = useState('')
+  const { addChartBlock } = useFrameworkStore()
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetchActiveIndices().then(data => { setIndices(data); setLoading(false) })
+  }, [])
+
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [onClose])
+
+  const activeIds = new Set(
+    fw.blocks.filter(b => b.type === 'chart').map(b => b.catalog_item_id)
+  )
+
+  const filtered = indices.filter(idx =>
+    idx.display_name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'fixed', top: anchorY + 6, left: anchorX,
+        width: 280, maxHeight: 340, zIndex: 600,
+        background: 'rgba(9,12,16,.98)',
+        border: '1px solid rgba(255,255,255,.1)',
+        borderRadius: 10,
+        boxShadow: '0 12px 40px rgba(0,0,0,.7)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Search */}
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,.07)', flexShrink: 0 }}>
+        <input
+          autoFocus
+          type="text"
+          placeholder="Search indices…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '6px 10px', borderRadius: 6,
+            border: '1px solid rgba(255,255,255,.1)',
+            background: 'rgba(255,255,255,.04)',
+            color: 'rgba(255,255,255,.8)', fontSize: 12,
+            outline: 'none', fontFamily: 'inherit',
+          }}
+        />
+      </div>
+
+      {/* List */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+        {loading ? (
+          <div style={{ padding: '20px 0', textAlign: 'center',
+            fontSize: 11, color: 'rgba(255,255,255,.25)',
+            fontFamily: 'var(--font-mono, monospace)' }}>
+            loading…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ padding: '20px 0', textAlign: 'center',
+            fontSize: 12, color: 'rgba(255,255,255,.2)' }}>
+            No results
+          </div>
+        ) : filtered.map(idx => {
+          const added = activeIds.has(`chart:${idx.id}`)
+          return (
+            <button
+              key={idx.id}
+              onClick={() => { if (!added) { addChartBlock({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() } }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', padding: '7px 12px', border: 'none',
+                background: 'transparent', textAlign: 'left', cursor: added ? 'default' : 'pointer',
+                opacity: added ? 0.45 : 1,
+              }}
+              onMouseEnter={e => { if (!added) (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,.08)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+            >
+              <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{idx.display_name}</span>
+              {added
+                ? <span style={{ fontSize: 10, color: '#7c6af7', fontFamily: 'var(--font-mono,monospace)' }}>✓</span>
+                : <span style={{ fontSize: 16, color: 'rgba(124,106,247,.5)' }}>+</span>
+              }
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 interface Props {
   framework: UserFramework
 }
@@ -150,7 +259,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
   const [picker, setPicker] = useState<{ id: string; x: number; y: number } | null>(null)
-  const [instrumentPickerOpen, setInstrumentPickerOpen] = useState(false)
+  const [indexDropdown, setIndexDropdown] = useState<{ x: number; y: number } | null>(null)
 
   // Block resize state
   const [resizingBlockId, setResizingBlockId] = useState<string | null>(null)
@@ -373,7 +482,11 @@ export default function WorkspaceCanvas({ framework }: Props) {
 
         {/* + index */}
         <button
-          onClick={() => setInstrumentPickerOpen(true)}
+          onClick={e => {
+            if (indexDropdown) { setIndexDropdown(null); return }
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            setIndexDropdown({ x: rect.left, y: rect.bottom })
+          }}
           style={{
             padding: '6px 14px', borderRadius: 100, cursor: 'pointer', flexShrink: 0,
             fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
@@ -505,9 +618,14 @@ export default function WorkspaceCanvas({ framework }: Props) {
         />
       )}
 
-      {/* Instrument picker modal */}
-      {instrumentPickerOpen && (
-        <InstrumentPickerModal onClose={() => setInstrumentPickerOpen(false)} />
+      {/* Index dropdown */}
+      {indexDropdown && (
+        <IndexDropdown
+          anchorX={indexDropdown.x}
+          anchorY={indexDropdown.y}
+          framework={framework}
+          onClose={() => setIndexDropdown(null)}
+        />
       )}
     </div>
   )
