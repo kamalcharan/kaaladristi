@@ -293,25 +293,40 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     // Don't add if this instrument already has a chart block
     if (framework.blocks.some(b => b.type === 'chart' && b.catalog_item_id === `chart:${instrument.id}`)) return
 
-    // Find space to the right of or below existing chart blocks
+    // Charts stack vertically in the chart zone (cols 1–17).
+    // Find the lowest row_end among existing chart blocks, then start there.
     const chartBlocks = framework.blocks.filter(b => b.type === 'chart')
-    const maxChartColEnd = chartBlocks.reduce((m, b) => Math.max(m, b.grid_position.col_end), 1)
-    const newColStart = Math.min(maxChartColEnd, 7)  // cap so there's sidebar room
-    const newColEnd = Math.min(newColStart + 6, 9)
+    const maxRowEnd = chartBlocks.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
+
+    // Each additional chart gets half the vertical space of the canvas (10 rows out of 20).
+    // If this is the first chart added via addChartBlock (bootstrap already placed one),
+    // we split the existing chart's rows and put the new one below.
+    const newRowStart = Math.min(maxRowEnd, 19)   // cap to leave at least 1 row
+    const newRowEnd   = 21                          // go to bottom
+
+    // Also shrink the topmost chart so it doesn't cover the new chart's rows
+    const updatedBlocks = framework.blocks.map(b => {
+      if (b.type !== 'chart') return b
+      // Only shrink if it would overlap the new chart's rows
+      if (b.grid_position.row_end > newRowStart) {
+        return { ...b, grid_position: { ...b.grid_position, row_end: newRowStart } }
+      }
+      return b
+    })
 
     const block: FrameworkBlock = {
       id: crypto.randomUUID(),
       type: 'chart',
       catalog_item_id: `chart:${instrument.id}`,
       placement: 'panel_block',
-      grid_position: { col_start: 1, col_end: newColEnd, row_start: 1, row_end: 10 },
+      grid_position: { col_start: 1, col_end: 17, row_start: newRowStart, row_end: newRowEnd },
       config: { instrument },
       added_by: 'user',
       added_at: new Date().toISOString(),
     }
     set(s => ({
       framework: s.framework
-        ? { ...s.framework, blocks: [...s.framework.blocks, block], version: s.framework.version + 1 }
+        ? { ...s.framework, blocks: [...updatedBlocks, block], version: s.framework.version + 1 }
         : null,
     }))
     scheduleSave(saveFramework)
