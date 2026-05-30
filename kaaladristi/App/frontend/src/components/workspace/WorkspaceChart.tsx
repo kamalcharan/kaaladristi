@@ -102,6 +102,7 @@ export default function WorkspaceChart({ height }: Props) {
         <TradingChart
           data={data}
           height={height - HEADER_H}
+          workspaceMode
           overlays={overlays}
           highlightDate={playerDate}
           onCrosshairMove={handleCrosshairMove}

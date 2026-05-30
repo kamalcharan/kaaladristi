@@ -31,21 +31,42 @@ import {
 import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 
-// ── SMA config ──
+// ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
   { key: 'sma_21',  color: '#FFD700', label: 'SMA 21',  width: 1 },
   { key: 'sma_50',  color: '#FF6347', label: 'SMA 50',  width: 1 },
-  { key: 'sma_150', color: '#00CED1', label: 'SMA 150', width: 2 },  // Golden Line
+  { key: 'sma_150', color: '#00CED1', label: 'SMA 150', width: 2 },
   { key: 'sma_200', color: '#DA70D6', label: 'SMA 200', width: 1 },
 ];
+
+// ── Overlay → IndicatorRow column + default color ──
+// Used in workspaceMode to draw framework-driven indicator lines.
+const OVERLAY_COL: Partial<Record<string, keyof IndicatorRow>> = {
+  'ema_20':     'ema_20',
+  'ema_60':     'ema_60',
+  'sma_50':     'sma_50',
+  'sma_150':    'sma_150',
+  'sma_200':    'sma_200',
+  'supertrend': 'supertrend',
+};
+
+const OVERLAY_DEFAULT_COLOR: Record<string, string> = {
+  'ema_20':     '#FFD700',
+  'ema_60':     '#FFA500',
+  'sma_50':     '#FF6347',
+  'sma_150':    '#00CED1',
+  'sma_200':    '#DA70D6',
+  'supertrend': '#10b981',
+};
 
 interface TradingChartProps {
   data: IndicatorRow[];
   height?: number;
-  compact?: boolean;  // hide RSI + Sniper panes (when Visual Pulse cards show them)
-  highlightDate?: string | null;  // scroll chart to center on this date
+  compact?: boolean;       // hide RSI + Sniper panes (Visual Pulse mode)
+  workspaceMode?: boolean; // framework-driven: no hardcoded overlays/subpanes
+  highlightDate?: string | null;
   overlays?: ChartOverlay[];
-  // Optional sync callbacks — used by workspace, ignored by ChartView
+  // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
 }
@@ -105,7 +126,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, highlightDate = null, overlays = [], onVisibleRangeChange, onCrosshairMove }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], onVisibleRangeChange, onCrosshairMove }: TradingChartProps) {
   const mainRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
   const sniperRef = useRef<HTMLDivElement>(null);
@@ -114,8 +135,9 @@ export default function TradingChart({ data, height = 900, compact = false, high
   const chartsRef = useRef<IChartApi[]>([]);
 
   const buildCharts = useCallback(() => {
-    if (!mainRef.current || !magicRef.current) return;
-    if (!compact && (!rsiRef.current || !sniperRef.current)) return;
+    if (!mainRef.current) return;
+    if (!workspaceMode && !magicRef.current) return;
+    if (!workspaceMode && !compact && (!rsiRef.current || !sniperRef.current)) return;
     if (data.length === 0) return;
 
     // Read theme colors from CSS vars
@@ -125,7 +147,9 @@ export default function TradingChart({ data, height = 900, compact = false, high
     chartsRef.current.forEach((c) => c.remove());
     chartsRef.current = [];
 
-    const mainHeight = compact ? Math.round(height * 0.70) : Math.round(height * 0.50);
+    const mainHeight = workspaceMode
+      ? height
+      : compact ? Math.round(height * 0.70) : Math.round(height * 0.50);
     const subHeight = Math.round(height * 0.16);
 
     // ═══════════════════════════════════════════════════════════════════
@@ -176,41 +200,41 @@ export default function TradingChart({ data, height = 900, compact = false, high
     }));
     volumeSeries.setData(volData);
 
-    // SMA lines
-    for (const sma of SMA_LINES) {
-      const lineData: LineData<Time>[] = [];
-      for (const d of data) {
-        const val = d[sma.key] as number | null;
-        if (val != null) lineData.push({ time: toTime(d.trade_date), value: val });
+    // SMA lines — only in legacy (non-workspace) mode
+    if (!workspaceMode) {
+      for (const sma of SMA_LINES) {
+        const lineData: LineData<Time>[] = [];
+        for (const d of data) {
+          const val = d[sma.key] as number | null;
+          if (val != null) lineData.push({ time: toTime(d.trade_date), value: val });
+        }
+        if (lineData.length > 0) {
+          const series = mainChart.addSeries(LineSeries, {
+            color: sma.color,
+            lineWidth: sma.width,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          series.setData(lineData);
+        }
       }
-      if (lineData.length > 0) {
-        const series = mainChart.addSeries(LineSeries, {
-          color: sma.color,
-          lineWidth: sma.width,
+
+      // SuperTrend line
+      const stData: LineData<Time>[] = [];
+      for (const d of data) {
+        if (d.supertrend != null) stData.push({ time: toTime(d.trade_date), value: d.supertrend });
+      }
+      if (stData.length > 0) {
+        const stSeries = mainChart.addSeries(LineSeries, {
+          color: C.riskGreen,
+          lineWidth: 2 as LineWidth,
           priceLineVisible: false,
           lastValueVisible: false,
           crosshairMarkerVisible: false,
         });
-        series.setData(lineData);
+        stSeries.setData(stData);
       }
-    }
-
-    // SuperTrend line
-    const stData: LineData<Time>[] = [];
-    for (const d of data) {
-      if (d.supertrend != null) {
-        stData.push({ time: toTime(d.trade_date), value: d.supertrend });
-      }
-    }
-    if (stData.length > 0) {
-      const stSeries = mainChart.addSeries(LineSeries, {
-        color: C.riskGreen,
-        lineWidth: 2 as LineWidth,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-      });
-      stSeries.setData(stData);
     }
 
     // Markers: Dot signals + Swing High/Low
@@ -234,7 +258,7 @@ export default function TradingChart({ data, height = 900, compact = false, high
     let rsiChart: IChartApi | null = null;
     let sniperChart: IChartApi | null = null;
 
-    if (!compact && rsiRef.current) {
+    if (!workspaceMode && !compact && rsiRef.current) {
       rsiChart = createChart(rsiRef.current, {
         ...createChartOptions(rsiRef.current, subHeight, C),
         rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
@@ -266,7 +290,7 @@ export default function TradingChart({ data, height = 900, compact = false, high
     // PANE 3: Sniper Dragon Histogram — hidden in compact mode
     // ═══════════════════════════════════════════════════════════════════
 
-    if (!compact && sniperRef.current) {
+    if (!workspaceMode && !compact && sniperRef.current) {
       sniperChart = createChart(sniperRef.current, {
         ...createChartOptions(sniperRef.current, subHeight, C),
         rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
@@ -299,80 +323,71 @@ export default function TradingChart({ data, height = 900, compact = false, high
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // PANE 4: MagicRS + MagicMA
+    // PANE 4: MagicRS + MagicMA — legacy mode only
     // ═══════════════════════════════════════════════════════════════════
 
-    const magicChart = createChart(magicRef.current, {
-      ...createChartOptions(magicRef.current, subHeight, C),
-      rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
-    });
-    chartsRef.current.push(magicChart);
+    let magicChart: IChartApi | null = null;
 
-    // MagicRS line
-    const rsLine: LineData<Time>[] = [];
-    for (const d of data) { if (d.magic_rs != null) rsLine.push({ time: toTime(d.trade_date), value: d.magic_rs }); }
-    if (rsLine.length > 0) {
-      const rsSeries = magicChart.addSeries(LineSeries, { color: C.riskGreen, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
-      rsSeries.setData(rsLine);
+    if (!workspaceMode && magicRef.current) {
+      magicChart = createChart(magicRef.current, {
+        ...createChartOptions(magicRef.current, subHeight, C),
+        rightPriceScale: { borderColor: C.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
+      });
+      chartsRef.current.push(magicChart);
+
+      const rsLine: LineData<Time>[] = [];
+      for (const d of data) { if (d.magic_rs != null) rsLine.push({ time: toTime(d.trade_date), value: d.magic_rs }); }
+      if (rsLine.length > 0) {
+        const rsSeries = magicChart.addSeries(LineSeries, { color: C.riskGreen, lineWidth: 2 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+        rsSeries.setData(rsLine);
+      }
+
+      const maLine: LineData<Time>[] = [];
+      for (const d of data) { if (d.magic_ma != null) maLine.push({ time: toTime(d.trade_date), value: d.magic_ma }); }
+      if (maLine.length > 0) {
+        const maSeries = magicChart.addSeries(LineSeries, { color: C.indigo, lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
+        maSeries.setData(maLine);
+      }
+
+      const zeroLine = magicChart.addSeries(LineSeries, {
+        color: 'rgba(255,255,255,0.15)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      });
+      zeroLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 0 })));
     }
-
-    // MagicMA line
-    const maLine: LineData<Time>[] = [];
-    for (const d of data) { if (d.magic_ma != null) maLine.push({ time: toTime(d.trade_date), value: d.magic_ma }); }
-    if (maLine.length > 0) {
-      const maSeries = magicChart.addSeries(LineSeries, { color: C.indigo, lineWidth: 1 as LineWidth, priceLineVisible: false, lastValueVisible: true });
-      maSeries.setData(maLine);
-    }
-
-    // Zero line
-    const zeroLine = magicChart.addSeries(LineSeries, {
-      color: 'rgba(255,255,255,0.15)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
-      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-    });
-    zeroLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 0 })));
 
     // ═══════════════════════════════════════════════════════════════════
-    // OVERLAYS — injected from framework.chart_overlays
+    // OVERLAYS — framework-driven (all modes)
     // ═══════════════════════════════════════════════════════════════════
 
     for (const overlay of overlays.filter(o => o.visible)) {
-      const color = overlay.color ?? '#7c6af7'
+      const color = overlay.color ?? OVERLAY_DEFAULT_COLOR[overlay.catalog_item_id] ?? '#7c6af7'
 
-      if (overlay.type === 'astro_zone') {
-        // TODO: wire astro date ranges from rule engine
-        const zoneSeries = mainChart.addSeries(AreaSeries, {
-          lineColor: 'transparent',
-          topColor: color + '22',
-          bottomColor: color + '08',
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-        })
-        zoneSeries.setData([]) // TODO: date ranges from km_rule_transits
+      if (overlay.type === 'indicator_line') {
+        const col = OVERLAY_COL[overlay.catalog_item_id]
+        const lineData: LineData<Time>[] = col
+          ? data.flatMap(d => {
+              const val = d[col] as number | null
+              return val != null ? [{ time: toTime(d.trade_date), value: val }] : []
+            })
+          : []
+
+        if (lineData.length > 0) {
+          const lineSeries = mainChart.addSeries(LineSeries, {
+            color,
+            lineWidth: 1 as LineWidth,
+            priceLineVisible: false,
+            lastValueVisible: true,
+            crosshairMarkerVisible: false,
+          })
+          lineSeries.setData(lineData)
+        }
+      } else if (overlay.type === 'astro_zone') {
+        // Deferred — requires rule engine data from km_rule_transits
       } else if (overlay.type === 'astro_marker') {
-        // TODO: wire astro event dates from rule engine
-        // createSeriesMarkers(candleSeries, []) deferred until km_astro_events is wired
-      } else if (overlay.type === 'indicator_line') {
-        // TODO: wire indicator values from overlay config
-        const lineSeries = mainChart.addSeries(LineSeries, {
-          color,
-          lineWidth: 1 as LineWidth,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-        })
-        lineSeries.setData([]) // TODO: overlay config → LineData[]
+        // Deferred — requires km_astro_events wiring
       } else if (overlay.type === 'indicator_band') {
-        // TODO: wire upper/lower band values from overlay config
-        const bandSeries = mainChart.addSeries(AreaSeries, {
-          lineColor: color,
-          topColor: color + '33',
-          bottomColor: color + '11',
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-        })
-        bandSeries.setData([]) // TODO: overlay config → AreaData[]
+        // Deferred — pivot levels require separate multi-series rendering
       }
     }
 
@@ -411,7 +426,7 @@ export default function TradingChart({ data, height = 900, compact = false, high
     }
 
     mainChart.timeScale().fitContent();
-  }, [data, height, compact, overlays, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, overlays, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
@@ -447,23 +462,25 @@ export default function TradingChart({ data, height = 900, compact = false, high
 
   return (
     <div className="space-y-0.5">
-      {/* Legend */}
-      <div className="flex items-center gap-4 mb-2 text-[10px] text-muted">
-        {SMA_LINES.map((s) => (
-          <span key={s.key} className="flex items-center gap-1">
-            <span className="inline-block w-3 h-0.5 rounded" style={{ backgroundColor: s.color }} />
-            {s.label}
+      {/* Legend — legacy mode only */}
+      {!workspaceMode && (
+        <div className="flex items-center gap-4 mb-2 text-[10px] text-muted">
+          {SMA_LINES.map((s) => (
+            <span key={s.key} className="flex items-center gap-1">
+              <span className="inline-block w-3 h-0.5 rounded" style={{ backgroundColor: s.color }} />
+              {s.label}
+            </span>
+          ))}
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-3 h-0.5 rounded bg-risk-green" />
+            SuperTrend
           </span>
-        ))}
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-0.5 rounded bg-risk-green" />
-          SuperTrend
-        </span>
-      </div>
+        </div>
+      )}
 
       <div ref={mainRef} className="rounded-xl overflow-hidden" />
 
-      {!compact && (
+      {!workspaceMode && !compact && (
         <div className="relative">
           <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
             RSI(14) <span style={{ color: 'var(--accent-violet)' }}>━</span> &nbsp; MFI(14) <span style={{ color: 'var(--accent-cyan)' }}>━</span>
@@ -472,7 +489,7 @@ export default function TradingChart({ data, height = 900, compact = false, high
         </div>
       )}
 
-      {!compact && (
+      {!workspaceMode && !compact && (
         <div className="relative">
           <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
             Sniper Dragon — <span style={{ color: 'var(--risk-red)' }}>Inst</span> / <span style={{ color: 'var(--risk-amber)' }}>Hot$</span> / <span style={{ color: 'var(--risk-green)' }}>Retail</span>
@@ -481,12 +498,14 @@ export default function TradingChart({ data, height = 900, compact = false, high
         </div>
       )}
 
-      <div className="relative">
-        <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
-          MagicRS <span style={{ color: 'var(--risk-green)' }}>━</span> &nbsp; MagicMA <span style={{ color: 'var(--accent-indigo)' }}>━</span>
-        </span>
-        <div ref={magicRef} className="rounded-xl overflow-hidden" />
-      </div>
+      {!workspaceMode && (
+        <div className="relative">
+          <span className="absolute top-1 left-2 text-[10px] text-muted z-10 pointer-events-none">
+            MagicRS <span style={{ color: 'var(--risk-green)' }}>━</span> &nbsp; MagicMA <span style={{ color: 'var(--accent-indigo)' }}>━</span>
+          </span>
+          <div ref={magicRef} className="rounded-xl overflow-hidden" />
+        </div>
+      )}
     </div>
   );
 }

@@ -24,6 +24,7 @@ function getStartDate(range: TimeRange): string | null {
 
 // Indicator columns to fetch — all that migration 005 added
 const INDICATOR_COLS = [
+  'ema_20', 'ema_60',
   'sma_8', 'sma_21', 'sma_50', 'sma_55', 'sma_89', 'sma_150', 'sma_200', 'sma_233',
   'rsi_14', 'rsi_9', 'mfi_14',
   'atr_10', 'atr_14', 'supertrend', 'supertrend_dir',
@@ -45,6 +46,9 @@ export interface IndicatorRow {
   low: number;
   close: number;
   volume: number;
+  // EMAs
+  ema_20: number | null;
+  ema_60: number | null;
   // SMAs
   sma_8: number | null;
   sma_21: number | null;
