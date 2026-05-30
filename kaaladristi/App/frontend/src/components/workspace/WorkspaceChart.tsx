@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { fetchInstrumentEod } from '@/services/indicatorData'
 import TradingChart from '@/components/charts/TradingChart'
+import { useChartSyncStore } from '@/stores/chartSyncStore'
 
 const DISPLAY_NAME: Record<string, string> = {
   NIFTY50:   'NIFTY 50',
@@ -20,7 +22,7 @@ interface Props {
 
 export default function WorkspaceChart({ height }: Props) {
   const framework = useFrameworkStore(s => s.framework)
-  const symbol = framework?.instruments?.[0] ?? null
+  const symbol  = framework?.instruments?.[0] ?? null
   const overlays = framework?.chart_overlays ?? []
 
   const { data = [], isLoading } = useQuery({
@@ -29,6 +31,23 @@ export default function WorkspaceChart({ height }: Props) {
     staleTime: 120_000,
     enabled: !!symbol,
   })
+
+  const { setTotalBars, setActiveBarIndex, setVisibleRange } = useChartSyncStore()
+
+  // Seed the store total once data arrives
+  useEffect(() => {
+    if (data.length > 0) setTotalBars(data.length)
+  }, [data.length, setTotalBars])
+
+  const handleCrosshairMove = useCallback(
+    (idx: number) => setActiveBarIndex(idx),
+    [setActiveBarIndex],
+  )
+
+  const handleVisibleRangeChange = useCallback(
+    (from: string, to: string) => setVisibleRange(from, to),
+    [setVisibleRange],
+  )
 
   if (!symbol) {
     return (
@@ -81,6 +100,8 @@ export default function WorkspaceChart({ height }: Props) {
           data={data}
           height={height - HEADER_H}
           overlays={overlays}
+          onCrosshairMove={handleCrosshairMove}
+          onVisibleRangeChange={handleVisibleRangeChange}
         />
       )}
     </div>
