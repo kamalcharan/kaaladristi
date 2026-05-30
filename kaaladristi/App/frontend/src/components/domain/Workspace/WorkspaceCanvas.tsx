@@ -82,7 +82,7 @@ interface Props {
 export default function WorkspaceCanvas({ framework }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { removeBlock, updateBlockPosition, saveFramework, toggleOverlayVisibility } = useFrameworkStore()
+  const { removeBlock, updateBlockPosition, saveFramework, toggleOverlayVisibility, removeOverlay } = useFrameworkStore()
 
   const sensors = useSensors(useSensor(PointerSensor, {
     activationConstraint: { distance: 8 },
@@ -144,30 +144,53 @@ export default function WorkspaceCanvas({ framework }: Props) {
             const label   = catalog?.display_name ?? o.catalog_item_id.replace('astro_rule:', '')
             const dot     = OVERLAY_DOT_COLOR[o.type] ?? '#7c6af7'
             return (
-              <button
+              <div
                 key={o.catalog_item_id}
-                onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
-                title={o.visible ? 'Click to hide' : 'Click to show'}
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '4px 10px', borderRadius: 100, flexShrink: 0,
+                  display: 'inline-flex', alignItems: 'center', gap: 0,
+                  borderRadius: 100, flexShrink: 0,
                   border: '1px solid rgba(255,255,255,.1)',
                   background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
-                  cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                  color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)',
                   opacity: o.visible ? 1 : 0.4,
                   transition: 'all .15s',
                 }}
               >
-                <span style={{
-                  width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                  background: dot, opacity: o.visible ? 1 : 0.4,
-                }} />
-                {label}
-                <span style={{ fontSize: 10, opacity: 0.5, marginLeft: 2 }}>
-                  {o.visible ? '👁' : '👁‍🗨'}
-                </span>
-              </button>
+                {/* Toggle visibility */}
+                <button
+                  onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
+                  title={o.visible ? 'Click to hide' : 'Click to show'}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '4px 8px 4px 10px', borderRadius: '100px 0 0 100px',
+                    border: 'none', background: 'transparent',
+                    cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                    color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)',
+                  }}
+                >
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                    background: dot, opacity: o.visible ? 1 : 0.4,
+                  }} />
+                  {label}
+                </button>
+                {/* Remove overlay */}
+                <button
+                  onClick={() => removeOverlay(o.catalog_item_id)}
+                  title="Remove overlay"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 20, height: 20, borderRadius: '0 100px 100px 0',
+                    border: 'none', background: 'transparent',
+                    cursor: 'pointer', fontSize: 9,
+                    color: 'rgba(255,255,255,.25)',
+                    transition: 'color .15s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.25)' }}
+                >
+                  ✕
+                </button>
+              </div>
             )
           })}
 
