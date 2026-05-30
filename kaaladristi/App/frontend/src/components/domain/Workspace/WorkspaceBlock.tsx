@@ -434,8 +434,10 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           {isMaximized ? '⊟' : '⊞'}
         </button>
 
-        {editMode && (
+        {/* Chart blocks: remove always visible. Other blocks: only in edit mode. */}
+        {(editMode || isChart) && (
           <button onClick={() => onRemove(block.id)}
+            title="Remove"
             style={{ width: 22, height: 22, borderRadius: 5, border: 'none',
               background: 'rgba(248,113,113,.12)', color: 'rgba(248,113,113,.6)',
               cursor: 'pointer', fontSize: 11, flexShrink: 0, lineHeight: 1,
