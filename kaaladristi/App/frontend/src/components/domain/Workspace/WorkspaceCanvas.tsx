@@ -20,12 +20,25 @@ const CELL_HEIGHT_REM = 6
 // Chart cell spans rows 1-9 (9 rows) × 16px/rem base — passed to TradingChart height
 const CHART_HEIGHT_PX = 9 * CELL_HEIGHT_REM * 16
 
-// Default dot color by overlay type — mirrors OVERLAY_DEFAULT_COLOR in TradingChart
-const OVERLAY_DEFAULT_DOT: Record<string, string> = {
+// Per-item defaults — must match OVERLAY_DEFAULT_COLOR in TradingChart exactly
+const ITEM_DEFAULT_COLOR: Record<string, string> = {
+  'ema_20':     '#FFD700',
+  'ema_60':     '#FFA500',
+  'sma_50':     '#FF6347',
+  'sma_150':    '#00CED1',
+  'sma_200':    '#DA70D6',
+  'supertrend': '#10b981',
+}
+// Fallback by overlay type (astro rules, unknown indicators)
+const TYPE_DEFAULT_COLOR: Record<string, string> = {
   astro_zone:     '#c9a84c',
   astro_marker:   '#c9a84c',
-  indicator_line: '#2dd4bf',
-  indicator_band: '#2dd4bf',
+  indicator_line: '#7c6af7',
+  indicator_band: '#7c6af7',
+}
+
+function effectiveDotColor(overlayId: string, overlayType: string, savedColor?: string): string {
+  return savedColor ?? ITEM_DEFAULT_COLOR[overlayId] ?? TYPE_DEFAULT_COLOR[overlayType] ?? '#7c6af7'
 }
 
 // Preset swatches for the color picker
@@ -82,19 +95,24 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
 }
 
 // ── Color picker popover ──────────────────────────────────────────────────────
+// Uses position:fixed anchored to screen coords so the overflowX scroll
+// container on the pill strip cannot clip it.
 
 function ColorPicker({
-  current, onSelect, onClose,
-}: { current: string; onSelect: (c: string) => void; onClose: () => void }) {
+  anchorX, anchorY, current, onSelect, onClose,
+}: {
+  anchorX: number; anchorY: number
+  current: string; onSelect: (c: string) => void; onClose: () => void
+}) {
   return (
     <>
       {/* Click-away backdrop */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 399 }} />
       <div style={{
-        position: 'absolute', top: '100%', left: 0, marginTop: 6,
+        position: 'fixed', left: anchorX, top: anchorY + 8,
         background: '#1a1f2e', border: '1px solid rgba(255,255,255,.12)',
-        borderRadius: 10, padding: 10, zIndex: 300,
-        boxShadow: '0 8px 24px rgba(0,0,0,.5)',
+        borderRadius: 10, padding: 10, zIndex: 400,
+        boxShadow: '0 8px 24px rgba(0,0,0,.6)',
         width: 164,
       }}>
         {/* Swatches */}
@@ -109,7 +127,6 @@ function ColorPicker({
                 background: c, cursor: 'pointer',
                 outline: c === current ? '2px solid #fff' : '2px solid transparent',
                 outlineOffset: 1,
-                transition: 'outline 0.1s',
               }}
             />
           ))}
@@ -155,7 +172,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
-  const [pickerOpenId, setPickerOpenId] = useState<string | null>(null)
+  const [picker, setPicker] = useState<{ id: string; x: number; y: number } | null>(null)
 
   const {
     removeBlock, updateBlockPosition, saveFramework,
@@ -230,15 +247,15 @@ export default function WorkspaceCanvas({ framework }: Props) {
           {framework.chart_overlays.map(o => {
             const catalog  = getCatalogItem(o.catalog_item_id)
             const label    = catalog?.display_name ?? o.catalog_item_id.replace('astro_rule:', '')
-            const dotColor = o.color ?? OVERLAY_DEFAULT_DOT[o.type] ?? '#7c6af7'
-            const isPickerOpen = pickerOpenId === o.catalog_item_id
+            const dotColor = effectiveDotColor(o.catalog_item_id, o.type, o.color)
+            const isPickerOpen = picker?.id === o.catalog_item_id
 
             return (
               <div
                 key={o.catalog_item_id}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 0,
-                  borderRadius: 100, flexShrink: 0, position: 'relative',
+                  borderRadius: 100, flexShrink: 0,
                   border: '1px solid rgba(255,255,255,.1)',
                   background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
                   opacity: o.visible ? 1 : 0.4,
@@ -247,23 +264,21 @@ export default function WorkspaceCanvas({ framework }: Props) {
               >
                 {/* Color dot — click to open picker */}
                 <button
-                  onClick={e => { e.stopPropagation(); setPickerOpenId(isPickerOpen ? null : o.catalog_item_id) }}
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (isPickerOpen) { setPicker(null); return }
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    setPicker({ id: o.catalog_item_id, x: rect.left, y: rect.bottom })
+                  }}
                   title="Change color"
                   style={{
-                    width: 18, height: 18, marginLeft: 6, padding: 0,
-                    border: 'none', borderRadius: '50%', cursor: 'pointer',
+                    width: 14, height: 14, marginLeft: 8, padding: 0,
+                    border: isPickerOpen ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.2)',
+                    borderRadius: '50%', cursor: 'pointer',
                     background: dotColor, flexShrink: 0,
-                    boxShadow: isPickerOpen ? `0 0 0 2px rgba(255,255,255,.4)` : 'none',
-                    transition: 'box-shadow .15s',
+                    transition: 'border-color .15s',
                   }}
                 />
-                {isPickerOpen && (
-                  <ColorPicker
-                    current={dotColor}
-                    onSelect={c => updateOverlayColor(o.catalog_item_id, c)}
-                    onClose={() => setPickerOpenId(null)}
-                  />
-                )}
 
                 {/* Toggle visibility */}
                 <button
@@ -419,6 +434,21 @@ export default function WorkspaceCanvas({ framework }: Props) {
         onClose={() => setDrawerOpen(false)}
         context={drawerContext}
       />
+
+      {/* Color picker — rendered at root so overflow:auto on pill strip can't clip it */}
+      {picker && (
+        <ColorPicker
+          anchorX={picker.x}
+          anchorY={picker.y}
+          current={effectiveDotColor(
+            picker.id,
+            framework.chart_overlays.find(o => o.catalog_item_id === picker.id)?.type ?? '',
+            framework.chart_overlays.find(o => o.catalog_item_id === picker.id)?.color,
+          )}
+          onSelect={c => updateOverlayColor(picker.id, c)}
+          onClose={() => setPicker(null)}
+        />
+      )}
     </div>
   )
 }
