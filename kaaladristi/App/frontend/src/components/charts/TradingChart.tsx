@@ -112,6 +112,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
       background: { type: ColorType.Solid as const, color: colors.bg },
       textColor: colors.text,
       fontSize: 11,
+      attributionLogo: false,
     },
     grid: {
       vertLines: { color: colors.grid },
