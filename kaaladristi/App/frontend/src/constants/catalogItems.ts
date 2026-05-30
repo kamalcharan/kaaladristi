@@ -210,6 +210,18 @@ const WIDGETS: CatalogItem[] = [
     applicable_to: ['equity', 'index'],
     tier_required: 'paid',
   },
+  {
+    id: 'chart_player',
+    display_name: 'Historical Player',
+    description: 'Timeline scrubber — play through history bar by bar. Syncs all workspace panels and the main chart.',
+    block_type: 'widget',
+    placement: 'panel_block',
+    data_source: 'db_column',
+    db_table: ['km_index_eod', 'km_equity_eod'],
+    db_column: 'trade_date',
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+  },
 ]
 
 // ── Registry ──────────────────────────────────────────────────────────────────
