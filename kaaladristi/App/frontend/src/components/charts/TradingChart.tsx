@@ -9,7 +9,7 @@
  * All panes share a synced time scale.
  */
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import {
   createChart,
   createSeriesMarkers,
@@ -146,6 +146,19 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const drawBandsRef  = useRef<(() => void) | null>(null);
 
   const chartsRef = useRef<IChartApi[]>([]);
+
+  // Tooltip state for astro band hover
+  const [bandTooltip, setBandTooltip] = useState<{
+    x: number; y: number; band: AstroBand
+  } | null>(null);
+
+  // Astro-zone overlays are drawn by the canvas overlay — exclude them from
+  // buildCharts deps so adding/removing an astro rule doesn't trigger a full
+  // chart rebuild (which would wipe mainChartRef before the fetch completes).
+  const indicatorOverlays = useMemo(
+    () => overlays.filter(o => o.type !== 'astro_zone'),
+    [overlays],
+  );
 
   const buildCharts = useCallback(() => {
     if (!mainRef.current) return;
@@ -373,7 +386,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // OVERLAYS — framework-driven (all modes)
     // ═══════════════════════════════════════════════════════════════════
 
-    for (const overlay of overlays.filter(o => o.visible)) {
+    for (const overlay of indicatorOverlays.filter(o => o.visible)) {
       const color = overlay.color ?? OVERLAY_DEFAULT_COLOR[overlay.catalog_item_id] ?? '#7c6af7'
 
       if (overlay.type === 'indicator_line') {
@@ -446,7 +459,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
     mainChart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       drawBandsRef.current?.();
     });
-  }, [data, height, compact, workspaceMode, overlays, onVisibleRangeChange, onCrosshairMove]);
+    // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
+    requestAnimationFrame(() => { drawBandsRef.current?.(); });
+  }, [data, height, compact, workspaceMode, indicatorOverlays, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
@@ -580,7 +595,34 @@ export default function TradingChart({ data, height = 900, compact = false, work
         </div>
       )}
 
-      <div style={{ position: 'relative' }}>
+      <div
+        style={{ position: 'relative' }}
+        onMouseMove={e => {
+          if (astroBands.length === 0 || !mainChartRef.current) {
+            if (bandTooltip) setBandTooltip(null);
+            return;
+          }
+          const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const ts     = mainChartRef.current.timeScale();
+          let found: AstroBand | null = null;
+          for (const band of astroBands) {
+            const x1 = ts.timeToCoordinate(band.from as Time);
+            const x2 = ts.timeToCoordinate(band.to   as Time);
+            if (x1 == null || x2 == null) continue;
+            const left  = Math.min(x1, x2);
+            const right = Math.max(x1, x2);
+            if (mouseX >= left && mouseX <= right) { found = band; break; }
+          }
+          if (found) {
+            setBandTooltip({ x: mouseX, y: mouseY, band: found });
+          } else if (bandTooltip) {
+            setBandTooltip(null);
+          }
+        }}
+        onMouseLeave={() => setBandTooltip(null)}
+      >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
         <canvas
           ref={bandCanvasRef}
@@ -590,6 +632,44 @@ export default function TradingChart({ data, height = 900, compact = false, work
             borderRadius: 12,
           }}
         />
+        {bandTooltip && (
+          <div style={{
+            position: 'absolute',
+            left: bandTooltip.x + 14,
+            top:  Math.max(8, bandTooltip.y - 60),
+            zIndex: 20,
+            background: 'rgba(13,17,23,0.95)',
+            border: `1px solid ${bandTooltip.band.color}55`,
+            borderLeft: `3px solid ${bandTooltip.band.color}`,
+            borderRadius: 6,
+            padding: '7px 11px',
+            pointerEvents: 'none',
+            minWidth: 180,
+            maxWidth: 260,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: bandTooltip.band.color, marginBottom: 4, lineHeight: 1.3 }}>
+              {bandTooltip.band.displayName}
+            </div>
+            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>
+              {bandTooltip.band.ruleCode}
+            </div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', display: 'flex', gap: 4, alignItems: 'center' }}>
+              <span>{bandTooltip.band.from}</span>
+              <span style={{ opacity: 0.35 }}>→</span>
+              <span>{bandTooltip.band.to}</span>
+            </div>
+            <div style={{ marginTop: 5, fontSize: 10 }}>
+              {bandTooltip.band.matched === true  && <span style={{ color: bandTooltip.band.color }}>✓ Confirmed</span>}
+              {bandTooltip.band.matched === false && <span style={{ color: '#ef4444' }}>✗ Not matched</span>}
+              {bandTooltip.band.matched === null  && (
+                <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  {bandTooltip.band.from > new Date().toISOString().slice(0,10) ? '◦ Future transit' : '◦ Pending validation'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {!workspaceMode && !compact && (
