@@ -61,15 +61,17 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
         style={{
           position: 'fixed',
           right: isOpen ? 0 : -460,
-          top: 0,
+          top: 72,
           bottom: 0,
           width: 440,
           background: 'var(--bg-card, #0d1117)',
           borderLeft: '1px solid var(--border)',
+          borderTop: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 200,
           transition: 'right 0.32s cubic-bezier(0.22,1,0.36,1)',
+          borderRadius: '12px 0 0 0',
         }}
       >
         {/* Header */}
