@@ -18,8 +18,10 @@ interface Props {
   editMode:          boolean
   isDraggable:       boolean
   effectivePosition: GridPosition
+  isMaximized:       boolean
   onRemove:          (id: string) => void
-  onResizeStart:     (blockId: string, startX: number, startY: number, startPos: GridPosition) => void
+  onResizeStart:     (blockId: string, startX: number, startY: number, startPos: GridPosition, dir: 'h' | 'v' | 'both') => void
+  onMaximize:        (blockId: string | null) => void
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -72,7 +74,7 @@ function BlockContent({
   )
 }
 
-export default function WorkspaceBlock({ block, editMode, isDraggable, effectivePosition, onRemove, onResizeStart }: Props) {
+export default function WorkspaceBlock({ block, editMode, isDraggable, effectivePosition, isMaximized, onRemove, onResizeStart, onMaximize }: Props) {
   const isVaNi  = block.added_by === 'vani'
   const catalog = getCatalogItem(block.catalog_item_id)
   const name    = catalog?.display_name ?? block.catalog_item_id
@@ -116,7 +118,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
         gridRowEnd:      effectivePosition.row_end,
         transform:       CSS.Translate.toString(transform),
         opacity:         isDragging ? 0.5 : 1,
-        zIndex:          isDragging ? 100 : undefined,
+        zIndex:          isMaximized ? 50 : isDragging ? 100 : undefined,
         position:        'relative',
         border:          isVaNi
           ? '1px solid rgba(124,106,247,.45)'
@@ -180,6 +182,23 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           </div>
         </div>
 
+        {/* Maximize / restore */}
+        <button
+          onClick={() => onMaximize(isMaximized ? null : block.id)}
+          title={isMaximized ? 'Restore' : 'Maximize'}
+          style={{ width: 22, height: 22, borderRadius: 5, border: 'none',
+            background: isMaximized ? 'rgba(124,106,247,.2)' : 'rgba(255,255,255,.06)',
+            color: isMaximized ? '#8b7af8' : 'rgba(255,255,255,.35)',
+            cursor: 'pointer', fontSize: 12, flexShrink: 0, lineHeight: 1,
+            transition: 'all .15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onMouseEnter={e => { (e.currentTarget).style.background = 'rgba(124,106,247,.25)'; (e.currentTarget).style.color = '#8b7af8' }}
+          onMouseLeave={e => {
+            (e.currentTarget).style.background = isMaximized ? 'rgba(124,106,247,.2)' : 'rgba(255,255,255,.06)'
+            ;(e.currentTarget).style.color = isMaximized ? '#8b7af8' : 'rgba(255,255,255,.35)'
+          }}>
+          {isMaximized ? '⊟' : '⊞'}
+        </button>
+
         {editMode && (
           <button onClick={() => onRemove(block.id)}
             style={{ width: 22, height: 22, borderRadius: 5, border: 'none',
@@ -199,32 +218,55 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
         description={catalog?.description}
       />
 
-      {/* Resize handle — bottom-right corner, edit mode only */}
-      {editMode && (
-        <div
-          onMouseDown={e => {
-            e.preventDefault()
-            e.stopPropagation()
-            onResizeStart(block.id, e.clientX, e.clientY, block.grid_position)
-          }}
-          title="Drag to resize"
-          style={{
-            position: 'absolute', right: 0, bottom: 0,
-            width: 20, height: 20,
-            cursor: 'se-resize',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
-            padding: '3px',
-            zIndex: 10,
-          }}
-        >
-          <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ opacity: 0.35, transition: 'opacity .15s' }}
-            onMouseEnter={e => { (e.currentTarget as SVGElement).style.opacity = '0.7' }}
-            onMouseLeave={e => { (e.currentTarget as SVGElement).style.opacity = '0.35' }}
+      {/* Resize handles — edit mode only, hidden when maximized */}
+      {editMode && !isMaximized && (
+        <>
+          {/* Right-center: width only */}
+          <div
+            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onResizeStart(block.id, e.clientX, e.clientY, block.grid_position, 'h') }}
+            title="Drag to resize width"
+            style={{
+              position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
+              width: 8, height: 32, cursor: 'ew-resize', zIndex: 10,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.35)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
           >
-            <line x1="1" y1="9" x2="9" y2="1" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="5" y1="9" x2="9" y2="5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </div>
+            <div style={{ width: 2, height: 20, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} />
+          </div>
+
+          {/* Bottom-center: height only */}
+          <div
+            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onResizeStart(block.id, e.clientX, e.clientY, block.grid_position, 'v') }}
+            title="Drag to resize height"
+            style={{
+              position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)',
+              width: 32, height: 8, cursor: 'ns-resize', zIndex: 10,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.35)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+          >
+            <div style={{ height: 2, width: 20, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} />
+          </div>
+
+          {/* Bottom-right corner: both */}
+          <div
+            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onResizeStart(block.id, e.clientX, e.clientY, block.grid_position, 'both') }}
+            title="Drag to resize"
+            style={{
+              position: 'absolute', right: 0, bottom: 0,
+              width: 16, height: 16, cursor: 'se-resize', zIndex: 10,
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 3,
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ opacity: 0.3 }}>
+              <line x1="1" y1="8" x2="8" y2="1" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+              <line x1="4" y1="8" x2="8" y2="4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
+        </>
       )}
 
       {/* Context menu */}
