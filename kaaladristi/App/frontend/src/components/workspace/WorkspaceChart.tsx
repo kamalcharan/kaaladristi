@@ -5,6 +5,7 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { fetchInstrumentEod } from '@/services/indicatorData'
 import TradingChart from '@/components/charts/TradingChart'
 import { useChartSyncStore } from '@/stores/chartSyncStore'
+import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands'
 
 const DISPLAY_NAME: Record<string, string> = {
   NIFTY50:   'NIFTY 50',
@@ -33,6 +34,7 @@ export default function WorkspaceChart({ height }: Props) {
   })
 
   const { setTotalBars, setActiveBarIndex, setVisibleRange, playerBarIndex } = useChartSyncStore()
+  const astroBands = useAstroOverlayBands(overlays)
 
   // Seed the store total once data arrives
   useEffect(() => {
@@ -104,6 +106,7 @@ export default function WorkspaceChart({ height }: Props) {
           height={height - HEADER_H}
           workspaceMode
           overlays={overlays}
+          astroBands={astroBands}
           highlightDate={playerDate}
           onCrosshairMove={handleCrosshairMove}
           onVisibleRangeChange={handleVisibleRangeChange}
