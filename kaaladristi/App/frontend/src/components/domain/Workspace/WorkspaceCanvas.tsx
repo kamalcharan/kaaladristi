@@ -164,6 +164,9 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const [resizingPos, setResizingPos] = useState<GridPosition | null>(null)
   const liveResizePosRef = useRef<GridPosition | null>(null)
 
+  // Maximize state
+  const [maximizedBlockId, setMaximizedBlockId] = useState<string | null>(null)
+
   // Chart panel size (local — not yet persisted to DB)
   const [chartCols, setChartCols] = useState(CHART_COLS_DEFAULT)
   const [chartRows, setChartRows] = useState(CHART_ROWS_DEFAULT)
@@ -191,21 +194,22 @@ export default function WorkspaceCanvas({ framework }: Props) {
 
   // ── Block resize ───────────────────────────────────────────────────────────
   function handleBlockResizeStart(
-    blockId: string, startX: number, startY: number, startPos: GridPosition,
+    blockId: string, startX: number, startY: number, startPos: GridPosition, dir: 'h' | 'v' | 'both',
   ) {
     const canvasEl = document.getElementById('workspace-grid')
     if (!canvasEl) return
     const { width, height } = canvasEl.getBoundingClientRect()
-    const colStep = width  / COLS
-    const rowStep = height / ROWS
+    // Cell step = (canvas - 2×padding - (N-1)×gap) / N — more accurate than width/N
+    const colStep = (width  - 32 - (COLS - 1) * 8) / COLS
+    const rowStep = (height - 32 - (ROWS - 1) * 8) / ROWS
 
     liveResizePosRef.current = { ...startPos }
     setResizingBlockId(blockId)
     setResizingPos({ ...startPos })
 
     function onMove(e: MouseEvent) {
-      const dCols = Math.round((e.clientX - startX) / colStep)
-      const dRows = Math.round((e.clientY - startY) / rowStep)
+      const dCols = (dir === 'h' || dir === 'both') ? Math.round((e.clientX - startX) / colStep) : 0
+      const dRows = (dir === 'v' || dir === 'both') ? Math.round((e.clientY - startY) / rowStep) : 0
       const newPos: GridPosition = {
         ...startPos,
         col_end: Math.max(startPos.col_start + 2, Math.min(COLS + 1, startPos.col_end + dCols)),
@@ -530,18 +534,23 @@ export default function WorkspaceCanvas({ framework }: Props) {
             </div>
 
             {framework.blocks.map(block => {
-              const effectivePosition = (resizingBlockId === block.id && resizingPos)
-                ? resizingPos
-                : block.grid_position
+              const isMaximized = maximizedBlockId === block.id
+              const effectivePosition: GridPosition = isMaximized
+                ? { col_start: 1, col_end: COLS + 1, row_start: 1, row_end: ROWS + 1 }
+                : (resizingBlockId === block.id && resizingPos)
+                  ? resizingPos
+                  : block.grid_position
               return (
                 <WorkspaceBlock
                   key={block.id}
                   block={block}
                   editMode={editMode}
-                  isDraggable={editMode && !resizingBlockId}
+                  isDraggable={editMode && !resizingBlockId && !isMaximized}
                   effectivePosition={effectivePosition}
+                  isMaximized={isMaximized}
                   onRemove={removeBlock}
                   onResizeStart={handleBlockResizeStart}
+                  onMaximize={setMaximizedBlockId}
                 />
               )
             })}
