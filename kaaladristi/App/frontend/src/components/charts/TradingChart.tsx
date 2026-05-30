@@ -525,14 +525,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
         } else if (band.matched === false) {
           fillColor   = 'rgba(239,68,68,0.10)';
           borderColor = 'rgba(239,68,68,0.55)';
-        } else if (isFuture) {
-          fillColor   = hexToRgba(band.color, 0.07);
-          borderColor = hexToRgba(band.color, 0.45);
-          dashed      = true;
         } else {
-          // past, unbacktested
-          fillColor   = 'rgba(150,150,150,0.05)';
-          borderColor = 'rgba(150,150,150,0.2)';
+          // null — not yet validated (past unbacktested or future transit)
+          fillColor   = hexToRgba(band.color, 0.06);
+          borderColor = hexToRgba(band.color, isFuture ? 0.50 : 0.30);
+          dashed      = true;
         }
 
         ctx.fillStyle = fillColor;
