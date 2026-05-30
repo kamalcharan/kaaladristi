@@ -181,7 +181,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
         }}>
           {activeTab === 'indicators'  && <IndicatorsSection />}
           {activeTab === 'widgets'     && <WidgetsSection />}
-          {activeTab === 'astro_rules' && <CatalogAstroSection />}
+          {activeTab === 'astro_rules' && <CatalogAstroSection compact />}
         </div>
       </div>
     </>
