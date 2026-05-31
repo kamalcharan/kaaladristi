@@ -26,16 +26,38 @@ function retColor(v: number | null): string {
   return v >= 0 ? '#10b981' : '#ef4444'
 }
 
-// Fix: exclude unresolved (return_5d === null) from resolved count
 function vaNiNote(c: VaNiCorrelation): string {
-  const resolved   = c.instances.filter(i => i.return_5d !== null)
-  const bullish    = resolved.filter(i => i.return_5d! >= 0).length
-  const bearish    = resolved.filter(i => i.return_5d! < 0).length
-  const direction  = c.avg_return_5d < 0 ? 'bearish' : 'bullish'
-  const strength   = Math.abs(c.avg_return_5d) > 1 ? 'strongly' : 'mildly'
-  const activePart = c.currently_active ? ' is currently active and' : ''
-  const currentPart = c.currently_active ? ' (1 currently active)' : ''
-  return `This confluence${activePart} has resolved ${strength} ${direction} in ${bullish + bearish} of ${resolved.length} historical instances${currentPart}, with an average 5-day move of ${fmtRet(c.avg_return_5d)} and 22-day move of ${fmtRet(c.avg_return_22d)}.`
+  const total    = c.n_instances
+  const resolved = c.instances.filter(i => i.return_5d !== null)
+  const nRes     = resolved.length
+  const bearish  = resolved.filter(i => i.return_5d! < 0).length
+  const bullish  = resolved.filter(i => i.return_5d! >= 0).length
+
+  // Direction: whichever side wins
+  const bearishWins = bearish > bullish
+  const winCount    = bearishWins ? bearish : bullish
+  const direction   = bearishWins ? 'lower' : 'higher'
+  const edgeWord    = bearishWins ? 'bearish' : 'bullish'
+
+  // Certainty from hit-rate
+  const hitRate = nRes > 0 ? winCount / nRes : 0
+  const certainty = hitRate > 0.75 ? 'strong' : hitRate >= 0.6 ? 'clear' : 'moderate'
+
+  // Approximate year of first instance
+  const firstYear = c.instances.length > 0
+    ? c.instances.slice().sort((a, b) => a.start_date.localeCompare(b.start_date))[0].start_date.slice(0, 4)
+    : ''
+
+  const pair    = pairLabel(c)
+  const sinceStr = firstYear ? ` since ${firstYear}` : ''
+
+  const statusStr = c.currently_active
+    ? 'One instance is currently active.'
+    : nRes < total
+      ? 'One instance is currently approaching.'
+      : ''
+
+  return `${pair} has co-occurred ${total} times${sinceStr}. In ${winCount} of ${nRes} resolved instances the market moved ${direction} — avg 5D: ${fmtRet(c.avg_return_5d)}, avg 22D: ${fmtRet(c.avg_return_22d)}. The ${edgeWord} edge is ${certainty}, not conclusive.${statusStr ? ' ' + statusStr : ''}`
 }
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
