@@ -39,25 +39,29 @@ function vaNiNote(c: VaNiCorrelation): string {
   const direction   = bearishWins ? 'lower' : 'higher'
   const edgeWord    = bearishWins ? 'bearish' : 'bullish'
 
-  // Certainty from hit-rate
-  const hitRate = nRes > 0 ? winCount / nRes : 0
-  const certainty = hitRate > 0.75 ? 'strong' : hitRate >= 0.6 ? 'clear' : 'moderate'
+  // Certainty qualifier — < 65% moderate, 65–75% clear, > 75% strong
+  const hitRate   = nRes > 0 ? winCount / nRes : 0
+  const certainty = hitRate > 0.75 ? 'strong' : hitRate >= 0.65 ? 'clear' : 'moderate, not conclusive'
 
-  // Approximate year of first instance
+  // Year of first instance
   const firstYear = c.instances.length > 0
     ? c.instances.slice().sort((a, b) => a.start_date.localeCompare(b.start_date))[0].start_date.slice(0, 4)
     : ''
 
-  const pair    = pairLabel(c)
-  const sinceStr = firstYear ? ` since ${firstYear}` : ''
+  const pair      = pairLabel(c)
+  const sinceStr  = firstYear ? ` since ${firstYear}` : ''
 
+  // Status: active with day count OR approaching (unresolved latest) OR nothing
+  const latestInst = c.instances.length > 0
+    ? c.instances.slice().sort((a, b) => b.start_date.localeCompare(a.start_date))[0]
+    : null
   const statusStr = c.currently_active
-    ? 'One instance is currently active.'
-    : nRes < total
-      ? 'One instance is currently approaching.'
-      : ''
+    ? (latestInst?.return_5d === null && latestInst?.duration_days > 0
+        ? `Currently active — Day ${latestInst.duration_days}.`
+        : 'One instance is currently active.')
+    : (nRes < total ? 'One instance is currently approaching.' : '')
 
-  return `${pair} has co-occurred ${total} times${sinceStr}. In ${winCount} of ${nRes} resolved instances the market moved ${direction} — avg 5D: ${fmtRet(c.avg_return_5d)}, avg 22D: ${fmtRet(c.avg_return_22d)}. The ${edgeWord} edge is ${certainty}, not conclusive.${statusStr ? ' ' + statusStr : ''}`
+  return `${pair} has co-occurred ${total} times${sinceStr}. In ${winCount} of ${nRes} resolved instances the market moved ${direction} — avg 5D: ${fmtRet(c.avg_return_5d)}, avg 22D: ${fmtRet(c.avg_return_22d)}. The ${edgeWord} edge is ${certainty}.${statusStr ? ' ' + statusStr : ''}`
 }
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
