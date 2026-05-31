@@ -140,7 +140,19 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
         headers: authHeaders(),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: UserFramework = await res.json()
+      const raw = await res.json()
+      const data: UserFramework = raw
+
+      // Sync tier + expires_at into authStore profile so gates and badges
+      // always reflect the latest subscription state without a separate fetch.
+      const { profile, setProfile } = useAuthStore.getState()
+      if (profile && (raw.tier !== undefined || raw.expires_at !== undefined)) {
+        setProfile({
+          ...profile,
+          tier:       raw.tier       ?? profile.tier,
+          expires_at: raw.expires_at ?? profile.expires_at,
+        })
+      }
 
       // Deduplicate chart blocks: keep only one per catalog_item_id (largest by area).
       // Fixes corrupt saved state from before the addChartBlock positioning fix.

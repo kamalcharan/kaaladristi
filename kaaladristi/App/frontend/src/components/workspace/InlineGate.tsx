@@ -65,7 +65,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
   if (!isOpen) return null
 
   const cfg      = GATE_CONFIGS[context]
-  const days     = daysLeft((profile as unknown as Record<string, unknown>)?.expires_at as string | null)
+  const days     = daysLeft(profile?.expires_at)
   const paidTiers = ['trial', 'quarterly', 'annual', 'beta']
   const isFree   = !profile?.tier || !paidTiers.includes(profile.tier)
 
