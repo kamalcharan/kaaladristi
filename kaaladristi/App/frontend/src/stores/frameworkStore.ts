@@ -153,12 +153,11 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
           tier:       raw.tier       ?? profile.tier,
           expires_at: raw.expires_at ?? profile.expires_at,
           theme:      raw.theme      ?? profile.theme,
-          dark_mode:  raw.dark_mode  ?? profile.dark_mode,
         }
         setProfile(updated)
         // Apply theme from server — overrides any localStorage state
         if (raw.theme !== undefined) {
-          useThemeStore.getState().setTheme(raw.theme as any, raw.dark_mode ?? true)
+          useThemeStore.getState().setTheme(raw.theme as any)
         }
       }
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { from } from '@/services/postgrest'
@@ -7,6 +8,7 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
+import InlineGate from '@/components/workspace/InlineGate'
 
 // ── Shared types (exported for section components) ────────────────────────────
 
@@ -209,7 +211,7 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         padding: '8px 12px',
         borderRadius: 6,
         background: isRange ? 'var(--accent-glow)' : 'var(--gold-bg)',
-        border: `1px solid ${isRange ? 'var(--accent-dim)' : 'var(--gold-soft)'}`,
+        border: `1px solid ${isRange ? 'var(--accent-dim)' : 'var(--gold-bg)'}`,
         fontSize: 11,
         color: 'var(--text-secondary)',
       }}>
@@ -329,7 +331,7 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
           padding: '9px 14px',
           marginBottom: 18,
           borderRadius: 8,
-          border: '1px solid var(--accent-glow)',
+          border: '1px solid var(--accent-dim)',
           background: 'var(--accent-glow)',
           color: 'var(--accent)',
           fontSize: 12,
@@ -340,12 +342,12 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         }}
         onMouseEnter={e => {
           const el = e.currentTarget as HTMLElement
-          el.style.borderColor = 'var(--accent-dim)'
-          el.style.background = 'var(--accent-glow)'
+          el.style.borderColor = 'color-mix(in srgb, var(--accent) 50%, transparent)'
+          el.style.background = 'var(--accent-dim)'
         }}
         onMouseLeave={e => {
           const el = e.currentTarget as HTMLElement
-          el.style.borderColor = 'var(--accent-glow)'
+          el.style.borderColor = 'var(--accent-dim)'
           el.style.background = 'var(--accent-glow)'
         }}
       >
@@ -477,6 +479,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
   const { addToFramework } = useAddToFramework()
+  const [gateOpen, setGateOpen] = useState(false)
 
   const isOpen = item !== null
 
@@ -526,7 +529,8 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
       if (isRange) addOverlay(syntheticItem)
       else addBlock(syntheticItem)
     } else {
-      addToFramework(item.item.id)
+      const r = addToFramework(item.item.id)
+      if (r.reason === 'tier_gate') setGateOpen(true)
     }
   }
 
@@ -555,7 +559,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           top: 0,
           bottom: 0,
           width: 380,
-          background: 'var(--card)',
+          background: 'var(--bg-card, #0d1117)',
           borderLeft: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
@@ -702,7 +706,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
             onMouseEnter={e => {
               if (!cta.active && !cta.locked) {
                 (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'
-                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px rgba(124,106,247,0.5)'
+                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px color-mix(in srgb, var(--accent) 50%, transparent)'
               }
             }}
             onMouseLeave={e => {
@@ -716,6 +720,12 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           </button>
         </div>
       </div>
+
+      <InlineGate
+        context="add_rule"
+        isOpen={gateOpen}
+        onDismiss={() => setGateOpen(false)}
+      />
     </>
   )
 }

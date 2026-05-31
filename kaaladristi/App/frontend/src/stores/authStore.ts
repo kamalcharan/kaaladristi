@@ -7,8 +7,7 @@ import { useThemeStore } from '@/stores/themeStore';
 function applyProfileTheme(profile: KmProfile | null) {
   if (!profile) return
   const themeId = (profile.theme ?? 'kaaladristi') as Parameters<typeof useThemeStore.getState['setTheme']>[0]
-  const darkMode = profile.dark_mode ?? true
-  useThemeStore.getState().setTheme(themeId as any, darkMode)
+  useThemeStore.getState().setTheme(themeId as any)
 }
 
 interface AuthState {

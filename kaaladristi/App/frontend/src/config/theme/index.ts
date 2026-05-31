@@ -133,13 +133,9 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
 
 /**
  * Convenience wrapper: resolve theme by id and apply it.
- * - kaaladristi: always dark — light mode not supported in v1
- * - tech-ai / jade-thorn: respect the caller-supplied darkMode preference
+ * Always dark — DristiQ is dark-only in v1.
  */
-export function applyThemeById(id: string, darkMode?: boolean): void {
+export function applyThemeById(id: string): void {
   const config = getTheme(id);
-  const prefersDark = id === 'kaaladristi'
-    ? true  // DristiQ always renders dark — light mode not supported in v1
-    : (darkMode ?? window.matchMedia('(prefers-color-scheme: dark)').matches);
-  applyTheme(config, prefersDark);
+  applyTheme(config, true);
 }
