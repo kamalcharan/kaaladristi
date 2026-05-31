@@ -27,6 +27,12 @@ export interface CorrelationResult {
   currently_active: boolean
   instances:        CorrelationInstance[]
   insufficient_data?: boolean
+  // Data quality fields — returned by backend when data is sufficient
+  coverage_pct?:    number
+  days_covered?:    number
+  days_total?:      number
+  date_from?:       string
+  date_to?:         string
 }
 
 // Cache outside React so StrictMode double-mount doesn't re-fetch

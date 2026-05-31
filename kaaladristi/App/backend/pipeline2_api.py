@@ -3481,7 +3481,15 @@ def get_framework(
                 conn.commit()
                 row = cur.fetchone()
 
-        return dict(row)
+            # Join current tier from km_profiles
+            cur.execute(
+                'SELECT tier FROM km_profiles WHERE id = %s::uuid LIMIT 1',
+                (user_id,),
+            )
+            profile_row = cur.fetchone()
+            result = dict(row)
+            result['tier'] = profile_row['tier'] if profile_row else 'free'
+        return result
     except HTTPException:
         raise
     except Exception as exc:
@@ -3833,6 +3841,14 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
         # Currently active: is today inside any overlap range?
         currently_active = any(s <= today <= e for s, e in overlaps)
 
+        # ── Data quality metrics ──────────────────────────────────────────
+        days_total   = len(date_list)
+        days_covered = len([d for d in date_list
+                            if any(s <= d <= e for s, e in overlaps)])
+        coverage_pct = round((days_covered / days_total * 100), 2) if days_total else 0.0
+        date_from    = str(date_list[0])  if date_list else ''
+        date_to      = str(date_list[-1]) if date_list else ''
+
         return {
             'shape':           shape,
             'n_instances':     len(overlaps),
@@ -3842,6 +3858,11 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
             'avg_return_22d':  round(ret22_sum / ret22_cnt, 4) if ret22_cnt else 0,
             'currently_active': currently_active,
             'instances':       instances,
+            'coverage_pct':    coverage_pct,
+            'days_covered':    days_covered,
+            'days_total':      days_total,
+            'date_from':       date_from,
+            'date_to':         date_to,
         }
     except HTTPException:
         raise
@@ -3850,3 +3871,116 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
         raise HTTPException(500, str(exc))
     finally:
         conn.close()
+
+
+# ── Payments (Razorpay) ────────────────────────────────────────────────────────
+
+RAZORPAY_KEY_ID     = os.environ.get('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+
+TIER_AMOUNTS_PAISE = {
+    'trial':     19900,   # ₹199
+    'quarterly': 199900,  # ₹1,999
+    'annual':    499900,  # ₹4,999
+}
+
+class CreateOrderRequest(BaseModel):
+    tier:    str
+    user_id: str
+
+class VerifyPaymentRequest(BaseModel):
+    razorpay_payment_id: str
+    razorpay_order_id:   str
+    razorpay_signature:  str
+
+
+@app.post('/api/payments/create-order')
+def payments_create_order(
+    req: CreateOrderRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    if caller_id != req.user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if req.tier not in TIER_AMOUNTS_PAISE:
+        raise HTTPException(status_code=400, detail=f'Unknown tier: {req.tier}')
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(status_code=503, detail='Payment gateway not configured')
+
+    try:
+        import razorpay as _rzp  # type: ignore
+        client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        order  = client.order.create({
+            'amount':   TIER_AMOUNTS_PAISE[req.tier],
+            'currency': 'INR',
+            'notes':    {'tier': req.tier, 'user_id': req.user_id},
+        })
+        return {
+            'order_id': order['id'],
+            'amount':   order['amount'],
+            'currency': order['currency'],
+        }
+    except ImportError:
+        raise HTTPException(status_code=503, detail='razorpay SDK not installed — run pip install razorpay')
+    except Exception as exc:
+        log.error(f'payments_create_order error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post('/api/payments/verify')
+def payments_verify(
+    req: VerifyPaymentRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(status_code=503, detail='Payment gateway not configured')
+
+    try:
+        import razorpay as _rzp  # type: ignore
+        import hmac as _hmac, hashlib as _hashlib
+
+        # Verify signature
+        body       = f'{req.razorpay_order_id}|{req.razorpay_payment_id}'.encode()
+        expected   = _hmac.new(RAZORPAY_KEY_SECRET.encode(), body, _hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(expected, req.razorpay_signature):
+            raise HTTPException(status_code=400, detail='Invalid payment signature')
+
+        # Fetch order from Razorpay to get tier from notes
+        client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        order  = client.order.fetch(req.razorpay_order_id)
+        tier   = order.get('notes', {}).get('tier', 'trial')
+        user_id = order.get('notes', {}).get('user_id', caller_id)
+
+        # Determine expires_at based on tier
+        from datetime import timedelta
+        tier_durations = {'trial': 3, 'quarterly': 90, 'annual': 365}
+        days_valid     = tier_durations.get(tier, 3)
+        expires_at     = datetime.utcnow() + timedelta(days=days_valid)
+
+        # Upgrade km_profiles.tier + insert user_subscriptions row
+        conn = _conn(5000)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE km_profiles SET tier = %s, updated_at = now() WHERE id = %s::uuid",
+                    (tier, user_id),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO user_subscriptions (user_id, tier, started_at, expires_at)
+                    VALUES (%s::uuid, %s, now(), %s)
+                    """,
+                    (user_id, tier, expires_at),
+                )
+                conn.commit()
+        finally:
+            conn.close()
+
+        return {'tier': tier, 'expires_at': expires_at.isoformat()}
+
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(status_code=503, detail='razorpay SDK not installed — run pip install razorpay')
+    except Exception as exc:
+        log.error(f'payments_verify error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))

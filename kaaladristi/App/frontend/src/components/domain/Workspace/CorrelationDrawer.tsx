@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { X } from 'lucide-react'
+import DataQualityBar, { KNOWN_QUALITY_ISSUES } from '@/components/correlation/DataQualityBar'
 import {
   BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -624,8 +625,39 @@ function PairDetail({ corr, onDismiss }: { corr: VaNiCorrelation; onDismiss: () 
       {/* Outcome bar */}
       <OutcomeBar bullish={corr.bullish_count} bearish={corr.bearish_count} total={total} />
 
+      {/* Data quality bar */}
+      {corr.coverage_pct != null ? (
+        <DataQualityBar
+          coverage_pct={corr.coverage_pct}
+          days_covered={corr.days_covered ?? 0}
+          days_total={corr.days_total ?? 0}
+          date_from={corr.date_from ?? ''}
+          date_to={corr.date_to ?? ''}
+          exclusions={[
+            KNOWN_QUALITY_ISSUES.VOLUME_DISCONTINUITY,
+            KNOWN_QUALITY_ISSUES.DUAL_LISTED,
+          ]}
+        />
+      ) : corr.insufficient_data ? (
+        <DataQualityBar
+          coverage_pct={0} days_covered={0} days_total={0}
+          date_from='' date_to=''
+          insufficient_data={true}
+        />
+      ) : null}
+
       {/* Shape-specific visualization */}
-      {renderShapeVisualization(corr)}
+      {!corr.insufficient_data && renderShapeVisualization(corr)}
+
+      {/* Insufficient data VaNi message */}
+      {corr.insufficient_data && (
+        <div style={{ padding: 12, background: 'rgba(139,92,246,.06)', borderRadius: 8,
+          border: '1px solid rgba(139,92,246,.2)', fontSize: 12,
+          color: 'rgba(255,255,255,.6)', lineHeight: 1.6 }}>
+          <span style={{ color: '#a78bfa', marginRight: 6, fontSize: 10 }}>✦ VaNi</span>
+          Only {corr.n_instances} historical instance{corr.n_instances !== 1 ? 's' : ''} found — not enough to draw reliable conclusions. I'll watch for more data as history builds.
+        </div>
+      )}
 
       {/* VaNi inference note */}
       <div style={{ padding: 12, background: 'rgba(139,92,246,.06)', borderRadius: 8,
