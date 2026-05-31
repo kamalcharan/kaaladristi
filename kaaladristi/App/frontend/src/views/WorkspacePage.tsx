@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
+import type { FrameworkBlock } from '@/types/framework'
 
 export default function WorkspacePage() {
   const { profile } = useAuthStore()
@@ -59,15 +60,48 @@ export default function WorkspacePage() {
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* Page header */}
       <div style={{ padding: '14px 20px 10px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300,
-            color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            {framework!.name}
-          </h1>
-          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-            color: 'rgba(255,255,255,.2)', letterSpacing: '.05em' }}>
-            v{framework!.version}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300,
+              color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+              {framework!.name}
+            </h1>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+              color: 'rgba(255,255,255,.2)', letterSpacing: '.05em' }}>
+              v{framework!.version}
+            </span>
+          </div>
+          {/* VaNi confluence alerts — inline pills next to framework title */}
+          {framework!.blocks
+            .filter((b: FrameworkBlock) => b.type === 'vani_correlation')
+            .map((b: FrameworkBlock) => {
+              const r = b.config.correlation_result as { currently_active?: boolean; n_instances?: number; avg_return_5d?: number } | undefined
+              const itemA = (b.config.item_a as string).replace('astro_rule:', '').toUpperCase()
+              const itemB = (b.config.item_b as string).replace('astro_rule:', '').toUpperCase()
+              const active = r?.currently_active
+              return (
+                <span key={b.id} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '3px 10px', borderRadius: 20, fontSize: 11,
+                  background: active ? 'rgba(139,92,246,.18)' : 'rgba(139,92,246,.08)',
+                  border: `1px solid ${active ? 'rgba(139,92,246,.5)' : 'rgba(139,92,246,.2)'}`,
+                  color: active ? '#c4b5fd' : 'rgba(196,181,253,.5)',
+                  fontFamily: 'var(--font-mono,monospace)',
+                }}>
+                  <span style={{ fontSize: 9, opacity: .7 }}>✦</span>
+                  {itemA} ∩ {itemB}
+                  {r?.n_instances != null && (
+                    <span style={{ opacity: .6 }}>· {r.n_instances}×</span>
+                  )}
+                  {active && (
+                    <span style={{ width: 6, height: 6, borderRadius: '50%',
+                      background: '#a78bfa', boxShadow: '0 0 5px #a78bfa',
+                      display: 'inline-block' }} />
+                  )}
+                </span>
+              )
+            })
+          }
         </div>
       </div>
 
