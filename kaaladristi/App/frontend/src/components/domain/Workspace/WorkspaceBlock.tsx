@@ -503,7 +503,14 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
   const chartInstrument = isChart ? (block.config.instrument as InstrumentRef) : null
   const name = isChart
     ? (CHART_DISPLAY[chartInstrument?.symbol?.toUpperCase() ?? ''] ?? chartInstrument?.symbol ?? 'Chart')
-    : (catalog?.display_name ?? block.catalog_item_id)
+    : isVaNiCorr
+      ? (() => {
+          const a = (block.config.item_a as string | undefined) ?? ''
+          const b = (block.config.item_b as string | undefined) ?? ''
+          const fmt = (id: string) => id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
+          return `${fmt(a)} ∩ ${fmt(b)}`
+        })()
+      : (catalog?.display_name ?? block.catalog_item_id)
 
   const badge = PLACEMENT_BADGE[block.placement] ?? PLACEMENT_BADGE.panel_block
 
@@ -558,6 +565,8 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
             : 'none',
         transition: isDragging ? undefined : 'box-shadow .2s, border-color .2s',
         overflow: 'hidden',
+        minWidth: 0,
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
       }}
