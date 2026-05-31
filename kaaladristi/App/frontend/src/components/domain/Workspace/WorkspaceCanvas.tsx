@@ -572,7 +572,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
               </div>
             )}
 
-            {framework.blocks.map(block => {
+            {framework.blocks.filter(b => b.type !== 'vani_correlation').map(block => {
               const isMaximized = maximizedBlockId === block.id
               const effectivePosition: GridPosition = isMaximized
                 ? { col_start: 1, col_end: COLS + 1, row_start: 1, row_end: ROWS + 1 }
