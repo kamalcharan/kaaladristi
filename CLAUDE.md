@@ -269,6 +269,17 @@ non-predictive insights explaining *why* risk is elevated or low in astronomical
 - Safe vocabulary: "elevated caution", "favorable window", "structural stress",
   "historically correlated with", "risk is heightened"
 
+### VaNi Confluence Shapes — CorrelationDrawer.tsx
+
+| Shape | Visualization | Test status |
+|---|---|---|
+| `ZONE_CONFLUENCE` | Active callout + Gantt duration bars + 5D return histogram | **Tested** — triggered by default ICP templates |
+| `EVENT_OVERLAP` | Dual SVG track timeline (teal/orange/purple) + stats row + instance list | **UNTESTED** — requires two simultaneous astro rule overlays as chart_overlays |
+| `EVENT_IN_STATE` | Current state callout + conditional return table + event breakdown grid | **UNTESTED** — requires astro rule + magic_rs/order_flow/smart_money/breadth_roc overlay pair |
+| `THRESHOLD_CROSS` | Falls through to plain InstanceList | **UNTESTED** — requires astro rule + rsi_14/rsi_9 overlay pair |
+
+Backend `states[]`: `EVENT_IN_STATE` now returns `state` per instance (from `magic_rs_zone`, `flow_type`, `sniper_inst` level, or `breadth_roc` direction). Frontend shows fallback label "(backend state pending)" if `state` field missing.
+
 ### Adding a New VaNi Skill
 1. Add `_SKILL_SYSTEM` constant + register in `SKILLS` dict in `lib/ai_prompts.py`
 2. Add `GET /api/ai/<skill-name>` endpoint in `pipeline2_api.py`
@@ -776,6 +787,13 @@ visual language feels right. Only then proceed to VP-2. Once one metaphor works,
 the pattern applies to all others.
 
 ---
+
+## Deferred — UX Review + Story-telling Session
+- Full workspace UX review — story-telling, information hierarchy, user guidance
+- LLM inference notes — replace template strings with Qwen3 calls (temperature 0.3,
+  /no_think) with template fallback on failure. Covers all four correlation shapes.
+- Action Island observations — wire VaNi live state text
+- Companion: dristiQ-interaction-spec.md Section 6.4 + 16.6
 
 ## Astro Market-Book 2026
 

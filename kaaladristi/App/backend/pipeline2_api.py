@@ -3598,3 +3598,255 @@ def update_framework(
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         conn.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# /api/correlation/compute
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CorrelationRequest(BaseModel):
+    item_a: str
+    item_b: str
+    benchmark: str = 'NIFTY50'  # NIFTY50 | BANKNIFTY | NIFTY500
+
+
+_BENCHMARK_NAMES: dict[str, str] = {
+    'NIFTY50':   'NIFTY 50',
+    'BANKNIFTY': 'NIFTY BANK',
+    'NIFTY500':  'NIFTY 500',
+}
+
+# Indicator items that live as columns in km_index_eod
+_INDICATOR_COLS: dict[str, str] = {
+    'ema_20':   'ema_20',
+    'ema_60':   'ema_60',
+    'sma_50':   'sma_50',
+    'sma_150':  'sma_150',
+    'sma_200':  'sma_200',
+    'rsi_14':   'rsi_14',
+    'supertrend': 'supertrend_dir',
+}
+
+# State label for EVENT_IN_STATE shape — what was the indicator doing at overlap start?
+def _get_indicator_state(item_id: str, start_date, index_id: int, conn) -> str:
+    try:
+        with conn.cursor() as cur:
+            if item_id == 'magic_rs':
+                cur.execute(
+                    "SELECT magic_rs_zone FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                return row[0] if row and row[0] else 'Unknown'
+            elif item_id == 'order_flow':
+                cur.execute(
+                    "SELECT flow_type FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                return row[0].replace('_', ' ').title() if row and row[0] else 'Unknown'
+            elif item_id == 'smart_money':
+                cur.execute(
+                    "SELECT sniper_inst FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                if not row or row[0] is None: return 'Unknown'
+                v = float(row[0])
+                return 'High' if v > 0.7 else 'Medium' if v > 0.3 else 'Low'
+            elif item_id == 'breadth_roc':
+                cur.execute(
+                    "SELECT roc_13 FROM km_breadth_roc WHERE trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (start_date,))
+                row = cur.fetchone()
+                if not row or row[0] is None: return 'Unknown'
+                return 'Rising' if float(row[0]) > 0 else 'Falling'
+    except Exception:
+        pass
+    return 'Unknown'
+
+
+def _classify_shape(item_a: str, item_b: str) -> str:
+    def is_event(x):
+        return x.startswith('astro_rule:')
+    def is_threshold(x):
+        return x in ('rsi_14', 'rsi_9')
+    def is_zone(x):
+        return x in ('magic_rs', 'order_flow', 'smart_money', 'breadth_roc')
+
+    if is_event(item_a) and is_event(item_b):
+        return 'EVENT_OVERLAP'
+    if (is_event(item_a) and is_threshold(item_b)) or (is_event(item_b) and is_threshold(item_a)):
+        return 'THRESHOLD_CROSS'
+    if (is_event(item_a) and is_zone(item_b)) or (is_event(item_b) and is_zone(item_a)):
+        return 'EVENT_IN_STATE'
+    return 'ZONE_CONFLUENCE'
+
+
+def _dates_to_ranges(dates: list) -> list[tuple]:
+    """Group individual dates into (start, end) tuples for consecutive trading-day runs."""
+    if not dates:
+        return []
+    ranges, start, prev = [], dates[0], dates[0]
+    for d in dates[1:]:
+        if (d - prev).days <= 5:   # allow weekend gaps
+            prev = d
+        else:
+            ranges.append((start, prev))
+            start = prev = d
+    ranges.append((start, prev))
+    return ranges
+
+
+def _get_astro_ranges(rule_code: str, conn) -> list[tuple]:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT t.start_date, t.end_date
+            FROM km_rule_transits t
+            JOIN km_astro_rule_master r ON r.id = t.rule_id
+            WHERE r.rule_code = %s
+            ORDER BY t.start_date
+        """, (rule_code,))
+        return [(r[0], r[1]) for r in cur.fetchall()]
+
+
+def _get_indicator_ranges(item_id: str, index_id: int, conn) -> list[tuple]:
+    col = _INDICATOR_COLS.get(item_id)
+    if item_id in ('ema_20', 'ema_60', 'sma_50', 'sma_150', 'sma_200'):
+        sql = f"SELECT trade_date FROM km_index_eod WHERE index_id=%s AND {col} IS NOT NULL AND close > {col} ORDER BY trade_date"
+    elif item_id == 'rsi_14':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND rsi_14 IS NOT NULL AND (rsi_14 > 65 OR rsi_14 < 35) ORDER BY trade_date"
+    elif item_id == 'supertrend':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND supertrend_dir IS NOT NULL AND supertrend_dir > 0 ORDER BY trade_date"
+    # Zone items — active when in a directional / strong state
+    elif item_id == 'magic_rs':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND magic_rs IS NOT NULL ORDER BY trade_date"
+    elif item_id == 'order_flow':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND flow_type IS NOT NULL ORDER BY trade_date"
+    elif item_id == 'smart_money':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND sniper_inst IS NOT NULL ORDER BY trade_date"
+    elif item_id == 'breadth_roc':
+        sql = "SELECT trade_date FROM km_breadth_roc WHERE trade_date IN (SELECT trade_date FROM km_index_eod WHERE index_id=%s) AND roc_13 > 0 ORDER BY trade_date"
+    elif col:
+        sql = f"SELECT trade_date FROM km_index_eod WHERE index_id=%s AND {col} IS NOT NULL ORDER BY trade_date"
+    else:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(sql, (index_id,))
+        return _dates_to_ranges([r[0] for r in cur.fetchall()])
+
+
+def _find_overlaps(ranges_a: list[tuple], ranges_b: list[tuple]) -> list[tuple]:
+    result = []
+    for a_s, a_e in ranges_a:
+        for b_s, b_e in ranges_b:
+            s = max(a_s, b_s)
+            e = min(a_e, b_e)
+            if s <= e:
+                result.append((s, e))
+    return result
+
+
+@app.post('/api/correlation/compute')
+def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_current_user_id)):
+    benchmark_name = _BENCHMARK_NAMES.get(body.benchmark, 'NIFTY 50')
+    conn = _conn(15000)
+    try:
+        # ── Resolve benchmark index id ──────────────────────────────────────
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM km_index_symbols WHERE name=%s LIMIT 1", (benchmark_name,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(400, f'Benchmark not found: {benchmark_name}')
+            bm_id = row[0]
+
+        # ── Fetch all benchmark closes ordered by date ──────────────────────
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT trade_date, close FROM km_index_eod WHERE index_id=%s AND close IS NOT NULL ORDER BY trade_date",
+                (bm_id,)
+            )
+            rows = cur.fetchall()
+        date_list   = [r[0] for r in rows]
+        price_map   = {r[0]: float(r[1]) for r in rows}
+        date_index  = {d: i for i, d in enumerate(date_list)}
+
+        def _fwd_return(start: date, n: int) -> float | None:
+            idx = date_index.get(start)
+            if idx is None:
+                return None
+            # find nearest trading day on or after start
+            closest = next((date_index[date_list[j]] for j in range(idx, min(idx+3, len(date_list)))
+                            if date_list[j] >= start), idx)
+            fwd_idx = closest + n
+            if fwd_idx >= len(date_list):
+                return None
+            start_close = price_map.get(date_list[closest])
+            end_close   = price_map.get(date_list[fwd_idx])
+            if not start_close or not end_close:
+                return None
+            return round((end_close - start_close) / start_close * 100, 4)
+
+        # ── Get active ranges for each item ────────────────────────────────
+        def get_ranges(item_id: str) -> list[tuple]:
+            if item_id.startswith('astro_rule:'):
+                rc = item_id[len('astro_rule:'):]
+                return _get_astro_ranges(rc, conn)
+            return _get_indicator_ranges(item_id, bm_id, conn)
+
+        ranges_a = get_ranges(body.item_a)
+        ranges_b = get_ranges(body.item_b)
+        overlaps  = _find_overlaps(ranges_a, ranges_b)
+
+        if len(overlaps) < 3:
+            return {'insufficient_data': True, 'n_instances': len(overlaps)}
+
+        # ── Compute returns for each overlap ────────────────────────────────
+        today = date.today()
+        shape = _classify_shape(body.item_a, body.item_b)
+        # Identify which item is the zone indicator (for EVENT_IN_STATE state labels)
+        zone_item = body.item_b if body.item_a.startswith('astro_rule:') else body.item_a
+        instances, bullish, bearish = [], 0, 0
+        ret5_sum = ret22_sum = ret5_cnt = ret22_cnt = 0.0
+
+        for s, e in overlaps:
+            r5  = _fwd_return(s, 5)
+            r22 = _fwd_return(s, 22)
+            dur = (e - s).days + 1
+            inst = {
+                'start_date':    str(s),
+                'end_date':      str(e),
+                'duration_days': dur,
+                'return_5d':     r5,
+                'return_22d':    r22,
+            }
+            if shape == 'EVENT_IN_STATE':
+                inst['state'] = _get_indicator_state(zone_item, s, bm_id, conn)
+            instances.append(inst)
+            if r5 is not None:
+                if r5 > 0: bullish += 1
+                else:       bearish += 1
+                ret5_sum  += r5;  ret5_cnt  += 1
+            if r22 is not None:
+                ret22_sum += r22; ret22_cnt += 1
+
+        # Sort newest first
+        instances.sort(key=lambda x: x['start_date'], reverse=True)
+
+        # Currently active: is today inside any overlap range?
+        currently_active = any(s <= today <= e for s, e in overlaps)
+
+        return {
+            'shape':           shape,
+            'n_instances':     len(overlaps),
+            'bearish_count':   bearish,
+            'bullish_count':   bullish,
+            'avg_return_5d':   round(ret5_sum  / ret5_cnt,  4) if ret5_cnt  else 0,
+            'avg_return_22d':  round(ret22_sum / ret22_cnt, 4) if ret22_cnt else 0,
+            'currently_active': currently_active,
+            'instances':       instances,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'correlation_compute error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()

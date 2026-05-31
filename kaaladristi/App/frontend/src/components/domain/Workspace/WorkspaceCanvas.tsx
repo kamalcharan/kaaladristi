@@ -11,6 +11,8 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
+import { useVisibleOverlayPairs, ConfluencePairMonitor } from '@/hooks/useConfluenceDetection'
+import WorkspaceActionIsland from './WorkspaceActionIsland'
 import { effectiveDotColor } from './overlayColors'
 import { fetchActiveIndices, type IndexOption } from '@/services/indexPickerService'
 
@@ -153,7 +155,7 @@ function IndexDropdown({
   const [indices, setIndices] = useState<IndexOption[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
-  const { addChartBlock } = useFrameworkStore()
+  const { switchPrimaryIndex } = useFrameworkStore()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -223,25 +225,23 @@ function IndexDropdown({
             No results
           </div>
         ) : filtered.map(idx => {
-          const added = activeIds.has(`chart:${idx.id}`)
+          const isCurrent = activeIds.has(`chart:${idx.id}`)
           return (
             <button
               key={idx.id}
-              onClick={() => { if (!added) { addChartBlock({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() } }}
+              onClick={() => { switchPrimaryIndex({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() }}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 width: '100%', padding: '7px 12px', border: 'none',
-                background: 'transparent', textAlign: 'left', cursor: added ? 'default' : 'pointer',
-                opacity: added ? 0.45 : 1,
+                background: isCurrent ? 'rgba(139,92,246,.08)' : 'transparent',
+                textAlign: 'left', cursor: 'pointer',
+                opacity: 1,
               }}
-              onMouseEnter={e => { if (!added) (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,.08)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+              onMouseEnter={e => { if (!isCurrent) (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,.08)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isCurrent ? 'rgba(139,92,246,.08)' : 'transparent' }}
             >
               <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{idx.display_name}</span>
-              {added
-                ? <span style={{ fontSize: 10, color: '#7c6af7', fontFamily: 'var(--font-mono,monospace)' }}>✓</span>
-                : <span style={{ fontSize: 16, color: 'rgba(124,106,247,.5)' }}>+</span>
-              }
+              {isCurrent && <span style={{ fontSize: 10, color: '#7c6af7', fontFamily: 'var(--font-mono,monospace)' }}>● active</span>}
             </button>
           )
         })}
@@ -251,15 +251,18 @@ function IndexDropdown({
 }
 
 interface Props {
-  framework: UserFramework
+  framework:     UserFramework
+  onOpenDrawer?: (pairKey: string | null) => void
 }
 
-export default function WorkspaceCanvas({ framework }: Props) {
+export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
   const [picker, setPicker] = useState<{ id: string; x: number; y: number } | null>(null)
   const [indexDropdown, setIndexDropdown] = useState<{ x: number; y: number } | null>(null)
+  const primarySymbol = framework.blocks.find(b => b.type === 'chart')
+    ?.config.instrument ? (framework.blocks.find(b => b.type === 'chart')!.config.instrument as { symbol: string }).symbol : 'index'
 
   // Block resize state
   const [resizingBlockId, setResizingBlockId] = useState<string | null>(null)
@@ -268,6 +271,9 @@ export default function WorkspaceCanvas({ framework }: Props) {
 
   // Maximize state
   const [maximizedBlockId, setMaximizedBlockId] = useState<string | null>(null)
+
+  // VaNi confluence detection
+  const confluencePairs = useVisibleOverlayPairs()
 
   const {
     removeBlock, updateBlockPosition, saveFramework,
@@ -368,7 +374,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const isEmpty = !framework.blocks.some(b => b.type !== 'chart')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       {/* ── Canvas topbar: overlay pills (left) + Edit Canvas (right) ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
@@ -508,7 +514,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
             el.style.background = 'transparent'
           }}
         >
-          + index
+          {primarySymbol} ▾
         </button>
 
         {/* Edit Canvas / Done Editing */}
@@ -627,6 +633,14 @@ export default function WorkspaceCanvas({ framework }: Props) {
           onClose={() => setIndexDropdown(null)}
         />
       )}
+
+      {/* VaNi confluence monitors — one per visible overlay pair, no render output */}
+      {confluencePairs.map(([a, b]) => (
+        <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} />
+      ))}
+
+      {/* Workspace Action Island — fixed pill at bottom of canvas */}
+      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} />
     </div>
   )
 }
