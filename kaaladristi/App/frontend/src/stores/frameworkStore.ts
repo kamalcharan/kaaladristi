@@ -360,13 +360,31 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
   addVaNiBlock: (block: FrameworkBlock) => {
     const { framework, saveFramework } = get()
     if (!framework) return
-    // Idempotent — don't add the same catalog_item_id twice
     if (framework.blocks.some(b => b.catalog_item_id === block.catalog_item_id)) return
-    set(s => ({
-      framework: s.framework
-        ? { ...s.framework, blocks: [...s.framework.blocks, block], version: s.framework.version + 1 }
-        : null,
-    }))
+
+    const VANI_BLOCK_HEIGHT = 8
+    const RIGHT_COL_START   = 17
+
+    const pinned: FrameworkBlock = {
+      ...block,
+      grid_position: { col_start: 17, col_end: 25, row_start: 1, row_end: 1 + VANI_BLOCK_HEIGHT },
+    }
+
+    set(s => {
+      if (!s.framework) return { framework: null }
+      const shifted = s.framework.blocks.map(b =>
+        b.grid_position.col_start === RIGHT_COL_START
+          ? { ...b, grid_position: {
+                ...b.grid_position,
+                row_start: b.grid_position.row_start + VANI_BLOCK_HEIGHT,
+                row_end:   b.grid_position.row_end   + VANI_BLOCK_HEIGHT,
+              }}
+          : b
+      )
+      return {
+        framework: { ...s.framework, blocks: [pinned, ...shifted], version: s.framework.version + 1 },
+      }
+    })
     scheduleSave(saveFramework)
   },
 
