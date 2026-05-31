@@ -718,8 +718,6 @@ export default function ProfileSetup() {
   const [s2Typed,     setS2Typed]     = useState(false)
   const [committing,  setCommitting]  = useState(false)
 
-  const isFree = !PAID_TIERS.includes((profile?.tier ?? 'free') as typeof PAID_TIERS[number])
-
   // Screen 2: typing animation — reveal question after 1.4s
   useEffect(() => {
     if (step !== 2) return
@@ -763,7 +761,9 @@ export default function ProfileSetup() {
       try { await refreshProfile() } catch {
         if (profile) setProfile({ ...profile, onboarded: true })
       }
-      if (isFree) {
+      const freshTier = useAuthStore.getState().profile?.tier ?? 'free'
+      const isFreeUser = !PAID_TIERS.includes(freshTier as typeof PAID_TIERS[number])
+      if (isFreeUser) {
         setStep(4)
       } else {
         navigate('/workspace', { replace: true })
@@ -780,9 +780,8 @@ export default function ProfileSetup() {
     navigate('/workspace', { replace: true })
   }
 
-  // "Browse Templates" — /catalog doesn't exist yet, fall back to /dashboard
   function handleBrowse() {
-    navigate('/dashboard', { replace: true })
+    navigate('/catalog', { replace: true })
   }
 
   const template = icp ? getTemplateForICP(icp, blend) : null
@@ -808,7 +807,7 @@ export default function ProfileSetup() {
       {step === 3 && template && (
         <Screen3
           template={template}
-          isFree={isFree}
+          isFree={false}
           onAccept={handleAccept}
           onBrowse={handleBrowse}
           isCommitting={committing}
