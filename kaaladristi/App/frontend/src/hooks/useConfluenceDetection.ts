@@ -3,32 +3,26 @@
  *
  * Mount <ConfluencePairMonitor> inside WorkspaceCanvas for each visible
  * overlay pair. Each monitor runs useCorrelationResult for one pair and
- * fires addVaNiBlock when conditions are met.
+ * fires addVaNiCorrelation when conditions are met.
  *
- * Suppression is tracked in a useRef inside each monitor so the guard is
- * synchronous — avoids the async-state race that causes infinite loops.
+ * Suppression is tracked in a module-level Map in frameworkStore (24hr window)
+ * so it survives component remounts.
  */
 
 import { useEffect, useRef, useMemo } from 'react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useCorrelationResult } from './useCorrelationResult'
-import type { CorrelationResult } from './useCorrelationResult'
-import type { FrameworkBlock } from '@/types/framework'
 
 /**
  * Returns all pairs of visible overlay catalog_item_ids.
- * Uses a stable memo so the array reference only changes when overlay IDs
- * actually change — prevents Zustand from force-re-rendering on unrelated
- * store updates.
  */
 export function useVisibleOverlayPairs(): Array<[string, string]> {
-  // Select only the IDs of visible overlays — primitives, stable comparison
   const visibleIds = useFrameworkStore(s => {
     const overlays = s.framework?.chart_overlays ?? []
     return overlays
       .filter(o => o.visible)
       .map(o => o.catalog_item_id)
-      .join(',')   // string — stable reference when content doesn't change
+      .join(',')
   })
 
   return useMemo(() => {
@@ -45,62 +39,31 @@ export function useVisibleOverlayPairs(): Array<[string, string]> {
 }
 
 interface PairMonitorProps {
-  itemA:       string
-  itemB:       string
-  benchmark?:  string
-  onSuppress:  (key: string) => void
+  itemA: string
+  itemB: string
+  benchmark?: string
 }
 
 /**
- * Renders nothing. Watches one overlay pair and fires addVaNiBlock when
- * the correlation has ≥3 instances and is currently active.
- *
- * Uses a ref-based "has fired" guard so the guard is synchronous —
- * React setState (async) would lose the race and allow re-entry.
+ * Renders nothing. Watches one overlay pair and fires addVaNiCorrelation
+ * when the correlation has ≥3 instances and is currently active.
  */
 export function ConfluencePairMonitor({
-  itemA, itemB, benchmark = 'NIFTY50', onSuppress,
+  itemA, itemB, benchmark = 'NIFTY50',
 }: PairMonitorProps): null {
   const { result } = useCorrelationResult(itemA, itemB, benchmark)
-  const addVaNiBlock  = useFrameworkStore(s => s.addVaNiBlock)
-  const existingBlock = useFrameworkStore(
-    s => s.framework?.blocks.some(b => b.catalog_item_id === `vani_corr:${itemA}:${itemB}`) ?? false,
-  )
-  const nextRowStart = useFrameworkStore(s => {
-    const blocks = s.framework?.blocks ?? []
-    const nonChart = blocks.filter(b => b.type !== 'chart')
-    return nonChart.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
-  })
-
-  // Synchronous guard — prevents re-entry before React state updates commit
+  const addVaNiCorrelation = useFrameworkStore(s => s.addVaNiCorrelation)
   const firedRef = useRef(false)
 
   useEffect(() => {
     if (!result) return
     if (!result.currently_active) return
     if (result.n_instances < 3) return
-    if (existingBlock) return
     if (firedRef.current) return
 
-    firedRef.current = true   // synchronous — safe against concurrent effect runs
-
-    const block: FrameworkBlock = {
-      id:              crypto.randomUUID(),
-      type:            'vani_correlation',
-      catalog_item_id: `vani_corr:${itemA}:${itemB}`,
-      placement:       'panel_block',
-      grid_position:   { col_start: 17, col_end: 25, row_start: nextRowStart, row_end: nextRowStart + 8 },
-      config:          {
-        item_a: itemA,
-        item_b: itemB,
-        correlation_result: result as unknown as Record<string, unknown>,
-      },
-      added_by: 'vani',
-      added_at: new Date().toISOString(),
-    }
-    addVaNiBlock(block)
-    onSuppress(`${itemA}:${itemB}`)
-  }, [result, existingBlock])  // eslint-disable-line react-hooks/exhaustive-deps
+    firedRef.current = true
+    addVaNiCorrelation(itemA, itemB, result)
+  }, [result])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return null
 }

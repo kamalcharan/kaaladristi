@@ -270,11 +270,8 @@ export default function WorkspaceCanvas({ framework }: Props) {
   // Maximize state
   const [maximizedBlockId, setMaximizedBlockId] = useState<string | null>(null)
 
-  // VaNi confluence detection — suppressed pairs (in-memory, Phase 5 adds DB)
-  const [suppressedPairs, setSuppressedPairs] = useState<Set<string>>(new Set())
+  // VaNi confluence detection
   const confluencePairs = useVisibleOverlayPairs()
-  const handleSuppress = (key: string) =>
-    setSuppressedPairs(prev => new Set([...prev, key]))
 
   const {
     removeBlock, updateBlockPosition, saveFramework,
@@ -587,14 +584,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                   isDraggable={editMode && !resizingBlockId && !isMaximized}
                   effectivePosition={effectivePosition}
                   isMaximized={isMaximized}
-                  onRemove={(id) => {
-                    const b = framework.blocks.find(bl => bl.id === id)
-                    if (b?.catalog_item_id.startsWith('vani_corr:')) {
-                      const parts = b.catalog_item_id.split(':').slice(1)
-                      handleSuppress(`${parts[0]}:${parts.slice(1).join(':')}`)
-                    }
-                    removeBlock(id)
-                  }}
+                  onRemove={removeBlock}
                   onResizeStart={handleBlockResizeStart}
                   onMaximize={setMaximizedBlockId}
                 />
@@ -644,12 +634,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
 
       {/* VaNi confluence monitors — one per visible overlay pair, no render output */}
       {confluencePairs.map(([a, b]) => (
-        <ConfluencePairMonitor
-          key={`${a}:${b}`}
-          itemA={a}
-          itemB={b}
-          onSuppress={handleSuppress}
-        />
+        <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} />
       ))}
     </div>
   )

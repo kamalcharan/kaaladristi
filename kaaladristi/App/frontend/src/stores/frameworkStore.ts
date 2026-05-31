@@ -4,6 +4,7 @@ import type { CatalogItem } from '@/constants/catalogItems'
 import { getCatalogItem } from '@/constants/catalogItems'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import { useAuthStore } from '@/stores/authStore'
+import type { CorrelationResult } from '@/hooks/useCorrelationResult'
 
 const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
 
@@ -19,6 +20,19 @@ let _saveTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleSave(saveFn: () => Promise<void>) {
   if (_saveTimer) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => { saveFn() }, 800)
+}
+
+// ── VaNi correlation suppression — 24hr session-level map ─────────────────────
+
+const _suppressedUntil = new Map<string, number>()
+
+function isSuppressed(key: string): boolean {
+  const t = _suppressedUntil.get(key)
+  return t !== undefined && Date.now() < t
+}
+
+function suppress(key: string) {
+  _suppressedUntil.set(key, Date.now() + 24 * 60 * 60 * 1000)
 }
 
 // ── Default framework ─────────────────────────────────────────────────────────
@@ -60,11 +74,21 @@ function makeDefaultChartBlock(): FrameworkBlock {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
+export interface VaNiCorrelation extends CorrelationResult {
+  item_a: string
+  item_b: string
+}
+
 interface FrameworkStore {
   framework: UserFramework | null
   isLoading: boolean
   isSaving: boolean
   error: string | null
+
+  // ── VaNi correlations — session-only, not persisted ──────────────────────
+  vaniCorrelations: VaNiCorrelation[]
+  addVaNiCorrelation: (item_a: string, item_b: string, result: CorrelationResult) => void
+  dismissVaNiCorrelation: (item_a: string, item_b: string) => void
 
   loadFramework: (userId: string) => Promise<void>
   saveFramework: () => Promise<void>
@@ -76,7 +100,6 @@ interface FrameworkStore {
   toggleOverlayVisibility: (catalogItemId: string) => void
   updateOverlayColor: (catalogItemId: string, color: string) => void
   addChartBlock: (instrument: InstrumentRef) => void
-  addVaNiBlock: (block: FrameworkBlock) => void
   addInstrument: (symbol: string) => void
   removeInstrument: (symbol: string) => void
   isBlockActive: (catalogItemId: string) => boolean
@@ -89,6 +112,23 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
   isLoading: false,
   isSaving: false,
   error: null,
+
+  // ── VaNi correlations ─────────────────────────────────────────────────────
+  vaniCorrelations: [],
+
+  addVaNiCorrelation: (item_a, item_b, result) => {
+    const key = `${item_a}:${item_b}`
+    if (isSuppressed(key)) return
+    if (get().vaniCorrelations.some(c => c.item_a === item_a && c.item_b === item_b)) return
+    suppress(key)
+    set(s => ({ vaniCorrelations: [...s.vaniCorrelations, { ...result, item_a, item_b }] }))
+  },
+
+  dismissVaNiCorrelation: (item_a, item_b) => {
+    set(s => ({
+      vaniCorrelations: s.vaniCorrelations.filter(c => !(c.item_a === item_a && c.item_b === item_b)),
+    }))
+  },
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
@@ -354,37 +394,6 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
         ? { ...s.framework, blocks: [...updatedBlocks, block], version: s.framework.version + 1 }
         : null,
     }))
-    scheduleSave(saveFramework)
-  },
-
-  addVaNiBlock: (block: FrameworkBlock) => {
-    const { framework, saveFramework } = get()
-    if (!framework) return
-    if (framework.blocks.some(b => b.catalog_item_id === block.catalog_item_id)) return
-
-    const VANI_BLOCK_HEIGHT = 8
-    const RIGHT_COL_START   = 17
-
-    const pinned: FrameworkBlock = {
-      ...block,
-      grid_position: { col_start: 17, col_end: 25, row_start: 1, row_end: 1 + VANI_BLOCK_HEIGHT },
-    }
-
-    set(s => {
-      if (!s.framework) return { framework: null }
-      const shifted = s.framework.blocks.map(b =>
-        b.grid_position.col_start === RIGHT_COL_START
-          ? { ...b, grid_position: {
-                ...b.grid_position,
-                row_start: b.grid_position.row_start + VANI_BLOCK_HEIGHT,
-                row_end:   b.grid_position.row_end   + VANI_BLOCK_HEIGHT,
-              }}
-          : b
-      )
-      return {
-        framework: { ...s.framework, blocks: [pinned, ...shifted], version: s.framework.version + 1 },
-      }
-    })
     scheduleSave(saveFramework)
   },
 
