@@ -66,13 +66,18 @@ export function ConfluencePairMonitor({
   const existingBlock = useFrameworkStore(
     s => s.framework?.blocks.some(b => b.catalog_item_id === `vani_corr:${itemA}:${itemB}`) ?? false,
   )
+  const nextRowStart = useFrameworkStore(s => {
+    const blocks = s.framework?.blocks ?? []
+    const nonChart = blocks.filter(b => b.type !== 'chart')
+    return nonChart.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
+  })
 
   // Synchronous guard — prevents re-entry before React state updates commit
   const firedRef = useRef(false)
 
   useEffect(() => {
     if (!result) return
-    // TEST MODE: fire for any pair with ≥3 instances regardless of currently_active
+    if (!result.currently_active) return
     if (result.n_instances < 3) return
     if (existingBlock) return
     if (firedRef.current) return
@@ -84,7 +89,7 @@ export function ConfluencePairMonitor({
       type:            'vani_correlation',
       catalog_item_id: `vani_corr:${itemA}:${itemB}`,
       placement:       'panel_block',
-      grid_position:   { col_start: 17, col_end: 25, row_start: 1, row_end: 9 },
+      grid_position:   { col_start: 17, col_end: 25, row_start: nextRowStart, row_end: nextRowStart + 8 },
       config:          {
         item_a: itemA,
         item_b: itemB,
