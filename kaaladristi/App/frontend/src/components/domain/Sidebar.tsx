@@ -78,31 +78,17 @@ function marketStatus(): string {
 // ── ThemeSwitcher ────────────────────────────────────────────────────────────
 
 function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
-  const { activeTheme, darkMode, setTheme, setDarkMode } = useThemeStore()
+  const { activeTheme, setTheme } = useThemeStore()
   const currentTheme = THEMES.find(t => t.id === activeTheme) ?? THEMES[0]
 
   if (collapsed) {
     return (
       <div className="flex flex-col items-center gap-1.5 pb-3">
-        {/* Active theme dot */}
         <div
           title={`Theme: ${currentTheme.label}`}
           style={{ width: 8, height: 8, borderRadius: '50%', background: currentTheme.dot,
             boxShadow: `0 0 6px ${currentTheme.dot}`, cursor: 'default' }}
         />
-        {/* Dark/light toggle if theme supports it */}
-        {!currentTheme.forceDark && (
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? 'Light mode' : 'Dark mode'}
-            style={{ color: 'var(--text-faint)', fontSize: 11, background: 'none',
-              border: 'none', cursor: 'pointer', lineHeight: 1 }}
-            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)')}
-            onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-faint)')}
-          >
-            {darkMode ? '◐' : '○'}
-          </button>
-        )}
       </div>
     )
   }
@@ -113,7 +99,7 @@ function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
         {THEMES.map(t => (
           <button
             key={t.id}
-            onClick={() => setTheme(t.id, darkMode)}
+            onClick={() => setTheme(t.id)}
             title={t.label}
             style={{
               width: 10, height: 10, borderRadius: '50%',
@@ -125,24 +111,6 @@ function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
             }}
           />
         ))}
-        {!currentTheme.forceDark && (
-          <>
-            <div style={{ flex: 1 }} />
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              title={darkMode ? 'Switch to light' : 'Switch to dark'}
-              style={{
-                fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-faint)',
-                background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1,
-                padding: '2px 4px', borderRadius: 4,
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)')}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-faint)')}
-            >
-              {darkMode ? '◐ dark' : '○ light'}
-            </button>
-          </>
-        )}
       </div>
     </div>
   )
