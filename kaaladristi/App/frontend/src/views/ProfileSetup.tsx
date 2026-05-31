@@ -7,8 +7,9 @@ import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import { from } from '@/services/postgrest'
+import PricingCards from '@/components/domain/Pricing/PricingCards'
 
-type Step = 1 | 2 | 3 | 4
+type Step = 1 | 2 | 3 | 4 | 5
 type ICP  = 'investor' | 'trader' | 'both'
 
 // ── Keyframe animations ───────────────────────────────────────────────────────
@@ -749,7 +750,7 @@ export default function ProfileSetup() {
     if (val !== 'both') setTimeout(() => setStep(3), 280)
   }
 
-  // "Start here →" — apply template, mark onboarded, route to workspace or S4
+  // "Start here →" — apply template, mark onboarded, go to plan selection
   async function handleAccept() {
     if (!icp) return
     setCommitting(true)
@@ -761,20 +762,22 @@ export default function ProfileSetup() {
       try { await refreshProfile() } catch {
         if (profile) setProfile({ ...profile, onboarded: true })
       }
-      console.log('tier after refresh:', useAuthStore.getState().profile?.tier)
-      const freshTier = useAuthStore.getState().profile?.tier ?? 'free'
-      const isFreeUser = !PAID_TIERS.includes(freshTier as typeof PAID_TIERS[number])
-      if (isFreeUser) {
-        setStep(4)
-      } else {
-        navigate('/workspace', { replace: true })
-      }
+      setStep(4)
     } catch {
       setCommitting(false)
     }
   }
 
-  // Screen 4 complete — add instruments, save, navigate
+  // Screen 4 (plan selection) — paid success → workspace, free skip → Screen 5
+  function handlePaidSuccess() {
+    navigate('/workspace', { replace: true })
+  }
+
+  function handleFreeSelected() {
+    setStep(5)
+  }
+
+  // Screen 5 complete — add instruments, save, navigate
   async function handleInstrumentsComplete(symbols: string[]) {
     symbols.forEach(s => addInstrument(s))
     await saveFramework()
@@ -828,6 +831,32 @@ export default function ProfileSetup() {
         />
       )}
       {step === 4 && (
+        <div className="fixed inset-0 overflow-y-auto" style={{ background: 'var(--bg)', padding: '48px 24px 80px' }}>
+          <div style={{ maxWidth: 900, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: 40 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '5px 14px', borderRadius: 100,
+                background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)',
+                fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase',
+                color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)', marginBottom: 20 }}>
+                One last step
+              </div>
+              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 300,
+                letterSpacing: '-0.03em', marginBottom: 12, color: 'var(--text-primary)' }}>
+                Choose your plan
+              </h1>
+              <p style={{ fontSize: 15, color: 'var(--text-muted)', maxWidth: 420, margin: '0 auto' }}>
+                Your framework is ready. Upgrade now for full access, or start free.
+              </p>
+            </div>
+            <PricingCards
+              onPaidSuccess={handlePaidSuccess}
+              onFreeSelected={handleFreeSelected}
+            />
+          </div>
+        </div>
+      )}
+      {step === 5 && (
         <Screen4 onComplete={handleInstrumentsComplete} />
       )}
     </>
