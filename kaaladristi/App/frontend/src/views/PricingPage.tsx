@@ -127,15 +127,15 @@ export default function PricingPage() {
             return (
               <div key={tier.id} style={{
                 borderRadius: 16, padding: '24px 20px',
-                background: tier.highlight ? 'rgba(139,92,246,.12)' : 'rgba(255,255,255,.04)',
-                border: `1px solid ${tier.highlight ? 'rgba(139,92,246,.5)' : 'rgba(255,255,255,.1)'}`,
+                background: tier.highlight ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'var(--card)',
+                border: `1px solid ${tier.highlight ? 'color-mix(in srgb, var(--accent) 50%, transparent)' : 'var(--border)'}`,
                 position: 'relative',
-                boxShadow: tier.highlight ? '0 0 30px rgba(139,92,246,.15)' : 'none',
+                boxShadow: tier.highlight ? '0 0 30px color-mix(in srgb, var(--accent) 15%, transparent)' : 'none',
               }}>
                 {tier.highlight && (
                   <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
                     padding: '2px 12px', borderRadius: 20, fontSize: 10, fontWeight: 600,
-                    background: '#8b5cf6', color: '#fff', letterSpacing: '.06em',
+                    background: 'var(--accent)', color: '#fff', letterSpacing: '.06em',
                     fontFamily: 'var(--font-mono,monospace)' }}>
                     BEST VALUE
                   </div>
@@ -180,11 +180,11 @@ export default function PricingPage() {
 
         {/* Feature comparison */}
         <div style={{ borderRadius: 16, overflow: 'hidden',
-          border: '1px solid rgba(255,255,255,.08)', background: 'rgba(255,255,255,.02)' }}>
+          border: '1px solid var(--border)', background: 'var(--card)' }}>
           {/* Header row */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px',
-            padding: '12px 20px', background: 'rgba(255,255,255,.04)',
-            borderBottom: '1px solid rgba(255,255,255,.08)', fontSize: 11,
+            padding: '12px 20px', background: 'var(--surface-dim, rgba(255,255,255,.04))',
+            borderBottom: '1px solid var(--border)', fontSize: 11,
             color: 'rgba(255,255,255,.4)', fontFamily: 'var(--font-mono,monospace)',
             letterSpacing: '.04em', textAlign: 'center' }}>
             <span style={{ textAlign: 'left' }}>FEATURE</span>

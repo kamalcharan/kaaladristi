@@ -239,6 +239,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   {({ isActive }) => (
                     <>
                       <span
+                        aria-hidden="true"
                         style={{
                           fontFamily: 'var(--font-display)',
                           fontSize: '14px',

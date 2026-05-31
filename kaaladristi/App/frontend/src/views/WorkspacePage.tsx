@@ -140,6 +140,7 @@ export default function WorkspacePage() {
           flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
           padding: '7px 20px',
+          zIndex: 50,
           background: 'rgba(245,158,11,.07)',
           borderTop: '1px solid rgba(245,158,11,.2)',
           fontSize: 12, color: 'rgba(253,211,77,.7)',

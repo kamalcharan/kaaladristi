@@ -167,7 +167,7 @@ export default function VaNiChatPanel() {
       <div
         className={cn(
           'fixed top-0 right-0 h-full z-[201] flex flex-col',
-          'bg-[#0c0a1a] border-l-2 border-[var(--accent-indigo)]/30',
+          'bg-[var(--bg)] border-l-2 border-[var(--accent-indigo)]/30',
           'shadow-[−8px_0_30px_rgba(99,102,241,0.15)]',
           'transition-transform duration-300 ease-out',
           'w-full sm:w-[420px] lg:w-[400px]',
@@ -267,7 +267,7 @@ export default function VaNiChatPanel() {
                     <span className="text-white text-[9px] font-serif font-bold">V</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[#161233] border border-[var(--accent-indigo)]/15">
+                    <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[var(--card)] border border-[var(--accent-indigo)]/15">
                       <p className="text-[12px] text-white/80 leading-[1.7] whitespace-pre-wrap">
                         {msg.text}
                       </p>
@@ -307,7 +307,7 @@ export default function VaNiChatPanel() {
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-1 shadow shadow-indigo-500/20 animate-pulse">
                 <span className="text-white text-[9px] font-serif font-bold">V</span>
               </div>
-              <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[#161233] border border-[var(--accent-indigo)]/15">
+              <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[var(--card)] border border-[var(--accent-indigo)]/15">
                 <div className="flex items-center gap-2.5">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-indigo)]" />
                   <span className="text-[11px] text-white/40">VaNi is analysing...</span>

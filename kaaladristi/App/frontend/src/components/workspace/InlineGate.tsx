@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, Lock, Zap, TrendingUp, BarChart2, Clock } from 'lucide-react'
+import { X, Lock, Zap, TrendingUp, BarChart2, Clock, Activity } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { createOrder, openCheckout, verifyPayment } from '@/services/razorpayService'
 
 export type GateContext =
   | 'add_rule'
+  | 'add_indicator'
   | 'correlation_view'
   | 'add_instrument'
   | 'free_expired'
@@ -19,6 +20,10 @@ const GATE_CONFIGS: Record<GateContext, GateContextConfig> = {
   add_rule: {
     icon: <Zap size={16} />,
     message: "VaNi can't add rules to your framework on the free tier. Upgrade to build your own combination — or try the Trial for 3 days.",
+  },
+  add_indicator: {
+    icon: <Activity size={16} />,
+    message: "VaNi can't add this indicator on the free tier. Upgrade to customise your setup.",
   },
   correlation_view: {
     icon: <TrendingUp size={16} />,
@@ -52,13 +57,20 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
   const [visible, setVisible]     = useState(false)
   const [paying, setPaying]       = useState(false)
   const [payError, setPayError]   = useState<string | null>(null)
+  const primaryBtnRef = useRef<HTMLButtonElement>(null)
+  const triggerRef    = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (isOpen) {
-      // Slight delay to let mount happen before scale animation
-      requestAnimationFrame(() => setVisible(true))
+      triggerRef.current = document.activeElement as HTMLElement
+      requestAnimationFrame(() => {
+        setVisible(true)
+        primaryBtnRef.current?.focus()
+      })
     } else {
       setVisible(false)
+      triggerRef.current?.focus()
+      triggerRef.current = null
     }
   }, [isOpen])
 
@@ -101,22 +113,28 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
         position: 'fixed', inset: 0, zIndex: 400,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         backdropFilter: 'blur(8px)',
-        background: 'rgba(0,0,0,.55)',
+        background: 'var(--overlay, rgba(0,0,0,.55))',
         opacity: visible ? 1 : 0,
         transition: 'opacity .2s ease',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onDismiss() }}
     >
-      <div style={{
-        background: '#13131f',
-        border: '1px solid rgba(139,92,246,.35)',
-        borderRadius: 16,
-        padding: '28px 28px 24px',
-        width: 400,
-        boxShadow: '0 8px 40px rgba(0,0,0,.7), 0 0 0 1px rgba(139,92,246,.12)',
-        transform: visible ? 'scale(1)' : 'scale(0.95)',
-        transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)',
-      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Upgrade required"
+        style={{
+          background: 'var(--card)',
+          border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+          borderRadius: 16,
+          padding: '28px 28px 24px',
+          width: 400,
+          position: 'relative',
+          boxShadow: '0 8px 40px rgba(0,0,0,.7), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent)',
+          transform: visible ? 'scale(1)' : 'scale(0.95)',
+          transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)',
+        }}
+      >
         {/* Dismiss button */}
         <button
           onClick={onDismiss}
@@ -128,16 +146,17 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
         {/* Lock tag */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '3px 10px', borderRadius: 20, marginBottom: 16,
-          background: 'rgba(139,92,246,.15)', border: '1px solid rgba(139,92,246,.3)',
-          fontSize: 11, color: '#a78bfa', fontFamily: 'var(--font-mono,monospace)' }}>
+          background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+          fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)' }}>
           <Lock size={10} />
           PAID FEATURE
         </div>
 
         {/* Context icon + message */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-          <div style={{ color: '#a78bfa', paddingTop: 2, flexShrink: 0 }}>{cfg.icon}</div>
-          <p style={{ fontSize: 14, color: 'rgba(255,255,255,.75)', lineHeight: 1.55, margin: 0 }}>
+          <div style={{ color: 'var(--accent)', paddingTop: 2, flexShrink: 0 }}>{cfg.icon}</div>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
             {cfg.message}
           </p>
         </div>
@@ -145,19 +164,20 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
         {/* Free tier remaining bar — only for free + has expiry */}
         {isFree && days !== null && (
           <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 8,
-            background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)' }}>
+            background: 'var(--surface-dim, rgba(255,255,255,.04))',
+            border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
-              fontSize: 11, color: 'rgba(255,255,255,.4)', marginBottom: 6 }}>
+              fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
               <span>Free tier remaining</span>
-              <span style={{ color: days <= 2 ? '#f59e0b' : 'rgba(255,255,255,.4)' }}>
+              <span style={{ color: days <= 2 ? 'var(--caution)' : 'var(--text-muted)' }}>
                 {days} day{days !== 1 ? 's' : ''} left
               </span>
             </div>
-            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,.1)' }}>
+            <div style={{ height: 4, borderRadius: 2, background: 'var(--border)' }}>
               <div style={{
                 width: `${Math.min(100, (days / 7) * 100)}%`,
                 height: '100%', borderRadius: 2,
-                background: days <= 2 ? '#f59e0b' : '#8b5cf6',
+                background: days <= 2 ? 'var(--caution)' : 'var(--accent)',
                 transition: 'width .4s ease',
               }} />
             </div>
@@ -175,11 +195,14 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
         {/* CTAs */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
+            ref={primaryBtnRef}
             onClick={handleTrialPurchase}
             disabled={paying}
             style={{
               padding: '11px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: paying ? 'rgba(139,92,246,.3)' : 'rgba(139,92,246,.9)',
+              background: paying
+                ? 'color-mix(in srgb, var(--accent) 30%, transparent)'
+                : 'color-mix(in srgb, var(--accent) 90%, transparent)',
               border: 'none', color: '#fff', cursor: paying ? 'wait' : 'pointer',
               transition: 'background .15s',
             }}>
@@ -190,8 +213,9 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             onClick={() => navigate('/pricing')}
             style={{
               padding: '9px 16px', borderRadius: 10, fontSize: 12,
-              background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)',
-              color: 'rgba(255,255,255,.55)', cursor: 'pointer',
+              background: 'var(--surface-dim, rgba(255,255,255,.05))',
+              border: '1px solid var(--border)',
+              color: 'var(--text-muted)', cursor: 'pointer',
             }}>
             See all plans →
           </button>
@@ -201,7 +225,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             style={{
               padding: '7px 16px', borderRadius: 10, fontSize: 12,
               background: 'none', border: 'none',
-              color: 'rgba(255,255,255,.3)', cursor: 'pointer',
+              color: 'var(--text-faint, rgba(255,255,255,.3))', cursor: 'pointer',
             }}>
             Continue on free tier
           </button>

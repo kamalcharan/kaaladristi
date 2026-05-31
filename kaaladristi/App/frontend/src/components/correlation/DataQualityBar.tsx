@@ -55,8 +55,8 @@ export default function DataQualityBar({
   return (
     <div style={{
       borderRadius: 8, margin: '6px 0',
-      background: '#ffffff',
-      border: '1px solid #e5e7eb',
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
       overflow: 'hidden',
     }}>
       {/* Header row */}
@@ -65,14 +65,14 @@ export default function DataQualityBar({
         padding: '7px 12px 5px',
       }}>
         <span style={{
-          fontSize: 10, fontWeight: 600, letterSpacing: '.06em',
-          color: '#6b7280', fontFamily: 'var(--font-mono,monospace)',
+          fontSize: 12, fontWeight: 600, letterSpacing: '.06em',
+          color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)',
         }}>
           EOD DATA COVERAGE
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: '#374151' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
             {days_covered.toLocaleString()} of {days_total.toLocaleString()} days
             &nbsp;·&nbsp;
             {fmt(date_from)} – {fmt(date_to)}
@@ -84,22 +84,22 @@ export default function DataQualityBar({
                 onMouseEnter={() => setTooltipOpen(true)}
                 onMouseLeave={() => setTooltipOpen(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer',
-                  padding: 0, display: 'flex', alignItems: 'center', color: '#9ca3af' }}>
+                  padding: 0, display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}>
                 <Info size={12} />
               </button>
               {tooltipOpen && (
                 <div style={{
                   position: 'absolute', bottom: '100%', right: 0, marginBottom: 6,
-                  background: '#1e1e2e', border: '1px solid rgba(255,255,255,.12)',
+                  background: 'var(--card)', border: '1px solid var(--border)',
                   borderRadius: 8, padding: '8px 12px', width: 280, zIndex: 50,
                   boxShadow: '0 4px 20px rgba(0,0,0,.5)',
                 }}>
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', marginBottom: 6,
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6,
                     fontFamily: 'var(--font-mono,monospace)', letterSpacing: '.04em' }}>
                     KNOWN EXCLUSIONS
                   </div>
                   {exclusions.map((e, i) => (
-                    <div key={i} style={{ fontSize: 11, color: 'rgba(255,255,255,.65)',
+                    <div key={i} style={{ fontSize: 11, color: 'var(--text-secondary)',
                       lineHeight: 1.55, paddingTop: i > 0 ? 4 : 0 }}>
                       · {e}
                     </div>
@@ -113,7 +113,7 @@ export default function DataQualityBar({
 
       {/* Progress bar + percentage */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px 8px' }}>
-        <div style={{ flex: 1, height: 5, borderRadius: 3, background: '#f3f4f6' }}>
+        <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--border)' }}>
           <div style={{
             width: `${Math.min(100, coverage_pct)}%`,
             height: '100%', borderRadius: 3,

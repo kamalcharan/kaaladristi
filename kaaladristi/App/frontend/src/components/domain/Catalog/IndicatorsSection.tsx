@@ -223,7 +223,7 @@ export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) 
     </div>
 
     <InlineGate
-      context="add_rule"
+      context="add_indicator"
       isOpen={gateOpen}
       onDismiss={() => setGateOpen(false)}
     />
