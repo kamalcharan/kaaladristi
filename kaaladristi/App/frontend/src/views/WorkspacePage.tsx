@@ -17,7 +17,7 @@ export default function WorkspacePage() {
   const [drawerOpen, setDrawerOpen]         = useState(false)
   const [activePairKey, setActivePairKey]   = useState<string | null>(null)
 
-  const openDrawer = useCallback((key: string) => {
+  const openDrawer = useCallback((key: string | null) => {
     setActivePairKey(key)
     setDrawerOpen(true)
   }, [])
@@ -103,7 +103,7 @@ export default function WorkspacePage() {
       </div>
 
       {/* Canvas */}
-      <WorkspaceCanvas framework={framework!} />
+      <WorkspaceCanvas framework={framework!} onOpenDrawer={openDrawer} />
 
       {/* Correlation Drawer */}
       <CorrelationDrawer

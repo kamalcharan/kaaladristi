@@ -12,6 +12,7 @@ import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
 import { useVisibleOverlayPairs, ConfluencePairMonitor } from '@/hooks/useConfluenceDetection'
+import WorkspaceActionIsland from './WorkspaceActionIsland'
 import { effectiveDotColor } from './overlayColors'
 import { fetchActiveIndices, type IndexOption } from '@/services/indexPickerService'
 
@@ -250,10 +251,11 @@ function IndexDropdown({
 }
 
 interface Props {
-  framework: UserFramework
+  framework:     UserFramework
+  onOpenDrawer?: (pairKey: string | null) => void
 }
 
-export default function WorkspaceCanvas({ framework }: Props) {
+export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
@@ -372,7 +374,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const isEmpty = !framework.blocks.some(b => b.type !== 'chart')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       {/* ── Canvas topbar: overlay pills (left) + Edit Canvas (right) ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
@@ -636,6 +638,9 @@ export default function WorkspaceCanvas({ framework }: Props) {
       {confluencePairs.map(([a, b]) => (
         <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} />
       ))}
+
+      {/* Workspace Action Island — fixed pill at bottom of canvas */}
+      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} />
     </div>
   )
 }
