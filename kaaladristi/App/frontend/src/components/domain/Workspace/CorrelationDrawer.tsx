@@ -506,7 +506,7 @@ function EventInStateViz({ corr }: { corr: VaNiCorrelation }) {
                 padding: '8px 12px', fontSize: 11,
                 borderTop: '1px solid rgba(255,255,255,.04)',
                 background: isActive ? 'var(--caution-bg)' : isBest ? 'var(--bull-bg)' : 'transparent',
-                borderLeft: isActive ? '3px solid #f59e0b' : isBest ? '3px solid var(--bull-dim)' : '3px solid transparent',
+                borderLeft: isActive ? '3px solid var(--caution)' : isBest ? '3px solid var(--bull-dim)' : '3px solid transparent',
               }}>
                 <span style={{ color: isActive ? 'var(--caution)' : 'rgba(255,255,255,.65)',
                   fontFamily: 'var(--font-mono,monospace)', fontSize: 10 }}>
@@ -695,8 +695,8 @@ function PairDetail({ corr, onDismiss }: { corr: VaNiCorrelation; onDismiss: () 
         <button
           onClick={onDismiss}
           style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 12,
-            background: 'var(--bear-bg)', border: '1px solid rgba(239,68,68,.2)',
-            color: '#f87171', cursor: 'pointer' }}>
+            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim)',
+            color: 'var(--bear)', cursor: 'pointer' }}>
           Dismiss
         </button>
       </div>

@@ -540,7 +540,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           borderColor = hexToRgba(band.color, 0.75);
         } else if (band.matched === false) {
           fillColor   = 'var(--bear-bg)';
-          borderColor = 'rgba(239,68,68,0.55)'; /* bear tint border */
+          borderColor = 'var(--bear-dim)'; /* bear tint border */
         } else {
           // null — not yet validated (past unbacktested or future transit)
           fillColor   = hexToRgba(band.color, 0.06);
