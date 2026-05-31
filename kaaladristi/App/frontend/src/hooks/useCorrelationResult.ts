@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 
 const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || ''
@@ -28,6 +28,9 @@ export interface CorrelationResult {
   insufficient_data?: boolean
 }
 
+// Cache outside React so StrictMode double-mount doesn't re-fetch
+const _cache = new Map<string, CorrelationResult | null>()
+
 export function useCorrelationResult(
   itemA: string,
   itemB: string,
@@ -38,28 +41,48 @@ export function useCorrelationResult(
   error:            string | null
   insufficientData: boolean
 } {
-  const { data, isLoading, error } = useQuery<CorrelationResult>({
-    queryKey:  ['correlation', itemA, itemB, benchmark],
-    queryFn:   async () => {
-      const res = await fetch(`${PIPELINE_URL}/api/correlation/compute`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ item_a: itemA, item_b: itemB, benchmark }),
+  const cacheKey = `${itemA}|${itemB}|${benchmark}`
+  const [result, setResult]   = useState<CorrelationResult | null>(_cache.get(cacheKey) ?? null)
+  const [loading, setLoading] = useState(!_cache.has(cacheKey))
+  const [error, setError]     = useState<string | null>(null)
+  const fetchedRef            = useRef(false)
+
+  useEffect(() => {
+    if (fetchedRef.current) return       // already fired in this mount
+    if (_cache.has(cacheKey)) {          // already cached from a previous mount
+      setResult(_cache.get(cacheKey) ?? null)
+      setLoading(false)
+      return
+    }
+
+    fetchedRef.current = true
+    setLoading(true)
+
+    fetch(`${PIPELINE_URL}/api/correlation/compute`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body:    JSON.stringify({ item_a: itemA, item_b: itemB, benchmark }),
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json() as Promise<CorrelationResult>
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res.json()
-    },
-    staleTime:           5 * 60_000,
-    retry:               1,
-    enabled:             !!itemA && !!itemB,
-    networkMode:         'always',    // don't abort on StrictMode unmount/remount
-    gcTime:              10 * 60_000, // keep cached result for 10 min
-  })
+      .then(data => {
+        const value = data.insufficient_data ? null : data
+        _cache.set(cacheKey, value)
+        setResult(value)
+        setLoading(false)
+      })
+      .catch(err => {
+        setError(String(err))
+        setLoading(false)
+      })
+  }, [cacheKey])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
-    result:           data?.insufficient_data ? null : (data ?? null),
-    loading:          isLoading,
-    error:            error ? String(error) : null,
-    insufficientData: data?.insufficient_data === true,
+    result,
+    loading,
+    error,
+    insufficientData: result === null && !loading && !error,
   }
 }
