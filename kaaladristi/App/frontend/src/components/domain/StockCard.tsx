@@ -84,8 +84,8 @@ const FLOW_DISPLAY: Record<string, { label: string; bull: boolean }> = {
 
 function zoneColor(zone: string | null): string {
   if (zone === 'Strong Bull') return 'var(--bull)';
-  if (zone === 'Mild Bull')   return 'rgba(16,185,129,0.7)';
-  if (zone === 'Mild Bear')   return 'rgba(239,68,68,0.7)';
+  if (zone === 'Mild Bull')   return 'color-mix(in srgb, var(--bull) 70%, transparent)';
+  if (zone === 'Mild Bear')   return 'color-mix(in srgb, var(--bear) 70%, transparent)';
   if (zone === 'Strong Bear') return 'var(--bear)';
   return 'var(--text-muted)';
 }

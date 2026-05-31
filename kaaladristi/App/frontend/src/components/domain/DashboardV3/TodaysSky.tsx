@@ -208,7 +208,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
               fontFamily: 'var(--font-mono)',
               padding: '3px 10px',
               background: 'var(--bull-bg)',
-              border: '1px solid rgba(16,185,129,0.2)',
+              border: '1px solid var(--bull-dim)',
               borderRadius: 4,
               fontSize: 10,
               color: 'var(--bull)',
