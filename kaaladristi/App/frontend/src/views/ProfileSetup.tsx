@@ -772,9 +772,10 @@ export default function ProfileSetup() {
     }
   }
 
-  // Screen 4 complete — add instruments, navigate
+  // Screen 4 complete — add instruments, save, navigate
   async function handleInstrumentsComplete(symbols: string[]) {
     symbols.forEach(s => addInstrument(s))
+    await saveFramework()
     navigate('/workspace', { replace: true })
   }
 
