@@ -3709,16 +3709,25 @@ def _get_astro_ranges(rule_code: str, conn) -> list[tuple]:
 
 def _get_indicator_ranges(item_id: str, index_id: int, conn) -> list[tuple]:
     col = _INDICATOR_COLS.get(item_id)
-    if not col:
-        return []
     if item_id in ('ema_20', 'ema_60', 'sma_50', 'sma_150', 'sma_200'):
         sql = f"SELECT trade_date FROM km_index_eod WHERE index_id=%s AND {col} IS NOT NULL AND close > {col} ORDER BY trade_date"
     elif item_id == 'rsi_14':
         sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND rsi_14 IS NOT NULL AND (rsi_14 > 65 OR rsi_14 < 35) ORDER BY trade_date"
     elif item_id == 'supertrend':
         sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND supertrend_dir IS NOT NULL AND supertrend_dir > 0 ORDER BY trade_date"
+    # Zone items — active when in a directional / strong state
+    elif item_id == 'magic_rs':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND magic_rs_zone IN ('Strong Bull','Mild Bull') ORDER BY trade_date"
+    elif item_id == 'order_flow':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND flow_type IN ('FRESH_LONGS','SHORT_COVERING') ORDER BY trade_date"
+    elif item_id == 'smart_money':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND sniper_inst IS NOT NULL AND sniper_inst > 0.5 ORDER BY trade_date"
+    elif item_id == 'breadth_roc':
+        sql = "SELECT trade_date FROM km_breadth_roc WHERE trade_date IN (SELECT trade_date FROM km_index_eod WHERE index_id=%s) AND roc_13 > 0 ORDER BY trade_date"
+    elif col:
+        sql = f"SELECT trade_date FROM km_index_eod WHERE index_id=%s AND {col} IS NOT NULL ORDER BY trade_date"
     else:
-        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s ORDER BY trade_date"
+        return []
     with conn.cursor() as cur:
         cur.execute(sql, (index_id,))
         return _dates_to_ranges([r[0] for r in cur.fetchall()])
