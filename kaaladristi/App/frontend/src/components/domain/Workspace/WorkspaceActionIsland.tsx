@@ -52,7 +52,7 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
         gap: 10,
         padding: '10px 20px',
         borderRadius: 100,
-        background: 'rgba(13,17,23,0.96)',
+        background: 'var(--card)',
         backdropFilter: 'blur(16px)',
         border: `1px solid ${hasActive ? '#f59e0b' : 'rgba(255,255,255,.15)'}`,
         boxShadow: hasActive

@@ -1,29 +1,13 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Loader2, X } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
-import CorrelationDrawer from '@/components/domain/Workspace/CorrelationDrawer'
-
-function fmtId(id: string): string {
-  return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
-}
 
 export default function WorkspacePage() {
   const { profile } = useAuthStore()
-  const { framework, isLoading, error, loadFramework, vaniCorrelations } = useFrameworkStore()
-
-  const [drawerOpen, setDrawerOpen]         = useState(false)
-  const [activePairKey, setActivePairKey]   = useState<string | null>(null)
-  const [betaBarDismissed, setBetaBarDismissed] = useState(false)
-
-  const isBeta = profile?.tier === 'beta'
-
-  const openDrawer = useCallback((key: string | null) => {
-    setActivePairKey(key)
-    setDrawerOpen(true)
-  }, [])
+  const { framework, isLoading, error, loadFramework } = useFrameworkStore()
 
   useEffect(() => {
     if (!framework && profile?.id) {
@@ -41,19 +25,32 @@ export default function WorkspacePage() {
     )
   }
 
+  // version === 1 means the framework was just auto-created and has never been saved.
+  // Any user interaction bumps it to 2+, so this redirect only fires for a fresh account.
   if (
-    !isLoading && framework && framework.version === 1 &&
-    framework.blocks.filter(b => b.type !== 'chart').length === 0 &&
+    framework &&
+    framework.version === 1 &&
+    framework.blocks.length === 0 &&
     framework.chart_overlays.length === 0
   ) {
-    return <Navigate to="/profile-setup" replace />
+    return <Navigate to="/setup" replace />
   }
 
-  if (error && !framework) {
+  if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3"
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6"
         style={{ background: 'var(--bg)' }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Failed to load framework.</span>
+        <div style={{ fontSize: 28, opacity: .4 }}>⚠</div>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,.4)', textAlign: 'center', maxWidth: 280 }}>
+          Could not load framework: {error}
+        </p>
+        <button
+          onClick={() => profile?.id && loadFramework(profile.id)}
+          style={{ padding: '8px 20px', borderRadius: 100, border: '1px solid rgba(255,255,255,.1)',
+            background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
+            fontSize: 12, fontFamily: 'inherit' }}>
+          Retry
+        </button>
       </div>
     )
   }
@@ -62,98 +59,20 @@ export default function WorkspacePage() {
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* Page header */}
       <div style={{ padding: '14px 20px 10px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300,
-              color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-              {framework!.name}
-            </h1>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-              color: 'rgba(255,255,255,.2)', letterSpacing: '.05em' }}>
-              v{framework!.version}
-            </span>
-          </div>
-
-          {/* Beta badge */}
-          {isBeta && (
-            <div
-              title="You're a founding member. Full access free until public launch."
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 10px', borderRadius: 20, fontSize: 11,
-                background: 'rgba(245,158,11,.12)',
-                border: '1px solid rgba(245,158,11,.35)',
-                color: '#fcd34d',
-                fontFamily: 'var(--font-mono,monospace)',
-                cursor: 'default',
-                letterSpacing: '.04em',
-              }}>
-              β · Beta Access
-            </div>
-          )}
-
-          {/* VaNi confluence pills */}
-          {vaniCorrelations.map(c => {
-            const key    = `${c.item_a}:${c.item_b}`
-            const active = c.currently_active
-            return (
-              <button
-                key={key}
-                onClick={() => openDrawer(key)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '3px 10px', borderRadius: 20, fontSize: 11,
-                  background: active ? 'rgba(139,92,246,.18)' : 'rgba(139,92,246,.06)',
-                  border: `1px solid ${active ? '#f59e0b' : 'rgba(139,92,246,.2)'}`,
-                  color: active ? '#fcd34d' : 'rgba(196,181,253,.5)',
-                  fontFamily: 'var(--font-mono,monospace)',
-                  cursor: 'pointer',
-                  transition: 'border-color .2s, color .2s',
-                }}>
-                <span style={{ fontSize: 9, color: '#a78bfa' }}>✦</span>
-                {fmtId(c.item_a)} ∩ {fmtId(c.item_b)} · {c.n_instances}×
-                {active && (
-                  <span style={{ width: 6, height: 6, borderRadius: '50%',
-                    background: '#f59e0b', boxShadow: '0 0 5px #f59e0b',
-                    display: 'inline-block' }} />
-                )}
-              </button>
-            )
-          })}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300,
+            color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            {framework!.name}
+          </h1>
+          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            color: 'var(--text-faint)', letterSpacing: '.05em' }}>
+            v{framework!.version}
+          </span>
         </div>
       </div>
 
-      {/* Canvas */}
-      <WorkspaceCanvas framework={framework!} onOpenDrawer={openDrawer} />
-
-      {/* Correlation Drawer */}
-      <CorrelationDrawer
-        isOpen={drawerOpen}
-        activePairKey={activePairKey}
-        onClose={() => setDrawerOpen(false)}
-        onSelectPair={setActivePairKey}
-      />
-
-      {/* Beta footer bar — session-dismissable, beta tier only */}
-      {isBeta && !betaBarDismissed && (
-        <div style={{
-          flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-          padding: '7px 20px',
-          zIndex: 50,
-          background: 'rgba(245,158,11,.07)',
-          borderTop: '1px solid rgba(245,158,11,.2)',
-          fontSize: 12, color: 'rgba(253,211,77,.7)',
-        }}>
-          <span>Beta Access — free until public launch. You'll be notified before anything changes.</span>
-          <button
-            onClick={() => setBetaBarDismissed(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer',
-              color: 'rgba(253,211,77,.4)', padding: 2, display: 'flex', alignItems: 'center' }}>
-            <X size={12} />
-          </button>
-        </div>
-      )}
+      {/* Canvas — topbar contains overlay pills + Edit Canvas button */}
+      <WorkspaceCanvas framework={framework!} />
     </div>
   )
 }

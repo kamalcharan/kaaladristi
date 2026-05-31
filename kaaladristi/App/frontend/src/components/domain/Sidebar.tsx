@@ -3,7 +3,6 @@ import { LogOut, Shield, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { signOut } from '@/services/auth';
-import { useThemeStore } from '@/stores/themeStore';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
 // Glyphs are Fraunces/Unicode characters, matching dashboard-LOCKED.html
@@ -75,98 +74,6 @@ function marketStatus(): string {
   return 'Market closed';
 }
 
-// ── ThemeSwitcher ────────────────────────────────────────────────────────────
-
-function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
-  const { activeTheme, darkMode, themes, setTheme, setDarkMode } = useThemeStore()
-  const current    = themes.find(t => t.id === activeTheme) ?? themes[0]
-  const canToggle  = !current.forceDark
-
-  if (collapsed) {
-    const next = themes[(themes.findIndex(t => t.id === activeTheme) + 1) % themes.length]
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 0 4px' }}>
-        {/* Theme dot — cycles on click */}
-        <button
-          onClick={() => setTheme(next.id)}
-          title={`Theme: ${current.label} — click to switch`}
-          style={{
-            width: 10, height: 10, borderRadius: '50%',
-            background: current.dot,
-            border: '2px solid rgba(255,255,255,.25)',
-            cursor: 'pointer', padding: 0,
-            boxShadow: `0 0 8px ${current.dot}80`,
-          }}
-        />
-        {/* Dark/light toggle — only when theme supports it */}
-        {canToggle && (
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-              fontSize: 12, color: 'var(--text-faint)', lineHeight: 1,
-            }}
-          >
-            {darkMode ? '◐' : '○'}
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ padding: '8px 12px 4px' }}>
-      {/* Row 1: Theme label + dots */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: canToggle ? 6 : 0 }}>
-        <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 9,
-          color: 'var(--text-faint)', letterSpacing: '.1em',
-          textTransform: 'uppercase', flexShrink: 0,
-        }}>
-          Theme
-        </span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {themes.map(t => {
-            const isActive = t.id === activeTheme
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                title={t.label}
-                style={{
-                  width: 10, height: 10, borderRadius: '50%',
-                  background: t.dot,
-                  border: isActive ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.15)',
-                  cursor: 'pointer', padding: 0,
-                  boxShadow: isActive ? `0 0 8px ${t.dot}90` : 'none',
-                  transition: 'border-color .15s, box-shadow .15s',
-                }}
-              />
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Row 2: Dark/light toggle — only when theme supports it */}
-      {canToggle && (
-        <button
-          onClick={() => setDarkMode(!darkMode)}
-          title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0',
-            fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)',
-          }}
-        >
-          <span style={{ fontSize: 12 }}>{darkMode ? '◐' : '○'}</span>
-          {darkMode ? 'Dark' : 'Light'}
-        </button>
-      )}
-    </div>
-  )
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
@@ -191,7 +98,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
       style={{
         width: collapsed ? '52px' : '220px',
-        background: 'rgba(11,17,32,0.6)',
+        background: 'var(--card)',
         borderRight: '1px solid var(--border)',
         padding: collapsed ? '28px 8px' : '28px 16px',
       }}
@@ -312,14 +219,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     transition: 'all 0.18s',
                     marginBottom: '1px',
                     background: isActive
-                      ? (section.adminHeading ? 'rgba(99,102,241,0.12)' : 'var(--gold-bg)')
+                      ? (section.adminHeading ? 'var(--accent-glow)' : 'var(--gold-bg)')
                       : 'transparent',
                     textDecoration: 'none',
                   })}
                   onMouseEnter={e => {
                     const el = e.currentTarget as HTMLElement;
                     el.style.background = section.adminHeading
-                      ? 'rgba(99,102,241,0.08)'
+                      ? 'var(--accent-glow)'
                       : 'rgba(255,255,255,0.04)';
                     el.style.color = 'var(--text-secondary)';
                   }}
@@ -332,7 +239,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   {({ isActive }) => (
                     <>
                       <span
-                        aria-hidden="true"
                         style={{
                           fontFamily: 'var(--font-display)',
                           fontSize: '14px',
@@ -355,9 +261,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           );
         })}
       </div>
-
-      {/* ── Theme switcher ── */}
-      <ThemeSwitcher collapsed={collapsed} />
 
       {/* ── Footer: user + date ── */}
       <div

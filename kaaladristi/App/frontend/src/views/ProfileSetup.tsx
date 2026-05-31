@@ -191,9 +191,9 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
           padding:'5px 14px', borderRadius:100,
           background:`${V}.1)`, border:`1px solid ${V}.25)`,
           fontSize:10, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase',
-          color:'#7c6af7', fontFamily:'var(--font-mono, monospace)', marginBottom:28,
+          color:'var(--accent)', fontFamily:'var(--font-mono, monospace)', marginBottom:28,
           animation:'text-in .6s ease .8s both' }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:'#7c6af7',
+          <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--accent)',
             animation:'badge-pulse 2s ease-in-out infinite', display:'inline-block' }} />
           Agentic Intelligence
         </div>
@@ -273,7 +273,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
             display:'flex', alignItems:'center', justifyContent:'center',
             boxShadow:`0 3px 12px ${V}.4)`, fontSize:13, fontWeight:700,
             color:'#fff', fontFamily:'var(--font-mono, monospace)', marginTop:2 }}>V</div>
-          <div style={{ background:'rgba(13,17,23,1)', border:'1px solid rgba(255,255,255,.14)',
+          <div style={{ background:'var(--card)', border:'1px solid rgba(255,255,255,.14)',
             borderRadius:'3px 14px 14px 14px', padding:'14px 18px',
             fontSize:14, color:'var(--text-primary)', lineHeight:1.65, maxWidth:460 }}>
             {!typed ? (
@@ -306,8 +306,8 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
               <button key={val} onClick={() => onSelect(val)}
                 style={{ flex:1, padding:'18px 14px', cursor:'pointer', textAlign:'center',
                   borderRadius:12, transition:'all .2s ease',
-                  border:`1px solid ${icp === val ? '#7c6af7' : 'rgba(255,255,255,.07)'}`,
-                  background: icp === val ? `${V}.08)` : 'rgba(13,17,23,1)' }}
+                  border:`1px solid ${icp === val ? 'var(--accent)' : 'rgba(255,255,255,.07)'}`,
+                  background: icp === val ? 'var(--accent-glow)' : 'var(--card)' }}
                 onMouseEnter={e => { if (icp !== val) (e.currentTarget).style.borderColor='rgba(255,255,255,.14)' }}
                 onMouseLeave={e => { if (icp !== val) (e.currentTarget).style.borderColor='rgba(255,255,255,.07)' }}>
                 <div style={{ fontSize:22, marginBottom:8 }}>{icon}</div>
@@ -321,7 +321,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
         {typed && icp === 'both' && (
           <div style={{ maxWidth:520, width:'100%', marginTop:10, padding:'16px 20px',
             border:'1px solid rgba(255,255,255,.07)', borderRadius:12,
-            background:'rgba(13,17,23,1)', animation:'bubble-in .3s ease both' }}>
+            background:'var(--card)', animation:'bubble-in .3s ease both' }}>
             <div style={{ textAlign:'center', fontFamily:'var(--font-mono, monospace)',
               fontSize:13, color:'#c9a84c', marginBottom:12 }}>
               {blend}% Investor · {100 - blend}% Trader
@@ -339,7 +339,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
       </div>
       {/* Action island */}
       <div style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
-        background:'rgba(9,12,16,.95)', border:`1px solid ${V}.3)`,
+        background:'var(--bg)', border:`1px solid ${V}.3)`,
         borderRadius:28, padding:'10px 20px 10px 14px',
         display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(20px)',
         boxShadow:`0 8px 32px rgba(0,0,0,.5), 0 0 0 1px ${V}.08)`,
@@ -352,7 +352,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
           <button onClick={onContinue}
             style={{ padding:'7px 16px', border:'none', borderRadius:100, cursor:'pointer',
               fontSize:12, fontWeight:500, fontFamily:'inherit',
-              background:'#7c6af7', color:'#fff', flexShrink:0, transition:'background .2s' }}>
+              background:'var(--accent)', color:'#fff', flexShrink:0, transition:'background .2s' }}>
             Build my workspace →
           </button>
         )}
@@ -395,7 +395,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
 
   const badgeColor = (badge: string) => {
     if (badge.includes('Overlay')) return { bg: 'rgba(45,212,191,.1)',  color: '#2dd4bf' }
-    if (badge.includes('Output'))  return { bg: 'rgba(124,106,247,.1)', color: '#7c6af7' }
+    if (badge.includes('Output'))  return { bg: 'var(--accent-glow)', color: 'var(--accent)' }
     return                                { bg: 'rgba(201,168,76,.1)',   color: '#c9a84c' }
   }
 
@@ -409,7 +409,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
           background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
           boxShadow:`0 3px 10px ${V}.4)` }} />
         <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:10,
-          color:'#7c6af7', letterSpacing:'.1em', textTransform:'uppercase' }}>VaNi</span>
+          color:'var(--accent)', letterSpacing:'.1em', textTransform:'uppercase' }}>VaNi</span>
         <span style={{ marginLeft:'auto', fontSize:10, fontFamily:'var(--font-mono, monospace)',
           color:'var(--text-muted)' }}>
           {done ? 'ready ✓' : `${visibleCount} / ${total}`}
@@ -434,8 +434,8 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
             const bc = badgeColor(block.badge)
             return (
               <div key={block.catalog_item_id}
-                style={{ border:`1px solid ${visible ? `${V}.35)` : 'rgba(255,255,255,.07)'}`,
-                  borderRadius:10, background:'rgba(13,17,23,1)', padding:'14px 16px',
+                style={{ border:`1px solid ${visible ? 'var(--accent-dim)' : 'rgba(255,255,255,.07)'}`,
+                  borderRadius:10, background:'var(--card)', padding:'14px 16px',
                   opacity: visible ? 1 : 0,
                   transform: visible ? 'none' : 'translateY(12px) scale(.97)',
                   transition:'all .5s cubic-bezier(.34,1.4,.64,1)' }}>
@@ -497,7 +497,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                 display:'flex', alignItems:'center', justifyContent:'center',
                 fontSize:10, fontWeight:700, color:'#fff',
                 fontFamily:'var(--font-mono, monospace)', marginTop:1 }}>V</div>
-              <div style={{ background:'rgba(13,17,23,1)',
+              <div style={{ background:'var(--card)',
                 border:'1px solid rgba(255,255,255,.07)',
                 borderRadius:'3px 10px 10px 10px', padding:'10px 14px',
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}
@@ -517,7 +517,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                 background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
                 display:'flex', alignItems:'center', justifyContent:'center',
                 fontSize:10, fontWeight:700, color:'#fff', fontFamily:'var(--font-mono, monospace)', marginTop:1 }}>V</div>
-              <div style={{ background:'rgba(13,17,23,1)', border:`1px solid ${V}.2)`,
+              <div style={{ background:'var(--card)', border:'1px solid var(--accent-glow)',
                 borderRadius:'3px 10px 10px 10px', padding:'10px 14px',
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}>
                 Done.{' '}
@@ -629,8 +629,8 @@ function Screen4({ onComplete }: S4Props) {
           {selected.map(s => (
             <button key={s} onClick={() => toggle(s)}
               style={{ padding:'7px 14px', borderRadius:100, cursor:'pointer',
-                background:`${V}.1)`, border:`1px solid ${V}.3)`,
-                fontSize:12, color:'#7c6af7', fontFamily:'var(--font-mono, monospace)',
+                background:'var(--accent-glow)', border:'1px solid var(--accent-dim)',
+                fontSize:12, color:'var(--accent)', fontFamily:'var(--font-mono, monospace)',
                 display:'flex', alignItems:'center', gap:6, transition:'all .15s' }}>
               {s}
               <span style={{ fontSize:14, opacity:.7 }}>✕</span>
@@ -667,7 +667,7 @@ function Screen4({ onComplete }: S4Props) {
               disabled={selected.length >= 2}
               title={e.company_name ?? e.symbol}
               style={{ padding:'6px 14px', borderRadius:100, cursor: selected.length >= 2 ? 'default' : 'pointer',
-                background:'rgba(13,17,23,1)', border:'1px solid rgba(255,255,255,.1)',
+                background:'var(--card)', border:'1px solid rgba(255,255,255,.1)',
                 fontSize:12, color:'var(--text-primary)',
                 fontFamily:'var(--font-mono, monospace)',
                 opacity: selected.length >= 2 ? .4 : 1,
@@ -772,10 +772,9 @@ export default function ProfileSetup() {
     }
   }
 
-  // Screen 4 complete — add instruments, save, navigate
+  // Screen 4 complete — add instruments, navigate
   async function handleInstrumentsComplete(symbols: string[]) {
     symbols.forEach(s => addInstrument(s))
-    await saveFramework()
     navigate('/workspace', { replace: true })
   }
 
