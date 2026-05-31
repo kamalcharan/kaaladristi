@@ -72,7 +72,7 @@ export function ConfluencePairMonitor({
 
   useEffect(() => {
     if (!result) return
-    if (!result.currently_active) return
+    // TEST MODE: fire for any pair with ≥3 instances regardless of currently_active
     if (result.n_instances < 3) return
     if (existingBlock) return
     if (firedRef.current) return
