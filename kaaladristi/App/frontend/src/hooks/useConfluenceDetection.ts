@@ -32,7 +32,6 @@ export function useVisibleOverlayPairs(): Array<[string, string]> {
   })
 
   return useMemo(() => {
-    console.debug('[VaNi] visibleIds:', visibleIds)
     if (!visibleIds) return []
     const ids = visibleIds.split(',')
     const pairs: Array<[string, string]> = []
@@ -62,7 +61,6 @@ interface PairMonitorProps {
 export function ConfluencePairMonitor({
   itemA, itemB, benchmark = 'NIFTY50', onSuppress,
 }: PairMonitorProps): null {
-  console.debug('[VaNi] ConfluencePairMonitor mounted:', itemA, itemB)
   const { result } = useCorrelationResult(itemA, itemB, benchmark)
   const addVaNiBlock  = useFrameworkStore(s => s.addVaNiBlock)
   const existingBlock = useFrameworkStore(
