@@ -11,7 +11,7 @@ export default function ActionIsland({ pingCount = 0, onAction }: ActionIslandPr
         bottom: 28,
         left: '50%',
         transform: 'translateX(calc(-50% + 110px))',
-        background: 'rgba(11,17,32,0.95)',
+        background: 'var(--card)',
         backdropFilter: 'blur(12px)',
         border: '1px solid var(--border-strong)',
         borderRadius: '100px',

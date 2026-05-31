@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { from } from '@/services/postgrest'
@@ -7,6 +8,7 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
+import InlineGate from '@/components/workspace/InlineGate'
 
 // ── Shared types (exported for section components) ────────────────────────────
 
@@ -82,9 +84,9 @@ function fmt(n: number | null | undefined, digits = 1, suffix = ''): string {
 
 function outcomeColor(s: string | null): string {
   if (!s) return 'var(--text-muted)'
-  if (s.includes('bull'))  return '#4ade80'
-  if (s.includes('bear'))  return '#f87171'
-  if (s === 'volatile' || s === 'turning') return '#c9a84c'
+  if (s.includes('bull'))  return 'var(--bull)'
+  if (s.includes('bear'))  return 'var(--bear)'
+  if (s === 'volatile' || s === 'turning') return 'var(--gold)'
   return 'var(--text-secondary)'
 }
 
@@ -122,7 +124,7 @@ function YearlyBars({ rows }: { rows: RuleConfYearly[] }) {
         const x = 16 + i * (BAR_W + BAR_GAP)
         const pct = row.win_pct ?? 0
         const barH = Math.max(2, (pct / maxPct) * H)
-        const color = pct >= 65 ? '#4ade80' : pct >= 50 ? '#c9a84c' : '#f87171'
+        const color = pct >= 65 ? 'var(--bull)' : pct >= 50 ? 'var(--gold)' : 'var(--bear)'
         return (
           <g key={row.year}>
             <rect
@@ -208,12 +210,12 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         marginBottom: 18,
         padding: '8px 12px',
         borderRadius: 6,
-        background: isRange ? 'rgba(124,106,247,0.06)' : 'rgba(201,168,76,0.06)',
-        border: `1px solid ${isRange ? 'rgba(124,106,247,0.2)' : 'rgba(201,168,76,0.2)'}`,
+        background: isRange ? 'var(--accent-glow)' : 'var(--gold-bg)',
+        border: `1px solid ${isRange ? 'var(--accent-dim)' : 'var(--gold-bg)'}`,
         fontSize: 11,
         color: 'var(--text-secondary)',
       }}>
-        <span style={{ color: isRange ? '#8b7af8' : '#c9a84c', fontFamily: 'var(--font-mono, monospace)', fontSize: 9 }}>
+        <span style={{ color: isRange ? 'var(--accent)' : 'var(--gold)', fontFamily: 'var(--font-mono, monospace)', fontSize: 9 }}>
           {isRange ? 'CHART OVERLAY' : 'PANEL BLOCK'}
         </span>
         {' — '}
@@ -302,8 +304,8 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
                   <span style={{ color: 'var(--text-muted)' }}>{row.year}</span>
                   <span style={{
                     color: (row.win_pct ?? 0) >= 65
-                      ? '#4ade80' : (row.win_pct ?? 0) >= 50
-                      ? '#c9a84c' : '#f87171',
+                      ? 'var(--bull)' : (row.win_pct ?? 0) >= 50
+                      ? 'var(--gold)' : 'var(--bear)',
                   }}>
                     {fmt(row.win_pct, 0, '%')} win
                   </span>
@@ -329,9 +331,9 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
           padding: '9px 14px',
           marginBottom: 18,
           borderRadius: 8,
-          border: '1px solid rgba(124,106,247,0.28)',
-          background: 'rgba(124,106,247,0.06)',
-          color: '#8b7af8',
+          border: '1px solid var(--accent-dim)',
+          background: 'var(--accent-glow)',
+          color: 'var(--accent)',
           fontSize: 12,
           cursor: 'pointer',
           fontFamily: 'inherit',
@@ -340,13 +342,13 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         }}
         onMouseEnter={e => {
           const el = e.currentTarget as HTMLElement
-          el.style.borderColor = 'rgba(124,106,247,0.5)'
-          el.style.background = 'rgba(124,106,247,0.12)'
+          el.style.borderColor = 'color-mix(in srgb, var(--accent) 50%, transparent)'
+          el.style.background = 'var(--accent-dim)'
         }}
         onMouseLeave={e => {
           const el = e.currentTarget as HTMLElement
-          el.style.borderColor = 'rgba(124,106,247,0.28)'
-          el.style.background = 'rgba(124,106,247,0.06)'
+          el.style.borderColor = 'var(--accent-dim)'
+          el.style.background = 'var(--accent-glow)'
         }}
       >
         Full Analysis →
@@ -354,8 +356,8 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
 
       {/* VaNi placeholder */}
       <div style={{
-        background: 'rgba(124,106,247,0.06)',
-        border: '1px solid rgba(124,106,247,0.18)',
+        background: 'var(--accent-glow)',
+        border: '1px solid var(--accent-glow)',
         borderRadius: 8,
         padding: '12px 14px',
         display: 'flex',
@@ -428,8 +430,8 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
 
       {/* VaNi placeholder */}
       <div style={{
-        background: 'rgba(124,106,247,0.06)',
-        border: '1px solid rgba(124,106,247,0.18)',
+        background: 'var(--accent-glow)',
+        border: '1px solid var(--accent-glow)',
         borderRadius: 8,
         padding: '12px 14px',
         display: 'flex',
@@ -477,6 +479,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
   const { addToFramework } = useAddToFramework()
+  const [gateOpen, setGateOpen] = useState(false)
 
   const isOpen = item !== null
 
@@ -526,7 +529,8 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
       if (isRange) addOverlay(syntheticItem)
       else addBlock(syntheticItem)
     } else {
-      addToFramework(item.item.id)
+      const r = addToFramework(item.item.id)
+      if (r.reason === 'tier_gate') setGateOpen(true)
     }
   }
 
@@ -702,7 +706,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
             onMouseEnter={e => {
               if (!cta.active && !cta.locked) {
                 (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'
-                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px rgba(124,106,247,0.5)'
+                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px color-mix(in srgb, var(--accent) 50%, transparent)'
               }
             }}
             onMouseLeave={e => {
@@ -716,6 +720,12 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           </button>
         </div>
       </div>
+
+      <InlineGate
+        context="add_rule"
+        isOpen={gateOpen}
+        onDismiss={() => setGateOpen(false)}
+      />
     </>
   )
 }

@@ -84,8 +84,8 @@ const FLOW_DISPLAY: Record<string, { label: string; bull: boolean }> = {
 
 function zoneColor(zone: string | null): string {
   if (zone === 'Strong Bull') return 'var(--bull)';
-  if (zone === 'Mild Bull')   return 'rgba(16,185,129,0.7)';
-  if (zone === 'Mild Bear')   return 'rgba(239,68,68,0.7)';
+  if (zone === 'Mild Bull')   return 'color-mix(in srgb, var(--bull) 70%, transparent)';
+  if (zone === 'Mild Bear')   return 'color-mix(in srgb, var(--bear) 70%, transparent)';
   if (zone === 'Strong Bear') return 'var(--bear)';
   return 'var(--text-muted)';
 }
@@ -101,7 +101,7 @@ function zonePillStyle(zone: string | null): React.CSSProperties {
     fontWeight: 600,
     letterSpacing: '0.03em',
     whiteSpace: 'nowrap' as const,
-    background: isBull ? 'rgba(16,185,129,0.06)' : isBear ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.04)',
+    background: isBull ? 'var(--bull-bg)' : isBear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
     color: zoneColor(zone),
   };
 }
@@ -115,7 +115,7 @@ function SigPill({ label, bull, bear }: { label: string; bull?: boolean; bear?: 
       borderRadius: '5px', fontWeight: 500,
       background: bull ? 'var(--bull-bg)' : bear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
       color: bull ? 'var(--bull)' : bear ? 'var(--bear)' : 'var(--text-muted)',
-      border: `1px solid ${bull ? 'rgba(16,185,129,0.2)' : bear ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
+      border: `1px solid ${bull ? 'var(--bull-dim, rgba(16,185,129,0.2))' : bear ? 'var(--bear-dim, rgba(239,68,68,0.2))' : 'var(--border)'}`,
     }}>
       {label}
     </span>
@@ -190,7 +190,7 @@ function MrsPill({
         borderRadius: '5px', fontWeight: 500,
         background: isBull ? 'var(--bull-bg)' : isBear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
         color: isBull ? 'var(--bull)' : isBear ? 'var(--bear)' : 'var(--text-muted)',
-        border: `1px solid ${isBull ? 'rgba(16,185,129,0.2)' : isBear ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
+        border: `1px solid ${isBull ? 'var(--bull-dim, rgba(16,185,129,0.2))' : isBear ? 'var(--bear-dim, rgba(239,68,68,0.2))' : 'var(--border)'}`,
         cursor: 'default',
       }}
     >
@@ -261,7 +261,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
               borderRadius: '5px', fontWeight: 500,
               background: isBullFlow ? 'var(--bull-bg)' : 'rgba(255,255,255,0.04)',
               color: isBullFlow ? 'var(--bull)' : 'var(--text-muted)',
-              border: `1px solid ${isBullFlow ? 'rgba(16,185,129,0.2)' : 'var(--border)'}`,
+              border: `1px solid ${isBullFlow ? 'var(--bull-dim, rgba(16,185,129,0.2))' : 'var(--border)'}`,
             }}>
               {flowCfg.label}
             </span>

@@ -36,30 +36,30 @@ export interface MarketWeatherProps {
 // ── Helper: bar fill color based on 0-1 normalized score ─────────────────────
 
 function barColor(normalized: number): string {
-  if (normalized >= 0.70) return '#22c55e';
+  if (normalized >= 0.70) return 'var(--bull)';
   if (normalized >= 0.60) return '#14b8a6';
-  if (normalized >= 0.45) return '#f59e0b';
-  if (normalized >= 0.35) return '#f97316';
-  return '#ef4444';
+  if (normalized >= 0.45) return 'var(--caution)';
+  if (normalized >= 0.35) return 'var(--caution)';
+  return 'var(--bear)';
 }
 
 // ── Helper: ROC crossover color ───────────────────────────────────────────────
 
 function rocCrossoverColor(roc_13: number, sma_breadth: number | undefined): string {
   const s = sma_breadth ?? 0;
-  if (roc_13 > 0 && roc_13 > s) return '#22c55e';   // accelerating — green
-  if (roc_13 > 0 && roc_13 <= s) return '#f97316';  // decelerating — orange
-  if (roc_13 <= 0 && roc_13 > s) return '#f59e0b';  // recovering — amber
-  return '#ef4444';                                   // falling — red
+  if (roc_13 > 0 && roc_13 > s) return 'var(--bull)';   // accelerating — green
+  if (roc_13 > 0 && roc_13 <= s) return 'var(--caution)';  // decelerating — orange
+  if (roc_13 <= 0 && roc_13 > s) return 'var(--caution)';  // recovering — amber
+  return 'var(--bear)';                                   // falling — red
 }
 
 // ── Helper: momentum arrow + color from ROC delta ────────────────────────────
 
 function rocArrow(roc_13: number, roc_13_prev: number): { glyph: string; color: string } {
   const delta = roc_13 - roc_13_prev;
-  if (delta > 0.1)  return { glyph: '↗', color: '#22c55e' };
-  if (delta < -0.1) return { glyph: '↘', color: '#ef4444' };
-  return { glyph: '→', color: '#D4A853' };
+  if (delta > 0.1)  return { glyph: '↗', color: 'var(--bull)' };
+  if (delta < -0.1) return { glyph: '↘', color: 'var(--bear)' };
+  return { glyph: '→', color: 'var(--gold)' };
 }
 
 // ── Helper: composite score → label + icon ────────────────────────────────────
@@ -167,7 +167,7 @@ const HISTORY_CSS = `
   .kd-hist-pulse {
     display: inline-block;
     animation: kd-hist-glow 1.6s ease-in-out infinite;
-    color: #D4A853;
+    color: var(--gold);
   }
   .kd-hist-pulse.seen {
     animation: none;
@@ -316,7 +316,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
               fontWeight: 500,
               letterSpacing: '-0.03em',
               lineHeight: 1,
-              color: '#D4A853',
+              color: 'var(--gold)',
             }}
           >
             {Math.round(data.composite_score)}
@@ -461,15 +461,15 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
   if (astro.total === 0) {
     astroNorm = 0; astroBarLabel = '—'; astroColorOverride = undefined;
   } else if (astro.turning > astro.positive && astro.turning > astro.negative) {
-    astroNorm = astro.avg_trn_conf / 100; astroBarLabel = 'Inflection'; astroColorOverride = '#D4A853';
+    astroNorm = astro.avg_trn_conf / 100; astroBarLabel = 'Inflection'; astroColorOverride = 'var(--gold)';
   } else if (astro.positive >= astro.negative) {
     astroNorm = astro.avg_pos_conf / 100;
     astroBarLabel = astro.avg_pos_conf >= 60 ? 'Positive' : 'Mod. Positive';
-    astroColorOverride = '#22c55e';
+    astroColorOverride = 'var(--bull)';
   } else {
     astroNorm = astro.avg_neg_conf / 100;
     astroBarLabel = astro.avg_neg_conf >= 60 ? 'Negative' : 'Mod. Negative';
-    astroColorOverride = '#ef4444';
+    astroColorOverride = 'var(--bear)';
   }
 
   const { glyph: arrowGlyph, color: arrowColor } = rocArrow(roc.roc_13, roc.roc_13_prev);
@@ -506,9 +506,9 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
 
 function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro'] }) {
   const pills: { label: string; count: number; color: string }[] = [
-    { label: 'Positive',   count: astro.positive, color: '#22c55e' },
-    { label: 'Negative',   count: astro.negative, color: '#ef4444' },
-    { label: 'Inflection', count: astro.turning,  color: '#D4A853' },
+    { label: 'Positive',   count: astro.positive, color: 'var(--bull)' },
+    { label: 'Negative',   count: astro.negative, color: 'var(--bear)' },
+    { label: 'Inflection', count: astro.turning,  color: 'var(--gold)' },
   ];
 
   return (
@@ -745,7 +745,7 @@ export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {})
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 8 }}>
           Astro-Technical Alignment
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#ef4444', letterSpacing: '0.1em', marginBottom: 6 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--bear)', letterSpacing: '0.1em', marginBottom: 6 }}>
           API UNAVAILABLE
         </div>
         <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-faint)' }}>

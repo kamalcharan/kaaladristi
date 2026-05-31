@@ -47,7 +47,7 @@ export function Avatar({ symbol, isVani }: { symbol: string; isVani: boolean }) 
       fontWeight: 700,
       letterSpacing: '0.02em',
       flexShrink: 0,
-      border: isVani ? '1.5px solid rgba(212,168,75,0.4)' : '1.5px solid rgba(255,255,255,0.06)',
+      border: isVani ? '1.5px solid var(--gold-soft)' : '1.5px solid var(--border)',
     }}>
       {symbol.slice(0, 2).toUpperCase()}
     </div>

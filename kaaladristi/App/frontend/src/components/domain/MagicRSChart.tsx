@@ -47,23 +47,23 @@ interface MagicRSChartProps {
 // ── Colours ───────────────────────────────────────────────────────────────────
 
 const COL = {
-  green:      '#22c55e',
-  greenFaint: '#22c55e22',
-  red:        '#ef4444',
-  redFaint:   '#ef444422',
+  green:      'var(--bull)',
+  greenFaint: 'color-mix(in srgb, var(--bull) 13%, transparent)',
+  red:        'var(--bear)',
+  redFaint:   'color-mix(in srgb, var(--bear) 13%, transparent)',
   blue:       '#3b82f6',
   shortRS:    '#94a3b8',  // slate-400 — neutral, never green/red
   zero:       '#475569',
-  grid:       '#1e293b',
+  grid:       'var(--bg)',
   text:       '#64748b',
-  bg:         '#020917',
+  bg:         'var(--bg)',
 };
 
 const SIGNAL_STYLE: Record<string, { bg: string; text: string; label: string }> = {
-  'Strong Alignment':   { bg: '#22c55e22', text: '#22c55e', label: 'Strong Alignment' },
-  'Emerging Recovery':  { bg: '#f59e0b22', text: '#f59e0b', label: 'Emerging Recovery' },
+  'Strong Alignment':   { bg: 'var(--bull-bg)', text: 'var(--bull)', label: 'Strong Alignment' },
+  'Emerging Recovery':  { bg: 'var(--caution-bg)', text: 'var(--caution)', label: 'Emerging Recovery' },
   'Tactical Pullback':  { bg: '#14b8a622', text: '#14b8a6', label: 'Tactical Pullback' },
-  'Negative Alignment': { bg: '#ef444422', text: '#ef4444', label: 'Negative Alignment' },
+  'Negative Alignment': { bg: 'var(--bear-bg)', text: 'var(--bear)', label: 'Negative Alignment' },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ function CrossoverDot(props: {
   const { cx, cy, index, crossovers } = props;
   if (cx == null || cy == null || index == null) return null;
   if (!crossovers.has(index)) return null;
-  return <circle cx={cx} cy={cy} r={4} fill="#f59e0b" stroke={COL.bg} strokeWidth={1.5} />;
+  return <circle cx={cx} cy={cy} r={4} fill="var(--caution)" stroke={COL.bg} strokeWidth={1.5} />;
 }
 
 // ── Custom Tooltip ────────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ function RSTooltip({ active, payload, label }: {
 
   return (
     <div style={{
-      background: '#0f172a', border: '1px solid #1e293b',
+      background: '#0f172a', border: '1px solid var(--bg)',
       borderRadius: 6, padding: '8px 12px', fontSize: 11,
       fontFamily: 'var(--font-mono)',
     }}>
@@ -285,7 +285,7 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
             name="magic_rs"
             isAnimationActive={false}
             dot={(props) => <CrossoverDot {...props} crossovers={crossovers} />}
-            activeDot={{ r: 4, fill: '#f59e0b', strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: 'var(--caution)', strokeWidth: 0 }}
           />
 
         </ComposedChart>
@@ -299,7 +299,7 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
         <span><span style={{ color: COL.green }}>──</span> Long RS</span>
         <span><span style={{ color: COL.blue }}>──</span> Long MA</span>
         <span><span style={{ color: COL.shortRS }}>- -</span> Short RS</span>
-        <span><span style={{ color: '#f59e0b' }}>●</span> Crossover</span>
+        <span><span style={{ color: 'var(--caution)' }}>●</span> Crossover</span>
       </div>
     </div>
   );

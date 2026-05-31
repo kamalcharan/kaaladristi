@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LogOut, Shield, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore, THEMES } from '@/stores/themeStore';
 import { signOut } from '@/services/auth';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ const navSections: NavSection[] = [
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
       { to: '/planetary-intel', glyph: '☽', label: 'Planetary Intel' },
+      { to: '/account',         glyph: '◯', label: 'Account' },
     ],
   },
   {
@@ -74,6 +76,47 @@ function marketStatus(): string {
   return 'Market closed';
 }
 
+// ── ThemeSwitcher ────────────────────────────────────────────────────────────
+
+function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { activeTheme, setTheme } = useThemeStore()
+  const currentTheme = THEMES.find(t => t.id === activeTheme) ?? THEMES[0]
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-1.5 pb-3">
+        <div
+          title={`Theme: ${currentTheme.label}`}
+          style={{ width: 8, height: 8, borderRadius: '50%', background: currentTheme.dot,
+            boxShadow: `0 0 6px ${currentTheme.dot}`, cursor: 'default' }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {THEMES.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTheme(t.id)}
+            title={t.label}
+            style={{
+              width: 10, height: 10, borderRadius: '50%',
+              background: t.dot,
+              boxShadow: activeTheme === t.id ? `0 0 7px ${t.dot}` : 'none',
+              border: activeTheme === t.id ? `2px solid ${t.dot}` : '2px solid transparent',
+              cursor: 'pointer', flexShrink: 0, padding: 0,
+              outline: 'none', transition: 'box-shadow .15s',
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 interface SidebarProps {
@@ -98,7 +141,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
       style={{
         width: collapsed ? '52px' : '220px',
-        background: 'rgba(11,17,32,0.6)',
+        background: 'var(--card)',
         borderRight: '1px solid var(--border)',
         padding: collapsed ? '28px 8px' : '28px 16px',
       }}
@@ -219,14 +262,14 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     transition: 'all 0.18s',
                     marginBottom: '1px',
                     background: isActive
-                      ? (section.adminHeading ? 'rgba(99,102,241,0.12)' : 'var(--gold-bg)')
+                      ? (section.adminHeading ? 'var(--accent-glow)' : 'var(--gold-bg)')
                       : 'transparent',
                     textDecoration: 'none',
                   })}
                   onMouseEnter={e => {
                     const el = e.currentTarget as HTMLElement;
                     el.style.background = section.adminHeading
-                      ? 'rgba(99,102,241,0.08)'
+                      ? 'var(--accent-glow)'
                       : 'rgba(255,255,255,0.04)';
                     el.style.color = 'var(--text-secondary)';
                   }}
@@ -261,6 +304,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           );
         })}
       </div>
+
+      {/* ── Theme switcher ── */}
+      <ThemeSwitcher collapsed={collapsed} />
 
       {/* ── Footer: user + date ── */}
       <div

@@ -127,7 +127,7 @@ export default function IndicatorPanels({
       {/* Panel 1 — Confluence */}
       <PanelShell
         title="Confluence"
-        accentColor="var(--accent-teal, #40B8C8)"
+        accentColor="var(--accent-cyan)"
         summary={`${snapshot.corrState.state} · astro ${snapshot.astroScore.toFixed(1)} · tech ${snapshot.techScore.toFixed(1)} · sm ${snapshot.smScore.toFixed(1)}`}
       >
         <CorrelationCard
@@ -164,7 +164,7 @@ export default function IndicatorPanels({
       {/* Panel 3 — Smart Money */}
       <PanelShell
         title="Smart Money"
-        accentColor="var(--accent-violet, #9B6BC0)"
+        accentColor="var(--accent-violet)"
         summary={`sniper ${typeof smVal === 'number' ? smVal.toFixed(0) : smVal} · dot ${dotSummary}`}
       >
         <SmartMoneyCard

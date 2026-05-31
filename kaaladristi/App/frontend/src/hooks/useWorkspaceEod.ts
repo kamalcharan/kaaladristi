@@ -2,24 +2,32 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useChartSyncStore } from '@/stores/chartSyncStore'
-import { fetchInstrumentEod } from '@/services/indicatorData'
+import { fetchIndicatorDataById, fetchEquityEodById } from '@/services/indicatorData'
+import type { InstrumentRef } from '@/types/framework'
 
 /**
  * Reads the workspace EOD dataset from the React Query cache.
- * Uses the same key as WorkspaceChart — no extra network call.
+ * Uses the same key as WorkspaceChart (instrument.id + instrument.type) — no extra network call.
  *
  * Also derives the sync-aware slice from chartSyncStore so that
  * every canvas panel widget stays in sync with the main chart's
  * scroll position and crosshair without any extra wiring.
  */
 export function useWorkspaceEod() {
-  const symbol = useFrameworkStore(s => s.framework?.instruments?.[0] ?? null)
+  // Read the first chart block's instrument — same source WorkspaceChart uses
+  const instrument = useFrameworkStore(s => {
+    const chartBlock = s.framework?.blocks.find(b => b.type === 'chart')
+    return chartBlock ? (chartBlock.config.instrument as InstrumentRef) : null
+  })
 
   const { data = [], isLoading } = useQuery({
-    queryKey: ['workspace-chart', symbol, '1Y'],
-    queryFn:  () => fetchInstrumentEod(symbol!, '1Y'),
+    queryKey: ['workspace-chart', instrument?.id ?? null, instrument?.type ?? null],
+    queryFn:  () =>
+      instrument!.type === 'equity'
+        ? fetchEquityEodById(instrument!.id, '1Y')
+        : fetchIndicatorDataById(instrument!.id, '1Y'),
     staleTime: 120_000,
-    enabled:  !!symbol,
+    enabled:  !!instrument,
   })
 
   const { activeBarIndex, visibleFrom, visibleTo } = useChartSyncStore()

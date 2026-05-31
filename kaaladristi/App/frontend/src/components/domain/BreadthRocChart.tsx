@@ -80,10 +80,10 @@ export default function BreadthRocChart() {
   const rocStatus = (() => {
     const r = latest?.roc_13 ?? 0;
     const s = latest?.sma_breadth ?? 0;
-    if (r > 0 && r > s) return { label: 'Bull ✓',    style: { background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.4)' } };
-    if (r > 0 && r <= s) return { label: 'Caution',  style: { background: 'rgba(249,115,22,0.12)', color: '#f97316', border: '1px solid rgba(249,115,22,0.4)' } };
-    if (r <= 0 && r > s)  return { label: 'Recovering', style: { background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' } };
-    return                       { label: 'Bear',     style: { background: 'rgba(239,68,68,0.12)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)'  } };
+    if (r > 0 && r > s) return { label: 'Bull ✓',    style: { background: 'var(--bull-bg)', color: 'var(--bull)', border: '1px solid color-mix(in srgb, var(--bull) 40%, transparent)' } };
+    if (r > 0 && r <= s) return { label: 'Caution',  style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
+    if (r <= 0 && r > s)  return { label: 'Recovering', style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
+    return                       { label: 'Bear',     style: { background: 'var(--bear-bg)',  color: 'var(--bear)', border: '1px solid color-mix(in srgb, var(--bear) 40%, transparent)'  } };
   })();
 
   // Dynamic Y domain with some padding
@@ -191,18 +191,18 @@ export default function BreadthRocChart() {
           <ComposedChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="rocBullGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#10b981" stopOpacity={0.30} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                <stop offset="5%"  stopColor="var(--bull)" stopOpacity={0.30} />
+                <stop offset="95%" stopColor="var(--bull)" stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="rocBearGrad" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.30} />
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02} />
+                <stop offset="5%"  stopColor="var(--bear)" stopOpacity={0.30} />
+                <stop offset="95%" stopColor="var(--bear)" stopOpacity={0.02} />
               </linearGradient>
             </defs>
 
             {/* Zero-line background zones */}
-            <ReferenceArea y1={0} y2={yDomain[1]}  fill="#10b981" fillOpacity={0.04} />
-            <ReferenceArea y1={yDomain[0]} y2={0}  fill="#ef4444" fillOpacity={0.04} />
+            <ReferenceArea y1={0} y2={yDomain[1]}  fill="var(--bull)" fillOpacity={0.04} />
+            <ReferenceArea y1={yDomain[0]} y2={0}  fill="var(--bear)" fillOpacity={0.04} />
 
             <XAxis
               dataKey="trade_date"
@@ -233,7 +233,7 @@ export default function BreadthRocChart() {
             {/* ROC 55 — slow structural line */}
             <Line
               dataKey="roc_55"
-              stroke="#8b5cf6"
+              stroke="var(--accent)"
               strokeWidth={1}
               dot={false}
               strokeDasharray="4 2"
@@ -244,20 +244,20 @@ export default function BreadthRocChart() {
             {/* ROC 13 area — fast signal with dual-color fill */}
             <Area
               dataKey="roc_13"
-              stroke="#6366f1"
+              stroke="var(--accent)"
               strokeWidth={1.5}
               fill="url(#rocBullGrad)"
               dot={false}
-              activeDot={{ r: 3, fill: '#6366f1' }}
+              activeDot={{ r: 3, fill: 'var(--accent)' }}
             />
 
             {/* SMA 5 — smoothed signal */}
             <Line
               dataKey="sma_breadth"
-              stroke="#f59e0b"
+              stroke="var(--caution)"
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 3, fill: '#f59e0b' }}
+              activeDot={{ r: 3, fill: 'var(--caution)' }}
             />
           </ComposedChart>
         </ResponsiveContainer>

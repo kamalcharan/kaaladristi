@@ -22,7 +22,7 @@ const VERDICT_COLOR_VAR: Record<NonNullable<AlertStripProps['verdictColor']>, st
   red:   'var(--risk-red)',
   green: 'var(--risk-green)',
   amber: 'var(--risk-amber)',
-  teal:  'var(--accent-teal, #40B8C8)',
+  teal:  'var(--accent-cyan)',
   dim:   'var(--text-muted)',
 };
 
@@ -80,9 +80,9 @@ export default function AlertStrip({
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '4px 16px',
       background: inRahu
-        ? 'rgba(231, 76, 60, 0.10)'
+        ? 'var(--bear-bg)'
         : inAbhijit
-          ? 'rgba(46, 204, 113, 0.10)'
+          ? 'var(--bull-bg)'
           : 'transparent',
       borderBottom: '1px solid var(--kd-border)',
       fontFamily: 'var(--font-mono, monospace)', fontSize: 10,

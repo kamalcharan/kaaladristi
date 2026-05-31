@@ -2,12 +2,12 @@ import { useRef, useEffect } from 'react'
 import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 
 function zoneColor(zone: string | null): string {
-  if (!zone) return '#6366f1'
-  if (zone.includes('Strong Bull')) return '#10b981'
-  if (zone.includes('Bull'))        return '#34d399'
-  if (zone.includes('Strong Bear')) return '#ef4444'
-  if (zone.includes('Bear'))        return '#f87171'
-  return '#6366f1'
+  if (!zone) return 'var(--accent)'
+  if (zone.includes('Strong Bull')) return 'var(--bull)'
+  if (zone.includes('Bull'))        return 'var(--bull)'
+  if (zone.includes('Strong Bear')) return 'var(--bear)'
+  if (zone.includes('Bear'))        return 'var(--bear)'
+  return 'var(--accent)'
 }
 
 function MagicSparkline({

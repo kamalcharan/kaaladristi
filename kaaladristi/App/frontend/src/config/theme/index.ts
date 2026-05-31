@@ -74,6 +74,7 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--bg',               c.utility.primaryBackground);
   set('--card',             c.utility.secondaryBackground ?? c.utility.primaryBackground);
   set('--card-soft',        c.surface.glassStrong);
+  set('--border',           c.surface.glassBorder);
   set('--kd-bg',            c.utility.primaryBackground);
   set('--kd-surface',       c.utility.secondaryBackground ?? c.utility.primaryBackground);
   set('--kd-card',          c.surface.glass);
@@ -97,6 +98,7 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--caution',       c.semantic.warning);
 
   // ── Accents — legacy vars (kept for backward compat) ──
+  set('--accent',        c.brand.primary);
   set('--accent-indigo', c.brand.primary);
   set('--accent-violet', c.brand.tertiary);
   set('--accent-gold',   c.brand.secondary);
@@ -106,14 +108,34 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--risk-green', c.semantic.success);
   set('--risk-amber', c.semantic.warning);
   set('--risk-red',   c.semantic.error);
+
+  // ── Opacity variants — computed from base tokens, never static ──
+  set('--bull-bg',    hexToRgba(c.semantic.success, 0.1));
+  set('--bear-bg',    hexToRgba(c.semantic.error,   0.1));
+  set('--caution-bg', hexToRgba(c.semantic.warning,  0.1));
+  set('--gold-bg',    hexToRgba(c.brand.secondary,   0.1));
+  set('--bull-dim',   hexToRgba(c.semantic.success, 0.3));
+  set('--bear-dim',   hexToRgba(c.semantic.error,   0.3));
+  set('--caution-dim',hexToRgba(c.semantic.warning,  0.3));
+
+  // ── Accent opacity variants ──
+  set('--accent-dim',   hexToRgba(c.brand.primary, 0.35));
+  set('--accent-glow',  hexToRgba(c.brand.primary, 0.15));
+  set('--accent-solid', hexToRgba(c.brand.primary, 0.9));
+
+  // ── Surface aliases ──
+  set('--surface-1', c.utility.primaryBackground);
+  set('--surface-2', c.utility.secondaryBackground ?? c.utility.primaryBackground);
+
+  // ── Text faint — primary text at 25% ──
+  set('--text-faint', hexToRgba(c.utility.primaryText, 0.25));
 }
 
 /**
- * Convenience wrapper: resolve theme by VITE_THEME id and apply it.
- * Automatically detects system dark-mode preference.
+ * Convenience wrapper: resolve theme by id and apply it.
+ * Always dark — DristiQ is dark-only in v1.
  */
 export function applyThemeById(id: string): void {
   const config = getTheme(id);
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(config, prefersDark);
+  applyTheme(config, true);
 }

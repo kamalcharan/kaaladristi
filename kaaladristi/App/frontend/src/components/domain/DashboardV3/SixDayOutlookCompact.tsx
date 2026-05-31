@@ -51,14 +51,14 @@ function weekDayToTone(day: WeekDay | undefined): Tone {
 // ── Outcome helpers ───────────────────────────────────────────────────────────
 
 const OUTCOME_MAP: Record<string, { label: string; color: string }> = {
-  strong_bullish: { label: 'High +ve',    color: '#22c55e' },
-  bullish:        { label: 'Positive',    color: '#22c55e' },
-  mild_bullish:   { label: 'Mod. +ve',    color: '#86efac' },
-  turning:        { label: 'Inflection',  color: '#D4A853' },
+  strong_bullish: { label: 'High +ve',    color: 'var(--bull)' },
+  bullish:        { label: 'Positive',    color: 'var(--bull)' },
+  mild_bullish:   { label: 'Mod. +ve',    color: 'var(--bull)' },
+  turning:        { label: 'Inflection',  color: 'var(--gold)' },
   neutral:        { label: 'Neutral',     color: 'var(--text-faint)' },
-  mild_bearish:   { label: 'Mod. -ve',    color: '#fca5a5' },
-  bearish:        { label: 'Negative',    color: '#ef4444' },
-  strong_bearish: { label: 'High -ve',    color: '#ef4444' },
+  mild_bearish:   { label: 'Mod. -ve',    color: 'var(--bear)' },
+  bearish:        { label: 'Negative',    color: 'var(--bear)' },
+  strong_bearish: { label: 'High -ve',    color: 'var(--bear)' },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -237,9 +237,9 @@ function DayCell({ iso, week }: { iso: string; week: WeekDay | undefined }) {
       {total > 0 && (
         <div style={{ padding: '0 6px' }}>
           <div style={{ display: 'flex', height: 3, borderRadius: 2, overflow: 'hidden', gap: 1 }}>
-            {bullish > 0 && <div style={{ flex: bullish, background: '#22c55e', borderRadius: 2 }} />}
-            {turning > 0 && <div style={{ flex: turning, background: '#f59e0b', borderRadius: 2 }} />}
-            {bearish > 0 && <div style={{ flex: bearish, background: '#ef4444', borderRadius: 2 }} />}
+            {bullish > 0 && <div style={{ flex: bullish, background: 'var(--bull)', borderRadius: 2 }} />}
+            {turning > 0 && <div style={{ flex: turning, background: 'var(--caution)', borderRadius: 2 }} />}
+            {bearish > 0 && <div style={{ flex: bearish, background: 'var(--bear)', borderRadius: 2 }} />}
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-faint)', marginTop: 2, letterSpacing: '0.06em' }}>
             {total} rule{total !== 1 ? 's' : ''}

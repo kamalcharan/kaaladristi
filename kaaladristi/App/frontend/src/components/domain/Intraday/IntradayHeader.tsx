@@ -117,7 +117,7 @@ export default function IntradayHeader({
         <span style={{
           fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
           padding: '2px 8px', borderRadius: 3,
-          background: 'rgba(245,158,11,0.15)',
+          background: 'var(--caution-bg)',
           color: 'var(--risk-amber)',
           letterSpacing: '0.08em',
         }}>⊘ NON-WORKING</span>
@@ -127,7 +127,7 @@ export default function IntradayHeader({
           seconds tick smoothly even if nowMin only updates per-minute. */}
       <span style={{
         fontFamily: 'var(--font-mono, monospace)', fontSize: 14,
-        color: 'var(--accent-gold, #C9A84C)', letterSpacing: '0.1em',
+        color: 'var(--gold)', letterSpacing: '0.1em',
         // Re-read the wall-clock for seconds precision; the explicit
         // dependency on nowMin (via parent re-render) is what makes
         // this re-evaluate in lockstep with the rest of the page.
