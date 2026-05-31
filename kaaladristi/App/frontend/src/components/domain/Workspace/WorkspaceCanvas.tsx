@@ -12,6 +12,7 @@ import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
 import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
+import { useVisibleOverlayPairs, ConfluencePairMonitor } from '@/hooks/useConfluenceDetection'
 import { effectiveDotColor } from './overlayColors'
 import { fetchActiveIndices, type IndexOption } from '@/services/indexPickerService'
 
@@ -257,6 +258,7 @@ interface Props {
 }
 
 export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
+  const confluencePairs = useVisibleOverlayPairs()
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
@@ -631,6 +633,11 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
       )}
 
       <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} />
+
+      {/* VaNi confluence monitors — one per visible overlay pair, no render output */}
+      {confluencePairs.map(([a, b]) => (
+        <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} />
+      ))}
     </div>
   )
 }
