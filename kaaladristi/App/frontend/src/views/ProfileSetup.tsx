@@ -761,6 +761,7 @@ export default function ProfileSetup() {
       try { await refreshProfile() } catch {
         if (profile) setProfile({ ...profile, onboarded: true })
       }
+      console.log('tier after refresh:', useAuthStore.getState().profile?.tier)
       const freshTier = useAuthStore.getState().profile?.tier ?? 'free'
       const isFreeUser = !PAID_TIERS.includes(freshTier as typeof PAID_TIERS[number])
       if (isFreeUser) {
