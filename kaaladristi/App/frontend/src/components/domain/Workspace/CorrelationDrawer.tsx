@@ -24,7 +24,7 @@ function fmtRet(v: number | null): string {
 
 function retColor(v: number | null): string {
   if (v === null) return 'rgba(255,255,255,.25)'
-  return v >= 0 ? '#10b981' : '#ef4444'
+  return v >= 0 ? 'var(--bull)' : 'var(--bear)'
 }
 
 function vaNiNote(c: VaNiCorrelation): string {
@@ -87,12 +87,12 @@ function OutcomeBar({ bullish, bearish, total }: { bullish: number; bearish: num
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 10,
         color: 'rgba(255,255,255,.4)', fontFamily: 'var(--font-mono,monospace)' }}>
-        <span style={{ color: '#10b981' }}>▲ {bullish} bullish</span>
-        <span style={{ color: '#ef4444' }}>{bearish} bearish ▼</span>
+        <span style={{ color: 'var(--bull)' }}>▲ {bullish} bullish</span>
+        <span style={{ color: 'var(--bear)' }}>{bearish} bearish ▼</span>
       </div>
-      <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', background: 'rgba(239,68,68,.25)',
+      <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', background: 'var(--bear-bg)',
         display: 'flex' }}>
-        <div style={{ width: `${bullPct}%`, background: '#10b981', borderRadius: '3px 0 0 3px',
+        <div style={{ width: `${bullPct}%`, background: 'var(--bull)', borderRadius: '3px 0 0 3px',
           transition: 'width .4s' }} />
       </div>
     </div>
@@ -121,13 +121,13 @@ function InstanceRow({ inst }: { inst: CorrelationInstance }) {
           <div style={{
             width: `${Math.min(Math.abs(ret5) * 15, 100)}%`,
             height: '100%',
-            background: isPos ? '#10b981' : '#ef4444',
+            background: isPos ? 'var(--bull)' : 'var(--bear)',
             borderRadius: 2,
           }} />
         )}
       </div>
       <span style={{ minWidth: 52, textAlign: 'right', fontFamily: 'var(--font-mono,monospace)',
-        color: isPos ? '#10b981' : isNeg ? '#ef4444' : 'rgba(255,255,255,.25)', fontSize: 11 }}>
+        color: isPos ? 'var(--bull)' : isNeg ? 'var(--bear)' : 'rgba(255,255,255,.25)', fontSize: 11 }}>
         {fmtRet(ret5)}
       </span>
     </div>
@@ -194,11 +194,11 @@ function ZoneConfluenceViz({ corr }: { corr: VaNiCorrelation }) {
       {activeInst && (
         <div style={{
           padding: '10px 14px', borderRadius: 8,
-          background: 'rgba(245,158,11,.06)',
-          borderLeft: '3px solid #f59e0b',
+          background: 'var(--caution-bg)',
+          borderLeft: '3px solid var(--caution)',
           animation: 'pulse 2s infinite',
         }}>
-          <div style={{ fontSize: 11, color: '#fbbf24', fontWeight: 600, marginBottom: 4 }}>
+          <div style={{ fontSize: 11, color: 'var(--caution)', fontWeight: 600, marginBottom: 4 }}>
             Currently in confluence · Day {activeInst.duration_days}
           </div>
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', fontFamily: 'var(--font-mono,monospace)' }}>
@@ -217,7 +217,7 @@ function ZoneConfluenceViz({ corr }: { corr: VaNiCorrelation }) {
           {ganttData.map((d, i) => {
             const barColor = d.isCurrent ? '#a78bfa'
               : d.ret === null ? 'rgba(255,255,255,.15)'
-              : d.ret >= 0 ? '#10b981' : '#ef4444'
+              : d.ret >= 0 ? 'var(--bull)' : 'var(--bear)'
             const widthPct = (d.value / maxDur) * 100
             return (
               <div key={i} title={d.tooltip} style={{ display: 'flex', alignItems: 'center',
@@ -257,13 +257,13 @@ function ZoneConfluenceViz({ corr }: { corr: VaNiCorrelation }) {
             <YAxis tick={{ fontSize: 9, fill: 'rgba(255,255,255,.3)' }} axisLine={false} tickLine={false} allowDecimals={false} />
             <Tooltip
               cursor={{ fill: 'rgba(255,255,255,.04)' }}
-              contentStyle={{ background: '#0d1117', border: '1px solid rgba(255,255,255,.1)',
+              contentStyle={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,.1)',
                 borderRadius: 6, fontSize: 11 }}
               formatter={(v: unknown) => [v as number, 'instances']}
             />
             <Bar dataKey="count" radius={[2, 2, 0, 0]}>
               {histData.map((d, i) => (
-                <Cell key={i} fill={d.positive ? '#10b981' : '#ef4444'} opacity={d.count === 0 ? 0.2 : 1} />
+                <Cell key={i} fill={d.positive ? 'var(--bull)' : 'var(--bear)'} opacity={d.count === 0 ? 0.2 : 1} />
               ))}
             </Bar>
           </BarChart>
@@ -310,7 +310,7 @@ function EventOverlapViz({ corr }: { corr: VaNiCorrelation }) {
       {/* Legend */}
       <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'rgba(255,255,255,.4)',
         fontFamily: 'var(--font-mono,monospace)' }}>
-        <span><span style={{ color: '#2dd4bf' }}>■</span> {fmtId(corr.item_a)}</span>
+        <span><span style={{ color: 'var(--accent-cyan)' }}>■</span> {fmtId(corr.item_a)}</span>
         <span><span style={{ color: '#fb923c' }}>■</span> {fmtId(corr.item_b)}</span>
         <span><span style={{ color: '#a78bfa' }}>■</span> OVERLAP</span>
       </div>
@@ -332,15 +332,15 @@ function EventOverlapViz({ corr }: { corr: VaNiCorrelation }) {
             const x2    = xOf(inst.end_date)
             const barW  = Math.max(x2 - x1, 4)
             const isCur = corr.currently_active && i === sorted.length - 1
-            const dotC  = inst.return_5d === null ? '#f59e0b'
-              : inst.return_5d >= 0 ? '#10b981' : '#ef4444'
+            const dotC  = inst.return_5d === null ? 'var(--caution)'
+              : inst.return_5d >= 0 ? 'var(--bull)' : 'var(--bear)'
             const tooltip = `${inst.start_date} · ${inst.duration_days}d · 5D: ${fmtRet(inst.return_5d)} · 22D: ${fmtRet(inst.return_22d)}`
             return (
               <g key={i}>
                 <title>{tooltip}</title>
                 {/* Track A — teal */}
                 <rect x={x1} y={0} width={barW} height={TRACK_H} rx={2}
-                  fill="#2dd4bf" opacity={isCur ? 0.9 : 0.55} />
+                  fill="var(--accent-cyan)" opacity={isCur ? 0.9 : 0.55} />
                 {/* Track B — orange */}
                 <rect x={x1} y={TRACK_H + TRACK_GAP} width={barW} height={TRACK_H} rx={2}
                   fill="#fb923c" opacity={isCur ? 0.9 : 0.55} />
@@ -350,7 +350,7 @@ function EventOverlapViz({ corr }: { corr: VaNiCorrelation }) {
                 {/* Outcome dot at right edge */}
                 {!isCur && (
                   <circle cx={x2} cy={TRACK_H + TRACK_GAP / 2} r={4}
-                    fill={dotC} stroke="rgba(13,17,23,.8)" strokeWidth={1} />
+                    fill={dotC} stroke="var(--card)" strokeWidth={1} />
                 )}
                 {/* Pulsing ring for current */}
                 {isCur && (
@@ -445,9 +445,9 @@ function EventInStateViz({ corr }: { corr: VaNiCorrelation }) {
   // Current state returns for callout
   const currentStateRow = currentState ? stateRows.find(r => r.state === currentState) : null
   const calloutBg = currentStateRow?.avg5 != null && currentStateRow.avg5 < 0
-    ? 'rgba(245,158,11,.06)' : 'rgba(45,212,191,.06)'
+    ? 'var(--caution-bg)' : 'color-mix(in srgb, var(--accent-cyan) 6%, transparent)'
   const calloutBorder = currentStateRow?.avg5 != null && currentStateRow.avg5 < 0
-    ? '#f59e0b' : '#2dd4bf'
+    ? 'var(--caution)' : 'var(--accent-cyan)'
 
   const CELL_SIZE = 32
   const GRID_COLS = 6
@@ -505,10 +505,10 @@ function EventInStateViz({ corr }: { corr: VaNiCorrelation }) {
                 display: 'grid', gridTemplateColumns: '1fr 56px 56px 44px 50px',
                 padding: '8px 12px', fontSize: 11,
                 borderTop: '1px solid rgba(255,255,255,.04)',
-                background: isActive ? 'rgba(245,158,11,.06)' : isBest ? 'rgba(16,185,129,.04)' : 'transparent',
-                borderLeft: isActive ? '3px solid #f59e0b' : isBest ? '3px solid rgba(16,185,129,.3)' : '3px solid transparent',
+                background: isActive ? 'var(--caution-bg)' : isBest ? 'var(--bull-bg)' : 'transparent',
+                borderLeft: isActive ? '3px solid var(--caution)' : isBest ? '3px solid var(--bull-dim)' : '3px solid transparent',
               }}>
-                <span style={{ color: isActive ? '#fbbf24' : 'rgba(255,255,255,.65)',
+                <span style={{ color: isActive ? 'var(--caution)' : 'rgba(255,255,255,.65)',
                   fontFamily: 'var(--font-mono,monospace)', fontSize: 10 }}>
                   {g.state}
                 </span>
@@ -543,7 +543,7 @@ function EventInStateViz({ corr }: { corr: VaNiCorrelation }) {
             const stLabel = instState(inst)
             const cellBg  = isCur ? 'rgba(167,139,250,.15)'
               : inst.return_5d === null ? 'rgba(255,255,255,.05)'
-              : inst.return_5d >= 0 ? 'rgba(16,185,129,.18)' : 'rgba(239,68,68,.18)'
+              : inst.return_5d >= 0 ? 'var(--bull-bg)' : 'var(--bear-bg)'
             const tooltip = `${inst.start_date} · ${stLabel} · 5D: ${fmtRet(inst.return_5d)}`
             return (
               <div key={i} title={tooltip} style={{
@@ -591,15 +591,15 @@ function PairDetail({ corr, onDismiss }: { corr: VaNiCorrelation; onDismiss: () 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {corr.currently_active ? (
           <>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981',
-              boxShadow: '0 0 8px #10b981', display: 'inline-block', animation: 'pulse 2s infinite' }} />
-            <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>Active Now</span>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--bull)',
+              boxShadow: '0 0 8px var(--bull)', display: 'inline-block', animation: 'pulse 2s infinite' }} />
+            <span style={{ fontSize: 12, color: 'var(--bull)', fontWeight: 600 }}>Active Now</span>
           </>
         ) : (
           <>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b',
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--caution)',
               display: 'inline-block' }} />
-            <span style={{ fontSize: 12, color: '#f59e0b' }}>Approaching</span>
+            <span style={{ fontSize: 12, color: 'var(--caution)' }}>Approaching</span>
           </>
         )}
         <span style={{ fontSize: 10, color: 'rgba(255,255,255,.25)', fontFamily: 'var(--font-mono,monospace)',
@@ -664,8 +664,8 @@ function PairDetail({ corr, onDismiss }: { corr: VaNiCorrelation; onDismiss: () 
 
       {/* Insufficient data VaNi message */}
       {corr.insufficient_data && (
-        <div style={{ padding: 12, background: 'rgba(139,92,246,.06)', borderRadius: 8,
-          border: '1px solid rgba(139,92,246,.2)', fontSize: 12,
+        <div style={{ padding: 12, background: 'var(--accent-glow)', borderRadius: 8,
+          border: '1px solid var(--accent-dim)', fontSize: 12,
           color: 'rgba(255,255,255,.6)', lineHeight: 1.6 }}>
           <span style={{ color: '#a78bfa', marginRight: 6, fontSize: 10 }}>✦ VaNi</span>
           Only {corr.n_instances} historical instance{corr.n_instances !== 1 ? 's' : ''} found — not enough to draw reliable conclusions. I'll watch for more data as history builds.
@@ -673,8 +673,8 @@ function PairDetail({ corr, onDismiss }: { corr: VaNiCorrelation; onDismiss: () 
       )}
 
       {/* VaNi inference note */}
-      <div style={{ padding: 12, background: 'rgba(139,92,246,.06)', borderRadius: 8,
-        border: '1px solid rgba(139,92,246,.2)', fontSize: 12,
+      <div style={{ padding: 12, background: 'var(--accent-glow)', borderRadius: 8,
+        border: '1px solid var(--accent-dim)', fontSize: 12,
         color: 'rgba(255,255,255,.6)', lineHeight: 1.6 }}>
         <span style={{ color: '#a78bfa', marginRight: 6, fontSize: 10 }}>✦ VaNi</span>
         {vaNiNote(corr)}
@@ -695,8 +695,8 @@ function PairDetail({ corr, onDismiss }: { corr: VaNiCorrelation; onDismiss: () 
         <button
           onClick={onDismiss}
           style={{ flex: 1, padding: '8px 0', borderRadius: 7, fontSize: 12,
-            background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)',
-            color: '#f87171', cursor: 'pointer' }}>
+            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim)',
+            color: 'var(--bear)', cursor: 'pointer' }}>
           Dismiss
         </button>
       </div>
@@ -743,7 +743,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
         position: 'fixed', top: 56, right: 0, bottom: 0, width: 400,
         zIndex: 200, display: 'flex', flexDirection: 'column',
         background: 'var(--card)', backdropFilter: 'blur(20px)',
-        borderLeft: '1px solid rgba(139,92,246,.2)',
+        borderLeft: '1px solid var(--accent-dim)',
         boxShadow: '-8px 0 32px rgba(0,0,0,.5)',
         transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
         transition: 'transform .25s cubic-bezier(.4,0,.2,1)',

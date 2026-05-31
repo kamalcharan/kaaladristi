@@ -50,8 +50,8 @@ export default function MagicRsSubchart({ data, activeIndex, benchmarkLabel }: M
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const colBg = getCssVar('--kd-bg', '#020917');
-    const colBorder = getCssVar('--kd-border', '#1a2740');
+    const colBg = getCssVar('--bg', '#020917');
+    const colBorder = getCssVar('--border', '#1a2740');
     const colGreen = getCssVar('--risk-green', '#10b981');
     const colRed = getCssVar('--risk-red', '#ef4444');
     const colGold = getCssVar('--accent-gold', '#c9a84c');

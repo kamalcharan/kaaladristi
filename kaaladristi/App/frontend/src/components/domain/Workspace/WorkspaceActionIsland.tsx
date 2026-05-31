@@ -52,11 +52,11 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
         gap: 10,
         padding: '10px 20px',
         borderRadius: 100,
-        background: 'rgba(13,17,23,0.96)',
+        background: 'var(--card)',
         backdropFilter: 'blur(16px)',
-        border: `1px solid ${hasActive ? '#f59e0b' : 'rgba(255,255,255,.15)'}`,
+        border: `1px solid ${hasActive ? 'var(--caution)' : 'rgba(255,255,255,.15)'}`,
         boxShadow: hasActive
-          ? '0 0 24px rgba(245,158,11,.25), 0 12px 40px rgba(0,0,0,.6)'
+          ? '0 0 24px var(--caution-bg), 0 12px 40px rgba(0,0,0,.6)'
           : '0 12px 40px rgba(0,0,0,.5)',
         cursor: isWatching ? 'default' : 'pointer',
         transition: 'border-color .3s, box-shadow .3s',
@@ -66,7 +66,7 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
       {/* VaNi icon */}
       <span style={{
         fontSize: 13,
-        color: hasActive ? '#f59e0b' : isWatching ? 'rgba(167,139,250,.5)' : '#a78bfa',
+        color: hasActive ? 'var(--caution)' : isWatching ? 'rgba(167,139,250,.5)' : '#a78bfa',
         transition: 'color .3s',
         flexShrink: 0,
       }}>
@@ -79,8 +79,8 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
           display: 'inline-block',
           width: 7, height: 7,
           borderRadius: '50%',
-          background: '#f59e0b',
-          boxShadow: '0 0 8px #f59e0b',
+          background: 'var(--caution)',
+          boxShadow: '0 0 8px var(--caution)',
           animation: 'pulse 2s infinite',
           flexShrink: 0,
         }} />
@@ -91,7 +91,7 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
         fontSize: 12,
         color: isWatching
           ? 'rgba(255,255,255,.35)'
-          : hasActive ? '#fcd34d' : 'rgba(255,255,255,.75)',
+          : hasActive ? 'var(--caution)' : 'rgba(255,255,255,.75)',
         fontFamily: 'var(--font-display, var(--font-mono, monospace))',
         letterSpacing: '.01em',
         whiteSpace: 'nowrap',

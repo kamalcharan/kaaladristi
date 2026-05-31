@@ -188,15 +188,15 @@ export default function MarketBreadthChart() {
           <AreaChart data={data} margin={{ top: 4, right: 40, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="breadthGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0.05} />
+                <stop offset="5%"  stopColor="var(--accent)" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0.05} />
               </linearGradient>
             </defs>
 
             {/* Regime background zones */}
-            <ReferenceArea y1={GREED_THRESHOLD} y2={100} fill="#ef4444" fillOpacity={0.06} />
-            <ReferenceArea y1={FEAR_THRESHOLD}  y2={GREED_THRESHOLD} fill="#f59e0b" fillOpacity={0.06} />
-            <ReferenceArea y1={0}               y2={FEAR_THRESHOLD}  fill="#10b981" fillOpacity={0.06} />
+            <ReferenceArea y1={GREED_THRESHOLD} y2={100} fill="var(--bear)" fillOpacity={0.06} />
+            <ReferenceArea y1={FEAR_THRESHOLD}  y2={GREED_THRESHOLD} fill="var(--caution)" fillOpacity={0.06} />
+            <ReferenceArea y1={0}               y2={FEAR_THRESHOLD}  fill="var(--bull)" fillOpacity={0.06} />
 
             <XAxis
               dataKey="trade_date"
@@ -216,28 +216,28 @@ export default function MarketBreadthChart() {
             {/* Threshold reference lines */}
             <ReferenceLine
               y={GREED_THRESHOLD}
-              stroke="#ef4444"
+              stroke="var(--bear)"
               strokeDasharray="4 2"
               strokeOpacity={0.6}
-              label={{ value: `Greed ${GREED_THRESHOLD}`, position: 'right', fontSize: 9, fill: '#ef4444' }}
+              label={{ value: `Greed ${GREED_THRESHOLD}`, position: 'right', fontSize: 9, fill: 'var(--bear)' }}
             />
             <ReferenceLine
               y={FEAR_THRESHOLD}
-              stroke="#10b981"
+              stroke="var(--bull)"
               strokeDasharray="4 2"
               strokeOpacity={0.6}
-              label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: '#10b981' }}
+              label={{ value: `Fear ${FEAR_THRESHOLD}`, position: 'right', fontSize: 9, fill: 'var(--bull)' }}
             />
 
             <Tooltip content={<BreadthTooltip />} />
 
             <Area
               dataKey="breadth_score"
-              stroke="#6366f1"
+              stroke="var(--accent)"
               strokeWidth={1.5}
               fill="url(#breadthGrad)"
               dot={false}
-              activeDot={{ r: 3, fill: '#6366f1' }}
+              activeDot={{ r: 3, fill: 'var(--accent)' }}
             />
           </AreaChart>
         </ResponsiveContainer>

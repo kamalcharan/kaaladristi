@@ -32,7 +32,7 @@ const TONE_VAR: Record<Status['tone'], string> = {
   green: 'var(--risk-green)',
   red:   'var(--risk-red)',
   amber: 'var(--risk-amber)',
-  gold:  'var(--accent-gold, #C9A84C)',
+  gold:  'var(--gold)',
   dim:   'var(--text-muted)',
 };
 

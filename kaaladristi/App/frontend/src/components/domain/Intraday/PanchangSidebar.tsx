@@ -16,8 +16,8 @@ const ROW_COLOR: Record<string, string> = {
   green: 'var(--risk-green)',
   red:   'var(--risk-red)',
   amber: 'var(--risk-amber)',
-  teal:  'var(--accent-teal, #40B8C8)',
-  gold:  'var(--accent-gold, #C9A84C)',
+  teal:  'var(--accent-cyan)',
+  gold:  'var(--gold)',
   dim:   'var(--text-muted)',
 };
 
@@ -118,9 +118,9 @@ export default function PanchangSidebar({ panchang }: Props) {
             <span key={s} style={{
               fontSize: 9, padding: '1px 6px', borderRadius: 2,
               fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
-              background: 'rgba(201, 168, 76, 0.12)',
-              color: 'var(--accent-gold, #C9A84C)',
-              border: '1px solid rgba(201, 168, 76, 0.40)',
+              background: 'var(--gold-bg)',
+              color: 'var(--gold)',
+              border: '1px solid color-mix(in srgb, var(--gold) 40%, transparent)',
             }}>{s}</span>
           ))}
         </div>

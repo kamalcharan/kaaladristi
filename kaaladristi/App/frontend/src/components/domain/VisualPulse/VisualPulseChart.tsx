@@ -48,8 +48,8 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
     ctx.scale(dpr, dpr);
 
     // Resolve theme colors
-    const colBg = getCssVar('--kd-bg', '#020917');
-    const colBorder = getCssVar('--kd-border', '#1a2740');
+    const colBg = getCssVar('--bg', '#020917');
+    const colBorder = getCssVar('--border', '#1a2740');
     const colGreen = getCssVar('--risk-green', '#10b981');
     const colRed = getCssVar('--risk-red', '#ef4444');
     const colGold = getCssVar('--accent-gold', '#c9a84c');
@@ -154,9 +154,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
       const alpha = isActive ? 1.0 : 0.7;
 
       // Wick
-      ctx.strokeStyle = bullish
-        ? `rgba(16,185,129,${alpha})`
-        : `rgba(239,68,68,${alpha})`;
+      ctx.strokeStyle = `${bullish ? colGreen : colRed}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, toY(b.high));
@@ -164,9 +162,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
       ctx.stroke();
 
       // Body
-      ctx.fillStyle = bullish
-        ? `rgba(16,185,129,${alpha})`
-        : `rgba(239,68,68,${alpha})`;
+      ctx.fillStyle = `${bullish ? colGreen : colRed}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
       ctx.fillRect(x - barW * 0.35, bodyTop, barW * 0.7, bodyH);
     });
 

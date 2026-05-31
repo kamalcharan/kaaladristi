@@ -12,30 +12,30 @@ import type { ConfluenceConditions, ConfluencePattern } from '@/types';
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
 function breadthRegimeColor(regime: string | null): string {
-  if (regime === 'Elevated') return '#22c55e';
-  if (regime === 'Depressed') return '#ef4444';
-  return '#f59e0b';
+  if (regime === 'Elevated') return 'var(--bull)';
+  if (regime === 'Depressed') return 'var(--bear)';
+  return 'var(--caution)';
 }
 
 function rocRegimeColor(regime: string | null): string {
-  if (regime === 'Expanding') return '#22c55e';
-  if (regime === 'Positive')  return '#10b981';
-  if (regime === 'Negative')  return '#f97316';
-  return '#ef4444';
+  if (regime === 'Expanding') return 'var(--bull)';
+  if (regime === 'Positive')  return 'var(--bull)';
+  if (regime === 'Negative')  return 'var(--caution)';
+  return 'var(--bear)';
 }
 
 function nakvarColor(outcome: string | null): string {
-  if (outcome === 'bullish') return '#22c55e';
-  if (outcome === 'bearish') return '#ef4444';
+  if (outcome === 'bullish') return 'var(--bull)';
+  if (outcome === 'bearish') return 'var(--bear)';
   return '#64748b';
 }
 
 function patternColor(pct: number | null): string {
   if (pct == null) return '#64748b';
-  if (pct >= 65) return '#22c55e';
+  if (pct >= 65) return 'var(--bull)';
   if (pct >= 55) return '#14b8a6';
-  if (pct >= 45) return '#f59e0b';
-  return '#ef4444';
+  if (pct >= 45) return 'var(--caution)';
+  return 'var(--bear)';
 }
 
 function fmtRoc(v: number | null): string {
@@ -188,7 +188,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
           </div>
         </div>
         <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: (ret ?? 0) >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: (ret ?? 0) >= 0 ? 'var(--bull)' : 'var(--bear)', lineHeight: 1 }}>
             {ret != null ? `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#475569', marginTop: 3 }}>
@@ -206,7 +206,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
       </div>
 
       {pattern.signal_count < 20 && (
-        <div style={{ marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 9, color: '#f59e0b' }}>
+        <div style={{ marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--caution)' }}>
           ⚠ Small sample — interpret with caution
         </div>
       )}
@@ -280,7 +280,7 @@ interface InsightCard {
 
 const OBSERVATIONS: InsightCard[] = [
   {
-    color:   '#ef4444',
+    color:   'var(--bear)',
     icon:    '▼',
     title:   'Depressed Breadth + Negative ROC',
     sub:     'Market structure overwhelms all astro signals',
@@ -290,7 +290,7 @@ const OBSERVATIONS: InsightCard[] = [
     verdict: 'When breadth is depressed and momentum is negative, positive astro signals fail. Market internals dominate — the historical edge disappears entirely in this regime.',
   },
   {
-    color:   '#22c55e',
+    color:   'var(--bull)',
     icon:    '▲',
     title:   'Elevated Breadth + Positive ROC + Positive Astro',
     sub:     'Strongest positive confluence observed',
@@ -300,7 +300,7 @@ const OBSERVATIONS: InsightCard[] = [
     verdict: 'When all three layers align — broad participation, expanding short-term momentum, and positive astro — the historical frequency of a positive trading day is highest across the system.',
   },
   {
-    color:   '#f59e0b',
+    color:   'var(--caution)',
     icon:    '◈',
     title:   'Elevated Breadth overrides Negative Astro',
     sub:     'Structural breadth dominated negative signals — 63.9% positive days',
@@ -397,7 +397,7 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading conditions…</span>
           </div>
         ) : isError || !data ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#ef4444' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--bear)' }}>
             <AlertCircle className="w-4 h-4" />
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Could not load conditions — backend may be offline</span>
           </div>

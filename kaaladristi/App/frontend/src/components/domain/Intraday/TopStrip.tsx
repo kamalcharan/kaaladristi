@@ -45,17 +45,17 @@ const TONE_COLOR: Record<NonNullable<CellProps['tone']>, string> = {
   green: 'var(--risk-green)',
   red:   'var(--risk-red)',
   amber: 'var(--risk-amber)',
-  teal:  'var(--accent-teal, #40B8C8)',
-  gold:  'var(--accent-gold, #C9A84C)',
+  teal:  'var(--accent-cyan)',
+  gold:  'var(--gold)',
   dim:   'var(--text-muted)',
 };
 
 const TONE_BG: Record<NonNullable<CellProps['tone']>, string> = {
-  green: 'rgba(46, 204, 113, 0.10)',
-  red:   'rgba(231, 76, 60, 0.10)',
-  amber: 'rgba(245, 158, 11, 0.08)',
-  teal:  'rgba(64, 184, 200, 0.08)',
-  gold:  'rgba(201, 168, 76, 0.08)',
+  green: 'var(--bull-bg)',
+  red:   'var(--bear-bg)',
+  amber: 'var(--caution-bg)',
+  teal:  'color-mix(in srgb, var(--accent-cyan) 8%, transparent)',
+  gold:  'var(--gold-bg)',
   dim:   'transparent',
 };
 

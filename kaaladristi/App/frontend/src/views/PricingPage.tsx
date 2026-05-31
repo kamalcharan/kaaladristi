@@ -112,7 +112,7 @@ export default function PricingPage() {
 
         {payError && (
           <div style={{ maxWidth: 500, margin: '0 auto 24px', padding: '10px 16px', borderRadius: 10,
-            background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)',
+            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))',
             fontSize: 13, color: '#fca5a5', textAlign: 'center' }}>
             {payError}
           </div>
@@ -161,7 +161,7 @@ export default function PricingPage() {
                       (tier.id === 'free' || isCurrentFree || isCurrent) ? 'default' :
                       paying ? 'wait' : 'pointer',
                     background: tier.highlight
-                      ? 'rgba(139,92,246,.9)'
+                      ? 'var(--accent-solid)'
                       : isCurrentFree || isCurrent
                         ? 'rgba(255,255,255,.06)'
                         : 'rgba(255,255,255,.1)',
@@ -200,7 +200,7 @@ export default function PricingPage() {
               background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.01)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8,
                 fontSize: 13, color: 'rgba(255,255,255,.7)' }}>
-                <span style={{ color: 'rgba(139,92,246,.6)' }}>{f.icon}</span>
+                <span style={{ color: 'var(--accent)' }}>{f.icon}</span>
                 {f.label}
               </div>
               {[f.free, f.trial, f.paid, f.paid].map((yes, j) => (
