@@ -4,8 +4,9 @@ import App from './App';
 import './styles/globals.css';
 import { applyThemeById } from '@/config/theme';
 
-// Apply theme from .env before the React tree mounts so there is no flash.
-applyThemeById(import.meta.env.VITE_THEME ?? 'kaaladristi');
+// Apply theme before the React tree mounts — prefer localStorage, fall back to .env.
+const _storedTheme = localStorage.getItem('kd-theme') ?? import.meta.env.VITE_THEME ?? 'kaaladristi';
+applyThemeById(_storedTheme);
 
 // Service worker management.
 // A stale SW from a prior deployment can intercept /api/ and /db/ requests,

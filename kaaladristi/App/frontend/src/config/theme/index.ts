@@ -97,6 +97,7 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--caution',       c.semantic.warning);
 
   // ── Accents — legacy vars (kept for backward compat) ──
+  set('--accent',        c.brand.primary);
   set('--accent-indigo', c.brand.primary);
   set('--accent-violet', c.brand.tertiary);
   set('--accent-gold',   c.brand.secondary);

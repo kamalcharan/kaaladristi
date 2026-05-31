@@ -3,6 +3,7 @@ import { LogOut, Shield, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { signOut } from '@/services/auth';
+import { useThemeStore } from '@/stores/themeStore';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
 // Glyphs are Fraunces/Unicode characters, matching dashboard-LOCKED.html
@@ -72,6 +73,68 @@ function marketStatus(): string {
   if (mins < 9 * 60 + 15) return 'Pre-market';
   if (mins <= 15 * 60 + 30) return 'Market open';
   return 'Market closed';
+}
+
+// ── ThemeSwitcher ────────────────────────────────────────────────────────────
+
+function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { activeTheme, themes, setTheme } = useThemeStore()
+
+  if (collapsed) {
+    // Collapsed: single dot showing active theme colour, cycles on click
+    const current = themes.find(t => t.id === activeTheme) ?? themes[0]
+    const next = themes[(themes.findIndex(t => t.id === activeTheme) + 1) % themes.length]
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+        <button
+          onClick={() => setTheme(next.id)}
+          title={`Theme: ${current.label} — click to switch`}
+          style={{
+            width: 10, height: 10, borderRadius: '50%',
+            background: current.dot,
+            border: '2px solid rgba(255,255,255,.25)',
+            cursor: 'pointer', padding: 0,
+            boxShadow: `0 0 8px ${current.dot}80`,
+          }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      padding: '8px 12px 4px',
+      display: 'flex', alignItems: 'center', gap: 10,
+    }}>
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9,
+        color: 'var(--text-faint)', letterSpacing: '.1em',
+        textTransform: 'uppercase', flexShrink: 0,
+      }}>
+        Theme
+      </span>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {themes.map(t => {
+          const isActive = t.id === activeTheme
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTheme(t.id)}
+              title={t.label}
+              style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: t.dot,
+                border: isActive ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.15)',
+                cursor: 'pointer', padding: 0,
+                boxShadow: isActive ? `0 0 8px ${t.dot}90` : 'none',
+                transition: 'border-color .15s, box-shadow .15s',
+              }}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -262,6 +325,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           );
         })}
       </div>
+
+      {/* ── Theme switcher ── */}
+      <ThemeSwitcher collapsed={collapsed} />
 
       {/* ── Footer: user + date ── */}
       <div
