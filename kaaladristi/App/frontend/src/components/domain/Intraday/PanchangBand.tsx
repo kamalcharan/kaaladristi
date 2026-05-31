@@ -68,10 +68,10 @@ export default function PanchangBand({ panchang, nowMin, sq }: PanchangBandProps
 
   // Background tint by SQ
   const sqTint =
-    sq === 3 ? 'rgba(46, 204, 113, 0.06)' :
-    sq === 2 ? 'rgba(245, 158, 11, 0.05)' :
-    sq === 1 ? 'rgba(245, 158, 11, 0.05)' :
-               'rgba(231, 76, 60, 0.06)';
+    sq === 3 ? 'var(--bull-bg)' :
+    sq === 2 ? 'var(--caution-bg)' :
+    sq === 1 ? 'var(--caution-bg)' :
+               'var(--bear-bg)';
 
   // Cursor (only render if in session window, otherwise pin to edge)
   const inSession = nowMin >= SESSION_OPEN_MIN && nowMin <= SESSION_CLOSE_MIN;
@@ -135,7 +135,7 @@ export default function PanchangBand({ panchang, nowMin, sq }: PanchangBandProps
         {showYoga && (
           <line
             x1={tx(yogaEnd!)} y1={0} x2={tx(yogaEnd!)} y2={VB_H}
-            stroke="var(--accent-gold, #C9A84C)"
+            stroke="var(--gold)"
             strokeWidth={1.2}
             strokeDasharray="3,2"
             opacity={0.85}
@@ -170,7 +170,7 @@ export default function PanchangBand({ panchang, nowMin, sq }: PanchangBandProps
         {inSession && (
           <line
             x1={cursorX} y1={0} x2={cursorX} y2={VB_H}
-            stroke="var(--accent-gold, #C9A84C)"
+            stroke="var(--gold)"
             strokeWidth={1.5}
             opacity={0.95}
           />

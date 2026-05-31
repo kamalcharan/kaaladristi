@@ -29,7 +29,7 @@ export default function LPBadge({ lpScore, lpDot }: LPBadgeProps) {
         display: 'flex', justifyContent: 'space-between',
       }}>
         <span>⚡ LP + FIN Bridge</span>
-        <span style={{ color: 'var(--accent-teal, #40B8C8)' }}>★ pending</span>
+        <span style={{ color: 'var(--accent-cyan)' }}>★ pending</span>
       </div>
 
       {hasSignal ? (
@@ -41,7 +41,7 @@ export default function LPBadge({ lpScore, lpDot }: LPBadgeProps) {
             {lpScore! > 0 ? '+' : ''}{lpScore}
           </strong></div>
           {lpDot && (
-            <div>Dot: <strong style={{ color: 'var(--accent-violet, #9B6BC0)' }}>● {lpDot}</strong></div>
+            <div>Dot: <strong style={{ color: 'var(--accent-violet)' }}>● {lpDot}</strong></div>
           )}
           <div style={{
             fontSize: 9, color: 'var(--text-faint)', marginTop: 4,

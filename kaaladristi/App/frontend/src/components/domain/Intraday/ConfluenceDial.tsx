@@ -119,7 +119,7 @@ export default function ConfluenceDial({ breakdown }: ConfluenceDialProps) {
       {/* 3-bar breakdown */}
       <Bar
         label="Tech" weight={60} value={tech} max={6}
-        color="var(--accent-teal, #40B8C8)"
+        color="var(--accent-cyan)"
         grey={!lpAvailable}
         caption={lpAvailable ? `${tech.toFixed(1)}/6` : 'awaiting LP'}
       />
@@ -136,7 +136,7 @@ export default function ConfluenceDial({ breakdown }: ConfluenceDialProps) {
       <Bar
         label="Planetary" weight={20}
         value={plan} max={2}
-        color="var(--accent-gold, #C9A84C)"
+        color="var(--gold)"
         caption={`${plan.toFixed(2)}/2.0`}
       />
     </div>

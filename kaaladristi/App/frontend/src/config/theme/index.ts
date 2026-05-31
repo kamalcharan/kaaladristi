@@ -108,6 +108,24 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--risk-green', c.semantic.success);
   set('--risk-amber', c.semantic.warning);
   set('--risk-red',   c.semantic.error);
+
+  // ── Opacity variants — computed from base tokens, never static ──
+  set('--bull-bg',    hexToRgba(c.semantic.success, 0.1));
+  set('--bear-bg',    hexToRgba(c.semantic.error,   0.1));
+  set('--caution-bg', hexToRgba(c.semantic.warning,  0.1));
+  set('--gold-bg',    hexToRgba(c.brand.secondary,   0.1));
+
+  // ── Accent opacity variants ──
+  set('--accent-dim',   hexToRgba(c.brand.primary, 0.35));
+  set('--accent-glow',  hexToRgba(c.brand.primary, 0.15));
+  set('--accent-solid', hexToRgba(c.brand.primary, 0.9));
+
+  // ── Surface aliases ──
+  set('--surface-1', c.utility.primaryBackground);
+  set('--surface-2', c.utility.secondaryBackground ?? c.utility.primaryBackground);
+
+  // ── Text faint — primary text at 25% ──
+  set('--text-faint', hexToRgba(c.utility.primaryText, 0.25));
 }
 
 /**
