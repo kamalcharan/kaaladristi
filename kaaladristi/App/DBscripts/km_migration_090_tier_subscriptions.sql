@@ -21,14 +21,17 @@ CREATE TABLE user_subscriptions (
 
 CREATE INDEX ON user_subscriptions(user_id);
 
--- RLS
+-- RLS — uses same JWT pattern as migration 088 (self-hosted, no auth schema)
 ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "users_read_own_subscriptions"
   ON user_subscriptions FOR SELECT
-  USING (user_id = (SELECT id FROM km_profiles WHERE id = auth.uid()));
+  USING (
+    user_id = (current_setting('request.jwt.claims', true)::json->>'sub')::uuid
+  );
 
--- Backend service role can insert/update
+-- Backend writes directly via psycopg2 (bypasses RLS); this policy covers
+-- any future PostgREST writes with a service-level JWT.
 CREATE POLICY "service_manage_subscriptions"
   ON user_subscriptions FOR ALL
   USING (true)
