@@ -78,14 +78,15 @@ function marketStatus(): string {
 // ── ThemeSwitcher ────────────────────────────────────────────────────────────
 
 function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
-  const { activeTheme, themes, setTheme } = useThemeStore()
+  const { activeTheme, darkMode, themes, setTheme, setDarkMode } = useThemeStore()
+  const current    = themes.find(t => t.id === activeTheme) ?? themes[0]
+  const canToggle  = !current.forceDark
 
   if (collapsed) {
-    // Collapsed: single dot showing active theme colour, cycles on click
-    const current = themes.find(t => t.id === activeTheme) ?? themes[0]
     const next = themes[(themes.findIndex(t => t.id === activeTheme) + 1) % themes.length]
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 0 4px' }}>
+        {/* Theme dot — cycles on click */}
         <button
           onClick={() => setTheme(next.id)}
           title={`Theme: ${current.label} — click to switch`}
@@ -97,42 +98,71 @@ function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
             boxShadow: `0 0 8px ${current.dot}80`,
           }}
         />
+        {/* Dark/light toggle — only when theme supports it */}
+        {canToggle && (
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+              fontSize: 12, color: 'var(--text-faint)', lineHeight: 1,
+            }}
+          >
+            {darkMode ? '◐' : '○'}
+          </button>
+        )}
       </div>
     )
   }
 
   return (
-    <div style={{
-      padding: '8px 12px 4px',
-      display: 'flex', alignItems: 'center', gap: 10,
-    }}>
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 9,
-        color: 'var(--text-faint)', letterSpacing: '.1em',
-        textTransform: 'uppercase', flexShrink: 0,
-      }}>
-        Theme
-      </span>
-      <div style={{ display: 'flex', gap: 6 }}>
-        {themes.map(t => {
-          const isActive = t.id === activeTheme
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTheme(t.id)}
-              title={t.label}
-              style={{
-                width: 10, height: 10, borderRadius: '50%',
-                background: t.dot,
-                border: isActive ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.15)',
-                cursor: 'pointer', padding: 0,
-                boxShadow: isActive ? `0 0 8px ${t.dot}90` : 'none',
-                transition: 'border-color .15s, box-shadow .15s',
-              }}
-            />
-          )
-        })}
+    <div style={{ padding: '8px 12px 4px' }}>
+      {/* Row 1: Theme label + dots */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: canToggle ? 6 : 0 }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: 9,
+          color: 'var(--text-faint)', letterSpacing: '.1em',
+          textTransform: 'uppercase', flexShrink: 0,
+        }}>
+          Theme
+        </span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {themes.map(t => {
+            const isActive = t.id === activeTheme
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                title={t.label}
+                style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: t.dot,
+                  border: isActive ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.15)',
+                  cursor: 'pointer', padding: 0,
+                  boxShadow: isActive ? `0 0 8px ${t.dot}90` : 'none',
+                  transition: 'border-color .15s, box-shadow .15s',
+                }}
+              />
+            )
+          })}
+        </div>
       </div>
+
+      {/* Row 2: Dark/light toggle — only when theme supports it */}
+      {canToggle && (
+        <button
+          onClick={() => setDarkMode(!darkMode)}
+          title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0',
+            fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-mono)',
+          }}
+        >
+          <span style={{ fontSize: 12 }}>{darkMode ? '◐' : '○'}</span>
+          {darkMode ? 'Dark' : 'Light'}
+        </button>
+      )}
     </div>
   )
 }
