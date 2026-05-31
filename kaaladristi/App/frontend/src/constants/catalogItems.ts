@@ -95,7 +95,7 @@ const INDICATORS: CatalogItem[] = [
     db_table: ['km_equity_eod', 'km_index_eod'],
     db_column: 'rsi_14',
     applicable_to: ['equity', 'index'],
-    tier_required: 'free',
+    tier_required: 'paid',
   },
   {
     id: 'supertrend',
@@ -173,7 +173,7 @@ const WIDGETS: CatalogItem[] = [
     db_table: ['km_equity_eod', 'km_index_eod'],
     db_column: 'sniper_inst',  // also reads sniper_hot — never legacy sniper_banker / sniper_hotmoney
     applicable_to: ['equity', 'index'],
-    tier_required: 'free',
+    tier_required: 'paid',
   },
   {
     id: 'conviction_flow',
@@ -197,7 +197,7 @@ const WIDGETS: CatalogItem[] = [
     db_table: ['km_equity_eod', 'km_index_eod'],
     db_column: 'flow_type',  // also reads rvol, vacuum_flag, accum_distrib — never legacy aliases
     applicable_to: ['equity', 'index'],
-    tier_required: 'free',
+    tier_required: 'paid',
   },
   {
     id: 'six_day_outlook',
