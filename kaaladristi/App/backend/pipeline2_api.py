@@ -3842,12 +3842,20 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
         currently_active = any(s <= today <= e for s, e in overlaps)
 
         # ── Data quality metrics ──────────────────────────────────────────
-        days_total   = len(date_list)
-        days_covered = len([d for d in date_list
-                            if any(s <= d <= e for s, e in overlaps)])
-        coverage_pct = round((days_covered / days_total * 100), 2) if days_total else 0.0
+        # days_covered = trading days with valid close data (date_list is already
+        #   filtered by close IS NOT NULL, so this is the clean day count)
+        # days_total   = all rows for this benchmark regardless of NULL close
+        # coverage_pct = what fraction of benchmark history has usable EOD data
+        days_covered = len(date_list)
         date_from    = str(date_list[0])  if date_list else ''
         date_to      = str(date_list[-1]) if date_list else ''
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM km_index_eod WHERE index_id=%s",
+                (bm_id,)
+            )
+            days_total = cur.fetchone()[0]
+        coverage_pct = round((days_covered / days_total * 100), 2) if days_total else 0.0
 
         return {
             'shape':           shape,
