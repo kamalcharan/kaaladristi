@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
@@ -16,6 +16,9 @@ export default function WorkspacePage() {
 
   const [drawerOpen, setDrawerOpen]         = useState(false)
   const [activePairKey, setActivePairKey]   = useState<string | null>(null)
+  const [betaBarDismissed, setBetaBarDismissed] = useState(false)
+
+  const isBeta = profile?.tier === 'beta'
 
   const openDrawer = useCallback((key: string | null) => {
     setActivePairKey(key)
@@ -71,6 +74,24 @@ export default function WorkspacePage() {
             </span>
           </div>
 
+          {/* Beta badge */}
+          {isBeta && (
+            <div
+              title="You're a founding member. Full access free until public launch."
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '3px 10px', borderRadius: 20, fontSize: 11,
+                background: 'rgba(245,158,11,.12)',
+                border: '1px solid rgba(245,158,11,.35)',
+                color: '#fcd34d',
+                fontFamily: 'var(--font-mono,monospace)',
+                cursor: 'default',
+                letterSpacing: '.04em',
+              }}>
+              β · Beta Access
+            </div>
+          )}
+
           {/* VaNi confluence pills */}
           {vaniCorrelations.map(c => {
             const key    = `${c.item_a}:${c.item_b}`
@@ -112,6 +133,26 @@ export default function WorkspacePage() {
         onClose={() => setDrawerOpen(false)}
         onSelectPair={setActivePairKey}
       />
+
+      {/* Beta footer bar — session-dismissable, beta tier only */}
+      {isBeta && !betaBarDismissed && (
+        <div style={{
+          flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+          padding: '7px 20px',
+          background: 'rgba(245,158,11,.07)',
+          borderTop: '1px solid rgba(245,158,11,.2)',
+          fontSize: 12, color: 'rgba(253,211,77,.7)',
+        }}>
+          <span>Beta Access — free until public launch. You'll be notified before anything changes.</span>
+          <button
+            onClick={() => setBetaBarDismissed(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer',
+              color: 'rgba(253,211,77,.4)', padding: 2, display: 'flex', alignItems: 'center' }}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -60,9 +60,10 @@ kaaladristi/
 | `km_data_sync_log` | Pipeline run audit log |
 | `dc_inference` | Planetary DC (Dasha Cycle) inference rules |
 | `dc_lookup` | Lookup values for DC inferences |
-| `km_profiles` | User profiles + roles (RLS-controlled) |
+| `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
+| `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
 
-Latest migration: **072** (`km_migration_072_panchang_windows_columns.sql`)
+Latest migration: **090** (`km_migration_090_tier_subscriptions.sql`)
 
 | Table | Description |
 |---|---|
@@ -793,6 +794,7 @@ the pattern applies to all others.
 - LLM inference notes — replace template strings with Qwen3 calls (temperature 0.3,
   /no_think) with template fallback on failure. Covers all four correlation shapes.
 - Action Island observations — wire VaNi live state text
+- "Mark on chart" — CorrelationDrawer stub button needs to highlight overlap instances on WorkspaceChart (not yet wired)
 - Companion: dristiQ-interaction-spec.md Section 6.4 + 16.6
 
 ## Astro Market-Book 2026
@@ -814,3 +816,16 @@ SELECT compute_astro_daily_signals('2026-01-01', '2026-12-31');
 API endpoints:
 - `GET /api/astro/daily-signal?date=YYYY-MM-DD` — single date, includes active_events array
 - `GET /api/astro/signals?from=YYYY-MM-DD&to=YYYY-MM-DD` — range, max 90 days, used by calendar view
+
+---
+
+## Payments
+
+- Provider: Razorpay
+- Keys: `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` (backend, in .env — not committed); `VITE_RAZORPAY_KEY_ID` (frontend public key)
+- Flow: `POST /api/payments/create-order` → Razorpay checkout modal → `POST /api/payments/verify` → tier upgrade in `km_profiles` + row in `user_subscriptions`
+- Frontend service: `src/services/razorpayService.ts` — `createOrder`, `openCheckout`, `verifyPayment`
+- Test mode: use Razorpay test keys during development (`rzp_test_*`)
+- Live keys: Charan provides before production launch
+- On successful verify: `km_profiles.tier` updated, `user_subscriptions` row inserted with `expires_at`
+- After verify: frontend calls `refreshProfile()` → gate disappears, beta/paid UI activates automatically
