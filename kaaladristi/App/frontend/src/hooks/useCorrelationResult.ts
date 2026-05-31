@@ -38,6 +38,7 @@ export function useCorrelationResult(
   error:            string | null
   insufficientData: boolean
 } {
+  console.debug('[VaNi] useCorrelationResult called:', itemA, itemB, 'enabled:', !!itemA && !!itemB, 'url:', PIPELINE_URL)
   const { data, isLoading, error } = useQuery<CorrelationResult>({
     queryKey:  ['correlation', itemA, itemB, benchmark],
     queryFn:   async () => {
