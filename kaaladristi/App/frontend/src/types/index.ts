@@ -147,6 +147,7 @@ export interface KmProfile {
   created_at: string;
   updated_at: string;
   tier?: string;        // subscription tier — undefined treated as 'free'
+  expires_at?: string | null;  // latest subscription expiry; null = no expiry (beta/lifetime)
 }
 
 // ── Index / Equity Symbol Tables (new restructured schema) ──

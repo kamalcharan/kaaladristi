@@ -3481,14 +3481,28 @@ def get_framework(
                 conn.commit()
                 row = cur.fetchone()
 
-            # Join current tier from km_profiles
+            # Join tier + latest subscription expiry from km_profiles / user_subscriptions
             cur.execute(
-                'SELECT tier FROM km_profiles WHERE id = %s::uuid LIMIT 1',
+                """
+                SELECT p.tier,
+                       s.expires_at
+                FROM   km_profiles p
+                LEFT JOIN LATERAL (
+                    SELECT expires_at
+                    FROM   user_subscriptions
+                    WHERE  user_id = p.id
+                    ORDER  BY started_at DESC
+                    LIMIT  1
+                ) s ON true
+                WHERE  p.id = %s::uuid
+                LIMIT  1
+                """,
                 (user_id,),
             )
             profile_row = cur.fetchone()
             result = dict(row)
-            result['tier'] = profile_row['tier'] if profile_row else 'free'
+            result['tier']       = profile_row['tier']       if profile_row else 'free'
+            result['expires_at'] = str(profile_row['expires_at']) if profile_row and profile_row['expires_at'] else None
         return result
     except HTTPException:
         raise
