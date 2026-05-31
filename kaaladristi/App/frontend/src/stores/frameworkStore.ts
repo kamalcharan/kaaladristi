@@ -362,10 +362,18 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     if (!framework) return
     // Idempotent — don't add the same catalog_item_id twice
     if (framework.blocks.some(b => b.catalog_item_id === block.catalog_item_id)) return
-    // Insert at index 0 so it appears at the top of the right panel
+    // Shift all existing non-chart right-panel blocks down to make room at the top
+    const blockHeight = block.grid_position.row_end - block.grid_position.row_start
+    const shiftedBlocks = framework.blocks.map(b => {
+      if (b.type === 'chart') return b
+      const gp = b.grid_position
+      return { ...b, grid_position: { ...gp, row_start: gp.row_start + blockHeight, row_end: gp.row_end + blockHeight } }
+    })
+    // Place VaNi block at row 1 of the right panel
+    const pinned = { ...block, grid_position: { col_start: 17, col_end: 25, row_start: 1, row_end: 1 + blockHeight } }
     set(s => ({
       framework: s.framework
-        ? { ...s.framework, blocks: [block, ...s.framework.blocks], version: s.framework.version + 1 }
+        ? { ...s.framework, blocks: [pinned, ...shiftedBlocks], version: s.framework.version + 1 }
         : null,
     }))
     scheduleSave(saveFramework)
