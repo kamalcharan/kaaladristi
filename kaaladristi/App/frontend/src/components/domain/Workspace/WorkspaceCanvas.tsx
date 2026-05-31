@@ -155,7 +155,7 @@ function IndexDropdown({
   const [indices, setIndices] = useState<IndexOption[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
-  const { addChartBlock } = useFrameworkStore()
+  const { switchPrimaryIndex } = useFrameworkStore()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -229,7 +229,7 @@ function IndexDropdown({
           return (
             <button
               key={idx.id}
-              onClick={() => { if (!added) { addChartBlock({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() } }}
+              onClick={() => { if (!added) { switchPrimaryIndex({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() } }}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 width: '100%', padding: '7px 12px', border: 'none',
@@ -277,6 +277,9 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
     removeBlock, updateBlockPosition, saveFramework,
     toggleOverlayVisibility, removeOverlay, updateOverlayColor,
   } = useFrameworkStore()
+
+  const primarySymbol = framework.blocks.find(b => b.type === 'chart')
+    ?.catalog_item_id?.replace('chart:', '') ?? 'index'
 
   const sensors = useSensors(useSensor(PointerSensor, {
     activationConstraint: { distance: 8 },
@@ -512,7 +515,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
             el.style.background = 'transparent'
           }}
         >
-          + index
+          {primarySymbol} ▾
         </button>
 
         {/* Edit Canvas / Done Editing */}

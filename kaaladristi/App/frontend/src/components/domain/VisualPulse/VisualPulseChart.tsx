@@ -47,6 +47,15 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
+    // Safely add alpha to any hex colour returned from getCssVar
+    function withAlpha(hex: string, alpha: number): string {
+      const h = hex.replace('#', '')
+      const r = parseInt(h.slice(0, 2), 16)
+      const g = parseInt(h.slice(2, 4), 16)
+      const b = parseInt(h.slice(4, 6), 16)
+      return `rgba(${r},${g},${b},${alpha})`
+    }
+
     // Resolve theme colors
     const colBg = getCssVar('--bg', '#020917');
     const colBorder = getCssVar('--border', '#1a2740');
@@ -139,7 +148,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
       if (vH < 1) return;
       const x = toX(i) - barW * 0.3;
       const bullish = b.close >= b.open;
-      ctx.fillStyle = bullish ? colGreen + '30' : colRed + '30';
+      ctx.fillStyle = bullish ? withAlpha(colGreen, 0.19) : withAlpha(colRed, 0.19);
       ctx.fillRect(x, CHART_H - PAD.b - vH, barW * 0.6, vH);
     });
 
@@ -154,7 +163,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
       const alpha = isActive ? 1.0 : 0.7;
 
       // Wick
-      ctx.strokeStyle = `${bullish ? colGreen : colRed}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
+      ctx.strokeStyle = withAlpha(bullish ? colGreen : colRed, alpha);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, toY(b.high));
@@ -162,7 +171,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
       ctx.stroke();
 
       // Body
-      ctx.fillStyle = `${bullish ? colGreen : colRed}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
+      ctx.fillStyle = withAlpha(bullish ? colGreen : colRed, alpha);
       ctx.fillRect(x - barW * 0.35, bodyTop, barW * 0.7, bodyH);
     });
 
