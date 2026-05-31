@@ -20,6 +20,7 @@ const navSections: NavSection[] = [
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
       { to: '/planetary-intel', glyph: '☽', label: 'Planetary Intel' },
+      { to: '/account',         glyph: '◯', label: 'Account' },
     ],
   },
   {

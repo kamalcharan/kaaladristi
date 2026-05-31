@@ -114,6 +114,19 @@ export async function resetPassword(token: string, newPassword: string): Promise
   return data.message;
 }
 
+/** Change password for the currently authenticated user. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<string> {
+  const { data, error } = await rpc('kd_auth_change_password', {
+    p_current_password: currentPassword,
+    p_new_password: newPassword,
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+
+  return data.message;
+}
+
 /** Get current session from localStorage. */
 export async function getSession(): Promise<KdSession | null> {
   return getStoredSession();
