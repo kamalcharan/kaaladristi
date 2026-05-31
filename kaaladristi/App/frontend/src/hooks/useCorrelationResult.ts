@@ -41,6 +41,7 @@ export function useCorrelationResult(
   const { data, isLoading, error } = useQuery<CorrelationResult>({
     queryKey:  ['correlation', itemA, itemB, benchmark],
     queryFn:   async () => {
+      console.debug('[VaNi] correlation fetch:', itemA, itemB, 'url:', PIPELINE_URL)
       const res = await fetch(`${PIPELINE_URL}/api/correlation/compute`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
