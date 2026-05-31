@@ -10,6 +10,7 @@ import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
+import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
 import { effectiveDotColor } from './overlayColors'
 import { fetchActiveIndices, type IndexOption } from '@/services/indexPickerService'
@@ -252,9 +253,10 @@ function IndexDropdown({
 
 interface Props {
   framework: UserFramework
+  onOpenDrawer?: (pairKey: string | null) => void
 }
 
-export default function WorkspaceCanvas({ framework }: Props) {
+export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
@@ -627,6 +629,8 @@ export default function WorkspaceCanvas({ framework }: Props) {
           onClose={() => setIndexDropdown(null)}
         />
       )}
+
+      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} />
     </div>
   )
 }
