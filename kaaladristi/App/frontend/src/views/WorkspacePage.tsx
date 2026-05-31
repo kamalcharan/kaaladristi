@@ -46,7 +46,7 @@ export default function WorkspacePage() {
     framework.blocks.filter(b => b.type !== 'chart').length === 0 &&
     framework.chart_overlays.length === 0
   ) {
-    return <Navigate to="/profile-setup" replace />
+    return <Navigate to="/setup" replace />
   }
 
   if (error && !framework) {
