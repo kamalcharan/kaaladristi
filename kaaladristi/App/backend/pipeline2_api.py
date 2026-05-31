@@ -3842,19 +3842,24 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
         currently_active = any(s <= today <= e for s, e in overlaps)
 
         # ── Data quality metrics ──────────────────────────────────────────
-        # days_covered = trading days with valid close data (date_list is already
-        #   filtered by close IS NOT NULL, so this is the clean day count)
-        # days_total   = all rows for this benchmark regardless of NULL close
-        # coverage_pct = what fraction of benchmark history has usable EOD data
-        days_covered = len(date_list)
-        date_from    = str(date_list[0])  if date_list else ''
-        date_to      = str(date_list[-1]) if date_list else ''
+        # Use NIFTY 50 (index_id=1) as the canonical quality benchmark —
+        # it has the longest, most complete history and reflects real trading
+        # calendar coverage regardless of which index is being correlated.
+        date_from = str(date_list[0])  if date_list else ''
+        date_to   = str(date_list[-1]) if date_list else ''
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) FROM km_index_eod WHERE index_id=%s",
-                (bm_id,)
+                """
+                SELECT
+                  COUNT(*) FILTER (WHERE close IS NOT NULL) AS valid_days,
+                  COUNT(*)                                   AS total_days
+                FROM km_index_eod
+                WHERE index_id = (SELECT id FROM km_index_symbols WHERE name='NIFTY 50' LIMIT 1)
+                """,
             )
-            days_total = cur.fetchone()[0]
+            row = cur.fetchone()
+            days_covered = row[0] if row else 0
+            days_total   = row[1] if row else 0
         coverage_pct = round((days_covered / days_total * 100), 2) if days_total else 0.0
 
         return {
