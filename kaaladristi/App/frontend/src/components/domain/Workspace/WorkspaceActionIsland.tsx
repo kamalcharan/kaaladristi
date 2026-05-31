@@ -42,22 +42,22 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
     <div
       onClick={() => { if (!isWatching) onOpen(pairKey) }}
       style={{
-        position: 'absolute',
-        bottom: 16,
+        position: 'fixed',
+        bottom: 28,
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 50,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 10,
-        padding: '9px 18px',
+        padding: '10px 20px',
         borderRadius: 100,
-        background: 'rgba(11,17,32,0.92)',
-        backdropFilter: 'blur(12px)',
-        border: `1px solid ${hasActive ? '#f59e0b' : 'rgba(255,255,255,.08)'}`,
+        background: 'rgba(13,17,23,0.96)',
+        backdropFilter: 'blur(16px)',
+        border: `1px solid ${hasActive ? '#f59e0b' : 'rgba(255,255,255,.15)'}`,
         boxShadow: hasActive
-          ? '0 0 20px rgba(245,158,11,.2), 0 8px 32px rgba(0,0,0,.4)'
-          : '0 8px 32px rgba(0,0,0,.3)',
+          ? '0 0 24px rgba(245,158,11,.25), 0 12px 40px rgba(0,0,0,.6)'
+          : '0 12px 40px rgba(0,0,0,.5)',
         cursor: isWatching ? 'default' : 'pointer',
         transition: 'border-color .3s, box-shadow .3s',
         userSelect: 'none',
@@ -65,9 +65,10 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
     >
       {/* VaNi icon */}
       <span style={{
-        fontSize: 12,
-        color: hasActive ? '#f59e0b' : isWatching ? 'rgba(167,139,250,.4)' : '#a78bfa',
+        fontSize: 13,
+        color: hasActive ? '#f59e0b' : isWatching ? 'rgba(167,139,250,.5)' : '#a78bfa',
         transition: 'color .3s',
+        flexShrink: 0,
       }}>
         ✦
       </span>
@@ -76,10 +77,10 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
       {hasActive && (
         <span style={{
           display: 'inline-block',
-          width: 6, height: 6,
+          width: 7, height: 7,
           borderRadius: '50%',
           background: '#f59e0b',
-          boxShadow: '0 0 6px #f59e0b',
+          boxShadow: '0 0 8px #f59e0b',
           animation: 'pulse 2s infinite',
           flexShrink: 0,
         }} />
@@ -89,8 +90,8 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
       <span style={{
         fontSize: 12,
         color: isWatching
-          ? 'rgba(255,255,255,.25)'
-          : hasActive ? '#fcd34d' : 'rgba(255,255,255,.6)',
+          ? 'rgba(255,255,255,.35)'
+          : hasActive ? '#fcd34d' : 'rgba(255,255,255,.75)',
         fontFamily: 'var(--font-mono, monospace)',
         letterSpacing: '.01em',
         whiteSpace: 'nowrap',
@@ -101,7 +102,7 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
 
       {/* Chevron — only when clickable */}
       {!isWatching && (
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,.25)', marginLeft: 2 }}>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginLeft: 2 }}>
           ›
         </span>
       )}
