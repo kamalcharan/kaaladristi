@@ -14,6 +14,7 @@ export interface CorrelationInstance {
   duration_days: number
   return_5d:     number | null
   return_22d:    number | null
+  state?:        string   // EVENT_IN_STATE only — indicator state at overlap start
 }
 
 export interface CorrelationResult {

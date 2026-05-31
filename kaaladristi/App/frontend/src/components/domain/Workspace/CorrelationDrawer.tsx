@@ -273,30 +273,38 @@ function ZoneConfluenceViz({ corr }: { corr: VaNiCorrelation }) {
 }
 
 // ── EVENT_OVERLAP ─────────────────────────────────────────────────────────────
+// UNTESTED — requires two simultaneous astro rule overlays
 
 function EventOverlapViz({ corr }: { corr: VaNiCorrelation }) {
   const sorted = [...corr.instances].sort((a, b) => a.start_date.localeCompare(b.start_date))
 
-  // Compute a simple timeline using SVG — each instance as a horizontal strip
-  // Track A (item_a): teal, Track B (item_b): orange, Overlap: purple
-  const W = 340
-  const TRACK_H = 14
-  const GAP = 6
-  const ROW_H = TRACK_H * 2 + GAP + 10
+  // Build a unified timeline spanning all overlap periods
   const allDates = sorted.flatMap(i => [i.start_date, i.end_date]).sort()
-  const minDate  = allDates[0] ?? '2020-01-01'
-  const maxDate  = allDates[allDates.length - 1] ?? '2026-12-31'
-  const totalMs  = Math.max(new Date(maxDate).getTime() - new Date(minDate).getTime(), 1)
+  const minDate  = new Date(allDates[0]  ?? '2020-01-01')
+  const maxDate  = new Date(allDates[allDates.length - 1] ?? '2026-12-31')
+  const totalMs  = Math.max(maxDate.getTime() - minDate.getTime(), 1)
 
-  function xPct(dateStr: string): number {
-    const ms = new Date(dateStr).getTime() - new Date(minDate).getTime()
-    return (ms / totalMs) * W
+  const W        = 356   // fits 400px drawer minus 44px padding
+  const TRACK_H  = 12
+  const TRACK_GAP = 4
+  const SVG_H    = TRACK_H * 2 + TRACK_GAP + 28   // two tracks + year axis
+
+  function xOf(dateStr: string): number {
+    return ((new Date(dateStr).getTime() - minDate.getTime()) / totalMs) * W
   }
 
-  const svgH = sorted.length * ROW_H + 20
+  // Year tick marks across the full span
+  const startYear = minDate.getFullYear()
+  const endYear   = maxDate.getFullYear()
+  const yearTicks = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i)
+
+  // Avg duration
+  const avgDur = sorted.length
+    ? Math.round(sorted.reduce((a, i) => a + i.duration_days, 0) / sorted.length)
+    : 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'rgba(255,255,255,.4)',
@@ -306,41 +314,76 @@ function EventOverlapViz({ corr }: { corr: VaNiCorrelation }) {
         <span><span style={{ color: '#a78bfa' }}>■</span> OVERLAP</span>
       </div>
 
-      {/* SVG timeline */}
-      <div style={{ overflowY: 'auto', maxHeight: 200 }}>
-        <svg width={W} height={svgH} style={{ display: 'block' }}>
-          {sorted.map((inst, i) => {
-            const x1   = xPct(inst.start_date)
-            const x2   = xPct(inst.end_date)
-            const barW  = Math.max(x2 - x1, 3)
-            const yBase = i * ROW_H + 10
-            const isCur = corr.currently_active && i === sorted.length - 1
-            const dotColor = inst.return_5d === null ? '#f59e0b'
-              : inst.return_5d >= 0 ? '#10b981' : '#ef4444'
+      {/* Dual-track SVG timeline */}
+      <div style={{ overflowX: 'auto' }}>
+        <svg width={W} height={SVG_H} style={{ display: 'block', overflow: 'visible' }}>
+          {/* Track labels */}
+          <text x={0} y={TRACK_H - 2} fontSize={7} fill="rgba(45,212,191,.7)" fontFamily="monospace">
+            {fmtId(corr.item_a).slice(0, 20)}
+          </text>
+          <text x={0} y={TRACK_H + TRACK_GAP + TRACK_H - 2} fontSize={7} fill="rgba(251,146,60,.7)" fontFamily="monospace">
+            {fmtId(corr.item_b).slice(0, 20)}
+          </text>
 
+          {/* Overlap instances — two tracks + purple overlay + outcome dot */}
+          {sorted.map((inst, i) => {
+            const x1    = xOf(inst.start_date)
+            const x2    = xOf(inst.end_date)
+            const barW  = Math.max(x2 - x1, 4)
+            const isCur = corr.currently_active && i === sorted.length - 1
+            const dotC  = inst.return_5d === null ? '#f59e0b'
+              : inst.return_5d >= 0 ? '#10b981' : '#ef4444'
+            const tooltip = `${inst.start_date} · ${inst.duration_days}d · 5D: ${fmtRet(inst.return_5d)} · 22D: ${fmtRet(inst.return_22d)}`
             return (
               <g key={i}>
-                {/* Track A */}
-                <rect x={x1} y={yBase} width={barW} height={TRACK_H} rx={3}
-                  fill="#2dd4bf" opacity={0.6} />
-                {/* Track B offset half-height */}
-                <rect x={x1} y={yBase + TRACK_H + GAP} width={barW} height={TRACK_H} rx={3}
-                  fill="#fb923c" opacity={0.6} />
-                {/* Overlap stripe — middle */}
-                <rect x={x1} y={yBase + TRACK_H / 2} width={barW} height={TRACK_H + GAP} rx={2}
-                  fill={isCur ? '#a78bfa' : '#7c3aed'} opacity={isCur ? 0.7 : 0.4} />
-                {/* Outcome dot */}
-                <circle cx={x2} cy={yBase + TRACK_H} r={4} fill={dotColor}
-                  opacity={isCur ? 0 : 1} />
-                {/* Year label */}
-                <text x={x1} y={yBase - 2} fontSize={8} fill="rgba(255,255,255,.3)"
-                  fontFamily="monospace">
-                  {inst.start_date.slice(0, 4)}
+                <title>{tooltip}</title>
+                {/* Track A — teal */}
+                <rect x={x1} y={0} width={barW} height={TRACK_H} rx={2}
+                  fill="#2dd4bf" opacity={isCur ? 0.9 : 0.55} />
+                {/* Track B — orange */}
+                <rect x={x1} y={TRACK_H + TRACK_GAP} width={barW} height={TRACK_H} rx={2}
+                  fill="#fb923c" opacity={isCur ? 0.9 : 0.55} />
+                {/* Overlap highlight spanning both tracks — purple */}
+                <rect x={x1} y={TRACK_H / 2} width={barW} height={TRACK_H + TRACK_GAP} rx={2}
+                  fill={isCur ? '#a78bfa' : '#7c3aed'} opacity={isCur ? 0.5 : 0.25} />
+                {/* Outcome dot at right edge */}
+                {!isCur && (
+                  <circle cx={x2} cy={TRACK_H + TRACK_GAP / 2} r={4}
+                    fill={dotC} stroke="rgba(13,17,23,.8)" strokeWidth={1} />
+                )}
+                {/* Pulsing ring for current */}
+                {isCur && (
+                  <circle cx={x2} cy={TRACK_H + TRACK_GAP / 2} r={5}
+                    fill="none" stroke="#a78bfa" strokeWidth={1.5} opacity={0.8} />
+                )}
+              </g>
+            )
+          })}
+
+          {/* Year axis */}
+          {yearTicks.map(yr => {
+            const x = xOf(`${yr}-01-01`)
+            return (
+              <g key={yr}>
+                <line x1={x} y1={TRACK_H * 2 + TRACK_GAP + 4} x2={x} y2={TRACK_H * 2 + TRACK_GAP + 8}
+                  stroke="rgba(255,255,255,.15)" strokeWidth={1} />
+                <text x={x + 2} y={SVG_H - 2} fontSize={8} fill="rgba(255,255,255,.25)" fontFamily="monospace">
+                  {yr}
                 </text>
               </g>
             )
           })}
         </svg>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
+        padding: 12, background: 'rgba(255,255,255,.02)', borderRadius: 8,
+        border: '1px solid rgba(255,255,255,.05)' }}>
+        <StatBox label="Overlaps"    value={String(corr.n_instances)} />
+        <StatBox label="Bull / Bear" value={`${corr.bullish_count} / ${corr.bearish_count}`} />
+        <StatBox label="Avg dur"     value={`${avgDur}d`} />
+        <StatBox label="5D avg"      value={fmtRet(corr.avg_return_5d)} color={retColor(corr.avg_return_5d)} />
       </div>
 
       <InstanceList instances={sorted} />
@@ -349,93 +392,135 @@ function EventOverlapViz({ corr }: { corr: VaNiCorrelation }) {
 }
 
 // ── EVENT_IN_STATE ────────────────────────────────────────────────────────────
+// UNTESTED — requires astro rule + state-based widget overlay combination
 
 function EventInStateViz({ corr }: { corr: VaNiCorrelation }) {
   const instances = corr.instances
+  const sorted    = [...instances].sort((a, b) => a.start_date.localeCompare(b.start_date))
 
-  // Group by a proxy "state" — we don't have a state field in CorrelationInstance
-  // so bucket by return quartile as proxy until backend adds state field
-  type State = 'Strong' | 'Moderate' | 'Weak' | 'Unresolved'
-  function toState(inst: CorrelationInstance): State {
+  // Use backend-provided state if available; fall back to return-quartile bucketing
+  const hasStateData = instances.some(i => i.state !== undefined)
+
+  function instState(inst: CorrelationInstance): string {
+    if (hasStateData && inst.state) return inst.state
     if (inst.return_5d === null) return 'Unresolved'
-    const v = inst.return_5d
-    if (Math.abs(v) > 2) return 'Strong'
-    if (Math.abs(v) > 0.5) return 'Moderate'
-    return 'Weak'
+    const v = Math.abs(inst.return_5d)
+    return v > 2 ? 'Strong' : v > 0.5 ? 'Moderate' : 'Weak'
   }
 
-  const states: State[] = ['Strong', 'Moderate', 'Weak', 'Unresolved']
+  // Detect current indicator state (last sorted instance if currently active)
+  const currentState = corr.currently_active && sorted.length > 0
+    ? instState(sorted[sorted.length - 1])
+    : null
 
-  const grouped = states.map(s => {
-    const rows = instances.filter(i => toState(i) === s)
+  // Group instances by state
+  const stateMap = new Map<string, CorrelationInstance[]>()
+  for (const inst of sorted) {
+    const s = instState(inst)
+    if (!stateMap.has(s)) stateMap.set(s, [])
+    stateMap.get(s)!.push(inst)
+  }
+
+  const stateRows = Array.from(stateMap.entries()).map(([state, rows]) => {
     const resolved = rows.filter(i => i.return_5d !== null)
-    const avg5 = resolved.length > 0
-      ? resolved.reduce((a, i) => a + i.return_5d!, 0) / resolved.length
-      : null
-    const avg22 = resolved.length > 0
-      ? resolved.reduce((a, i) => a + i.return_22d!, 0) / resolved.length
-      : null
-    return { state: s, count: rows.length, avg5, avg22 }
-  }).filter(g => g.count > 0)
+    const posCount = resolved.filter(i => i.return_5d! >= 0).length
+    const avg5  = resolved.length > 0 ? resolved.reduce((a, i) => a + i.return_5d!, 0)  / resolved.length : null
+    const avg22 = resolved.length > 0 ? resolved.reduce((a, i) => a + (i.return_22d ?? 0), 0) / resolved.length : null
+    const posRate = resolved.length > 0 ? Math.round((posCount / resolved.length) * 100) : null
+    return { state, count: rows.length, avg5, avg22, posRate }
+  })
 
-  const bestIdx = grouped
-    .filter(g => g.avg5 !== null)
-    .reduce((best, g, _, arr) =>
-      g.avg5! > (arr[best]?.avg5 ?? -Infinity) ? grouped.indexOf(g) : best
-    , 0)
+  // Best state by avg5
+  const bestState = stateRows
+    .filter(r => r.avg5 !== null)
+    .sort((a, b) => b.avg5! - a.avg5!)[0]?.state ?? null
 
-  const activeStateIdx = corr.currently_active
-    ? grouped.findIndex(g => g.state === toState(instances[instances.length - 1]))
-    : -1
+  // Identify indicator name (non-event item)
+  const eventItem     = corr.item_a.startsWith('astro_rule:') ? corr.item_a : corr.item_b
+  const indicatorItem = corr.item_a.startsWith('astro_rule:') ? corr.item_b : corr.item_a
+  const indicatorName = fmtId(indicatorItem)
+  const eventName     = fmtId(eventItem)
 
-  const COLS = 8
-  const sorted = [...instances].sort((a, b) => a.start_date.localeCompare(b.start_date))
+  // Current state returns for callout
+  const currentStateRow = currentState ? stateRows.find(r => r.state === currentState) : null
+  const calloutBg = currentStateRow?.avg5 != null && currentStateRow.avg5 < 0
+    ? 'rgba(245,158,11,.06)' : 'rgba(45,212,191,.06)'
+  const calloutBorder = currentStateRow?.avg5 != null && currentStateRow.avg5 < 0
+    ? '#f59e0b' : '#2dd4bf'
+
+  const CELL_SIZE = 32
+  const GRID_COLS = 6
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Current state callout */}
+      {currentState && (
+        <div style={{ padding: '10px 14px', borderRadius: 8,
+          background: calloutBg, borderLeft: `3px solid ${calloutBorder}` }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.8)', fontWeight: 600, marginBottom: 4 }}>
+            {eventName} is active · {indicatorName} in <span style={{ color: calloutBorder }}>{currentState}</span>
+          </div>
+          {currentStateRow && (
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)',
+              fontFamily: 'var(--font-mono,monospace)' }}>
+              Historical return for this state:
+              avg 5D: <span style={{ color: retColor(currentStateRow.avg5) }}>{fmtRet(currentStateRow.avg5)}</span>
+              {' · '}
+              avg 22D: <span style={{ color: retColor(currentStateRow.avg22) }}>{fmtRet(currentStateRow.avg22)}</span>
+            </div>
+          )}
+          {!hasStateData && (
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,.25)', marginTop: 4,
+              fontFamily: 'var(--font-mono,monospace)' }}>
+              ↳ state derived from return magnitude (backend state pending)
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Conditional return table */}
       <div>
         <div style={{ fontSize: 10, color: 'rgba(255,255,255,.3)', marginBottom: 6,
           fontFamily: 'var(--font-mono,monospace)', letterSpacing: '.05em' }}>
-          RETURN BY STATE
+          RETURN BY INDICATOR STATE
         </div>
-        <div style={{ borderRadius: 8, overflow: 'hidden',
-          border: '1px solid rgba(255,255,255,.06)' }}>
-          {/* header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px 50px',
+        <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,.06)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 56px 44px 50px',
             padding: '6px 12px', background: 'rgba(255,255,255,.03)',
             fontSize: 9, color: 'rgba(255,255,255,.3)', fontFamily: 'var(--font-mono,monospace)',
             letterSpacing: '.05em' }}>
-            <span>STATE</span><span style={{ textAlign: 'right' }}>5D AVG</span>
+            <span>STATE</span>
+            <span style={{ textAlign: 'right' }}>5D AVG</span>
             <span style={{ textAlign: 'right' }}>22D AVG</span>
+            <span style={{ textAlign: 'right' }}>+RATE</span>
             <span style={{ textAlign: 'right' }}>N</span>
           </div>
-          {grouped.map((g, i) => {
-            const isActive = i === activeStateIdx
-            const isBest   = i === bestIdx
+          {stateRows.map(g => {
+            const isActive = g.state === currentState
+            const isBest   = g.state === bestState
             return (
               <div key={g.state} style={{
-                display: 'grid', gridTemplateColumns: '1fr 60px 60px 50px',
+                display: 'grid', gridTemplateColumns: '1fr 56px 56px 44px 50px',
                 padding: '8px 12px', fontSize: 11,
                 borderTop: '1px solid rgba(255,255,255,.04)',
                 background: isActive ? 'rgba(245,158,11,.06)' : isBest ? 'rgba(16,185,129,.04)' : 'transparent',
                 borderLeft: isActive ? '3px solid #f59e0b' : isBest ? '3px solid rgba(16,185,129,.3)' : '3px solid transparent',
               }}>
-                <span style={{ color: isActive ? '#fbbf24' : 'rgba(255,255,255,.6)',
+                <span style={{ color: isActive ? '#fbbf24' : 'rgba(255,255,255,.65)',
                   fontFamily: 'var(--font-mono,monospace)', fontSize: 10 }}>
                   {g.state}
                 </span>
-                <span style={{ textAlign: 'right', color: retColor(g.avg5),
-                  fontFamily: 'var(--font-mono,monospace)' }}>
+                <span style={{ textAlign: 'right', color: retColor(g.avg5), fontFamily: 'var(--font-mono,monospace)' }}>
                   {fmtRet(g.avg5)}
                 </span>
-                <span style={{ textAlign: 'right', color: retColor(g.avg22),
-                  fontFamily: 'var(--font-mono,monospace)' }}>
+                <span style={{ textAlign: 'right', color: retColor(g.avg22), fontFamily: 'var(--font-mono,monospace)' }}>
                   {fmtRet(g.avg22)}
                 </span>
-                <span style={{ textAlign: 'right', color: 'rgba(255,255,255,.35)',
-                  fontFamily: 'var(--font-mono,monospace)' }}>
+                <span style={{ textAlign: 'right', color: 'rgba(255,255,255,.4)', fontFamily: 'var(--font-mono,monospace)' }}>
+                  {g.posRate !== null ? `${g.posRate}%` : '—'}
+                </span>
+                <span style={{ textAlign: 'right', color: 'rgba(255,255,255,.35)', fontFamily: 'var(--font-mono,monospace)' }}>
                   {g.count}
                 </span>
               </div>
@@ -444,29 +529,36 @@ function EventInStateViz({ corr }: { corr: VaNiCorrelation }) {
         </div>
       </div>
 
-      {/* Event grid */}
+      {/* Event breakdown grid */}
       <div>
         <div style={{ fontSize: 10, color: 'rgba(255,255,255,.3)', marginBottom: 6,
           fontFamily: 'var(--font-mono,monospace)', letterSpacing: '.05em' }}>
           EVENT INSTANCES
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${COLS}, 1fr)`, gap: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, ${CELL_SIZE}px)`,
+          gap: 4 }}>
           {sorted.map((inst, i) => {
-            const state    = toState(inst)
-            const isCur    = corr.currently_active && i === sorted.length - 1
-            const cellColor = isCur ? 'rgba(167,139,250,.15)'
-              : inst.return_5d === null ? 'rgba(255,255,255,.06)'
-              : inst.return_5d >= 0 ? 'rgba(16,185,129,.15)' : 'rgba(239,68,68,.15)'
-            const borderColor = isCur ? '#a78bfa' : 'transparent'
-            const tooltip = `${inst.start_date} · ${state} · 5D: ${fmtRet(inst.return_5d)}`
+            const isCur   = corr.currently_active && i === sorted.length - 1
+            const stLabel = instState(inst)
+            const cellBg  = isCur ? 'rgba(167,139,250,.15)'
+              : inst.return_5d === null ? 'rgba(255,255,255,.05)'
+              : inst.return_5d >= 0 ? 'rgba(16,185,129,.18)' : 'rgba(239,68,68,.18)'
+            const tooltip = `${inst.start_date} · ${stLabel} · 5D: ${fmtRet(inst.return_5d)}`
             return (
               <div key={i} title={tooltip} style={{
-                height: 20, borderRadius: 3, background: cellColor,
-                border: `1px solid ${borderColor}`,
+                width: CELL_SIZE, height: CELL_SIZE, borderRadius: 4,
+                background: cellBg,
+                border: `1px solid ${isCur ? '#a78bfa' : 'rgba(255,255,255,.06)'}`,
                 boxShadow: isCur ? '0 0 8px #a78bfa' : undefined,
                 animation: isCur ? 'pulse 2s infinite' : undefined,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'default',
-              }} />
+              }}>
+                <span style={{ fontSize: 8, color: 'rgba(255,255,255,.3)',
+                  fontFamily: 'var(--font-mono,monospace)' }}>
+                  {inst.start_date.slice(2, 7)}
+                </span>
+              </div>
             )
           })}
         </div>

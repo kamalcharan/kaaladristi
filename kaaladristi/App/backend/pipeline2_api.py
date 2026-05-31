@@ -3627,6 +3627,41 @@ _INDICATOR_COLS: dict[str, str] = {
     'supertrend': 'supertrend_dir',
 }
 
+# State label for EVENT_IN_STATE shape — what was the indicator doing at overlap start?
+def _get_indicator_state(item_id: str, start_date, index_id: int, conn) -> str:
+    try:
+        with conn.cursor() as cur:
+            if item_id == 'magic_rs':
+                cur.execute(
+                    "SELECT magic_rs_zone FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                return row[0] if row and row[0] else 'Unknown'
+            elif item_id == 'order_flow':
+                cur.execute(
+                    "SELECT flow_type FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                return row[0].replace('_', ' ').title() if row and row[0] else 'Unknown'
+            elif item_id == 'smart_money':
+                cur.execute(
+                    "SELECT sniper_inst FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                if not row or row[0] is None: return 'Unknown'
+                v = float(row[0])
+                return 'High' if v > 0.7 else 'Medium' if v > 0.3 else 'Low'
+            elif item_id == 'breadth_roc':
+                cur.execute(
+                    "SELECT roc_13 FROM km_breadth_roc WHERE trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (start_date,))
+                row = cur.fetchone()
+                if not row or row[0] is None: return 'Unknown'
+                return 'Rising' if float(row[0]) > 0 else 'Falling'
+    except Exception:
+        pass
+    return 'Unknown'
+
 
 def _classify_shape(item_a: str, item_b: str) -> str:
     def is_event(x):
@@ -3756,6 +3791,9 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
 
         # ── Compute returns for each overlap ────────────────────────────────
         today = date.today()
+        shape = _classify_shape(body.item_a, body.item_b)
+        # Identify which item is the zone indicator (for EVENT_IN_STATE state labels)
+        zone_item = body.item_b if body.item_a.startswith('astro_rule:') else body.item_a
         instances, bullish, bearish = [], 0, 0
         ret5_sum = ret22_sum = ret5_cnt = ret22_cnt = 0.0
 
@@ -3770,6 +3808,8 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
                 'return_5d':     r5,
                 'return_22d':    r22,
             }
+            if shape == 'EVENT_IN_STATE':
+                inst['state'] = _get_indicator_state(zone_item, s, bm_id, conn)
             instances.append(inst)
             if r5 is not None:
                 if r5 > 0: bullish += 1
@@ -3785,7 +3825,7 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
         currently_active = any(s <= today <= e for s, e in overlaps)
 
         return {
-            'shape':           _classify_shape(body.item_a, body.item_b),
+            'shape':           shape,
             'n_instances':     len(overlaps),
             'bearish_count':   bearish,
             'bullish_count':   bullish,
