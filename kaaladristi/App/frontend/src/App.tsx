@@ -31,7 +31,8 @@ import MarketStructureView from '@/views/MarketStructureView';
 import PlanetaryIntelView from '@/views/PlanetaryIntelView';
 import WorkspacePage from '@/views/WorkspacePage'
 import CatalogPage from '@/views/CatalogPage';
-import PricingPage from '@/views/PricingPage';
+import PricingPage from '@/views/PricingPage'
+import AccountPage from '@/views/AccountPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -126,6 +127,7 @@ function AppRoutes() {
           <Route path="/rules" element={<RuleList />} />
           <Route path="/rules/:id" element={<RuleDetail />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/account" element={<AccountPage />} />
         </Route>
       </Route>
 
