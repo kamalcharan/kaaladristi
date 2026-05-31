@@ -781,7 +781,7 @@ export default function ProfileSetup() {
   }
 
   function handleBrowse() {
-    navigate('/catalog', { replace: true })
+    window.open('/catalog', '_blank')
   }
 
   const template = icp ? getTemplateForICP(icp, blend) : null
