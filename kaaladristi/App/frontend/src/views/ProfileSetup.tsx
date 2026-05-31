@@ -780,8 +780,21 @@ export default function ProfileSetup() {
     navigate('/workspace', { replace: true })
   }
 
-  function handleBrowse() {
-    window.open('/catalog', '_blank')
+  async function handleBrowse() {
+    if (!icp) { navigate('/catalog', { replace: true }); return }
+    setCommitting(true)
+    try {
+      const template = getTemplateForICP(icp, blend)
+      applyTemplate(template)
+      await saveFramework()
+      await updateProfile({ onboarded: true })
+      try { await refreshProfile() } catch {
+        if (profile) setProfile({ ...profile, onboarded: true })
+      }
+      navigate('/catalog', { replace: true })
+    } catch {
+      setCommitting(false)
+    }
   }
 
   const template = icp ? getTemplateForICP(icp, blend) : null
