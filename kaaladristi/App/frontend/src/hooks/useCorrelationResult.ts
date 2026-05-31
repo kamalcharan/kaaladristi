@@ -38,11 +38,9 @@ export function useCorrelationResult(
   error:            string | null
   insufficientData: boolean
 } {
-  console.debug('[VaNi] useCorrelationResult called:', itemA, itemB, 'enabled:', !!itemA && !!itemB, 'url:', PIPELINE_URL)
   const { data, isLoading, error } = useQuery<CorrelationResult>({
     queryKey:  ['correlation', itemA, itemB, benchmark],
     queryFn:   async () => {
-      console.debug('[VaNi] correlation fetch:', itemA, itemB, 'url:', PIPELINE_URL)
       const res = await fetch(`${PIPELINE_URL}/api/correlation/compute`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -51,9 +49,11 @@ export function useCorrelationResult(
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return res.json()
     },
-    staleTime: 5 * 60_000,
-    retry:     1,
-    enabled:   !!itemA && !!itemB,
+    staleTime:           5 * 60_000,
+    retry:               1,
+    enabled:             !!itemA && !!itemB,
+    networkMode:         'always',    // don't abort on StrictMode unmount/remount
+    gcTime:              10 * 60_000, // keep cached result for 10 min
   })
 
   return {
