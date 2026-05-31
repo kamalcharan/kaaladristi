@@ -34,7 +34,7 @@ export default function CatalogActionIsland() {
           '0 0 0 1px rgba(124,106,247,0.18)',
           '0 8px 32px rgba(124,106,247,0.12)',
         ].join(', '),
-        zIndex: 150,
+        zIndex: 350,
       }}
     >
       {/* Summary */}

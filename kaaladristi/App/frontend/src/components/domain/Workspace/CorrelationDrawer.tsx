@@ -742,7 +742,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
       <div style={{
         position: 'fixed', top: 56, right: 0, bottom: 0, width: 400,
         zIndex: 200, display: 'flex', flexDirection: 'column',
-        background: 'rgba(13,17,23,.97)', backdropFilter: 'blur(20px)',
+        background: 'var(--card)', backdropFilter: 'blur(20px)',
         borderLeft: '1px solid rgba(139,92,246,.2)',
         boxShadow: '-8px 0 32px rgba(0,0,0,.5)',
         transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
@@ -793,7 +793,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
         {correlations.length === 1 && activeCorr && (
           <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,.06)',
             flexShrink: 0 }}>
-            <div style={{ fontSize: 13, color: '#c4b5fd', fontFamily: 'var(--font-mono,monospace)' }}>
+            <div style={{ fontSize: 13, color: '#c4b5fd', fontFamily: 'var(--font-display,var(--font-mono,monospace))' }}>
               {pairLabel(activeCorr)}
             </div>
             <div style={{ fontSize: 10, color: 'rgba(255,255,255,.25)', marginTop: 2 }}>

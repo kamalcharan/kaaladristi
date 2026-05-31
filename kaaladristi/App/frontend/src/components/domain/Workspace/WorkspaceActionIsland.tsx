@@ -92,7 +92,7 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
         color: isWatching
           ? 'rgba(255,255,255,.35)'
           : hasActive ? '#fcd34d' : 'rgba(255,255,255,.75)',
-        fontFamily: 'var(--font-mono, monospace)',
+        fontFamily: 'var(--font-display, var(--font-mono, monospace))',
         letterSpacing: '.01em',
         whiteSpace: 'nowrap',
         transition: 'color .3s',
