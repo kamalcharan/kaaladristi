@@ -625,26 +625,39 @@ function PairDetail({ corr, onDismiss }: { corr: VaNiCorrelation; onDismiss: () 
       {/* Outcome bar */}
       <OutcomeBar bullish={corr.bullish_count} bearish={corr.bearish_count} total={total} />
 
-      {/* Data quality bar */}
-      {corr.coverage_pct != null ? (
-        <DataQualityBar
-          coverage_pct={corr.coverage_pct}
-          days_covered={corr.days_covered ?? 0}
-          days_total={corr.days_total ?? 0}
-          date_from={corr.date_from ?? ''}
-          date_to={corr.date_to ?? ''}
-          exclusions={[
-            KNOWN_QUALITY_ISSUES.VOLUME_DISCONTINUITY,
-            KNOWN_QUALITY_ISSUES.DUAL_LISTED,
-          ]}
-        />
-      ) : corr.insufficient_data ? (
+      {/* Data quality bar — always render; shows pending if backend fields absent */}
+      {!corr.insufficient_data && (
+        corr.coverage_pct != null ? (
+          <DataQualityBar
+            coverage_pct={corr.coverage_pct}
+            days_covered={corr.days_covered ?? 0}
+            days_total={corr.days_total ?? 0}
+            date_from={corr.date_from ?? ''}
+            date_to={corr.date_to ?? ''}
+            exclusions={[
+              KNOWN_QUALITY_ISSUES.VOLUME_DISCONTINUITY,
+              KNOWN_QUALITY_ISSUES.DUAL_LISTED,
+            ]}
+          />
+        ) : (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '5px 10px', borderRadius: 8, margin: '6px 0',
+            background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)',
+            fontSize: 11, color: 'rgba(255,255,255,.25)',
+            fontFamily: 'var(--font-mono,monospace)',
+          }}>
+            Coverage data — dismiss drawer and reopen to refresh
+          </div>
+        )
+      )}
+      {corr.insufficient_data && (
         <DataQualityBar
           coverage_pct={0} days_covered={0} days_total={0}
           date_from='' date_to=''
           insufficient_data={true}
         />
-      ) : null}
+      )}
 
       {/* Shape-specific visualization */}
       {!corr.insufficient_data && renderShapeVisualization(corr)}
