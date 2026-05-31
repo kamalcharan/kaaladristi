@@ -114,6 +114,9 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--bear-bg',    hexToRgba(c.semantic.error,   0.1));
   set('--caution-bg', hexToRgba(c.semantic.warning,  0.1));
   set('--gold-bg',    hexToRgba(c.brand.secondary,   0.1));
+  set('--bull-dim',   hexToRgba(c.semantic.success, 0.3));
+  set('--bear-dim',   hexToRgba(c.semantic.error,   0.3));
+  set('--caution-dim',hexToRgba(c.semantic.warning,  0.3));
 
   // ── Accent opacity variants ──
   set('--accent-dim',   hexToRgba(c.brand.primary, 0.35));

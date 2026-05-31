@@ -57,7 +57,7 @@ const OVERLAY_DEFAULT_COLOR: Record<string, string> = {
   'sma_50':     '#FF6347',
   'sma_150':    '#00CED1',
   'sma_200':    '#DA70D6',
-  'supertrend': '#10b981',
+  'supertrend': 'var(--bull)',
 };
 
 interface TradingChartProps {
@@ -539,8 +539,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
           fillColor   = hexToRgba(band.color, 0.12);
           borderColor = hexToRgba(band.color, 0.75);
         } else if (band.matched === false) {
-          fillColor   = 'rgba(239,68,68,0.10)';
-          borderColor = 'rgba(239,68,68,0.55)';
+          fillColor   = 'var(--bear-bg)';
+          borderColor = 'rgba(239,68,68,0.55)'; /* bear tint border */
         } else {
           // null — not yet validated (past unbacktested or future transit)
           fillColor   = hexToRgba(band.color, 0.06);
@@ -662,7 +662,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
             </div>
             <div style={{ marginTop: 5, fontSize: 10 }}>
               {bandTooltip.band.matched === true  && <span style={{ color: bandTooltip.band.color }}>✓ Confirmed</span>}
-              {bandTooltip.band.matched === false && <span style={{ color: '#ef4444' }}>✗ Not matched</span>}
+              {bandTooltip.band.matched === false && <span style={{ color: 'var(--bear)' }}>✗ Not matched</span>}
               {bandTooltip.band.matched === null  && (
                 <span style={{ color: 'rgba(255,255,255,0.35)' }}>
                   {bandTooltip.band.from > new Date().toISOString().slice(0,10) ? '◦ Future transit' : '◦ Pending validation'}

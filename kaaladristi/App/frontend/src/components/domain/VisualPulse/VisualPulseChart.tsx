@@ -48,8 +48,8 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
     ctx.scale(dpr, dpr);
 
     // Resolve theme colors
-    const colBg = getCssVar('--kd-bg', '#020917');
-    const colBorder = getCssVar('--kd-border', '#1a2740');
+    const colBg = getCssVar('--bg', '#020917');
+    const colBorder = getCssVar('--border', '#1a2740');
     const colGreen = getCssVar('--risk-green', '#10b981');
     const colRed = getCssVar('--risk-red', '#ef4444');
     const colGold = getCssVar('--accent-gold', '#c9a84c');
