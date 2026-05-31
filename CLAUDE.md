@@ -777,6 +777,13 @@ the pattern applies to all others.
 
 ---
 
+## Deferred — UX Review + Story-telling Session
+- Full workspace UX review — story-telling, information hierarchy, user guidance
+- LLM inference notes — replace template strings with Qwen3 calls (temperature 0.3,
+  /no_think) with template fallback on failure. Covers all four correlation shapes.
+- Action Island observations — wire VaNi live state text
+- Companion: dristiQ-interaction-spec.md Section 6.4 + 16.6
+
 ## Astro Market-Book 2026
 
 Three new tables as of migrations 047-050:
