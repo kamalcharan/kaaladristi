@@ -61,10 +61,10 @@ function fmtShort(d: string) {
 /** Glow color based on market_impact category — overrides signalColor for bars */
 function transitGlow(impact: string): { color: string; shadow: string } {
   if (['strong_bullish', 'bullish', 'mild_bullish'].includes(impact))
-    return { color: '#1a8a4a', shadow: '0 0 6px #1a8a4a' };
+    return { color: 'var(--bull)', shadow: '0 0 6px var(--bull)' };
   if (['strong_bearish', 'bearish', 'mild_bearish'].includes(impact))
-    return { color: '#c0392b', shadow: '0 0 6px #c0392b' };
-  return { color: '#f0a500', shadow: '0 0 6px #f0a500' };
+    return { color: 'var(--bear)', shadow: '0 0 6px var(--bear)' };
+  return { color: 'var(--caution)', shadow: '0 0 6px var(--caution)' };
 }
 
 // ── Transit bar ───────────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ export default function AstroSignalWeekPanel({ date }: { date: string }) {
 
       <div
         style={{
-          backgroundColor: '#0d1117',
+          backgroundColor: 'var(--bg)',
           border: '1px solid rgba(255,255,255,0.06)',
           borderRadius: '16px',
           backgroundImage: [

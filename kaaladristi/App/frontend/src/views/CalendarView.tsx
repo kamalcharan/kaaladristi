@@ -30,14 +30,14 @@ const BIAS: Record<string, { fill: string; border: string; label: string }> = {
 };
 
 const OUTCOME_MAP: Record<string, { label: string; color: string }> = {
-  strong_bullish: { label: 'High +ve',   color: '#22c55e' },
-  bullish:        { label: 'Positive',   color: '#22c55e' },
-  mild_bullish:   { label: 'Mod. +ve',   color: '#86efac' },
-  turning:        { label: 'Inflection', color: '#D4A853' },
+  strong_bullish: { label: 'High +ve',   color: 'var(--bull)' },
+  bullish:        { label: 'Positive',   color: 'var(--bull)' },
+  mild_bullish:   { label: 'Mod. +ve',   color: 'var(--bull)' },
+  turning:        { label: 'Inflection', color: 'var(--gold)' },
   neutral:        { label: 'Neutral',    color: 'var(--text-faint)' },
-  mild_bearish:   { label: 'Mod. -ve',   color: '#fca5a5' },
-  bearish:        { label: 'Negative',   color: '#ef4444' },
-  strong_bearish: { label: 'High -ve',   color: '#ef4444' },
+  mild_bearish:   { label: 'Mod. -ve',   color: 'var(--bear)' },
+  bearish:        { label: 'Negative',   color: 'var(--bear)' },
+  strong_bearish: { label: 'High -ve',   color: 'var(--bear)' },
 };
 
 function getBias(signal: AstroDailySignal | undefined, isWeekend: boolean) {
