@@ -279,7 +279,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
   } = useFrameworkStore()
 
   const primarySymbol = framework.blocks.find(b => b.type === 'chart')
-    ?.catalog_item_id?.replace('chart:', '') ?? 'index'
+    ?.config.instrument ? (framework.blocks.find(b => b.type === 'chart')!.config.instrument as { symbol: string }).symbol : 'index'
 
   const sensors = useSensors(useSensor(PointerSensor, {
     activationConstraint: { distance: 8 },
