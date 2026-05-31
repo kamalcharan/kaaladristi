@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Globe, BarChart3, Activity, ChevronRight, type LucideIcon } from 'lucide-react';
+import ThemeSettings from '@/components/domain/ThemeSettings';
 import SectorLordsDetail from './settings/SectorLordsDetail';
 import MarketDataHub from './settings/MarketDataHub';
 import PipelineDashboard from './settings/PipelineDashboard';
@@ -50,6 +51,13 @@ export default function SettingsView() {
         <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Settings</h1>
         <p className="text-secondary font-medium">Master data reference tables</p>
       </header>
+
+      {/* Theme selector — always visible at top */}
+      {!activeCard && (
+        <div className="bg-kd-surface border border-kd-border rounded-2xl p-5 mb-6" style={{ maxWidth: 360 }}>
+          <ThemeSettings />
+        </div>
+      )}
 
       {/* Detail view or card grid */}
       {activeCard === 'sector-lords' ? (

@@ -3481,10 +3481,12 @@ def get_framework(
                 conn.commit()
                 row = cur.fetchone()
 
-            # Join tier + latest subscription expiry from km_profiles / user_subscriptions
+            # Join tier, subscription expiry, and theme preferences from km_profiles
             cur.execute(
                 """
                 SELECT p.tier,
+                       p.theme,
+                       p.dark_mode,
                        s.expires_at
                 FROM   km_profiles p
                 LEFT JOIN LATERAL (
@@ -3503,6 +3505,8 @@ def get_framework(
             result = dict(row)
             result['tier']       = profile_row['tier']       if profile_row else 'free'
             result['expires_at'] = str(profile_row['expires_at']) if profile_row and profile_row['expires_at'] else None
+            result['theme']      = profile_row['theme']      if profile_row else 'kaaladristi'
+            result['dark_mode']  = profile_row['dark_mode']  if profile_row else True
         return result
     except HTTPException:
         raise

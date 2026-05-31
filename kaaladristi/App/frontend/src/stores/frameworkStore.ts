@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useThemeStore } from '@/stores/themeStore'
 import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition, InstrumentRef } from '@/types/framework'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { getCatalogItem } from '@/constants/catalogItems'
@@ -143,15 +144,22 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       const raw = await res.json()
       const data: UserFramework = raw
 
-      // Sync tier + expires_at into authStore profile so gates and badges
-      // always reflect the latest subscription state without a separate fetch.
+      // Sync tier, expires_at, and theme prefs into authStore profile so
+      // gates, badges, and theme all reflect the latest server state.
       const { profile, setProfile } = useAuthStore.getState()
-      if (profile && (raw.tier !== undefined || raw.expires_at !== undefined)) {
-        setProfile({
+      if (profile && (raw.tier !== undefined || raw.expires_at !== undefined || raw.theme !== undefined)) {
+        const updated = {
           ...profile,
           tier:       raw.tier       ?? profile.tier,
           expires_at: raw.expires_at ?? profile.expires_at,
-        })
+          theme:      raw.theme      ?? profile.theme,
+          dark_mode:  raw.dark_mode  ?? profile.dark_mode,
+        }
+        setProfile(updated)
+        // Apply theme from server — overrides any localStorage state
+        if (raw.theme !== undefined) {
+          useThemeStore.getState().setTheme(raw.theme as any, raw.dark_mode ?? true)
+        }
       }
 
       // Deduplicate chart blocks: keep only one per catalog_item_id (largest by area).

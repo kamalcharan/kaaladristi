@@ -148,6 +148,8 @@ export interface KmProfile {
   updated_at: string;
   tier?: string;        // subscription tier — undefined treated as 'free'
   expires_at?: string | null;  // latest subscription expiry; null = no expiry (beta/lifetime)
+  theme?: string;       // active UI theme id; undefined = 'kaaladristi'
+  dark_mode?: boolean;  // dark mode preference; ignored for kaaladristi (always dark)
 }
 
 // ── Index / Equity Symbol Tables (new restructured schema) ──
