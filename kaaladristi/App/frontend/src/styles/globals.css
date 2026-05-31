@@ -18,6 +18,8 @@
   --indigo: #818cf8;
   --indigo-strong: #a5b4fc;
   --indigo-bg: rgba(129,140,248,0.12);
+  --accent: #818cf8;
+  --overlay: rgba(0,0,0,0.55);
   --bull: #10b981;
   --bull-bg: rgba(16,185,129,0.1);
   --bear: #ef4444;
