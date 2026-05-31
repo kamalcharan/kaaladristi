@@ -74,6 +74,7 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--bg',               c.utility.primaryBackground);
   set('--card',             c.utility.secondaryBackground ?? c.utility.primaryBackground);
   set('--card-soft',        c.surface.glassStrong);
+  set('--border',           c.surface.glassBorder);
   set('--kd-bg',            c.utility.primaryBackground);
   set('--kd-surface',       c.utility.secondaryBackground ?? c.utility.primaryBackground);
   set('--kd-card',          c.surface.glass);
@@ -110,11 +111,14 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
 }
 
 /**
- * Convenience wrapper: resolve theme by VITE_THEME id and apply it.
- * Automatically detects system dark-mode preference.
+ * Convenience wrapper: resolve theme by id and apply it.
+ * - kaaladristi: always dark — light mode not supported in v1
+ * - tech-ai / jade-thorn: respect the caller-supplied darkMode preference
  */
-export function applyThemeById(id: string): void {
+export function applyThemeById(id: string, darkMode?: boolean): void {
   const config = getTheme(id);
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const prefersDark = id === 'kaaladristi'
+    ? true  // DristiQ always renders dark — light mode not supported in v1
+    : (darkMode ?? window.matchMedia('(prefers-color-scheme: dark)').matches);
   applyTheme(config, prefersDark);
 }

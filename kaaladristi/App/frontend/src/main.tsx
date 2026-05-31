@@ -4,9 +4,14 @@ import App from './App';
 import './styles/globals.css';
 import { applyThemeById } from '@/config/theme';
 
-// Apply theme before the React tree mounts — prefer localStorage, fall back to .env.
+// Apply theme before React mounts — no flash.
+// kaaladristi ignores darkMode (always dark); others respect stored preference.
 const _storedTheme = localStorage.getItem('kd-theme') ?? import.meta.env.VITE_THEME ?? 'kaaladristi';
-applyThemeById(_storedTheme);
+const _storedDark  = localStorage.getItem('kd-dark-mode');
+const _prefersDark = _storedDark !== null
+  ? _storedDark === 'true'
+  : window.matchMedia('(prefers-color-scheme: dark)').matches;
+applyThemeById(_storedTheme, _prefersDark);
 
 // Service worker management.
 // A stale SW from a prior deployment can intercept /api/ and /db/ requests,
