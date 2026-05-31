@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LogOut, Shield, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore, THEMES } from '@/stores/themeStore';
 import { signOut } from '@/services/auth';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
@@ -72,6 +73,79 @@ function marketStatus(): string {
   if (mins < 9 * 60 + 15) return 'Pre-market';
   if (mins <= 15 * 60 + 30) return 'Market open';
   return 'Market closed';
+}
+
+// ── ThemeSwitcher ────────────────────────────────────────────────────────────
+
+function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { activeTheme, darkMode, setTheme, setDarkMode } = useThemeStore()
+  const currentTheme = THEMES.find(t => t.id === activeTheme) ?? THEMES[0]
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-1.5 pb-3">
+        {/* Active theme dot */}
+        <div
+          title={`Theme: ${currentTheme.label}`}
+          style={{ width: 8, height: 8, borderRadius: '50%', background: currentTheme.dot,
+            boxShadow: `0 0 6px ${currentTheme.dot}`, cursor: 'default' }}
+        />
+        {/* Dark/light toggle if theme supports it */}
+        {!currentTheme.forceDark && (
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            title={darkMode ? 'Light mode' : 'Dark mode'}
+            style={{ color: 'var(--text-faint)', fontSize: 11, background: 'none',
+              border: 'none', cursor: 'pointer', lineHeight: 1 }}
+            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)')}
+            onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-faint)')}
+          >
+            {darkMode ? '◐' : '○'}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {THEMES.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTheme(t.id, darkMode)}
+            title={t.label}
+            style={{
+              width: 10, height: 10, borderRadius: '50%',
+              background: t.dot,
+              boxShadow: activeTheme === t.id ? `0 0 7px ${t.dot}` : 'none',
+              border: activeTheme === t.id ? `2px solid ${t.dot}` : '2px solid transparent',
+              cursor: 'pointer', flexShrink: 0, padding: 0,
+              outline: 'none', transition: 'box-shadow .15s',
+            }}
+          />
+        ))}
+        {!currentTheme.forceDark && (
+          <>
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              title={darkMode ? 'Switch to light' : 'Switch to dark'}
+              style={{
+                fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-faint)',
+                background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1,
+                padding: '2px 4px', borderRadius: 4,
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--text-faint)')}
+            >
+              {darkMode ? '◐ dark' : '○ light'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -261,6 +335,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           );
         })}
       </div>
+
+      {/* ── Theme switcher ── */}
+      <ThemeSwitcher collapsed={collapsed} />
 
       {/* ── Footer: user + date ── */}
       <div
