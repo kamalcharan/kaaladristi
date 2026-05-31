@@ -57,7 +57,6 @@ export function ConfluencePairMonitor({
 
   useEffect(() => {
     if (!result) return
-    if (!result.currently_active) return
     if (result.n_instances < 3) return
     if (firedRef.current) return
 
