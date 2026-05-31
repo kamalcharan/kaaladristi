@@ -3717,11 +3717,11 @@ def _get_indicator_ranges(item_id: str, index_id: int, conn) -> list[tuple]:
         sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND supertrend_dir IS NOT NULL AND supertrend_dir > 0 ORDER BY trade_date"
     # Zone items — active when in a directional / strong state
     elif item_id == 'magic_rs':
-        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND magic_rs_zone IN ('Strong Bull','Mild Bull') ORDER BY trade_date"
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND magic_rs IS NOT NULL ORDER BY trade_date"
     elif item_id == 'order_flow':
-        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND flow_type IN ('FRESH_LONGS','SHORT_COVERING') ORDER BY trade_date"
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND flow_type IS NOT NULL ORDER BY trade_date"
     elif item_id == 'smart_money':
-        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND sniper_inst IS NOT NULL AND sniper_inst > 0.5 ORDER BY trade_date"
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND sniper_inst IS NOT NULL ORDER BY trade_date"
     elif item_id == 'breadth_roc':
         sql = "SELECT trade_date FROM km_breadth_roc WHERE trade_date IN (SELECT trade_date FROM km_index_eod WHERE index_id=%s) AND roc_13 > 0 ORDER BY trade_date"
     elif col:
