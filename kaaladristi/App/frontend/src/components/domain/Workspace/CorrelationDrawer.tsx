@@ -695,7 +695,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
 
       {/* Drawer */}
       <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 400,
+        position: 'fixed', top: 56, right: 0, bottom: 0, width: 400,
         zIndex: 200, display: 'flex', flexDirection: 'column',
         background: 'rgba(13,17,23,.97)', backdropFilter: 'blur(20px)',
         borderLeft: '1px solid rgba(139,92,246,.2)',
