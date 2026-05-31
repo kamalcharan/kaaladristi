@@ -133,6 +133,7 @@ function buildAnimBlocks(template: FrameworkTemplate): AnimItem[] {
 
 // ── Shared colour helpers ─────────────────────────────────────────────────────
 
+// VaNi orb purple — intentional brand identity, does NOT change with theme
 const V = 'rgba(124,106,247,'
 
 // ── Screen 1 — VaNi Introduction ─────────────────────────────────────────────
@@ -189,7 +190,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
         animation:'card-rise .9s cubic-bezier(.22,1,.36,1) .4s both' }}>
         <div style={{ display:'inline-flex', alignItems:'center', gap:7,
           padding:'5px 14px', borderRadius:100,
-          background:`${V}.1)`, border:`1px solid ${V}.25)`,
+          background:'var(--accent-glow)', border:'1px solid var(--accent-dim)',
           fontSize:10, fontWeight:600, letterSpacing:'1px', textTransform:'uppercase',
           color:'var(--accent)', fontFamily:'var(--font-mono, monospace)', marginBottom:28,
           animation:'text-in .6s ease .8s both' }}>
@@ -202,7 +203,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
           animation:'text-in .6s ease .8s both' }}>I'm</div>
         <div style={{ fontFamily:'var(--font-display)', fontSize:40, fontWeight:400,
           fontStyle:'italic', letterSpacing:'-0.03em',
-          background:'linear-gradient(135deg, #9d8ff9, #c9a84c)',
+          background:'linear-gradient(135deg, #9d8ff9, var(--gold, #c9a84c))',
           WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
           animation:'text-in .6s ease .95s both' }}>VaNi.</div>
         <p style={{ fontSize:15, color:'var(--text-muted)', marginTop:16, marginBottom:32,
@@ -287,7 +288,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
             ) : (
               <span style={{ animation:'bubble-in .4s cubic-bezier(.22,1,.36,1) both' }}>
                 One thing —{' '}
-                <span style={{ color:'#c9a84c', fontFamily:'var(--font-display)',
+                <span style={{ color:'var(--gold, #c9a84c)', fontFamily:'var(--font-display)',
                   fontStyle:'italic', fontSize:15 }}>
                   how do you participate in markets?
                 </span>
@@ -323,12 +324,12 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
             border:'1px solid rgba(255,255,255,.07)', borderRadius:12,
             background:'var(--card)', animation:'bubble-in .3s ease both' }}>
             <div style={{ textAlign:'center', fontFamily:'var(--font-mono, monospace)',
-              fontSize:13, color:'#c9a84c', marginBottom:12 }}>
+              fontSize:13, color:'var(--gold, #c9a84c)', marginBottom:12 }}>
               {blend}% Investor · {100 - blend}% Trader
             </div>
             <input type="range" min={10} max={90} value={blend}
               onChange={e => setBlend(Number(e.target.value))}
-              style={{ width:'100%', accentColor:'#c9a84c' }} />
+              style={{ width:'100%', accentColor:'var(--gold, #c9a84c)' }} />
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:10,
               color:'var(--text-muted)', marginTop:8,
               fontFamily:'var(--font-mono, monospace)' }}>
@@ -339,7 +340,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
       </div>
       {/* Action island */}
       <div style={{ position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
-        background:'var(--bg)', border:`1px solid ${V}.3)`,
+        background:'var(--bg)', border:'1px solid var(--accent-dim)',
         borderRadius:28, padding:'10px 20px 10px 14px',
         display:'flex', alignItems:'center', gap:12, backdropFilter:'blur(20px)',
         boxShadow:`0 8px 32px rgba(0,0,0,.5), 0 0 0 1px ${V}.08)`,
@@ -352,7 +353,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
           <button onClick={onContinue}
             style={{ padding:'7px 16px', border:'none', borderRadius:100, cursor:'pointer',
               fontSize:12, fontWeight:500, fontFamily:'inherit',
-              background:'var(--accent)', color:'#fff', flexShrink:0, transition:'background .2s' }}>
+              background:'var(--accent-solid)', color:'#fff', flexShrink:0, transition:'background .2s' }}>
             Build my workspace →
           </button>
         )}
@@ -396,7 +397,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
   const badgeColor = (badge: string) => {
     if (badge.includes('Overlay')) return { bg: 'rgba(45,212,191,.1)',  color: '#2dd4bf' }
     if (badge.includes('Output'))  return { bg: 'var(--accent-glow)', color: 'var(--accent)' }
-    return                                { bg: 'rgba(201,168,76,.1)',   color: '#c9a84c' }
+    return                                { bg: 'rgba(201,168,76,.1)',   color: 'var(--gold, #c9a84c)' }
   }
 
   return (
@@ -469,7 +470,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                 <button onClick={onAccept} disabled={isCommitting}
                   style={{ flex:1, padding:'13px 0', border:'none', borderRadius:100,
                     cursor: isCommitting ? 'default' : 'pointer', fontSize:14, fontWeight:500,
-                    fontFamily:'inherit', background:'linear-gradient(135deg, #7c6af7, #5b4fd4)',
+                    fontFamily:'inherit', background:'var(--accent-solid)',
                     color:'#fff', opacity: isCommitting ? .7 : 1,
                     boxShadow:`0 4px 20px ${V}.45)`, transition:'all .2s ease' }}>
                   {isCommitting ? 'Setting up…' : 'Start here →'}
@@ -687,7 +688,7 @@ function Screen4({ onComplete }: S4Props) {
           style={{ width:'100%', padding:'14px 0', border:'none', borderRadius:100,
             cursor: canContinue ? 'pointer' : 'default', fontSize:14, fontWeight:500,
             fontFamily:'inherit',
-            background: canContinue ? 'linear-gradient(135deg, #7c6af7, #5b4fd4)' : 'rgba(255,255,255,.06)',
+            background: canContinue ? 'var(--accent-solid)' : 'rgba(255,255,255,.06)',
             color: canContinue ? '#fff' : 'rgba(255,255,255,.25)',
             boxShadow: canContinue ? `0 4px 20px ${V}.4)` : 'none',
             transition:'all .3s ease' }}>
