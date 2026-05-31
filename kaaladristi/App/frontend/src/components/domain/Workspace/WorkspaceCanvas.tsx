@@ -154,7 +154,7 @@ function IndexDropdown({
   const [indices, setIndices] = useState<IndexOption[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
-  const { addChartBlock } = useFrameworkStore()
+  const { switchPrimaryIndex } = useFrameworkStore()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -224,25 +224,23 @@ function IndexDropdown({
             No results
           </div>
         ) : filtered.map(idx => {
-          const added = activeIds.has(`chart:${idx.id}`)
+          const isCurrent = activeIds.has(`chart:${idx.id}`)
           return (
             <button
               key={idx.id}
-              onClick={() => { if (!added) { addChartBlock({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() } }}
+              onClick={() => { switchPrimaryIndex({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() }}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 width: '100%', padding: '7px 12px', border: 'none',
-                background: 'transparent', textAlign: 'left', cursor: added ? 'default' : 'pointer',
-                opacity: added ? 0.45 : 1,
+                background: isCurrent ? 'rgba(139,92,246,.08)' : 'transparent',
+                textAlign: 'left', cursor: 'pointer',
+                opacity: 1,
               }}
-              onMouseEnter={e => { if (!added) (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,.08)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+              onMouseEnter={e => { if (!isCurrent) (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,.08)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isCurrent ? 'rgba(139,92,246,.08)' : 'transparent' }}
             >
               <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{idx.display_name}</span>
-              {added
-                ? <span style={{ fontSize: 10, color: '#7c6af7', fontFamily: 'var(--font-mono,monospace)' }}>✓</span>
-                : <span style={{ fontSize: 16, color: 'rgba(124,106,247,.5)' }}>+</span>
-              }
+              {isCurrent && <span style={{ fontSize: 10, color: '#7c6af7', fontFamily: 'var(--font-mono,monospace)' }}>● active</span>}
             </button>
           )
         })}
@@ -261,6 +259,8 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
   const [picker, setPicker] = useState<{ id: string; x: number; y: number } | null>(null)
   const [indexDropdown, setIndexDropdown] = useState<{ x: number; y: number } | null>(null)
+  const primarySymbol = framework.blocks.find(b => b.type === 'chart')
+    ?.config.instrument ? (framework.blocks.find(b => b.type === 'chart')!.config.instrument as { symbol: string }).symbol : 'index'
 
   // Block resize state
   const [resizingBlockId, setResizingBlockId] = useState<string | null>(null)
@@ -512,7 +512,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
             el.style.background = 'transparent'
           }}
         >
-          + index
+          {primarySymbol} ▾
         </button>
 
         {/* Edit Canvas / Done Editing */}
