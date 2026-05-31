@@ -45,7 +45,7 @@ export default function WorkspaceActionIsland({ onOpen }: Props) {
         position: 'fixed',
         bottom: 28,
         left: '50%',
-        transform: 'translateX(-50%)',
+        transform: 'translateX(calc(-50% + 110px))',
         zIndex: 50,
         display: 'inline-flex',
         alignItems: 'center',
