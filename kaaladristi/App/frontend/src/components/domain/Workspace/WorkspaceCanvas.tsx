@@ -375,7 +375,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
   const isEmpty = !framework.blocks.some(b => b.type !== 'chart')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       {/* ── Canvas topbar: overlay pills (left) + Edit Canvas (right) ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
