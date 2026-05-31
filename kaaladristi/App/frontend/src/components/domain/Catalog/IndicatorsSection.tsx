@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { getCatalogItemsByType } from '@/constants/catalogItems'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
+import InlineGate from '@/components/workspace/InlineGate'
 import type { DeepDiveItem } from './DeepDivePanel'
 
 const INDICATORS = getCatalogItemsByType('indicator')
@@ -14,12 +16,14 @@ export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) 
   const { profile } = useAuthStore()
   const { addToFramework, isBlockActive, isOverlayActive } = useAddToFramework()
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
+  const [gateOpen, setGateOpen] = useState(false)
 
   function isActive(itemId: string, placement: string) {
     return placement === 'chart_overlay' ? isOverlayActive(itemId) : isBlockActive(itemId)
   }
 
   return (
+    <>
     <div>
       <div style={{ marginBottom: 24 }}>
         <h2 style={{
@@ -139,7 +143,10 @@ export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) 
                   </span>
                 ) : (
                   <button
-                    onClick={() => addToFramework(item.id)}
+                    onClick={() => {
+                      const r = addToFramework(item.id)
+                      if (r.reason === 'tier_gate') setGateOpen(true)
+                    }}
                     style={{
                       marginLeft: 'auto',
                       padding: '4px 12px',
@@ -214,5 +221,12 @@ export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) 
         </span>
       </div>
     </div>
+
+    <InlineGate
+      context="add_rule"
+      isOpen={gateOpen}
+      onDismiss={() => setGateOpen(false)}
+    />
+    </>
   )
 }

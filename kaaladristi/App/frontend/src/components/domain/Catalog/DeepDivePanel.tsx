@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { from } from '@/services/postgrest'
@@ -7,6 +8,7 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
+import InlineGate from '@/components/workspace/InlineGate'
 
 // ── Shared types (exported for section components) ────────────────────────────
 
@@ -477,6 +479,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
   const { addToFramework } = useAddToFramework()
+  const [gateOpen, setGateOpen] = useState(false)
 
   const isOpen = item !== null
 
@@ -526,7 +529,8 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
       if (isRange) addOverlay(syntheticItem)
       else addBlock(syntheticItem)
     } else {
-      addToFramework(item.item.id)
+      const r = addToFramework(item.item.id)
+      if (r.reason === 'tier_gate') setGateOpen(true)
     }
   }
 
@@ -716,6 +720,12 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           </button>
         </div>
       </div>
+
+      <InlineGate
+        context="add_rule"
+        isOpen={gateOpen}
+        onDismiss={() => setGateOpen(false)}
+      />
     </>
   )
 }
