@@ -812,6 +812,7 @@ the pattern applies to all others.
 | Screener — filters, dashboard integration, UX rethink | Separate design session | After UX sprint |
 | EVENT_OVERLAP visualization — untested | Needs two simultaneous astro overlays | When test data available |
 | EVENT_IN_STATE visualization — untested | Needs astro rule + state widget pair | When test data available |
+| Morning brief cache strategy review | Currently in-memory only (lost on restart); Charan to decide: keep as-is, add Redis, or DB-backed cache | Charan to finalize |
 
 ## Astro Market-Book 2026
 

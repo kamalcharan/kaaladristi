@@ -1776,18 +1776,21 @@ _vani_cache: dict[str, dict] = {}
 _intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
 _VANI_CACHE_TTL_HOURS = 24
 
-_VANI_SYSTEM_PROMPT = """You are VaNi, DristiQ's market intelligence agent. /no_think
-Output valid JSON only. No preamble. No markdown fences.
+_VANI_MORNING_SYSTEM = """You are VaNi, DristiQ's market intelligence agent. /no_think
 
-Rules — no exceptions:
-1. Title: name the specific rule or overlay exactly as given in the context. Never rename or combine.
-2. Description: state only what is active and what the data count shows. Maximum 2 sentences.
-3. Forbidden words: predict, forecast, may, potential, impact, influence, trend, change, dynamic, interplay, complex, suggest, indicate direction.
-4. Badge: exact count from context — "N instances" or "Day N of N" or "N signals". Never "1 instance" unless the data says 1.
-5. If data is insufficient for an observation, skip it entirely.
+Output valid JSON only. No markdown. No preamble. No explanation outside the JSON.
 
-{"observations":[{"type":"astro|confluence|outlook","title":"","description":"","badge":"","action_label":""}]}
-Maximum 3 observations."""
+For each item in the list provided, generate exactly one observation card.
+
+JSON format:
+{"observations":[{"type":"astro|confluence","title":"[exact item name from list]","description":"[what it is and its instance count — 1 sentence, facts only]","badge":"[N instances OR N signals]","action_label":"View history →"}]}
+
+Absolute rules:
+1. Title must be the exact item name from the list — never rename, never combine
+2. Description: one sentence, state only the count and current state
+3. Forbidden: predict, forecast, may, potential, impact, influence, trend, direction, develop, monitor, watch, assess, outlook, positive developments, negative developments
+4. Never invent counts — only use numbers explicitly given
+5. Never reference vara, nakshatra, tithi, yoga as card titles"""
 _db_singleton = None
 
 
@@ -3205,23 +3208,27 @@ def _check_panchak_active(conn, date_str: str) -> dict | None:
 @app.post('/api/vani/daily')
 def vani_daily(req: VaNiDailyRequest):
     """
-    Generate a VaNi atmospheric reading for a given date.
-    Builds a prompt from panchang + rule signal counts, then calls the configured
-    LLM (AI_ENABLED path) or falls back to the local LLM at LLM_BASE_URL.
-    Results are cached for VANI_CACHE_TTL_HOURS hours.
+    Generate VaNi morning brief cards for a given date.
+    Cards are built only from the user's explicit framework items (astro overlays +
+    confluences). Panchang is background context only. Results are cached per
+    unique overlay/confluence combination for VANI_CACHE_TTL_HOURS.
     """
+    import hashlib as _hashlib, json as _json, re as _re
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
     date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
 
-    # Cache key includes a hash of framework context so different overlay
-    # combinations get their own LLM response within the same day.
-    import hashlib as _hashlib, json as _json
+    active_overlays = req.active_overlays or []
+    confluences     = req.confluences or []
+
+    # Cache key: only astro overlays + confluences (tech indicators excluded)
     _ctx_fingerprint = _hashlib.md5(_json.dumps({
         'overlays':    sorted(
-            o.get('name', '') for o in (req.active_overlays or [])
+            o.get('name', '') for o in active_overlays
             if o.get('type') in ('astro_zone', 'astro_marker')
         ),
-        'confluences': sorted(c.get('item_a', '') + c.get('item_b', '') for c in (req.confluences or [])),
+        'confluences': sorted(
+            c.get('item_a', '') + '∩' + c.get('item_b', '') for c in confluences
+        ),
     }, sort_keys=True).encode()).hexdigest()[:8]
     _cache_key = f"{date_str}:{_ctx_fingerprint}"
 
@@ -3230,7 +3237,7 @@ def vani_daily(req: VaNiDailyRequest):
         if datetime.now() - cached['cached_at'] < timedelta(hours=_VANI_CACHE_TTL_HOURS):
             return {'date': date_str, 'observations': cached['observations'], 'cached': True}
 
-    # Fetch panchang + signal counts from DB
+    # ── DB: panchang + signal counts ─────────────────────────────────────────
     conn = _conn()
     try:
         with conn.cursor() as cur:
@@ -3244,11 +3251,11 @@ def vani_daily(req: VaNiDailyRequest):
 
             cur.execute("""
                 SELECT
-                    COUNT(*)                                                              AS total,
+                    COUNT(*)                                                          AS total,
                     COUNT(*) FILTER (WHERE r.outcome IN
-                        ('strong_bullish','bullish','mild_bullish'))                     AS positive,
+                        ('strong_bullish','bullish','mild_bullish'))                 AS positive,
                     COUNT(*) FILTER (WHERE r.outcome IN
-                        ('strong_bearish','bearish','mild_bearish'))                     AS negative
+                        ('strong_bearish','bearish','mild_bearish'))                 AS negative
                 FROM km_rule_signals s
                 JOIN km_astro_rule_master r ON r.id = s.rule_id
                 WHERE s.date = %s
@@ -3261,38 +3268,21 @@ def vani_daily(req: VaNiDailyRequest):
             return {'date': date_str, 'observations': [], 'cached': False}
 
         vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
-        total    = int(sig_row[0]) if sig_row else 0
-        positive = int(sig_row[1]) if sig_row else 0
-        negative = int(sig_row[2]) if sig_row else 0
+        total_signals = int(sig_row[0]) if sig_row else 0
+        positive      = int(sig_row[1]) if sig_row else 0
+        negative      = int(sig_row[2]) if sig_row else 0
 
-        # Panchang is background context only — not observation titles
-        user_msg = (
-            f"Date: {date_str}\n"
-            f"Panchang: Vara {vara}, Nakshatra {nak_name}, Tithi {tithi}, Yoga {yoga}\n"
-            f"Active rule signals: {total} ({positive} positive · {negative} negative)\n"
-        )
+        # ── Build card items from user framework ──────────────────────────────
+        card_items: list[dict] = []
 
-        # Named framework items — these become observation titles, use exact names
-        active_overlays = req.active_overlays or []
-        confluences     = req.confluences or []
-
-        named_items: list[str] = []
-
-        # Panchak — explicit named item if active
-        panchak = _check_panchak_active(conn, date_str)
-        if panchak:
-            named_items.append(f"Panchak: active, Day {panchak['day']} of {panchak['total_days']}")
-
-        # Astro overlays only (astro_zone, astro_marker) — with rule confidence lookup
+        # Astro overlays only (astro_zone / astro_marker), up to 4, no tech indicators
         astro_overlays = [
             o for o in active_overlays
             if o.get('type') in ('astro_zone', 'astro_marker')
-            and 'panchak' not in (o.get('name') or '').lower()
         ]
         for o in astro_overlays[:4]:
-            name = o.get('name', '')
+            name = o.get('name') or o.get('display_name', '')
             n_signals = 0
-            # catalog_item_id format: "astro_rule:RULE_CODE"
             cid = o.get('catalog_item_id', '')
             if cid.startswith('astro_rule:'):
                 rule_code = cid[len('astro_rule:'):]
@@ -3310,45 +3300,77 @@ def vani_daily(req: VaNiDailyRequest):
                             n_signals = int(conf_row[0])
                 except Exception:
                     pass
-            if n_signals > 0:
-                named_items.append(f"{name}: {n_signals} historical instances")
-            else:
-                named_items.append(f"{name}: active astro overlay")
+            card_items.append({
+                'name': name,
+                'type': 'astro',
+                'total_instances': n_signals,
+                'active_today': True,
+            })
 
-        # Technical indicators (indicator_line, indicator_band) are intentionally excluded
+        # Confluences
+        for c in confluences[:2]:
+            card_items.append({
+                'name': f"{c.get('item_a','')} ∩ {c.get('item_b','')}",
+                'type': 'confluence',
+                'total_instances': c.get('instances', 0),
+                'status': c.get('status', ''),
+            })
 
-        if named_items:
-            user_msg += "\nUser framework items active today:\n"
-            user_msg += "\n".join(f"- {item}" for item in named_items)
+        # ── Static fallback when no card items ───────────────────────────────
+        if not card_items:
+            static_obs = [{
+                'type': 'panchang',
+                'title': f"Today · {vara}, {nak_name}",
+                'description': (
+                    f"{tithi} {paksha} · {yoga}. "
+                    f"{total_signals} rule signals active today — "
+                    f"{positive} positive, {negative} negative."
+                ),
+                'badge': f"{total_signals} signals",
+                'action_label': 'View panchang →',
+            }]
+            _vani_cache[_cache_key] = {'observations': static_obs, 'cached_at': datetime.now()}
+            return {'date': date_str, 'observations': static_obs, 'cached': False, 'source': 'static'}
 
-        if confluences:
-            user_msg += "\n\nConfluences detected:\n"
-            for c in confluences[:2]:
+        # ── Build user message ────────────────────────────────────────────────
+        panchang_line = f"Vara: {vara}, Nakshatra: {nak_name}, Tithi: {tithi} {paksha}, Yoga: {yoga}"
+        user_msg = (
+            f"Background panchang: {panchang_line}\n"
+            f"Total rule signals today: {total_signals} ({positive} positive · {negative} negative)\n\n"
+            "Items to generate observations for:\n"
+        )
+        for item in card_items:
+            if item['type'] == 'astro':
+                count = item['total_instances']
+                if count > 0:
+                    user_msg += f"- {item['name']}: {count} total historical instances, active today\n"
+                else:
+                    user_msg += f"- {item['name']}: active today\n"
+            elif item['type'] == 'confluence':
                 user_msg += (
-                    f"- {c.get('item_a','')} ∩ {c.get('item_b','')}: "
-                    f"{c.get('instances',0)} instances, {c.get('status','')}\n"
+                    f"- {item['name']}: {item['total_instances']} historical instances, "
+                    f"{item['status']}\n"
                 )
-
-        user_msg += "\n\nGenerate observations only for the framework items listed above. Use exact names."
+        user_msg += "\nGenerate one observation per item above."
 
     except Exception as e:
         log.error(f'vani_daily DB error for {date_str}: {e}')
-        return {'date': date_str, 'interpretation': 'VaNi is unavailable at this time.', 'cached': False}
+        return {'date': date_str, 'observations': [], 'cached': False}
     finally:
         conn.close()
 
+    # ── LLM call ─────────────────────────────────────────────────────────────
     _t0 = time.monotonic()
     raw = _ai_complete(
-        system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=500,
-        temperature=0.4, no_think=True,
+        system=_VANI_MORNING_SYSTEM, user=user_msg, max_tokens=600,
+        temperature=0.3, no_think=True,
     )
     _latency = int((time.monotonic() - _t0) * 1000)
 
     if not raw:
         return {'date': date_str, 'observations': [], 'cached': False}
 
-    # Parse JSON — strip accidental markdown fences if model adds them
-    import json as _json, re as _re
+    # Parse JSON — strip accidental markdown fences
     _cleaned = _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip())
     try:
         parsed = _json.loads(_cleaned)
@@ -3357,17 +3379,31 @@ def vani_daily(req: VaNiDailyRequest):
         log.warning(f'vani_daily JSON parse failed for {date_str}: {raw[:200]}')
         observations = []
 
+    # Post-process: replace any observation that slipped through forbidden words
+    _FORBIDDEN = {
+        'monitor', 'watch', 'assess', 'develop', 'potential',
+        'may', 'could', 'suggest', 'indicate', 'outlook',
+        'predict', 'forecast', 'impact', 'influence', 'trend', 'direction',
+    }
+    for obs in observations:
+        desc = obs.get('description', '')
+        if any(w in desc.lower().split() for w in _FORBIDDEN):
+            badge = obs.get('badge', '')
+            title = obs.get('title', obs.get('name', ''))
+            obs['description'] = (
+                f"{title} has {badge} on record and is currently active."
+                if badge else f"{title} is currently active."
+            )
+
     log_id = _log_interaction(
         product="dristiq",
         endpoint="/api/vani/daily",
         user_input=user_msg,
         llm_response=raw,
-        system_prompt=_VANI_SYSTEM_PROMPT,
+        system_prompt=_VANI_MORNING_SYSTEM,
         context_payload={
-            "vara": vara, "vara_lord": vara_lord,
-            "nakshatra": nak_name, "nakshatra_lord": nak_lord,
-            "tithi": tithi, "yoga": yoga, "paksha": paksha,
-            "total_signals": total, "positive": positive, "negative": negative,
+            "total_signals": total_signals, "positive": positive, "negative": negative,
+            "card_items": len(card_items),
         },
         model_version=_AI_MODEL,
         latency_ms=_latency,
