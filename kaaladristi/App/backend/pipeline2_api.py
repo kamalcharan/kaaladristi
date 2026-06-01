@@ -1796,7 +1796,9 @@ Rules:
 4. Forbidden: buy, sell, bullish, bearish, up, down, rise, fall, recommend, predict, forecast
 5. Allowed: historically, instances show, when active, has appeared, on record, observed
 6. If historical instances = 0 — say "No historical data computed yet for this rule."
-7. Never truncate the JSON — one card only, always complete"""
+7. Never truncate the JSON — one card only, always complete
+8. Never use: potential, may, could, might, volatility, shift, strategy, communication
+   Replace with: historically marks, has been associated with, instances show, on record"""
 
 _VANI_FORBIDDEN_WORDS = frozenset({
     'buy', 'sell', 'recommend', 'predict', 'forecast',
@@ -3511,8 +3513,10 @@ def vani_daily(req: VaNiDailyRequest):
                     f"Historical instances on Nifty: {n}\n"
                     f"Status: Active today as chart overlay\n"
                     f"Badge must be: {f'{n} instances' if n > 0 else 'No data yet'}\n"
-                    f"Explain: First sentence — what {name} is in plain language, no jargon.\n"
-                    f"Second sentence — describe what kind of market condition or period this rule typically marks based on {n} historical instances. Do not repeat the instance count in the second sentence."
+                    f"Explain: First sentence — what {name} is in plain language.\n"
+                    f"Second sentence — describe what kind of period or condition this rule marks historically.\n"
+                    f"Do not use the words: potential, may, could, might, suggest, indicate, volatility, shift, strategy.\n"
+                    f"Instead use: historically marks, has been associated with, on record, instances show."
                 ),
             })
 
