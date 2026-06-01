@@ -1776,33 +1776,18 @@ _vani_cache: dict[str, dict] = {}
 _intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
 _VANI_CACHE_TTL_HOURS = 24
 
-_VANI_SYSTEM_PROMPT = """You are VaNi (Vāṇī), the voice of knowledge for DristiQ — \
-a Vedic astronomical market intelligence platform for Indian traders.
+_VANI_SYSTEM_PROMPT = """You are VaNi, DristiQ's market intelligence agent. /no_think
+Output valid JSON only. No preamble. No markdown fences.
 
-Rules:
-- Never use: buy, sell, bullish, bearish, up, down, rise, fall
-- Use: positive correlation, negative correlation, historically associated, \
-  recorded instances, atmospheric conditions
-- Always cite data when available (occurrences, %)
-- Use astronomical terminology: vara, nakshatra, tithi, paksha, combust, \
-  retrograde, conjunction, vedh
-- Tone: scholarly, observational, non-advisory
-- Language: English with Sanskrit terms where natural
+Rules — no exceptions:
+1. Title: name the specific rule or overlay exactly as given in the context. Never rename or combine.
+2. Description: state only what is active and what the data count shows. Maximum 2 sentences.
+3. Forbidden words: predict, forecast, may, potential, impact, influence, trend, change, dynamic, interplay, complex, suggest, indicate direction.
+4. Badge: exact count from context — "N instances" or "Day N of N" or "N signals". Never "1 instance" unless the data says 1.
+5. If data is insufficient for an observation, skip it entirely.
 
-Output valid JSON only — no preamble, no markdown fences:
-{
-  "observations": [
-    {
-      "type": "astro|confluence|outlook",
-      "title": "specific name — not generic",
-      "description": "one factual sentence — what it is and current state",
-      "badge": "N instances OR Day N of N OR N rules active",
-      "action_label": "View on chart → OR Open correlation → OR See rules →"
-    }
-  ]
-}
-Maximum 3 observations. Title must name the specific rule or pair — never generic.
-If data is insufficient for an observation, omit it entirely — do not pad."""
+{"observations":[{"type":"astro|confluence|outlook","title":"","description":"","badge":"","action_label":""}]}
+Maximum 3 observations."""
 _db_singleton = None
 
 
@@ -3270,61 +3255,54 @@ def vani_daily(req: VaNiDailyRequest):
             sig_row = cur.fetchone()
 
         if not panchang:
-            return {'date': date_str, 'interpretation': 'No panchang data available for this date.', 'cached': False}
+            return {'date': date_str, 'observations': [], 'cached': False}
 
         vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
         total    = int(sig_row[0]) if sig_row else 0
         positive = int(sig_row[1]) if sig_row else 0
         negative = int(sig_row[2]) if sig_row else 0
 
-        # Layer 1 — panchang (always present)
+        # Panchang is background context only — not observation titles
         user_msg = (
-            f"Astronomical conditions for {date_str}:\n"
-            f"Vara: {vara} (lord: {vara_lord})\n"
-            f"Nakshatra: {nak_name} (lord: {nak_lord})\n"
-            f"Tithi: {tithi} · {paksha} Paksha\n"
-            f"Yoga: {yoga}\n\n"
-            f"Rule signals today: {total} active\n"
-            f"Breakdown: {positive} positive · {negative} negative"
+            f"Date: {date_str}\n"
+            f"Panchang: Vara {vara}, Nakshatra {nak_name}, Tithi {tithi}, Yoga {yoga}\n"
+            f"Active rule signals: {total} ({positive} positive · {negative} negative)\n"
         )
 
-        # Layer 2 — panchak if active
+        # Named framework items — these become observation titles, use exact names
+        active_overlays = req.active_overlays or []
+        confluences     = req.confluences or []
+
+        named_items: list[str] = []
+
+        # Panchak — explicit named item if active
         panchak = _check_panchak_active(conn, date_str)
         if panchak:
-            user_msg += f"\nPanchak active: Day {panchak['day']} of {panchak['total_days']}"
+            named_items.append(f"Panchak: active, Day {panchak['day']} of {panchak['total_days']}")
 
-        # Layer 3 — other active astro overlays (not panchak)
-        active_overlays = req.active_overlays or []
-        astro_overlays = [
-            o for o in active_overlays[:3]
-            if o.get('type') == 'astro_zone'
-            and 'panchak' not in (o.get('name') or '').lower()
-        ]
-        if astro_overlays:
-            user_msg += "\nOther active astro overlays in user framework:\n"
-            for o in astro_overlays:
-                user_msg += f"- {o.get('name', '')}\n"
+        # Other astro overlays from user framework (not panchak)
+        for o in active_overlays[:3]:
+            if o.get('type') == 'astro_zone' and 'panchak' not in (o.get('name') or '').lower():
+                named_items.append(f"{o['name']}: active astro overlay")
 
-        # Layer 4 — technical overlays (names only)
-        tech_overlays = [
-            o for o in active_overlays
-            if o.get('type') in ['indicator_line', 'indicator_band']
-        ]
-        if tech_overlays:
-            names = ', '.join(o.get('name', '') for o in tech_overlays[:3])
-            user_msg += f"\nActive technical overlays: {names}"
+        # Technical overlays — named only, no values
+        tech_names = [o['name'] for o in active_overlays if o.get('type') in ('indicator_line', 'indicator_band')]
+        if tech_names:
+            named_items.append(f"Technical overlays active: {', '.join(tech_names[:3])}")
 
-        # Layer 5 — confluences
-        confluences = req.confluences or []
+        if named_items:
+            user_msg += "\nUser framework items active today:\n"
+            user_msg += "\n".join(f"- {item}" for item in named_items)
+
         if confluences:
-            user_msg += "\nDetected confluences in user framework:\n"
+            user_msg += "\n\nConfluences detected:\n"
             for c in confluences[:2]:
                 user_msg += (
-                    f"- {c.get('item_a','')} ∩ {c.get('item_b','')} · "
-                    f"{c.get('instances',0)} historical instances · {c.get('status','')}\n"
+                    f"- {c.get('item_a','')} ∩ {c.get('item_b','')}: "
+                    f"{c.get('instances',0)} instances, {c.get('status','')}\n"
                 )
 
-        user_msg += "\n\nReturn JSON observations for what matters most today."
+        user_msg += "\n\nGenerate observations only for the framework items listed above. Use exact names."
 
     except Exception as e:
         log.error(f'vani_daily DB error for {date_str}: {e}')
