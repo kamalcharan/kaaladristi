@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -15,6 +15,82 @@ function todayKey(userId: string) {
 
 function fmtId(id: string): string {
   return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
+}
+
+const LOADING_MESSAGES = [
+  'Reading your framework overlays…',
+  'Checking active astro rules…',
+  'Correlating panchang conditions…',
+  'Surfacing what matters today…',
+]
+
+function VaNiLoader() {
+  const [msgIdx, setMsgIdx] = useState(0)
+  const [dots, setDots] = useState(0)
+
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx(i => (i + 1) % LOADING_MESSAGES.length), 2200)
+    return () => clearInterval(t)
+  }, [])
+  useEffect(() => {
+    const t = setInterval(() => setDots(d => (d + 1) % 4), 500)
+    return () => clearInterval(t)
+  }, [])
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      padding: '28px 20px', gap: 16,
+    }}>
+      {/* Pulsing orb */}
+      <div style={{ position: 'relative', width: 48, height: 48 }}>
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+          opacity: 0.15,
+          animation: 'vani-ring 1.8s ease-in-out infinite',
+        }} />
+        <div style={{
+          position: 'absolute', inset: 6, borderRadius: '50%',
+          background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 13, fontWeight: 700, color: '#fff',
+          fontFamily: 'var(--font-mono,monospace)',
+        }}>
+          Vᴺ
+        </div>
+      </div>
+      <style>{`
+        @keyframes vani-ring {
+          0%, 100% { transform: scale(1); opacity: 0.15; }
+          50% { transform: scale(1.35); opacity: 0.06; }
+        }
+      `}</style>
+      <div style={{
+        fontSize: 12, color: 'var(--text-secondary)',
+        fontStyle: 'italic', textAlign: 'center', minHeight: 18,
+        transition: 'opacity 0.4s',
+      }}>
+        {LOADING_MESSAGES[msgIdx]}{'.'.repeat(dots)}
+      </div>
+    </div>
+  )
+}
+
+const PIPELINEURL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+
+function useFeedback() {
+  const [ratings, setRatings] = useState<Record<number, 1 | -1>>({})
+  function rate(idx: number, logId: string | undefined, rating: 1 | -1) {
+    setRatings(r => ({ ...r, [idx]: rating }))
+    if (!logId) return
+    fetch(`${PIPELINEURL}/api/vani/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log_id: logId, rating }),
+    }).catch(() => {})
+  }
+  return { ratings, rate }
 }
 
 function useVaniDailyBrief(
@@ -50,6 +126,7 @@ function useVaniDailyBrief(
           action_label: string
         }>
         cached: boolean
+        log_id?: string
       }>
     },
     staleTime: 24 * 60 * 60 * 1000,
@@ -215,6 +292,18 @@ function MorningModal({ items, profile, onClose }: {
     confluences,
   )
 
+  // Always show loader for at least 900ms — even cached responses
+  // feel instant without it, and the transition is jarring.
+  const [minWait, setMinWait] = useState(true)
+  const minWaitRef = useRef(true)
+  useEffect(() => {
+    const t = setTimeout(() => { setMinWait(false); minWaitRef.current = false }, 900)
+    return () => clearTimeout(t)
+  }, [])
+  const showLoader = briefLoading || minWait
+
+  const { ratings, rate } = useFeedback()
+
   return (
     <>
       {/* Backdrop */}
@@ -284,19 +373,9 @@ function MorningModal({ items, profile, onClose }: {
         </div>
 
         {/* Body */}
-        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {briefLoading ? (
-            [1, 2, 3].map(i => (
-              <div key={i} style={{
-                borderRadius: 8, padding: '12px 14px',
-                background: 'rgba(255,255,255,0.025)',
-                border: '1px solid rgba(255,255,255,0.06)',
-              }}>
-                <div style={{ height: 12, width: '55%', borderRadius: 3, background: 'rgba(255,255,255,0.07)', marginBottom: 8 }} />
-                <div style={{ height: 10, width: '85%', borderRadius: 3, background: 'rgba(255,255,255,0.04)', marginBottom: 4 }} />
-                <div style={{ height: 10, width: '65%', borderRadius: 3, background: 'rgba(255,255,255,0.04)' }} />
-              </div>
-            ))
+        <div style={{ padding: showLoader ? 0 : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'padding 0.2s' }}>
+          {showLoader ? (
+            <VaNiLoader />
           ) : briefData?.observations?.length ? (
             briefData.observations.map((obs, i) => {
               const dotColor = obs.type === 'confluence' ? '#f59e0b' : obs.type === 'outlook' ? '#2dd4bf' : '#9d8ff9'
@@ -323,18 +402,43 @@ function MorningModal({ items, profile, onClose }: {
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 8 }}>
                     {obs.description}
                   </div>
-                  <button
-                    onClick={onClose}
-                    style={{
-                      fontSize: 10, fontFamily: 'var(--font-mono,monospace)',
-                      color: dotColor, background: 'none', border: 'none',
-                      cursor: 'pointer', padding: 0, opacity: 0.8,
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.8')}
-                  >
-                    {obs.action_label}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <button
+                      onClick={onClose}
+                      style={{
+                        fontSize: 10, fontFamily: 'var(--font-mono,monospace)',
+                        color: dotColor, background: 'none', border: 'none',
+                        cursor: 'pointer', padding: 0, opacity: 0.8,
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.8')}
+                    >
+                      {obs.action_label}
+                    </button>
+                    {/* Feedback */}
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {([1, -1] as const).map(r => (
+                        <button
+                          key={r}
+                          onClick={() => rate(i, briefData.log_id, r)}
+                          title={r === 1 ? 'Helpful' : 'Not helpful'}
+                          style={{
+                            fontSize: 12, background: 'none', border: 'none',
+                            cursor: 'pointer', padding: '2px 4px', borderRadius: 4,
+                            opacity: ratings[i] === r ? 1 : ratings[i] !== undefined ? 0.25 : 0.45,
+                            transition: 'opacity 0.15s',
+                            color: ratings[i] === r
+                              ? (r === 1 ? '#2dd4bf' : '#f87171')
+                              : 'var(--text-faint)',
+                          }}
+                          onMouseEnter={e => { if (ratings[i] === undefined) (e.currentTarget as HTMLElement).style.opacity = '0.8' }}
+                          onMouseLeave={e => { if (ratings[i] === undefined) (e.currentTarget as HTMLElement).style.opacity = '0.45' }}
+                        >
+                          {r === 1 ? '↑' : '↓'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )
             })
@@ -354,15 +458,22 @@ function MorningModal({ items, profile, onClose }: {
           borderTop: '1px solid var(--border)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <button
-            onClick={onClose}
-            style={{
-              fontSize: 12, color: 'var(--text-muted)', background: 'none',
-              border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            Dismiss
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <button
+              onClick={onClose}
+              style={{
+                fontSize: 12, color: 'var(--text-muted)', background: 'none',
+                border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, textAlign: 'left',
+              }}
+            >
+              Dismiss
+            </button>
+            {!showLoader && briefData && (
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>
+                {briefData.cached ? '⚡ cached · instant' : '✦ generated · fresh'}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             style={{
