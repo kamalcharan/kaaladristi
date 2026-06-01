@@ -38,6 +38,7 @@ const ICONS: Record<string, string> = {
 
 interface WidgetsSectionProps {
   onSelect?: (item: DeepDiveItem) => void
+  compact?: boolean
 }
 
 // symbolId={1} = NIFTY 50. Explicit in catalog context; workspace widgets read from
@@ -428,7 +429,7 @@ function WidgetCard({
   )
 }
 
-export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
+export default function WidgetsSection({ onSelect, compact: _compact }: WidgetsSectionProps) {
   const { profile } = useAuthStore()
   const { addBlock, isBlockActive, isOverlayActive } = useFrameworkStore()
   const isPaid = PAID_TIERS.includes(profile?.tier as never)

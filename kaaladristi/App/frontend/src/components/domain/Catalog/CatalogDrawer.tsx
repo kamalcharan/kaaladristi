@@ -60,10 +60,10 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
       <div
         style={{
           position: 'fixed',
-          right: isOpen ? 0 : -460,
+          right: isOpen ? 0 : -540,
           top: 72,
           bottom: 0,
-          width: 440,
+          width: 520,
           background: 'var(--card)',
           borderLeft: '1px solid var(--border)',
           borderTop: '1px solid var(--border)',
@@ -179,8 +179,8 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
           overflowY: 'auto',
           padding: '20px 18px',
         }}>
-          {activeTab === 'indicators'  && <IndicatorsSection />}
-          {activeTab === 'widgets'     && <WidgetsSection />}
+          {activeTab === 'indicators'  && <IndicatorsSection compact />}
+          {activeTab === 'widgets'     && <WidgetsSection compact />}
           {activeTab === 'astro_rules' && <CatalogAstroSection compact />}
         </div>
       </div>

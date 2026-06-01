@@ -171,9 +171,10 @@ function ColorSwatch({
 
 interface IndicatorsSectionProps {
   onSelect?: (item: DeepDiveItem) => void
+  compact?: boolean
 }
 
-export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) {
+export default function IndicatorsSection({ onSelect, compact }: IndicatorsSectionProps) {
   const { profile } = useAuthStore()
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
@@ -238,7 +239,7 @@ export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) 
       {/* Card grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: compact ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
         gap: 12,
         marginBottom: 24,
       }}>
