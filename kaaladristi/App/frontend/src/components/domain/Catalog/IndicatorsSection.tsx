@@ -178,9 +178,15 @@ export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) 
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
   const [gateOpen, setGateOpen] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [colors, setColors] = useState<Record<string, string>>(() =>
     Object.fromEntries(INDICATORS.map(i => [i.id, INDICATOR_DEFAULTS[i.id] ?? '#7c6af7']))
   )
+
+  function handleSelect(item: CatalogItem) {
+    setSelectedId(item.id)
+    onSelect?.({ mode: 'catalog_item', item })
+  }
 
   function isActive(item: CatalogItem) {
     return item.placement === 'chart_overlay' ? isOverlayActive(item.id) : isBlockActive(item.id)
@@ -237,38 +243,48 @@ export default function IndicatorsSection({ onSelect }: IndicatorsSectionProps) 
         marginBottom: 24,
       }}>
         {INDICATORS.map(item => {
-          const active = isActive(item)
-          const color  = colors[item.id] ?? '#7c6af7'
-          const isChart = item.placement === 'chart_overlay'
+          const active   = isActive(item)
+          const selected = selectedId === item.id
+          const color    = colors[item.id] ?? '#7c6af7'
+          const isChart  = item.placement === 'chart_overlay'
 
           return (
             <div
               key={item.id}
-              onClick={() => onSelect?.({ mode: 'catalog_item', item })}
+              onClick={() => handleSelect(item)}
               style={{
-                border: `1px solid ${active ? 'rgba(45,212,191,0.28)' : 'var(--border)'}`,
+                border: `1px solid ${
+                  active   ? 'rgba(45,212,191,0.28)' :
+                  selected ? 'rgba(201,168,76,0.45)' :
+                             'var(--border)'
+                }`,
                 borderRadius: 10,
-                background: active ? 'rgba(45,212,191,0.04)' : 'rgba(255,255,255,0.02)',
+                background: active
+                  ? 'rgba(45,212,191,0.04)'
+                  : selected
+                    ? 'rgba(201,168,76,0.04)'
+                    : 'rgba(255,255,255,0.02)',
+                boxShadow: selected ? '0 0 0 1px rgba(201,168,76,0.15), inset 3px 0 0 rgba(201,168,76,0.5)' : 'none',
                 overflow: 'hidden',
-                transition: 'border-color 0.2s, background 0.2s',
+                transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
                 position: 'relative',
                 cursor: 'pointer',
               }}
               onMouseEnter={e => {
-                if (!active) {
+                if (!active && !selected) {
                   (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.12)'
                   ;(e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'
                 }
               }}
               onMouseLeave={e => {
-                if (!active) {
+                if (!active && !selected) {
                   (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'
                   ;(e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.02)'
                 }
               }}
             >
-              {/* Color strip */}
-              <div style={{ height: 3, background: color, opacity: active ? 1 : 0.7 }} />
+              {/* Color strip — gold when selected */}
+              <div style={{ height: 3, background: selected ? 'var(--gold)' : color, opacity: active ? 1 : 0.7 }} />
 
               <div style={{ padding: '12px 14px' }}>
                 {/* Type chips */}
