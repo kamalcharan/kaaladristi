@@ -95,12 +95,14 @@ function useFeedback() {
 }
 
 interface VaniBriefObs {
-  type:         string
-  title:        string
-  description:  string
-  badge:        string
-  action_label: string
-  item_key?:    string
+  type:          string
+  title:         string
+  description:   string
+  badge:         string
+  action_label:  string
+  action?:       string
+  action_target?: string
+  item_key?:     string
 }
 
 interface VaniBriefResult {
@@ -365,6 +367,12 @@ function MorningModal({ items, profile, onClose }: {
 
   const { ratings, rate } = useFeedback()
 
+  function handleAction(obs: VaniBriefObs) {
+    if (!obs.action_target) return
+    onClose?.()
+    navigate(obs.action_target)
+  }
+
   return (
     <>
       {/* Backdrop */}
@@ -493,18 +501,18 @@ function MorningModal({ items, profile, onClose }: {
                     {obs.description}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <button
-                      onClick={onClose}
+                    <span
+                      onClick={() => handleAction(obs)}
                       style={{
-                        fontSize: 10, fontFamily: 'var(--font-mono,monospace)',
-                        color: dotColor, background: 'none', border: 'none',
-                        cursor: 'pointer', padding: 0, opacity: 0.8,
+                        fontSize: 11,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        color: 'var(--accent, #7c6af7)',
+                        cursor: obs.action_target ? 'pointer' : 'default',
+                        opacity: obs.action_target ? 1 : 0.4,
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.8')}
                     >
                       {obs.action_label}
-                    </button>
+                    </span>
                     {/* Feedback */}
                     <div style={{ display: 'flex', gap: 4 }}>
                       {([1, -1] as const).map(r => (
