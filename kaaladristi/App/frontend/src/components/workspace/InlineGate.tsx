@@ -10,6 +10,8 @@ export type GateContext =
   | 'correlation_view'
   | 'add_instrument'
   | 'free_expired'
+  | 'walk_mode'
+  | 'save_walk_widget'
 
 interface GateContextConfig {
   icon: React.ReactNode
@@ -36,6 +38,14 @@ const GATE_CONFIGS: Record<GateContext, GateContextConfig> = {
   free_expired: {
     icon: <Clock size={16} />,
     message: 'Your free week has ended. Everything you built is saved — pick up where you left off.',
+  },
+  walk_mode: {
+    icon: <TrendingUp size={16} />,
+    message: "Walk mode lets you explore all instances on the chart — seeing each confluence period in its historical context. Available on Trial and above.",
+  },
+  save_walk_widget: {
+    icon: <Activity size={16} />,
+    message: "Save Walk widgets to your workspace to re-visit any correlation's history at any time. Available on Quarterly and above.",
   },
 }
 

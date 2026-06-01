@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
 import CorrelationDrawer from '@/components/domain/Workspace/CorrelationDrawer'
+import VaNiMorningBrief, { useMorningBriefAutoShow } from '@/components/workspace/VaNiMorningBrief'
 
 function fmtId(id: string): string {
   return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
@@ -17,8 +18,15 @@ export default function WorkspacePage() {
   const [drawerOpen, setDrawerOpen]             = useState(false)
   const [activePairKey, setActivePairKey]       = useState<string | null>(null)
   const [betaBarDismissed, setBetaBarDismissed] = useState(false)
+  const [morningModalOpen, setMorningModalOpen] = useState(false)
+  const { shouldShow: autoShowMorning, dismiss: dismissMorning } = useMorningBriefAutoShow(profile?.id)
 
   const isBeta = profile?.tier === 'beta'
+
+  // Auto-show morning modal once per day
+  useEffect(() => {
+    if (autoShowMorning) setMorningModalOpen(true)
+  }, [autoShowMorning])
 
   const openDrawer = useCallback((key: string | null) => {
     setActivePairKey(key)
@@ -121,6 +129,18 @@ export default function WorkspacePage() {
             )
           })}
         </div>
+      </div>
+
+      {/* VaNi Morning Brief — pinned above canvas, non-block, session-computed */}
+      <div style={{ flexShrink: 0, padding: '0 20px 4px' }}>
+        <VaNiMorningBrief
+          modalOpen={morningModalOpen}
+          onModalOpen={() => setMorningModalOpen(true)}
+          onModalClose={() => {
+            setMorningModalOpen(false)
+            dismissMorning()
+          }}
+        />
       </div>
 
       {/* Canvas */}

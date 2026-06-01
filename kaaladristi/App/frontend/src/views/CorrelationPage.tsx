@@ -1,12 +1,16 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
+import { useAuthStore } from '@/stores/authStore'
+import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { useCorrelationResult, type CorrelationInstance } from '@/hooks/useCorrelationResult'
 import ConfidenceDial from '@/components/correlation/ConfidenceDial'
 import { recommendVisualisations } from '@/utils/correlationVizSkill'
 import type { VisualisationOption } from '@/utils/correlationVizSkill'
-import { Loader2 } from 'lucide-react'
+import InlineGate from '@/components/workspace/InlineGate'
+
+const WALK_TIERS = ['trial', 'quarterly', 'annual', 'beta'] as const
 
 const VIZ_PREF_KEY = (a: string, b: string) => `corr_viz:${a}:${b}`
 
@@ -334,6 +338,9 @@ export default function CorrelationPage() {
   const navigate          = useNavigate()
   const correlations      = useFrameworkStore(s => s.vaniCorrelations)
   const dismissCorrelation = useFrameworkStore(s => s.dismissVaNiCorrelation)
+  const { profile }        = useAuthStore()
+  const canWalk            = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
+  const [walkGateOpen, setWalkGateOpen] = useState(false)
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
 
@@ -565,6 +572,32 @@ export default function CorrelationPage() {
                 </div>
               )}
 
+              {/* Walk mode CTA */}
+              <button
+                onClick={() => canWalk ? undefined : setWalkGateOpen(true)}
+                style={{
+                  width: '100%', padding: '10px', borderRadius: 8, fontSize: 12,
+                  border: '1px solid rgba(124,106,247,0.35)',
+                  background: canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)',
+                  color: canWalk ? '#8b7af8' : 'var(--text-muted)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  marginTop: 8, transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => {
+                  if (canWalk) {
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.18)'
+                    ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.55)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.background = canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)'
+                  ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.35)'
+                }}
+              >
+                {!canWalk && <span style={{ marginRight: 5 }}>🔒</span>}
+                Walk through all {result.n_instances} instances on chart →
+              </button>
+
               {/* Dismiss */}
               <button
                 onClick={() => { dismissCorrelation(itemA ?? '', itemB ?? ''); navigate('/workspace') }}
@@ -651,6 +684,12 @@ export default function CorrelationPage() {
           )}
         </div>
       </div>
+
+      <InlineGate
+        context="walk_mode"
+        isOpen={walkGateOpen}
+        onDismiss={() => setWalkGateOpen(false)}
+      />
     </div>
   )
 }
