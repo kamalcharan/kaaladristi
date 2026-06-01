@@ -144,10 +144,10 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
       </div>
 
       {/* Spacer */}
-      <div style={{ flex: 1 }} />
+      <div style={{ height: 24 }} />
 
       {/* Actions */}
-      <div style={{ flexShrink: 0, padding: '12px 16px 16px',
+      <div style={{ flexShrink: 0, padding: '12px 16px 20px',
         display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
           onClick={onOpenFull}
@@ -252,9 +252,12 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
 
         {/* Pair tabs — only shown when multiple pairs */}
         {correlations.length > 1 && (
-          <div style={{ display: 'flex', gap: 0,
+          <div style={{
+            display: 'flex', gap: 4, flexShrink: 0,
             borderBottom: '1px solid rgba(255,255,255,.06)',
-            overflowX: 'auto', flexShrink: 0 }}>
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+          }}>
             {correlations.map(c => {
               const key      = `${c.item_a}:${c.item_b}`
               const isActive = key === (activePairKey ?? `${correlations[0].item_a}:${correlations[0].item_b}`)
@@ -263,7 +266,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
                   key={key}
                   onClick={() => onSelectPair(key)}
                   style={{
-                    padding: '9px 12px', fontSize: 10, whiteSpace: 'nowrap', cursor: 'pointer',
+                    padding: '6px 8px', fontSize: 10, whiteSpace: 'nowrap', cursor: 'pointer',
                     background: 'none', border: 'none',
                     borderBottom: isActive ? '2px solid #a78bfa' : '2px solid transparent',
                     color: isActive ? '#c4b5fd' : 'rgba(255,255,255,.3)',
