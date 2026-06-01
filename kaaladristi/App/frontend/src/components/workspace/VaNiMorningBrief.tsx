@@ -330,6 +330,10 @@ function MorningModal({ items, profile, onClose }: {
     })
     .filter((c): c is NonNullable<typeof c> => c !== null)
 
+  // DEBUG — remove after confirming
+  console.log('activeOverlays after filter:', activeOverlays)
+  console.log('confluences after filter:', confluences)
+
   const { data: briefData, isLoading: briefLoading } = useVaniDailyBrief(
     profile?.id,
     today,
