@@ -6,7 +6,8 @@ import { PAID_TIERS } from '@/constants/frameworkConstants'
 import InlineGate from '@/components/workspace/InlineGate'
 import type { DeepDiveItem } from './DeepDivePanel'
 
-const INDICATORS = getCatalogItemsByType('indicator')
+// Only chart overlay indicators belong here — panel_block indicators (RSI 14, ATR 14) live in WidgetsSection
+const INDICATORS = getCatalogItemsByType('indicator').filter(i => i.placement === 'chart_overlay')
 
 // Default colors per indicator
 const INDICATOR_DEFAULTS: Record<string, string> = {
