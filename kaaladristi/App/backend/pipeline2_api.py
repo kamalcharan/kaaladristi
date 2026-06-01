@@ -3217,7 +3217,10 @@ def vani_daily(req: VaNiDailyRequest):
     # combinations get their own LLM response within the same day.
     import hashlib as _hashlib, json as _json
     _ctx_fingerprint = _hashlib.md5(_json.dumps({
-        'overlays':    sorted(o.get('name', '') for o in (req.active_overlays or [])),
+        'overlays':    sorted(
+            o.get('name', '') for o in (req.active_overlays or [])
+            if o.get('type') in ('astro_zone', 'astro_marker')
+        ),
         'confluences': sorted(c.get('item_a', '') + c.get('item_b', '') for c in (req.confluences or [])),
     }, sort_keys=True).encode()).hexdigest()[:8]
     _cache_key = f"{date_str}:{_ctx_fingerprint}"
@@ -3280,15 +3283,39 @@ def vani_daily(req: VaNiDailyRequest):
         if panchak:
             named_items.append(f"Panchak: active, Day {panchak['day']} of {panchak['total_days']}")
 
-        # Other astro overlays from user framework (not panchak)
-        for o in active_overlays[:3]:
-            if o.get('type') == 'astro_zone' and 'panchak' not in (o.get('name') or '').lower():
-                named_items.append(f"{o['name']}: active astro overlay")
+        # Astro overlays only (astro_zone, astro_marker) — with rule confidence lookup
+        astro_overlays = [
+            o for o in active_overlays
+            if o.get('type') in ('astro_zone', 'astro_marker')
+            and 'panchak' not in (o.get('name') or '').lower()
+        ]
+        for o in astro_overlays[:4]:
+            name = o.get('name', '')
+            n_signals = 0
+            # catalog_item_id format: "astro_rule:RULE_CODE"
+            cid = o.get('catalog_item_id', '')
+            if cid.startswith('astro_rule:'):
+                rule_code = cid[len('astro_rule:'):]
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT c.total_occurrences
+                            FROM km_rule_confidence c
+                            JOIN km_astro_rule_master r ON r.id = c.rule_id
+                            WHERE r.rule_code = %s
+                            LIMIT 1
+                        """, (rule_code,))
+                        conf_row = cur.fetchone()
+                        if conf_row:
+                            n_signals = int(conf_row[0])
+                except Exception:
+                    pass
+            if n_signals > 0:
+                named_items.append(f"{name}: {n_signals} historical instances")
+            else:
+                named_items.append(f"{name}: active astro overlay")
 
-        # Technical overlays — named only, no values
-        tech_names = [o['name'] for o in active_overlays if o.get('type') in ('indicator_line', 'indicator_band')]
-        if tech_names:
-            named_items.append(f"Technical overlays active: {', '.join(tech_names[:3])}")
+        # Technical indicators (indicator_line, indicator_band) are intentionally excluded
 
         if named_items:
             user_msg += "\nUser framework items active today:\n"
