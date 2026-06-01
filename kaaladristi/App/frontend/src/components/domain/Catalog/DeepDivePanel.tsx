@@ -664,7 +664,8 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           bottom: 0,
           width: 380,
           background: 'var(--bg-card, #0d1117)',
-          borderLeft: '1px solid var(--border)',
+          borderLeft: '2px solid rgba(201,168,76,0.35)',
+          boxShadow: '-8px 0 32px rgba(0,0,0,0.5), -2px 0 0 rgba(201,168,76,0.12)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 300,
@@ -780,12 +781,43 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           padding: '14px 20px',
           borderTop: '1px solid var(--border)',
           flexShrink: 0,
+          display: 'flex',
+          gap: 8,
+          alignItems: 'stretch',
         }}>
+          <button
+            onClick={onClose}
+            style={{
+              flexShrink: 0,
+              width: 40,
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              background: 'rgba(255,255,255,0.03)',
+              color: 'var(--text-secondary)',
+              fontSize: 16,
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'rgba(255,255,255,0.07)'
+              el.style.borderColor = 'rgba(255,255,255,0.18)'
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'rgba(255,255,255,0.03)'
+              el.style.borderColor = 'var(--border)'
+            }}
+            title="Close panel"
+          >
+            ✕
+          </button>
           <button
             onClick={!cta.active && !cta.locked ? handleAdd : undefined}
             disabled={cta.locked}
             style={{
-              width: '100%',
+              flex: 1,
               padding: '13px',
               border: 'none',
               borderRadius: 10,
