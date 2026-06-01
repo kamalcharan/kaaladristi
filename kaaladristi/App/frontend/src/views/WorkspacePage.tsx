@@ -144,7 +144,7 @@ export default function WorkspacePage() {
       </div>
 
       {/* Canvas */}
-      <WorkspaceCanvas framework={framework!} onOpenDrawer={openDrawer} />
+      <WorkspaceCanvas framework={framework!} onOpenDrawer={openDrawer} islandOffset={isBeta && !betaBarDismissed ? 36 : 0} />
 
       {/* Correlation Drawer */}
       <CorrelationDrawer
@@ -154,13 +154,14 @@ export default function WorkspacePage() {
         onSelectPair={setActivePairKey}
       />
 
-      {/* Beta footer bar — session-dismissable, beta tier only */}
+      {/* Beta footer bar — fixed to bottom, session-dismissable, beta tier only */}
       {isBeta && !betaBarDismissed && (
         <div style={{
-          flexShrink: 0,
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          height: 36,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-          padding: '7px 20px',
-          zIndex: 50,
+          padding: '0 20px',
+          zIndex: 60,
           background: 'var(--caution-bg)',
           borderTop: '1px solid var(--caution-dim)',
           fontSize: 12, color: 'var(--caution)',
