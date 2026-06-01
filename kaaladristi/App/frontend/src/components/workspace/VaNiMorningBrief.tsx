@@ -93,6 +93,22 @@ function useFeedback() {
   return { ratings, rate }
 }
 
+interface VaniBriefObs {
+  type:         string
+  title:        string
+  description:  string
+  badge:        string
+  action_label: string
+  item_key?:    string
+}
+
+interface VaniBriefResult {
+  observations: VaniBriefObs[]
+  cached:       boolean
+  source?:      string
+  log_id?:      string
+}
+
 function useVaniDailyBrief(
   userId: string | undefined,
   today: string,
@@ -102,7 +118,6 @@ function useVaniDailyBrief(
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
 
   // Stable cache key: sorted astro catalog_item_ids + sorted confluence pairs
-  // userId excluded — cache is shared per item, not per user
   const overlayKeys = activeOverlays
     .filter(o => o.type === 'astro_zone' || o.type === 'astro_marker')
     .map(o => o.catalog_item_id)
@@ -118,27 +133,10 @@ function useVaniDailyBrief(
       const res = await fetch(`${pipelineUrl}/api/vani/daily`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: today,
-          user_id: userId,
-          active_overlays: activeOverlays,
-          confluences,
-        }),
+        body: JSON.stringify({ date: today, user_id: userId, active_overlays: activeOverlays, confluences }),
       })
       if (!res.ok) throw new Error('vani daily failed')
-      return res.json() as Promise<{
-        observations: Array<{
-          type: string
-          title: string
-          description: string
-          badge: string
-          action_label: string
-          item_key?: string
-        }>
-        cached: boolean
-        source?: string
-        log_id?: string
-      }>
+      return res.json() as Promise<VaniBriefResult>
     },
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
@@ -305,15 +303,24 @@ function MorningModal({ items, profile, onClose }: {
     confluences,
   )
 
-  // Always show loader for at least 900ms — even cached responses
-  // feel instant without it, and the transition is jarring.
-  const [minWait, setMinWait] = useState(true)
-  const minWaitRef = useRef(true)
+  // Progressive rendering — cards pop in as each resolves
+  const [liveObs, setLiveObs] = useState<VaniBriefObs[]>([])
+  const [allCached, setAllCached] = useState(false)
+
   useEffect(() => {
-    const t = setTimeout(() => { setMinWait(false); minWaitRef.current = false }, 900)
+    if (!briefData) return
+    // Start with whatever the batch call returned
+    setLiveObs(briefData.observations ?? [])
+    setAllCached(briefData.cached ?? false)
+  }, [briefData])
+
+  // Minimum loader display — 900ms even for cache hits
+  const [minWait, setMinWait] = useState(true)
+  useEffect(() => {
+    const t = setTimeout(() => setMinWait(false), 900)
     return () => clearTimeout(t)
   }, [])
-  const showLoader = briefLoading || minWait
+  const showLoader = (briefLoading || minWait) && liveObs.length === 0
 
   const { ratings, rate } = useFeedback()
 
@@ -386,19 +393,50 @@ function MorningModal({ items, profile, onClose }: {
         </div>
 
         {/* Body */}
+        <style>{`
+          .vani-obs-card:hover .vani-admin-delete { opacity: 1 !important; }
+        `}</style>
         <div style={{ padding: showLoader ? 0 : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'padding 0.2s' }}>
           {showLoader ? (
             <VaNiLoader />
-          ) : briefData?.observations?.length ? (
-            briefData.observations.map((obs, i) => {
-              const dotColor = obs.type === 'confluence' ? '#f59e0b' : obs.type === 'outlook' ? '#2dd4bf' : '#9d8ff9'
+          ) : liveObs.length > 0 ? (
+            liveObs.map((obs, i) => {
+              const dotColor = obs.type === 'confluence' ? '#f59e0b' : obs.type === 'panchang' ? '#2dd4bf' : '#9d8ff9'
               return (
-                <div key={i} style={{
-                  borderRadius: 8, padding: '12px 14px',
-                  background: 'rgba(255,255,255,0.025)',
-                  border: `1px solid ${dotColor}22`,
-                  borderLeft: `3px solid ${dotColor}`,
-                }}>
+                <div
+                  key={obs.item_key ?? i}
+                  className="vani-obs-card"
+                  style={{
+                    position: 'relative',
+                    borderRadius: 8, padding: '12px 14px',
+                    background: 'rgba(255,255,255,0.025)',
+                    border: `1px solid ${dotColor}22`,
+                    borderLeft: `3px solid ${dotColor}`,
+                  }}
+                >
+                  {/* Admin delete — hover-only, absolute positioned, admin only */}
+                  {isAdmin && obs.item_key && (
+                    <button
+                      className="vani-admin-delete"
+                      title="Clear from cache (admin)"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        await fetch(
+                          `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
+                          { method: 'DELETE' },
+                        ).catch(() => {})
+                      }}
+                      style={{
+                        position: 'absolute', top: 7, right: 8,
+                        fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                        color: 'var(--text-faint)', background: 'none', border: 'none',
+                        cursor: 'pointer', padding: '1px 4px',
+                        opacity: 0, transition: 'opacity 0.15s',
+                      }}
+                    >
+                      ✕ cache
+                    </button>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>
                       {obs.title}
@@ -428,36 +466,12 @@ function MorningModal({ items, profile, onClose }: {
                     >
                       {obs.action_label}
                     </button>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {/* Admin delete — forces regeneration of this card on next load */}
-                      {isAdmin && obs.item_key && (
-                        <button
-                          onClick={async () => {
-                            await fetch(
-                              `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
-                              { method: 'DELETE' },
-                            ).catch(() => {})
-                          }}
-                          title="Clear cache for this card (admin)"
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 3,
-                            fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
-                            color: 'rgba(248,113,113,0.35)', background: 'none', border: 'none',
-                            cursor: 'pointer', padding: '2px 4px',
-                            transition: 'color 0.15s',
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(248,113,113,0.8)')}
-                          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,113,113,0.35)')}
-                        >
-                          <Trash2 size={10} />
-                          <span>clear cache</span>
-                        </button>
-                      )}
-                      {/* Feedback */}
+                    {/* Feedback */}
+                    <div style={{ display: 'flex', gap: 4 }}>
                       {([1, -1] as const).map(r => (
                         <button
                           key={r}
-                          onClick={() => rate(i, briefData.log_id, r)}
+                          onClick={() => rate(i, briefData?.log_id, r)}
                           title={r === 1 ? 'Helpful' : 'Not helpful'}
                           style={{
                             fontSize: 12, background: 'none', border: 'none',
@@ -505,9 +519,9 @@ function MorningModal({ items, profile, onClose }: {
             >
               Dismiss
             </button>
-            {!showLoader && briefData && (
+            {!showLoader && liveObs.length > 0 && (
               <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>
-                {briefData.cached ? '⚡ cached · instant' : '✦ generated · fresh'}
+                {allCached ? '⚡ cached · instant' : '✦ generated · fresh'}
               </span>
             )}
           </div>
