@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -9,6 +10,7 @@ import ConfidenceDial from '@/components/correlation/ConfidenceDial'
 import { recommendVisualisations } from '@/utils/correlationVizSkill'
 import type { VisualisationOption } from '@/utils/correlationVizSkill'
 import InlineGate from '@/components/workspace/InlineGate'
+import { getCatalogItem } from '@/constants/catalogItems'
 
 const WALK_TIERS = ['trial', 'quarterly', 'annual', 'beta'] as const
 
@@ -25,6 +27,21 @@ function fmtPct(n: number | null, digits = 2): string {
 
 function fmtDate(s: string): string {
   return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
+}
+
+function resolveDisplayName(id: string): string {
+  const item = getCatalogItem(id)
+  if (item) return item.display_name
+  return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
+}
+
+function resolveDescription(id: string): string {
+  const item = getCatalogItem(id)
+  if (item?.vani_explanation) {
+    const first = item.vani_explanation.split('.')[0]
+    return first + '.'
+  }
+  return resolveDisplayName(id)
 }
 
 function OutcomeBadge({ returnVal }: { returnVal: number | null }) {
@@ -338,8 +355,8 @@ export default function CorrelationPage() {
   const navigate          = useNavigate()
   const correlations      = useFrameworkStore(s => s.vaniCorrelations)
   const dismissCorrelation = useFrameworkStore(s => s.dismissVaNiCorrelation)
-  const { profile }        = useAuthStore()
-  const canWalk            = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
+  const { profile, session } = useAuthStore()
+  const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
@@ -379,6 +396,39 @@ export default function CorrelationPage() {
   const bullCount = result?.bullish_count ?? 0
   const bearCount = result?.bearish_count ?? 0
   const total     = bullCount + bearCount
+  const hitRate   = total > 0 ? Math.max(bullCount, bearCount) / total : 0
+
+  const { data: insightData, isLoading: insightLoading } = useQuery({
+    queryKey: ['corr-insight', itemA, itemB, result?.shape],
+    queryFn: async () => {
+      const token = session?.access_token
+      const r = await fetch('/api/vani/correlation-insight', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          item_a:             itemA,
+          item_b:             itemB,
+          item_a_display:     resolveDisplayName(itemA ?? ''),
+          item_b_display:     resolveDisplayName(itemB ?? ''),
+          item_a_description: resolveDescription(itemA ?? ''),
+          item_b_description: resolveDescription(itemB ?? ''),
+          shape:              result?.shape ?? '',
+          n_instances:        result?.n_instances ?? 0,
+          hit_rate:           hitRate,
+          avg_return_5d:      result?.avg_return_5d ?? 0,
+          avg_return_22d:     result?.avg_return_22d ?? 0,
+          currently_active:   result?.currently_active ?? false,
+        }),
+      })
+      return r.json()
+    },
+    enabled: !!result && !!itemA && !!itemB,
+    staleTime: Infinity,
+    retry: 1,
+  })
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text-primary)' }}>
@@ -568,6 +618,59 @@ export default function CorrelationPage() {
                   }}>
                     <span style={{ color: 'var(--bull)' }}>{bullCount} up</span>
                     <span style={{ color: 'var(--bear)' }}>{bearCount} down</span>
+                  </div>
+                </div>
+              )}
+
+              {/* VaNi Insight */}
+              {insightLoading && (
+                <div style={{
+                  padding: '12px 14px', marginBottom: 12,
+                  background: 'var(--accent-glow)',
+                  border: '1px solid var(--accent-dim)',
+                  borderRadius: 8,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ color: 'var(--accent)', fontSize: 12 }}>✦</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', fontFamily: 'var(--font-mono,monospace)', fontStyle: 'italic' }}>
+                    VaNi is reading this combination…
+                  </span>
+                </div>
+              )}
+
+              {!insightLoading && insightData?.insight && (
+                <div style={{
+                  padding: '12px 14px', marginBottom: 12,
+                  background: 'var(--accent-glow)',
+                  border: '1px solid var(--accent-dim)',
+                  borderRadius: 8,
+                  position: 'relative', overflow: 'hidden',
+                }}>
+                  <div style={{
+                    position: 'absolute', left: 0, top: 0, bottom: 0, width: 2,
+                    background: 'linear-gradient(180deg, var(--accent), transparent)',
+                  }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <span style={{ color: 'var(--accent)', fontSize: 12 }}>✦</span>
+                    <span style={{
+                      fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+                      color: 'var(--accent)', fontWeight: 600,
+                      fontFamily: 'var(--font-mono,monospace)',
+                    }}>VaNi</span>
+                    <span style={{
+                      fontSize: 9, color: 'rgba(255,255,255,.25)',
+                      fontFamily: 'var(--font-mono,monospace)', marginLeft: 'auto',
+                    }}>
+                      {insightData.cached ? 'cached' : 'fresh'}
+                    </span>
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-display, serif)',
+                    fontSize: 13, fontStyle: 'italic',
+                    fontWeight: 400, lineHeight: 1.6,
+                    color: 'var(--text-primary)',
+                  }}>
+                    {insightData.insight}
                   </div>
                 </div>
               )}
