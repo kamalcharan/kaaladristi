@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore'
 import type { UserFramework } from '@/types/framework'
@@ -96,15 +96,24 @@ function useFeedback() {
 function useVaniDailyBrief(
   userId: string | undefined,
   today: string,
-  activeOverlays: Array<{ name: string; type: string }>,
+  activeOverlays: Array<{ catalog_item_id: string; name: string; type: string }>,
   confluences: Array<{ item_a: string; item_b: string; instances: number; status: string }>,
 ) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+
+  // Stable cache key: sorted astro catalog_item_ids + sorted confluence pairs
+  // userId excluded — cache is shared per item, not per user
+  const overlayKeys = activeOverlays
+    .filter(o => o.type === 'astro_zone' || o.type === 'astro_marker')
+    .map(o => o.catalog_item_id)
+    .sort()
+  const confluenceKeys = confluences
+    .slice(0, 2)
+    .map(c => [c.item_a, c.item_b].sort().join(':'))
+    .sort()
+
   return useQuery({
-    queryKey: ['vani-morning-brief', userId, today,
-      activeOverlays.map(o => o.name).sort().join(','),
-      confluences.map(c => c.item_a + c.item_b).sort().join(','),
-    ],
+    queryKey: ['vani-morning-brief', today, overlayKeys.join(','), confluenceKeys.join(',')],
     queryFn: async () => {
       const res = await fetch(`${pipelineUrl}/api/vani/daily`, {
         method: 'POST',
@@ -124,8 +133,10 @@ function useVaniDailyBrief(
           description: string
           badge: string
           action_label: string
+          item_key?: string
         }>
         cached: boolean
+        source?: string
         log_id?: string
       }>
     },
@@ -268,11 +279,13 @@ function MorningModal({ items, profile, onClose }: {
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) + ' IST'
 
   // Build overlay context from framework
+  // No slice — server controls the limit; sorted by catalog_item_id for cache stability
   const { framework, vaniCorrelations } = useFrameworkStore()
+  const { isAdmin } = useAuthStore()
   const activeOverlays = (framework?.chart_overlays ?? [])
     .filter(o => o.visible !== false)
-    .slice(0, 3)
     .map(o => ({
+      catalog_item_id: o.catalog_item_id,
       name: getCatalogItem(o.catalog_item_id)?.display_name ?? o.catalog_item_id,
       type: o.type ?? 'indicator_line',
     }))
@@ -415,8 +428,32 @@ function MorningModal({ items, profile, onClose }: {
                     >
                       {obs.action_label}
                     </button>
-                    {/* Feedback */}
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {/* Admin delete — forces regeneration of this card on next load */}
+                      {isAdmin && obs.item_key && (
+                        <button
+                          onClick={async () => {
+                            await fetch(
+                              `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
+                              { method: 'DELETE' },
+                            ).catch(() => {})
+                          }}
+                          title="Clear cache for this card (admin)"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 3,
+                            fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                            color: 'rgba(248,113,113,0.35)', background: 'none', border: 'none',
+                            cursor: 'pointer', padding: '2px 4px',
+                            transition: 'color 0.15s',
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(248,113,113,0.8)')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(248,113,113,0.35)')}
+                        >
+                          <Trash2 size={10} />
+                          <span>clear cache</span>
+                        </button>
+                      )}
+                      {/* Feedback */}
                       {([1, -1] as const).map(r => (
                         <button
                           key={r}
