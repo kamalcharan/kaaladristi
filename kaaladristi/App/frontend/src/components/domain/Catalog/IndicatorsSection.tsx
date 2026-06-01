@@ -23,8 +23,10 @@ const INDICATOR_DEFAULTS: Record<string, string> = {
 }
 
 const SWATCH_PALETTE = [
-  '#7c6af7', '#4ade80', '#fb923c', '#f59e0b',
-  '#f43f5e', '#2dd4bf', '#94a3b8', '#c084fc',
+  '#7c6af7', '#a78bfa', '#c084fc', '#e879f9',
+  '#4ade80', '#2dd4bf', '#38bdf8', '#60a5fa',
+  '#fb923c', '#f59e0b', '#facc15', '#a3e635',
+  '#f43f5e', '#fb7185', '#94a3b8', '#e2e8f0',
 ]
 
 // Mini SVG preview paths per indicator (viewBox 0 0 160 36)

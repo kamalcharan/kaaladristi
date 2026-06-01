@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react'
-import { Lock } from 'lucide-react'
 import { getCatalogItemsByType, type CatalogItem } from '@/constants/catalogItems'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
@@ -52,7 +51,45 @@ function LivePreview({ id }: { id: string }) {
   if (id === 'conviction_flow') return <ConvictionMock />
   if (id === 'rsi_14')          return <RsiWidget />
   if (id === 'atr_14')          return <AtrWidget />
+  if (id === 'chart_player')    return <ChartPlayerMock />
   return null
+}
+
+function ChartPlayerMock() {
+  return (
+    <div style={{ padding: '6px 0 4px' }}>
+      {/* Fake mini candlestick row */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 48, marginBottom: 8 }}>
+        {[
+          { body: 28, up: true }, { body: 18, up: false }, { body: 34, up: true },
+          { body: 22, up: true }, { body: 14, up: false }, { body: 38, up: true },
+          { body: 30, up: true }, { body: 10, up: false }, { body: 26, up: true },
+          { body: 40, up: true },
+        ].map((c, i) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <div style={{
+              width: '60%', height: c.body * 0.46,
+              borderRadius: 1,
+              background: c.up ? 'rgba(45,212,191,0.55)' : 'rgba(248,113,113,0.55)',
+            }} />
+          </div>
+        ))}
+      </div>
+      {/* Playback bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 22, height: 22, borderRadius: '50%',
+          border: '1px solid rgba(139,122,248,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 9, color: '#8b7af8',
+        }}>▶</div>
+        <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', position: 'relative' }}>
+          <div style={{ width: '40%', height: '100%', borderRadius: 2, background: 'rgba(139,122,248,0.5)' }} />
+        </div>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>1D</span>
+      </div>
+    </div>
+  )
 }
 
 // Static visual mocks for locked-only widgets — shown blurred behind overlay
@@ -197,58 +234,179 @@ function AtrWidget() {
   )
 }
 
-function LockedOverlay({ item, onDeepDive }: { item: CatalogItem; onDeepDive: () => void }) {
+
+function WidgetCard({
+  item, active, locked, onSelect, onAdd,
+}: {
+  item: CatalogItem
+  active: boolean
+  locked: boolean
+  onSelect: () => void
+  onAdd: (e: React.MouseEvent) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const icon = ICONS[item.id] ?? '◌'
+  const desc = LOCKED_DESCRIPTIONS[item.id] ?? item.description
+
   return (
-    <div style={{
-      position: 'absolute', inset: 0,
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 10, padding: '20px 24px',
-      zIndex: 2,
-    }}>
-      <Lock size={20} style={{ color: 'var(--text-muted)', opacity: 0.7 }} />
+    <div
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        border: `1px solid ${active ? 'rgba(45,212,191,0.28)' : 'rgba(124,106,247,0.18)'}`,
+        borderRadius: 12,
+        background: active ? 'rgba(45,212,191,0.04)' : 'rgba(255,255,255,0.02)',
+        position: 'relative',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
+        ...(hovered && !active ? {
+          borderColor: 'rgba(124,106,247,0.38)',
+          transform: 'translateY(-2px)',
+          boxShadow: '0 8px 28px rgba(0,0,0,0.28)',
+        } : {}),
+      }}
+    >
+      {/* VaNi glow backdrop */}
       <div style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: 17,
-        fontWeight: 300,
-        color: 'var(--text-primary)',
-        letterSpacing: '-0.02em',
-        textAlign: 'center',
-        fontStyle: 'italic',
-      }}>
-        {item.display_name}
+        position: 'absolute', top: 0, right: 0, width: 110, height: 110,
+        background: 'radial-gradient(circle at top right, rgba(124,106,247,0.05), transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
+      {/* Card body */}
+      <div style={{ padding: '18px 20px' }}>
+        {/* Tier badge */}
+        {item.tier_required === 'paid' && (
+          <div style={{
+            position: 'absolute', top: 14, right: 14,
+            fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
+            padding: '2px 6px',
+            background: locked ? 'rgba(255,255,255,0.04)' : 'rgba(124,106,247,0.10)',
+            border: `1px solid ${locked ? 'rgba(255,255,255,0.12)' : 'rgba(124,106,247,0.28)'}`,
+            color: locked ? 'var(--text-faint)' : '#8b7af8',
+            borderRadius: 3, letterSpacing: '0.06em',
+          }}>
+            {locked ? 'PAID' : 'PAID ✓'}
+          </div>
+        )}
+
+        {/* Icon */}
+        <div style={{
+          fontSize: 22, marginBottom: 10,
+          fontFamily: 'var(--font-display)',
+          color: active ? '#2dd4bf' : '#8b7af8',
+        }}>
+          {icon}
+        </div>
+
+        {/* Name */}
+        <div style={{
+          fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 300,
+          color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 5,
+        }}>
+          {item.display_name}
+        </div>
+
+        {/* Live preview */}
+        <div style={{ marginBottom: 10, pointerEvents: 'none' }}>
+          <LivePreview id={item.id} />
+        </div>
+
+        {/* VaNi one-liner — only for unlocked */}
+        {!locked && item.vani_explanation && (
+          <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 14 }}>
+            <span style={{ color: 'var(--accent)' }}>✦</span>{' '}
+            {item.vani_explanation.split('. ')[0]}.
+          </p>
+        )}
+
+        {/* Footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+          <span style={{
+            fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+            color: 'var(--text-faint)', background: 'rgba(255,255,255,0.03)',
+            border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
+          }}>
+            {item.id}
+          </span>
+
+          {!locked && (
+            active ? (
+              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: '#2dd4bf' }}>
+                ✓ added
+              </span>
+            ) : (
+              <button
+                onClick={onAdd}
+                style={{
+                  padding: '5px 13px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+                  border: '1px solid rgba(124,106,247,0.38)',
+                  background: 'rgba(124,106,247,0.10)',
+                  color: '#8b7af8', fontFamily: 'inherit', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.background = 'rgba(124,106,247,0.18)'
+                  el.style.borderColor = 'rgba(124,106,247,0.55)'
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.background = 'rgba(124,106,247,0.10)'
+                  el.style.borderColor = 'rgba(124,106,247,0.38)'
+                }}
+              >
+                + Add to framework
+              </button>
+            )
+          )}
+        </div>
       </div>
-      <p style={{
-        fontSize: 11.5,
-        color: 'var(--text-secondary)',
-        lineHeight: 1.6,
-        textAlign: 'center',
-        maxWidth: 220,
-      }}>
-        {LOCKED_DESCRIPTIONS[item.id] ?? item.description}
-      </p>
-      <button
-        onClick={e => { e.stopPropagation(); onDeepDive() }}
-        style={{
-          padding: '6px 16px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
-          border: '1px solid rgba(124,106,247,0.35)',
-          background: 'rgba(124,106,247,0.10)',
-          color: '#8b7af8', fontFamily: 'inherit',
-          marginTop: 4,
-        }}
-        onMouseEnter={e => {
-          const el = e.currentTarget as HTMLElement
-          el.style.background = 'rgba(124,106,247,0.18)'
-          el.style.borderColor = 'rgba(124,106,247,0.55)'
-        }}
-        onMouseLeave={e => {
-          const el = e.currentTarget as HTMLElement
-          el.style.background = 'rgba(124,106,247,0.10)'
-          el.style.borderColor = 'rgba(124,106,247,0.35)'
-        }}
-      >
-        Unlock with Trial →
-      </button>
+
+      {/* Hover overlay for locked cards — slides up on hover */}
+      {locked && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to top, rgba(10,10,18,0.96) 0%, rgba(10,10,18,0.7) 60%, transparent 100%)',
+          display: 'flex', flexDirection: 'column',
+          justifyContent: 'flex-end',
+          padding: '20px 20px 18px',
+          opacity: hovered ? 1 : 0,
+          transform: hovered ? 'translateY(0)' : 'translateY(8px)',
+          transition: 'opacity 0.22s ease, transform 0.22s ease',
+          pointerEvents: hovered ? 'auto' : 'none',
+          zIndex: 10,
+        }}>
+          <p style={{
+            fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
+            marginBottom: 14, textAlign: 'left',
+          }}>
+            {desc}
+          </p>
+          <button
+            onClick={e => { e.stopPropagation(); onSelect() }}
+            style={{
+              padding: '7px 16px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
+              border: '1px solid rgba(124,106,247,0.4)',
+              background: 'rgba(124,106,247,0.14)',
+              color: '#8b7af8', fontFamily: 'inherit', alignSelf: 'flex-start',
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'rgba(124,106,247,0.22)'
+              el.style.borderColor = 'rgba(124,106,247,0.6)'
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'rgba(124,106,247,0.14)'
+              el.style.borderColor = 'rgba(124,106,247,0.4)'
+            }}
+          >
+            Unlock with Trial →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -265,12 +423,8 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
 
   function handleAdd(item: CatalogItem, e: React.MouseEvent) {
     e.stopPropagation()
-    if (item.tier_required === 'paid' && !isPaid) { setGateOpen(true); return }
     addBlock(item)
   }
-
-  const hasLivePreview = (id: string) =>
-    ['magic_rs', 'breadth_roc', 'order_flow', 'smart_money', 'six_day_outlook', 'conviction_flow', 'rsi_14', 'atr_14'].includes(id)
 
   return (
     <>
@@ -301,178 +455,17 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
       </div>
 
       {/* Card grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: 14,
-      }}>
-        {ALL_WIDGETS.map(item => {
-          const active  = isActive(item)
-          const locked  = item.tier_required === 'paid' && !isPaid
-          const icon    = ICONS[item.id] ?? '◌'
-          const livePreview = hasLivePreview(item.id)
-
-          return (
-            <div
-              key={item.id}
-              onClick={() => onSelect?.({ mode: 'catalog_item', item })}
-              style={{
-                border: `1px solid ${
-                  active ? 'rgba(45,212,191,0.28)'  :
-                  locked ? 'rgba(255,255,255,0.06)' :
-                           'rgba(124,106,247,0.18)'
-                }`,
-                borderRadius: 12,
-                background: active ? 'rgba(45,212,191,0.04)' : 'rgba(255,255,255,0.02)',
-                transition: 'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
-                position: 'relative',
-                overflow: 'hidden',
-                cursor: 'pointer',
-                minHeight: locked ? 220 : undefined,
-              }}
-              onMouseEnter={e => {
-                if (!active) {
-                  const el = e.currentTarget as HTMLElement
-                  el.style.borderColor = locked ? 'rgba(255,255,255,0.1)' : 'rgba(124,106,247,0.38)'
-                  if (!locked) { el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 8px 28px rgba(0,0,0,0.28)' }
-                }
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLElement
-                el.style.borderColor = active
-                  ? 'rgba(45,212,191,0.28)'
-                  : locked ? 'rgba(255,255,255,0.06)' : 'rgba(124,106,247,0.18)'
-                el.style.transform = ''
-                el.style.boxShadow = ''
-              }}
-            >
-              {/* Live preview always renders — blur sits on top when locked */}
-              {livePreview && (
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  filter: locked ? 'blur(3px)' : 'none',
-                  opacity: locked ? 0.5 : 1,
-                  pointerEvents: 'none', zIndex: 1,
-                  overflow: 'hidden', padding: '18px 20px',
-                }}>
-                  <LivePreview id={item.id} />
-                </div>
-              )}
-              {locked && !livePreview && (
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: 'rgba(0,0,0,0.15)',
-                  pointerEvents: 'none', zIndex: 1,
-                }} />
-              )}
-
-              {/* Lock overlay */}
-              {locked && (
-                <LockedOverlay
-                  item={item}
-                  onDeepDive={() => onSelect?.({ mode: 'catalog_item', item })}
-                />
-              )}
-
-              {/* Normal card content — hidden behind lock overlay when locked */}
-              {!locked && (
-                <div style={{ padding: '18px 20px' }}>
-                  {/* VaNi glow backdrop */}
-                  <div style={{
-                    position: 'absolute', top: 0, right: 0,
-                    width: 110, height: 110,
-                    background: 'radial-gradient(circle at top right, rgba(124,106,247,0.05), transparent 70%)',
-                    pointerEvents: 'none',
-                  }} />
-
-                  {/* Tier badge */}
-                  {item.tier_required === 'paid' && (
-                    <div style={{
-                      position: 'absolute', top: 14, right: 14,
-                      fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
-                      padding: '2px 6px',
-                      background: 'rgba(124,106,247,0.10)',
-                      border: '1px solid rgba(124,106,247,0.28)',
-                      color: '#8b7af8', borderRadius: 3, letterSpacing: '0.06em',
-                    }}>
-                      PAID ✓
-                    </div>
-                  )}
-
-                  {/* Icon */}
-                  <div style={{
-                    fontSize: 22, marginBottom: 10,
-                    fontFamily: 'var(--font-display)',
-                    color: active ? '#2dd4bf' : '#8b7af8',
-                  }}>
-                    {icon}
-                  </div>
-
-                  {/* Name */}
-                  <div style={{
-                    fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 300,
-                    color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 5,
-                  }}>
-                    {item.display_name}
-                  </div>
-
-                  {/* Spacer when live preview is absolute-positioned behind card */}
-                  {livePreview && <div style={{ height: 80, marginBottom: 12 }} />}
-
-                  {/* VaNi one-liner */}
-                  {item.vani_explanation && (
-                    <p style={{
-                      fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.55,
-                      marginBottom: 14,
-                    }}>
-                      <span style={{ color: 'var(--accent)' }}>✦</span>{' '}
-                      {item.vani_explanation.split('. ')[0]}.
-                    </p>
-                  )}
-
-                  {/* Footer */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{
-                      fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-                      color: 'var(--text-faint)', background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
-                    }}>
-                      {item.id}
-                    </span>
-
-                    {active ? (
-                      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: '#2dd4bf' }}>
-                        ✓ added
-                      </span>
-                    ) : (
-                      <button
-                        onClick={e => handleAdd(item, e)}
-                        style={{
-                          padding: '5px 13px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
-                          border: '1px solid rgba(124,106,247,0.38)',
-                          background: 'rgba(124,106,247,0.10)',
-                          color: '#8b7af8', fontFamily: 'inherit', transition: 'all 0.15s',
-                        }}
-                        onMouseEnter={e => {
-                          const el = e.currentTarget as HTMLElement
-                          el.style.background = 'rgba(124,106,247,0.18)'
-                          el.style.borderColor = 'rgba(124,106,247,0.55)'
-                        }}
-                        onMouseLeave={e => {
-                          const el = e.currentTarget as HTMLElement
-                          el.style.background = 'rgba(124,106,247,0.10)'
-                          el.style.borderColor = 'rgba(124,106,247,0.38)'
-                        }}
-                      >
-                        + Add to framework
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+        {ALL_WIDGETS.map(item => (
+          <WidgetCard
+            key={item.id}
+            item={item}
+            active={isActive(item)}
+            locked={item.tier_required === 'paid' && !isPaid}
+            onSelect={() => onSelect?.({ mode: 'catalog_item', item })}
+            onAdd={e => handleAdd(item, e)}
+          />
+        ))}
       </div>
     </div>
 

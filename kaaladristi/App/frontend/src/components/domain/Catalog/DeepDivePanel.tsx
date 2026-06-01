@@ -383,8 +383,10 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
 }
 
 const SWATCH_PALETTE_DP = [
-  '#7c6af7', '#4ade80', '#fb923c', '#f59e0b',
-  '#f43f5e', '#2dd4bf', '#94a3b8', '#c084fc',
+  '#7c6af7', '#a78bfa', '#c084fc', '#e879f9',
+  '#4ade80', '#2dd4bf', '#38bdf8', '#60a5fa',
+  '#fb923c', '#f59e0b', '#facc15', '#a3e635',
+  '#f43f5e', '#fb7185', '#94a3b8', '#e2e8f0',
 ]
 
 const INDICATOR_DEFAULTS_DP: Record<string, string> = {
@@ -417,7 +419,7 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
             }} />
             {/* Swatches */}
             {!isSupertrend && (
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 5 }}>
                 {SWATCH_PALETTE_DP.map(s => (
                   <button
                     key={s}
