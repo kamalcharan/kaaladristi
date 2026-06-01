@@ -295,6 +295,11 @@ function MorningModal({ items, profile, onClose }: {
     return map
   }, [astroRules])
 
+  // DEBUG — remove after confirming
+  console.log('astroRuleNames map:', astroRuleNames)
+  console.log('astroRules data:', astroRules)
+  console.log('lookup test:', astroRuleNames['astro_rule:CON-SUN-MER-TRN'])
+
   // Resolve display name — no fallbacks. If unresolved, item is dropped entirely.
   const resolveName = (cid: string): string | null =>
     getCatalogItem(cid)?.display_name ?? astroRuleNames[cid] ?? null
