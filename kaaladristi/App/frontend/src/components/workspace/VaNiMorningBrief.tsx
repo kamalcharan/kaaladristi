@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, Trash2 } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore'
 import type { UserFramework } from '@/types/framework'
 import { useAuthStore } from '@/stores/authStore'
 import type { KmProfile } from '@/types'
 import { getCatalogItem } from '@/constants/catalogItems'
+import { fetchCatalogRules } from '@/pages/RuleEngine/ruleService'
 
 function todayKey(userId: string) {
   const d = new Date().toISOString().slice(0, 10)
@@ -113,7 +114,7 @@ function useVaniDailyBrief(
   userId: string | undefined,
   today: string,
   activeOverlays: Array<{ catalog_item_id: string; name: string; type: string }>,
-  confluences: Array<{ item_a: string; item_b: string; instances: number; status: string }>,
+  confluences: Array<{ item_a: string; item_b: string; item_a_display: string; item_b_display: string; instances: number; status: string }>,
 ) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
 
@@ -276,25 +277,53 @@ function MorningModal({ items, profile, onClose }: {
   const dateStr = `${dd}-${mmm}-${yyyy}`
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) + ' IST'
 
-  // Build overlay context from framework
-  // No slice — server controls the limit; sorted by catalog_item_id for cache stability
   const { framework, vaniCorrelations } = useFrameworkStore()
   const { isAdmin } = useAuthStore()
+
+  // Astro rule display names — same query key as CatalogAstroSection, served from cache
+  const { data: astroRules = [] } = useQuery({
+    queryKey: ['rule-engine', 'catalog-rules'],
+    queryFn: fetchCatalogRules,
+    staleTime: 10 * 60 * 1000,
+  })
+  const astroRuleNames = useMemo(() => {
+    const map: Record<string, string> = {}
+    astroRules.forEach(r => {
+      // catalog_item_id in chart_overlays is "astro_rule:{rule_code}"
+      map[`astro_rule:${r.rule_code}`] = r.display_name ?? ''
+    })
+    return map
+  }, [astroRules])
+
+  // Resolve display name — no fallbacks. If unresolved, item is dropped entirely.
+  const resolveName = (cid: string): string | null =>
+    getCatalogItem(cid)?.display_name ?? astroRuleNames[cid] ?? null
+
   const activeOverlays = (framework?.chart_overlays ?? [])
     .filter(o => o.visible !== false)
     .map(o => ({
       catalog_item_id: o.catalog_item_id,
-      name: getCatalogItem(o.catalog_item_id)?.display_name ?? o.catalog_item_id,
+      name: resolveName(o.catalog_item_id),
       type: o.type ?? 'indicator_line',
     }))
+    .filter((o): o is typeof o & { name: string } => o.name !== null)
+
   const confluences = (vaniCorrelations ?? [])
     .slice(0, 2)
-    .map(c => ({
-      item_a: c.item_a,
-      item_b: c.item_b,
-      instances: c.n_instances ?? 0,
-      status: c.currently_active ? 'active' : 'approaching',
-    }))
+    .map(c => {
+      const a = resolveName(c.item_a)
+      const b = resolveName(c.item_b)
+      if (!a || !b) return null
+      return {
+        item_a: c.item_a,
+        item_b: c.item_b,
+        item_a_display: a,
+        item_b_display: b,
+        instances: c.n_instances ?? 0,
+        status: c.currently_active ? 'active' : 'approaching',
+      }
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null)
 
   const { data: briefData, isLoading: briefLoading } = useVaniDailyBrief(
     profile?.id,
