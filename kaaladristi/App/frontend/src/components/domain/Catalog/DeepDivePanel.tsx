@@ -446,13 +446,6 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
         </div>
       )}
 
-      {/* Description */}
-      <div style={{ marginBottom: 18 }}>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-          {item.description}
-        </p>
-      </div>
-
       {/* Metadata grid */}
       <div style={{ marginBottom: 18 }}>
         <div style={SEC_LABEL}>Details</div>
@@ -774,8 +767,9 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
         {/* Body — scrollable */}
         <div style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
-          padding: '18px 20px',
+          padding: '18px 20px 32px',
         }}>
           {item?.mode === 'astro_rule' && <AstroRuleBody item={item} onClose={onClose} />}
           {item?.mode === 'catalog_item' && <CatalogItemBody item={item.item} />}

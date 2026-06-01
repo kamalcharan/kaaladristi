@@ -254,6 +254,12 @@ const WIDGETS: CatalogItem[] = [
     db_column: 'delivery_qty',  // primary input; also uses close, value_cr, ema_20
     applicable_to: ['equity'],
     tier_required: 'paid',
+    vani_explanation: "Conviction Flow compares the last 5-day delivery percentage against a 22-day rolling baseline. When delivery surges above baseline without a proportional price move, it flags quiet institutional accumulation — large participants taking positions before the market notices.",
+    vani_tags: [
+      { text: 'Institutional detection', type: 'works' },
+      { text: 'Pre-move signal', type: 'works' },
+      { text: 'Equity only', type: 'limit' },
+    ],
   },
   {
     id: 'order_flow',
@@ -301,6 +307,12 @@ const WIDGETS: CatalogItem[] = [
     db_column: 'trade_date',
     applicable_to: ['equity', 'index'],
     tier_required: 'free',
+    vani_explanation: "Historical Player turns your workspace into a time machine. Drag the scrubber to any past date and every panel — Order Flow, Smart Money, Magic RS, Breadth ROC — snaps to that moment. Use it to replay how signals looked the day before a major move, and build intuition without risk.",
+    vani_tags: [
+      { text: 'Replay any date', type: 'works' },
+      { text: 'All panels sync', type: 'works' },
+      { text: 'No live data while scrubbing', type: 'limit' },
+    ],
   },
 ]
 
