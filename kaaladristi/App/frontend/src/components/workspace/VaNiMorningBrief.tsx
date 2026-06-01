@@ -393,9 +393,6 @@ function MorningModal({ items, profile, onClose }: {
         </div>
 
         {/* Body */}
-        <style>{`
-          .vani-obs-card:hover .vani-admin-delete { opacity: 1 !important; }
-        `}</style>
         <div style={{ padding: showLoader ? 0 : '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'padding 0.2s' }}>
           {showLoader ? (
             <VaNiLoader />
@@ -414,10 +411,9 @@ function MorningModal({ items, profile, onClose }: {
                     borderLeft: `3px solid ${dotColor}`,
                   }}
                 >
-                  {/* Admin delete — hover-only, absolute positioned, admin only */}
+                  {/* Admin delete — small ✕, 40% opacity, always visible for admin */}
                   {isAdmin && obs.item_key && (
-                    <button
-                      className="vani-admin-delete"
+                    <span
                       title="Clear from cache (admin)"
                       onClick={async (e) => {
                         e.stopPropagation()
@@ -427,15 +423,17 @@ function MorningModal({ items, profile, onClose }: {
                         ).catch(() => {})
                       }}
                       style={{
-                        position: 'absolute', top: 7, right: 8,
+                        position: 'absolute', top: 8, right: 10,
                         fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
-                        color: 'var(--text-faint)', background: 'none', border: 'none',
-                        cursor: 'pointer', padding: '1px 4px',
-                        opacity: 0, transition: 'opacity 0.15s',
+                        color: 'var(--text-faint)', cursor: 'pointer',
+                        opacity: 0.4, transition: 'opacity 0.15s',
+                        userSelect: 'none',
                       }}
+                      onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
+                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
                     >
-                      ✕ cache
-                    </button>
+                      ✕
+                    </span>
                   )}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>
