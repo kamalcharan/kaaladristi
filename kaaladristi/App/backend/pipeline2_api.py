@@ -3576,6 +3576,7 @@ def vani_daily(req: VaNiDailyRequest):
                     'description': 'Active today.',
                 }
 
+            log.info(f"LLM raw obs for {item['key']}: {json.dumps(obs)}")
             obs = _apply_vani_post_filter([obs])[0]
             obs.setdefault('action_label', 'View history →')
             # Enrich with action routing (Fix 4)
