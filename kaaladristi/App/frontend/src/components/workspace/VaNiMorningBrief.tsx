@@ -25,7 +25,10 @@ function useVaniDailyBrief(
 ) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
   return useQuery({
-    queryKey: ['vani-morning-brief', userId, today],
+    queryKey: ['vani-morning-brief', userId, today,
+      activeOverlays.map(o => o.name).sort().join(','),
+      confluences.map(c => c.item_a + c.item_b).sort().join(','),
+    ],
     queryFn: async () => {
       const res = await fetch(`${pipelineUrl}/api/vani/daily`, {
         method: 'POST',

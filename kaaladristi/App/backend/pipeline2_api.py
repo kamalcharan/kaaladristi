@@ -3218,9 +3218,17 @@ def vani_daily(req: VaNiDailyRequest):
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
     date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
 
-    # Serve from cache if fresh
-    if date_str in _vani_cache:
-        cached = _vani_cache[date_str]
+    # Cache key includes a hash of framework context so different overlay
+    # combinations get their own LLM response within the same day.
+    import hashlib as _hashlib, json as _json
+    _ctx_fingerprint = _hashlib.md5(_json.dumps({
+        'overlays':    sorted(o.get('name', '') for o in (req.active_overlays or [])),
+        'confluences': sorted(c.get('item_a', '') + c.get('item_b', '') for c in (req.confluences or [])),
+    }, sort_keys=True).encode()).hexdigest()[:8]
+    _cache_key = f"{date_str}:{_ctx_fingerprint}"
+
+    if _cache_key in _vani_cache:
+        cached = _vani_cache[_cache_key]
         if datetime.now() - cached['cached_at'] < timedelta(hours=_VANI_CACHE_TTL_HOURS):
             return {'date': date_str, 'interpretation': cached['text'], 'cached': True}
 
@@ -3341,7 +3349,7 @@ def vani_daily(req: VaNiDailyRequest):
     else:
         interpretation = 'VaNi is unavailable at this time.'
 
-    _vani_cache[date_str] = {'text': interpretation, 'cached_at': datetime.now()}
+    _vani_cache[_cache_key] = {'text': interpretation, 'cached_at': datetime.now()}
     return {'date': date_str, 'interpretation': interpretation, 'cached': False, 'log_id': log_id}
 
 
