@@ -57,9 +57,10 @@ function computeIslandState(
 interface Props {
   onOpen:          (pairKey: string | null) => void
   onMorningBrief?: () => void
+  bottomOffset?:   number
 }
 
-export default function WorkspaceActionIsland({ onOpen, onMorningBrief }: Props) {
+export default function WorkspaceActionIsland({ onOpen, onMorningBrief, bottomOffset = 0 }: Props) {
   const navigate      = useNavigate()
   const correlations  = useFrameworkStore(s => s.vaniCorrelations)
   const framework     = useFrameworkStore(s => s.framework)
@@ -88,7 +89,7 @@ export default function WorkspaceActionIsland({ onOpen, onMorningBrief }: Props)
       onClick={handleClick}
       style={{
         position: 'fixed',
-        bottom: 28,
+        bottom: 28 + bottomOffset,
         left: '50%',
         transform: 'translateX(calc(-50% + 110px))',
         zIndex: 50,
