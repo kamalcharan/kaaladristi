@@ -1,11 +1,30 @@
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
+import { fetchIndicatorDataById } from '@/services/indicatorData'
 import SmartMoneyCard, { type SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard'
 import { computeSmartMoney, computeDots } from '@/services/visualPulseEngine'
 import type { PulseBar, DotSignals } from '@/services/visualPulseEngine'
 
-export default function SmartMoneyWidget() {
-  const { visibleData, activeBarIndex, isLoading } = useWorkspaceEod()
+interface Props {
+  /** When provided (catalog context), fetches this index directly.
+   *  When absent (workspace context), reads from useWorkspaceEod. */
+  symbolId?: number
+}
+
+export default function SmartMoneyWidget({ symbolId }: Props) {
+  const { data: catalogData = [], isLoading: catalogLoading } = useQuery({
+    queryKey: ['widget-catalog-eod', symbolId],
+    queryFn:  () => fetchIndicatorDataById(symbolId!, '1Y'),
+    staleTime: 120_000,
+    enabled:  symbolId != null,
+  })
+
+  const workspace = useWorkspaceEod()
+
+  const visibleData    = symbolId != null ? catalogData : workspace.visibleData
+  const activeBarIndex = symbolId != null ? (catalogData.length > 0 ? catalogData.length - 1 : 0) : workspace.activeBarIndex
+  const isLoading      = symbolId != null ? catalogLoading : workspace.isLoading
 
   const bars = visibleData as unknown as PulseBar[]
   const idx  = activeBarIndex

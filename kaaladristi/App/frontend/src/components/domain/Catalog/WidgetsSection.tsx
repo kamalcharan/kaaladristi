@@ -39,11 +39,13 @@ interface WidgetsSectionProps {
   onSelect?: (item: DeepDiveItem) => void
 }
 
+// symbolId={1} = NIFTY 50. Explicit in catalog context; workspace widgets read from
+// useWorkspaceEod instead (no prop passed).
 function LivePreview({ id }: { id: string }) {
-  if (id === 'magic_rs')    return <MagicRsWidget />
+  if (id === 'magic_rs')    return <MagicRsWidget    symbolId={1} />
   if (id === 'breadth_roc') return <BreadthRocChart />
-  if (id === 'order_flow')  return <OrderFlowWidget />
-  if (id === 'smart_money') return <SmartMoneyWidget />
+  if (id === 'order_flow')  return <OrderFlowWidget  symbolId={1} />
+  if (id === 'smart_money') return <SmartMoneyWidget symbolId={1} />
   return null
 }
 
@@ -196,11 +198,12 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
                 el.style.boxShadow = ''
               }}
             >
-              {/* Blur background for locked cards */}
-              {locked && livePreview && (
+              {/* Live preview always renders — blur sits on top when locked */}
+              {livePreview && (
                 <div style={{
                   position: 'absolute', inset: 0,
-                  filter: 'blur(3px)', opacity: 0.5,
+                  filter: locked ? 'blur(3px)' : 'none',
+                  opacity: locked ? 0.5 : 1,
                   pointerEvents: 'none', zIndex: 1,
                   overflow: 'hidden', padding: '18px 20px',
                 }}>
@@ -265,12 +268,8 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
                     {item.display_name}
                   </div>
 
-                  {/* Live preview or VaNi one-liner */}
-                  {livePreview ? (
-                    <div style={{ marginBottom: 12, pointerEvents: 'none' }}>
-                      <LivePreview id={item.id} />
-                    </div>
-                  ) : null}
+                  {/* Spacer when live preview is absolute-positioned behind card */}
+                  {livePreview && <div style={{ height: 80, marginBottom: 12 }} />}
 
                   {/* VaNi one-liner */}
                   {item.vani_explanation && (
