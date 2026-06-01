@@ -115,6 +115,7 @@ function useVaniDailyBrief(
   today: string,
   activeOverlays: Array<{ catalog_item_id: string; name: string; type: string }>,
   confluences: Array<{ item_a: string; item_b: string; item_a_display: string; item_b_display: string; instances: number; status: string }>,
+  astroRulesReady: boolean,
 ) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
 
@@ -141,7 +142,7 @@ function useVaniDailyBrief(
     },
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
-    enabled: !!userId,
+    enabled: !!userId && astroRulesReady,  // wait for rules to load before firing
   })
 }
 
@@ -280,65 +281,73 @@ function MorningModal({ items, profile, onClose }: {
   const { framework, vaniCorrelations } = useFrameworkStore()
   const { isAdmin } = useAuthStore()
 
-  // Astro rule display names — same query key as CatalogAstroSection, served from cache
-  const { data: astroRules = [] } = useQuery({
+  // Astro rule display names — same query key as CatalogAstroSection, served from cache.
+  // No default — undefined = still loading, [] = loaded (empty). Critical for the guard below.
+  const { data: astroRules } = useQuery({
     queryKey: ['rule-engine', 'catalog-rules'],
     queryFn: fetchCatalogRules,
     staleTime: 10 * 60 * 1000,
   })
+  const astroRulesReady = astroRules !== undefined
+
   const astroRuleNames = useMemo(() => {
     const map: Record<string, string> = {}
-    astroRules.forEach(r => {
-      // catalog_item_id in chart_overlays is "astro_rule:{rule_code}"
+    astroRules?.forEach(r => {
       map[`astro_rule:${r.rule_code}`] = r.display_name ?? ''
     })
     return map
   }, [astroRules])
 
-  // DEBUG — remove after confirming
-  console.log('astroRuleNames map:', astroRuleNames)
-  console.log('astroRules data:', astroRules)
-  console.log('lookup test:', astroRuleNames['astro_rule:CON-SUN-MER-TRN'])
-
   // Resolve display name — no fallbacks. If unresolved, item is dropped entirely.
   const resolveName = (cid: string): string | null =>
     getCatalogItem(cid)?.display_name ?? astroRuleNames[cid] ?? null
 
-  const activeOverlays = (framework?.chart_overlays ?? [])
-    .filter(o => o.visible !== false)
-    .map(o => ({
-      catalog_item_id: o.catalog_item_id,
-      name: resolveName(o.catalog_item_id),
-      type: o.type ?? 'indicator_line',
-    }))
-    .filter((o): o is typeof o & { name: string } => o.name !== null)
+  const activeOverlays = useMemo(() => {
+    if (!astroRulesReady) return []
+    return (framework?.chart_overlays ?? [])
+      .filter(o => o.visible !== false)
+      .map(o => ({
+        catalog_item_id: o.catalog_item_id,
+        name: resolveName(o.catalog_item_id),
+        type: o.type ?? 'indicator_line',
+      }))
+      .filter((o): o is typeof o & { name: string } => o.name !== null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [framework?.chart_overlays, astroRuleNames, astroRulesReady])
 
-  const confluences = (vaniCorrelations ?? [])
-    .slice(0, 2)
-    .map(c => {
-      const a = resolveName(c.item_a)
-      const b = resolveName(c.item_b)
-      if (!a || !b) return null
-      return {
-        item_a: c.item_a,
-        item_b: c.item_b,
-        item_a_display: a,
-        item_b_display: b,
-        instances: c.n_instances ?? 0,
-        status: c.currently_active ? 'active' : 'approaching',
-      }
-    })
-    .filter((c): c is NonNullable<typeof c> => c !== null)
+  const confluences = useMemo(() => {
+    if (!astroRulesReady) return []
+    return (vaniCorrelations ?? [])
+      .slice(0, 2)
+      .map(c => {
+        const a = resolveName(c.item_a)
+        const b = resolveName(c.item_b)
+        if (!a || !b) return null
+        return {
+          item_a: c.item_a,
+          item_b: c.item_b,
+          item_a_display: a,
+          item_b_display: b,
+          instances: c.n_instances ?? 0,
+          status: c.currently_active ? 'active' : 'approaching',
+        }
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vaniCorrelations, astroRuleNames, astroRulesReady])
 
   // DEBUG — remove after confirming
+  console.log('astroRulesReady:', astroRulesReady, '| rules count:', astroRules?.length)
   console.log('activeOverlays after filter:', activeOverlays)
   console.log('confluences after filter:', confluences)
+  console.log('lookup test CON-SUN-MER-TRN:', astroRuleNames['astro_rule:CON-SUN-MER-TRN'])
 
   const { data: briefData, isLoading: briefLoading } = useVaniDailyBrief(
     profile?.id,
     today,
     activeOverlays,
     confluences,
+    astroRulesReady,   // guard — don't fire until rules are loaded
   )
 
   // Progressive rendering — cards pop in as each resolves
