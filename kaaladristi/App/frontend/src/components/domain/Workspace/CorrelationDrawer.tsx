@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import DataQualityBar, { KNOWN_QUALITY_ISSUES } from '@/components/correlation/DataQualityBar'
 import {
@@ -714,6 +715,7 @@ interface Props {
 }
 
 export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSelectPair }: Props) {
+  const navigate           = useNavigate()
   const correlations       = useFrameworkStore(s => s.vaniCorrelations)
   const dismissCorrelation = useFrameworkStore(s => s.dismissVaNiCorrelation)
 
@@ -814,6 +816,41 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
             />
           )}
         </div>
+
+        {/* Footer — full page link */}
+        {activeCorr && (
+          <div style={{
+            flexShrink: 0,
+            borderTop: '1px solid var(--border)',
+            padding: '12px 16px',
+          }}>
+            <button
+              onClick={() => {
+                onClose()
+                navigate(`/correlation/${activeCorr.item_a}/${activeCorr.item_b}`)
+              }}
+              style={{
+                width: '100%', padding: '9px', borderRadius: 8, fontSize: 12,
+                border: '1px solid var(--accent-dim)',
+                background: 'var(--accent-glow)',
+                color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.borderColor = 'color-mix(in srgb, var(--accent) 50%, transparent)'
+                el.style.background = 'var(--accent-dim)'
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.borderColor = 'var(--accent-dim)'
+                el.style.background = 'var(--accent-glow)'
+              }}
+            >
+              Open full view →
+            </button>
+          </div>
+        )}
       </div>
     </>
   )
