@@ -3695,6 +3695,94 @@ def vani_delete_observation(
     return {'ok': True, 'deleted': deleted, 'item_key': item_key, 'cache_date': cache_date}
 
 
+# ── VaNi Correlation Insight ──────────────────────────────────────────────────
+
+class CorrelationInsightRequest(BaseModel):
+    item_a:             str
+    item_b:             str
+    item_a_display:     str
+    item_b_display:     str
+    item_a_description: str
+    item_b_description: str
+    shape:              str
+    n_instances:        int
+    hit_rate:           float
+    avg_return_5d:      float
+    avg_return_22d:     float
+    currently_active:   bool
+
+
+_corr_insight_cache: dict = {}
+
+
+@app.post('/api/vani/correlation-insight')
+def vani_correlation_insight(
+    req: CorrelationInsightRequest,
+    _uid: str = Depends(_get_current_user_id),
+):
+    pair      = sorted([req.item_a, req.item_b])
+    cache_key = f"corr_insight:{pair[0]}:{pair[1]}:{req.shape}"
+
+    if cache_key in _corr_insight_cache:
+        return {**_corr_insight_cache[cache_key], 'cached': True}
+
+    skill = _AI_SKILLS.get('vani_correlation_insight')
+    if not skill:
+        return {'insight': None, 'cached': False}
+
+    user_message = (
+        f"Combination: {req.item_a_display} ∩ {req.item_b_display}\n"
+        f"Shape: {req.shape}\n\n"
+        f"{req.item_a_display}: {req.item_a_description}\n"
+        f"{req.item_b_display}: {req.item_b_description}\n\n"
+        f"Historical instances on Nifty: {req.n_instances}\n"
+        f"Status: {'active' if req.currently_active else 'approaching'}\n\n"
+        "Explain what this combination means when both conditions are present simultaneously on Nifty."
+    )
+
+    _t0  = time.monotonic()
+    raw  = _ai_complete(system=skill.system, user=user_message, max_tokens=skill.max_tokens,
+                        temperature=0.3, no_think=True)
+    _lat = int((time.monotonic() - _t0) * 1000)
+
+    if not raw:
+        return {'insight': None, 'cached': False}
+
+    _cleaned = _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip())
+    try:
+        result  = json.loads(_cleaned)
+        insight = result.get('insight', '')
+    except Exception:
+        log.warning(f'corr_insight parse failed: {raw[:100]}')
+        return {'insight': None, 'cached': False}
+
+    _forbidden = {'buy', 'sell', 'bullish', 'bearish', 'rise', 'fall',
+                  'predict', 'forecast', 'recommend', 'potential', 'may', 'could'}
+    lower = insight.lower()
+    for word in _forbidden:
+        if word in lower:
+            log.warning(f"corr_insight forbidden word '{word}': {insight[:100]}")
+            return {'insight': None, 'cached': False}
+
+    _corr_insight_cache[cache_key] = {'insight': insight}
+
+    _log_interaction(
+        product='dristiq',
+        endpoint='/api/vani/correlation-insight',
+        user_input=user_message,
+        llm_response=insight,
+        system_prompt=skill.system,
+        context_payload={
+            'item_a': req.item_a, 'item_b': req.item_b,
+            'shape': req.shape, 'n_instances': req.n_instances,
+        },
+        model_version=_AI_MODEL,
+        latency_ms=_lat,
+    )
+
+    return {'insight': insight, 'cached': False}
+
+
 # ── VaNi Intent System ────────────────────────────────────────────────────────
 
 # Single system prompt for all /api/vani/ask calls.
