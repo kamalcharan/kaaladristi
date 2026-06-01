@@ -767,6 +767,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
         {/* Body — scrollable */}
         <div style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           padding: '18px 20px 32px',
         }}>
