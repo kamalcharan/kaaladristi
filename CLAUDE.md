@@ -813,6 +813,7 @@ the pattern applies to all others.
 | EVENT_OVERLAP visualization — untested | Needs two simultaneous astro overlays | When test data available |
 | EVENT_IN_STATE visualization — untested | Needs astro rule + state widget pair | When test data available |
 | Morning brief cache strategy review | Currently in-memory only (lost on restart); Charan to decide: keep as-is, add Redis, or DB-backed cache | Charan to finalize |
+| CatalogDrawer compatibility | Drawer (440px) mounts IndicatorsSection + WidgetsSection directly — both are cramped, not in sync with new catalog UX. Fix: add `compact?: boolean` prop to switch to single-column layout. Deferred from UX sprint. | Next session |
 
 ## Astro Market-Book 2026
 
