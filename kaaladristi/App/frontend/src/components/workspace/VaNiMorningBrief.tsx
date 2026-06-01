@@ -336,12 +336,6 @@ function MorningModal({ items, profile, onClose }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vaniCorrelations, astroRuleNames, astroRulesReady])
 
-  // DEBUG — remove after confirming
-  console.log('astroRulesReady:', astroRulesReady, '| rules count:', astroRules?.length)
-  console.log('activeOverlays after filter:', activeOverlays)
-  console.log('confluences after filter:', confluences)
-  console.log('lookup test CON-SUN-MER-TRN:', astroRuleNames['astro_rule:CON-SUN-MER-TRN'])
-
   const { data: briefData, isLoading: briefLoading } = useVaniDailyBrief(
     profile?.id,
     today,
