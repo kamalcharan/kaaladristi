@@ -797,6 +797,22 @@ the pattern applies to all others.
 - "Mark on chart" — CorrelationDrawer stub button needs to highlight overlap instances on WorkspaceChart (not yet wired)
 - Companion: dristiQ-interaction-spec.md Section 6.4 + 16.6
 
+## Deferred — UX & Story-telling Sprint (June 2026)
+
+| Item | Why deferred | When |
+|------|-------------|------|
+| Morning brief — screener top 3% feed | Depends on screener session | After screener session |
+| Master Frameworks catalog section | Full feature — LLM briefing, admin creation, user templates | Post cashflow |
+| Astro Rules catalog improvements | Separate session | Next astro session |
+| Scanners catalog | Separate session | Next scanners session |
+| LLM inference notes — correlation drawer | Story-telling + LLM session | After this sprint |
+| VaNi catalog explanations via Qwen3 | Use hardcoded texts for now | Post cashflow |
+| Walk mode — mark on chart | Phase 6 | After Walk mode |
+| Save observation — correlation page | Phase 6 | After Walk mode |
+| Screener — filters, dashboard integration, UX rethink | Separate design session | After UX sprint |
+| EVENT_OVERLAP visualization — untested | Needs two simultaneous astro overlays | When test data available |
+| EVENT_IN_STATE visualization — untested | Needs astro rule + state widget pair | When test data available |
+
 ## Astro Market-Book 2026
 
 Three new tables as of migrations 047-050:
