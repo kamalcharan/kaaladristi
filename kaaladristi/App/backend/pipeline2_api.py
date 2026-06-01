@@ -1808,23 +1808,43 @@ def _vani_db_conn():
 
 
 def _get_rule_confidence_for_cid(catalog_item_id: str, conn) -> int:
-    """Return total_occurrences from km_rule_confidence for an astro_rule:RULE_CODE id."""
-    if not catalog_item_id.startswith('astro_rule:'):
-        return 0
-    rule_code = catalog_item_id[len('astro_rule:'):]
+    """Return total_occurrences from km_rule_confidence for a catalog_item_id.
+    Strips 'astro_rule:' prefix, tries case-insensitive match plus hyphen/underscore variant."""
+    # Strip known prefixes
+    rule_code = catalog_item_id
+    for prefix in ('astro_rule:', 'astro_zone:', 'astro_marker:'):
+        if rule_code.startswith(prefix):
+            rule_code = rule_code[len(prefix):]
+            break
+    rule_code = rule_code.upper()
+    rule_code_alt = rule_code.replace('-', '_')
     try:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT c.total_occurrences
                 FROM km_rule_confidence c
                 JOIN km_astro_rule_master r ON r.id = c.rule_id
-                WHERE r.rule_code = %s
+                WHERE UPPER(r.rule_code) IN (%s, %s)
+                ORDER BY c.total_occurrences DESC
                 LIMIT 1
-            """, (rule_code,))
+            """, (rule_code, rule_code_alt))
             row = cur.fetchone()
             return int(row[0]) if row else 0
     except Exception:
         return 0
+
+
+def _resolve_display_name(catalog_item_id: str, active_overlays: list) -> str:
+    """Resolve a catalog_item_id to a human display name.
+    Checks active_overlays first (frontend sends name), then cleans up the raw ID."""
+    for o in active_overlays:
+        if o.get('catalog_item_id') == catalog_item_id:
+            name = o.get('name', '')
+            if name and name != catalog_item_id:
+                return name
+    # Fallback: strip prefix, replace underscores/hyphens with spaces, title-case
+    name = catalog_item_id.split(':')[-1]
+    return name.replace('_', ' ').replace('-', ' ').upper()
 
 
 def _apply_vani_post_filter(observations: list) -> list:
@@ -1881,9 +1901,11 @@ def _generate_single_vani_observation(
         )
 
     elif item_type == 'confluence' and confluence is not None:
+        a = confluence.get('item_a_display') or confluence.get('item_a', '')
+        b = confluence.get('item_b_display') or confluence.get('item_b', '')
         user_msg = (
             f"Generate one observation card for this confluence.\n"
-            f"Item name: {confluence.get('item_a', '')} ∩ {confluence.get('item_b', '')}\n"
+            f"Item name: {a} ∩ {b}\n"
             f"Historical instances: {confluence.get('instances', 0)}\n"
             f"Status: {confluence.get('status', 'detected')}"
         )
@@ -3390,14 +3412,18 @@ def _vani_build_items(active_overlays: list, confluences: list, date_str: str) -
     Build ordered list of items to process for the morning brief.
     Priority: confluences first, then astro rules, then panchang.
     Each item dict: {item_key, item_type, overlay?, confluence?}
+    Confluence items get item_a_display / item_b_display resolved from active_overlays.
     """
     items = []
     for c in confluences[:2]:
         pair = sorted([c.get('item_a', ''), c.get('item_b', '')])
+        c_enriched = dict(c)
+        c_enriched['item_a_display'] = _resolve_display_name(c.get('item_a', ''), active_overlays)
+        c_enriched['item_b_display'] = _resolve_display_name(c.get('item_b', ''), active_overlays)
         items.append({
             'item_key':  f"confluence:{pair[0]}:{pair[1]}:{date_str}",
             'item_type': 'confluence',
-            'confluence': c,
+            'confluence': c_enriched,
         })
     for o in active_overlays:
         if o.get('type') in ('astro_zone', 'astro_marker'):
