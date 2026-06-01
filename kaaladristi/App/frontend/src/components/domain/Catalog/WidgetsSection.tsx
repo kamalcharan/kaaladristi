@@ -46,7 +46,72 @@ function LivePreview({ id }: { id: string }) {
   if (id === 'breadth_roc') return <BreadthRocChart />
   if (id === 'order_flow')  return <OrderFlowWidget  symbolId={1} />
   if (id === 'smart_money') return <SmartMoneyWidget symbolId={1} />
+  if (id === 'six_day_outlook') return <SixDayMock />
+  if (id === 'conviction_flow') return <ConvictionMock />
+  if (id === 'rsi_14')          return <RsiMock />
   return null
+}
+
+// Static visual mocks for locked-only widgets — shown blurred behind overlay
+function SixDayMock() {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const signals = ['↑', '↑↑', '—', '↓', '↑', '↑↑']
+  const colors  = ['#2dd4bf', '#2dd4bf', '#888', '#f87171', '#2dd4bf', '#2dd4bf']
+  return (
+    <div style={{ padding: '10px 4px 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {days.map((d, i) => (
+        <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', width: 24 }}>{d}</span>
+          <div style={{ flex: 1, height: 6, borderRadius: 3, background: `${colors[i]}22` }}>
+            <div style={{ width: `${[60,90,20,35,70,85][i]}%`, height: '100%', borderRadius: 3, background: colors[i], opacity: 0.7 }} />
+          </div>
+          <span style={{ fontSize: 10, color: colors[i], width: 20, textAlign: 'right' }}>{signals[i]}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ConvictionMock() {
+  const bars = [12, 28, 18, 42, 35, 55, 48, 70, 62, 85]
+  return (
+    <div style={{ padding: '10px 4px 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 60 }}>
+        {bars.map((h, i) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+            <div style={{ height: `${h}%`, borderRadius: 2, background: i > 6 ? 'rgba(45,212,191,0.6)' : 'rgba(139,122,248,0.35)' }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>baseline</span>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: '#2dd4bf' }}>surge ↑</span>
+      </div>
+    </div>
+  )
+}
+
+function RsiMock() {
+  const pts = [42, 48, 55, 61, 58, 52, 45, 38, 44, 52, 60, 67, 72, 68, 62]
+  const W = 200, H = 56
+  const toX = (i: number) => (i / (pts.length - 1)) * W
+  const toY = (v: number) => H - ((v - 20) / 60) * H * 0.8 - H * 0.1
+  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
+  return (
+    <div style={{ padding: '10px 4px 4px' }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+        <line x1="0" y1={toY(70).toFixed(1)} x2={W} y2={toY(70).toFixed(1)} stroke="rgba(248,113,113,0.3)" strokeWidth="1" strokeDasharray="3,3" />
+        <line x1="0" y1={toY(30).toFixed(1)} x2={W} y2={toY(30).toFixed(1)} stroke="rgba(45,212,191,0.3)" strokeWidth="1" strokeDasharray="3,3" />
+        <path d={path} fill="none" stroke="#8b7af8" strokeWidth="1.5" strokeLinejoin="round" />
+        <circle cx={toX(pts.length - 1).toFixed(1)} cy={toY(pts[pts.length - 1]).toFixed(1)} r="2.5" fill="#8b7af8" />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'rgba(45,212,191,0.6)' }}>30 OS</span>
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: '#8b7af8' }}>62.4</span>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'rgba(248,113,113,0.6)' }}>70 OB</span>
+      </div>
+    </div>
+  )
 }
 
 function LockedOverlay({ item, onDeepDive }: { item: CatalogItem; onDeepDive: () => void }) {
@@ -122,7 +187,7 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
   }
 
   const hasLivePreview = (id: string) =>
-    ['magic_rs', 'breadth_roc', 'order_flow', 'smart_money'].includes(id)
+    ['magic_rs', 'breadth_roc', 'order_flow', 'smart_money', 'six_day_outlook', 'conviction_flow', 'rsi_14'].includes(id)
 
   return (
     <>
