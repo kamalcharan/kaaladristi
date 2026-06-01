@@ -60,9 +60,10 @@ kaaladristi/
 | `km_data_sync_log` | Pipeline run audit log |
 | `dc_inference` | Planetary DC (Dasha Cycle) inference rules |
 | `dc_lookup` | Lookup values for DC inferences |
-| `km_profiles` | User profiles + roles (RLS-controlled) |
+| `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
+| `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
 
-Latest migration: **072** (`km_migration_072_panchang_windows_columns.sql`)
+Latest migration: **090** (`km_migration_090_tier_subscriptions.sql`)
 
 | Table | Description |
 |---|---|
@@ -268,6 +269,17 @@ non-predictive insights explaining *why* risk is elevated or low in astronomical
 - Always explain in **astronomical terms**, not stock attribution
 - Safe vocabulary: "elevated caution", "favorable window", "structural stress",
   "historically correlated with", "risk is heightened"
+
+### VaNi Confluence Shapes — CorrelationDrawer.tsx
+
+| Shape | Visualization | Test status |
+|---|---|---|
+| `ZONE_CONFLUENCE` | Active callout + Gantt duration bars + 5D return histogram | **Tested** — triggered by default ICP templates |
+| `EVENT_OVERLAP` | Dual SVG track timeline (teal/orange/purple) + stats row + instance list | **UNTESTED** — requires two simultaneous astro rule overlays as chart_overlays |
+| `EVENT_IN_STATE` | Current state callout + conditional return table + event breakdown grid | **UNTESTED** — requires astro rule + magic_rs/order_flow/smart_money/breadth_roc overlay pair |
+| `THRESHOLD_CROSS` | Falls through to plain InstanceList | **UNTESTED** — requires astro rule + rsi_14/rsi_9 overlay pair |
+
+Backend `states[]`: `EVENT_IN_STATE` now returns `state` per instance (from `magic_rs_zone`, `flow_type`, `sniper_inst` level, or `breadth_roc` direction). Frontend shows fallback label "(backend state pending)" if `state` field missing.
 
 ### Adding a New VaNi Skill
 1. Add `_SKILL_SYSTEM` constant + register in `SKILLS` dict in `lib/ai_prompts.py`
@@ -777,6 +789,31 @@ the pattern applies to all others.
 
 ---
 
+## Deferred — UX Review + Story-telling Session
+- Full workspace UX review — story-telling, information hierarchy, user guidance
+- LLM inference notes — replace template strings with Qwen3 calls (temperature 0.3,
+  /no_think) with template fallback on failure. Covers all four correlation shapes.
+- Action Island observations — wire VaNi live state text
+- "Mark on chart" — CorrelationDrawer stub button needs to highlight overlap instances on WorkspaceChart (not yet wired)
+- Companion: dristiQ-interaction-spec.md Section 6.4 + 16.6
+
+## Deferred — UX & Story-telling Sprint (June 2026)
+
+| Item | Why deferred | When |
+|------|-------------|------|
+| Morning brief — screener top 3% feed | Depends on screener session | After screener session |
+| Master Frameworks catalog section | Full feature — LLM briefing, admin creation, user templates | Post cashflow |
+| Astro Rules catalog improvements | Separate session | Next astro session |
+| Scanners catalog | Separate session | Next scanners session |
+| LLM inference notes — correlation drawer | Story-telling + LLM session | After this sprint |
+| VaNi catalog explanations via Qwen3 | Use hardcoded texts for now | Post cashflow |
+| Walk mode — mark on chart | Phase 6 | After Walk mode |
+| Save observation — correlation page | Phase 6 | After Walk mode |
+| Screener — filters, dashboard integration, UX rethink | Separate design session | After UX sprint |
+| EVENT_OVERLAP visualization — untested | Needs two simultaneous astro overlays | When test data available |
+| EVENT_IN_STATE visualization — untested | Needs astro rule + state widget pair | When test data available |
+| Morning brief cache strategy review | Currently in-memory only (lost on restart); Charan to decide: keep as-is, add Redis, or DB-backed cache | Charan to finalize |
+
 ## Astro Market-Book 2026
 
 Three new tables as of migrations 047-050:
@@ -796,3 +833,16 @@ SELECT compute_astro_daily_signals('2026-01-01', '2026-12-31');
 API endpoints:
 - `GET /api/astro/daily-signal?date=YYYY-MM-DD` — single date, includes active_events array
 - `GET /api/astro/signals?from=YYYY-MM-DD&to=YYYY-MM-DD` — range, max 90 days, used by calendar view
+
+---
+
+## Payments
+
+- Provider: Razorpay
+- Keys: `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` (backend, in .env — not committed); `VITE_RAZORPAY_KEY_ID` (frontend public key)
+- Flow: `POST /api/payments/create-order` → Razorpay checkout modal → `POST /api/payments/verify` → tier upgrade in `km_profiles` + row in `user_subscriptions`
+- Frontend service: `src/services/razorpayService.ts` — `createOrder`, `openCheckout`, `verifyPayment`
+- Test mode: use Razorpay test keys during development (`rzp_test_*`)
+- Live keys: Charan provides before production launch
+- On successful verify: `km_profiles.tier` updated, `user_subscriptions` row inserted with `expires_at`
+- After verify: frontend calls `refreshProfile()` → gate disappears, beta/paid UI activates automatically

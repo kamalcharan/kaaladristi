@@ -87,18 +87,18 @@ function changeColor(pct: number | null, isVix: boolean): string {
   if (pct == null) return 'var(--text-faint)';
   const positive = isVix ? pct < 0 : pct > 0;
   const negative = isVix ? pct > 0 : pct < 0;
-  if (positive) return '#22c55e';
-  if (negative) return '#ef4444';
+  if (positive) return 'var(--bull)';
+  if (negative) return 'var(--bear)';
   return 'var(--text-faint)';
 }
 
 function rsiColor(rsi: number | null): string {
   if (rsi == null) return 'var(--text-faint)';
-  if (rsi >= 70) return '#ef4444';
-  if (rsi >= 60) return '#f59e0b';
-  if (rsi >= 40) return '#22c55e';
-  if (rsi >= 30) return '#f59e0b';
-  return '#ef4444';
+  if (rsi >= 70) return 'var(--bear)';
+  if (rsi >= 60) return 'var(--caution)';
+  if (rsi >= 40) return 'var(--bull)';
+  if (rsi >= 30) return 'var(--caution)';
+  return 'var(--bear)';
 }
 
 function deriveZone(magic_rs: number | null, magic_ma: number | null): string | null {
@@ -115,13 +115,13 @@ function deriveZone(magic_rs: number | null, magic_ma: number | null): string | 
 
 function zoneColor(zone: string | null): string {
   switch (zone) {
-    case 'Strong Bull':  return '#22c55e';
-    case 'Mild Bull':    return '#86efac';
-    case 'Neutral Bull': return '#bbf7d0';
+    case 'Strong Bull':  return 'var(--bull)';
+    case 'Mild Bull':    return 'var(--bull)';
+    case 'Neutral Bull': return 'var(--bull)';
     case 'Neutral':      return 'var(--text-faint)'; // legacy
-    case 'Neutral Bear': return '#fecaca';
-    case 'Mild Bear':    return '#fca5a5';
-    case 'Strong Bear':  return '#ef4444';
+    case 'Neutral Bear': return 'var(--bear)';
+    case 'Mild Bear':    return 'var(--bear)';
+    case 'Strong Bear':  return 'var(--bear)';
     default:             return 'var(--text-faint)';
   }
 }

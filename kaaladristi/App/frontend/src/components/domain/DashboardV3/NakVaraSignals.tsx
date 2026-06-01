@@ -46,15 +46,15 @@ const OUTCOME_LABEL: Record<string, string> = {
 };
 
 const OUTCOME_COLOR: Record<string, string> = {
-  strong_bullish: '#22c55e',
-  bullish:        '#22c55e',
-  mild_bullish:   '#4ade80',
+  strong_bullish: 'var(--bull)',
+  bullish:        'var(--bull)',
+  mild_bullish:   'var(--bull)',
   neutral:        '#94a3b8',
-  turning:        '#f59e0b',
-  mild_bearish:   '#f87171',
-  bearish:        '#ef4444',
-  strong_bearish: '#ef4444',
-  volatile:       '#f59e0b',
+  turning:        'var(--caution)',
+  mild_bearish:   'var(--bear)',
+  bearish:        'var(--bear)',
+  strong_bearish: 'var(--bear)',
+  volatile:       'var(--caution)',
 };
 
 const RULE_TYPE_ORDER: Record<string, number> = {
@@ -161,7 +161,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
             fontFamily: 'var(--font-mono)',
             fontSize: 10,
             fontWeight: 600,
-            color: confPct >= 60 ? '#22c55e' : confPct >= 40 ? '#f59e0b' : '#94a3b8',
+            color: confPct >= 60 ? 'var(--bull)' : confPct >= 40 ? 'var(--caution)' : '#94a3b8',
           }}>
             {confPct}%
           </span>
@@ -195,9 +195,9 @@ function SectionDivider({ label }: { label: string }) {
       fontSize: 8,
       letterSpacing: '0.16em',
       textTransform: 'uppercase',
-      color: '#D4A853',
-      background: 'rgba(212,168,83,0.05)',
-      borderBottom: '1px solid rgba(212,168,83,0.12)',
+      color: 'var(--gold)',
+      background: 'var(--gold-bg)',
+      borderBottom: '1px solid color-mix(in srgb, var(--gold) 12%, transparent)',
     }}>
       {label}
     </div>
@@ -268,17 +268,17 @@ export default function NakVaraSignals({ date }: { date: string }) {
         {summary && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {summary.bullish > 0 && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#22c55e' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--bull)' }}>
                 {summary.bullish}▲
               </span>
             )}
             {summary.bearish > 0 && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#ef4444' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--bear)' }}>
                 {summary.bearish}▼
               </span>
             )}
             {summary.turning > 0 && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#f59e0b' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--caution)' }}>
                 {summary.turning}◈
               </span>
             )}
@@ -302,7 +302,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
 
       {isError && (
         <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#ef4444', letterSpacing: '0.1em' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--bear)', letterSpacing: '0.1em' }}>
             SIGNAL DATA UNAVAILABLE
           </span>
         </div>

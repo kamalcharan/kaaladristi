@@ -432,13 +432,13 @@ export default function IntradayPage() {
             {/* Dev-only LP signal toggle — for QA of all 7 conflict cases */}
             {isDev && (
               <div style={{
-                border: '1px dashed var(--accent-violet, #9B6BC0)',
+                border: '1px dashed var(--accent-violet)',
                 borderRadius: 4, padding: 8, marginTop: 4,
-                background: 'rgba(155, 107, 192, 0.06)',
+                background: 'color-mix(in srgb, var(--accent-violet) 6%, transparent)',
               }}>
                 <div style={{
                   fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
-                  color: 'var(--accent-violet, #9B6BC0)', letterSpacing: '0.1em',
+                  color: 'var(--accent-violet)', letterSpacing: '0.1em',
                   marginBottom: 6,
                 }}>DEV · MOCK LP SIGNAL</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -458,12 +458,12 @@ export default function IntradayPage() {
                         fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
                         padding: '3px 6px', borderRadius: 2, cursor: 'pointer',
                         background: lpDebug.score === opt.score && lpDebug.dot === opt.dot
-                          ? 'var(--accent-violet, #9B6BC0)'
+                          ? 'var(--accent-violet)'
                           : 'transparent',
                         color: lpDebug.score === opt.score && lpDebug.dot === opt.dot
                           ? 'var(--kd-bg)'
                           : 'var(--text-muted)',
-                        border: '1px solid var(--accent-violet, #9B6BC0)',
+                        border: '1px solid var(--accent-violet)',
                       }}
                     >{opt.label}</button>
                   ))}

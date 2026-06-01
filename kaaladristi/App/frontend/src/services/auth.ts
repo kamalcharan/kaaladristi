@@ -114,6 +114,19 @@ export async function resetPassword(token: string, newPassword: string): Promise
   return data.message;
 }
 
+/** Change password for the currently authenticated user. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<string> {
+  const { data, error } = await rpc('kd_auth_change_password', {
+    p_current_password: currentPassword,
+    p_new_password: newPassword,
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+
+  return data.message;
+}
+
 /** Get current session from localStorage. */
 export async function getSession(): Promise<KdSession | null> {
   return getStoredSession();
@@ -147,7 +160,7 @@ export async function getProfile(): Promise<KmProfile | null> {
  *  Uses upsert so it works whether or not the km_profiles row already exists
  *  (e.g. immediately after a fresh registration). */
 export async function updateProfile(
-  updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded'>>,
+  updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded' | 'theme'>>,
 ) {
   const user = getUser();
   if (!user) throw new Error('Not authenticated');

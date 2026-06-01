@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { from } from '@/services/postgrest'
@@ -7,6 +8,7 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
+import InlineGate from '@/components/workspace/InlineGate'
 
 // ── Shared types (exported for section components) ────────────────────────────
 
@@ -82,9 +84,9 @@ function fmt(n: number | null | undefined, digits = 1, suffix = ''): string {
 
 function outcomeColor(s: string | null): string {
   if (!s) return 'var(--text-muted)'
-  if (s.includes('bull'))  return '#4ade80'
-  if (s.includes('bear'))  return '#f87171'
-  if (s === 'volatile' || s === 'turning') return '#c9a84c'
+  if (s.includes('bull'))  return 'var(--bull)'
+  if (s.includes('bear'))  return 'var(--bear)'
+  if (s === 'volatile' || s === 'turning') return 'var(--gold)'
   return 'var(--text-secondary)'
 }
 
@@ -122,7 +124,7 @@ function YearlyBars({ rows }: { rows: RuleConfYearly[] }) {
         const x = 16 + i * (BAR_W + BAR_GAP)
         const pct = row.win_pct ?? 0
         const barH = Math.max(2, (pct / maxPct) * H)
-        const color = pct >= 65 ? '#4ade80' : pct >= 50 ? '#c9a84c' : '#f87171'
+        const color = pct >= 65 ? 'var(--bull)' : pct >= 50 ? 'var(--gold)' : 'var(--bear)'
         return (
           <g key={row.year}>
             <rect
@@ -208,12 +210,12 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         marginBottom: 18,
         padding: '8px 12px',
         borderRadius: 6,
-        background: isRange ? 'rgba(124,106,247,0.06)' : 'rgba(201,168,76,0.06)',
-        border: `1px solid ${isRange ? 'rgba(124,106,247,0.2)' : 'rgba(201,168,76,0.2)'}`,
+        background: isRange ? 'var(--accent-glow)' : 'var(--gold-bg)',
+        border: `1px solid ${isRange ? 'var(--accent-dim)' : 'var(--gold-bg)'}`,
         fontSize: 11,
         color: 'var(--text-secondary)',
       }}>
-        <span style={{ color: isRange ? '#8b7af8' : '#c9a84c', fontFamily: 'var(--font-mono, monospace)', fontSize: 9 }}>
+        <span style={{ color: isRange ? 'var(--accent)' : 'var(--gold)', fontFamily: 'var(--font-mono, monospace)', fontSize: 9 }}>
           {isRange ? 'CHART OVERLAY' : 'PANEL BLOCK'}
         </span>
         {' — '}
@@ -302,8 +304,8 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
                   <span style={{ color: 'var(--text-muted)' }}>{row.year}</span>
                   <span style={{
                     color: (row.win_pct ?? 0) >= 65
-                      ? '#4ade80' : (row.win_pct ?? 0) >= 50
-                      ? '#c9a84c' : '#f87171',
+                      ? 'var(--bull)' : (row.win_pct ?? 0) >= 50
+                      ? 'var(--gold)' : 'var(--bear)',
                   }}>
                     {fmt(row.win_pct, 0, '%')} win
                   </span>
@@ -329,9 +331,9 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
           padding: '9px 14px',
           marginBottom: 18,
           borderRadius: 8,
-          border: '1px solid rgba(124,106,247,0.28)',
-          background: 'rgba(124,106,247,0.06)',
-          color: '#8b7af8',
+          border: '1px solid var(--accent-dim)',
+          background: 'var(--accent-glow)',
+          color: 'var(--accent)',
           fontSize: 12,
           cursor: 'pointer',
           fontFamily: 'inherit',
@@ -340,13 +342,13 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         }}
         onMouseEnter={e => {
           const el = e.currentTarget as HTMLElement
-          el.style.borderColor = 'rgba(124,106,247,0.5)'
-          el.style.background = 'rgba(124,106,247,0.12)'
+          el.style.borderColor = 'color-mix(in srgb, var(--accent) 50%, transparent)'
+          el.style.background = 'var(--accent-dim)'
         }}
         onMouseLeave={e => {
           const el = e.currentTarget as HTMLElement
-          el.style.borderColor = 'rgba(124,106,247,0.28)'
-          el.style.background = 'rgba(124,106,247,0.06)'
+          el.style.borderColor = 'var(--accent-dim)'
+          el.style.background = 'var(--accent-glow)'
         }}
       >
         Full Analysis →
@@ -354,8 +356,8 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
 
       {/* VaNi placeholder */}
       <div style={{
-        background: 'rgba(124,106,247,0.06)',
-        border: '1px solid rgba(124,106,247,0.18)',
+        background: 'var(--accent-glow)',
+        border: '1px solid var(--accent-glow)',
         borderRadius: 8,
         padding: '12px 14px',
         display: 'flex',
@@ -380,17 +382,69 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
   )
 }
 
+const SWATCH_PALETTE_DP = [
+  '#7c6af7', '#a78bfa', '#c084fc', '#e879f9',
+  '#4ade80', '#2dd4bf', '#38bdf8', '#60a5fa',
+  '#fb923c', '#f59e0b', '#facc15', '#a3e635',
+  '#f43f5e', '#fb7185', '#94a3b8', '#e2e8f0',
+]
+
+const INDICATOR_DEFAULTS_DP: Record<string, string> = {
+  ema_20: '#7c6af7', ema_60: '#4ade80', sma_50: '#fb923c',
+  sma_150: '#f59e0b', sma_200: '#f43f5e', supertrend: '#2dd4bf',
+  pivot_levels: '#94a3b8', atr_14: '#c084fc', rsi_14: '#60a5fa',
+}
+
 // ── Mode B — Catalog Item body ────────────────────────────────────────────────
 
 function CatalogItemBody({ item }: { item: CatalogItem }) {
+  const [color, setColor] = useState(INDICATOR_DEFAULTS_DP[item.id] ?? '#7c6af7')
+  const isChartOverlay = item.placement === 'chart_overlay'
+  const isSupertrend   = item.id === 'supertrend'
+
   return (
     <>
-      {/* Description */}
-      <div style={{ marginBottom: 18 }}>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-          {item.description}
-        </p>
-      </div>
+      {/* Color section — chart overlays only */}
+      {isChartOverlay && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={SEC_LABEL}>Chart Color</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            {/* Color preview */}
+            <div style={{
+              width: 36, height: 36, borderRadius: 6, flexShrink: 0,
+              background: isSupertrend
+                ? 'linear-gradient(135deg, #2dd4bf 50%, #f43f5e 50%)'
+                : color,
+              border: '1px solid rgba(255,255,255,0.12)',
+            }} />
+            {/* Swatches */}
+            {!isSupertrend && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 5 }}>
+                {SWATCH_PALETTE_DP.map(s => (
+                  <button
+                    key={s}
+                    title={s}
+                    onClick={() => setColor(s)}
+                    style={{
+                      width: 20, height: 20, borderRadius: 4,
+                      background: s,
+                      border: s === color
+                        ? '2px solid rgba(255,255,255,0.8)'
+                        : '1px solid rgba(255,255,255,0.1)',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            {isSupertrend
+              ? 'SuperTrend uses bull/bear colors from your theme — not configurable.'
+              : 'This color appears on your chart. You can change it anytime from the overlay pill strip.'}
+          </p>
+        </div>
+      )}
 
       {/* Metadata grid */}
       <div style={{ marginBottom: 18 }}>
@@ -406,18 +460,14 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
           ].map(({ label, value }) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <span style={{
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono, monospace)',
-                flexShrink: 0,
+                fontSize: 11, color: 'var(--text-muted)',
+                fontFamily: 'var(--font-mono, monospace)', flexShrink: 0,
               }}>
                 {label}
               </span>
               <span style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono, monospace)',
-                textAlign: 'right',
+                fontSize: 11, color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono, monospace)', textAlign: 'right',
               }}>
                 {value}
               </span>
@@ -426,30 +476,86 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
         </div>
       </div>
 
-      {/* VaNi placeholder */}
-      <div style={{
-        background: 'rgba(124,106,247,0.06)',
-        border: '1px solid rgba(124,106,247,0.18)',
-        borderRadius: 8,
-        padding: '12px 14px',
-        display: 'flex',
-        gap: 10,
-        alignItems: 'flex-start',
-      }}>
-        <div style={{
-          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-          background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, fontWeight: 700, color: '#fff',
-          fontFamily: 'var(--font-mono, monospace)',
-        }}>
-          Vᴺ
+      {/* VaNi explanation — populated items */}
+      {item.vani_explanation ? (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, fontWeight: 700, color: '#fff',
+                fontFamily: 'var(--font-mono, monospace)',
+              }}>
+                Vᴺ
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>VaNi explains</span>
+            </div>
+            <span style={{
+              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              color: 'var(--text-faint)', letterSpacing: '0.04em',
+            }}>
+              cached · updated rarely
+            </span>
+          </div>
+
+          <div style={{
+            background: 'var(--accent-glow)',
+            border: '1px solid var(--accent-glow)',
+            borderRadius: 8, padding: '12px 14px',
+          }}>
+            <p style={{
+              fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7,
+              margin: 0, marginBottom: item.vani_tags?.length ? 12 : 0,
+              fontStyle: 'italic',
+            }}>
+              {item.vani_explanation}
+            </p>
+
+            {/* Works / Limits tags */}
+            {item.vani_tags && item.vani_tags.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {item.vani_tags.map((tag, i) => (
+                  <span key={i} style={{
+                    padding: '3px 8px', borderRadius: 4, fontSize: 10,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    background: tag.type === 'works'
+                      ? 'rgba(45,212,191,0.07)' : 'rgba(239,68,68,0.07)',
+                    border: `1px solid ${tag.type === 'works' ? 'rgba(45,212,191,0.18)' : 'rgba(239,68,68,0.18)'}`,
+                    color: tag.type === 'works' ? 'var(--bull)' : 'var(--bear)',
+                  }}>
+                    {tag.type === 'works' ? '✓' : '✗'} {tag.text}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-          VaNi will explain <em style={{ color: 'var(--gold)', fontStyle: 'normal' }}>when and why</em> to
-          use this indicator in the context of current market astro conditions.
-        </p>
-      </div>
+      ) : (
+        /* VaNi placeholder for items without explanation yet */
+        <div style={{
+          background: 'var(--accent-glow)',
+          border: '1px solid var(--accent-glow)',
+          borderRadius: 8, padding: '12px 14px',
+          display: 'flex', gap: 10, alignItems: 'flex-start',
+          marginBottom: 18,
+        }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+            background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 9, fontWeight: 700, color: '#fff',
+            fontFamily: 'var(--font-mono, monospace)',
+          }}>
+            Vᴺ
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            VaNi will explain <em style={{ color: 'var(--gold)', fontStyle: 'normal' }}>when and why</em> to
+            use this indicator in the context of current market astro conditions.
+          </p>
+        </div>
+      )}
     </>
   )
 }
@@ -477,6 +583,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
   const isPaid = PAID_TIERS.includes(profile?.tier as never)
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
   const { addToFramework } = useAddToFramework()
+  const [gateOpen, setGateOpen] = useState(false)
 
   const isOpen = item !== null
 
@@ -526,7 +633,8 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
       if (isRange) addOverlay(syntheticItem)
       else addBlock(syntheticItem)
     } else {
-      addToFramework(item.item.id)
+      const r = addToFramework(item.item.id)
+      if (r.reason === 'tier_gate') setGateOpen(true)
     }
   }
 
@@ -556,7 +664,8 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           bottom: 0,
           width: 380,
           background: 'var(--bg-card, #0d1117)',
-          borderLeft: '1px solid var(--border)',
+          borderLeft: '2px solid rgba(201,168,76,0.35)',
+          boxShadow: '-8px 0 32px rgba(0,0,0,0.5), -2px 0 0 rgba(201,168,76,0.12)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 300,
@@ -659,8 +768,9 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
         {/* Body — scrollable */}
         <div style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
-          padding: '18px 20px',
+          padding: '18px 20px 32px',
         }}>
           {item?.mode === 'astro_rule' && <AstroRuleBody item={item} onClose={onClose} />}
           {item?.mode === 'catalog_item' && <CatalogItemBody item={item.item} />}
@@ -671,12 +781,43 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           padding: '14px 20px',
           borderTop: '1px solid var(--border)',
           flexShrink: 0,
+          display: 'flex',
+          gap: 8,
+          alignItems: 'stretch',
         }}>
+          <button
+            onClick={onClose}
+            style={{
+              flexShrink: 0,
+              width: 40,
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              background: 'rgba(255,255,255,0.03)',
+              color: 'var(--text-secondary)',
+              fontSize: 16,
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'rgba(255,255,255,0.07)'
+              el.style.borderColor = 'rgba(255,255,255,0.18)'
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'rgba(255,255,255,0.03)'
+              el.style.borderColor = 'var(--border)'
+            }}
+            title="Close panel"
+          >
+            ✕
+          </button>
           <button
             onClick={!cta.active && !cta.locked ? handleAdd : undefined}
             disabled={cta.locked}
             style={{
-              width: '100%',
+              flex: 1,
               padding: '13px',
               border: 'none',
               borderRadius: 10,
@@ -702,7 +843,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
             onMouseEnter={e => {
               if (!cta.active && !cta.locked) {
                 (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'
-                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px rgba(124,106,247,0.5)'
+                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px color-mix(in srgb, var(--accent) 50%, transparent)'
               }
             }}
             onMouseLeave={e => {
@@ -716,6 +857,12 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           </button>
         </div>
       </div>
+
+      <InlineGate
+        context="add_rule"
+        isOpen={gateOpen}
+        onDismiss={() => setGateOpen(false)}
+      />
     </>
   )
 }

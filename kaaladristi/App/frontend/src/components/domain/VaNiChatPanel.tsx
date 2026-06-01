@@ -134,8 +134,8 @@ export default function VaNiChatPanel() {
       className={cn(
         'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all group',
         variant === 'primary'
-          ? 'bg-[#1e1b4b]/60 border-2 border-[var(--accent-indigo)]/20 hover:border-[var(--accent-indigo)]/50 hover:bg-[#1e1b4b]/80'
-          : 'bg-[#1e1b4b]/30 border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 hover:bg-[#1e1b4b]/50',
+          ? 'bg-[var(--bg)]/60 border-2 border-[var(--accent-indigo)]/20 hover:border-[var(--accent-indigo)]/50 hover:bg-[var(--bg)]/80'
+          : 'bg-[var(--bg)]/30 border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 hover:bg-[var(--bg)]/50',
         askMutation.isPending && 'opacity-40 cursor-not-allowed',
       )}
     >
@@ -175,7 +175,7 @@ export default function VaNiChatPanel() {
         )}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[#0f0d22]">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[var(--bg)]">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
             <span className="text-white text-sm font-serif font-bold">V</span>
           </div>

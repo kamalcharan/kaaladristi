@@ -212,6 +212,9 @@ class CalendarMarkRequest(BaseModel):
 
 class VaNiDailyRequest(BaseModel):
     date: Optional[str] = None    # YYYY-MM-DD; defaults to today (IST)
+    user_id: Optional[str] = None
+    active_overlays: Optional[list] = []
+    confluences: Optional[list] = []
 
 
 class VaNiFeedbackRequest(BaseModel):
@@ -1769,27 +1772,199 @@ def panchang_note_delete(note_id: int):
 
 _insight_cache: dict[str, object] = {}
 
-_vani_cache: dict[str, dict] = {}
 _intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
-_VANI_CACHE_TTL_HOURS = 24
 
-_VANI_SYSTEM_PROMPT = """You are VaNi (Vāṇī), the voice of knowledge for DristiQ — \
-a Vedic astronomical market intelligence platform for Indian traders.
+_VANI_MORNING_SYSTEM = """You are VaNi, DristiQ's market intelligence agent. /no_think
 
-Your role: Generate factual, educational, non-predictive explanations of astronomical \
-conditions and their historical correlation with NSE market behavior.
+Output valid JSON only. No markdown. No preamble. No explanation outside the JSON.
 
-Rules:
-- Never use: buy, sell, bullish, bearish, up, down, rise, fall
-- Use: positive correlation, negative correlation, historically associated, \
-  recorded instances, atmospheric conditions
-- Always cite data when available (occurrences, %)
-- Maximum 4 sentences
-- End with macro backdrop context
-- Use astronomical terminology: vara, nakshatra, tithi, paksha, combust, \
-  retrograde, conjunction, vedh
-- Tone: scholarly, observational, non-advisory
-- Language: English with Sanskrit terms where natural"""
+For each item in the list provided, generate exactly one observation card.
+
+JSON format:
+{"observations":[{"type":"panchang|astro|confluence","title":"[exact item name from list]","description":"[current status only — 1 sentence]","badge":"[N instances OR N signals OR Day N of N]","action_label":"View history →"}]}
+
+Absolute rules:
+1. Title must be the exact item name from the list — never rename, never combine
+2. Badge contains the count. Description must NOT repeat the count — state only the current status.
+   Examples of correct descriptions:
+   - "Active today as chart overlay."
+   - "Both overlays are currently active in your framework."
+   - "Panchak period is active today."
+   - "13 rule signals active today." (panchang only — signals count belongs in description for panchang)
+3. Forbidden: predict, forecast, may, potential, impact, influence, trend, direction, develop, monitor, watch, assess, suggest, indicate, heightened, significant, dynamics, interplay, intellectual, recalibration
+4. Never invent counts — only use numbers explicitly given
+5. Panchang card title = "Today's Panchang". Never use vara/nakshatra/tithi as observation titles.
+6. Confluence title = "ItemA ∩ ItemB" exactly."""
+
+_VANI_FORBIDDEN_WORDS = frozenset({
+    'monitor', 'watch', 'assess', 'develop', 'potential', 'may', 'could',
+    'suggest', 'indicate', 'heightened', 'significant', 'dynamics',
+    'interplay', 'intellectual', 'recalibration', 'predict', 'forecast',
+    'impact', 'influence', 'trend', 'direction',
+})
+
+
+def _vani_db_conn():
+    """Return a fresh psycopg2 connection to vani_db. Callers must close."""
+    url = os.getenv('VANI_DB_URL', '')
+    if not url:
+        raise RuntimeError('VANI_DB_URL not configured')
+    return psycopg2.connect(url, connect_timeout=10)
+
+
+def _get_rule_confidence_for_cid(catalog_item_id: str, conn) -> int:
+    """Return total_occurrences from km_rule_confidence for a catalog_item_id.
+    Strips 'astro_rule:' prefix, tries case-insensitive match plus hyphen/underscore variant."""
+    # Strip known prefixes
+    rule_code = catalog_item_id
+    for prefix in ('astro_rule:', 'astro_zone:', 'astro_marker:'):
+        if rule_code.startswith(prefix):
+            rule_code = rule_code[len(prefix):]
+            break
+    rule_code = rule_code.upper()
+    rule_code_alt = rule_code.replace('-', '_')
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT c.total_occurrences
+                FROM km_rule_confidence c
+                JOIN km_astro_rule_master r ON r.id = c.rule_id
+                WHERE UPPER(r.rule_code) IN (%s, %s)
+                ORDER BY c.total_occurrences DESC
+                LIMIT 1
+            """, (rule_code, rule_code_alt))
+            row = cur.fetchone()
+            return int(row[0]) if row else 0
+    except Exception:
+        return 0
+
+
+def _resolve_display_name(catalog_item_id: str, active_overlays: list) -> str:
+    """Resolve a catalog_item_id to a human display name.
+    Checks active_overlays first (frontend sends name), then cleans up the raw ID."""
+    for o in active_overlays:
+        if o.get('catalog_item_id') == catalog_item_id:
+            name = o.get('name', '')
+            if name and name != catalog_item_id:
+                return name
+    # Fallback: strip prefix, replace underscores/hyphens with spaces, title-case
+    name = catalog_item_id.split(':')[-1]
+    return name.replace('_', ' ').replace('-', ' ').upper()
+
+
+def _apply_vani_post_filter(observations: list) -> list:
+    """Replace any description containing forbidden words with a safe fallback."""
+    for obs in observations:
+        desc = obs.get('description', '')
+        if any(w in desc.lower().split() for w in _VANI_FORBIDDEN_WORDS):
+            badge = obs.get('badge', '')
+            title = obs.get('title', 'This item')
+            obs['description'] = (
+                f"{title} has {badge} on record and is currently active."
+                if badge else f"{title} is currently active."
+            )
+    return observations
+
+
+def _generate_single_vani_observation(
+    item_type: str,       # 'panchang' | 'astro' | 'confluence'
+    item_key: str,
+    date_str: str,
+    panchang: tuple,
+    total_signals: int,
+    positive: int,
+    negative: int,
+    overlay: dict | None = None,        # for astro items
+    confluence: dict | None = None,     # for confluence items
+    main_conn=None,
+) -> dict | None:
+    """One LLM call for one item. Returns a single observation dict or None."""
+    import json as _json, re as _re
+    vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
+
+    if item_type == 'panchang':
+        user_msg = (
+            f"Generate one observation card for today's panchang.\n"
+            f"Date: {date_str}\n"
+            f"Vara: {vara} (lord: {vara_lord})\n"
+            f"Nakshatra: {nak_name}\n"
+            f"Tithi: {tithi} {paksha}\n"
+            f"Yoga: {yoga}\n"
+            f"Rule signals: {total_signals} total ({positive} positive · {negative} negative)\n"
+            f"Item name: Today's Panchang"
+        )
+
+    elif item_type == 'astro' and overlay is not None:
+        cid  = overlay.get('catalog_item_id', '')
+        name = overlay.get('name', cid)
+        n    = _get_rule_confidence_for_cid(cid, main_conn) if main_conn else 0
+        user_msg = (
+            f"Generate one observation card for this astro rule.\n"
+            f"Item name: {name}\n"
+            f"Badge (instance count): {n} instances\n"
+            f"Description (current status only, do not repeat the count): Active today as chart overlay."
+        )
+
+    elif item_type == 'confluence' and confluence is not None:
+        a = confluence.get('item_a_display') or confluence.get('item_a', '')
+        b = confluence.get('item_b_display') or confluence.get('item_b', '')
+        status = confluence.get('status', 'detected')
+        n = confluence.get('instances', 0)
+        status_sentence = (
+            'Both overlays are currently active in your framework.'
+            if status == 'active'
+            else 'Both overlays are approaching simultaneous activation.'
+        )
+        user_msg = (
+            f"Generate one observation card for this confluence.\n"
+            f"Item name: {a} ∩ {b}\n"
+            f"Badge (instance count): {n} instances\n"
+            f"Description (current status only, do not repeat the count): {status_sentence}"
+        )
+
+    else:
+        return None
+
+    _t0 = time.monotonic()
+    raw = _ai_complete(
+        system=_VANI_MORNING_SYSTEM, user=user_msg, max_tokens=160,
+        temperature=0.3, no_think=True,
+    )
+    _latency = int((time.monotonic() - _t0) * 1000)
+
+    if not raw:
+        return None
+
+    _cleaned = _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip())
+    try:
+        parsed = _json.loads(_cleaned)
+        # Accept both {"observations":[...]} and direct {...}
+        if 'observations' in parsed and parsed['observations']:
+            obs = parsed['observations'][0]
+        elif 'type' in parsed:
+            obs = parsed
+        else:
+            return None
+    except Exception:
+        log.warning(f'_generate_single_vani_observation parse failed ({item_key}): {raw[:200]}')
+        return None
+
+    obs = _apply_vani_post_filter([obs])[0]
+
+    _log_interaction(
+        product="dristiq",
+        endpoint="/api/vani/daily",
+        user_input=user_msg,
+        llm_response=raw,
+        system_prompt=_VANI_MORNING_SYSTEM,
+        context_payload={"item_key": item_key, "item_type": item_type},
+        model_version=_AI_MODEL,
+        latency_ms=_latency,
+    )
+
+    return obs
+
+
 _db_singleton = None
 
 
@@ -1896,9 +2071,21 @@ def breadth_insight(date: str = None):
     skill = _AI_SKILLS.get("breadth_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
+    _t0_b = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_b = int((time.monotonic() - _t0_b) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/breadth-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"date": target_date, "score": score, "regime": regime, "trend": trend},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_b,
+        )
     return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
@@ -1939,9 +2126,21 @@ def breadth_roc_insight():
     skill = _AI_SKILLS.get("breadth_roc_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
+    _t0_roc = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_roc = int((time.monotonic() - _t0_roc) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/breadth-roc-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"date": target_date, "roc13": roc13, "roc55": roc55, "trend": trend},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_roc,
+        )
     return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
@@ -1961,9 +2160,21 @@ def instrument_insight(id: int, type: str = 'index', date: str = None):
         return {"id": id, "type": type, "date": date, "insight": None, "ai": False, "alignment": ""}
     from pipeline_api import _fmt_instrument_msg  # reuse formatting helper
     user_msg = _fmt_instrument_msg(ctx)
+    _t0_inst = time.monotonic()
     insight  = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_inst = int((time.monotonic() - _t0_inst) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/instrument-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"id": id, "type": type, "date": ctx.get('date', date)},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_inst,
+        )
     alignment = ctx.get('alignment', {}).get('status', '')
     return {"id": id, "type": type, "date": ctx.get('date', date),
             "insight": insight, "ai": insight is not None, "alignment": alignment}
@@ -1984,9 +2195,21 @@ def market_pulse_insight(date: str = None):
         return {"date": date, "insight": None, "ai": False, "astro_direction": ""}
     from pipeline_api import _fmt_market_pulse_msg  # reuse formatting helper
     user_msg      = _fmt_market_pulse_msg(ctx)
+    _t0_mp = time.monotonic()
     insight       = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_mp = int((time.monotonic() - _t0_mp) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/market-pulse-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"date": ctx.get('date', date)},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_mp,
+        )
     astro_dir = ctx.get('astro', {}).get('direction', '')
     return {"date": ctx.get('date', date), "insight": insight,
             "ai": insight is not None, "astro_direction": astro_dir}
@@ -3102,103 +3325,361 @@ def equity_magic_rs(symbol: str, from_date: str = '2025-01-01'):
 
 # ── VaNi Daily Interpretation ─────────────────────────────────────────────────
 
+def _check_panchak_active(conn, date_str: str) -> dict | None:
+    """Returns { day, total_days } if panchak is active on date_str, else None."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT s.date, r.id
+                FROM km_rule_signals s
+                JOIN km_astro_rule_master r ON r.id = s.rule_id
+                WHERE s.date = %s
+                  AND r.is_active = TRUE
+                  AND r.is_deleted = FALSE
+                  AND (LOWER(r.rule_code) LIKE '%%panchak%%'
+                       OR LOWER(r.remarks) LIKE '%%panchak%%'
+                       OR LOWER(r.display_name) LIKE '%%panchak%%')
+                LIMIT 1
+            """, (date_str,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            # Find the contiguous panchak window to get day/total
+            cur.execute("""
+                WITH panchak_signals AS (
+                    SELECT s.date
+                    FROM km_rule_signals s
+                    JOIN km_astro_rule_master r ON r.id = s.rule_id
+                    WHERE r.id = %s
+                      AND r.is_active = TRUE
+                    ORDER BY s.date
+                ),
+                grouped AS (
+                    SELECT date,
+                           date - (ROW_NUMBER() OVER (ORDER BY date) * INTERVAL '1 day') AS grp
+                    FROM panchak_signals
+                )
+                SELECT MIN(date) AS start_date, MAX(date) AS end_date,
+                       COUNT(*) AS total_days
+                FROM grouped
+                WHERE %s::date BETWEEN MIN(date) AND MAX(date)
+                   OR grp = (SELECT grp FROM grouped WHERE date = %s::date LIMIT 1)
+                GROUP BY grp
+                HAVING %s::date BETWEEN MIN(date) AND MAX(date)
+                LIMIT 1
+            """, (row[1], date_str, date_str, date_str))
+            window = cur.fetchone()
+            if window:
+                start_date, end_date, total_days = window
+                import datetime as dt
+                day_num = (dt.date.fromisoformat(date_str) - start_date).days + 1
+                return {'day': day_num, 'total_days': int(total_days)}
+            return {'day': 1, 'total_days': 5}  # panchak is always 5 days
+    except Exception:
+        return None
+
+
+def _vani_cache_read(item_keys: list, date_str: str) -> dict:
+    """Batch-read vani_observation_cache for a list of item_keys. Returns {item_key: obs}."""
+    import json as _json
+    if not item_keys:
+        return {}
+    cached: dict = {}
+    try:
+        vconn = _vani_db_conn()
+        with vconn.cursor() as cur:
+            cur.execute(
+                "SELECT item_key, observation FROM vani_observation_cache "
+                "WHERE item_key = ANY(%s) AND cache_date = %s",
+                (item_keys, date_str),
+            )
+            for row in cur.fetchall():
+                obs = row[1] if isinstance(row[1], dict) else _json.loads(row[1])
+                cached[row[0]] = obs
+        vconn.close()
+    except Exception as e:
+        log.warning(f'vani cache read failed: {e}')
+    return cached
+
+
+def _vani_cache_write(item_key: str, date_str: str, obs: dict) -> None:
+    """Write one observation to vani_observation_cache. Silently skips on error."""
+    import json as _json
+    try:
+        vconn = _vani_db_conn()
+        with vconn:
+            with vconn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO vani_observation_cache (item_key, cache_date, observation) "
+                    "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                    (item_key, date_str, _json.dumps(obs)),
+                )
+        vconn.close()
+    except Exception as e:
+        log.warning(f'vani cache write failed ({item_key}): {e}')
+
+
+def _vani_build_items(active_overlays: list, confluences: list, date_str: str) -> list[dict]:
+    """
+    Build ordered list of items to process for the morning brief.
+    Priority: confluences first, then astro rules, then panchang.
+    Each item dict: {item_key, item_type, overlay?, confluence?}
+    Confluence items get item_a_display / item_b_display resolved from active_overlays.
+    """
+    items = []
+    for c in confluences[:2]:
+        pair = sorted([c.get('item_a', ''), c.get('item_b', '')])
+        c_enriched = dict(c)
+        c_enriched['item_a_display'] = _resolve_display_name(c.get('item_a', ''), active_overlays)
+        c_enriched['item_b_display'] = _resolve_display_name(c.get('item_b', ''), active_overlays)
+        items.append({
+            'item_key':  f"confluence:{pair[0]}:{pair[1]}:{date_str}",
+            'item_type': 'confluence',
+            'confluence': c_enriched,
+        })
+    for o in active_overlays:
+        if o.get('type') in ('astro_zone', 'astro_marker'):
+            cid = o.get('catalog_item_id', '')
+            if cid:
+                items.append({
+                    'item_key':  f"rule:{cid}:{date_str}",
+                    'item_type': 'astro',
+                    'overlay':   o,
+                })
+    items.append({'item_key': f"panchang:{date_str}", 'item_type': 'panchang'})
+    return items
+
+
 @app.post('/api/vani/daily')
 def vani_daily(req: VaNiDailyRequest):
     """
-    Generate a VaNi atmospheric reading for a given date.
-    Builds a prompt from panchang + rule signal counts, then calls the configured
-    LLM (AI_ENABLED path) or falls back to the local LLM at LLM_BASE_URL.
-    Results are cached for VANI_CACHE_TTL_HOURS hours.
+    Morning brief — sequential per-item cache-then-LLM.
+    Priority order: confluences → astro rules → panchang.
+    Each item is cached individually in vani_observation_cache (vani_db).
+    Cache is date-scoped (cache_date = today) — no TTL needed.
     """
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
     date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
 
-    # Serve from cache if fresh
-    if date_str in _vani_cache:
-        cached = _vani_cache[date_str]
-        if datetime.now() - cached['cached_at'] < timedelta(hours=_VANI_CACHE_TTL_HOURS):
-            return {'date': date_str, 'interpretation': cached['text'], 'cached': True}
+    active_overlays = req.active_overlays or []
+    confluences     = req.confluences or []
 
-    # Fetch panchang + signal counts from DB
     conn = _conn()
     try:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT vara, vara_lord, nakshatra_name, nakshatra_lord,
                        tithi_name, yoga_name, paksha
-                FROM km_daily_panchang
-                WHERE date = %s
+                FROM km_daily_panchang WHERE date = %s
             """, (date_str,))
             panchang = cur.fetchone()
-
             cur.execute("""
                 SELECT
-                    COUNT(*)                                                              AS total,
+                    COUNT(*) AS total,
                     COUNT(*) FILTER (WHERE r.outcome IN
-                        ('strong_bullish','bullish','mild_bullish'))                     AS positive,
+                        ('strong_bullish','bullish','mild_bullish'))  AS positive,
                     COUNT(*) FILTER (WHERE r.outcome IN
-                        ('strong_bearish','bearish','mild_bearish'))                     AS negative
+                        ('strong_bearish','bearish','mild_bearish'))  AS negative
                 FROM km_rule_signals s
                 JOIN km_astro_rule_master r ON r.id = s.rule_id
-                WHERE s.date = %s
-                  AND r.is_active  = TRUE
-                  AND r.is_deleted = FALSE
+                WHERE s.date = %s AND r.is_active = TRUE AND r.is_deleted = FALSE
             """, (date_str,))
             sig_row = cur.fetchone()
+
+        if not panchang:
+            return {'date': date_str, 'observations': [], 'cached': False}
+
+        vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
+        total_signals = int(sig_row[0]) if sig_row else 0
+        positive      = int(sig_row[1]) if sig_row else 0
+        negative      = int(sig_row[2]) if sig_row else 0
+
+        items = _vani_build_items(active_overlays, confluences, date_str)
+
+        # Static fallback when no astro/confluence items in framework
+        has_framework_items = any(i['item_type'] != 'panchang' for i in items)
+        if not has_framework_items:
+            return {
+                'date': date_str,
+                'observations': [{
+                    'type': 'panchang',
+                    'title': "Today's Panchang",
+                    'description': (
+                        f"{tithi} {paksha} · {yoga}. "
+                        f"{total_signals} rule signals active today — "
+                        f"{positive} positive, {negative} negative."
+                    ),
+                    'badge': f"{total_signals} signals",
+                    'action_label': 'View panchang →',
+                    'item_key': f"panchang:{date_str}",
+                }],
+                'cached': False,
+                'source': 'static',
+            }
+
+        # Batch cache read
+        all_keys    = [i['item_key'] for i in items]
+        cached_map  = _vani_cache_read(all_keys, date_str)
+        cache_misses = 0
+
+        observations: list[dict] = []
+        for item in items:
+            if len(observations) >= 3:
+                break
+            key = item['item_key']
+            if key in cached_map:
+                obs = dict(cached_map[key])
+                obs['item_key'] = key
+                observations.append(obs)
+                continue
+
+            # Cache miss — one LLM call for this item
+            cache_misses += 1
+            obs = _generate_single_vani_observation(
+                item_type=item['item_type'],
+                item_key=key,
+                date_str=date_str,
+                panchang=panchang,
+                total_signals=total_signals,
+                positive=positive,
+                negative=negative,
+                overlay=item.get('overlay'),
+                confluence=item.get('confluence'),
+                main_conn=conn,
+            )
+            if obs:
+                _vani_cache_write(key, date_str, obs)
+                obs = dict(obs)
+                obs['item_key'] = key
+                observations.append(obs)
+
+        return {
+            'date': date_str,
+            'observations': observations,
+            'cached': cache_misses == 0,
+            'source': 'db_cache',
+        }
+
     except Exception as e:
-        log.error(f'vani_daily DB error for {date_str}: {e}')
-        return {'date': date_str, 'interpretation': 'VaNi is unavailable at this time.', 'cached': False}
+        log.error(f'vani_daily error for {date_str}: {e}')
+        return {'date': date_str, 'observations': [], 'cached': False}
     finally:
         conn.close()
 
-    if not panchang:
-        return {'date': date_str, 'interpretation': 'No panchang data available for this date.', 'cached': False}
 
-    vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
-    total    = int(sig_row[0]) if sig_row else 0
-    positive = int(sig_row[1]) if sig_row else 0
-    negative = int(sig_row[2]) if sig_row else 0
+class VaNiObservationRequest(BaseModel):
+    date:        str
+    item_key:    str
+    item_type:   str   # 'panchang' | 'astro' | 'confluence'
+    overlay:     Optional[dict] = None
+    confluence:  Optional[dict] = None
 
-    user_msg = (
-        f"Astronomical conditions for {date_str}:\n"
-        f"Vara: {vara} (lord: {vara_lord})\n"
-        f"Nakshatra: {nak_name} (lord: {nak_lord})\n"
-        f"Tithi: {tithi} · {paksha} Paksha\n"
-        f"Yoga: {yoga}\n\n"
-        f"Rule signals today: {total} active\n"
-        f"Breakdown: {positive} positive · {negative} negative\n\n"
-        f"Generate a 3-4 sentence VaNi interpretation."
-    )
 
-    _t0 = time.monotonic()
-    interpretation = _ai_complete(
-        system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300,
-        temperature=0.4, no_think=True,
-    )
-    _latency = int((time.monotonic() - _t0) * 1000)
+@app.post('/api/vani/observation')
+def vani_observation(req: VaNiObservationRequest, _uid: str = Depends(_get_current_user_id)):
+    """
+    Single-item lookup/generate — used by frontend for progressive rendering.
+    Checks DB cache first; calls LLM only on miss. Returns one observation dict.
+    """
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
 
-    log_id: str | None = None
-    if interpretation:
-        log_id = _log_interaction(
-            product="dristiq",
-            endpoint="/api/vani/daily",
-            user_input=user_msg,
-            llm_response=interpretation,
-            system_prompt=_VANI_SYSTEM_PROMPT,
-            context_payload={
-                "vara": vara, "vara_lord": vara_lord,
-                "nakshatra": nak_name, "nakshatra_lord": nak_lord,
-                "tithi": tithi, "yoga": yoga, "paksha": paksha,
-                "total_signals": total, "positive": positive, "negative": negative,
-            },
-            model_version=_AI_MODEL,
-            latency_ms=_latency,
+    cached = _vani_cache_read([req.item_key], date_str)
+    if req.item_key in cached:
+        obs = dict(cached[req.item_key])
+        obs['item_key'] = req.item_key
+        return {'observation': obs, 'cached': True}
+
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT vara, vara_lord, nakshatra_name, nakshatra_lord,
+                       tithi_name, yoga_name, paksha
+                FROM km_daily_panchang WHERE date = %s
+            """, (date_str,))
+            panchang = cur.fetchone()
+            cur.execute("""
+                SELECT COUNT(*),
+                    COUNT(*) FILTER (WHERE r.outcome IN ('strong_bullish','bullish','mild_bullish')),
+                    COUNT(*) FILTER (WHERE r.outcome IN ('strong_bearish','bearish','mild_bearish'))
+                FROM km_rule_signals s
+                JOIN km_astro_rule_master r ON r.id = s.rule_id
+                WHERE s.date = %s AND r.is_active = TRUE AND r.is_deleted = FALSE
+            """, (date_str,))
+            sig_row = cur.fetchone()
+
+        if not panchang:
+            return {'observation': None, 'cached': False}
+
+        total_signals = int(sig_row[0]) if sig_row else 0
+        positive      = int(sig_row[1]) if sig_row else 0
+        negative      = int(sig_row[2]) if sig_row else 0
+
+        obs = _generate_single_vani_observation(
+            item_type=req.item_type,
+            item_key=req.item_key,
+            date_str=date_str,
+            panchang=panchang,
+            total_signals=total_signals,
+            positive=positive,
+            negative=negative,
+            overlay=req.overlay,
+            confluence=req.confluence,
+            main_conn=conn,
         )
-    else:
-        interpretation = 'VaNi is unavailable at this time.'
+        if obs:
+            _vani_cache_write(req.item_key, date_str, obs)
+            obs = dict(obs)
+            obs['item_key'] = req.item_key
+        return {'observation': obs, 'cached': False}
 
-    _vani_cache[date_str] = {'text': interpretation, 'cached_at': datetime.now()}
-    return {'date': date_str, 'interpretation': interpretation, 'cached': False, 'log_id': log_id}
+    except Exception as e:
+        log.error(f'vani_observation error for {req.item_key}: {e}')
+        return {'observation': None, 'cached': False}
+    finally:
+        conn.close()
+
+
+@app.post('/api/vani/clear-cache')
+def vani_clear_cache(_uid: str = Depends(_get_current_user_id)):
+    """Admin: clear all entries from vani_observation_cache for today (and optionally all dates)."""
+    try:
+        vconn = _vani_db_conn()
+        with vconn:
+            with vconn.cursor() as cur:
+                cur.execute("DELETE FROM vani_observation_cache")
+                cur.execute("SELECT COUNT(*) FROM vani_observation_cache")
+                remaining = cur.fetchone()[0]
+        vconn.close()
+        return {'ok': True, 'remaining': remaining}
+    except Exception as e:
+        log.error(f'vani_clear_cache error: {e}')
+        return {'ok': False, 'error': str(e)}
+
+
+@app.delete('/api/vani/observation-cache/{item_key:path}/{cache_date}')
+def vani_delete_observation(
+    item_key: str,
+    cache_date: str,
+    _uid: str = Depends(_get_current_user_id),
+):
+    """Admin: delete one cached observation by item_key + date, forcing regeneration on next load."""
+    import json as _json
+    try:
+        vconn = _vani_db_conn()
+        with vconn:
+            with vconn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM vani_observation_cache WHERE item_key = %s AND cache_date = %s",
+                    (item_key, cache_date),
+                )
+                deleted = cur.rowcount
+        vconn.close()
+        return {'ok': True, 'deleted': deleted, 'item_key': item_key, 'cache_date': cache_date}
+    except Exception as e:
+        log.error(f'vani_delete_observation error: {e}')
+        return {'ok': False, 'error': str(e)}
 
 
 # ── VaNi Intent System ────────────────────────────────────────────────────────
@@ -3481,7 +3962,33 @@ def get_framework(
                 conn.commit()
                 row = cur.fetchone()
 
-        return dict(row)
+            # Join tier, subscription expiry, and theme preferences from km_profiles
+            cur.execute(
+                """
+                SELECT p.tier,
+                       p.theme,
+                       p.dark_mode,
+                       s.expires_at
+                FROM   km_profiles p
+                LEFT JOIN LATERAL (
+                    SELECT expires_at
+                    FROM   user_subscriptions
+                    WHERE  user_id = p.id
+                    ORDER  BY started_at DESC
+                    LIMIT  1
+                ) s ON true
+                WHERE  p.id = %s::uuid
+                LIMIT  1
+                """,
+                (user_id,),
+            )
+            profile_row = cur.fetchone()
+            result = dict(row)
+            result['tier']       = profile_row['tier']       if profile_row else 'free'
+            result['expires_at'] = str(profile_row['expires_at']) if profile_row and profile_row['expires_at'] else None
+            result['theme']      = profile_row['theme']      if profile_row else 'kaaladristi'
+            result['dark_mode']  = profile_row['dark_mode']  if profile_row else True
+        return result
     except HTTPException:
         raise
     except Exception as exc:
@@ -3598,3 +4105,394 @@ def update_framework(
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         conn.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# /api/correlation/compute
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CorrelationRequest(BaseModel):
+    item_a: str
+    item_b: str
+    benchmark: str = 'NIFTY50'  # NIFTY50 | BANKNIFTY | NIFTY500
+
+
+_BENCHMARK_NAMES: dict[str, str] = {
+    'NIFTY50':   'NIFTY 50',
+    'BANKNIFTY': 'NIFTY BANK',
+    'NIFTY500':  'NIFTY 500',
+}
+
+# Indicator items that live as columns in km_index_eod
+_INDICATOR_COLS: dict[str, str] = {
+    'ema_20':   'ema_20',
+    'ema_60':   'ema_60',
+    'sma_50':   'sma_50',
+    'sma_150':  'sma_150',
+    'sma_200':  'sma_200',
+    'rsi_14':   'rsi_14',
+    'supertrend': 'supertrend_dir',
+}
+
+# State label for EVENT_IN_STATE shape — what was the indicator doing at overlap start?
+def _get_indicator_state(item_id: str, start_date, index_id: int, conn) -> str:
+    try:
+        with conn.cursor() as cur:
+            if item_id == 'magic_rs':
+                cur.execute(
+                    "SELECT magic_rs_zone FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                return row[0] if row and row[0] else 'Unknown'
+            elif item_id == 'order_flow':
+                cur.execute(
+                    "SELECT flow_type FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                return row[0].replace('_', ' ').title() if row and row[0] else 'Unknown'
+            elif item_id == 'smart_money':
+                cur.execute(
+                    "SELECT sniper_inst FROM km_index_eod WHERE index_id=%s AND trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (index_id, start_date))
+                row = cur.fetchone()
+                if not row or row[0] is None: return 'Unknown'
+                v = float(row[0])
+                return 'High' if v > 0.7 else 'Medium' if v > 0.3 else 'Low'
+            elif item_id == 'breadth_roc':
+                cur.execute(
+                    "SELECT roc_13 FROM km_breadth_roc WHERE trade_date<=%s ORDER BY trade_date DESC LIMIT 1",
+                    (start_date,))
+                row = cur.fetchone()
+                if not row or row[0] is None: return 'Unknown'
+                return 'Rising' if float(row[0]) > 0 else 'Falling'
+    except Exception:
+        pass
+    return 'Unknown'
+
+
+def _classify_shape(item_a: str, item_b: str) -> str:
+    def is_event(x):
+        return x.startswith('astro_rule:')
+    def is_threshold(x):
+        return x in ('rsi_14', 'rsi_9')
+    def is_zone(x):
+        return x in ('magic_rs', 'order_flow', 'smart_money', 'breadth_roc')
+
+    if is_event(item_a) and is_event(item_b):
+        return 'EVENT_OVERLAP'
+    if (is_event(item_a) and is_threshold(item_b)) or (is_event(item_b) and is_threshold(item_a)):
+        return 'THRESHOLD_CROSS'
+    if (is_event(item_a) and is_zone(item_b)) or (is_event(item_b) and is_zone(item_a)):
+        return 'EVENT_IN_STATE'
+    return 'ZONE_CONFLUENCE'
+
+
+def _dates_to_ranges(dates: list) -> list[tuple]:
+    """Group individual dates into (start, end) tuples for consecutive trading-day runs."""
+    if not dates:
+        return []
+    ranges, start, prev = [], dates[0], dates[0]
+    for d in dates[1:]:
+        if (d - prev).days <= 5:   # allow weekend gaps
+            prev = d
+        else:
+            ranges.append((start, prev))
+            start = prev = d
+    ranges.append((start, prev))
+    return ranges
+
+
+def _get_astro_ranges(rule_code: str, conn) -> list[tuple]:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT t.start_date, t.end_date
+            FROM km_rule_transits t
+            JOIN km_astro_rule_master r ON r.id = t.rule_id
+            WHERE r.rule_code = %s
+            ORDER BY t.start_date
+        """, (rule_code,))
+        return [(r[0], r[1]) for r in cur.fetchall()]
+
+
+def _get_indicator_ranges(item_id: str, index_id: int, conn) -> list[tuple]:
+    col = _INDICATOR_COLS.get(item_id)
+    if item_id in ('ema_20', 'ema_60', 'sma_50', 'sma_150', 'sma_200'):
+        sql = f"SELECT trade_date FROM km_index_eod WHERE index_id=%s AND {col} IS NOT NULL AND close > {col} ORDER BY trade_date"
+    elif item_id == 'rsi_14':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND rsi_14 IS NOT NULL AND (rsi_14 > 65 OR rsi_14 < 35) ORDER BY trade_date"
+    elif item_id == 'supertrend':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND supertrend_dir IS NOT NULL AND supertrend_dir > 0 ORDER BY trade_date"
+    # Zone items — active when in a directional / strong state
+    elif item_id == 'magic_rs':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND magic_rs IS NOT NULL ORDER BY trade_date"
+    elif item_id == 'order_flow':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND flow_type IS NOT NULL ORDER BY trade_date"
+    elif item_id == 'smart_money':
+        sql = "SELECT trade_date FROM km_index_eod WHERE index_id=%s AND sniper_inst IS NOT NULL ORDER BY trade_date"
+    elif item_id == 'breadth_roc':
+        sql = "SELECT trade_date FROM km_breadth_roc WHERE trade_date IN (SELECT trade_date FROM km_index_eod WHERE index_id=%s) AND roc_13 > 0 ORDER BY trade_date"
+    elif col:
+        sql = f"SELECT trade_date FROM km_index_eod WHERE index_id=%s AND {col} IS NOT NULL ORDER BY trade_date"
+    else:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(sql, (index_id,))
+        return _dates_to_ranges([r[0] for r in cur.fetchall()])
+
+
+def _find_overlaps(ranges_a: list[tuple], ranges_b: list[tuple]) -> list[tuple]:
+    result = []
+    for a_s, a_e in ranges_a:
+        for b_s, b_e in ranges_b:
+            s = max(a_s, b_s)
+            e = min(a_e, b_e)
+            if s <= e:
+                result.append((s, e))
+    return result
+
+
+@app.post('/api/correlation/compute')
+def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_current_user_id)):
+    benchmark_name = _BENCHMARK_NAMES.get(body.benchmark, 'NIFTY 50')
+    conn = _conn(15000)
+    try:
+        # ── Resolve benchmark index id ──────────────────────────────────────
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM km_index_symbols WHERE name=%s LIMIT 1", (benchmark_name,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(400, f'Benchmark not found: {benchmark_name}')
+            bm_id = row[0]
+
+        # ── Fetch all benchmark closes ordered by date ──────────────────────
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT trade_date, close FROM km_index_eod WHERE index_id=%s AND close IS NOT NULL ORDER BY trade_date",
+                (bm_id,)
+            )
+            rows = cur.fetchall()
+        date_list   = [r[0] for r in rows]
+        price_map   = {r[0]: float(r[1]) for r in rows}
+        date_index  = {d: i for i, d in enumerate(date_list)}
+
+        def _fwd_return(start: date, n: int) -> float | None:
+            idx = date_index.get(start)
+            if idx is None:
+                return None
+            # find nearest trading day on or after start
+            closest = next((date_index[date_list[j]] for j in range(idx, min(idx+3, len(date_list)))
+                            if date_list[j] >= start), idx)
+            fwd_idx = closest + n
+            if fwd_idx >= len(date_list):
+                return None
+            start_close = price_map.get(date_list[closest])
+            end_close   = price_map.get(date_list[fwd_idx])
+            if not start_close or not end_close:
+                return None
+            return round((end_close - start_close) / start_close * 100, 4)
+
+        # ── Get active ranges for each item ────────────────────────────────
+        def get_ranges(item_id: str) -> list[tuple]:
+            if item_id.startswith('astro_rule:'):
+                rc = item_id[len('astro_rule:'):]
+                return _get_astro_ranges(rc, conn)
+            return _get_indicator_ranges(item_id, bm_id, conn)
+
+        ranges_a = get_ranges(body.item_a)
+        ranges_b = get_ranges(body.item_b)
+        overlaps  = _find_overlaps(ranges_a, ranges_b)
+
+        if len(overlaps) < 3:
+            return {'insufficient_data': True, 'n_instances': len(overlaps)}
+
+        # ── Compute returns for each overlap ────────────────────────────────
+        today = date.today()
+        shape = _classify_shape(body.item_a, body.item_b)
+        # Identify which item is the zone indicator (for EVENT_IN_STATE state labels)
+        zone_item = body.item_b if body.item_a.startswith('astro_rule:') else body.item_a
+        instances, bullish, bearish = [], 0, 0
+        ret5_sum = ret22_sum = ret5_cnt = ret22_cnt = 0.0
+
+        for s, e in overlaps:
+            r5  = _fwd_return(s, 5)
+            r22 = _fwd_return(s, 22)
+            dur = (e - s).days + 1
+            inst = {
+                'start_date':    str(s),
+                'end_date':      str(e),
+                'duration_days': dur,
+                'return_5d':     r5,
+                'return_22d':    r22,
+            }
+            if shape == 'EVENT_IN_STATE':
+                inst['state'] = _get_indicator_state(zone_item, s, bm_id, conn)
+            instances.append(inst)
+            if r5 is not None:
+                if r5 > 0: bullish += 1
+                else:       bearish += 1
+                ret5_sum  += r5;  ret5_cnt  += 1
+            if r22 is not None:
+                ret22_sum += r22; ret22_cnt += 1
+
+        # Sort newest first
+        instances.sort(key=lambda x: x['start_date'], reverse=True)
+
+        # Currently active: is today inside any overlap range?
+        currently_active = any(s <= today <= e for s, e in overlaps)
+
+        # ── Data quality metrics ──────────────────────────────────────────
+        # Use NIFTY 50 (index_id=1) as the canonical quality benchmark —
+        # it has the longest, most complete history and reflects real trading
+        # calendar coverage regardless of which index is being correlated.
+        date_from = str(date_list[0])  if date_list else ''
+        date_to   = str(date_list[-1]) if date_list else ''
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                  COUNT(*) FILTER (WHERE close IS NOT NULL) AS valid_days,
+                  COUNT(*)                                   AS total_days
+                FROM km_index_eod
+                WHERE index_id = (SELECT id FROM km_index_symbols WHERE name='NIFTY 50' LIMIT 1)
+                """,
+            )
+            row = cur.fetchone()
+            days_covered = row[0] if row else 0
+            days_total   = row[1] if row else 0
+        coverage_pct = round((days_covered / days_total * 100), 2) if days_total else 0.0
+
+        return {
+            'shape':           shape,
+            'n_instances':     len(overlaps),
+            'bearish_count':   bearish,
+            'bullish_count':   bullish,
+            'avg_return_5d':   round(ret5_sum  / ret5_cnt,  4) if ret5_cnt  else 0,
+            'avg_return_22d':  round(ret22_sum / ret22_cnt, 4) if ret22_cnt else 0,
+            'currently_active': currently_active,
+            'instances':       instances,
+            'coverage_pct':    coverage_pct,
+            'days_covered':    days_covered,
+            'days_total':      days_total,
+            'date_from':       date_from,
+            'date_to':         date_to,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'correlation_compute error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+# ── Payments (Razorpay) ────────────────────────────────────────────────────────
+
+RAZORPAY_KEY_ID     = os.environ.get('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+
+TIER_AMOUNTS_PAISE = {
+    'trial':     19900,   # ₹199
+    'quarterly': 199900,  # ₹1,999
+    'annual':    499900,  # ₹4,999
+}
+
+class CreateOrderRequest(BaseModel):
+    tier:    str
+    user_id: str
+
+class VerifyPaymentRequest(BaseModel):
+    razorpay_payment_id: str
+    razorpay_order_id:   str
+    razorpay_signature:  str
+
+
+@app.post('/api/payments/create-order')
+def payments_create_order(
+    req: CreateOrderRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    if caller_id != req.user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if req.tier not in TIER_AMOUNTS_PAISE:
+        raise HTTPException(status_code=400, detail=f'Unknown tier: {req.tier}')
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(status_code=503, detail='Payment gateway not configured')
+
+    try:
+        import razorpay as _rzp  # type: ignore
+        client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        order  = client.order.create({
+            'amount':   TIER_AMOUNTS_PAISE[req.tier],
+            'currency': 'INR',
+            'notes':    {'tier': req.tier, 'user_id': req.user_id},
+        })
+        return {
+            'order_id': order['id'],
+            'amount':   order['amount'],
+            'currency': order['currency'],
+        }
+    except ImportError:
+        raise HTTPException(status_code=503, detail='razorpay SDK not installed — run pip install razorpay')
+    except Exception as exc:
+        log.error(f'payments_create_order error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post('/api/payments/verify')
+def payments_verify(
+    req: VerifyPaymentRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(status_code=503, detail='Payment gateway not configured')
+
+    try:
+        import razorpay as _rzp  # type: ignore
+        import hmac as _hmac, hashlib as _hashlib
+
+        # Verify signature
+        body       = f'{req.razorpay_order_id}|{req.razorpay_payment_id}'.encode()
+        expected   = _hmac.new(RAZORPAY_KEY_SECRET.encode(), body, _hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(expected, req.razorpay_signature):
+            raise HTTPException(status_code=400, detail='Invalid payment signature')
+
+        # Fetch order from Razorpay to get tier from notes
+        client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        order  = client.order.fetch(req.razorpay_order_id)
+        tier   = order.get('notes', {}).get('tier', 'trial')
+        user_id = order.get('notes', {}).get('user_id', caller_id)
+
+        # Determine expires_at based on tier
+        from datetime import timedelta
+        tier_durations = {'trial': 3, 'quarterly': 90, 'annual': 365}
+        days_valid     = tier_durations.get(tier, 3)
+        expires_at     = datetime.utcnow() + timedelta(days=days_valid)
+
+        # Upgrade km_profiles.tier + insert user_subscriptions row
+        conn = _conn(5000)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE km_profiles SET tier = %s, updated_at = now() WHERE id = %s::uuid",
+                    (tier, user_id),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO user_subscriptions (user_id, tier, started_at, expires_at)
+                    VALUES (%s::uuid, %s, now(), %s)
+                    """,
+                    (user_id, tier, expires_at),
+                )
+                conn.commit()
+        finally:
+            conn.close()
+
+        return {'tier': tier, 'expires_at': expires_at.isoformat()}
+
+    except HTTPException:
+        raise
+    except ImportError:
+        raise HTTPException(status_code=503, detail='razorpay SDK not installed — run pip install razorpay')
+    except Exception as exc:
+        log.error(f'payments_verify error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))

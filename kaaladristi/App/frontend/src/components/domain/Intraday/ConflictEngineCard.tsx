@@ -10,7 +10,7 @@ const COLOR_VAR: Record<ConflictResult['color'], string> = {
   red:   'var(--risk-red)',
   green: 'var(--risk-green)',
   amber: 'var(--risk-amber)',
-  teal:  'var(--accent-teal, #40B8C8)',
+  teal:  'var(--accent-cyan)',
   dim:   'var(--text-muted)',
 };
 
@@ -68,7 +68,7 @@ export default function ConflictEngineCard({ result }: Props) {
           )}
           {result.bonus && (
             <span style={{
-              color: 'var(--accent-gold, #C9A84C)', fontWeight: 700,
+              color: 'var(--gold)', fontWeight: 700,
             }}>{result.bonus}</span>
           )}
         </div>

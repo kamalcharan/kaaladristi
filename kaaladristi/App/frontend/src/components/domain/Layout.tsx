@@ -32,7 +32,7 @@ export default function Layout() {
           className="sticky top-0 z-40 flex items-center justify-between border-b"
           style={{
             padding: '18px 40px',
-            background: 'rgba(11,17,32,0.75)',
+            background: 'var(--card)',
             backdropFilter: 'blur(10px)',
             borderBottomColor: 'var(--border)',
           }}

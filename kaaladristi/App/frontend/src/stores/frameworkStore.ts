@@ -1,9 +1,11 @@
 import { create } from 'zustand'
+import { useThemeStore } from '@/stores/themeStore'
 import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition, InstrumentRef } from '@/types/framework'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { getCatalogItem } from '@/constants/catalogItems'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import { useAuthStore } from '@/stores/authStore'
+import type { CorrelationResult } from '@/hooks/useCorrelationResult'
 
 const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
 
@@ -19,6 +21,19 @@ let _saveTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleSave(saveFn: () => Promise<void>) {
   if (_saveTimer) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => { saveFn() }, 800)
+}
+
+// ── VaNi correlation suppression — 24hr session-level map ─────────────────────
+
+const _suppressedUntil = new Map<string, number>()
+
+function isSuppressed(key: string): boolean {
+  const t = _suppressedUntil.get(key)
+  return t !== undefined && Date.now() < t
+}
+
+function suppress(key: string) {
+  _suppressedUntil.set(key, Date.now() + 24 * 60 * 60 * 1000)
 }
 
 // ── Default framework ─────────────────────────────────────────────────────────
@@ -60,22 +75,33 @@ function makeDefaultChartBlock(): FrameworkBlock {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
+export interface VaNiCorrelation extends CorrelationResult {
+  item_a: string
+  item_b: string
+}
+
 interface FrameworkStore {
   framework: UserFramework | null
   isLoading: boolean
   isSaving: boolean
   error: string | null
 
+  // ── VaNi correlations — session-only, not persisted ──────────────────────
+  vaniCorrelations: VaNiCorrelation[]
+  addVaNiCorrelation: (item_a: string, item_b: string, result: CorrelationResult) => void
+  dismissVaNiCorrelation: (item_a: string, item_b: string) => void
+
   loadFramework: (userId: string) => Promise<void>
   saveFramework: () => Promise<void>
   addBlock: (item: CatalogItem, config?: Record<string, unknown>) => void
   removeBlock: (blockId: string) => void
   updateBlockPosition: (blockId: string, position: GridPosition) => void
-  addOverlay: (item: CatalogItem) => void
+  addOverlay: (item: CatalogItem, color?: string) => void
   removeOverlay: (catalogItemId: string) => void
   toggleOverlayVisibility: (catalogItemId: string) => void
   updateOverlayColor: (catalogItemId: string, color: string) => void
   addChartBlock: (instrument: InstrumentRef) => void
+  switchPrimaryIndex: (instrument: InstrumentRef) => void
   addInstrument: (symbol: string) => void
   removeInstrument: (symbol: string) => void
   isBlockActive: (catalogItemId: string) => boolean
@@ -89,6 +115,23 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
   isSaving: false,
   error: null,
 
+  // ── VaNi correlations ─────────────────────────────────────────────────────
+  vaniCorrelations: [],
+
+  addVaNiCorrelation: (item_a, item_b, result) => {
+    const key = `${item_a}:${item_b}`
+    if (isSuppressed(key)) return
+    if (get().vaniCorrelations.some(c => c.item_a === item_a && c.item_b === item_b)) return
+    suppress(key)
+    set(s => ({ vaniCorrelations: [...s.vaniCorrelations, { ...result, item_a, item_b }] }))
+  },
+
+  dismissVaNiCorrelation: (item_a, item_b) => {
+    set(s => ({
+      vaniCorrelations: s.vaniCorrelations.filter(c => !(c.item_a === item_a && c.item_b === item_b)),
+    }))
+  },
+
   // ── Load ───────────────────────────────────────────────────────────────────
 
   loadFramework: async (userId: string) => {
@@ -98,16 +141,58 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
         headers: authHeaders(),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data: UserFramework = await res.json()
+      const raw = await res.json()
+      const data: UserFramework = raw
+
+      // Sync tier, expires_at, and theme prefs into authStore profile so
+      // gates, badges, and theme all reflect the latest server state.
+      const { profile, setProfile } = useAuthStore.getState()
+      if (profile && (raw.tier !== undefined || raw.expires_at !== undefined || raw.theme !== undefined)) {
+        const updated = {
+          ...profile,
+          tier:       raw.tier       ?? profile.tier,
+          expires_at: raw.expires_at ?? profile.expires_at,
+          theme:      raw.theme      ?? profile.theme,
+        }
+        setProfile(updated)
+        // Apply theme from server — overrides any localStorage state
+        if (raw.theme !== undefined) {
+          useThemeStore.getState().setTheme(raw.theme as any)
+        }
+      }
+
+      // Deduplicate chart blocks: keep only one per catalog_item_id (largest by area).
+      // Fixes corrupt saved state from before the addChartBlock positioning fix.
+      const chartGroups = new Map<string, FrameworkBlock>()
+      for (const b of data.blocks) {
+        if (b.type !== 'chart') continue
+        const existing = chartGroups.get(b.catalog_item_id)
+        if (!existing) { chartGroups.set(b.catalog_item_id, b); continue }
+        const areaA = (existing.grid_position.col_end - existing.grid_position.col_start) *
+                      (existing.grid_position.row_end - existing.grid_position.row_start)
+        const areaB = (b.grid_position.col_end - b.grid_position.col_start) *
+                      (b.grid_position.row_end - b.grid_position.row_start)
+        if (areaB > areaA) chartGroups.set(b.catalog_item_id, b)
+      }
+      const deduped = [
+        ...data.blocks.filter(b => b.type !== 'chart'),
+        ...Array.from(chartGroups.values()),
+      ]
+      const needsSave = deduped.length !== data.blocks.length
 
       // Bootstrap: inject NIFTY50 chart block if none present
-      if (!data.blocks.some(b => b.type === 'chart')) {
-        data.blocks = [...data.blocks, makeDefaultChartBlock()]
+      if (!deduped.some(b => b.type === 'chart')) {
+        data.blocks = [...deduped, makeDefaultChartBlock()]
         set({ framework: data, isLoading: false })
         const { saveFramework } = get()
         scheduleSave(saveFramework)
       } else {
+        data.blocks = deduped
         set({ framework: data, isLoading: false })
+        if (needsSave) {
+          const { saveFramework } = get()
+          scheduleSave(saveFramework)
+        }
       }
     } catch (err) {
       set({ error: String(err), isLoading: false })
@@ -192,7 +277,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
 
   // ── Overlay mutations ──────────────────────────────────────────────────────
 
-  addOverlay: (item: CatalogItem) => {
+  addOverlay: (item: CatalogItem, color?: string) => {
     const { framework, saveFramework } = get()
     if (!framework) return
 
@@ -207,6 +292,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       catalog_item_id: item.id,
       type: overlayType,
       visible: true,
+      ...(color ? { color } : {}),
     }
 
     set(s => ({
@@ -293,27 +379,61 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     // Don't add if this instrument already has a chart block
     if (framework.blocks.some(b => b.type === 'chart' && b.catalog_item_id === `chart:${instrument.id}`)) return
 
-    // Find space to the right of or below existing chart blocks
+    // Charts stack vertically in the chart zone (cols 1–17).
+    // Find the lowest row_end among existing chart blocks, then start there.
     const chartBlocks = framework.blocks.filter(b => b.type === 'chart')
-    const maxChartColEnd = chartBlocks.reduce((m, b) => Math.max(m, b.grid_position.col_end), 1)
-    const newColStart = Math.min(maxChartColEnd, 7)  // cap so there's sidebar room
-    const newColEnd = Math.min(newColStart + 6, 9)
+    const maxRowEnd = chartBlocks.reduce((m, b) => Math.max(m, b.grid_position.row_end), 1)
+
+    // Each additional chart gets half the vertical space of the canvas (10 rows out of 20).
+    // If this is the first chart added via addChartBlock (bootstrap already placed one),
+    // we split the existing chart's rows and put the new one below.
+    const newRowStart = Math.min(maxRowEnd, 19)   // cap to leave at least 1 row
+    const newRowEnd   = 21                          // go to bottom
+
+    // Also shrink the topmost chart so it doesn't cover the new chart's rows
+    const updatedBlocks = framework.blocks.map(b => {
+      if (b.type !== 'chart') return b
+      // Only shrink if it would overlap the new chart's rows
+      if (b.grid_position.row_end > newRowStart) {
+        return { ...b, grid_position: { ...b.grid_position, row_end: newRowStart } }
+      }
+      return b
+    })
 
     const block: FrameworkBlock = {
       id: crypto.randomUUID(),
       type: 'chart',
       catalog_item_id: `chart:${instrument.id}`,
       placement: 'panel_block',
-      grid_position: { col_start: 1, col_end: newColEnd, row_start: 1, row_end: 10 },
+      grid_position: { col_start: 1, col_end: 17, row_start: newRowStart, row_end: newRowEnd },
       config: { instrument },
       added_by: 'user',
       added_at: new Date().toISOString(),
     }
     set(s => ({
       framework: s.framework
-        ? { ...s.framework, blocks: [...s.framework.blocks, block], version: s.framework.version + 1 }
+        ? { ...s.framework, blocks: [...updatedBlocks, block], version: s.framework.version + 1 }
         : null,
     }))
+    scheduleSave(saveFramework)
+  },
+
+  switchPrimaryIndex: (instrument: InstrumentRef) => {
+    const { saveFramework } = get()
+    set(s => {
+      if (!s.framework) return { framework: null }
+      const blocks = s.framework.blocks.map(b => {
+        if (b.type !== 'chart') return b
+        return {
+          ...b,
+          catalog_item_id: `chart:${instrument.id}`,
+          config: { instrument },
+        }
+      })
+      return {
+        framework: { ...s.framework, blocks, instruments: [instrument.symbol], version: s.framework.version + 1 },
+      }
+    })
     scheduleSave(saveFramework)
   },
 

@@ -10,7 +10,9 @@ import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import WorkspaceBlock from './WorkspaceBlock'
+import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
+import { useVisibleOverlayPairs, ConfluencePairMonitor } from '@/hooks/useConfluenceDetection'
 import { effectiveDotColor } from './overlayColors'
 import { fetchActiveIndices, type IndexOption } from '@/services/indexPickerService'
 
@@ -56,8 +58,8 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
       }}
       onMouseEnter={e => {
         const el = e.currentTarget as HTMLElement
-        el.style.borderColor = 'rgba(124,106,247,0.35)'
-        el.style.background = 'rgba(124,106,247,0.04)'
+        el.style.borderColor = 'var(--accent-dim)'
+        el.style.background = 'var(--accent-glow)'
       }}
       onMouseLeave={e => {
         const el = e.currentTarget as HTMLElement
@@ -87,7 +89,7 @@ function ColorPicker({
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 399 }} />
       <div style={{
         position: 'fixed', left: anchorX, top: anchorY + 8,
-        background: '#1a1f2e', border: '1px solid rgba(255,255,255,.12)',
+        background: 'var(--card)', border: '1px solid rgba(255,255,255,.12)',
         borderRadius: 10, padding: 10, zIndex: 400,
         boxShadow: '0 8px 24px rgba(0,0,0,.6)',
         width: 164,
@@ -153,7 +155,7 @@ function IndexDropdown({
   const [indices, setIndices] = useState<IndexOption[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
-  const { addChartBlock } = useFrameworkStore()
+  const { switchPrimaryIndex } = useFrameworkStore()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -182,7 +184,7 @@ function IndexDropdown({
       style={{
         position: 'fixed', top: anchorY + 6, left: anchorX,
         width: 280, maxHeight: 340, zIndex: 600,
-        background: 'rgba(9,12,16,.98)',
+        background: 'var(--bg)',
         border: '1px solid rgba(255,255,255,.1)',
         borderRadius: 10,
         boxShadow: '0 12px 40px rgba(0,0,0,.7)',
@@ -227,20 +229,20 @@ function IndexDropdown({
           return (
             <button
               key={idx.id}
-              onClick={() => { if (!added) { addChartBlock({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() } }}
+              onClick={() => { if (!added) { switchPrimaryIndex({ symbol: idx.symbol, id: idx.id, type: 'index' }); onClose() } }}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 width: '100%', padding: '7px 12px', border: 'none',
                 background: 'transparent', textAlign: 'left', cursor: added ? 'default' : 'pointer',
                 opacity: added ? 0.45 : 1,
               }}
-              onMouseEnter={e => { if (!added) (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,.08)' }}
+              onMouseEnter={e => { if (!added) (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)' }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
             >
               <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{idx.display_name}</span>
               {added
-                ? <span style={{ fontSize: 10, color: '#7c6af7', fontFamily: 'var(--font-mono,monospace)' }}>✓</span>
-                : <span style={{ fontSize: 16, color: 'rgba(124,106,247,.5)' }}>+</span>
+                ? <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)' }}>✓</span>
+                : <span style={{ fontSize: 16, color: 'var(--accent-dim)' }}>+</span>
               }
             </button>
           )
@@ -252,9 +254,11 @@ function IndexDropdown({
 
 interface Props {
   framework: UserFramework
+  onOpenDrawer?: (pairKey: string | null) => void
 }
 
-export default function WorkspaceCanvas({ framework }: Props) {
+export default function WorkspaceCanvas({ framework, onOpenDrawer }: Props) {
+  const confluencePairs = useVisibleOverlayPairs()
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
@@ -273,6 +277,9 @@ export default function WorkspaceCanvas({ framework }: Props) {
     removeBlock, updateBlockPosition, saveFramework,
     toggleOverlayVisibility, removeOverlay, updateOverlayColor,
   } = useFrameworkStore()
+
+  const primarySymbol = framework.blocks.find(b => b.type === 'chart')
+    ?.config.instrument ? (framework.blocks.find(b => b.type === 'chart')!.config.instrument as { symbol: string }).symbol : 'index'
 
   const sensors = useSensors(useSensor(PointerSensor, {
     activationConstraint: { distance: 8 },
@@ -368,7 +375,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
   const isEmpty = !framework.blocks.some(b => b.type !== 'chart')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       {/* ── Canvas topbar: overlay pills (left) + Edit Canvas (right) ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
@@ -458,21 +465,21 @@ export default function WorkspaceCanvas({ framework }: Props) {
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '4px 10px', borderRadius: 100, flexShrink: 0,
-              border: '1px dashed rgba(124,106,247,.3)', background: 'transparent',
+              border: '1px dashed color-mix(in srgb, var(--accent) 30%, transparent)', background: 'transparent',
               cursor: 'pointer', fontSize: 11,
-              color: 'rgba(124,106,247,.7)', fontFamily: 'var(--font-mono, monospace)',
+              color: 'var(--accent)', fontFamily: 'var(--font-mono, monospace)',
               transition: 'all .15s',
             }}
             onMouseEnter={e => {
               const el = e.currentTarget as HTMLElement
-              el.style.borderColor = 'rgba(124,106,247,.6)'
-              el.style.color = '#8b7af8'
-              el.style.background = 'rgba(124,106,247,.06)'
+              el.style.borderColor = 'var(--accent)'
+              el.style.color = 'var(--accent)'
+              el.style.background = 'var(--accent-glow)'
             }}
             onMouseLeave={e => {
               const el = e.currentTarget as HTMLElement
-              el.style.borderColor = 'rgba(124,106,247,.3)'
-              el.style.color = 'rgba(124,106,247,.7)'
+              el.style.borderColor = 'var(--accent-glow)'
+              el.style.color = 'var(--accent)'
               el.style.background = 'transparent'
             }}
           >
@@ -497,9 +504,9 @@ export default function WorkspaceCanvas({ framework }: Props) {
           }}
           onMouseEnter={e => {
             const el = e.currentTarget as HTMLElement
-            el.style.borderColor = 'rgba(124,106,247,.5)'
-            el.style.color = '#8b7af8'
-            el.style.background = 'rgba(124,106,247,.06)'
+            el.style.borderColor = 'var(--accent)'
+            el.style.color = 'var(--accent)'
+            el.style.background = 'var(--accent-glow)'
           }}
           onMouseLeave={e => {
             const el = e.currentTarget as HTMLElement
@@ -508,7 +515,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
             el.style.background = 'transparent'
           }}
         >
-          + index
+          {primarySymbol} ▾
         </button>
 
         {/* Edit Canvas / Done Editing */}
@@ -518,7 +525,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
             padding: '6px 16px', borderRadius: 100, cursor: 'pointer', flexShrink: 0,
             fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
             border: editMode ? 'none' : '1px solid rgba(255,255,255,.1)',
-            background: editMode ? '#7c6af7' : 'transparent',
+            background: editMode ? 'var(--accent)' : 'transparent',
             color: editMode ? '#fff' : 'var(--text-muted)',
             transition: 'all .2s ease',
           }}
@@ -557,7 +564,7 @@ export default function WorkspaceCanvas({ framework }: Props) {
                   Your framework is empty.{' '}
                   <span
                     onClick={openBlockDrawer}
-                    style={{ color: '#7c6af7', cursor: 'pointer', textDecoration: 'underline' }}
+                    style={{ color: 'var(--accent)', cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     Add blocks from the Catalog.
                   </span>
@@ -627,6 +634,13 @@ export default function WorkspaceCanvas({ framework }: Props) {
           onClose={() => setIndexDropdown(null)}
         />
       )}
+
+      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} />
+
+      {/* VaNi confluence monitors — one per visible overlay pair, no render output */}
+      {confluencePairs.map(([a, b]) => (
+        <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} />
+      ))}
     </div>
   )
 }

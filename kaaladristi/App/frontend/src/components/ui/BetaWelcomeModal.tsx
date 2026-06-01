@@ -33,8 +33,8 @@ export default function BetaWelcomeModal() {
           <div
             className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5 text-2xl"
             style={{
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2))',
-              border: '1px solid rgba(99,102,241,0.3)',
+              background: 'linear-gradient(135deg, var(--accent-dim), var(--accent-dim))',
+              border: '1px solid var(--accent-dim)',
               color: 'var(--accent-gold, #e2b96f)',
             }}
           >
@@ -91,10 +91,10 @@ export default function BetaWelcomeModal() {
             style={{
               background: 'linear-gradient(135deg, var(--accent-indigo, #6366f1), var(--accent-violet, #8b5cf6))',
               color: '#fff',
-              boxShadow: '0 4px 20px rgba(99,102,241,0.3)',
+              boxShadow: '0 4px 20px var(--accent-dim)',
             }}
             onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 8px 30px rgba(99,102,241,0.45)')}
-            onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.3)')}
+            onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 4px 20px var(--accent-dim)')}
           >
             I understand — Take me to DristiQ ✦
           </button>

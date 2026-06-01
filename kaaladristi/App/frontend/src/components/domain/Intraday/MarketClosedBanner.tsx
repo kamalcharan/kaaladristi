@@ -22,7 +22,7 @@ export default function MarketClosedBanner({ fallbackDate }: MarketClosedBannerP
   return (
     <div style={{
       padding: '6px 16px',
-      background: 'var(--risk-amber-dim, rgba(245,158,11,0.10))',
+      background: 'var(--caution-bg)',
       borderBottom: '1px solid var(--risk-amber, rgba(245,158,11,0.40))',
       fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
       color: 'var(--risk-amber)', letterSpacing: '0.04em',

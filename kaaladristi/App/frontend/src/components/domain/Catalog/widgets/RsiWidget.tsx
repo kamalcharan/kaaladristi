@@ -2,9 +2,9 @@ import { useRef, useEffect } from 'react'
 import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 
 function rsiColor(value: number): string {
-  if (value >= 70) return '#ef4444'
-  if (value <= 30) return '#10b981'
-  return '#6366f1'
+  if (value >= 70) return 'var(--bear)'
+  if (value <= 30) return 'var(--bull)'
+  return 'var(--accent)'
 }
 
 function rsiZone(value: number): string {

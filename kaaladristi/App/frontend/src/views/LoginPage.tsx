@@ -95,7 +95,7 @@ export default function LoginPage() {
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '13px 16px',
-    background: 'rgba(10,10,18,0.8)',
+    background: 'var(--card)',
     border: `1px solid ${C.rule}`,
     outline: 'none', color: C.ink1,
     fontFamily: SANS, fontSize: 14,
@@ -146,7 +146,7 @@ export default function LoginPage() {
               </div>
 
               {inviteError && (
-                <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', color: '#ef4444', fontFamily: SANS, fontSize: 12 }}>
+                <div style={{ padding: '10px 12px', background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))', color: 'var(--bear)', fontFamily: SANS, fontSize: 12 }}>
                   {inviteError}
                 </div>
               )}
@@ -239,12 +239,12 @@ export default function LoginPage() {
 
             {/* Messages */}
             {error && (
-              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', color: '#ef4444', fontFamily: SANS, fontSize: 13 }}>
+              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))', color: 'var(--bear)', fontFamily: SANS, fontSize: 13 }}>
                 {error}
               </div>
             )}
             {success && (
-              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.3)', color: '#10b981', fontFamily: SANS, fontSize: 13 }}>
+              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'var(--bull-bg)', border: '1px solid var(--bull-dim, rgba(16,185,129,.3))', color: 'var(--bull)', fontFamily: SANS, fontSize: 13 }}>
                 {success}
               </div>
             )}

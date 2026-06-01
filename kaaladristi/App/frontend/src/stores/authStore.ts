@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import type { KmProfile } from '@/types';
 import type { KdSession, KdUser } from '@/services/auth';
 import { getSession, getProfile, onAuthStateChange } from '@/services/auth';
+import { useThemeStore } from '@/stores/themeStore';
+
+function applyProfileTheme(profile: KmProfile | null) {
+  if (!profile) return
+  const themeId = (profile.theme ?? 'kaaladristi') as Parameters<typeof useThemeStore.getState['setTheme']>[0]
+  useThemeStore.getState().setTheme(themeId as any)
+}
 
 interface AuthState {
   user: KdUser | null;
@@ -37,6 +44,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         try {
           const profile = await getProfile();
+          applyProfileTheme(profile)
           set({
             profile,
             isAdmin: profile?.role === 'admin',
@@ -57,6 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (session?.user) {
           try {
             const profile = await getProfile();
+            applyProfileTheme(profile)
             set({ profile, isAdmin: profile?.role === 'admin' });
           } catch { /* ignore */ }
         } else {
@@ -85,6 +94,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   refreshProfile: async () => {
     try {
       const profile = await getProfile();
+      applyProfileTheme(profile)
       set({ profile, isAdmin: profile?.role === 'admin' });
     } catch { /* ignore */ }
   },

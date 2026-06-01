@@ -4,8 +4,10 @@ import { Search, Loader2, AlertCircle, Database } from 'lucide-react'
 import { fetchCatalogRules, fetchConfidence, type AstroRule } from '@/pages/RuleEngine/ruleService'
 import { OutcomeBadge, TypeChip, ConfidenceCell, RULE_TYPE_LABELS, PROB_STYLES } from '@/pages/RuleEngine/RuleList'
 import { useFrameworkStore } from '@/stores/frameworkStore'
-import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
+import { useAuthStore } from '@/stores/authStore'
+import { RANGE_RULE_TYPES, PAID_TIERS } from '@/constants/frameworkConstants'
 import { cn } from '@/lib/utils'
+import InlineGate from '@/components/workspace/InlineGate'
 import type { CatalogItem } from '@/constants/catalogItems'
 import type { DeepDiveItem } from './DeepDivePanel'
 
@@ -42,6 +44,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
   const [typeFilter, setTypeFilter] = useState('')
 
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
+  const [gateOpen, setGateOpen] = useState(false)
 
   // Shared query keys with RuleList — no duplicate network calls when both are mounted
   const { data: rules = [], isLoading, isError } = useQuery({
@@ -69,6 +72,11 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
   function handleAdd(rule: AstroRule, e: React.MouseEvent) {
     e.stopPropagation()
+    const tier = useAuthStore.getState().profile?.tier ?? 'free'
+    if (!PAID_TIERS.includes(tier as typeof PAID_TIERS[number])) {
+      setGateOpen(true)
+      return
+    }
     const item = ruleToCatalogItem(rule)
     if (isRangeRule(rule.rule_type)) {
       addOverlay(item)
@@ -95,6 +103,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
   }, [rules, search, typeFilter])
 
   return (
+    <>
     <div>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
@@ -370,5 +379,11 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
         </div>
       )}
     </div>
+    <InlineGate
+      context="add_rule"
+      isOpen={gateOpen}
+      onDismiss={() => setGateOpen(false)}
+    />
+    </>
   )
 }
