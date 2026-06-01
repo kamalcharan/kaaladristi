@@ -113,19 +113,36 @@ function SixDayMock() {
 }
 
 function ConvictionMock() {
-  const bars = [12, 28, 18, 42, 35, 55, 48, 70, 62, 85]
+  // delivery% bars vs baseline line
+  const deliveries = [38, 42, 36, 44, 40, 39, 45, 43, 62, 78, 71, 65]
+  const baseline   = 43
+  const maxVal     = 85
   return (
-    <div style={{ padding: '10px 4px 4px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 60 }}>
-        {bars.map((h, i) => (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-            <div style={{ height: `${h}%`, borderRadius: 2, background: i > 6 ? 'rgba(45,212,191,0.6)' : 'rgba(139,122,248,0.35)' }} />
-          </div>
-        ))}
+    <div style={{ padding: '6px 0 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 56, position: 'relative' }}>
+        {/* Baseline line */}
+        <div style={{
+          position: 'absolute', left: 0, right: 0,
+          bottom: `${(baseline / maxVal) * 100}%`,
+          borderTop: '1px dashed rgba(201,168,76,0.5)',
+          pointerEvents: 'none',
+        }} />
+        {deliveries.map((v, i) => {
+          const surge = v > baseline * 1.3
+          return (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <div style={{
+                height: `${(v / maxVal) * 100}%`, borderRadius: '2px 2px 0 0',
+                background: surge ? 'rgba(45,212,191,0.7)' : 'rgba(139,122,248,0.3)',
+                transition: 'background 0.2s',
+              }} />
+            </div>
+          )
+        })}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>baseline</span>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: '#2dd4bf' }}>surge ↑</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'rgba(201,168,76,0.7)' }}>── baseline</span>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: '#2dd4bf' }}>surge ↑ detected</span>
       </div>
     </div>
   )
