@@ -25,7 +25,10 @@ function useVaniDailyBrief(
 ) {
   const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
   return useQuery({
-    queryKey: ['vani-morning-brief', userId, today],
+    queryKey: ['vani-morning-brief', userId, today,
+      activeOverlays.map(o => o.name).sort().join(','),
+      confluences.map(c => c.item_a + c.item_b).sort().join(','),
+    ],
     queryFn: async () => {
       const res = await fetch(`${pipelineUrl}/api/vani/daily`, {
         method: 'POST',
@@ -272,48 +275,40 @@ function MorningModal({ items, profile, onClose }: {
 
         {/* Body */}
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {items.map((item, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 12,
-              padding: '12px 14px', borderRadius: 8,
-              background: 'rgba(255,255,255,0.025)',
-              border: `1px solid ${item.dot}20`,
-              borderLeft: `3px solid ${item.dot}`,
+          {briefLoading ? (
+            /* Skeleton rows */
+            [90, 72, 55].map((w, i) => (
+              <div key={i} style={{
+                height: 14, borderRadius: 4,
+                background: 'rgba(255,255,255,0.06)',
+                width: `${w}%`,
+                opacity: 0.7,
+                transition: 'opacity 0.8s ease-in-out',
+              }} />
+            ))
+          ) : briefData?.interpretation ? (
+            /* LLM sentences */
+            briefData.interpretation
+              .split(/(?<=\.)\s+/)
+              .filter(s => s.trim().length > 0)
+              .map((sentence, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8,
+                  fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65,
+                }}>
+                  <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }}>✦</span>
+                  <span>{sentence.trim()}</span>
+                </div>
+              ))
+          ) : (
+            /* No data — say so clearly */
+            <p style={{
+              fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic',
+              textAlign: 'center', padding: '12px 0',
             }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 3,
-                }}>
-                  {item.title}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  {item.description}
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
-                <span style={{
-                  fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-                  color: item.dot, background: `${item.dot}18`,
-                  border: `1px solid ${item.dot}30`,
-                  padding: '2px 6px', borderRadius: 3,
-                }}>
-                  {item.badge}
-                </span>
-                <button
-                  onClick={() => { onClose(); item.action() }}
-                  style={{
-                    fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-                    color: 'var(--text-muted)', background: 'none', border: 'none',
-                    cursor: 'pointer', padding: 0,
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-                >
-                  View →
-                </button>
-              </div>
-            </div>
-          ))}
+              VaNi is unavailable right now.
+            </p>
+          )}
         </div>
 
         {/* Footer */}
