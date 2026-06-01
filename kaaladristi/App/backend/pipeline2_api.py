@@ -1779,20 +1779,30 @@ _VANI_CACHE_TTL_HOURS = 24
 _VANI_SYSTEM_PROMPT = """You are VaNi (Vāṇī), the voice of knowledge for DristiQ — \
 a Vedic astronomical market intelligence platform for Indian traders.
 
-Your role: Generate factual, educational, non-predictive explanations of astronomical \
-conditions and their historical correlation with NSE market behavior.
-
 Rules:
 - Never use: buy, sell, bullish, bearish, up, down, rise, fall
 - Use: positive correlation, negative correlation, historically associated, \
   recorded instances, atmospheric conditions
 - Always cite data when available (occurrences, %)
-- Maximum 4 sentences
-- End with macro backdrop context
 - Use astronomical terminology: vara, nakshatra, tithi, paksha, combust, \
   retrograde, conjunction, vedh
 - Tone: scholarly, observational, non-advisory
-- Language: English with Sanskrit terms where natural"""
+- Language: English with Sanskrit terms where natural
+
+Output valid JSON only — no preamble, no markdown fences:
+{
+  "observations": [
+    {
+      "type": "astro|confluence|outlook",
+      "title": "specific name — not generic",
+      "description": "one factual sentence — what it is and current state",
+      "badge": "N instances OR Day N of N OR N rules active",
+      "action_label": "View on chart → OR Open correlation → OR See rules →"
+    }
+  ]
+}
+Maximum 3 observations. Title must name the specific rule or pair — never generic.
+If data is insufficient for an observation, omit it entirely — do not pad."""
 _db_singleton = None
 
 
@@ -3230,7 +3240,7 @@ def vani_daily(req: VaNiDailyRequest):
     if _cache_key in _vani_cache:
         cached = _vani_cache[_cache_key]
         if datetime.now() - cached['cached_at'] < timedelta(hours=_VANI_CACHE_TTL_HOURS):
-            return {'date': date_str, 'interpretation': cached['text'], 'cached': True}
+            return {'date': date_str, 'observations': cached['observations'], 'cached': True}
 
     # Fetch panchang + signal counts from DB
     conn = _conn()
@@ -3314,7 +3324,7 @@ def vani_daily(req: VaNiDailyRequest):
                     f"{c.get('instances',0)} historical instances · {c.get('status','')}\n"
                 )
 
-        user_msg += "\n\nGenerate a 3-4 sentence VaNi interpretation."
+        user_msg += "\n\nReturn JSON observations for what matters most today."
 
     except Exception as e:
         log.error(f'vani_daily DB error for {date_str}: {e}')
@@ -3323,34 +3333,43 @@ def vani_daily(req: VaNiDailyRequest):
         conn.close()
 
     _t0 = time.monotonic()
-    interpretation = _ai_complete(
-        system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=300,
+    raw = _ai_complete(
+        system=_VANI_SYSTEM_PROMPT, user=user_msg, max_tokens=500,
         temperature=0.4, no_think=True,
     )
     _latency = int((time.monotonic() - _t0) * 1000)
 
-    log_id: str | None = None
-    if interpretation:
-        log_id = _log_interaction(
-            product="dristiq",
-            endpoint="/api/vani/daily",
-            user_input=user_msg,
-            llm_response=interpretation,
-            system_prompt=_VANI_SYSTEM_PROMPT,
-            context_payload={
-                "vara": vara, "vara_lord": vara_lord,
-                "nakshatra": nak_name, "nakshatra_lord": nak_lord,
-                "tithi": tithi, "yoga": yoga, "paksha": paksha,
-                "total_signals": total, "positive": positive, "negative": negative,
-            },
-            model_version=_AI_MODEL,
-            latency_ms=_latency,
-        )
-    else:
-        interpretation = 'VaNi is unavailable at this time.'
+    if not raw:
+        return {'date': date_str, 'observations': [], 'cached': False}
 
-    _vani_cache[_cache_key] = {'text': interpretation, 'cached_at': datetime.now()}
-    return {'date': date_str, 'interpretation': interpretation, 'cached': False, 'log_id': log_id}
+    # Parse JSON — strip accidental markdown fences if model adds them
+    import json as _json, re as _re
+    _cleaned = _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip())
+    try:
+        parsed = _json.loads(_cleaned)
+        observations = parsed.get('observations', [])
+    except Exception:
+        log.warning(f'vani_daily JSON parse failed for {date_str}: {raw[:200]}')
+        observations = []
+
+    log_id = _log_interaction(
+        product="dristiq",
+        endpoint="/api/vani/daily",
+        user_input=user_msg,
+        llm_response=raw,
+        system_prompt=_VANI_SYSTEM_PROMPT,
+        context_payload={
+            "vara": vara, "vara_lord": vara_lord,
+            "nakshatra": nak_name, "nakshatra_lord": nak_lord,
+            "tithi": tithi, "yoga": yoga, "paksha": paksha,
+            "total_signals": total, "positive": positive, "negative": negative,
+        },
+        model_version=_AI_MODEL,
+        latency_ms=_latency,
+    )
+
+    _vani_cache[_cache_key] = {'observations': observations, 'cached_at': datetime.now()}
+    return {'date': date_str, 'observations': observations, 'cached': False, 'log_id': log_id}
 
 
 # ── VaNi Intent System ────────────────────────────────────────────────────────

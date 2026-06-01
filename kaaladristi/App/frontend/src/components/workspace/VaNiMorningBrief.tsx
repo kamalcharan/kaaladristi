@@ -41,7 +41,16 @@ function useVaniDailyBrief(
         }),
       })
       if (!res.ok) throw new Error('vani daily failed')
-      return res.json() as Promise<{ interpretation: string; cached: boolean }>
+      return res.json() as Promise<{
+        observations: Array<{
+          type: string
+          title: string
+          description: string
+          badge: string
+          action_label: string
+        }>
+        cached: boolean
+      }>
     },
     staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
@@ -175,9 +184,10 @@ function MorningModal({ items, profile, onClose }: {
 }) {
   const now = new Date()
   const today = now.toISOString().slice(0, 10)
-  const dateStr = now.toLocaleDateString('en-IN', {
-    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
-  })
+  const dd  = String(now.getDate()).padStart(2, '0')
+  const mmm = now.toLocaleDateString('en-IN', { month: 'short' }).toUpperCase()
+  const yyyy = now.getFullYear()
+  const dateStr = `${dd}-${mmm}-${yyyy}`
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) + ' IST'
 
   // Build overlay context from framework
@@ -276,35 +286,62 @@ function MorningModal({ items, profile, onClose }: {
         {/* Body */}
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {briefLoading ? (
-            /* Skeleton rows */
-            [90, 72, 55].map((w, i) => (
+            [1, 2, 3].map(i => (
               <div key={i} style={{
-                height: 14, borderRadius: 4,
-                background: 'rgba(255,255,255,0.06)',
-                width: `${w}%`,
-                opacity: 0.7,
-                transition: 'opacity 0.8s ease-in-out',
-              }} />
+                borderRadius: 8, padding: '12px 14px',
+                background: 'rgba(255,255,255,0.025)',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                <div style={{ height: 12, width: '55%', borderRadius: 3, background: 'rgba(255,255,255,0.07)', marginBottom: 8 }} />
+                <div style={{ height: 10, width: '85%', borderRadius: 3, background: 'rgba(255,255,255,0.04)', marginBottom: 4 }} />
+                <div style={{ height: 10, width: '65%', borderRadius: 3, background: 'rgba(255,255,255,0.04)' }} />
+              </div>
             ))
-          ) : briefData?.interpretation ? (
-            /* LLM sentences */
-            briefData.interpretation
-              .split(/(?<=\.)\s+/)
-              .filter(s => s.trim().length > 0)
-              .map((sentence, i) => (
+          ) : briefData?.observations?.length ? (
+            briefData.observations.map((obs, i) => {
+              const dotColor = obs.type === 'confluence' ? '#f59e0b' : obs.type === 'outlook' ? '#2dd4bf' : '#9d8ff9'
+              return (
                 <div key={i} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 8,
-                  fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65,
+                  borderRadius: 8, padding: '12px 14px',
+                  background: 'rgba(255,255,255,0.025)',
+                  border: `1px solid ${dotColor}22`,
+                  borderLeft: `3px solid ${dotColor}`,
                 }}>
-                  <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 2 }}>✦</span>
-                  <span>{sentence.trim()}</span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                      {obs.title}
+                    </div>
+                    <span style={{
+                      fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                      color: dotColor, background: `${dotColor}18`,
+                      border: `1px solid ${dotColor}30`,
+                      padding: '2px 6px', borderRadius: 3, flexShrink: 0, whiteSpace: 'nowrap',
+                    }}>
+                      {obs.badge}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.55, marginBottom: 8 }}>
+                    {obs.description}
+                  </div>
+                  <button
+                    onClick={onClose}
+                    style={{
+                      fontSize: 10, fontFamily: 'var(--font-mono,monospace)',
+                      color: dotColor, background: 'none', border: 'none',
+                      cursor: 'pointer', padding: 0, opacity: 0.8,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '0.8')}
+                  >
+                    {obs.action_label}
+                  </button>
                 </div>
-              ))
+              )
+            })
           ) : (
-            /* No data — say so clearly */
             <p style={{
               fontSize: 12, color: 'var(--text-faint)', fontStyle: 'italic',
-              textAlign: 'center', padding: '12px 0',
+              textAlign: 'center', padding: '12px 0', margin: 0,
             }}>
               VaNi is unavailable right now.
             </p>
