@@ -212,6 +212,9 @@ class CalendarMarkRequest(BaseModel):
 
 class VaNiDailyRequest(BaseModel):
     date: Optional[str] = None    # YYYY-MM-DD; defaults to today (IST)
+    user_id: Optional[str] = None
+    active_overlays: Optional[list] = []
+    confluences: Optional[list] = []
 
 
 class VaNiFeedbackRequest(BaseModel):
@@ -1896,9 +1899,21 @@ def breadth_insight(date: str = None):
     skill = _AI_SKILLS.get("breadth_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
+    _t0_b = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_b = int((time.monotonic() - _t0_b) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/breadth-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"date": target_date, "score": score, "regime": regime, "trend": trend},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_b,
+        )
     return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
@@ -1939,9 +1954,21 @@ def breadth_roc_insight():
     skill = _AI_SKILLS.get("breadth_roc_insight")
     if not skill:
         return {"date": target_date, "insight": None, "ai": False}
+    _t0_roc = time.monotonic()
     insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_roc = int((time.monotonic() - _t0_roc) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/breadth-roc-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"date": target_date, "roc13": roc13, "roc55": roc55, "trend": trend},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_roc,
+        )
     return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
@@ -1961,9 +1988,21 @@ def instrument_insight(id: int, type: str = 'index', date: str = None):
         return {"id": id, "type": type, "date": date, "insight": None, "ai": False, "alignment": ""}
     from pipeline_api import _fmt_instrument_msg  # reuse formatting helper
     user_msg = _fmt_instrument_msg(ctx)
+    _t0_inst = time.monotonic()
     insight  = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_inst = int((time.monotonic() - _t0_inst) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/instrument-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"id": id, "type": type, "date": ctx.get('date', date)},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_inst,
+        )
     alignment = ctx.get('alignment', {}).get('status', '')
     return {"id": id, "type": type, "date": ctx.get('date', date),
             "insight": insight, "ai": insight is not None, "alignment": alignment}
@@ -1984,9 +2023,21 @@ def market_pulse_insight(date: str = None):
         return {"date": date, "insight": None, "ai": False, "astro_direction": ""}
     from pipeline_api import _fmt_market_pulse_msg  # reuse formatting helper
     user_msg      = _fmt_market_pulse_msg(ctx)
+    _t0_mp = time.monotonic()
     insight       = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _latency_mp = int((time.monotonic() - _t0_mp) * 1000)
     if insight:
         _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/market-pulse-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"date": ctx.get('date', date)},
+            model_version=_AI_MODEL,
+            latency_ms=_latency_mp,
+        )
     astro_dir = ctx.get('astro', {}).get('direction', '')
     return {"date": ctx.get('date', date), "insight": insight,
             "ai": insight is not None, "astro_direction": astro_dir}
@@ -3102,6 +3153,60 @@ def equity_magic_rs(symbol: str, from_date: str = '2025-01-01'):
 
 # ── VaNi Daily Interpretation ─────────────────────────────────────────────────
 
+def _check_panchak_active(conn, date_str: str) -> dict | None:
+    """Returns { day, total_days } if panchak is active on date_str, else None."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT s.date, r.id
+                FROM km_rule_signals s
+                JOIN km_astro_rule_master r ON r.id = s.rule_id
+                WHERE s.date = %s
+                  AND r.is_active = TRUE
+                  AND r.is_deleted = FALSE
+                  AND (LOWER(r.rule_code) LIKE '%%panchak%%'
+                       OR LOWER(r.remarks) LIKE '%%panchak%%'
+                       OR LOWER(r.display_name) LIKE '%%panchak%%')
+                LIMIT 1
+            """, (date_str,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            # Find the contiguous panchak window to get day/total
+            cur.execute("""
+                WITH panchak_signals AS (
+                    SELECT s.date
+                    FROM km_rule_signals s
+                    JOIN km_astro_rule_master r ON r.id = s.rule_id
+                    WHERE r.id = %s
+                      AND r.is_active = TRUE
+                    ORDER BY s.date
+                ),
+                grouped AS (
+                    SELECT date,
+                           date - (ROW_NUMBER() OVER (ORDER BY date) * INTERVAL '1 day') AS grp
+                    FROM panchak_signals
+                )
+                SELECT MIN(date) AS start_date, MAX(date) AS end_date,
+                       COUNT(*) AS total_days
+                FROM grouped
+                WHERE %s::date BETWEEN MIN(date) AND MAX(date)
+                   OR grp = (SELECT grp FROM grouped WHERE date = %s::date LIMIT 1)
+                GROUP BY grp
+                HAVING %s::date BETWEEN MIN(date) AND MAX(date)
+                LIMIT 1
+            """, (row[1], date_str, date_str, date_str))
+            window = cur.fetchone()
+            if window:
+                start_date, end_date, total_days = window
+                import datetime as dt
+                day_num = (dt.date.fromisoformat(date_str) - start_date).days + 1
+                return {'day': day_num, 'total_days': int(total_days)}
+            return {'day': 1, 'total_days': 5}  # panchak is always 5 days
+    except Exception:
+        return None
+
+
 @app.post('/api/vani/daily')
 def vani_daily(req: VaNiDailyRequest):
     """
@@ -3145,30 +3250,69 @@ def vani_daily(req: VaNiDailyRequest):
                   AND r.is_deleted = FALSE
             """, (date_str,))
             sig_row = cur.fetchone()
+
+        if not panchang:
+            return {'date': date_str, 'interpretation': 'No panchang data available for this date.', 'cached': False}
+
+        vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
+        total    = int(sig_row[0]) if sig_row else 0
+        positive = int(sig_row[1]) if sig_row else 0
+        negative = int(sig_row[2]) if sig_row else 0
+
+        # Layer 1 — panchang (always present)
+        user_msg = (
+            f"Astronomical conditions for {date_str}:\n"
+            f"Vara: {vara} (lord: {vara_lord})\n"
+            f"Nakshatra: {nak_name} (lord: {nak_lord})\n"
+            f"Tithi: {tithi} · {paksha} Paksha\n"
+            f"Yoga: {yoga}\n\n"
+            f"Rule signals today: {total} active\n"
+            f"Breakdown: {positive} positive · {negative} negative"
+        )
+
+        # Layer 2 — panchak if active
+        panchak = _check_panchak_active(conn, date_str)
+        if panchak:
+            user_msg += f"\nPanchak active: Day {panchak['day']} of {panchak['total_days']}"
+
+        # Layer 3 — other active astro overlays (not panchak)
+        active_overlays = req.active_overlays or []
+        astro_overlays = [
+            o for o in active_overlays[:3]
+            if o.get('type') == 'astro_zone'
+            and 'panchak' not in (o.get('name') or '').lower()
+        ]
+        if astro_overlays:
+            user_msg += "\nOther active astro overlays in user framework:\n"
+            for o in astro_overlays:
+                user_msg += f"- {o.get('name', '')}\n"
+
+        # Layer 4 — technical overlays (names only)
+        tech_overlays = [
+            o for o in active_overlays
+            if o.get('type') in ['indicator_line', 'indicator_band']
+        ]
+        if tech_overlays:
+            names = ', '.join(o.get('name', '') for o in tech_overlays[:3])
+            user_msg += f"\nActive technical overlays: {names}"
+
+        # Layer 5 — confluences
+        confluences = req.confluences or []
+        if confluences:
+            user_msg += "\nDetected confluences in user framework:\n"
+            for c in confluences[:2]:
+                user_msg += (
+                    f"- {c.get('item_a','')} ∩ {c.get('item_b','')} · "
+                    f"{c.get('instances',0)} historical instances · {c.get('status','')}\n"
+                )
+
+        user_msg += "\n\nGenerate a 3-4 sentence VaNi interpretation."
+
     except Exception as e:
         log.error(f'vani_daily DB error for {date_str}: {e}')
         return {'date': date_str, 'interpretation': 'VaNi is unavailable at this time.', 'cached': False}
     finally:
         conn.close()
-
-    if not panchang:
-        return {'date': date_str, 'interpretation': 'No panchang data available for this date.', 'cached': False}
-
-    vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
-    total    = int(sig_row[0]) if sig_row else 0
-    positive = int(sig_row[1]) if sig_row else 0
-    negative = int(sig_row[2]) if sig_row else 0
-
-    user_msg = (
-        f"Astronomical conditions for {date_str}:\n"
-        f"Vara: {vara} (lord: {vara_lord})\n"
-        f"Nakshatra: {nak_name} (lord: {nak_lord})\n"
-        f"Tithi: {tithi} · {paksha} Paksha\n"
-        f"Yoga: {yoga}\n\n"
-        f"Rule signals today: {total} active\n"
-        f"Breakdown: {positive} positive · {negative} negative\n\n"
-        f"Generate a 3-4 sentence VaNi interpretation."
-    )
 
     _t0 = time.monotonic()
     interpretation = _ai_complete(

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore'
 import type { UserFramework } from '@/types/framework'
 import { useAuthStore } from '@/stores/authStore'
 import type { KmProfile } from '@/types'
+import { getCatalogItem } from '@/constants/catalogItems'
 
 function todayKey(userId: string) {
   const d = new Date().toISOString().slice(0, 10)
@@ -13,6 +15,35 @@ function todayKey(userId: string) {
 
 function fmtId(id: string): string {
   return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
+}
+
+function useVaniDailyBrief(
+  userId: string | undefined,
+  today: string,
+  activeOverlays: Array<{ name: string; type: string }>,
+  confluences: Array<{ item_a: string; item_b: string; instances: number; status: string }>,
+) {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+  return useQuery({
+    queryKey: ['vani-morning-brief', userId, today],
+    queryFn: async () => {
+      const res = await fetch(`${pipelineUrl}/api/vani/daily`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: today,
+          user_id: userId,
+          active_overlays: activeOverlays,
+          confluences,
+        }),
+      })
+      if (!res.ok) throw new Error('vani daily failed')
+      return res.json() as Promise<{ interpretation: string; cached: boolean }>
+    },
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: 1,
+    enabled: !!userId,
+  })
 }
 
 interface BriefItem {
@@ -140,10 +171,36 @@ function MorningModal({ items, profile, onClose }: {
   onClose: () => void
 }) {
   const now = new Date()
+  const today = now.toISOString().slice(0, 10)
   const dateStr = now.toLocaleDateString('en-IN', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   })
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) + ' IST'
+
+  // Build overlay context from framework
+  const { framework, vaniCorrelations } = useFrameworkStore()
+  const activeOverlays = (framework?.chart_overlays ?? [])
+    .filter(o => o.visible !== false)
+    .slice(0, 3)
+    .map(o => ({
+      name: getCatalogItem(o.catalog_item_id)?.display_name ?? o.catalog_item_id,
+      type: o.type ?? 'indicator_line',
+    }))
+  const confluences = (vaniCorrelations ?? [])
+    .slice(0, 2)
+    .map(c => ({
+      item_a: c.item_a,
+      item_b: c.item_b,
+      instances: c.n_instances ?? 0,
+      status: c.currently_active ? 'active' : 'approaching',
+    }))
+
+  const { data: briefData, isLoading: briefLoading } = useVaniDailyBrief(
+    profile?.id,
+    today,
+    activeOverlays,
+    confluences,
+  )
 
   return (
     <>
