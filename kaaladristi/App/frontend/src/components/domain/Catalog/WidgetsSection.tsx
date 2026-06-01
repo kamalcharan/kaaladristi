@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Lock } from 'lucide-react'
 import { getCatalogItemsByType, type CatalogItem } from '@/constants/catalogItems'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import InlineGate from '@/components/workspace/InlineGate'
+import { useQuery } from '@tanstack/react-query'
+import { fetchIndicatorDataById } from '@/services/indicatorData'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import MagicRsWidget from './widgets/MagicRsWidget'
 import OrderFlowWidget from './widgets/OrderFlowWidget'
@@ -48,8 +50,8 @@ function LivePreview({ id }: { id: string }) {
   if (id === 'smart_money') return <SmartMoneyWidget symbolId={1} />
   if (id === 'six_day_outlook') return <SixDayMock />
   if (id === 'conviction_flow') return <ConvictionMock />
-  if (id === 'rsi_14')          return <RsiMock />
-  if (id === 'atr_14')          return <AtrMock />
+  if (id === 'rsi_14')          return <RsiWidget />
+  if (id === 'atr_14')          return <AtrWidget />
   return null
 }
 
@@ -92,47 +94,105 @@ function ConvictionMock() {
   )
 }
 
-function AtrMock() {
-  const pts = [38, 42, 55, 70, 65, 58, 48, 44, 50, 62, 74, 68, 55, 46, 40]
-  const W = 200, H = 56
-  const toX = (i: number) => (i / (pts.length - 1)) * W
-  const toY = (v: number) => H - ((v - 25) / 60) * H * 0.8 - H * 0.1
-  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
-  const fillPath = path + ` L${W},${H} L0,${H} Z`
+function useNiftyEod() {
+  return useQuery({
+    queryKey: ['widget-catalog-eod', 1],
+    queryFn:  () => fetchIndicatorDataById(1, '1Y'),
+    staleTime: 120_000,
+  })
+}
+
+function SparklineCanvas({ pts, color, fillColor, refLines }: {
+  pts: number[]
+  color: string
+  fillColor: string
+  refLines?: Array<{ value: number; color: string }>
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || pts.length < 2) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const W = canvas.width, H = canvas.height
+    ctx.clearRect(0, 0, W, H)
+    const min = Math.min(...pts), max = Math.max(...pts)
+    const range = max - min || 1
+    const toX = (i: number) => (i / (pts.length - 1)) * W
+    const toY = (v: number) => H - ((v - min) / range) * H * 0.82 - H * 0.09
+    refLines?.forEach(r => {
+      const ry = toY(r.value)
+      if (ry < 0 || ry > H) return
+      ctx.strokeStyle = r.color; ctx.lineWidth = 1; ctx.setLineDash([3, 3])
+      ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(W, ry); ctx.stroke()
+      ctx.setLineDash([])
+    })
+    const pathPts = pts.map((v, i) => [toX(i), toY(v)] as [number, number])
+    ctx.beginPath(); ctx.moveTo(pathPts[0][0], pathPts[0][1])
+    pathPts.slice(1).forEach(([x, y]) => ctx.lineTo(x, y))
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke()
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath()
+    ctx.fillStyle = fillColor; ctx.fill()
+    const last = pathPts[pathPts.length - 1]
+    ctx.beginPath(); ctx.arc(last[0], last[1], 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = color; ctx.fill()
+  }, [pts, color, fillColor, refLines])
+  return <canvas ref={canvasRef} width={240} height={60} style={{ width: '100%', height: 60 }} />
+}
+
+function RsiWidget() {
+  const { data = [], isLoading } = useNiftyEod()
+  if (isLoading || data.length === 0) return <div style={{ height: 80 }} />
+  const last60 = data.slice(-60)
+  const pts = last60.map(b => (b as unknown as Record<string, number>).rsi_14).filter(v => v != null)
+  const current = pts[pts.length - 1]
   return (
-    <div style={{ padding: '10px 4px 4px' }}>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-        <path d={fillPath} fill="rgba(201,168,76,0.08)" />
-        <path d={path} fill="none" stroke="rgba(201,168,76,0.7)" strokeWidth="1.5" strokeLinejoin="round" />
-        <circle cx={toX(pts.length - 1).toFixed(1)} cy={toY(pts[pts.length - 1]).toFixed(1)} r="2.5" fill="var(--gold)" />
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>14-period volatility</span>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: 'var(--gold)' }}>40.2 pts</span>
+    <div style={{ padding: '4px 12px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 26, fontWeight: 600, fontFamily: 'var(--font-mono,monospace)',
+          color: current >= 70 ? '#f87171' : current <= 30 ? '#2dd4bf' : '#8b7af8', lineHeight: 1 }}>
+          {current?.toFixed(1) ?? '—'}
+        </span>
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+          {current >= 70 ? 'OVERBOUGHT' : current <= 30 ? 'OVERSOLD' : 'NEUTRAL'}
+        </span>
       </div>
+      <SparklineCanvas
+        pts={pts}
+        color="#8b7af8"
+        fillColor="rgba(139,122,248,0.06)"
+        refLines={[
+          { value: 70, color: 'rgba(248,113,113,0.35)' },
+          { value: 30, color: 'rgba(45,212,191,0.35)' },
+        ]}
+      />
     </div>
   )
 }
 
-function RsiMock() {
-  const pts = [42, 48, 55, 61, 58, 52, 45, 38, 44, 52, 60, 67, 72, 68, 62]
-  const W = 200, H = 56
-  const toX = (i: number) => (i / (pts.length - 1)) * W
-  const toY = (v: number) => H - ((v - 20) / 60) * H * 0.8 - H * 0.1
-  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
+function AtrWidget() {
+  const { data = [], isLoading } = useNiftyEod()
+  if (isLoading || data.length === 0) return <div style={{ height: 80 }} />
+  const last60 = data.slice(-60)
+  const pts = last60.map(b => (b as unknown as Record<string, number>).atr_14).filter(v => v != null)
+  const current = pts[pts.length - 1]
+  const avg = pts.reduce((s, v) => s + v, 0) / pts.length
   return (
-    <div style={{ padding: '10px 4px 4px' }}>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-        <line x1="0" y1={toY(70).toFixed(1)} x2={W} y2={toY(70).toFixed(1)} stroke="rgba(248,113,113,0.3)" strokeWidth="1" strokeDasharray="3,3" />
-        <line x1="0" y1={toY(30).toFixed(1)} x2={W} y2={toY(30).toFixed(1)} stroke="rgba(45,212,191,0.3)" strokeWidth="1" strokeDasharray="3,3" />
-        <path d={path} fill="none" stroke="#8b7af8" strokeWidth="1.5" strokeLinejoin="round" />
-        <circle cx={toX(pts.length - 1).toFixed(1)} cy={toY(pts[pts.length - 1]).toFixed(1)} r="2.5" fill="#8b7af8" />
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'rgba(45,212,191,0.6)' }}>30 OS</span>
-        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: '#8b7af8' }}>62.4</span>
-        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'rgba(248,113,113,0.6)' }}>70 OB</span>
+    <div style={{ padding: '4px 12px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 26, fontWeight: 600, fontFamily: 'var(--font-mono,monospace)',
+          color: 'rgba(201,168,76,0.9)', lineHeight: 1 }}>
+          {current?.toFixed(1) ?? '—'}
+        </span>
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+          {current > avg * 1.2 ? 'HIGH VOL' : current < avg * 0.8 ? 'LOW VOL' : 'AVG RANGE'}
+        </span>
       </div>
+      <SparklineCanvas
+        pts={pts}
+        color="rgba(201,168,76,0.85)"
+        fillColor="rgba(201,168,76,0.07)"
+      />
     </div>
   )
 }
