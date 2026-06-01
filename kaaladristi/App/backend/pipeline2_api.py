@@ -3440,13 +3440,12 @@ def vani_daily(req: VaNiDailyRequest):
         positive      = int(sig_row[1]) if sig_row else 0
         negative      = int(sig_row[2]) if sig_row else 0
 
-        # Build ordered item list — panchang always first
-        items: list[dict] = []
-
-        # Item 1 — panchang
-        items.append({
+        # Build ordered item list — panchang first, confluences second, astro fills remaining
+        panchang_item = {
             'key': f"panchang:{date_str}",
             'type': 'panchang',
+            'action': 'view_panchang',
+            'action_target': '/panchang',
             'user_message': (
                 f"Generate one observation card for today's panchang.\n"
                 f"Item name: Today's Panchang\n"
@@ -3454,40 +3453,25 @@ def vani_daily(req: VaNiDailyRequest):
                 f"Nakshatra: {nak_name} (lord: {nak_lord})\n"
                 f"Tithi: {tithi} {paksha}\n"
                 f"Yoga: {yoga}\n"
-                f"Rule signals today: {total_signals} ({positive} positive · {negative} negative)\n"
                 f"Badge must be: {total_signals} signals\n"
-                f"Explain: What today's panchang conditions are and what the rule signal count represents."
+                f"Explain: State today's vara, nakshatra, tithi and yoga in one sentence.\n"
+                f'Second sentence must be exactly: "{total_signals} rule signals active today — {positive} positive, {negative} negative."\n'
+                f"Do not interpret the signals. Do not say \"observed on record\". Just state the count."
             ),
-        })
+        }
 
-        # Items 2-3 — astro rules
-        for o in active_astro_overlays:
-            cid  = o.get('catalog_item_id', '')
-            name = o.get('name') or _resolve_display_name(cid, active_overlays)
-            n    = _get_rule_confidence_for_cid(cid, conn)
-            items.append({
-                'key': f"rule:{cid}:{date_str}",
-                'type': 'astro',
-                'user_message': (
-                    f"Generate one observation card for this astro rule.\n"
-                    f"Item name: {name}\n"
-                    f"Historical instances on Nifty: {n}\n"
-                    f"Status: Active today as chart overlay\n"
-                    f"Badge must be: {f'{n} instances' if n > 0 else 'No data yet'}\n"
-                    f"Explain: What {name} is and what historically happens on Nifty when it is active."
-                ),
-            })
-
-        # Fill remaining slots with confluences
+        confluence_items: list[dict] = []
         for c in confluences:
             pair = sorted([c.get('item_a', ''), c.get('item_b', '')])
             a    = c.get('item_a_display') or _resolve_display_name(c.get('item_a', ''), active_overlays)
             b    = c.get('item_b_display') or _resolve_display_name(c.get('item_b', ''), active_overlays)
             n    = c.get('instances', 0)
             status = c.get('status', 'detected')
-            items.append({
+            confluence_items.append({
                 'key': f"confluence:{pair[0]}:{pair[1]}:{date_str}",
                 'type': 'confluence',
+                'action': 'open_correlation',
+                'action_target': f"/correlation/{c.get('item_a', '')}/{c.get('item_b', '')}",
                 'user_message': (
                     f"Generate one observation card for this confluence.\n"
                     f"Item name: {a} ∩ {b}\n"
@@ -3497,6 +3481,46 @@ def vani_daily(req: VaNiDailyRequest):
                     f"Explain: What happens on Nifty when {a} and {b} are simultaneously active."
                 ),
             })
+
+        astro_items: list[dict] = []
+        for o in active_astro_overlays:
+            cid  = o.get('catalog_item_id', '')
+            name = o.get('name') or _resolve_display_name(cid, active_overlays)
+            n    = _get_rule_confidence_for_cid(cid, conn)
+            # Resolve DB rule_id for action_target
+            rule_code = cid.replace('astro_rule:', '').upper()
+            rule_db_id: int | None = None
+            try:
+                with conn.cursor() as _cur:
+                    _cur.execute(
+                        "SELECT id FROM km_astro_rule_master WHERE UPPER(rule_code) IN (%s, %s) LIMIT 1",
+                        (rule_code, rule_code.replace('-', '_')),
+                    )
+                    _row = _cur.fetchone()
+                    rule_db_id = int(_row[0]) if _row else None
+            except Exception:
+                pass
+            astro_items.append({
+                'key': f"rule:{cid}:{date_str}",
+                'type': 'astro',
+                'action': 'view_rule',
+                'action_target': f"/rules/{rule_db_id}" if rule_db_id else None,
+                'user_message': (
+                    f"Generate one observation card for this astro rule.\n"
+                    f"Item name: {name}\n"
+                    f"Historical instances on Nifty: {n}\n"
+                    f"Status: Active today as chart overlay\n"
+                    f"Badge must be: {f'{n} instances' if n > 0 else 'No data yet'}\n"
+                    f"Explain: First sentence — what {name} is in plain language, no jargon.\n"
+                    f"Second sentence — describe what kind of market condition or period this rule typically marks based on {n} historical instances. Do not repeat the instance count in the second sentence."
+                ),
+            })
+
+        # Fix 3 — priority order: panchang → confluences → astro (fill remaining)
+        items: list[dict] = [panchang_item]
+        items.extend(confluence_items[:2])
+        items.extend(astro_items[:max(0, 3 - len(items))])
+        items = items[:3]
 
         # Sequential per-item processing — cache hit skips LLM call
         observations: list[dict] = []
@@ -3510,6 +3534,8 @@ def vani_daily(req: VaNiDailyRequest):
                 if age_s < 86400:
                     obs = dict(cached_entry['observation'])
                     obs.setdefault('action_label', 'View history →')
+                    obs.setdefault('action', item.get('action'))
+                    obs.setdefault('action_target', item.get('action_target'))
                     observations.append(obs)
                     continue
 
@@ -3552,6 +3578,9 @@ def vani_daily(req: VaNiDailyRequest):
 
             obs = _apply_vani_post_filter([obs])[0]
             obs.setdefault('action_label', 'View history →')
+            # Enrich with action routing (Fix 4)
+            obs['action']        = item.get('action')
+            obs['action_target'] = item.get('action_target')
 
             # Cache this item individually
             _vani_cache[item_key] = {
