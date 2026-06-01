@@ -10,6 +10,7 @@ Run:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -1776,36 +1777,40 @@ _intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
 
 _VANI_MORNING_SYSTEM = """You are VaNi, DristiQ's market intelligence agent. /no_think
 
-Output valid JSON only. No markdown. No preamble. No explanation outside the JSON.
+For each item in the list, generate one observation card explaining what it is and what historically happens on Nifty when it is active.
 
-For each item in the list provided, generate exactly one observation card.
+Output valid JSON only. No markdown. No preamble.
 
-JSON format:
-{"observations":[{"type":"panchang|astro|confluence","title":"[exact item name from list]","description":"[current status only — 1 sentence]","badge":"[N instances OR N signals OR Day N of N]","action_label":"View history →"}]}
+Format:
+{"observations":[{
+  "type":"panchang|astro|confluence",
+  "title":"[exact item name from list]",
+  "badge":"[N instances OR Day N of N OR N signals]",
+  "description":"[1-2 sentences: what it is + what historically happens when active on Nifty]"
+}]}
 
 Absolute rules:
-1. Title must be the exact item name from the list — never rename, never combine
-2. Badge contains the count. Description must NOT repeat the count — state only the current status.
-   Examples of correct descriptions:
-   - "Active today as chart overlay."
-   - "Both overlays are currently active in your framework."
-   - "Panchak period is active today."
-   - "13 rule signals active today." (panchang only — signals count belongs in description for panchang)
-3. Forbidden: predict, forecast, may, potential, impact, influence, trend, direction, develop, monitor, watch, assess, suggest, indicate, heightened, significant, dynamics, interplay, intellectual, recalibration
-4. Never invent counts — only use numbers explicitly given
-5. Panchang card title = "Today's Panchang". Never use vara/nakshatra/tithi as observation titles.
-6. Confluence title = "ItemA ∩ ItemB" exactly."""
+1. Title = exact name from the list — never rename
+2. Description = what it IS + what historically happens. Never invent counts.
+3. Forbidden: buy, sell, bullish, bearish, up, down, rise, fall, recommend, predict, forecast, potential, may impact, could
+4. Allowed: historically, instances show, when active, has appeared, on record, observed
+5. Use exact counts from context — never say "0 OR 1", never hedge the count
+6. If n_signals is 0 — say "No historical data computed yet for this rule."
+7. Panchang card title must be "Today's Panchang" always"""
 
 _VANI_FORBIDDEN_WORDS = frozenset({
-    'monitor', 'watch', 'assess', 'develop', 'potential', 'may', 'could',
-    'suggest', 'indicate', 'heightened', 'significant', 'dynamics',
-    'interplay', 'intellectual', 'recalibration', 'predict', 'forecast',
-    'impact', 'influence', 'trend', 'direction',
+    'buy', 'sell', 'recommend', 'predict', 'forecast',
+    'monitor', 'watch', 'assess', 'develop', 'potential',
+    'could indicate', 'may impact', 'heightened', 'significant',
+    'dynamics', 'interplay', 'intellectual', 'recalibration',
 })
+
+# In-memory morning brief cache — keyed by stable fingerprint, cleared on restart
+_vani_cache: dict = {}
 
 
 def _vani_db_conn():
-    """Return a fresh psycopg2 connection to vani_db. Callers must close."""
+    """Return a fresh psycopg2 connection to vani_db. Kept for vn_interaction_log writes."""
     url = os.getenv('VANI_DB_URL', '')
     if not url:
         raise RuntimeError('VANI_DB_URL not configured')
@@ -1853,10 +1858,11 @@ def _resolve_display_name(catalog_item_id: str, active_overlays: list) -> str:
 
 
 def _apply_vani_post_filter(observations: list) -> list:
-    """Replace any description containing forbidden words with a safe fallback."""
+    """Replace any description containing forbidden words/phrases with a safe fallback."""
     for obs in observations:
-        desc = obs.get('description', '')
-        if any(w in desc.lower().split() for w in _VANI_FORBIDDEN_WORDS):
+        desc = obs.get('description', '').lower()
+        hit = any(w in desc for w in _VANI_FORBIDDEN_WORDS)
+        if hit:
             badge = obs.get('badge', '')
             title = obs.get('title', 'This item')
             obs['description'] = (
@@ -3379,90 +3385,51 @@ def _check_panchak_active(conn, date_str: str) -> dict | None:
         return None
 
 
-def _vani_cache_read(item_keys: list, date_str: str) -> dict:
-    """Batch-read vani_observation_cache for a list of item_keys. Returns {item_key: obs}."""
-    import json as _json
-    if not item_keys:
-        return {}
-    cached: dict = {}
-    try:
-        vconn = _vani_db_conn()
-        with vconn.cursor() as cur:
-            cur.execute(
-                "SELECT item_key, observation FROM vani_observation_cache "
-                "WHERE item_key = ANY(%s) AND cache_date = %s",
-                (item_keys, date_str),
-            )
-            for row in cur.fetchall():
-                obs = row[1] if isinstance(row[1], dict) else _json.loads(row[1])
-                cached[row[0]] = obs
-        vconn.close()
-    except Exception as e:
-        log.warning(f'vani cache read failed: {e}')
-    return cached
-
-
-def _vani_cache_write(item_key: str, date_str: str, obs: dict) -> None:
-    """Write one observation to vani_observation_cache. Silently skips on error."""
-    import json as _json
-    try:
-        vconn = _vani_db_conn()
-        with vconn:
-            with vconn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO vani_observation_cache (item_key, cache_date, observation) "
-                    "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                    (item_key, date_str, _json.dumps(obs)),
-                )
-        vconn.close()
-    except Exception as e:
-        log.warning(f'vani cache write failed ({item_key}): {e}')
-
-
-def _vani_build_items(active_overlays: list, confluences: list, date_str: str) -> list[dict]:
-    """
-    Build ordered list of items to process for the morning brief.
-    Priority: confluences first, then astro rules, then panchang.
-    Each item dict: {item_key, item_type, overlay?, confluence?}
-    Confluence items get item_a_display / item_b_display resolved from active_overlays.
-    """
-    items = []
-    for c in confluences[:2]:
-        pair = sorted([c.get('item_a', ''), c.get('item_b', '')])
-        c_enriched = dict(c)
-        c_enriched['item_a_display'] = _resolve_display_name(c.get('item_a', ''), active_overlays)
-        c_enriched['item_b_display'] = _resolve_display_name(c.get('item_b', ''), active_overlays)
-        items.append({
-            'item_key':  f"confluence:{pair[0]}:{pair[1]}:{date_str}",
-            'item_type': 'confluence',
-            'confluence': c_enriched,
-        })
-    for o in active_overlays:
-        if o.get('type') in ('astro_zone', 'astro_marker'):
-            cid = o.get('catalog_item_id', '')
-            if cid:
-                items.append({
-                    'item_key':  f"rule:{cid}:{date_str}",
-                    'item_type': 'astro',
-                    'overlay':   o,
-                })
-    items.append({'item_key': f"panchang:{date_str}", 'item_type': 'panchang'})
-    return items
-
-
 @app.post('/api/vani/daily')
 def vani_daily(req: VaNiDailyRequest):
     """
-    Morning brief — sequential per-item cache-then-LLM.
-    Priority order: confluences → astro rules → panchang.
-    Each item is cached individually in vani_observation_cache (vani_db).
-    Cache is date-scoped (cache_date = today) — no TTL needed.
+    Morning brief — single LLM call for all items, in-memory cache with stable key.
+    Card order: panchang (always first) → astro rules (max 2) → confluences (fill remaining slots).
+    Max 3 cards total.
     """
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
     date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
 
     active_overlays = req.active_overlays or []
-    confluences     = req.confluences or []
+    all_confluences = req.confluences or []
+
+    # Astro overlays: filter to astro_zone / astro_marker, max 2
+    active_astro_overlays = [
+        o for o in active_overlays
+        if o.get('type') in ('astro_zone', 'astro_marker')
+    ][:2]
+
+    # Confluence slots: max 3 total − 1 panchang − n_astro
+    confluence_slots = max(0, 2 - len(active_astro_overlays))
+    confluences = all_confluences[:confluence_slots]
+
+    # Stable cache key — sorted astro IDs + sorted confluence pairs
+    astro_ids = sorted(o.get('catalog_item_id', '') for o in active_astro_overlays)
+    conf_ids  = sorted(
+        ':'.join(sorted([c.get('item_a', ''), c.get('item_b', '')]))
+        for c in confluences
+    )
+    _cache_key = (
+        f"{date_str}:"
+        f"{hashlib.md5(json.dumps({'a': astro_ids, 'c': conf_ids}).encode()).hexdigest()[:8]}"
+    )
+
+    # Check in-memory cache (24 h TTL)
+    if _cache_key in _vani_cache:
+        cached = _vani_cache[_cache_key]
+        age_s = (datetime.now() - cached['cached_at']).total_seconds()
+        if age_s < 86400:
+            return {
+                'date': date_str,
+                'observations': cached['observations'],
+                'cached': True,
+                'source': 'memory',
+            }
 
     conn = _conn()
     try:
@@ -3494,70 +3461,102 @@ def vani_daily(req: VaNiDailyRequest):
         positive      = int(sig_row[1]) if sig_row else 0
         negative      = int(sig_row[2]) if sig_row else 0
 
-        items = _vani_build_items(active_overlays, confluences, date_str)
+        # Build user message — panchang first, then astro, then confluences
+        user_message = (
+            f"Date: {date_str}\n\n"
+            f"ITEM 1 — Today's Panchang (always include this)\n"
+            f"Vara: {vara} (lord: {vara_lord})\n"
+            f"Nakshatra: {nak_name} (lord: {nak_lord})\n"
+            f"Tithi: {tithi} {paksha}\n"
+            f"Yoga: {yoga}\n"
+            f"Rule signals today: {total_signals} ({positive} positive · {negative} negative)\n"
+            f"Explain: What today's panchang conditions are and what the rule signal count means.\n\n"
+        )
 
-        # Static fallback when no astro/confluence items in framework
-        has_framework_items = any(i['item_type'] != 'panchang' for i in items)
-        if not has_framework_items:
-            return {
-                'date': date_str,
-                'observations': [{
-                    'type': 'panchang',
-                    'title': "Today's Panchang",
-                    'description': (
-                        f"{tithi} {paksha} · {yoga}. "
-                        f"{total_signals} rule signals active today — "
-                        f"{positive} positive, {negative} negative."
-                    ),
-                    'badge': f"{total_signals} signals",
-                    'action_label': 'View panchang →',
-                    'item_key': f"panchang:{date_str}",
-                }],
-                'cached': False,
-                'source': 'static',
-            }
+        item_num = 2
+        for o in active_astro_overlays:
+            name = o.get('name') or _resolve_display_name(o.get('catalog_item_id', ''), active_overlays)
+            n = _get_rule_confidence_for_cid(o.get('catalog_item_id', ''), conn)
+            user_message += (
+                f"ITEM {item_num} — {name}\n"
+                f"Type: Astro rule — chart overlay\n"
+                f"Historical instances on Nifty: {n if n > 0 else 'none computed yet'}\n"
+                f"Status: Active today as chart overlay\n"
+                f"Explain: What {name} is and what historically happens on Nifty when it is active.\n\n"
+            )
+            item_num += 1
 
-        # Batch cache read
-        all_keys    = [i['item_key'] for i in items]
-        cached_map  = _vani_cache_read(all_keys, date_str)
-        cache_misses = 0
+        for c in confluences:
+            a = c.get('item_a_display') or _resolve_display_name(c.get('item_a', ''), active_overlays)
+            b = c.get('item_b_display') or _resolve_display_name(c.get('item_b', ''), active_overlays)
+            n = c.get('instances', 0)
+            status = c.get('status', 'detected')
+            user_message += (
+                f"ITEM {item_num} — {a} ∩ {b}\n"
+                f"Type: Indicator/rule confluence\n"
+                f"Historical instances on Nifty: {n}\n"
+                f"Status: {status}\n"
+                f"Explain: What happens on Nifty when {a} and {b} are simultaneously active.\n\n"
+            )
+            item_num += 1
+
+        user_message += "Generate one observation card per item above. Use exact names and counts."
+
+        # Single LLM call for all items
+        _t0 = time.monotonic()
+        raw = _ai_complete(
+            system=_VANI_MORNING_SYSTEM,
+            user=user_message,
+            max_tokens=600,
+            temperature=0.3,
+            no_think=True,
+        )
+        _latency = int((time.monotonic() - _t0) * 1000)
 
         observations: list[dict] = []
-        for item in items:
-            if len(observations) >= 3:
-                break
-            key = item['item_key']
-            if key in cached_map:
-                obs = dict(cached_map[key])
-                obs['item_key'] = key
-                observations.append(obs)
-                continue
+        if raw:
+            import re as _re
+            cleaned = _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip())
+            try:
+                parsed = json.loads(cleaned)
+                observations = parsed.get('observations', [])
+            except Exception:
+                log.warning(f'vani_daily parse failed: {raw[:300]}')
 
-            # Cache miss — one LLM call for this item
-            cache_misses += 1
-            obs = _generate_single_vani_observation(
-                item_type=item['item_type'],
-                item_key=key,
-                date_str=date_str,
-                panchang=panchang,
-                total_signals=total_signals,
-                positive=positive,
-                negative=negative,
-                overlay=item.get('overlay'),
-                confluence=item.get('confluence'),
-                main_conn=conn,
-            )
-            if obs:
-                _vani_cache_write(key, date_str, obs)
-                obs = dict(obs)
-                obs['item_key'] = key
-                observations.append(obs)
+        # Safety filter
+        observations = _apply_vani_post_filter(observations)
+
+        # Add action_label if missing (LLM may omit since new prompt doesn't ask for it)
+        for obs in observations:
+            obs.setdefault('action_label', 'View history →')
+
+        # Store in in-memory cache
+        _vani_cache[_cache_key] = {
+            'observations': observations,
+            'cached_at': datetime.now(),
+        }
+
+        # Log to vn_interaction_log
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/vani/daily",
+            user_input=user_message,
+            llm_response=raw or '',
+            system_prompt=_VANI_MORNING_SYSTEM,
+            context_payload={
+                'date': date_str,
+                'astro_ids': astro_ids,
+                'conf_ids': conf_ids,
+            },
+            model_version=_AI_MODEL,
+            latency_ms=_latency,
+        )
 
         return {
             'date': date_str,
             'observations': observations,
-            'cached': cache_misses == 0,
-            'source': 'db_cache',
+            'cached': False,
+            'source': 'llm',
         }
 
     except Exception as e:
@@ -3584,11 +3583,11 @@ def vani_observation(req: VaNiObservationRequest, _uid: str = Depends(_get_curre
     tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
     date_str = req.date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
 
-    cached = _vani_cache_read([req.item_key], date_str)
-    if req.item_key in cached:
-        obs = dict(cached[req.item_key])
-        obs['item_key'] = req.item_key
-        return {'observation': obs, 'cached': True}
+    # Check in-memory cache for any entry containing this item_key
+    for _entry in _vani_cache.values():
+        for _obs in _entry.get('observations', []):
+            if _obs.get('item_key') == req.item_key:
+                return {'observation': dict(_obs), 'cached': True}
 
     conn = _conn()
     try:
@@ -3629,7 +3628,6 @@ def vani_observation(req: VaNiObservationRequest, _uid: str = Depends(_get_curre
             main_conn=conn,
         )
         if obs:
-            _vani_cache_write(req.item_key, date_str, obs)
             obs = dict(obs)
             obs['item_key'] = req.item_key
         return {'observation': obs, 'cached': False}
@@ -3643,19 +3641,10 @@ def vani_observation(req: VaNiObservationRequest, _uid: str = Depends(_get_curre
 
 @app.post('/api/vani/clear-cache')
 def vani_clear_cache(_uid: str = Depends(_get_current_user_id)):
-    """Admin: clear all entries from vani_observation_cache for today (and optionally all dates)."""
-    try:
-        vconn = _vani_db_conn()
-        with vconn:
-            with vconn.cursor() as cur:
-                cur.execute("DELETE FROM vani_observation_cache")
-                cur.execute("SELECT COUNT(*) FROM vani_observation_cache")
-                remaining = cur.fetchone()[0]
-        vconn.close()
-        return {'ok': True, 'remaining': remaining}
-    except Exception as e:
-        log.error(f'vani_clear_cache error: {e}')
-        return {'ok': False, 'error': str(e)}
+    """Admin: clear the in-memory morning brief cache, forcing fresh LLM generation on next load."""
+    count = len(_vani_cache)
+    _vani_cache.clear()
+    return {'ok': True, 'cleared': count}
 
 
 @app.delete('/api/vani/observation-cache/{item_key:path}/{cache_date}')
@@ -3664,22 +3653,10 @@ def vani_delete_observation(
     cache_date: str,
     _uid: str = Depends(_get_current_user_id),
 ):
-    """Admin: delete one cached observation by item_key + date, forcing regeneration on next load."""
-    import json as _json
-    try:
-        vconn = _vani_db_conn()
-        with vconn:
-            with vconn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM vani_observation_cache WHERE item_key = %s AND cache_date = %s",
-                    (item_key, cache_date),
-                )
-                deleted = cur.rowcount
-        vconn.close()
-        return {'ok': True, 'deleted': deleted, 'item_key': item_key, 'cache_date': cache_date}
-    except Exception as e:
-        log.error(f'vani_delete_observation error: {e}')
-        return {'ok': False, 'error': str(e)}
+    """Admin: clear in-memory cache (item_key / cache_date ignored — whole cache is cleared)."""
+    count = len(_vani_cache)
+    _vani_cache.clear()
+    return {'ok': True, 'cleared': count, 'item_key': item_key, 'cache_date': cache_date}
 
 
 # ── VaNi Intent System ────────────────────────────────────────────────────────
