@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DristiQ — Catalog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #080810;
+  --surface-1:    #0f0f1e;
+  --surface-2:    #13131f;
+  --surface-3:    #1a1a2e;
+  --accent:       #8b5cf6;
+  --accent-dim:   rgba(139,92,246,0.35);
+  --accent-glow:  rgba(139,92,246,0.12);
+  --accent-solid: rgba(139,92,246,0.9);
+  --gold:         #d4a84b;
+  --gold-dim:     rgba(212,168,75,0.15);
+  --gold-glow:    rgba(212,168,75,0.08);
+  --bull:         #10b981;
+  --bull-bg:      rgba(16,185,129,0.08);
+  --bear:         #ef4444;
+  --bear-bg:      rgba(239,68,68,0.08);
+  --caution:      #f59e0b;
+  --caution-bg:   rgba(245,158,11,0.08);
+  --text-1:       rgba(255,255,255,0.92);
+  --text-2:       rgba(255,255,255,0.55);
+  --text-3:       rgba(255,255,255,0.28);
+  --border:       rgba(255,255,255,0.07);
+  --border-mid:   rgba(255,255,255,0.12);
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+  --font-mono:    'IBM Plex Mono', monospace;
+  --radius-sm:    6px;
+  --radius:       10px;
+  --radius-lg:    16px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text-1);font-size:13px;-webkit-font-smoothing:antialiased;}
+
+/* ── LAYOUT ── */
+.app{display:grid;grid-template-columns:200px 1fr;grid-template-rows:52px 1fr;height:100vh;overflow:hidden;}
+
+/* ── TOPBAR ── */
+.topbar{grid-column:1/-1;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--border);background:var(--bg);gap:16px;z-index:10;}
+.brand{font-family:var(--font-display);font-size:18px;font-weight:400;letter-spacing:-0.02em;font-variation-settings:"opsz" 144;}
+.brand em{font-style:italic;color:var(--gold);}
+.topbar-search{flex:1;max-width:320px;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:8px;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.data-chip{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-2);font-family:var(--font-mono);}
+.data-dot{width:6px;height:6px;border-radius:50%;background:var(--bull);animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.ask-vani-btn{display:flex;align-items:center;gap:7px;padding:7px 14px;background:var(--accent-glow);border:1px solid var(--accent-dim);border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;}
+
+/* ── SIDEBAR ── */
+.sidebar{background:var(--bg);border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column;overflow:hidden;}
+.nav-section{padding:0 12px;margin-bottom:20px;}
+.nav-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);font-weight:600;padding:0 8px;margin-bottom:6px;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-2);cursor:pointer;transition:all 0.15s;margin-bottom:1px;}
+.nav-item:hover{background:var(--surface-1);color:var(--text-1);}
+.nav-item.active{background:var(--accent-glow);color:var(--text-1);border-left:2px solid var(--accent);padding-left:8px;}
+.nav-glyph{font-size:13px;width:16px;text-align:center;}
+.sidebar-footer{margin-top:auto;padding:12px;border-top:1px solid var(--border);}
+.theme-dots{display:flex;gap:7px;margin-bottom:12px;padding:0 4px;}
+.theme-dot{width:10px;height:10px;border-radius:50%;cursor:pointer;}
+.theme-dot.kd{background:#8b5cf6;} .theme-dot.tech{background:#10e8de;} .theme-dot.jade{background:#3aad7e;}
+.user-row{display:flex;align-items:center;gap:8px;padding:6px 4px;}
+.user-avatar{width:26px;height:26px;border-radius:6px;background:var(--accent-dim);display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--accent);}
+.user-name{font-size:12px;color:var(--text-2);}
+
+/* ── CATALOG LAYOUT ── */
+.catalog{
+  display:grid;
+  grid-template-columns:180px 1fr;
+  overflow:hidden;
+  min-height:0;
+  position:relative;
+}
+
+/* Catalog subnav */
+.cat-nav{
+  border-right:1px solid var(--border);
+  padding:16px 0;
+  display:flex;flex-direction:column;
+  gap:2px;
+  overflow-y:auto;
+}
+.cat-nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 16px;
+  font-size:12.5px;color:var(--text-2);
+  cursor:pointer;transition:all 0.15s;
+  border-left:2px solid transparent;
+}
+.cat-nav-item:hover{color:var(--text-1);background:var(--surface-1);}
+.cat-nav-item.active{
+  color:var(--text-1);
+  background:var(--gold-glow);
+  border-left-color:var(--gold);
+}
+.cat-nav-count{
+  margin-left:auto;
+  font-family:var(--font-mono);font-size:9px;
+  color:var(--text-3);
+  background:var(--surface-2);
+  padding:1px 6px;border-radius:4px;
+}
+.cat-nav-soon{
+  font-size:9px;color:var(--text-3);
+  margin-left:auto;
+  font-family:var(--font-mono);
+  font-style:italic;
+}
+
+/* Catalog content */
+.cat-content{
+  overflow-y:auto;
+  padding:24px 28px;
+  position:relative;
+}
+.cat-content::-webkit-scrollbar{width:4px;}
+.cat-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px;}
+.cat-content.panel-open{margin-right:400px;}
+
+/* Section header */
+.section-header{margin-bottom:20px;}
+.section-title{
+  font-family:var(--font-display);
+  font-size:28px;font-weight:400;
+  font-variation-settings:"opsz" 144;
+  letter-spacing:-0.02em;
+  margin-bottom:6px;
+}
+.section-title em{font-style:italic;color:var(--gold);}
+.section-desc{font-size:13px;color:var(--text-2);line-height:1.5;}
+.section-tag{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-family:var(--font-mono);
+  padding:3px 9px;border-radius:4px;
+  margin-top:8px;
+}
+.tag-free{background:var(--bull-bg);border:1px solid rgba(16,185,129,0.2);color:var(--bull);}
+.tag-mixed{background:var(--caution-bg);border:1px solid rgba(245,158,11,0.2);color:var(--caution);}
+
+/* ── INDICATOR CARDS ── */
+.indicators-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+  margin-bottom:32px;
+}
+.ind-card{
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  cursor:pointer;
+  transition:border-color 0.15s,transform 0.15s;
+  position:relative;
+}
+.ind-card:hover{border-color:var(--border-mid);transform:translateY(-1px);}
+.ind-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-glow);}
+.ind-card.added{border-color:rgba(16,185,129,0.3);}
+
+/* Color strip at top — indicator's chart color */
+.ind-color-strip{height:3px;width:100%;}
+
+.ind-card-top{
+  padding:12px 14px 8px;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:8px;
+}
+.ind-meta{flex:1;}
+.ind-type-row{
+  display:flex;align-items:center;gap:6px;
+  margin-bottom:6px;
+}
+.ind-type-chip{
+  font-size:8px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--text-3);font-weight:600;
+  padding:1px 6px;
+  background:var(--surface-2);
+  border-radius:3px;
+  font-family:var(--font-mono);
+}
+.ind-name{
+  font-family:var(--font-display);
+  font-size:17px;font-weight:400;
+  font-variation-settings:"opsz" 144;
+  letter-spacing:-0.01em;
+  margin-bottom:4px;
+}
+
+/* VaNi one-liner — cached explanation */
+.ind-vani-line{
+  font-size:11.5px;color:var(--text-2);
+  line-height:1.45;
+  margin-bottom:8px;
+}
+.ind-vani-line em{font-style:italic;color:rgba(167,139,250,0.8);}
+
+/* Mini sparkline preview */
+.ind-preview{
+  height:36px;
+  margin:0 -14px;
+  padding:0 14px;
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  background:rgba(255,255,255,0.02);
+  position:relative;
+  overflow:hidden;
+}
+.preview-label{
+  position:absolute;top:4px;left:14px;
+  font-family:var(--font-mono);font-size:8px;
+  color:var(--text-3);
+}
+
+/* Card footer */
+.ind-card-footer{
+  padding:8px 14px;
+  display:flex;align-items:center;gap:8px;
+}
+.ind-id{
+  font-family:var(--font-mono);font-size:9px;
+  color:var(--text-3);
+  background:var(--surface-2);
+  padding:2px 6px;border-radius:3px;
+}
+
+/* Color picker inline */
+.color-picker-wrap{
+  position:relative;
+  display:flex;align-items:center;gap:4px;
+}
+.color-swatch{
+  width:16px;height:16px;border-radius:50%;
+  cursor:pointer;border:2px solid rgba(255,255,255,0.2);
+  transition:transform 0.15s;
+  flex-shrink:0;
+}
+.color-swatch:hover{transform:scale(1.2);}
+.color-picker-popover{
+  position:absolute;
+  bottom:24px;left:0;
+  background:var(--surface-2);
+  border:1px solid var(--border-mid);
+  border-radius:var(--radius);
+  padding:10px;
+  display:none;
+  z-index:50;
+  box-shadow:0 8px 24px rgba(0,0,0,0.4);
+}
+.color-picker-popover.open{display:block;}
+.cp-swatches{display:flex;flex-wrap:wrap;gap:5px;width:120px;margin-bottom:8px;}
+.cp-swatch{
+  width:18px;height:18px;border-radius:4px;
+  cursor:pointer;transition:transform 0.1s;
+  border:1px solid rgba(255,255,255,0.1);
+}
+.cp-swatch:hover{transform:scale(1.2);}
+.cp-label{font-size:9px;color:var(--text-3);font-family:var(--font-mono);}
+
+.add-btn{
+  margin-left:auto;
+  padding:5px 12px;
+  border-radius:var(--radius-sm);
+  font-size:11px;font-weight:500;
+  cursor:pointer;transition:all 0.15s;
+  white-space:nowrap;
+}
+.btn-add{background:var(--accent-glow);border:1px solid var(--accent-dim);color:var(--text-1);}
+.btn-add:hover{background:var(--accent-dim);border-color:var(--accent);}
+.btn-added{background:var(--bull-bg);border:1px solid rgba(16,185,129,0.3);color:var(--bull);cursor:default;}
+
+/* ── WIDGET CARDS ── */
+.widgets-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:12px;
+}
+.widget-card{
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  cursor:pointer;
+  transition:border-color 0.15s;
+  position:relative;
+}
+.widget-card:hover{border-color:var(--border-mid);}
+.widget-card.selected{border-color:var(--accent);}
+
+/* Locked widget — communicates value, doesn't just dim */
+.widget-card.locked{
+  cursor:pointer;
+}
+.widget-card.locked .wc-preview{
+  filter:blur(3px);
+  pointer-events:none;
+  opacity:0.5;
+}
+.lock-overlay{
+  position:absolute;
+  inset:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  z-index:2;
+  background:rgba(8,8,16,0.7);
+  backdrop-filter:blur(2px);
+  gap:8px;
+  cursor:pointer;
+  transition:background 0.15s;
+}
+.lock-overlay:hover{background:rgba(8,8,16,0.6);}
+.lock-icon{font-size:20px;color:var(--text-3);}
+.lock-title{
+  font-family:var(--font-display);
+  font-size:14px;font-style:italic;font-weight:400;
+  font-variation-settings:"opsz" 144;
+  color:var(--text-2);
+}
+.lock-desc{font-size:11px;color:var(--text-3);text-align:center;max-width:180px;line-height:1.4;}
+.lock-cta{
+  padding:5px 14px;
+  background:var(--accent-glow);
+  border:1px solid var(--accent-dim);
+  border-radius:100px;
+  font-size:11px;color:var(--text-1);
+  cursor:pointer;
+  margin-top:4px;
+}
+
+.wc-header{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 14px;
+  border-bottom:1px solid var(--border);
+}
+.wc-icon{font-size:14px;}
+.wc-name{font-size:13px;font-weight:500;flex:1;}
+.wc-badge{
+  font-size:9px;padding:2px 7px;border-radius:4px;font-weight:600;
+  letter-spacing:0.06em;text-transform:uppercase;
+}
+.badge-free{background:var(--bull-bg);color:var(--bull);}
+.badge-paid{background:var(--gold-dim);color:var(--gold);}
+.wc-preview{padding:12px 14px;}
+
+/* VaNi one-liner on widget */
+.wc-vani-line{
+  padding:8px 14px;
+  border-top:1px solid var(--border);
+  font-size:11px;color:var(--text-3);
+  display:flex;align-items:flex-start;gap:6px;
+  line-height:1.4;
+}
+.wc-vani-star{color:var(--accent);font-size:10px;flex-shrink:0;margin-top:1px;}
+.wc-footer{
+  padding:8px 14px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-top:1px solid var(--border);
+}
+
+/* ── DEEP DIVE PANEL ── */
+.deep-dive{
+  position:fixed;
+  top:52px;right:0;bottom:0;
+  width:400px;
+  background:var(--surface-2);
+  border-left:1px solid var(--accent-dim);
+  display:flex;flex-direction:column;
+  z-index:60;
+  transform:translateX(100%);
+  transition:transform 0.35s cubic-bezier(0.22,1,0.36,1);
+  overflow:hidden;
+}
+.deep-dive.open{transform:translateX(0);}
+
+.dd-top{
+  flex-shrink:0;
+  padding:16px 18px 14px;
+  border-bottom:1px solid var(--border);
+  position:relative;
+  overflow:hidden;
+}
+.dd-top::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--accent),var(--gold),transparent);
+}
+.dd-close{
+  position:absolute;top:14px;right:16px;
+  width:26px;height:26px;border-radius:var(--radius-sm);
+  background:var(--surface-3);border:1px solid var(--border);
+  display:grid;place-items:center;font-size:12px;color:var(--text-2);
+  cursor:pointer;
+}
+.dd-close:hover{color:var(--text-1);}
+.dd-type{
+  font-size:9px;letter-spacing:0.14em;text-transform:uppercase;
+  color:var(--text-3);font-weight:600;margin-bottom:6px;
+  font-family:var(--font-mono);
+}
+.dd-name{
+  font-family:var(--font-display);
+  font-size:24px;font-weight:400;
+  font-variation-settings:"opsz" 144;
+  letter-spacing:-0.02em;
+  margin-bottom:6px;
+}
+.dd-placement{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-family:var(--font-mono);font-weight:600;
+  padding:3px 9px;border-radius:4px;
+}
+.place-chart{background:rgba(14,184,166,0.1);border:1px solid rgba(14,184,166,0.25);color:rgba(94,234,212,0.9);}
+.place-panel{background:var(--gold-dim);border:1px solid rgba(212,168,75,0.25);color:var(--gold);}
+
+.dd-scroll{flex:1;overflow-y:auto;padding:16px 18px;}
+.dd-scroll::-webkit-scrollbar{width:3px;}
+.dd-scroll::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px;}
+
+/* Color section in DeepDive */
+.dd-section{margin-bottom:18px;}
+.dd-section-label{
+  font-size:9px;letter-spacing:0.14em;text-transform:uppercase;
+  color:var(--text-3);font-weight:600;margin-bottom:8px;
+  font-family:var(--font-mono);
+}
+.dd-color-row{
+  display:flex;align-items:center;gap:8px;
+}
+.dd-color-preview{
+  width:36px;height:36px;border-radius:var(--radius-sm);
+  border:1px solid var(--border-mid);
+  transition:background 0.2s;
+}
+.dd-color-swatches{display:flex;flex-wrap:wrap;gap:5px;}
+.dd-swatch{
+  width:22px;height:22px;border-radius:4px;
+  cursor:pointer;transition:transform 0.1s;
+  border:2px solid transparent;
+}
+.dd-swatch:hover{transform:scale(1.15);}
+.dd-swatch.selected{border-color:rgba(255,255,255,0.5);}
+.dd-color-note{font-size:10px;color:var(--text-3);margin-top:5px;}
+
+/* VaNi explanation section — THE KEY NEW PIECE */
+.dd-vani-section{
+  padding:14px;
+  background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(13,13,25,0.6));
+  border:1px solid var(--accent-dim);
+  border-radius:var(--radius-lg);
+  margin-bottom:18px;
+  position:relative;overflow:hidden;
+}
+.dd-vani-section::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,var(--accent),transparent);
+}
+.dd-vani-header{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:10px;
+}
+.dd-vani-orb{
+  width:24px;height:24px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#5b4fd4);
+  display:grid;place-items:center;font-size:11px;
+  box-shadow:0 0 8px rgba(139,92,246,0.35);
+  animation:orb-breathe 3s ease-in-out infinite;
+  flex-shrink:0;
+}
+@keyframes orb-breathe{0%,100%{box-shadow:0 0 8px rgba(139,92,246,0.3);}50%{box-shadow:0 0 16px rgba(139,92,246,0.5);}}
+.dd-vani-label{
+  font-size:9px;letter-spacing:0.12em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;font-family:var(--font-mono);
+}
+.dd-vani-cache{
+  font-size:9px;color:var(--text-3);
+  font-family:var(--font-mono);margin-left:auto;
+}
+
+/* The actual VaNi explanation text — cached LLM response */
+.dd-vani-text{
+  font-family:var(--font-display);
+  font-size:14px;font-weight:400;font-style:italic;
+  line-height:1.6;color:var(--text-1);
+  font-variation-settings:"opsz" 144;
+  margin-bottom:10px;
+}
+.dd-vani-text em{font-style:normal;color:var(--gold);font-weight:500;}
+.dd-vani-text strong{font-style:normal;font-weight:600;color:#fff;}
+
+/* When it's useful / when it's not */
+.dd-vani-tags{display:flex;gap:6px;flex-wrap:wrap;}
+.dd-vani-tag{
+  display:flex;align-items:center;gap:4px;
+  padding:3px 9px;border-radius:100px;
+  font-size:10px;font-family:var(--font-mono);
+}
+.tag-works{background:var(--bull-bg);border:1px solid rgba(16,185,129,0.2);color:var(--bull);}
+.tag-limit{background:var(--bear-bg);border:1px solid rgba(239,68,68,0.15);color:rgba(252,165,165,0.8);}
+
+/* Details grid */
+.dd-details{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:6px;margin-bottom:18px;
+}
+.dd-detail-box{
+  padding:9px 12px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+}
+.dd-detail-label{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:3px;}
+.dd-detail-value{font-size:12px;color:var(--text-1);}
+
+/* Preview in DeepDive */
+.dd-preview{
+  height:80px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  margin-bottom:18px;
+  overflow:hidden;
+  position:relative;
+}
+.dd-preview-label{
+  position:absolute;top:6px;left:10px;
+  font-family:var(--font-mono);font-size:8px;color:var(--text-3);
+}
+
+/* Add button */
+.dd-add-btn{
+  width:100%;padding:11px;
+  border-radius:var(--radius);
+  font-size:13px;font-weight:500;
+  text-align:center;cursor:pointer;
+  transition:all 0.15s;
+}
+.dd-add-primary{background:var(--accent-solid);color:#fff;border:1px solid transparent;}
+.dd-add-primary:hover{background:var(--accent);}
+.dd-add-added{background:var(--bull-bg);border:1px solid rgba(16,185,129,0.3);color:var(--bull);cursor:default;}
+
+/* Catalog Action Island */
+.cat-island{
+  position:fixed;bottom:20px;
+  left:50%;transform:translateX(calc(-50% + 190px));
+  z-index:50;
+  display:flex;align-items:center;gap:8px;
+  padding:9px 16px;
+  background:rgba(10,10,20,0.96);
+  border:1px solid var(--gold-dim);
+  border-radius:100px;
+  backdrop-filter:blur(16px);
+  font-size:12px;font-weight:500;
+  cursor:pointer;
+  box-shadow:0 4px 20px rgba(0,0,0,0.4);
+  transition:all 0.2s;
+}
+.cat-island:hover{border-color:var(--gold);box-shadow:0 4px 28px rgba(0,0,0,0.5);}
+.cat-island-dot{width:6px;height:6px;border-radius:50%;background:var(--bull);animation:pulse 2s ease-in-out infinite;}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="brand">Dristi<em>Q</em></div>
+    <div class="topbar-search">
+      <span style="color:var(--text-3);font-size:13px;">⌕</span>
+      Search catalog · ⌘K
+    </div>
+    <div class="topbar-right">
+      <div class="data-chip"><span class="data-dot"></span>Data · 31 May 2026</div>
+      <div class="ask-vani-btn"><span style="color:var(--accent)">✦</span> Ask VaNi</div>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="nav-section">
+      <div class="nav-item"><span class="nav-glyph">⬡</span> Workspace</div>
+      <div class="nav-item active"><span class="nav-glyph">◈</span> Catalog</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">View</div>
+      <div class="nav-item"><span class="nav-glyph">◉</span> Dashboard</div>
+      <div class="nav-item"><span class="nav-glyph">⊡</span> Scanner</div>
+      <div class="nav-item"><span class="nav-glyph">⧖</span> Market Structure</div>
+      <div class="nav-item"><span class="nav-glyph">☽</span> Planetary Intel</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="theme-dots">
+        <div class="theme-dot kd"></div>
+        <div class="theme-dot tech"></div>
+        <div class="theme-dot jade"></div>
+      </div>
+      <div class="user-row">
+        <div class="user-avatar">KC</div>
+        <div class="user-name">kamalcharan</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CATALOG -->
+  <div class="catalog">
+
+    <!-- Catalog subnav -->
+    <nav class="cat-nav">
+      <div class="cat-nav-item" onclick="showSection('frameworks')">
+        Master Frameworks
+        <span class="cat-nav-soon">soon</span>
+      </div>
+      <div class="cat-nav-item" onclick="showSection('astro')">
+        Astro Rules
+        <span class="cat-nav-count">216</span>
+      </div>
+      <div class="cat-nav-item active" id="nav-indicators" onclick="showSection('indicators')">
+        Chart Indicators
+        <span class="cat-nav-count">7</span>
+      </div>
+      <div class="cat-nav-item" id="nav-widgets" onclick="showSection('widgets')">
+        Intelligence Widgets
+        <span class="cat-nav-count">5</span>
+      </div>
+      <div class="cat-nav-item" onclick="showSection('scanners')">
+        Scanners
+        <span class="cat-nav-soon">soon</span>
+      </div>
+    </nav>
+
+    <!-- Content -->
+    <div class="cat-content" id="catContent">
+
+      <!-- ── CHART INDICATORS ── -->
+      <div id="section-indicators">
+        <div class="section-header">
+          <div class="section-title">Chart <em>Indicators</em></div>
+          <div class="section-desc">Technical indicators drawn directly on the price chart as lines, bands, or zones. Pick a color before adding — you can change it anytime from the overlay strip.</div>
+          <span class="section-tag tag-free">● All free tier</span>
+        </div>
+
+        <div class="indicators-grid">
+
+          <!-- EMA 20 — added state -->
+          <div class="ind-card added" onclick="openDeepDive('ema20')">
+            <div class="ind-color-strip" style="background:var(--gold)"></div>
+            <div class="ind-card-top">
+              <div class="ind-meta">
+                <div class="ind-type-row">
+                  <span class="ind-type-chip">Chart Overlay</span>
+                  <span class="ind-type-chip">Indicator</span>
+                </div>
+                <div class="ind-name">EMA 20</div>
+                <div class="ind-vani-line">Tracks the last 20 days of price, weighting recent sessions more heavily. <em>First signal of trend shift.</em></div>
+              </div>
+            </div>
+            <div class="ind-preview">
+              <div class="preview-label">NIFTY 50 · 1Y</div>
+              <svg width="100%" height="36" viewBox="0 0 300 36" preserveAspectRatio="none">
+                <path d="M0,28 C30,24 60,18 90,15 C120,12 150,10 180,13 C210,16 240,22 270,26 C285,28 295,30 300,31" fill="none" stroke="var(--gold)" stroke-width="1.5"/>
+                <path d="M0,22 C20,20 50,16 80,13 C110,10 150,8 180,11 C210,14 250,20 280,26 L300,28" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1" stroke-dasharray="3,3"/>
+              </svg>
+            </div>
+            <div class="ind-card-footer">
+              <span class="ind-id">ema_20</span>
+              <div class="color-picker-wrap" onclick="event.stopPropagation()">
+                <div class="color-swatch" style="background:var(--gold)" onclick="toggleColorPicker('cp-ema20')"></div>
+                <div class="color-picker-popover" id="cp-ema20">
+                  <div class="cp-label" style="margin-bottom:6px">Chart color</div>
+                  <div class="cp-swatches">
+                    <div class="cp-swatch" style="background:#d4a84b" onclick="setColor('ema20','#d4a84b',this)"></div>
+                    <div class="cp-swatch" style="background:#10b981" onclick="setColor('ema20','#10b981',this)"></div>
+                    <div class="cp-swatch" style="background:#8b5cf6" onclick="setColor('ema20','#8b5cf6',this)"></div>
+                    <div class="cp-swatch" style="background:#3b82f6" onclick="setColor('ema20','#3b82f6',this)"></div>
+                    <div class="cp-swatch" style="background:#f59e0b" onclick="setColor('ema20','#f59e0b',this)"></div>
+                    <div class="cp-swatch" style="background:#06b6d4" onclick="setColor('ema20','#06b6d4',this)"></div>
+                    <div class="cp-swatch" style="background:#ef4444" onclick="setColor('ema20','#ef4444',this)"></div>
+                    <div class="cp-swatch" style="background:#ec4899" onclick="setColor('ema20','#ec4899',this)"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="add-btn btn-added">✓ added</div>
+            </div>
+          </div>
+
+          <!-- SMA 50 -->
+          <div class="ind-card" onclick="openDeepDive('sma50')">
+            <div class="ind-color-strip" style="background:#ef4444"></div>
+            <div class="ind-card-top">
+              <div class="ind-meta">
+                <div class="ind-type-row">
+                  <span class="ind-type-chip">Chart Overlay</span>
+                  <span class="ind-type-chip">Indicator</span>
+                </div>
+                <div class="ind-name">SMA 50</div>
+                <div class="ind-vani-line">Mid-term institutional reference. <em>Where larger funds watch price return to.</em></div>
+              </div>
+            </div>
+            <div class="ind-preview">
+              <div class="preview-label">NIFTY 50 · 1Y</div>
+              <svg width="100%" height="36" viewBox="0 0 300 36" preserveAspectRatio="none">
+                <path d="M0,20 C40,18 80,14 120,13 C160,12 200,15 240,20 C265,23 285,27 300,29" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+              </svg>
+            </div>
+            <div class="ind-card-footer">
+              <span class="ind-id">sma_50</span>
+              <div class="color-picker-wrap" onclick="event.stopPropagation()">
+                <div class="color-swatch" style="background:#ef4444" id="swatch-sma50" onclick="toggleColorPicker('cp-sma50')"></div>
+                <div class="color-picker-popover" id="cp-sma50">
+                  <div class="cp-label" style="margin-bottom:6px">Chart color</div>
+                  <div class="cp-swatches">
+                    <div class="cp-swatch" style="background:#d4a84b" onclick="setColor('sma50','#d4a84b',this)"></div>
+                    <div class="cp-swatch" style="background:#10b981" onclick="setColor('sma50','#10b981',this)"></div>
+                    <div class="cp-swatch" style="background:#8b5cf6" onclick="setColor('sma50','#8b5cf6',this)"></div>
+                    <div class="cp-swatch" style="background:#3b82f6" onclick="setColor('sma50','#3b82f6',this)"></div>
+                    <div class="cp-swatch" style="background:#ef4444" onclick="setColor('sma50','#ef4444',this)"></div>
+                    <div class="cp-swatch" style="background:#06b6d4" onclick="setColor('sma50','#06b6d4',this)"></div>
+                    <div class="cp-swatch" style="background:#f97316" onclick="setColor('sma50','#f97316',this)"></div>
+                    <div class="cp-swatch" style="background:#ec4899" onclick="setColor('sma50','#ec4899',this)"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="add-btn btn-add">+ Add</div>
+            </div>
+          </div>
+
+          <!-- SMA 150 Golden Line -->
+          <div class="ind-card" onclick="openDeepDive('sma150')">
+            <div class="ind-color-strip" style="background:linear-gradient(90deg,#d4a84b,#f59e0b)"></div>
+            <div class="ind-card-top">
+              <div class="ind-meta">
+                <div class="ind-type-row">
+                  <span class="ind-type-chip">Chart Overlay</span>
+                  <span class="ind-type-chip" style="background:var(--gold-dim);color:var(--gold)">Golden Line</span>
+                </div>
+                <div class="ind-name">SMA 150</div>
+                <div class="ind-vani-line">Primary trend filter used across all DristiQ scans. <em>Price above this line — market is in a constructive phase.</em></div>
+              </div>
+            </div>
+            <div class="ind-preview">
+              <div class="preview-label">NIFTY 50 · 1Y</div>
+              <svg width="100%" height="36" viewBox="0 0 300 36" preserveAspectRatio="none">
+                <path d="M0,14 C50,13 100,13 150,14 C200,15 250,18 300,22" fill="none" stroke="var(--gold)" stroke-width="1.5"/>
+              </svg>
+            </div>
+            <div class="ind-card-footer">
+              <span class="ind-id">sma_150</span>
+              <div class="color-picker-wrap" onclick="event.stopPropagation()">
+                <div class="color-swatch" style="background:var(--gold)" onclick="toggleColorPicker('cp-sma150')"></div>
+                <div class="color-picker-popover" id="cp-sma150">
+                  <div class="cp-label" style="margin-bottom:6px">Chart color</div>
+                  <div class="cp-swatches">
+                    <div class="cp-swatch" style="background:#d4a84b"></div>
+                    <div class="cp-swatch" style="background:#10b981"></div>
+                    <div class="cp-swatch" style="background:#8b5cf6"></div>
+                    <div class="cp-swatch" style="background:#3b82f6"></div>
+                    <div class="cp-swatch" style="background:#ef4444"></div>
+                    <div class="cp-swatch" style="background:#06b6d4"></div>
+                    <div class="cp-swatch" style="background:#f97316"></div>
+                    <div class="cp-swatch" style="background:#ec4899"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="add-btn btn-add">+ Add</div>
+            </div>
+          </div>
+
+          <!-- SuperTrend -->
+          <div class="ind-card" onclick="openDeepDive('supertrend')">
+            <div class="ind-color-strip" style="background:linear-gradient(90deg,var(--bull),var(--bear))"></div>
+            <div class="ind-card-top">
+              <div class="ind-meta">
+                <div class="ind-type-row">
+                  <span class="ind-type-chip">Chart Overlay</span>
+                  <span class="ind-type-chip">Indicator</span>
+                </div>
+                <div class="ind-name">SuperTrend</div>
+                <div class="ind-vani-line">Trend-following band that flips between bullish and bearish. <em>Green below price means trend up. Red above means trend down.</em></div>
+              </div>
+            </div>
+            <div class="ind-preview">
+              <div class="preview-label">NIFTY 50 · 1Y</div>
+              <svg width="100%" height="36" viewBox="0 0 300 36" preserveAspectRatio="none">
+                <path d="M0,12 C40,11 80,10 120,14 C140,16 155,18 160,18" fill="none" stroke="var(--bull)" stroke-width="2"/>
+                <path d="M160,18 C165,18 175,22 210,26 C240,29 270,31 300,32" fill="none" stroke="var(--bear)" stroke-width="2"/>
+              </svg>
+            </div>
+            <div class="ind-card-footer">
+              <span class="ind-id">supertrend</span>
+              <div class="color-picker-wrap" onclick="event.stopPropagation()">
+                <div class="color-swatch" style="background:linear-gradient(135deg,var(--bull),var(--bear))" onclick="toggleColorPicker('cp-st')"></div>
+                <div class="color-picker-popover" id="cp-st">
+                  <div class="cp-label" style="margin-bottom:4px;font-size:9px;">SuperTrend uses bull/bear colors from your theme — not configurable.</div>
+                </div>
+              </div>
+              <div class="add-btn btn-add">+ Add</div>
+            </div>
+          </div>
+
+          <!-- Pivot Levels -->
+          <div class="ind-card" onclick="openDeepDive('pivot')">
+            <div class="ind-color-strip" style="background:#06b6d4"></div>
+            <div class="ind-card-top">
+              <div class="ind-meta">
+                <div class="ind-type-row">
+                  <span class="ind-type-chip">Chart Overlay</span>
+                  <span class="ind-type-chip">Indicator</span>
+                </div>
+                <div class="ind-name">Pivot Levels</div>
+                <div class="ind-vani-line">Weekly support and resistance zones derived from prior period OHLC. <em>Price tends to react at these invisible walls.</em></div>
+              </div>
+            </div>
+            <div class="ind-preview">
+              <div class="preview-label">NIFTY 50 · 1Y</div>
+              <svg width="100%" height="36" viewBox="0 0 300 36" preserveAspectRatio="none">
+                <line x1="0" y1="10" x2="300" y2="10" stroke="#06b6d4" stroke-width="1" stroke-dasharray="5,3" opacity="0.6"/>
+                <line x1="0" y1="18" x2="300" y2="18" stroke="#06b6d4" stroke-width="1.5" opacity="0.9"/>
+                <line x1="0" y1="26" x2="300" y2="26" stroke="#06b6d4" stroke-width="1" stroke-dasharray="5,3" opacity="0.6"/>
+                <text x="4" y="8" font-family="IBM Plex Mono" font-size="7" fill="#06b6d4" opacity="0.6">R1</text>
+                <text x="4" y="16" font-family="IBM Plex Mono" font-size="7" fill="#06b6d4">PP</text>
+                <text x="4" y="24" font-family="IBM Plex Mono" font-size="7" fill="#06b6d4" opacity="0.6">S1</text>
+              </svg>
+            </div>
+            <div class="ind-card-footer">
+              <span class="ind-id">pivot_levels</span>
+              <div class="color-picker-wrap" onclick="event.stopPropagation()">
+                <div class="color-swatch" style="background:#06b6d4" onclick="toggleColorPicker('cp-pivot')"></div>
+                <div class="color-picker-popover" id="cp-pivot">
+                  <div class="cp-label" style="margin-bottom:6px">Chart color</div>
+                  <div class="cp-swatches">
+                    <div class="cp-swatch" style="background:#06b6d4"></div>
+                    <div class="cp-swatch" style="background:#d4a84b"></div>
+                    <div class="cp-swatch" style="background:#8b5cf6"></div>
+                    <div class="cp-swatch" style="background:#10b981"></div>
+                    <div class="cp-swatch" style="background:#f59e0b"></div>
+                    <div class="cp-swatch" style="background:#ef4444"></div>
+                    <div class="cp-swatch" style="background:#ec4899"></div>
+                    <div class="cp-swatch" style="background:#94a3b8"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="add-btn btn-add">+ Add</div>
+            </div>
+          </div>
+
+          <!-- SMA 200 -->
+          <div class="ind-card" onclick="openDeepDive('sma200')">
+            <div class="ind-color-strip" style="background:#a78bfa"></div>
+            <div class="ind-card-top">
+              <div class="ind-meta">
+                <div class="ind-type-row">
+                  <span class="ind-type-chip">Chart Overlay</span>
+                  <span class="ind-type-chip">Indicator</span>
+                </div>
+                <div class="ind-name">SMA 200</div>
+                <div class="ind-vani-line">Long-term institutional trend line. <em>The most watched line in global markets — price above it is structurally strong.</em></div>
+              </div>
+            </div>
+            <div class="ind-preview">
+              <div class="preview-label">NIFTY 50 · 1Y</div>
+              <svg width="100%" height="36" viewBox="0 0 300 36" preserveAspectRatio="none">
+                <path d="M0,12 C100,12 200,14 300,17" fill="none" stroke="#a78bfa" stroke-width="1.5"/>
+              </svg>
+            </div>
+            <div class="ind-card-footer">
+              <span class="ind-id">sma_200</span>
+              <div class="color-picker-wrap" onclick="event.stopPropagation()">
+                <div class="color-swatch" style="background:#a78bfa" onclick="toggleColorPicker('cp-sma200')"></div>
+                <div class="color-picker-popover" id="cp-sma200">
+                  <div class="cp-label" style="margin-bottom:6px">Chart color</div>
+                  <div class="cp-swatches">
+                    <div class="cp-swatch" style="background:#a78bfa"></div>
+                    <div class="cp-swatch" style="background:#d4a84b"></div>
+                    <div class="cp-swatch" style="background:#10b981"></div>
+                    <div class="cp-swatch" style="background:#3b82f6"></div>
+                    <div class="cp-swatch" style="background:#ef4444"></div>
+                    <div class="cp-swatch" style="background:#06b6d4"></div>
+                    <div class="cp-swatch" style="background:#f97316"></div>
+                    <div class="cp-swatch" style="background:#ec4899"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="add-btn btn-add">+ Add</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Intelligence Widgets section below indicators -->
+        <div class="section-header" style="margin-top:32px;">
+          <div class="section-title">Intelligence <em>Widgets</em></div>
+          <div class="section-desc">Proprietary DristiQ signals rendered as panel blocks in your workspace. These don't draw on the chart — they run alongside it.</div>
+          <span class="section-tag tag-mixed">◑ Some paid tier</span>
+        </div>
+
+        <div class="widgets-grid">
+
+          <!-- MagicRS — free, live preview -->
+          <div class="widget-card" onclick="openDeepDive('magicrs')">
+            <div class="wc-header">
+              <span class="wc-icon">⚡</span>
+              <span class="wc-name">MagicRS</span>
+              <span class="wc-badge badge-free">Free</span>
+            </div>
+            <div class="wc-preview">
+              <!-- Live preview mockup -->
+              <div style="font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--caution);margin-bottom:4px;">−0.56 <span style="font-size:11px;color:var(--text-3);font-weight:400;">Neutral</span></div>
+              <svg width="100%" height="36" viewBox="0 0 260 36">
+                <path d="M0,18 C20,16 40,13 60,17 C80,21 100,25 120,21 C140,17 160,13 180,18 C200,23 220,28 240,26 C255,24 258,28 260,30" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.7"/>
+                <line x1="0" y1="18" x2="260" y2="18" stroke="rgba(255,255,255,0.08)" stroke-width="0.5" stroke-dasharray="4,4"/>
+              </svg>
+            </div>
+            <div class="wc-vani-line">
+              <span class="wc-vani-star">✦</span>
+              DristiQ's proprietary relative strength signal. Measures how Nifty moves relative to its own historical volatility rhythm.
+            </div>
+            <div class="wc-footer">
+              <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">magic_rs</span>
+              <div class="add-btn btn-add" style="font-size:11px;padding:4px 10px;">+ Add to framework</div>
+            </div>
+          </div>
+
+          <!-- Smart Money — paid, locked with value communication -->
+          <div class="widget-card locked" onclick="openDeepDive('smartmoney')">
+            <div class="lock-overlay">
+              <div class="lock-icon">🔒</div>
+              <div class="lock-title">Smart Money</div>
+              <div class="lock-desc">Tracks institutional accumulation and distribution patterns on Nifty. See where the big money is moving.</div>
+              <div class="lock-cta">Unlock with Trial →</div>
+            </div>
+            <div class="wc-header">
+              <span class="wc-icon">🏦</span>
+              <span class="wc-name">Smart Money</span>
+              <span class="wc-badge badge-paid">Paid</span>
+            </div>
+            <div class="wc-preview">
+              <div style="font-family:var(--font-mono);font-size:18px;color:var(--text-1);margin-bottom:4px;">ACCUMULATION</div>
+              <svg width="100%" height="36" viewBox="0 0 260 36">
+                <path d="M0,28 C30,26 60,22 90,18 C120,14 150,12 180,14 C210,16 240,20 260,22" fill="none" stroke="var(--bull)" stroke-width="1.5" opacity="0.7"/>
+              </svg>
+            </div>
+            <div class="wc-vani-line">
+              <span class="wc-vani-star">✦</span>
+              Institutional flow tracker. Identifies when large participants are systematically buying or selling.
+            </div>
+            <div class="wc-footer">
+              <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">smart_money</span>
+              <div class="add-btn btn-add" style="font-size:11px;padding:4px 10px;opacity:0.4;cursor:not-allowed;">+ Add</div>
+            </div>
+          </div>
+
+          <!-- Order Flow — paid, locked -->
+          <div class="widget-card locked" onclick="openDeepDive('orderflow')">
+            <div class="lock-overlay">
+              <div class="lock-icon">🔒</div>
+              <div class="lock-title">Order Flow</div>
+              <div class="lock-desc">Real-time buy/sell pressure and volume classification. Know whether the tape is dominated by buyers or sellers.</div>
+              <div class="lock-cta">Unlock with Trial →</div>
+            </div>
+            <div class="wc-header">
+              <span class="wc-icon">📊</span>
+              <span class="wc-name">Order Flow</span>
+              <span class="wc-badge badge-paid">Paid</span>
+            </div>
+            <div class="wc-preview">
+              <div style="font-family:var(--font-mono);font-size:14px;color:var(--text-1);margin-bottom:4px;">LOW VOLUME · 24,534</div>
+              <div style="display:flex;gap:4px;margin-top:4px;">
+                <div style="height:8px;background:var(--bull);border-radius:2px;flex:3"></div>
+                <div style="height:8px;background:var(--bear);border-radius:2px;flex:2"></div>
+              </div>
+            </div>
+            <div class="wc-vani-line">
+              <span class="wc-vani-star">✦</span>
+              Buy/sell pressure and volume classification for Nifty sessions.
+            </div>
+            <div class="wc-footer">
+              <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">order_flow</span>
+              <div class="add-btn btn-add" style="font-size:11px;padding:4px 10px;opacity:0.4;cursor:not-allowed;">+ Add</div>
+            </div>
+          </div>
+
+          <!-- Six-Day Outlook — paid, locked -->
+          <div class="widget-card locked" onclick="openDeepDive('sixday')">
+            <div class="lock-overlay">
+              <div class="lock-icon">🔒</div>
+              <div class="lock-title">Six-Day Outlook</div>
+              <div class="lock-desc">Forward astro calendar showing rule signals for the next 6 trading days. Plan ahead, not just react.</div>
+              <div class="lock-cta">Unlock with Trial →</div>
+            </div>
+            <div class="wc-header">
+              <span class="wc-icon">☽</span>
+              <span class="wc-name">Six-Day Outlook</span>
+              <span class="wc-badge badge-paid">Paid</span>
+            </div>
+            <div class="wc-preview">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
+                <div style="background:var(--surface-2);border-radius:4px;padding:5px;text-align:center;border:1px solid var(--bull)">
+                  <div style="font-size:8px;color:var(--text-3)">MON</div>
+                  <div style="font-family:var(--font-display);font-size:14px">2</div>
+                  <div style="font-size:7px;color:var(--bull)">HIGH</div>
+                </div>
+                <div style="background:var(--surface-2);border-radius:4px;padding:5px;text-align:center">
+                  <div style="font-size:8px;color:var(--text-3)">TUE</div>
+                  <div style="font-family:var(--font-display);font-size:14px">3</div>
+                  <div style="font-size:7px;color:var(--caution)">MIX</div>
+                </div>
+                <div style="background:var(--surface-2);border-radius:4px;padding:5px;text-align:center">
+                  <div style="font-size:8px;color:var(--text-3)">WED</div>
+                  <div style="font-family:var(--font-display);font-size:14px">4</div>
+                  <div style="font-size:7px;color:var(--caution)">MIX</div>
+                </div>
+              </div>
+            </div>
+            <div class="wc-vani-line">
+              <span class="wc-vani-star">✦</span>
+              Astro-driven forward calendar. Shows which rules are firing across the next 6 trading days.
+            </div>
+            <div class="wc-footer">
+              <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-3);">six_day_outlook</span>
+              <div class="add-btn btn-add" style="font-size:11px;padding:4px 10px;opacity:0.4;cursor:not-allowed;">+ Add</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Placeholder for other sections -->
+      <div id="section-frameworks" style="display:none;padding:40px;text-align:center;color:var(--text-3);">
+        <div style="font-family:var(--font-display);font-size:24px;margin-bottom:8px;color:var(--text-2);">Master Frameworks</div>
+        <div style="font-size:13px;line-height:1.6;">Coming in a future release. Build your own framework from the Catalog, or let VaNi suggest a starting point during onboarding.</div>
+      </div>
+      <div id="section-astro" style="display:none;padding:40px;text-align:center;color:var(--text-3);">
+        <div style="font-family:var(--font-display);font-size:24px;margin-bottom:8px;color:var(--text-2);">Astro Rules</div>
+        <div style="font-size:13px;">Separate session — coming soon.</div>
+      </div>
+      <div id="section-widgets" style="display:none"></div>
+      <div id="section-scanners" style="display:none;padding:40px;text-align:center;color:var(--text-3);">
+        <div style="font-family:var(--font-display);font-size:24px;margin-bottom:8px;color:var(--text-2);">Scanners</div>
+        <div style="font-size:13px;">Separate session — coming soon.</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- CATALOG ACTION ISLAND -->
+<div class="cat-island">
+  <span class="cat-island-dot"></span>
+  1 overlay added · <span style="color:var(--gold)">0 widgets</span>
+  <span style="margin:0 4px;color:var(--text-3)">·</span>
+  Open Workspace →
+</div>
+
+<!-- DEEP DIVE PANEL -->
+<div class="deep-dive" id="deepDive">
+  <div class="dd-top">
+    <div class="dd-close" onclick="closeDeepDive()">✕</div>
+    <div class="dd-type" id="ddType">CHART OVERLAY · INDICATOR</div>
+    <div class="dd-name" id="ddName">EMA 20</div>
+    <div class="dd-placement place-chart" id="ddPlacement">Chart Overlay</div>
+  </div>
+
+  <div class="dd-scroll">
+
+    <!-- Color section -->
+    <div class="dd-section" id="ddColorSection">
+      <div class="dd-section-label">Chart color</div>
+      <div class="dd-color-row">
+        <div class="dd-color-preview" id="ddColorPreview" style="background:var(--gold)"></div>
+        <div class="dd-color-swatches">
+          <div class="dd-swatch selected" style="background:#d4a84b" onclick="setDDColor('#d4a84b',this)"></div>
+          <div class="dd-swatch" style="background:#10b981" onclick="setDDColor('#10b981',this)"></div>
+          <div class="dd-swatch" style="background:#8b5cf6" onclick="setDDColor('#8b5cf6',this)"></div>
+          <div class="dd-swatch" style="background:#3b82f6" onclick="setDDColor('#3b82f6',this)"></div>
+          <div class="dd-swatch" style="background:#f59e0b" onclick="setDDColor('#f59e0b',this)"></div>
+          <div class="dd-swatch" style="background:#06b6d4" onclick="setDDColor('#06b6d4',this)"></div>
+          <div class="dd-swatch" style="background:#ef4444" onclick="setDDColor('#ef4444',this)"></div>
+          <div class="dd-swatch" style="background:#ec4899" onclick="setDDColor('#ec4899',this)"></div>
+        </div>
+      </div>
+      <div class="dd-color-note">This color appears on your chart. You can change it anytime from the overlay pill strip.</div>
+    </div>
+
+    <!-- VaNi cached explanation — THE KEY NEW PIECE -->
+    <div class="dd-vani-section">
+      <div class="dd-vani-header">
+        <div class="dd-vani-orb">✦</div>
+        <div class="dd-vani-label">VaNi explains</div>
+        <div class="dd-vani-cache">cached · updated rarely</div>
+      </div>
+      <div class="dd-vani-text" id="ddVaniText">
+        EMA 20 gives more weight to the <em>last 20 sessions</em> than older data, so it reacts faster to price changes than a simple moving average. Think of it as a <strong>short-term memory of the market</strong> — it tells you the recent direction without the noise of individual sessions. When price crosses above EMA 20, the short-term tide has turned. When it holds below, the recent momentum is down.
+      </div>
+      <div class="dd-vani-tags" id="ddVaniTags">
+        <div class="dd-vani-tag tag-works">✓ Trending markets</div>
+        <div class="dd-vani-tag tag-works">✓ Entry timing</div>
+        <div class="dd-vani-tag tag-limit">✗ Choppy sideways markets</div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div class="dd-section">
+      <div class="dd-section-label">Preview on Nifty 50</div>
+      <div class="dd-preview">
+        <div class="dd-preview-label">1Y daily</div>
+        <svg width="100%" height="80" viewBox="0 0 360 80" preserveAspectRatio="none">
+          <path d="M0,60 C40,52 80,40 120,34 C160,28 200,26 240,32 C270,36 300,50 340,62" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+          <path id="ddPreviewLine" d="M0,64 C40,56 80,44 120,38 C160,32 200,30 240,36 C270,40 300,54 340,66" fill="none" stroke="var(--gold)" stroke-width="2"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Details -->
+    <div class="dd-section">
+      <div class="dd-section-label">Details</div>
+      <div class="dd-details">
+        <div class="dd-detail-box">
+          <div class="dd-detail-label">Type</div>
+          <div class="dd-detail-value" id="ddDetailType">Indicator</div>
+        </div>
+        <div class="dd-detail-box">
+          <div class="dd-detail-label">Placement</div>
+          <div class="dd-detail-value" id="ddDetailPlace">Chart overlay</div>
+        </div>
+        <div class="dd-detail-box">
+          <div class="dd-detail-label">Tier</div>
+          <div class="dd-detail-value" style="color:var(--bull)" id="ddDetailTier">Free</div>
+        </div>
+        <div class="dd-detail-box">
+          <div class="dd-detail-label">Applies to</div>
+          <div class="dd-detail-value">Index · Equity</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add button -->
+    <div class="dd-add-btn dd-add-primary" id="ddAddBtn">+ Add to Framework</div>
+
+  </div>
+</div>
+
+<script>
+// ── Section switcher ──
+function showSection(id) {
+  ['frameworks','astro','indicators','widgets','scanners'].forEach(s => {
+    const el = document.getElementById('section-' + s);
+    if (el) el.style.display = s === id ? 'block' : 'none';
+  });
+  document.querySelectorAll('.cat-nav-item').forEach((el,i) => {
+    el.classList.remove('active');
+  });
+  event.currentTarget.classList.add('active');
+  // Show indicators = show both indicators + widgets sections
+  if (id === 'indicators') {
+    document.getElementById('section-indicators').style.display = 'block';
+  }
+}
+
+// ── Color picker ──
+function toggleColorPicker(id) {
+  document.querySelectorAll('.color-picker-popover').forEach(p => {
+    if (p.id !== id) p.classList.remove('open');
+  });
+  document.getElementById(id).classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.color-picker-wrap')) {
+    document.querySelectorAll('.color-picker-popover').forEach(p => p.classList.remove('open'));
+  }
+});
+function setColor(id, color, el) {
+  document.getElementById('cp-' + id)?.classList.remove('open');
+}
+function setDDColor(color, el) {
+  document.getElementById('ddColorPreview').style.background = color;
+  document.getElementById('ddPreviewLine').style.stroke = color;
+  document.querySelectorAll('.dd-swatch').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// ── Deep Dive content per item ──
+const ddData = {
+  ema20: {
+    type: 'CHART OVERLAY · INDICATOR',
+    name: 'EMA 20',
+    placement: 'Chart Overlay',
+    placeClass: 'place-chart',
+    color: '#d4a84b',
+    vani: 'EMA 20 gives more weight to the <em>last 20 sessions</em> than older data, so it reacts faster to price changes than a simple moving average. Think of it as a <strong>short-term memory of the market</strong> — it tells you the recent direction without the noise of individual sessions. When price crosses above EMA 20, the short-term tide has turned.',
+    tags: ['✓ Trending markets','✓ Entry timing','✗ Choppy sideways markets'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Free', showColor: true,
+  },
+  sma50: {
+    type: 'CHART OVERLAY · INDICATOR',
+    name: 'SMA 50',
+    placement: 'Chart Overlay',
+    placeClass: 'place-chart',
+    color: '#ef4444',
+    vani: 'SMA 50 is the line <em>institutional desks watch most carefully</em> on weekly timeframes. It acts as a gravitational reference — price tends to return to it in trending markets. Unlike EMA, it weighs every one of the last 50 sessions equally, so it moves more slowly and filters out short-term noise. <strong>If price is above SMA 50, the medium-term structure is intact.</strong>',
+    tags: ['✓ Medium-term structure','✓ Support/resistance','✗ Short-term signals'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Free', showColor: true,
+  },
+  sma150: {
+    type: 'CHART OVERLAY · INDICATOR · GOLDEN LINE',
+    name: 'SMA 150',
+    placement: 'Chart Overlay',
+    placeClass: 'place-chart',
+    color: '#d4a84b',
+    vani: 'SMA 150 is DristiQ\'s primary trend filter — it\'s the line all internal scans use to classify whether the market is in a <em>constructive phase</em> or not. When Nifty is above SMA 150, scans weight bullish signals more heavily. When below, caution signals get priority. <strong>This is the most important line in your framework if you follow the system.</strong>',
+    tags: ['✓ Primary trend filter','✓ Scan classification','✗ Timing entries'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Free', showColor: true,
+  },
+  sma200: {
+    type: 'CHART OVERLAY · INDICATOR',
+    name: 'SMA 200',
+    placement: 'Chart Overlay',
+    placeClass: 'place-chart',
+    color: '#a78bfa',
+    vani: 'SMA 200 is the <em>most widely watched line in global equity markets</em>. Fund managers, algorithms, and retail traders all reference it. When a major index trades below SMA 200, institutional risk models flag it as a structural bear. <strong>Its power comes from the fact that everyone is watching it</strong> — making it a self-fulfilling reference point.',
+    tags: ['✓ Long-term structure','✓ Institutional reference','✗ Timing entries'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Free', showColor: true,
+  },
+  supertrend: {
+    type: 'CHART OVERLAY · INDICATOR',
+    name: 'SuperTrend',
+    placement: 'Chart Overlay',
+    placeClass: 'place-chart',
+    color: null,
+    vani: 'SuperTrend is a <em>trend-following band</em> built on ATR (volatility). It flips between two states — green below price means the trend is up, red above price means the trend is down. Unlike moving averages, it <strong>adjusts its distance from price based on how volatile the market is</strong>, so it stays closer in calm markets and wider in choppy ones.',
+    tags: ['✓ Clear trend identification','✓ Volatile markets','✗ Sideways markets'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Free', showColor: false,
+  },
+  pivot: {
+    type: 'CHART OVERLAY · INDICATOR',
+    name: 'Pivot Levels',
+    placement: 'Chart Overlay',
+    placeClass: 'place-chart',
+    color: '#06b6d4',
+    vani: 'Pivot levels are <em>mathematically derived support and resistance zones</em> calculated from the prior period\'s high, low, and close. They don\'t look at price history beyond one period — they simply define where the market statistically tends to find reaction points. <strong>Price doesn\'t always obey them, but it notices them.</strong>',
+    tags: ['✓ Intraday reference','✓ Short-term S/R','✗ Trend following'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Free', showColor: true,
+  },
+  magicrs: {
+    type: 'INTELLIGENCE WIDGET',
+    name: 'MagicRS',
+    placement: 'Panel Block',
+    placeClass: 'place-panel',
+    color: null,
+    vani: 'MagicRS is DristiQ\'s proprietary relative strength signal. It measures <em>how Nifty is moving relative to its own historical volatility rhythm</em> — not against another index. A positive reading means Nifty is expressing more strength than its recent average. A negative reading means it\'s underperforming its own baseline. <strong>It\'s a mirror of the market\'s internal momentum, not a comparison to anything external.</strong>',
+    tags: ['✓ Momentum context','✓ Intraday + swing','✗ Not a buy/sell signal'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Free', showColor: false,
+  },
+  smartmoney: {
+    type: 'INTELLIGENCE WIDGET',
+    name: 'Smart Money',
+    placement: 'Panel Block',
+    placeClass: 'place-panel',
+    color: null,
+    vani: 'Smart Money tracks <em>institutional accumulation and distribution patterns</em> on Nifty. It classifies volume into informed vs uninformed flow by looking at when and how blocks trade. When Smart Money is in accumulation, large participants are systematically absorbing supply. <strong>This is the signal that often precedes a sustained directional move.</strong>',
+    tags: ['✓ Institutional flow','✓ Swing context','✗ Not real-time tick data'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Paid — Trial+', showColor: false,
+  },
+  orderflow: {
+    type: 'INTELLIGENCE WIDGET',
+    name: 'Order Flow',
+    placement: 'Panel Block',
+    placeClass: 'place-panel',
+    color: null,
+    vani: 'Order Flow classifies each session\'s volume into <em>buyer-initiated vs seller-initiated</em> transactions. When buyers are dominant, sessions close in the upper half of their range on rising volume. <strong>It tells you whether the tape is being driven by urgency to buy or urgency to sell</strong> — which is different from price direction alone.',
+    tags: ['✓ Session context','✓ Volume analysis','✗ Not predictive alone'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Paid — Trial+', showColor: false,
+  },
+  sixday: {
+    type: 'INTELLIGENCE WIDGET',
+    name: 'Six-Day Outlook',
+    placement: 'Panel Block',
+    placeClass: 'place-panel',
+    color: null,
+    vani: 'Six-Day Outlook is a <em>forward astro calendar</em> — it shows which of your active rules are firing across the next 6 trading days before they happen. This is the planning surface. Instead of reacting to what fired today, you see what\'s coming. <strong>It turns the astro signal layer from reactive to anticipatory.</strong>',
+    tags: ['✓ Forward planning','✓ Rule confluence preview','✗ Not a trading calendar'],
+    tagTypes: ['works','works','limit'],
+    tier: 'Paid — Trial+', showColor: false,
+  },
+};
+
+function openDeepDive(id) {
+  const d = ddData[id];
+  if (!d) return;
+
+  document.getElementById('ddType').textContent = d.type;
+  document.getElementById('ddName').textContent = d.name;
+  const pl = document.getElementById('ddPlacement');
+  pl.textContent = d.placement;
+  pl.className = 'dd-placement ' + d.placeClass;
+  document.getElementById('ddVaniText').innerHTML = d.vani;
+  document.getElementById('ddDetailType').textContent = d.type.includes('WIDGET') ? 'Widget' : 'Indicator';
+  document.getElementById('ddDetailPlace').textContent = d.placement;
+  document.getElementById('ddDetailTier').textContent = d.tier;
+  document.getElementById('ddDetailTier').style.color = d.tier === 'Free' ? 'var(--bull)' : 'var(--gold)';
+
+  // Tags
+  const tagsEl = document.getElementById('ddVaniTags');
+  tagsEl.innerHTML = d.tags.map((t,i) => `<div class="dd-vani-tag tag-${d.tagTypes[i]}">${t}</div>`).join('');
+
+  // Color section
+  document.getElementById('ddColorSection').style.display = d.showColor ? 'block' : 'none';
+  if (d.color) {
+    document.getElementById('ddColorPreview').style.background = d.color;
+    document.getElementById('ddPreviewLine').style.stroke = d.color;
+  }
+
+  document.getElementById('deepDive').classList.add('open');
+  document.getElementById('catContent').classList.add('panel-open');
+
+  // Highlight selected card
+  document.querySelectorAll('.ind-card,.widget-card').forEach(c => c.classList.remove('selected'));
+}
+
+function closeDeepDive() {
+  document.getElementById('deepDive').classList.remove('open');
+  document.getElementById('catContent').classList.remove('panel-open');
+}
+
+// Auto-open EMA 20 to demo
+setTimeout(() => openDeepDive('ema20'), 800);
+</script>
+</body>
+</html>

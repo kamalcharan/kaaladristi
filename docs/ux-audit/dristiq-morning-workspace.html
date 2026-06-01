@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DristiQ — Morning Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #080810;
+  --bg-2:         #0c0c18;
+  --surface-1:    #0f0f1e;
+  --surface-2:    #13131f;
+  --surface-3:    #1a1a2e;
+  --accent:       #8b5cf6;
+  --accent-dim:   rgba(139,92,246,0.35);
+  --accent-glow:  rgba(139,92,246,0.12);
+  --accent-solid: rgba(139,92,246,0.9);
+  --gold:         #d4a84b;
+  --gold-dim:     rgba(212,168,75,0.15);
+  --gold-glow:    rgba(212,168,75,0.08);
+  --bull:         #10b981;
+  --bull-bg:      rgba(16,185,129,0.08);
+  --bear:         #ef4444;
+  --bear-bg:      rgba(239,68,68,0.08);
+  --caution:      #f59e0b;
+  --caution-bg:   rgba(245,158,11,0.08);
+  --text-1:       rgba(255,255,255,0.92);
+  --text-2:       rgba(255,255,255,0.55);
+  --text-3:       rgba(255,255,255,0.28);
+  --border:       rgba(255,255,255,0.07);
+  --border-mid:   rgba(255,255,255,0.12);
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+  --font-mono:    'IBM Plex Mono', monospace;
+  --radius-sm:    6px;
+  --radius:       10px;
+  --radius-lg:    16px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text-1);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── LAYOUT ── */
+.app {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  grid-template-rows: 52px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  gap: 16px;
+  z-index: 10;
+}
+.brand {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 144;
+}
+.brand em { font-style: italic; color: var(--gold); }
+.topbar-search {
+  flex: 1;
+  max-width: 320px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.data-chip { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-2); font-family: var(--font-mono); }
+.data-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--bull); animation: pulse-dot 2s ease-in-out infinite; }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.ask-vani-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 14px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.2s;
+}
+.ask-vani-btn:hover { background: var(--accent-dim); }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.nav-section { padding: 0 12px; margin-bottom: 20px; }
+.nav-label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); font-weight: 600; padding: 0 8px; margin-bottom: 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  font-size: 12.5px; color: var(--text-2);
+  cursor: pointer; transition: all 0.15s; margin-bottom: 1px;
+}
+.nav-item:hover { background: var(--surface-1); color: var(--text-1); }
+.nav-item.active { background: var(--accent-glow); color: var(--text-1); border-left: 2px solid var(--accent); padding-left: 8px; }
+.nav-glyph { font-size: 13px; width: 16px; text-align: center; }
+.sidebar-footer { margin-top: auto; padding: 12px; border-top: 1px solid var(--border); }
+.theme-dots { display: flex; gap: 7px; margin-bottom: 12px; padding: 0 4px; }
+.theme-dot { width: 10px; height: 10px; border-radius: 50%; cursor: pointer; transition: transform 0.15s; }
+.theme-dot:hover { transform: scale(1.3); }
+.theme-dot.kd { background: #8b5cf6; }
+.theme-dot.tech { background: #10e8de; }
+.theme-dot.jade { background: #3aad7e; }
+.user-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; }
+.user-avatar { width: 26px; height: 26px; border-radius: 6px; background: var(--accent-dim); display: grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--accent); }
+.user-name { font-size: 12px; color: var(--text-2); }
+
+/* ── WORKSPACE ── */
+.workspace { display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+.ws-header { padding: 12px 20px 0; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.ws-title-row { display: flex; align-items: center; gap: 10px; }
+.ws-name { font-family: var(--font-display); font-size: 20px; font-weight: 400; letter-spacing: -0.02em; font-variation-settings: "opsz" 144; }
+.ws-version { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); padding: 2px 6px; background: var(--surface-1); border-radius: 4px; }
+.beta-badge { display: flex; align-items: center; gap: 5px; padding: 3px 10px; background: var(--gold-dim); border: 1px solid rgba(212,168,75,0.3); border-radius: 100px; font-size: 10px; font-weight: 600; color: var(--gold); }
+
+/* Confluence pills */
+.confluence-strip { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.conf-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 100px;
+  font-size: 11px; font-family: var(--font-mono);
+  cursor: pointer; transition: all 0.2s;
+  border: 1px solid var(--accent-dim);
+  background: var(--accent-glow); color: var(--text-1);
+}
+.conf-pill:hover { border-color: var(--accent); background: var(--accent-dim); }
+.conf-pill.active { border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.06); }
+.conf-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--caution); animation: pulse-dot 1.5s ease-in-out infinite; }
+
+/* Overlay strip */
+.overlay-row { display: flex; align-items: center; gap: 8px; }
+.overlay-strip { display: flex; align-items: center; gap: 6px; overflow-x: auto; }
+.overlay-strip::-webkit-scrollbar { display: none; }
+.overlay-pill { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 100px; font-size: 11px; color: var(--text-2); white-space: nowrap; cursor: pointer; transition: all 0.15s; }
+.overlay-pill:hover { border-color: var(--border-mid); color: var(--text-1); }
+.overlay-color { width: 8px; height: 8px; border-radius: 50%; }
+.add-overlay-btn { padding: 4px 10px; background: transparent; border: 1px dashed var(--border-mid); border-radius: 100px; font-size: 11px; color: var(--text-3); cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.add-overlay-btn:hover { color: var(--text-2); border-color: var(--accent-dim); }
+.ws-ctrl-btn { padding: 5px 12px; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 11px; color: var(--text-2); cursor: pointer; transition: all 0.15s; }
+.ws-ctrl-btn:hover { color: var(--text-1); border-color: var(--border-mid); }
+
+/* ── CANVAS ── */
+.canvas-area {
+  flex: 1; overflow: hidden;
+  padding: 12px 20px 80px;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* Chart */
+.chart-block { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.chart-title { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
+.chart-canvas { flex: 1; position: relative; overflow: hidden; }
+.chart-svg { width: 100%; height: 100%; }
+.chart-tooltip { position: absolute; top: 16px; right: 16px; background: rgba(13,13,25,0.95); border: 1px solid var(--border-mid); border-radius: var(--radius); padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; }
+.tooltip-row { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 2px; }
+.tooltip-label { color: var(--text-3); }
+.grid-line { stroke: var(--border); stroke-width: 0.5; }
+
+/* Right panel */
+.right-panel { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; }
+.right-panel::-webkit-scrollbar { width: 3px; }
+.right-panel::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 2px; }
+
+/* Block cards */
+.block-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; flex-shrink: 0; }
+.block-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.block-icon { font-size: 13px; }
+.block-title { font-size: 12px; font-weight: 500; flex: 1; }
+.block-badge { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; font-weight: 600; }
+.badge-panel { background: var(--gold-dim); color: var(--gold); }
+.badge-vani { background: var(--accent-glow); color: var(--accent); }
+.block-body { padding: 12px 14px; }
+.metric-big { font-family: var(--font-display); font-size: 32px; font-weight: 400; letter-spacing: -0.02em; font-variation-settings: "opsz" 144; line-height: 1; margin-bottom: 4px; }
+.metric-label { font-size: 11px; color: var(--text-3); margin-bottom: 10px; }
+.sixday-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.day-cell { background: var(--surface-2); border-radius: var(--radius-sm); padding: 7px 8px; text-align: center; }
+.day-label { font-size: 9px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+.day-num { font-family: var(--font-display); font-size: 18px; font-weight: 400; font-variation-settings: "opsz" 144; line-height: 1.1; }
+.day-signal { font-size: 8px; margin-top: 3px; }
+.day-cell.today { border: 1px solid var(--bull); background: var(--bull-bg); }
+
+/* ── VANI MORNING BRIEF CARD ── */
+.vani-brief {
+  position: relative;
+  background: linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(13,13,25,0.8) 100%);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  flex-shrink: 0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.vani-brief::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--gold), transparent);
+}
+.vani-brief:hover { border-color: var(--accent); }
+.vani-brief-header { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.vani-orb {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #5b4fd4);
+  display: grid; place-items: center; font-size: 11px;
+  box-shadow: 0 0 10px rgba(139,92,246,0.4);
+  animation: orb-breathe 3s ease-in-out infinite;
+}
+@keyframes orb-breathe { 0%,100% { box-shadow: 0 0 10px rgba(139,92,246,0.35); } 50% { box-shadow: 0 0 18px rgba(139,92,246,0.55); } }
+.vani-brief-name { font-family: var(--font-display); font-size: 12px; font-style: italic; color: var(--text-2); }
+.vani-brief-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); margin-left: auto; }
+
+/* What VaNi surfaces — factual, no directional call */
+.brief-items { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+.brief-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.brief-item-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  flex-shrink: 0; margin-top: 5px;
+}
+.brief-item-body { flex: 1; }
+.brief-item-title { font-size: 11.5px; font-weight: 500; color: var(--text-1); margin-bottom: 2px; }
+.brief-item-sub { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+.brief-item-link { font-size: 10px; color: var(--accent); font-family: var(--font-mono); margin-top: 4px; cursor: pointer; }
+.brief-item-link:hover { text-decoration: underline; }
+.brief-item-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.brief-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.15s;
+}
+.brief-expand:hover { color: var(--accent); }
+
+/* ── MORNING MODAL ── */
+.morning-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 200px;
+  animation: fade-in 0.3s ease;
+  cursor: pointer;
+}
+.morning-overlay.hidden { display: none; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.morning-card {
+  width: 540px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px var(--accent-glow);
+  animation: card-enter 0.35s cubic-bezier(0.22,1,0.36,1);
+  cursor: default;
+}
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.morning-top {
+  padding: 20px 22px 18px;
+  background: linear-gradient(135deg, rgba(139,92,246,0.12), transparent);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.morning-top::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--gold), transparent);
+}
+.morning-top-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px;
+}
+.morning-orb {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, #9d8ff9, #5b4fd4, #3d2fa8);
+  display: grid; place-items: center; font-size: 14px;
+  box-shadow: 0 0 18px rgba(139,92,246,0.5);
+  animation: orb-breathe 3s ease-in-out infinite;
+}
+.morning-vani-name {
+  font-family: var(--font-display);
+  font-size: 15px; font-style: italic; font-weight: 400;
+}
+.morning-date {
+  font-family: var(--font-mono);
+  font-size: 10px; color: var(--text-3);
+  margin-left: auto;
+}
+.morning-headline {
+  font-family: var(--font-display);
+  font-size: 21px; font-weight: 400;
+  line-height: 1.35;
+  font-variation-settings: "opsz" 144;
+  letter-spacing: -0.015em;
+}
+.morning-headline em { font-style: italic; color: var(--gold); }
+
+/* Observation list — purely factual */
+.morning-body { padding: 18px 22px 20px; }
+.obs-section-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.obs-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.obs-row {
+  display: flex; gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer; transition: border-color 0.15s;
+}
+.obs-row:hover { border-color: var(--border-mid); }
+.obs-bar { width: 3px; border-radius: 2px; align-self: stretch; flex-shrink: 0; }
+.obs-bar.gold  { background: var(--gold); opacity: 0.7; }
+.obs-bar.accent { background: var(--accent); opacity: 0.7; }
+.obs-bar.neutral { background: var(--text-3); }
+.obs-content { flex: 1; }
+.obs-title { font-size: 12.5px; font-weight: 500; color: var(--text-1); margin-bottom: 3px; }
+.obs-desc {
+  font-size: 11.5px; color: var(--text-2);
+  line-height: 1.5;
+}
+/* Key: no directional language. Just facts. */
+.obs-stat {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px; color: var(--text-2);
+  background: var(--surface-2);
+  padding: 2px 7px; border-radius: 4px;
+  margin-top: 6px;
+}
+.obs-link {
+  font-size: 10px; color: var(--accent);
+  font-family: var(--font-mono);
+  margin-top: 6px; cursor: pointer; display: block;
+}
+.obs-link:hover { text-decoration: underline; }
+.obs-right {
+  display: flex; flex-direction: column;
+  align-items: flex-end; justify-content: space-between;
+  flex-shrink: 0;
+}
+.obs-badge {
+  font-family: var(--font-mono);
+  font-size: 9px; padding: 3px 8px;
+  border-radius: 100px; font-weight: 600;
+  border: 1px solid;
+}
+.obs-badge.active-now { background: var(--caution-bg); border-color: rgba(245,158,11,0.3); color: var(--caution); }
+.obs-badge.approaching { background: var(--accent-glow); border-color: var(--accent-dim); color: rgba(167,139,250,0.9); }
+.obs-badge.today { background: var(--bull-bg); border-color: rgba(16,185,129,0.2); color: var(--bull); }
+
+/* Footer */
+.morning-footer { display: flex; gap: 8px; }
+.morning-btn {
+  flex: 1; padding: 10px;
+  border-radius: var(--radius);
+  font-size: 12px; font-weight: 500;
+  text-align: center; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-enter { background: var(--accent-solid); color: #fff; border: 1px solid transparent; }
+.btn-enter:hover { background: var(--accent); }
+.btn-later { background: transparent; color: var(--text-2); border: 1px solid var(--border-mid); }
+.btn-later:hover { color: var(--text-1); border-color: var(--accent-dim); }
+
+/* ── ACTION ISLAND ── */
+.action-island {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(calc(-50% + 100px));
+  z-index: 50;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+  background: rgba(10,10,20,0.96);
+  border: 1px solid var(--accent-dim);
+  border-radius: 100px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px var(--accent-glow);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.22,1,0.36,1);
+  animation: island-enter 0.6s cubic-bezier(0.22,1,0.36,1) 0.3s both;
+}
+@keyframes island-enter {
+  from { opacity: 0; transform: translateX(calc(-50% + 100px)) translateY(16px); }
+  to   { opacity: 1; transform: translateX(calc(-50% + 100px)) translateY(0); }
+}
+.action-island:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 32px rgba(0,0,0,0.6), 0 0 20px rgba(139,92,246,0.12);
+}
+.island-orb {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #5b4fd4);
+  display: grid; place-items: center; font-size: 10px;
+  box-shadow: 0 0 8px rgba(139,92,246,0.4);
+  flex-shrink: 0;
+}
+/* Island text — factual state, not a call */
+.island-text {
+  font-family: var(--font-display);
+  font-size: 13px; font-style: italic;
+  font-weight: 400;
+  font-variation-settings: "opsz" 144;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.island-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.chip-caution { background: var(--caution-bg); border: 1px solid rgba(245,158,11,0.25); color: var(--caution); }
+.chip-accent  { background: var(--accent-glow); border: 1px solid var(--accent-dim); color: rgba(167,139,250,0.9); }
+.island-arrow { color: var(--text-3); font-size: 11px; transition: transform 0.2s; }
+.action-island:hover .island-arrow { transform: translateX(3px); }
+
+/* Beta footer */
+.beta-footer {
+  position: fixed; bottom: 0; left: 200px; right: 0;
+  background: rgba(212,168,75,0.05);
+  border-top: 1px solid rgba(212,168,75,0.12);
+  padding: 6px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: rgba(212,168,75,0.6);
+  z-index: 5;
+}
+.beta-dismiss { cursor: pointer; color: var(--text-3); }
+.beta-dismiss:hover { color: var(--text-2); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="brand">Dristi<em>Q</em></div>
+    <div class="topbar-search">
+      <span style="color:var(--text-3);font-size:13px;">⌕</span>
+      Search index or stock · ⌘K
+    </div>
+    <div class="topbar-right">
+      <div class="data-chip"><span class="data-dot"></span>Data · 31 May 2026</div>
+      <div class="ask-vani-btn"><span style="color:var(--accent)">✦</span> Ask VaNi</div>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="nav-section">
+      <div class="nav-item active"><span class="nav-glyph">⬡</span> Workspace</div>
+      <div class="nav-item"><span class="nav-glyph">◈</span> Catalog</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">View</div>
+      <div class="nav-item"><span class="nav-glyph">◉</span> Dashboard</div>
+      <div class="nav-item"><span class="nav-glyph">⊡</span> Scanner</div>
+      <div class="nav-item"><span class="nav-glyph">⧖</span> Market Structure</div>
+      <div class="nav-item"><span class="nav-glyph">☽</span> Planetary Intel</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="theme-dots">
+        <div class="theme-dot kd"></div>
+        <div class="theme-dot tech"></div>
+        <div class="theme-dot jade"></div>
+      </div>
+      <div class="user-row">
+        <div class="user-avatar">KC</div>
+        <div class="user-name">kamalcharan</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- WORKSPACE -->
+  <main class="workspace">
+    <div class="ws-header">
+      <div class="ws-title-row">
+        <div class="ws-name">My Framework</div>
+        <div class="ws-version">v180</div>
+        <div class="beta-badge">β · Beta Access</div>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <div class="ws-ctrl-btn">+ index</div>
+          <div class="ws-ctrl-btn">Edit Canvas</div>
+        </div>
+      </div>
+
+      <!-- Confluence pills — show what's detected, not what it means -->
+      <div class="confluence-strip">
+        <div class="conf-pill active" onclick="openMorning()">
+          <span class="conf-dot"></span>✦ SMA 50 ∩ CON-SUN-MER-TRN · 81 instances
+        </div>
+        <div class="conf-pill" onclick="openMorning()">
+          ✦ EMA 20 ∩ SMA 50 · 13 instances
+        </div>
+        <div class="conf-pill" onclick="openMorning()">
+          ✦ EMA 20 ∩ CON-SUN-MER-TRN · 3 instances
+        </div>
+      </div>
+
+      <!-- Overlay strip -->
+      <div class="overlay-row">
+        <div class="overlay-strip">
+          <div class="overlay-pill"><span class="overlay-color" style="background:var(--gold)"></span>Panchak</div>
+          <div class="overlay-pill"><span class="overlay-color" style="background:#f59e0b"></span>EMA 20</div>
+          <div class="overlay-pill"><span class="overlay-color" style="background:#ef4444"></span>SMA 50</div>
+          <div class="overlay-pill"><span class="overlay-color" style="background:#a78bfa"></span>CON-SUN-MER-TRN</div>
+          <div class="add-overlay-btn">+ overlay</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <div class="ws-ctrl-btn">+ index</div>
+          <div class="ws-ctrl-btn">Edit Canvas</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-area">
+
+      <!-- Chart -->
+      <div class="chart-block">
+        <div class="chart-header">
+          <div class="chart-title">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.5"><rect x="1" y="1" width="14" height="14" rx="2"/><path d="M4 10l3-4 3 3 3-5"/></svg>
+            NIFTY 50
+          </div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);">23,806.66</div>
+        </div>
+        <div class="chart-canvas">
+          <svg class="chart-svg" viewBox="0 0 900 380" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <line x1="0" y1="76"  x2="900" y2="76"  class="grid-line"/>
+            <line x1="0" y1="152" x2="900" y2="152" class="grid-line"/>
+            <line x1="0" y1="228" x2="900" y2="228" class="grid-line"/>
+            <line x1="0" y1="304" x2="900" y2="304" class="grid-line"/>
+            <!-- Panchak zone -->
+            <rect x="600" y="0" width="120" height="380" fill="rgba(245,158,11,0.04)"/>
+            <line x1="600" y1="0" x2="600" y2="380" stroke="rgba(245,158,11,0.18)" stroke-width="1"/>
+            <text x="608" y="18" font-family="IBM Plex Mono" font-size="9" fill="rgba(245,158,11,0.5)">PANCHAK</text>
+            <!-- Price area -->
+            <path d="M0,180 C60,170 120,155 180,148 C240,141 300,130 360,118 C420,106 480,100 540,112 C570,118 590,132 620,148 C650,164 680,200 720,228 C760,256 800,280 860,308 L900,320 L900,380 L0,380 Z" fill="url(#priceGrad)"/>
+            <!-- EMA -->
+            <path d="M0,190 C60,180 120,165 180,158 C240,151 300,140 360,130 C420,120 480,115 540,124 C570,130 590,142 620,158 C650,174 680,208 720,234 C760,260 800,282 860,308" fill="none" stroke="var(--gold)" stroke-width="1.2" opacity="0.7"/>
+            <!-- SMA -->
+            <path d="M0,205 C60,196 120,180 180,173 C240,166 300,156 360,147 C420,138 480,134 540,143 C570,148 590,160 620,175 C650,190 680,222 720,248 C760,274 800,294 860,316" fill="none" stroke="#ef4444" stroke-width="1" opacity="0.5"/>
+            <!-- Candles -->
+            <rect x="60" y="165" width="5" height="18" fill="var(--bull)"/>
+            <rect x="120" y="150" width="5" height="16" fill="var(--bull)"/>
+            <rect x="300" y="122" width="5" height="20" fill="var(--bull)"/>
+            <rect x="420" y="96"  width="5" height="18" fill="var(--bull)"/>
+            <rect x="90" y="158" width="5" height="14" fill="var(--bear)"/>
+            <rect x="210" y="140" width="5" height="15" fill="var(--bear)"/>
+            <rect x="480" y="104" width="5" height="16" fill="var(--bear)"/>
+            <rect x="630" y="150" width="5" height="18" fill="var(--bear)"/>
+            <rect x="690" y="220" width="5" height="20" fill="var(--bear)"/>
+            <rect x="780" y="272" width="5" height="18" fill="var(--bear)"/>
+          </svg>
+          <div class="chart-tooltip">
+            <div class="tooltip-row"><span class="tooltip-label">Close</span><span style="color:var(--text-1)">23,806</span></div>
+            <div class="tooltip-row"><span class="tooltip-label">EMA 20</span><span style="color:var(--gold)">23,992</span></div>
+            <div class="tooltip-row"><span class="tooltip-label">SMA 50</span><span style="color:#ef4444">24,512</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right panel -->
+      <div class="right-panel">
+
+        <!-- VaNi Brief — surfaces facts, no directional call -->
+        <div class="vani-brief" onclick="openMorning()">
+          <div class="vani-brief-header">
+            <div class="vani-orb">✦</div>
+            <div class="vani-brief-name">VaNi · what's active today</div>
+            <div class="vani-brief-time">09:15 IST</div>
+          </div>
+          <div class="brief-items">
+            <div class="brief-item">
+              <span class="brief-item-dot" style="background:var(--caution)"></span>
+              <div class="brief-item-body">
+                <div class="brief-item-title">Panchak — Day 3 of 5</div>
+                <div class="brief-item-sub">Active through Thursday. Caution zones visible on chart.</div>
+                <div class="brief-item-link">View all Panchak periods →</div>
+              </div>
+              <span class="brief-item-count">180 instances</span>
+            </div>
+            <div class="brief-item">
+              <span class="brief-item-dot" style="background:var(--accent)"></span>
+              <div class="brief-item-body">
+                <div class="brief-item-title">SMA 50 ∩ Conjunction — approaching</div>
+                <div class="brief-item-sub">Both overlays active in your framework simultaneously.</div>
+                <div class="brief-item-link">Open correlation data →</div>
+              </div>
+              <span class="brief-item-count">81 instances</span>
+            </div>
+            <div class="brief-item">
+              <span class="brief-item-dot" style="background:var(--bull)"></span>
+              <div class="brief-item-body">
+                <div class="brief-item-title">Six-Day Outlook — 2 rules firing today</div>
+                <div class="brief-item-sub">Monday Jun 2 shows High Positive signal in your outlook.</div>
+                <div class="brief-item-link">See which rules →</div>
+              </div>
+              <span class="brief-item-count">today</span>
+            </div>
+          </div>
+          <div class="brief-expand">
+            <span>Full morning context</span>
+            <span>›</span>
+          </div>
+        </div>
+
+        <!-- MagicRS -->
+        <div class="block-card">
+          <div class="block-header">
+            <span class="block-icon">⚡</span>
+            <span class="block-title">MagicRS</span>
+            <span class="block-badge badge-panel">Panel Block</span>
+            <span class="block-badge badge-vani">VaNi +</span>
+          </div>
+          <div class="block-body">
+            <div class="metric-big" style="color:var(--caution)">−0.56</div>
+            <div class="metric-label">Neutral · NIFTY 50</div>
+            <svg width="100%" height="40" viewBox="0 0 280 40">
+              <path d="M0,20 C20,17 40,14 60,18 C80,22 100,26 120,22 C140,18 160,14 180,19 C200,24 220,30 240,28 C260,26 270,32 280,35" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.6"/>
+              <line x1="0" y1="20" x2="280" y2="20" stroke="rgba(255,255,255,0.08)" stroke-width="0.5" stroke-dasharray="4,4"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Six-Day Outlook -->
+        <div class="block-card">
+          <div class="block-header">
+            <span class="block-icon">☽</span>
+            <span class="block-title">Six-Day Outlook</span>
+            <span class="block-badge badge-panel">Panel Block</span>
+          </div>
+          <div class="block-body">
+            <div style="font-size:10px;color:var(--text-3);margin-bottom:8px;font-style:italic;">forward read · hover for rules</div>
+            <div class="sixday-grid">
+              <div class="day-cell today">
+                <div class="day-label">Mon</div>
+                <div class="day-num">2</div>
+                <div class="day-signal" style="color:var(--bull);font-size:8px;">HIGH POS</div>
+              </div>
+              <div class="day-cell">
+                <div class="day-label">Tue</div>
+                <div class="day-num">3</div>
+                <div class="day-signal" style="color:var(--caution);font-size:8px;">MIXED</div>
+              </div>
+              <div class="day-cell">
+                <div class="day-label">Wed</div>
+                <div class="day-num">4</div>
+                <div class="day-signal" style="color:var(--caution);font-size:8px;">MIXED</div>
+              </div>
+              <div class="day-cell">
+                <div class="day-label">Thu</div>
+                <div class="day-num">5</div>
+                <div class="day-signal" style="color:var(--caution);font-size:8px;">MIXED</div>
+              </div>
+              <div class="day-cell">
+                <div class="day-label">Fri</div>
+                <div class="day-num">6</div>
+                <div class="day-signal" style="color:var(--bear);font-size:8px;">CAUTION</div>
+              </div>
+              <div class="day-cell">
+                <div class="day-label">Mon</div>
+                <div class="day-num">9</div>
+                <div class="day-signal" style="color:var(--bull);font-size:8px;">HIGH POS</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ACTION ISLAND — factual state summary -->
+<div class="action-island" onclick="openMorning()">
+  <div class="island-orb">✦</div>
+  <div class="island-text">3 things active in your framework</div>
+  <div class="island-chip chip-caution">Panchak Day 3</div>
+  <div class="island-chip chip-accent">81× confluence</div>
+  <div class="island-arrow">›</div>
+</div>
+
+<!-- BETA FOOTER -->
+<div class="beta-footer" id="betaFooter">
+  <span>Beta Access — free until public launch. You'll be notified before anything changes.</span>
+  <span class="beta-dismiss" onclick="document.getElementById('betaFooter').style.display='none'">✕</span>
+</div>
+
+<!-- MORNING MODAL — purely informational, no directional calls -->
+<div class="morning-overlay hidden" id="morningOverlay" onclick="closeMorning(event)">
+  <div class="morning-card" onclick="event.stopPropagation()">
+    <div class="morning-top">
+      <div class="morning-top-row">
+        <div class="morning-orb">✦</div>
+        <div class="morning-vani-name">VaNi</div>
+        <div class="morning-date">Monday · 2 Jun 2026 · 09:15 IST</div>
+      </div>
+      <div class="morning-headline">
+        What's active in your framework<br/><em>as markets open today.</em>
+      </div>
+    </div>
+
+    <div class="morning-body">
+      <div class="obs-section-label">Active in your framework now</div>
+      <div class="obs-list">
+
+        <!-- Observation 1 — pure fact, no direction -->
+        <div class="obs-row">
+          <div class="obs-bar gold"></div>
+          <div class="obs-content">
+            <div class="obs-title">Panchak — Day 3 of 5</div>
+            <div class="obs-desc">
+              Caution zone is active on your chart. Period runs through Thursday 5 Jun.
+              Your framework has 180 historical Panchak instances on record.
+            </div>
+            <div class="obs-stat">180 historical instances · since 2015</div>
+            <div class="obs-link" onclick="closeMorning()">View all Panchak periods on chart →</div>
+          </div>
+          <div class="obs-right">
+            <div class="obs-badge active-now">Active now</div>
+          </div>
+        </div>
+
+        <!-- Observation 2 — confluence fact, instance count surfaced -->
+        <div class="obs-row">
+          <div class="obs-bar accent"></div>
+          <div class="obs-content">
+            <div class="obs-title">SMA 50 ∩ CON-SUN-MER-TRN — both overlays active</div>
+            <div class="obs-desc">
+              Two of your active overlays are simultaneously present.
+              This combination has 81 historical instances in your dataset.
+            </div>
+            <div class="obs-stat">81 instances · ZONE_CONFLUENCE shape</div>
+            <div class="obs-link" onclick="closeMorning()">Open correlation detail →</div>
+          </div>
+          <div class="obs-right">
+            <div class="obs-badge approaching">Approaching</div>
+          </div>
+        </div>
+
+        <!-- Observation 3 — rule firing, data only -->
+        <div class="obs-row">
+          <div class="obs-bar neutral"></div>
+          <div class="obs-content">
+            <div class="obs-title">Six-Day Outlook — 2 rules firing today</div>
+            <div class="obs-desc">
+              Monday Jun 2 has 2 astro rules active in your Six-Day Outlook.
+              Signal classification: High Positive.
+            </div>
+            <div class="obs-stat">2 rules · see rules panel for detail</div>
+            <div class="obs-link" onclick="closeMorning()">See which rules are active →</div>
+          </div>
+          <div class="obs-right">
+            <div class="obs-badge today">Today</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <div class="morning-btn btn-enter" onclick="closeMorning()">Enter workspace →</div>
+        <div class="morning-btn btn-later" onclick="closeMorning()">Dismiss</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openMorning() {
+  document.getElementById('morningOverlay').classList.remove('hidden');
+}
+function closeMorning(e) {
+  if (!e || e.target === document.getElementById('morningOverlay')) {
+    document.getElementById('morningOverlay').classList.add('hidden');
+  }
+}
+setTimeout(() => openMorning(), 1200);
+</script>
+</body>
+</html>

@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DristiQ — Correlation View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #080810;
+  --surface-1:    #0f0f1e;
+  --surface-2:    #13131f;
+  --surface-3:    #1a1a2e;
+  --accent:       #8b5cf6;
+  --accent-dim:   rgba(139,92,246,0.35);
+  --accent-glow:  rgba(139,92,246,0.12);
+  --accent-solid: rgba(139,92,246,0.9);
+  --gold:         #d4a84b;
+  --gold-dim:     rgba(212,168,75,0.15);
+  --bull:         #10b981;
+  --bull-bg:      rgba(16,185,129,0.08);
+  --bear:         #ef4444;
+  --bear-bg:      rgba(239,68,68,0.08);
+  --caution:      #f59e0b;
+  --caution-bg:   rgba(245,158,11,0.08);
+  --text-1:       rgba(255,255,255,0.92);
+  --text-2:       rgba(255,255,255,0.55);
+  --text-3:       rgba(255,255,255,0.28);
+  --border:       rgba(255,255,255,0.07);
+  --border-mid:   rgba(255,255,255,0.12);
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+  --font-mono:    'IBM Plex Mono', monospace;
+  --radius-sm:    6px;
+  --radius:       10px;
+  --radius-lg:    16px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text-1);font-size:13px;-webkit-font-smoothing:antialiased;}
+
+/* ── FULL PAGE LAYOUT ── */
+.page{
+  height:100vh;
+  display:grid;
+  grid-template-rows:52px 1fr;
+  overflow:hidden;
+}
+
+/* ── TOPBAR ── */
+.topbar{
+  display:flex;align-items:center;
+  padding:0 24px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg);
+  gap:12px;
+  position:relative;
+  z-index:10;
+}
+.back-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 12px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  font-size:11px;color:var(--text-2);
+  cursor:pointer;transition:all 0.15s;
+}
+.back-btn:hover{color:var(--text-1);border-color:var(--border-mid);}
+.topbar-divider{width:1px;height:20px;background:var(--border);}
+.pair-breadcrumb{
+  display:flex;align-items:center;gap:7px;
+  font-family:var(--font-mono);font-size:11px;
+}
+.bc-item{
+  display:flex;align-items:center;gap:5px;
+  padding:3px 8px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:100px;
+  color:var(--text-2);
+}
+.bc-sep{color:var(--text-3);}
+.bc-shape{
+  font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-glow);
+  border:1px solid var(--accent-dim);
+  padding:2px 8px;border-radius:4px;font-weight:600;
+}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.pair-nav-btn{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 10px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  font-size:10px;font-family:var(--font-mono);
+  color:var(--text-2);cursor:pointer;transition:all 0.15s;
+}
+.pair-nav-btn:hover{color:var(--text-1);border-color:var(--border-mid);}
+.pair-nav-btn .dot{width:5px;height:5px;border-radius:50%;background:var(--caution);animation:pulse 1.5s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+/* ── MAIN LAYOUT ── */
+.main{
+  display:grid;
+  grid-template-columns:320px 1fr;
+  gap:0;
+  overflow:hidden;
+  min-height:0;
+}
+
+/* ── LEFT PANEL — identity + confidence + VaNi ── */
+.left-panel{
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow-y:auto;
+  padding:20px;
+  gap:16px;
+}
+.left-panel::-webkit-scrollbar{width:3px;}
+.left-panel::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px;}
+
+/* Pair header */
+.pair-header{
+  padding:16px;
+  background:linear-gradient(135deg,rgba(139,92,246,0.1),transparent);
+  border:1px solid var(--accent-dim);
+  border-radius:var(--radius-lg);
+  position:relative;overflow:hidden;
+}
+.pair-header::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--accent),var(--gold),transparent);
+}
+.ph-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:10px;}
+.ph-items{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.ph-item{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 10px;
+  background:var(--surface-2);
+  border:1px solid var(--border-mid);
+  border-radius:100px;
+  font-size:12px;font-family:var(--font-mono);
+}
+.ph-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ph-sep{font-size:16px;color:var(--text-3);font-family:var(--font-mono);}
+.ph-status{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 10px;
+  border-radius:var(--radius-sm);
+  font-size:11px;font-family:var(--font-mono);
+  background:var(--accent-glow);
+  border:1px solid var(--accent-dim);
+  color:rgba(167,139,250,0.9);
+}
+.ph-status-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1.5s ease-in-out infinite;}
+
+/* ── CLOCK CONFIDENCE DIAL ── */
+.confidence-section{
+  padding:16px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+}
+.conf-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:12px;}
+.clock-wrap{display:flex;align-items:center;gap:14px;}
+.clock-dial{position:relative;width:80px;height:80px;flex-shrink:0;}
+.clock-svg{width:80px;height:80px;}
+.clock-track{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:8;}
+.clock-fill{fill:none;stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset 1s cubic-bezier(0.22,1,0.36,1);}
+.clock-center-text{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  pointer-events:none;
+}
+.clock-strength{font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--bull);}
+.clock-n{font-family:var(--font-mono);font-size:8px;color:var(--text-3);}
+.clock-legend{flex:1;}
+.clock-legend-row{
+  display:flex;align-items:center;gap:6px;
+  margin-bottom:5px;font-size:10px;
+}
+.clock-tick{
+  font-family:var(--font-mono);font-size:9px;
+  width:20px;text-align:right;color:var(--text-3);
+}
+.clock-track-bar{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.06);}
+.clock-track-fill{height:100%;border-radius:2px;}
+.clock-desc{font-size:10px;color:var(--text-2);}
+.clock-sub{font-size:9px;color:var(--text-3);margin-top:6px;line-height:1.4;}
+
+/* Stats grid */
+.stats-grid{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:6px;
+}
+.stat-box{
+  padding:10px 12px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+}
+.stat-box-label{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:4px;}
+.stat-box-value{font-family:var(--font-display);font-size:20px;font-weight:400;font-variation-settings:"opsz" 144;line-height:1;}
+.stat-box-sub{font-size:9px;color:var(--text-3);margin-top:3px;}
+
+/* Outcome split */
+.outcome-section{
+  padding:14px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+}
+.outcome-bar{height:10px;border-radius:5px;overflow:hidden;display:flex;margin:8px 0;}
+.ob-bull{background:var(--bull);}
+.ob-bear{background:var(--bear);}
+.outcome-labels{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;}
+.ol-bull{color:var(--bull);}
+.ol-bear{color:var(--bear);}
+.outcome-note{font-size:10px;color:var(--text-3);margin-top:6px;line-height:1.4;}
+
+/* VaNi inference */
+.vani-section{
+  padding:14px;
+  background:var(--surface-1);
+  border:1px solid var(--accent-dim);
+  border-radius:var(--radius-lg);
+  position:relative;overflow:hidden;
+}
+.vani-section::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--accent),transparent);}
+.vi-header{display:flex;align-items:center;gap:7px;margin-bottom:8px;}
+.vi-orb{
+  width:22px;height:22px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#5b4fd4);
+  display:grid;place-items:center;font-size:10px;
+  box-shadow:0 0 8px rgba(139,92,246,0.3);
+  animation:orb-breathe 3s ease-in-out infinite;
+}
+@keyframes orb-breathe{0%,100%{box-shadow:0 0 8px rgba(139,92,246,0.3);}50%{box-shadow:0 0 16px rgba(139,92,246,0.5);}}
+.vi-name{font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+.vi-text{
+  font-family:var(--font-display);
+  font-size:13px;font-weight:400;font-style:italic;
+  line-height:1.6;color:var(--text-1);
+  font-variation-settings:"opsz" 144;
+}
+.vi-text em{font-style:normal;color:var(--gold);font-weight:500;}
+
+/* Actions */
+.action-row{display:flex;gap:7px;}
+.act-btn{
+  flex:1;padding:9px 10px;
+  border-radius:var(--radius-sm);
+  font-size:11px;font-weight:500;
+  text-align:center;cursor:pointer;transition:all 0.15s;
+}
+.btn-primary{background:var(--accent-solid);color:#fff;border:1px solid transparent;}
+.btn-primary:hover{background:var(--accent);}
+.btn-ghost{background:transparent;color:var(--text-2);border:1px solid var(--border-mid);}
+.btn-ghost:hover{color:var(--text-1);border-color:var(--accent-dim);}
+.btn-danger{background:transparent;color:var(--bear);border:1px solid rgba(239,68,68,0.2);}
+.btn-danger:hover{background:var(--bear-bg);}
+
+/* ── RIGHT PANEL — visualisation canvas ── */
+.right-panel{
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  min-height:0;
+}
+
+/* VaNi viz recommendation bar */
+.viz-recommend-bar{
+  padding:10px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+  flex-shrink:0;
+  background:rgba(139,92,246,0.04);
+}
+.vrb-label{
+  display:flex;align-items:center;gap:6px;
+  font-size:10px;color:var(--text-3);
+  white-space:nowrap;
+}
+.vrb-star{color:var(--accent);font-size:11px;}
+.viz-options{display:flex;gap:6px;flex:1;overflow-x:auto;}
+.viz-options::-webkit-scrollbar{display:none;}
+.viz-opt{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 12px;
+  border-radius:100px;
+  font-size:11px;font-weight:500;
+  cursor:pointer;transition:all 0.2s;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--text-2);
+  white-space:nowrap;
+  position:relative;
+}
+.viz-opt:hover{border-color:var(--border-mid);color:var(--text-1);}
+.viz-opt.selected{
+  background:var(--accent-dim);
+  border-color:var(--accent);
+  color:var(--text-1);
+}
+.viz-opt.recommended::after{
+  content:'VaNi pick';
+  position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+  font-size:8px;font-family:var(--font-mono);
+  color:var(--accent);
+  background:var(--surface-2);
+  padding:1px 5px;border-radius:3px;
+  border:1px solid var(--accent-dim);
+  white-space:nowrap;
+}
+.viz-icon{font-size:12px;}
+
+/* Visualisation canvas */
+.viz-canvas{
+  flex:1;overflow-y:auto;
+  padding:20px;
+  min-height:0;
+}
+.viz-canvas::-webkit-scrollbar{width:4px;}
+.viz-canvas::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px;}
+
+/* ── VIZ 1: INSTANCE GRID (default, VaNi recommended) ── */
+.grid-view{display:none;}
+.grid-view.active{display:block;}
+.grid-header{
+  display:flex;align-items:flex-start;
+  justify-content:space-between;
+  margin-bottom:16px;
+}
+.grid-title{
+  font-family:var(--font-display);
+  font-size:22px;font-weight:400;
+  font-variation-settings:"opsz" 144;
+  letter-spacing:-0.015em;
+  line-height:1.2;
+}
+.grid-title em{font-style:italic;color:var(--gold);}
+.grid-subtitle{font-size:12px;color:var(--text-2);margin-top:4px;line-height:1.5;}
+.grid-legend{display:flex;gap:12px;font-size:10px;font-family:var(--font-mono);}
+.legend-item{display:flex;align-items:center;gap:5px;color:var(--text-2);}
+.legend-sq{width:12px;height:12px;border-radius:2px;}
+
+/* The grid of squares */
+.instance-grid{
+  display:flex;flex-wrap:wrap;
+  gap:4px;
+  margin-bottom:16px;
+}
+.inst-sq{
+  width:20px;height:20px;
+  border-radius:3px;
+  cursor:pointer;
+  transition:transform 0.1s,box-shadow 0.1s;
+  position:relative;
+  flex-shrink:0;
+}
+.inst-sq:hover{transform:scale(1.3);z-index:2;}
+.inst-sq.bull{background:var(--bull);opacity:0.8;}
+.inst-sq.bull:hover{opacity:1;box-shadow:0 0 8px rgba(16,185,129,0.5);}
+.inst-sq.bear{background:var(--bear);opacity:0.8;}
+.inst-sq.bear:hover{opacity:1;box-shadow:0 0 8px rgba(239,68,68,0.5);}
+.inst-sq.current{
+  background:var(--accent);opacity:1;
+  animation:sq-pulse 2s ease-in-out infinite;
+  box-shadow:0 0 8px rgba(139,92,246,0.6);
+}
+@keyframes sq-pulse{0%,100%{box-shadow:0 0 8px rgba(139,92,246,0.5);}50%{box-shadow:0 0 16px rgba(139,92,246,0.8);}}
+
+/* Tooltip for hovered square */
+.sq-tooltip{
+  position:fixed;
+  background:rgba(13,13,25,0.98);
+  border:1px solid var(--border-mid);
+  border-radius:var(--radius);
+  padding:8px 12px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  pointer-events:none;
+  z-index:100;
+  display:none;
+  min-width:140px;
+}
+.sq-tooltip.visible{display:block;}
+.sq-tooltip-row{display:flex;justify-content:space-between;gap:12px;margin-bottom:2px;}
+.sq-tooltip-label{color:var(--text-3);}
+
+/* Grid summary strip */
+.grid-summary{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:8px;margin-bottom:16px;
+}
+.gs-box{
+  padding:10px 12px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  text-align:center;
+}
+.gs-value{font-family:var(--font-display);font-size:22px;font-weight:400;font-variation-settings:"opsz" 144;line-height:1;}
+.gs-label{font-size:10px;color:var(--text-3);margin-top:3px;}
+
+/* ── VIZ 2: TIMELINE (Gantt) ── */
+.timeline-view{display:none;}
+.timeline-view.active{display:block;}
+.gantt-section-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:10px;}
+.gantt-row{display:grid;grid-template-columns:64px 1fr 40px;gap:8px;align-items:center;margin-bottom:6px;}
+.gantt-date{font-family:var(--font-mono);font-size:9px;color:var(--text-3);text-align:right;}
+.gantt-track{height:12px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;cursor:pointer;transition:opacity 0.15s;}
+.gantt-track:hover{opacity:0.8;}
+.gantt-bar{height:100%;border-radius:3px;transition:width 0.6s ease;}
+.gb-bull{background:var(--bull);}
+.gb-bear{background:var(--bear);}
+.gb-current{background:var(--accent);animation:sq-pulse 2s ease-in-out infinite;}
+.gantt-dur{font-family:var(--font-mono);font-size:9px;color:var(--text-3);text-align:right;}
+
+.hist-section{margin-top:20px;}
+.hist-bars{display:flex;gap:6px;align-items:flex-end;height:60px;margin-bottom:6px;}
+.hb-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.hb-count{font-family:var(--font-mono);font-size:9px;color:var(--text-3);}
+.hb-bar{width:100%;border-radius:2px 2px 0 0;}
+.hb-bar.neg{background:var(--bear);opacity:0.8;}
+.hb-bar.pos{background:var(--bull);opacity:0.8;}
+.hb-label{font-family:var(--font-mono);font-size:8px;color:var(--text-3);}
+
+/* ── VIZ 3: DISTRIBUTION ── */
+.dist-view{display:none;}
+.dist-view.active{display:block;}
+.dist-chart{
+  display:flex;align-items:flex-end;
+  gap:8px;height:120px;
+  margin-bottom:10px;
+  padding:0 10px;
+}
+.dist-col{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;gap:4px;
+}
+.dist-bar{
+  width:100%;border-radius:4px 4px 0 0;
+  transition:height 0.6s cubic-bezier(0.22,1,0.36,1);
+  cursor:pointer;position:relative;
+}
+.dist-bar.neg{background:linear-gradient(180deg,rgba(239,68,68,0.9),rgba(239,68,68,0.5));}
+.dist-bar.pos{background:linear-gradient(180deg,rgba(16,185,129,0.9),rgba(16,185,129,0.5));}
+.dist-bar:hover{filter:brightness(1.2);}
+.dist-label{font-family:var(--font-mono);font-size:9px;color:var(--text-3);}
+.dist-count{font-family:var(--font-mono);font-size:9px;color:var(--text-2);}
+.dist-note{font-size:11px;color:var(--text-2);line-height:1.5;padding:10px 0;}
+
+/* ── VIZ 4: TABLE ── */
+.table-view{display:none;}
+.table-view.active{display:block;}
+.inst-table{width:100%;border-collapse:collapse;}
+.inst-table th{
+  font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--text-3);font-weight:600;
+  padding:6px 10px;
+  border-bottom:1px solid var(--border);
+  text-align:left;
+  position:sticky;top:0;background:var(--bg);
+}
+.inst-table td{
+  padding:8px 10px;
+  border-bottom:1px solid var(--border);
+  font-family:var(--font-mono);font-size:11px;
+  color:var(--text-2);
+}
+.inst-table tr:hover td{background:var(--surface-1);}
+.td-date{color:var(--text-1);}
+.td-dur{color:var(--text-3);}
+.td-return.pos{color:var(--bull);}
+.td-return.neg{color:var(--bear);}
+.td-return.pending{color:var(--text-3);font-style:italic;}
+.td-badge{
+  display:inline-flex;padding:2px 7px;
+  border-radius:3px;font-size:9px;font-weight:600;
+}
+.tb-bull{background:var(--bull-bg);color:var(--bull);}
+.tb-bear{background:var(--bear-bg);color:var(--bear);}
+.tb-current{background:var(--accent-glow);color:var(--accent);}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="back-btn" onclick="history.back()">← Workspace</div>
+    <div class="topbar-divider"></div>
+    <div class="pair-breadcrumb">
+      <div class="bc-item"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>SMA 50</div>
+      <span class="bc-sep">∩</span>
+      <div class="bc-item"><span style="width:8px;height:8px;border-radius:50%;background:#a78bfa;display:inline-block"></span>CON-SUN-MER-TRN</div>
+      <div class="bc-shape">ZONE_CONFLUENCE</div>
+    </div>
+    <div class="topbar-right">
+      <div class="pair-nav-btn" onclick="alert('EMA 20 ∩ SMA 50 — 13 instances')">
+        ← EMA 20 ∩ SMA 50 · 13×
+      </div>
+      <div class="pair-nav-btn" onclick="alert('EMA 20 ∩ CON-SUN-MER-TRN — 3 instances')">
+        EMA 20 ∩ CON-SUN · 3× →
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- LEFT PANEL -->
+    <div class="left-panel">
+
+      <!-- Pair identity -->
+      <div class="pair-header">
+        <div class="ph-label">Correlation pair · your framework</div>
+        <div class="ph-items">
+          <div class="ph-item"><span class="ph-dot" style="background:#ef4444"></span>SMA 50</div>
+          <span class="ph-sep">∩</span>
+          <div class="ph-item"><span class="ph-dot" style="background:#a78bfa"></span>CON-SUN-MER-TRN</div>
+        </div>
+        <div class="ph-status">
+          <span class="ph-status-dot"></span>
+          Approaching — both overlays active
+        </div>
+      </div>
+
+      <!-- Clock confidence dial -->
+      <div class="confidence-section">
+        <div class="conf-label">Data confidence</div>
+        <div class="clock-wrap">
+          <!-- SVG clock dial — 12=strong, 3=good, 6=moderate, 9=low -->
+          <div class="clock-dial">
+            <svg class="clock-svg" viewBox="0 0 80 80">
+              <!-- Track -->
+              <circle cx="40" cy="40" r="28" class="clock-track" stroke-dasharray="175.9" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+              <!-- Tick marks at 12, 3, 6, 9 -->
+              <line x1="40" y1="6"  x2="40" y2="12" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+              <line x1="74" y1="40" x2="68" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+              <line x1="40" y1="74" x2="40" y2="68" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+              <line x1="6"  y1="40" x2="12" y2="40" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+              <!-- Fill — n=81 = strong = full circle, stroke at 12 o'clock -->
+              <!-- 81 instances = strong = full fill (green). circumference = 2π×28 = 175.9 -->
+              <circle cx="40" cy="40" r="28" class="clock-fill" stroke="var(--bull)"
+                stroke-dasharray="175.9" stroke-dashoffset="0"
+                transform="rotate(-90 40 40)"/>
+              <!-- Labels -->
+              <text x="40" y="21" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="rgba(255,255,255,0.25)">12</text>
+              <text x="60" y="44" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="rgba(255,255,255,0.25)">3</text>
+              <text x="40" y="62" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="rgba(255,255,255,0.25)">6</text>
+              <text x="20" y="44" text-anchor="middle" font-family="IBM Plex Mono" font-size="7" fill="rgba(255,255,255,0.25)">9</text>
+            </svg>
+            <div class="clock-center-text">
+              <div class="clock-strength">STRONG</div>
+              <div class="clock-n">n=81</div>
+            </div>
+          </div>
+          <div class="clock-legend">
+            <div class="clock-legend-row">
+              <span class="clock-tick">12</span>
+              <div class="clock-track-bar"><div class="clock-track-fill" style="width:100%;background:var(--bull)"></div></div>
+              <span class="clock-desc">Strong</span>
+            </div>
+            <div class="clock-legend-row">
+              <span class="clock-tick">3</span>
+              <div class="clock-track-bar"><div class="clock-track-fill" style="width:66%;background:var(--caution)"></div></div>
+              <span class="clock-desc">Good</span>
+            </div>
+            <div class="clock-legend-row">
+              <span class="clock-tick">6</span>
+              <div class="clock-track-bar"><div class="clock-track-fill" style="width:33%;background:var(--gold)"></div></div>
+              <span class="clock-desc">Moderate</span>
+            </div>
+            <div class="clock-legend-row">
+              <span class="clock-tick">9</span>
+              <div class="clock-track-bar"><div class="clock-track-fill" style="width:10%;background:var(--bear)"></div></div>
+              <span class="clock-desc">Low</span>
+            </div>
+            <div class="clock-sub">4,586 trading days · 2007–2026</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-box-label">Total</div>
+          <div class="stat-box-value">81</div>
+          <div class="stat-box-sub">instances</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Resolved</div>
+          <div class="stat-box-value">80</div>
+          <div class="stat-box-sub">1 approaching</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">5D Avg</div>
+          <div class="stat-box-value" style="font-size:18px">+0.53%</div>
+          <div class="stat-box-sub">all instances</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">22D Avg</div>
+          <div class="stat-box-value" style="font-size:18px">+1.62%</div>
+          <div class="stat-box-sub">all instances</div>
+        </div>
+      </div>
+
+      <!-- Outcome split -->
+      <div class="outcome-section">
+        <div style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-bottom:6px;">Outcome split — 80 resolved</div>
+        <div class="outcome-bar">
+          <div class="ob-bull" style="width:60%"></div>
+          <div class="ob-bear" style="width:40%"></div>
+        </div>
+        <div class="outcome-labels">
+          <span class="ol-bull">▲ 48 up</span>
+          <span class="ol-bear">32 down ▼</span>
+        </div>
+        <div class="outcome-note">Each square in the grid represents one instance. Green = closed up on 5D basis. Red = closed down.</div>
+      </div>
+
+      <!-- VaNi inference — pure facts -->
+      <div class="vani-section">
+        <div class="vi-header">
+          <div class="vi-orb">✦</div>
+          <div class="vi-name">VaNi</div>
+        </div>
+        <div class="vi-text">
+          SMA 50 ∩ CON-SUN-MER-TRN has co-occurred <em>81 times</em> since 2015.
+          Of 80 resolved instances, <em>48 closed higher</em> and <em>32 closed lower</em> on a 5-day basis.
+          Average 5D move: <em>+0.53%</em>. Average 22D move: <em>+1.62%</em>.
+          One instance is currently approaching — not yet resolved.
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="action-row">
+        <div class="act-btn btn-primary">Mark on chart</div>
+        <div class="act-btn btn-ghost">Save</div>
+        <div class="act-btn btn-danger">Dismiss</div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+
+      <!-- VaNi viz recommendation bar -->
+      <div class="viz-recommend-bar">
+        <div class="vrb-label">
+          <span class="vrb-star">✦</span>
+          VaNi suggests for ZONE_CONFLUENCE · n=81:
+        </div>
+        <div class="viz-options">
+          <div class="viz-opt recommended selected" onclick="selectViz('grid', this)">
+            <span class="viz-icon">⊞</span> Instance Grid
+          </div>
+          <div class="viz-opt" onclick="selectViz('timeline', this)">
+            <span class="viz-icon">▬</span> Timeline
+          </div>
+          <div class="viz-opt" onclick="selectViz('dist', this)">
+            <span class="viz-icon">◫</span> Distribution
+          </div>
+          <div class="viz-opt" onclick="selectViz('table', this)">
+            <span class="viz-icon">≡</span> Table
+          </div>
+        </div>
+      </div>
+
+      <!-- Viz canvas -->
+      <div class="viz-canvas">
+
+        <!-- VIZ 1: INSTANCE GRID — default, VaNi recommended -->
+        <div class="grid-view active" id="viz-grid">
+          <div class="grid-header">
+            <div>
+              <div class="grid-title">81 times this<br/><em>combination appeared.</em></div>
+              <div class="grid-subtitle">Each square is one instance. Hover to see the date and 5-day return.<br/>Green = closed higher · Red = closed lower · Purple = current (approaching)</div>
+            </div>
+            <div class="grid-legend">
+              <div class="legend-item"><div class="legend-sq" style="background:var(--bull)"></div> Up</div>
+              <div class="legend-item"><div class="legend-sq" style="background:var(--bear)"></div> Down</div>
+              <div class="legend-item"><div class="legend-sq" style="background:var(--accent)"></div> Now</div>
+            </div>
+          </div>
+
+          <!-- Grid summary -->
+          <div class="grid-summary">
+            <div class="gs-box">
+              <div class="gs-value" style="color:var(--bull)">48</div>
+              <div class="gs-label">closed higher</div>
+            </div>
+            <div class="gs-box">
+              <div class="gs-value" style="color:var(--bear)">32</div>
+              <div class="gs-label">closed lower</div>
+            </div>
+            <div class="gs-box">
+              <div class="gs-value" style="color:var(--accent)">1</div>
+              <div class="gs-label">approaching now</div>
+            </div>
+          </div>
+
+          <!-- The 81 squares -->
+          <div class="instance-grid" id="instanceGrid"></div>
+
+          <div id="sqTooltip" class="sq-tooltip"></div>
+        </div>
+
+        <!-- VIZ 2: TIMELINE -->
+        <div class="timeline-view" id="viz-timeline">
+          <div style="margin-bottom:16px;">
+            <div class="grid-title">Duration of each<br/><em>confluence period.</em></div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:4px;">Width = duration in days. Green = resolved up. Red = resolved down. Purple = current.</div>
+          </div>
+          <div class="gantt-section-label">Confluence periods — width proportional to duration</div>
+          <div class="gantt-row"><div class="gantt-date">2025-04</div><div class="gantt-track"><div class="gantt-bar gb-bear" style="width:4%"></div></div><div class="gantt-dur">3d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2025-04</div><div class="gantt-track"><div class="gantt-bar gb-bull" style="width:100%"></div></div><div class="gantt-dur">87d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2025-07</div><div class="gantt-track"><div class="gantt-bar gb-bear" style="width:1%"></div></div><div class="gantt-dur">1d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2025-08</div><div class="gantt-track"><div class="gantt-bar gb-bear" style="width:2%"></div></div><div class="gantt-dur">2d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2025-09</div><div class="gantt-track"><div class="gantt-bar gb-bull" style="width:17%"></div></div><div class="gantt-dur">15d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2025-10</div><div class="gantt-track"><div class="gantt-bar gb-bull" style="width:33%"></div></div><div class="gantt-dur">29d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2025-11</div><div class="gantt-track"><div class="gantt-bar gb-bull" style="width:29%"></div></div><div class="gantt-dur">25d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2025-12</div><div class="gantt-track"><div class="gantt-bar gb-bear" style="width:31%"></div></div><div class="gantt-dur">27d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2026-02</div><div class="gantt-track"><div class="gantt-bar gb-bear" style="width:5%"></div></div><div class="gantt-dur">4d</div></div>
+          <div class="gantt-row"><div class="gantt-date">2026-04</div><div class="gantt-track"><div class="gantt-bar gb-current" style="width:11%"></div></div><div class="gantt-dur">now</div></div>
+
+          <div class="hist-section">
+            <div class="gantt-section-label">5D return distribution</div>
+            <div class="hist-bars">
+              <div class="hb-wrap"><div class="hb-count">4</div><div class="hb-bar neg" style="height:34px"></div><div class="hb-label">&lt;-2%</div></div>
+              <div class="hb-wrap"><div class="hb-count">3</div><div class="hb-bar neg" style="height:25px"></div><div class="hb-label">-2-1</div></div>
+              <div class="hb-wrap"><div class="hb-count">1</div><div class="hb-bar neg" style="height:8px"></div><div class="hb-label">-1-0</div></div>
+              <div class="hb-wrap"><div class="hb-count">3</div><div class="hb-bar pos" style="height:25px"></div><div class="hb-label">0-1</div></div>
+              <div class="hb-wrap"><div class="hb-count">2</div><div class="hb-bar pos" style="height:17px"></div><div class="hb-label">+1+2</div></div>
+              <div class="hb-wrap"><div class="hb-count">1</div><div class="hb-bar pos" style="height:8px"></div><div class="hb-label">&gt;+2%</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIZ 3: DISTRIBUTION -->
+        <div class="dist-view" id="viz-dist">
+          <div style="margin-bottom:16px;">
+            <div class="grid-title">How returns<br/><em>spread across instances.</em></div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:4px;">5-day return buckets for all 80 resolved instances.</div>
+          </div>
+          <div class="dist-chart">
+            <div class="dist-col"><div class="dist-count">4</div><div class="dist-bar neg" style="height:68px"></div><div class="dist-label">&lt; -2%</div></div>
+            <div class="dist-col"><div class="dist-count">9</div><div class="dist-bar neg" style="height:120px"></div><div class="dist-label">-2 to -1%</div></div>
+            <div class="dist-col"><div class="dist-count">5</div><div class="dist-bar neg" style="height:50px"></div><div class="dist-label">-1 to 0%</div></div>
+            <div class="dist-col"><div class="dist-count">18</div><div class="dist-bar pos" style="height:100px;border:2px solid rgba(16,185,129,0.4)"></div><div class="dist-label">0 to +1%</div></div>
+            <div class="dist-col"><div class="dist-count">26</div><div class="dist-bar pos" style="height:100px"></div><div class="dist-label">+1 to +2%</div></div>
+            <div class="dist-col"><div class="dist-count">18</div><div class="dist-bar pos" style="height:80px"></div><div class="dist-label">&gt; +2%</div></div>
+          </div>
+          <div class="dist-note">The most common outcome is a 5D return between +1% and +2%, appearing in 26 of 80 resolved instances. Returns below -2% appeared in 4 instances.</div>
+        </div>
+
+        <!-- VIZ 4: TABLE -->
+        <div class="table-view" id="viz-table">
+          <div style="margin-bottom:16px;">
+            <div class="grid-title">Every instance,<br/><em>in full detail.</em></div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:4px;">All 81 instances sorted by most recent. Click any row to see that period on the chart.</div>
+          </div>
+          <table class="inst-table">
+            <thead>
+              <tr>
+                <th>Start date</th>
+                <th>Duration</th>
+                <th>5D return</th>
+                <th>22D return</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="td-date">2026-05-25</td><td class="td-dur">ongoing</td><td class="td-return pending">—</td><td class="td-return pending">—</td><td><span class="td-badge tb-current">Approaching</span></td></tr>
+              <tr><td class="td-date">2026-04-29</td><td class="td-dur">10d</td><td class="td-return pos">+0.62%</td><td class="td-return pos">+1.43%</td><td><span class="td-badge tb-bull">Up</span></td></tr>
+              <tr><td class="td-date">2026-04-21</td><td class="td-dur">2d</td><td class="td-return neg">-2.36%</td><td class="td-return neg">-3.14%</td><td><span class="td-badge tb-bear">Down</span></td></tr>
+              <tr><td class="td-date">2026-02-18</td><td class="td-dur">1d</td><td class="td-return neg">-1.30%</td><td class="td-return neg">-0.82%</td><td><span class="td-badge tb-bear">Down</span></td></tr>
+              <tr><td class="td-date">2026-02-09</td><td class="td-dur">4d</td><td class="td-return neg">-1.53%</td><td class="td-return neg">-2.10%</td><td><span class="td-badge tb-bear">Down</span></td></tr>
+              <tr><td class="td-date">2025-12-05</td><td class="td-dur">27d</td><td class="td-return neg">-0.65%</td><td class="td-return pos">+0.42%</td><td><span class="td-badge tb-bear">Down</span></td></tr>
+              <tr><td class="td-date">2025-11-11</td><td class="td-dur">25d</td><td class="td-return pos">+0.84%</td><td class="td-return pos">+1.92%</td><td><span class="td-badge tb-bull">Up</span></td></tr>
+              <tr><td class="td-date">2025-10-06</td><td class="td-dur">29d</td><td class="td-return pos">+0.60%</td><td class="td-return pos">+2.18%</td><td><span class="td-badge tb-bull">Up</span></td></tr>
+              <tr><td class="td-date">2025-09-12</td><td class="td-dur">15d</td><td class="td-return pos">+1.14%</td><td class="td-return pos">+2.44%</td><td><span class="td-badge tb-bull">Up</span></td></tr>
+              <tr><td class="td-date">2025-08-03</td><td class="td-dur">2d</td><td class="td-return neg">-1.08%</td><td class="td-return neg">-0.54%</td><td><span class="td-badge tb-bear">Down</span></td></tr>
+              <tr><td class="td-date">2025-07-14</td><td class="td-dur">1d</td><td class="td-return neg">-0.44%</td><td class="td-return pos">+0.88%</td><td><span class="td-badge tb-bear">Down</span></td></tr>
+              <tr style="opacity:0.4"><td colspan="5" style="text-align:center;font-size:11px;color:var(--text-3);padding:12px;">70 more instances · 2015–2025</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Generate 81 instance squares ──
+const grid = document.getElementById('instanceGrid');
+const tooltip = document.getElementById('sqTooltip');
+
+// Sample data — 48 bull, 32 bear, 1 current
+const instances = [];
+const dates = [];
+let d = new Date('2015-03-01');
+for (let i = 0; i < 81; i++) {
+  d = new Date(d.getTime() + Math.random() * 45 * 86400000 + 5 * 86400000);
+  const isCurrent = i === 80;
+  const outcome = isCurrent ? 'current' : (i < 48 ? 'bull' : 'bear');
+  const ret = isCurrent ? null : (outcome === 'bull' ? +(Math.random() * 3).toFixed(2) : -(Math.random() * 2.5).toFixed(2));
+  instances.push({ date: d.toISOString().slice(0,10), outcome, ret });
+}
+
+// Shuffle so bulls and bears are mixed
+for (let i = instances.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [instances[i], instances[j]] = [instances[j], instances[i]];
+}
+// Force last to be current
+instances[instances.length - 1].outcome = 'current';
+instances[instances.length - 1].ret = null;
+
+instances.forEach((inst, idx) => {
+  const sq = document.createElement('div');
+  sq.className = `inst-sq ${inst.outcome}`;
+  sq.addEventListener('mouseenter', (e) => {
+    tooltip.classList.add('visible');
+    tooltip.innerHTML = `
+      <div class="sq-tooltip-row"><span class="sq-tooltip-label">Date</span><span>${inst.date}</span></div>
+      <div class="sq-tooltip-row"><span class="sq-tooltip-label">5D return</span><span style="color:${inst.outcome==='bull'?'var(--bull)':inst.outcome==='bear'?'var(--bear)':'var(--accent)'}">${inst.ret !== null ? (inst.ret > 0 ? '+' : '') + inst.ret + '%' : 'Approaching'}</span></div>
+      <div class="sq-tooltip-row"><span class="sq-tooltip-label">Outcome</span><span style="color:${inst.outcome==='bull'?'var(--bull)':inst.outcome==='bear'?'var(--bear)':'var(--accent)'}">${inst.outcome === 'current' ? 'In progress' : inst.outcome === 'bull' ? 'Closed up' : 'Closed down'}</span></div>
+    `;
+  });
+  sq.addEventListener('mousemove', (e) => {
+    tooltip.style.left = (e.clientX + 12) + 'px';
+    tooltip.style.top  = (e.clientY - 10) + 'px';
+  });
+  sq.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+  grid.appendChild(sq);
+});
+
+// ── Viz switcher ──
+function selectViz(id, el) {
+  document.querySelectorAll('.grid-view,.timeline-view,.dist-view,.table-view').forEach(v => v.classList.remove('active'));
+  document.getElementById('viz-' + id).classList.add('active');
+  document.querySelectorAll('.viz-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+</script>
+</body>
+</html>
