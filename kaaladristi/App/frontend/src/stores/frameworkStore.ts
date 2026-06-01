@@ -96,7 +96,7 @@ interface FrameworkStore {
   addBlock: (item: CatalogItem, config?: Record<string, unknown>) => void
   removeBlock: (blockId: string) => void
   updateBlockPosition: (blockId: string, position: GridPosition) => void
-  addOverlay: (item: CatalogItem) => void
+  addOverlay: (item: CatalogItem, color?: string) => void
   removeOverlay: (catalogItemId: string) => void
   toggleOverlayVisibility: (catalogItemId: string) => void
   updateOverlayColor: (catalogItemId: string, color: string) => void
@@ -277,7 +277,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
 
   // ── Overlay mutations ──────────────────────────────────────────────────────
 
-  addOverlay: (item: CatalogItem) => {
+  addOverlay: (item: CatalogItem, color?: string) => {
     const { framework, saveFramework } = get()
     if (!framework) return
 
@@ -292,6 +292,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       catalog_item_id: item.id,
       type: overlayType,
       visible: true,
+      ...(color ? { color } : {}),
     }
 
     set(s => ({

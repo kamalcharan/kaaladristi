@@ -382,11 +382,68 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
   )
 }
 
+const SWATCH_PALETTE_DP = [
+  '#7c6af7', '#4ade80', '#fb923c', '#f59e0b',
+  '#f43f5e', '#2dd4bf', '#94a3b8', '#c084fc',
+]
+
+const INDICATOR_DEFAULTS_DP: Record<string, string> = {
+  ema_20: '#7c6af7', ema_60: '#4ade80', sma_50: '#fb923c',
+  sma_150: '#f59e0b', sma_200: '#f43f5e', supertrend: '#2dd4bf',
+  pivot_levels: '#94a3b8', atr_14: '#c084fc', rsi_14: '#60a5fa',
+}
+
 // ── Mode B — Catalog Item body ────────────────────────────────────────────────
 
 function CatalogItemBody({ item }: { item: CatalogItem }) {
+  const [color, setColor] = useState(INDICATOR_DEFAULTS_DP[item.id] ?? '#7c6af7')
+  const isChartOverlay = item.placement === 'chart_overlay'
+  const isSupertrend   = item.id === 'supertrend'
+
   return (
     <>
+      {/* Color section — chart overlays only */}
+      {isChartOverlay && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={SEC_LABEL}>Chart Color</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            {/* Color preview */}
+            <div style={{
+              width: 36, height: 36, borderRadius: 6, flexShrink: 0,
+              background: isSupertrend
+                ? 'linear-gradient(135deg, #2dd4bf 50%, #f43f5e 50%)'
+                : color,
+              border: '1px solid rgba(255,255,255,0.12)',
+            }} />
+            {/* Swatches */}
+            {!isSupertrend && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {SWATCH_PALETTE_DP.map(s => (
+                  <button
+                    key={s}
+                    title={s}
+                    onClick={() => setColor(s)}
+                    style={{
+                      width: 20, height: 20, borderRadius: 4,
+                      background: s,
+                      border: s === color
+                        ? '2px solid rgba(255,255,255,0.8)'
+                        : '1px solid rgba(255,255,255,0.1)',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            {isSupertrend
+              ? 'SuperTrend uses bull/bear colors from your theme — not configurable.'
+              : 'This color appears on your chart. You can change it anytime from the overlay pill strip.'}
+          </p>
+        </div>
+      )}
+
       {/* Description */}
       <div style={{ marginBottom: 18 }}>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
@@ -408,18 +465,14 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
           ].map(({ label, value }) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <span style={{
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono, monospace)',
-                flexShrink: 0,
+                fontSize: 11, color: 'var(--text-muted)',
+                fontFamily: 'var(--font-mono, monospace)', flexShrink: 0,
               }}>
                 {label}
               </span>
               <span style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono, monospace)',
-                textAlign: 'right',
+                fontSize: 11, color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono, monospace)', textAlign: 'right',
               }}>
                 {value}
               </span>
@@ -428,30 +481,86 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
         </div>
       </div>
 
-      {/* VaNi placeholder */}
-      <div style={{
-        background: 'var(--accent-glow)',
-        border: '1px solid var(--accent-glow)',
-        borderRadius: 8,
-        padding: '12px 14px',
-        display: 'flex',
-        gap: 10,
-        alignItems: 'flex-start',
-      }}>
-        <div style={{
-          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-          background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, fontWeight: 700, color: '#fff',
-          fontFamily: 'var(--font-mono, monospace)',
-        }}>
-          Vᴺ
+      {/* VaNi explanation — populated items */}
+      {item.vani_explanation ? (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, fontWeight: 700, color: '#fff',
+                fontFamily: 'var(--font-mono, monospace)',
+              }}>
+                Vᴺ
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>VaNi explains</span>
+            </div>
+            <span style={{
+              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              color: 'var(--text-faint)', letterSpacing: '0.04em',
+            }}>
+              cached · updated rarely
+            </span>
+          </div>
+
+          <div style={{
+            background: 'var(--accent-glow)',
+            border: '1px solid var(--accent-glow)',
+            borderRadius: 8, padding: '12px 14px',
+          }}>
+            <p style={{
+              fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7,
+              margin: 0, marginBottom: item.vani_tags?.length ? 12 : 0,
+              fontStyle: 'italic',
+            }}>
+              {item.vani_explanation}
+            </p>
+
+            {/* Works / Limits tags */}
+            {item.vani_tags && item.vani_tags.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {item.vani_tags.map((tag, i) => (
+                  <span key={i} style={{
+                    padding: '3px 8px', borderRadius: 4, fontSize: 10,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    background: tag.type === 'works'
+                      ? 'rgba(45,212,191,0.07)' : 'rgba(239,68,68,0.07)',
+                    border: `1px solid ${tag.type === 'works' ? 'rgba(45,212,191,0.18)' : 'rgba(239,68,68,0.18)'}`,
+                    color: tag.type === 'works' ? 'var(--bull)' : 'var(--bear)',
+                  }}>
+                    {tag.type === 'works' ? '✓' : '✗'} {tag.text}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-          VaNi will explain <em style={{ color: 'var(--gold)', fontStyle: 'normal' }}>when and why</em> to
-          use this indicator in the context of current market astro conditions.
-        </p>
-      </div>
+      ) : (
+        /* VaNi placeholder for items without explanation yet */
+        <div style={{
+          background: 'var(--accent-glow)',
+          border: '1px solid var(--accent-glow)',
+          borderRadius: 8, padding: '12px 14px',
+          display: 'flex', gap: 10, alignItems: 'flex-start',
+          marginBottom: 18,
+        }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+            background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 9, fontWeight: 700, color: '#fff',
+            fontFamily: 'var(--font-mono, monospace)',
+          }}>
+            Vᴺ
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            VaNi will explain <em style={{ color: 'var(--gold)', fontStyle: 'normal' }}>when and why</em> to
+            use this indicator in the context of current market astro conditions.
+          </p>
+        </div>
+      )}
     </>
   )
 }
