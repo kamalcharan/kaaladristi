@@ -49,6 +49,7 @@ function LivePreview({ id }: { id: string }) {
   if (id === 'six_day_outlook') return <SixDayMock />
   if (id === 'conviction_flow') return <ConvictionMock />
   if (id === 'rsi_14')          return <RsiMock />
+  if (id === 'atr_14')          return <AtrMock />
   return null
 }
 
@@ -86,6 +87,28 @@ function ConvictionMock() {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
         <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>baseline</span>
         <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: '#2dd4bf' }}>surge ↑</span>
+      </div>
+    </div>
+  )
+}
+
+function AtrMock() {
+  const pts = [38, 42, 55, 70, 65, 58, 48, 44, 50, 62, 74, 68, 55, 46, 40]
+  const W = 200, H = 56
+  const toX = (i: number) => (i / (pts.length - 1)) * W
+  const toY = (v: number) => H - ((v - 25) / 60) * H * 0.8 - H * 0.1
+  const path = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ')
+  const fillPath = path + ` L${W},${H} L0,${H} Z`
+  return (
+    <div style={{ padding: '10px 4px 4px' }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+        <path d={fillPath} fill="rgba(201,168,76,0.08)" />
+        <path d={path} fill="none" stroke="rgba(201,168,76,0.7)" strokeWidth="1.5" strokeLinejoin="round" />
+        <circle cx={toX(pts.length - 1).toFixed(1)} cy={toY(pts[pts.length - 1]).toFixed(1)} r="2.5" fill="var(--gold)" />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>14-period volatility</span>
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono,monospace)', color: 'var(--gold)' }}>40.2 pts</span>
       </div>
     </div>
   )
@@ -187,7 +210,7 @@ export default function WidgetsSection({ onSelect }: WidgetsSectionProps) {
   }
 
   const hasLivePreview = (id: string) =>
-    ['magic_rs', 'breadth_roc', 'order_flow', 'smart_money', 'six_day_outlook', 'conviction_flow', 'rsi_14'].includes(id)
+    ['magic_rs', 'breadth_roc', 'order_flow', 'smart_money', 'six_day_outlook', 'conviction_flow', 'rsi_14', 'atr_14'].includes(id)
 
   return (
     <>
