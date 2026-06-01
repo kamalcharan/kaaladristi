@@ -269,16 +269,62 @@ _VISUAL_PULSE_SYSTEM = (
 )
 
 
+# ── Skill: VaNi Morning Brief (one observation card per item) ────────────────
+
+_VANI_MORNING_BRIEF_SYSTEM = (
+    "You are VaNi, DristiQ's market intelligence agent. /no_think\n\n"
+    "Generate exactly one observation card for the item provided.\n\n"
+    "Output valid JSON only. No markdown. No preamble.\n\n"
+    'Format:\n{"observations":[{\n'
+    '  "type":"panchang|astro|confluence",\n'
+    '  "title":"[exact item name]",\n'
+    '  "badge":"[use the badge value explicitly stated in Badge must be:]",\n'
+    '  "description":"[1-2 sentences: what it is + what historically happens when active on Nifty]"\n'
+    "}]}\n\n"
+    "Rules:\n"
+    "1. Title = exact item name provided\n"
+    "2. Badge = exact value from \"Badge must be:\" line — never change it\n"
+    "3. Description = what it IS + what historically happens. 2 sentences max.\n"
+    "4. Forbidden: buy, sell, bullish, bearish, up, down, rise, fall, recommend, predict, forecast, "
+    "potential, may, could, volatility, shift, strategy, communication\n"
+    "5. Allowed: historically, instances show, when active, has appeared, on record, observed, marks\n"
+    "6. If historical instances = 0 — say \"No historical data computed yet for this rule.\"\n"
+    "7. Never truncate the JSON — one card only, always complete\n"
+    "8. Never use: potential, may, could, might — replace with: historically marks, has been associated with, instances show\n"
+    "9. Panchang card: Do not use word \"associated\". State facts directly.\n"
+    "10. Astro rule: First sentence what it IS. Second sentence what condition it marks historically."
+)
+
+
+# ── Skill: VaNi Correlation Insight (pair explanation) ──────────────────────
+
+_VANI_CORRELATION_INSIGHT_SYSTEM = (
+    _IDENTITY
+    + "Generate one paragraph explaining what this indicator/rule combination means on Nifty.\n\n"
+    "Output valid JSON only. No markdown. No preamble.\n"
+    '{"insight": "[2-3 sentences explaining the combination]"}\n\n'
+    "Rules:\n"
+    "1. First sentence — what each item IS and why they matter individually\n"
+    "2. Second sentence — what it means when both are active simultaneously on Nifty\n"
+    "3. Never use: buy, sell, bullish, bearish, up, down, rise, fall, predict, forecast, recommend, potential, may, could\n"
+    "4. Use: historically, instances show, when active, has appeared, on record, observed, marks\n"
+    "5. Maximum 3 sentences. Be specific — use the item names provided.\n"
+    "6. Never use \"associated with\" — state facts directly."
+)
+
+
 # ── Skill Registry ────────────────────────────────────────────────────────────
 
 SKILLS: dict[str, Skill] = {
-    "panchang_insight":       Skill(system=_PANCHANG_SYSTEM,            max_tokens=200),
-    "day_risk_narration":     Skill(system=_DAY_RISK_SYSTEM,            max_tokens=200),
-    "historical_proof":       Skill(system=_HISTORICAL_PROOF_SYSTEM,    max_tokens=200),
-    "breadth_insight":        Skill(system=_BREADTH_INSIGHT_SYSTEM,     max_tokens=350),
-    "breadth_roc_insight":    Skill(system=_BREADTH_ROC_SYSTEM,         max_tokens=350),
-    "instrument_insight":     Skill(system=_INSTRUMENT_INSIGHT_SYSTEM,  max_tokens=400),
-    "market_pulse_insight":   Skill(system=_MARKET_PULSE_SYSTEM,        max_tokens=400),
-    "data_health_insight":    Skill(system=_DATA_HEALTH_SYSTEM,         max_tokens=350),
-    "visual_pulse_insight":   Skill(system=_VISUAL_PULSE_SYSTEM,        max_tokens=250),
+    "panchang_insight":          Skill(system=_PANCHANG_SYSTEM,                    max_tokens=200),
+    "day_risk_narration":        Skill(system=_DAY_RISK_SYSTEM,                    max_tokens=200),
+    "historical_proof":          Skill(system=_HISTORICAL_PROOF_SYSTEM,            max_tokens=200),
+    "breadth_insight":           Skill(system=_BREADTH_INSIGHT_SYSTEM,             max_tokens=350),
+    "breadth_roc_insight":       Skill(system=_BREADTH_ROC_SYSTEM,                 max_tokens=350),
+    "instrument_insight":        Skill(system=_INSTRUMENT_INSIGHT_SYSTEM,          max_tokens=400),
+    "market_pulse_insight":      Skill(system=_MARKET_PULSE_SYSTEM,                max_tokens=400),
+    "data_health_insight":       Skill(system=_DATA_HEALTH_SYSTEM,                 max_tokens=350),
+    "visual_pulse_insight":      Skill(system=_VISUAL_PULSE_SYSTEM,                max_tokens=250),
+    "vani_morning_brief":        Skill(system=_VANI_MORNING_BRIEF_SYSTEM,          max_tokens=150),
+    "vani_correlation_insight":  Skill(system=_VANI_CORRELATION_INSIGHT_SYSTEM,    max_tokens=200),
 }

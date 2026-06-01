@@ -1775,30 +1775,6 @@ _insight_cache: dict[str, object] = {}
 
 _intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
 
-_VANI_MORNING_SYSTEM = """You are VaNi, DristiQ's market intelligence agent. /no_think
-
-Generate exactly one observation card for the item provided.
-
-Output valid JSON only. No markdown. No preamble.
-
-Format:
-{"observations":[{
-  "type":"panchang|astro|confluence",
-  "title":"[exact item name]",
-  "badge":"[use the badge value explicitly stated in Badge must be:]",
-  "description":"[1-2 sentences: what it is + what historically happens when active on Nifty]"
-}]}
-
-Rules:
-1. Title = exact item name provided
-2. Badge = exact value from "Badge must be:" line — never change it
-3. Description = what it IS + what historically happens. 2 sentences max.
-4. Forbidden: buy, sell, bullish, bearish, up, down, rise, fall, recommend, predict, forecast
-5. Allowed: historically, instances show, when active, has appeared, on record, observed
-6. If historical instances = 0 — say "No historical data computed yet for this rule."
-7. Never truncate the JSON — one card only, always complete
-8. Never use: potential, may, could, might, volatility, shift, strategy, communication
-   Replace with: historically marks, has been associated with, instances show, on record"""
 
 _VANI_FORBIDDEN_WORDS = frozenset({
     'buy', 'sell', 'recommend', 'predict', 'forecast',
@@ -1934,8 +1910,9 @@ def _generate_single_vani_observation(
         return None
 
     _t0 = time.monotonic()
+    _morning_skill = _AI_SKILLS['vani_morning_brief']
     raw = _ai_complete(
-        system=_VANI_MORNING_SYSTEM, user=user_msg, max_tokens=160,
+        system=_morning_skill.system, user=user_msg, max_tokens=_morning_skill.max_tokens,
         temperature=0.3, no_think=True,
     )
     _latency = int((time.monotonic() - _t0) * 1000)
@@ -1964,7 +1941,7 @@ def _generate_single_vani_observation(
         endpoint="/api/vani/daily",
         user_input=user_msg,
         llm_response=raw,
-        system_prompt=_VANI_MORNING_SYSTEM,
+        system_prompt=_morning_skill.system,
         context_payload={"item_key": item_key, "item_type": item_type},
         model_version=_AI_MODEL,
         latency_ms=_latency,
@@ -3546,11 +3523,12 @@ def vani_daily(req: VaNiDailyRequest):
 
             # Cache miss — one LLM call for this item only
             all_cached = False
+            _morning_skill = _AI_SKILLS['vani_morning_brief']
             _t0 = time.monotonic()
             raw = _ai_complete(
-                system=_VANI_MORNING_SYSTEM,
+                system=_morning_skill.system,
                 user=item['user_message'],
-                max_tokens=150,
+                max_tokens=_morning_skill.max_tokens,
                 temperature=0.3,
                 no_think=True,
             )
@@ -3600,7 +3578,7 @@ def vani_daily(req: VaNiDailyRequest):
                 endpoint="/api/vani/daily",
                 user_input=item['user_message'],
                 llm_response=raw or '',
-                system_prompt=_VANI_MORNING_SYSTEM,
+                system_prompt=_morning_skill.system,
                 context_payload={'item_key': item_key, 'item_type': item['type']},
                 model_version=_AI_MODEL,
                 latency_ms=_latency,
