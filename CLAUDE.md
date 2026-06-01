@@ -789,6 +789,23 @@ the pattern applies to all others.
 
 ---
 
+## VaNi Morning Brief — Implementation Status (June 2026)
+
+`POST /api/vani/daily` — sequential per-item processing, panchang always card 1.
+
+### Architecture
+- **Card order**: panchang → confluences (priority) → astro rules (fill remaining). Max 3 cards.
+- **LLM calls**: one call per item (max_tokens=150), sequential. Panchang, astro rules, and confluences each get a tailored user message.
+- **Cache**: `_vani_cache` — in-memory Python dict, keyed by `item_key` (e.g. `panchang:2026-06-01`, `rule:astro_rule:CON-SUN-MER-TRN:2026-06-01`). 24h TTL. Cleared on restart. **Decision: in-memory is sufficient** — morning brief is ephemeral; no Redis, no DB cache needed. Closed.
+- **Action routing**: each observation carries `action` + `action_target`; frontend navigates on click (`/rules/:id`, `/correlation/:a/:b`, `/panchang`).
+- **Prompt iteration**: system prompt rule 8 forbids: potential, may, could, might, volatility, shift, strategy, communication. Panchang sentence 1 uses exact format template; sentence 2 is verbatim signal count.
+
+### Still deferred
+- Morning brief — screener top 3% feed (depends on screener session)
+- Prompt quality iteration may continue — share raw log output after each backend restart to verify Qwen3 output
+
+---
+
 ## Deferred — UX Review + Story-telling Session
 - Full workspace UX review — story-telling, information hierarchy, user guidance
 - LLM inference notes — replace template strings with Qwen3 calls (temperature 0.3,
@@ -812,7 +829,7 @@ the pattern applies to all others.
 | Screener — filters, dashboard integration, UX rethink | Separate design session | After UX sprint |
 | EVENT_OVERLAP visualization — untested | Needs two simultaneous astro overlays | When test data available |
 | EVENT_IN_STATE visualization — untested | Needs astro rule + state widget pair | When test data available |
-| Morning brief cache strategy review | Currently in-memory only (lost on restart); Charan to decide: keep as-is, add Redis, or DB-backed cache | Charan to finalize |
+| ~~Morning brief cache strategy review~~ | **Closed** — in-memory `_vani_cache` confirmed as final approach | Done |
 | CatalogDrawer compatibility | Drawer (440px) mounts IndicatorsSection + WidgetsSection directly — both are cramped, not in sync with new catalog UX. Fix: add `compact?: boolean` prop to switch to single-column layout. Deferred from UX sprint. | Next session |
 
 ## Astro Market-Book 2026
