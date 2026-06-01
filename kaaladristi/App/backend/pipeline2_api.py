@@ -3456,9 +3456,10 @@ def vani_daily(req: VaNiDailyRequest):
                 f"Tithi: {tithi} {paksha}\n"
                 f"Yoga: {yoga}\n"
                 f"Badge must be: {total_signals} signals\n"
-                f"Explain: State today's vara, nakshatra, tithi and yoga in one sentence.\n"
+                f'Explain: First sentence — state today\'s conditions directly using this exact format:\n'
+                f'"Today is {vara} (lord: {vara_lord}), Nakshatra {nak_name} (lord: {nak_lord}), Tithi {tithi} {paksha}, Yoga {yoga}."\n'
                 f'Second sentence must be exactly: "{total_signals} rule signals active today — {positive} positive, {negative} negative."\n'
-                f"Do not interpret the signals. Do not say \"observed on record\". Just state the count."
+                f"Do not use the word \"associated\". Do not interpret. Just state the facts."
             ),
         }
 
