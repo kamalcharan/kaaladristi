@@ -1781,11 +1781,16 @@ Output valid JSON only. No markdown. No preamble. No explanation outside the JSO
 For each item in the list provided, generate exactly one observation card.
 
 JSON format:
-{"observations":[{"type":"astro|confluence","title":"[exact item name from list]","description":"[what it is and its instance count — 1 sentence, facts only]","badge":"[N instances OR N signals]","action_label":"View history →"}]}
+{"observations":[{"type":"panchang|astro|confluence","title":"[exact item name from list]","description":"[current status only — 1 sentence]","badge":"[N instances OR N signals OR Day N of N]","action_label":"View history →"}]}
 
 Absolute rules:
 1. Title must be the exact item name from the list — never rename, never combine
-2. Description: one sentence, state only the count and current state
+2. Badge contains the count. Description must NOT repeat the count — state only the current status.
+   Examples of correct descriptions:
+   - "Active today as chart overlay."
+   - "Both overlays are currently active in your framework."
+   - "Panchak period is active today."
+   - "13 rule signals active today." (panchang only — signals count belongs in description for panchang)
 3. Forbidden: predict, forecast, may, potential, impact, influence, trend, direction, develop, monitor, watch, assess, suggest, indicate, heightened, significant, dynamics, interplay, intellectual, recalibration
 4. Never invent counts — only use numbers explicitly given
 5. Panchang card title = "Today's Panchang". Never use vara/nakshatra/tithi as observation titles.
@@ -1896,18 +1901,25 @@ def _generate_single_vani_observation(
         user_msg = (
             f"Generate one observation card for this astro rule.\n"
             f"Item name: {name}\n"
-            f"Historical instances: {n}\n"
-            f"Status: Active today as chart overlay"
+            f"Badge (instance count): {n} instances\n"
+            f"Description (current status only, do not repeat the count): Active today as chart overlay."
         )
 
     elif item_type == 'confluence' and confluence is not None:
         a = confluence.get('item_a_display') or confluence.get('item_a', '')
         b = confluence.get('item_b_display') or confluence.get('item_b', '')
+        status = confluence.get('status', 'detected')
+        n = confluence.get('instances', 0)
+        status_sentence = (
+            'Both overlays are currently active in your framework.'
+            if status == 'active'
+            else 'Both overlays are approaching simultaneous activation.'
+        )
         user_msg = (
             f"Generate one observation card for this confluence.\n"
             f"Item name: {a} ∩ {b}\n"
-            f"Historical instances: {confluence.get('instances', 0)}\n"
-            f"Status: {confluence.get('status', 'detected')}"
+            f"Badge (instance count): {n} instances\n"
+            f"Description (current status only, do not repeat the count): {status_sentence}"
         )
 
     else:
