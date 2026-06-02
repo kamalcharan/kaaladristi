@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, ChevronLeft, Download } from 'lucide-react';
+import { Loader2, ChevronLeft, Download, Copy, Check } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe } from '@/services/scanEngine';
@@ -202,6 +202,114 @@ function DownloadXlsButton({
       <Download style={{ width: '12px', height: '12px' }} />
       XLS
     </button>
+  );
+}
+
+// ── TradingView Export ──────────────────────────────────────────
+
+function toTvSymbol(symbol: string, exchange: string | null): string {
+  const ex = exchange === 'BSE' ? 'BSE' : 'NSE';
+  return `${ex}:${symbol}`;
+}
+
+function buildTvList(stocks: Array<{ symbol: string; exchange: string | null }>): string {
+  return stocks.map((s) => toTvSymbol(s.symbol, s.exchange)).join(',');
+}
+
+function TradingViewExportButton({
+  stocks,
+  scanName,
+}: {
+  stocks: Array<{ symbol: string; exchange: string | null }>;
+  scanName: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const resetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  if (stocks.length === 0) return null;
+
+  const list = buildTvList(stocks);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(list);
+      setCopied(true);
+      if (resetRef.current) clearTimeout(resetRef.current);
+      resetRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback: download as txt
+      const blob = new Blob([list], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${scanName.replace(/\s+/g, '_')}_tradingview.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([list], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${scanName.replace(/\s+/g, '_')}_tradingview.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const btnBase: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: '5px',
+    padding: '5px 12px', borderRadius: '100px',
+    border: '1px solid var(--border)',
+    background: 'transparent',
+    fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+    fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+    whiteSpace: 'nowrap',
+  };
+
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+      {/* Copy button */}
+      <button
+        onClick={handleCopy}
+        title={`Copy ${stocks.length} TradingView symbols to clipboard`}
+        style={{ ...btnBase, color: copied ? 'var(--bull)' : 'var(--text-muted)', borderColor: copied ? 'rgba(74,222,128,0.4)' : 'var(--border)' }}
+        onMouseEnter={(e) => {
+          if (!copied) {
+            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-strong)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!copied) {
+            (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+          }
+        }}
+      >
+        {copied
+          ? <><Check style={{ width: '12px', height: '12px' }} />Copied</>
+          : <><Copy style={{ width: '12px', height: '12px' }} />TV</>
+        }
+      </button>
+      {/* Download .txt button */}
+      <button
+        onClick={handleDownload}
+        title={`Download ${stocks.length} TradingView symbols as .txt`}
+        style={{ ...btnBase, color: 'var(--text-muted)', padding: '5px 8px' }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-strong)';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+        }}
+      >
+        <Download style={{ width: '12px', height: '12px' }} />
+      </button>
+    </div>
   );
 }
 
@@ -504,6 +612,7 @@ function ConvictionFlowResults({ preset, timeframe }: { preset: ScanDefinition; 
             );
           })}
           <DownloadXlsButton stocks={exportStocks} scanName={preset.name} variant="conviction_flow" />
+          <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
         </div>
       </div>
 
@@ -661,6 +770,7 @@ function BreakoutSurgeResults({ preset, timeframe }: { preset: ScanDefinition; t
             );
           })}
           <DownloadXlsButton stocks={exportStocks} scanName={preset.name} variant="breakout_surge" />
+          <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
         </div>
       </div>
 
@@ -895,6 +1005,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
             );
           })}
           <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
+          <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
         </div>
       </div>
 
