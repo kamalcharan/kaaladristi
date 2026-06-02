@@ -723,11 +723,13 @@ export default function CorrelationPage() {
                         title="Clear this insight's cache"
                         onClick={async () => {
                           const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+                          const shape = result?.shape ?? activeCorr?.shape ?? ''
+                          if (!shape) return
                           await fetch(
-                            `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(result?.shape ?? '')}`,
+                            `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(shape)}`,
                             { method: 'DELETE', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} },
                           ).catch(() => {})
-                          queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
+                          await queryClient.invalidateQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
                         }}
                         className="ml-auto flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
                         style={{ background: 'none', border: 'none', cursor: 'pointer' }}
