@@ -519,7 +519,7 @@ function MorningModal({ items, profile, onClose }: {
                               `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
                               { method: 'DELETE' },
                             ).catch(() => {})
-                            queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
+                            setLiveObs([])
                             refetch()
                           }}
                           style={{
