@@ -402,8 +402,9 @@ export default function CorrelationPage() {
   const { data: insightData, isLoading: insightLoading } = useQuery({
     queryKey: ['corr-insight', itemA, itemB, result?.shape],
     queryFn: async () => {
+      const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
       const token = session?.access_token
-      const r = await fetch('/api/vani/correlation-insight', {
+      const r = await fetch(`${pipelineUrl}/api/vani/correlation-insight`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
