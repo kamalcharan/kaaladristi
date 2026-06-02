@@ -3573,7 +3573,7 @@ def vani_daily(req: VaNiDailyRequest):
             }
 
             # Log per-item call
-            _log_interaction(
+            _obs_log_id = _log_interaction(
                 product="dristiq",
                 endpoint="/api/vani/daily",
                 user_input=item['user_message'],
@@ -3583,6 +3583,7 @@ def vani_daily(req: VaNiDailyRequest):
                 model_version=_AI_MODEL,
                 latency_ms=_latency,
             )
+            obs['log_id'] = str(_obs_log_id) if _obs_log_id else None
 
             observations.append(obs)
 

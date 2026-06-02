@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore'
 import type { UserFramework } from '@/types/framework'
@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import type { KmProfile } from '@/types'
 import { getCatalogItem } from '@/constants/catalogItems'
 import { fetchCatalogRules } from '@/pages/RuleEngine/ruleService'
+import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 
 function todayKey(userId: string) {
   const d = new Date().toISOString().slice(0, 10)
@@ -80,19 +81,6 @@ function VaNiLoader() {
 
 const PIPELINEURL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
 
-function useFeedback() {
-  const [ratings, setRatings] = useState<Record<number, 1 | -1>>({})
-  function rate(idx: number, logId: string | undefined, rating: 1 | -1) {
-    setRatings(r => ({ ...r, [idx]: rating }))
-    if (!logId) return
-    fetch(`${PIPELINEURL}/api/vani/feedback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ log_id: logId, rating }),
-    }).catch(() => {})
-  }
-  return { ratings, rate }
-}
 
 interface VaniBriefObs {
   type:          string
@@ -365,7 +353,7 @@ function MorningModal({ items, profile, onClose }: {
   }, [])
   const showLoader = (briefLoading || minWait) && liveObs.length === 0
 
-  const { ratings, rate } = useFeedback()
+
 
   function handleAction(obs: VaniBriefObs) {
     if (!obs.action_target) return
@@ -460,10 +448,9 @@ function MorningModal({ items, profile, onClose }: {
                     borderLeft: `3px solid ${dotColor}`,
                   }}
                 >
-                  {/* Admin delete — small ✕, 40% opacity, always visible for admin */}
                   {isAdmin && obs.item_key && (
-                    <span
-                      title="Clear from cache (admin)"
+                    <button
+                      title="Clear this observation's cache"
                       onClick={async (e) => {
                         e.stopPropagation()
                         await fetch(
@@ -471,18 +458,12 @@ function MorningModal({ items, profile, onClose }: {
                           { method: 'DELETE' },
                         ).catch(() => {})
                       }}
-                      style={{
-                        position: 'absolute', top: 8, right: 10,
-                        fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
-                        color: 'var(--text-faint)', cursor: 'pointer',
-                        opacity: 0.4, transition: 'opacity 0.15s',
-                        userSelect: 'none',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                      className="absolute top-2 right-2 flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                     >
-                      ✕
-                    </span>
+                      <Trash2 className="w-3 h-3" />
+                      <span>clear cache</span>
+                    </button>
                   )}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>
@@ -513,29 +494,7 @@ function MorningModal({ items, profile, onClose }: {
                     >
                       {obs.action_label}
                     </span>
-                    {/* Feedback */}
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {([1, -1] as const).map(r => (
-                        <button
-                          key={r}
-                          onClick={() => rate(i, briefData?.log_id, r)}
-                          title={r === 1 ? 'Helpful' : 'Not helpful'}
-                          style={{
-                            fontSize: 12, background: 'none', border: 'none',
-                            cursor: 'pointer', padding: '2px 4px', borderRadius: 4,
-                            opacity: ratings[i] === r ? 1 : ratings[i] !== undefined ? 0.25 : 0.45,
-                            transition: 'opacity 0.15s',
-                            color: ratings[i] === r
-                              ? (r === 1 ? '#2dd4bf' : '#f87171')
-                              : 'var(--text-faint)',
-                          }}
-                          onMouseEnter={e => { if (ratings[i] === undefined) (e.currentTarget as HTMLElement).style.opacity = '0.8' }}
-                          onMouseLeave={e => { if (ratings[i] === undefined) (e.currentTarget as HTMLElement).style.opacity = '0.45' }}
-                        >
-                          {r === 1 ? '↑' : '↓'}
-                        </button>
-                      ))}
-                    </div>
+                    {obs.log_id && <VaNiFeedback logId={obs.log_id} />}
                   </div>
                 </div>
               )
