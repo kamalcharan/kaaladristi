@@ -792,7 +792,7 @@ export default function CorrelationPage() {
                           } catch {}
                           // Remove all cached versions of this query (any refreshCount)
                           queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
-                          setRefreshCount(0)
+                          setRefreshCount(prev => prev + 1)
                           setVaniTriggered(false)
                         }}
                         style={{

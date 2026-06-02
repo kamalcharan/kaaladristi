@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Check, Zap, TrendingUp, BarChart2, Brain, Star } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { createOrder, openCheckout, verifyPayment } from '@/services/razorpayService'
+import { startTrialCheckout, startSubscriptionCheckout } from '@/services/razorpayService'
 
 const TIERS = [
   { id: 'free'      as const, label: 'Free',      price: '₹0',     duration: '1 week',   cta: 'Current plan',  highlight: false },
@@ -36,10 +36,30 @@ interface PricingCardsProps {
 export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingCardsProps) {
   const { profile, refreshProfile } = useAuthStore()
   const [paying,   setPaying]   = useState<string | null>(null)
+  const [activating, setActivating] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
 
   const currentTier   = profile?.tier ?? 'free'
   const isOnboarding  = !!onPaidSuccess || !!onFreeSelected
+
+  async function pollProfileUntilUpgraded() {
+    setActivating(true)
+    const startTier = profile?.tier ?? 'free'
+    const deadline  = Date.now() + 30_000
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2000))
+      await refreshProfile()
+      const current = useAuthStore.getState().profile
+      if (current?.tier && current.tier !== startTier && current.tier !== 'free') {
+        setActivating(false)
+        setPaying(null)
+        onPaidSuccess?.()
+        return
+      }
+    }
+    setActivating(false)
+    setPaying(null)
+  }
 
   async function handleCta(tierId: string) {
     if (tierId === 'free') return
@@ -48,23 +68,30 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
     setPaying(tierId)
     setPayError(null)
     try {
-      const order = await createOrder(tierId, profile.id)
-      await openCheckout(
-        order,
-        { name: profile.full_name, email: profile.email, phone: profile.phone },
-        async (paymentId, orderId, signature) => {
-          try {
-            await verifyPayment(paymentId, orderId, signature)
-            await refreshProfile()
-            onPaidSuccess?.()
-          } catch (err) {
-            setPayError(String(err))
-          } finally {
-            setPaying(null)
-          }
-        },
-        () => setPaying(null),
-      )
+      if (tierId === 'trial') {
+        await startTrialCheckout(
+          profile.id,
+          { name: profile.full_name, email: profile.email },
+          () => pollProfileUntilUpgraded(),
+          () => setPaying(null),
+        )
+      } else if (tierId === 'quarterly') {
+        await startSubscriptionCheckout(
+          'quarterly',
+          profile.id,
+          { name: profile.full_name, email: profile.email },
+          () => pollProfileUntilUpgraded(),
+          () => setPaying(null),
+        )
+      } else if (tierId === 'annual') {
+        await startSubscriptionCheckout(
+          'annual',
+          profile.id,
+          { name: profile.full_name, email: profile.email },
+          () => pollProfileUntilUpgraded(),
+          () => setPaying(null),
+        )
+      }
     } catch (err) {
       setPayError(String(err))
       setPaying(null)
@@ -114,18 +141,19 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
               </div>
               <button
                 onClick={() => handleCta(tier.id)}
-                disabled={disabled}
+                disabled={disabled || activating}
                 style={{
                   width: '100%', padding: '10px', borderRadius: 10, fontSize: 13,
                   fontWeight: 600, border: 'none',
-                  cursor: disabled ? (paying ? 'wait' : 'default') : 'pointer',
+                  cursor: (disabled || activating) ? (paying ? 'wait' : 'default') : 'pointer',
                   background: tier.highlight
                     ? 'var(--accent-solid)'
                     : (isCurrentFree || isCurrent) ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.1)',
                   color: (isCurrentFree || isCurrent) ? 'rgba(255,255,255,.35)' : '#fff',
                   transition: 'background .15s',
                 }}>
-                {paying === tier.id ? 'Opening checkout…' :
+                {activating        ? 'Activating your plan…' :
+                 paying === tier.id ? 'Opening checkout…' :
                  isCurrentFree      ? 'Current plan' :
                  isCurrent          ? 'Active' :
                  tier.cta}

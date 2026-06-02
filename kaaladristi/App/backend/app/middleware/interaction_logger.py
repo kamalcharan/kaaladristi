@@ -86,4 +86,5 @@ def log_llm_interaction(
         return str(row[0]) if row else None
     except Exception as e:
         print(f"[interaction_logger] insert failed: {e}", file=sys.stderr)
+        print(f"[interaction_logger] exception detail: {repr(e)}", file=sys.stderr)
         return None

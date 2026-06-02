@@ -153,7 +153,25 @@ export async function getProfile(): Promise<KmProfile | null> {
     throw new Error(error.message);
   }
 
-  return data as KmProfile | null;
+  const profile = data as KmProfile | null;
+
+  // Get latest active subscription expires_at
+  if (profile) {
+    const { data: subData } = await from('user_subscriptions')
+      .select('expires_at, status')
+      .eq('user_id', profile.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .execute();
+
+    if (subData) {
+      profile.expires_at = (subData as any).expires_at ?? null;
+    }
+  }
+
+  return profile;
 }
 
 /** Update profile for current user.
