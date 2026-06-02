@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Trash2 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore'
 import type { UserFramework } from '@/types/framework'
 import { useAuthStore } from '@/stores/authStore'
@@ -143,6 +143,7 @@ interface BriefItem {
   badge:       string
   dot:         string  // CSS color
   action:      () => void
+  item_key?:   string
 }
 
 interface VaNiMorningBriefProps {
@@ -154,7 +155,9 @@ interface VaNiMorningBriefProps {
 
 export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose }: VaNiMorningBriefProps) {
   const navigate       = useNavigate()
-  const { profile }    = useAuthStore()
+  const { profile, isAdmin } = useAuthStore()
+  const queryClient    = useQueryClient()
+  const today          = new Date().toISOString().slice(0, 10)
   const { framework, vaniCorrelations } = useFrameworkStore()
 
   const items = useComputeBriefItems({ navigate, framework, vaniCorrelations })
@@ -211,9 +214,36 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose 
         {/* Items */}
         {items.map((item, i) => (
           <div key={i} style={{
+            position: 'relative',
             display: 'flex', alignItems: 'flex-start', gap: 8,
             marginBottom: i < items.length - 1 ? 8 : 0,
           }}>
+            {isAdmin && item.item_key && (
+              <button
+                title="Clear this observation's cache"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  await fetch(
+                    `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(item.item_key!)}/${today}`,
+                    { method: 'DELETE' },
+                  ).catch(() => {})
+                  queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
+                }}
+                style={{
+                  position: 'absolute', top: 0, right: 0,
+                  display: 'flex', alignItems: 'center', gap: 3,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
+                  color: 'rgba(239,68,68,0.35)',
+                  padding: 0,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
+              >
+                <Trash2 style={{ width: 10, height: 10 }} />
+                <span>clear cache</span>
+              </button>
+            )}
             <div style={{
               width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0,
               background: item.dot,
@@ -270,6 +300,7 @@ function MorningModal({ items, profile, onClose }: {
 
   const { framework, vaniCorrelations } = useFrameworkStore()
   const { isAdmin } = useAuthStore()
+  const queryClient = useQueryClient()
 
   // Astro rule display names — same query key as CatalogAstroSection, served from cache.
   // No default — undefined = still loading, [] = loaded (empty). Critical for the guard below.
@@ -326,7 +357,7 @@ function MorningModal({ items, profile, onClose }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vaniCorrelations, astroRuleNames, astroRulesReady])
 
-  const { data: briefData, isLoading: briefLoading } = useVaniDailyBrief(
+  const { data: briefData, isLoading: briefLoading, refetch } = useVaniDailyBrief(
     profile?.id,
     today,
     activeOverlays,
@@ -457,6 +488,8 @@ function MorningModal({ items, profile, onClose }: {
                           `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
                           { method: 'DELETE' },
                         ).catch(() => {})
+                        queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
+                        refetch()
                       }}
                       style={{
                         position: 'absolute', top: 8, right: 10,
