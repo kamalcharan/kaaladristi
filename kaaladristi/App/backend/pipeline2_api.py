@@ -3830,6 +3830,7 @@ def corr_insight_delete(
     pair      = sorted([item_a, item_b])
     cache_key = f"corr_insight:{pair[0]}:{pair[1]}:{shape}"
     deleted   = 1 if _corr_insight_cache.pop(cache_key, None) is not None else 0
+    log.info(f"corr_insight cache evict: key={cache_key} deleted={deleted}")
     return {'ok': True, 'deleted': deleted, 'cache_key': cache_key}
 
 
