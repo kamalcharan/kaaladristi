@@ -24,7 +24,7 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -4705,6 +4705,7 @@ async def payments_webhook(request: Request):
             RAZORPAY_WEBHOOK_SECRET.encode(), body_bytes, _hashlib.sha256
         ).hexdigest()
         if not _hmac.compare_digest(expected, sig):
+            log.warning(f'webhook signature mismatch — expected {expected[:12]}… got {sig[:12]}…')
             raise HTTPException(status_code=400, detail='Invalid webhook signature')
 
     payload = json.loads(body_bytes)
