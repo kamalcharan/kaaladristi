@@ -784,10 +784,12 @@ export default function CorrelationPage() {
                     {isAdmin && (
                       <button
                         title="Regenerate — bypasses cache"
-                        onClick={() => {
-                          setVaniMinWait(true)
-                          setTimeout(() => setVaniMinWait(false), 900)
-                          setRefreshCount(c => c + 1)
+                        onClick={async () => {
+                          const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+                          try {
+                            await fetch(`${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA)}/${encodeURIComponent(itemB)}/${encodeURIComponent(result?.shape ?? '')}`, { method: 'DELETE' })
+                          } catch {}
+                          setVaniTriggered(false)
                         }}
                         style={{
                           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3,
