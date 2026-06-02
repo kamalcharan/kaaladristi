@@ -3748,7 +3748,7 @@ def vani_correlation_insight(
     if not raw:
         return {'insight': None, 'cached': False}
 
-    _cleaned = _re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip())
+    _cleaned = raw.strip().strip('`').replace('json', '', 1).strip()
     try:
         result  = json.loads(_cleaned)
         insight = result.get('insight', '')
