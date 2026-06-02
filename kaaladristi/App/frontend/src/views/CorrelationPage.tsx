@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Trash2 } from 'lucide-react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
@@ -12,6 +12,7 @@ import { recommendVisualisations } from '@/utils/correlationVizSkill'
 import type { VisualisationOption } from '@/utils/correlationVizSkill'
 import InlineGate from '@/components/workspace/InlineGate'
 import { getCatalogItem } from '@/constants/catalogItems'
+import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 
 const WALK_TIERS = ['trial', 'quarterly', 'annual', 'beta'] as const
 
@@ -401,19 +402,6 @@ export default function CorrelationPage() {
   const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
   const queryClient          = useQueryClient()
-  const [insightRating, setInsightRating] = useState<1 | -1 | null>(null)
-
-  function submitFeedback(logId: string, rating: 1 | -1) {
-    const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-    fetch(`${pipelineUrl}/api/vani/feedback`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      },
-      body: JSON.stringify({ log_id: logId, rating }),
-    }).catch(() => {})
-  }
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
 
@@ -730,34 +718,22 @@ export default function CorrelationPage() {
                       color: 'var(--accent)', fontWeight: 600,
                       fontFamily: 'var(--font-mono,monospace)',
                     }}>VaNi</span>
-                    <span style={{
-                      fontSize: 9, color: 'rgba(255,255,255,.25)',
-                      fontFamily: 'var(--font-mono,monospace)', marginLeft: 'auto',
-                    }}>
-                      {insightData.cached ? 'cached' : 'fresh'}
-                    </span>
                     {isAdmin && (
                       <button
-                        title="Clear from cache — regenerates on next load (admin)"
+                        title="Clear this insight's cache"
                         onClick={async () => {
                           const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-                          const shape = result?.shape ?? ''
                           await fetch(
-                            `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(shape)}`,
+                            `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(result?.shape ?? '')}`,
                             { method: 'DELETE', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} },
                           ).catch(() => {})
                           queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
                         }}
-                        style={{
-                          background: 'rgba(239,68,68,0.08)',
-                          border: '1px solid rgba(239,68,68,0.25)',
-                          borderRadius: 3, padding: '2px 7px',
-                          fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
-                          color: 'rgba(239,68,68,0.7)', cursor: 'pointer',
-                          letterSpacing: '0.05em',
-                        }}
+                        className="ml-auto flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                       >
-                        regen
+                        <Trash2 className="w-3 h-3" />
+                        <span>clear cache</span>
                       </button>
                     )}
                   </div>
@@ -769,39 +745,7 @@ export default function CorrelationPage() {
                   }}>
                     {insightData.insight}
                   </div>
-                  {/* Feedback thumbs */}
-                  {insightData.log_id && (
-                    <div style={{
-                      display: 'flex', gap: 8, marginTop: 10,
-                      paddingTop: 8, borderTop: '1px solid var(--border)',
-                    }}>
-                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-muted)', alignSelf: 'center' }}>
-                        useful?
-                      </span>
-                      {([{ r: 1 as const, label: '↑ yes' }, { r: -1 as const, label: '↓ no' }]).map(({ r, label }) => (
-                        <button
-                          key={r}
-                          onClick={() => {
-                            if (insightRating !== null) return
-                            setInsightRating(r)
-                            submitFeedback(insightData.log_id!, r)
-                          }}
-                          style={{
-                            background: insightRating === r ? 'var(--accent-glow)' : 'none',
-                            border: `1px solid ${insightRating === r ? 'var(--accent-dim)' : 'var(--border)'}`,
-                            borderRadius: 4, padding: '3px 10px',
-                            fontSize: 10, cursor: insightRating !== null ? 'default' : 'pointer',
-                            opacity: insightRating === null ? 0.7 : insightRating === r ? 1 : 0.25,
-                            fontFamily: 'var(--font-mono,monospace)',
-                            color: insightRating === r ? 'var(--accent)' : 'var(--text-muted)',
-                            transition: 'opacity 0.15s',
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {insightData.log_id && <VaNiFeedback logId={insightData.log_id} />}
                 </div>
               )}
 
