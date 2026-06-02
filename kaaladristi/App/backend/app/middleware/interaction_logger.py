@@ -50,6 +50,7 @@ def log_llm_interaction(
     user_id: str | None = None,
 ) -> str | None:
     """Insert one interaction log row. Returns the UUID string or None on failure."""
+    print(f"[interaction_logger] called, VANI_DB_URL set: {bool(_VANI_DB_URL)}", file=sys.stderr)
     if not _VANI_DB_URL:
         return None
     try:
