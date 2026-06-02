@@ -16,24 +16,47 @@ import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 
 const WALK_TIERS = ['trial', 'quarterly', 'annual', 'beta'] as const
 
-function VaNiLoader() {
-  const [dots, setDots] = useState(0)
+const VANI_LOADING_MESSAGES = [
+  'Reading this combination…',
+  'Checking historical instances…',
+  'Analysing pattern signals…',
+  'Generating insight…',
+]
+
+function VaNiModal() {
+  const [msgIdx, setMsgIdx] = useState(0)
+  const [dots, setDots]     = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx(i => (i + 1) % VANI_LOADING_MESSAGES.length), 2200)
+    return () => clearInterval(t)
+  }, [])
   useEffect(() => {
     const t = setInterval(() => setDots(d => (d + 1) % 4), 500)
     return () => clearInterval(t)
   }, [])
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', marginBottom: 12, background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)', borderRadius: 8 }}>
-      <div style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
-        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', opacity: 0.15, animation: 'vani-ring 1.8s ease-in-out infinite' }} />
-        <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', fontFamily: 'var(--font-mono,monospace)' }}>
-          Vᴺ
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <style>{`@keyframes vani-ring{0%,100%{transform:scale(1);opacity:.15}50%{transform:scale(1.35);opacity:.06}}`}</style>
+      <div style={{
+        background: 'var(--bg-card, #111)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: '36px 48px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18,
+        minWidth: 260,
+      }}>
+        <div style={{ position: 'relative', width: 56, height: 56 }}>
+          <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', opacity: 0.15, animation: 'vani-ring 1.8s ease-in-out infinite' }} />
+          <div style={{ position: 'absolute', inset: 7, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', fontFamily: 'var(--font-mono,monospace)' }}>
+            Vᴺ
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontStyle: 'italic', textAlign: 'center', minHeight: 20 }}>
+          {VANI_LOADING_MESSAGES[msgIdx]}{'.'.repeat(dots)}
         </div>
       </div>
-      <style>{`@keyframes vani-ring { 0%,100%{transform:scale(1);opacity:.15} 50%{transform:scale(1.35);opacity:.06} }`}</style>
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', fontFamily: 'var(--font-mono,monospace)', fontStyle: 'italic' }}>
-        Reading this combination{'.'.repeat(dots)}
-      </span>
     </div>
   )
 }
@@ -510,6 +533,8 @@ export default function CorrelationPage() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text-primary)' }}>
 
+      {vaniTriggered && (insightLoading || vaniMinWait) && <VaNiModal />}
+
       {/* Topbar */}
       <div style={{
         flexShrink: 0,
@@ -735,7 +760,7 @@ export default function CorrelationPage() {
               )}
 
               {/* VaNi loader + insight — shown after trigger, in original position */}
-              {vaniTriggered && (insightLoading || vaniMinWait) && <VaNiLoader />}
+              {/* VaNiModal handles loading overlay at root level */}
 
               {vaniTriggered && !insightLoading && !vaniMinWait && insightData?.insight && (
                 <div style={{
