@@ -737,15 +737,11 @@ export default function CorrelationPage() {
                       {insightData.cached ? 'cached' : 'fresh'}
                     </span>
                     {isAdmin && (
-                      <span
-                        title="Clear from cache (admin)"
+                      <button
+                        title="Clear from cache — regenerates on next load (admin)"
                         onClick={async () => {
                           const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-                          const corr = correlations?.find(c =>
-                            (c.item_a === itemA && c.item_b === itemB) ||
-                            (c.item_a === itemB && c.item_b === itemA)
-                          )
-                          const shape = corr?.shape ?? result?.shape ?? ''
+                          const shape = result?.shape ?? ''
                           await fetch(
                             `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(shape)}`,
                             { method: 'DELETE', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} },
@@ -753,15 +749,16 @@ export default function CorrelationPage() {
                           queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
                         }}
                         style={{
+                          background: 'rgba(239,68,68,0.08)',
+                          border: '1px solid rgba(239,68,68,0.25)',
+                          borderRadius: 3, padding: '2px 7px',
                           fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
-                          color: 'var(--text-faint)', cursor: 'pointer',
-                          opacity: 0.4, transition: 'opacity 0.15s', userSelect: 'none',
+                          color: 'rgba(239,68,68,0.7)', cursor: 'pointer',
+                          letterSpacing: '0.05em',
                         }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
                       >
-                        ✕
-                      </span>
+                        regen
+                      </button>
                     )}
                   </div>
                   <div style={{
@@ -778,26 +775,29 @@ export default function CorrelationPage() {
                       display: 'flex', gap: 8, marginTop: 10,
                       paddingTop: 8, borderTop: '1px solid var(--border)',
                     }}>
-                      {([1, -1] as const).map(rating => (
+                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-muted)', alignSelf: 'center' }}>
+                        useful?
+                      </span>
+                      {([{ r: 1 as const, label: '↑ yes' }, { r: -1 as const, label: '↓ no' }]).map(({ r, label }) => (
                         <button
-                          key={rating}
-                          title={rating === 1 ? 'Helpful' : 'Not helpful'}
+                          key={r}
                           onClick={() => {
                             if (insightRating !== null) return
-                            setInsightRating(rating)
-                            submitFeedback(insightData.log_id!, rating)
+                            setInsightRating(r)
+                            submitFeedback(insightData.log_id!, r)
                           }}
                           style={{
-                            background: insightRating === rating ? 'var(--accent-glow)' : 'none',
-                            border: '1px solid var(--border)',
+                            background: insightRating === r ? 'var(--accent-glow)' : 'none',
+                            border: `1px solid ${insightRating === r ? 'var(--accent-dim)' : 'var(--border)'}`,
                             borderRadius: 4, padding: '3px 10px',
-                            fontSize: 11, cursor: insightRating !== null ? 'default' : 'pointer',
-                            opacity: insightRating === null ? 0.7 : insightRating === rating ? 1 : 0.25,
-                            fontFamily: 'var(--font-mono)',
+                            fontSize: 10, cursor: insightRating !== null ? 'default' : 'pointer',
+                            opacity: insightRating === null ? 0.7 : insightRating === r ? 1 : 0.25,
+                            fontFamily: 'var(--font-mono,monospace)',
+                            color: insightRating === r ? 'var(--accent)' : 'var(--text-muted)',
                             transition: 'opacity 0.15s',
                           }}
                         >
-                          {rating === 1 ? '👍' : '👎'}
+                          {label}
                         </button>
                       ))}
                     </div>
