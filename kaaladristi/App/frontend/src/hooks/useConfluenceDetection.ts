@@ -31,6 +31,7 @@ export function useVisibleOverlayPairs(): Array<[string, string]> {
     const pairs: Array<[string, string]> = []
     for (let i = 0; i < ids.length; i++) {
       for (let j = i + 1; j < ids.length; j++) {
+        if (ids[i] === ids[j]) continue
         pairs.push([ids[i], ids[j]])
       }
     }
