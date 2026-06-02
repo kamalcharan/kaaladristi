@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -9,11 +9,15 @@ interface VaNiFeedbackProps {
 }
 
 export default function VaNiFeedback({ logId }: VaNiFeedbackProps) {
-  const [voted, setVoted] = useState<1 | -1 | null>(null);
+  const storageKey = `vani_feedback:${logId}`;
+  const [voted, setVoted] = useState<1 | -1 | null>(() => {
+    try { return (localStorage.getItem(storageKey) as '1' | '-1' | null) ? Number(localStorage.getItem(storageKey)) as 1 | -1 : null } catch { return null }
+  });
 
   const handleVote = async (rating: 1 | -1) => {
     if (voted !== null) return;
     setVoted(rating);
+    try { localStorage.setItem(storageKey, String(rating)) } catch {}
     try {
       await fetch(`${pipelineUrl}/api/vani/feedback`, {
         method: 'POST',
@@ -21,7 +25,7 @@ export default function VaNiFeedback({ logId }: VaNiFeedbackProps) {
         body: JSON.stringify({ log_id: logId, rating }),
       });
     } catch {
-      // fire and forget — don't undo UI state on network error
+      // fire and forget
     }
   };
 
