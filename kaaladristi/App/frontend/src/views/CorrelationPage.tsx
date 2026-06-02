@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Trash2 } from 'lucide-react'
@@ -466,7 +466,9 @@ export default function CorrelationPage() {
   const total     = bullCount + bearCount
   const hitRate   = total > 0 ? Math.max(bullCount, bearCount) / total : 0
 
-  const { data: insightData, isLoading: insightLoading } = useQuery({
+  const forceRefreshRef = useRef(false)
+
+  const { data: insightData, isLoading: insightLoading, refetch: refetchInsight } = useQuery({
     queryKey: ['corr-insight', itemA, itemB, result?.shape],
     queryFn: async () => {
       const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
@@ -495,8 +497,10 @@ export default function CorrelationPage() {
             duration_days: i.duration_days,
             return_5d:     i.return_5d,
           })),
+          force_refresh:      forceRefreshRef.current,
         }),
       })
+      forceRefreshRef.current = false
       return r.json()
     },
     enabled: vaniTriggered && !!result && !!itemA && !!itemB,
@@ -756,33 +760,12 @@ export default function CorrelationPage() {
                     {isAdmin && (
                       <button
                         title="Regenerate — bypasses cache"
-                        onClick={async () => {
-                          const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-                          const token = session?.access_token
+                        onClick={() => {
+                          forceRefreshRef.current = true
                           setVaniMinWait(true)
                           setTimeout(() => setVaniMinWait(false), 900)
-                          queryClient.setQueryData(['corr-insight', itemA, itemB, result?.shape], undefined)
-                          const r = await fetch(`${pipelineUrl}/api/vani/correlation-insight`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                            body: JSON.stringify({
-                              item_a: itemA, item_b: itemB,
-                              item_a_display: resolveDisplayName(itemA ?? ''),
-                              item_b_display: resolveDisplayName(itemB ?? ''),
-                              item_a_description: resolveDescription(itemA ?? ''),
-                              item_b_description: resolveDescription(itemB ?? ''),
-                              shape: result?.shape ?? '', n_instances: result?.n_instances ?? 0,
-                              hit_rate: hitRate, avg_return_5d: result?.avg_return_5d ?? 0,
-                              avg_return_22d: result?.avg_return_22d ?? 0,
-                              currently_active: result?.currently_active ?? false,
-                              instances: (result?.instances ?? []).slice(0, 5).map(i => ({ start_date: i.start_date, duration_days: i.duration_days, return_5d: i.return_5d })),
-                              force_refresh: true,
-                            }),
-                          }).catch(() => null)
-                          if (r?.ok) {
-                            const fresh = await r.json()
-                            queryClient.setQueryData(['corr-insight', itemA, itemB, result?.shape], fresh)
-                          }
+                          queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
+                          refetchInsight()
                         }}
                         style={{
                           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3,
