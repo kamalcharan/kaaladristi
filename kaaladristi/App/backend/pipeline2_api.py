@@ -4541,110 +4541,209 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
 
 RAZORPAY_KEY_ID     = os.environ.get('RAZORPAY_KEY_ID', '')
 RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '')
 
-TIER_AMOUNTS_PAISE = {
-    'trial':     19900,   # ₹199
-    'quarterly': 199900,  # ₹1,999
-    'annual':    499900,  # ₹4,999
-}
 
-class CreateOrderRequest(BaseModel):
+def _load_config() -> dict:
+    """Load km_config table into a dict at startup."""
+    try:
+        conn = _conn(3000)
+        with conn.cursor() as cur:
+            cur.execute("SELECT key, value FROM km_config")
+            rows = cur.fetchall()
+        conn.close()
+        return {r[0]: r[1] for r in rows}
+    except Exception as e:
+        log.warning(f"km_config load failed: {e}")
+        return {}
+
+_KM_CONFIG: dict = _load_config()
+
+class CreateSubscriptionRequest(BaseModel):
     tier:    str
     user_id: str
 
-class VerifyPaymentRequest(BaseModel):
-    razorpay_payment_id: str
-    razorpay_order_id:   str
-    razorpay_signature:  str
+class CreateOrderRequest(BaseModel):
+    user_id: str
 
 
-@app.post('/api/payments/create-order')
-def payments_create_order(
+def _activate_tier(
+    user_id: str, tier: str, days: int,
+    subscription_id: str = None, payment_id: str = None
+):
+    from datetime import timedelta
+    expires_at = datetime.utcnow() + timedelta(days=days)
+    conn = _conn(5000)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE km_profiles
+                   SET tier = %s, expires_at = %s, updated_at = now()
+                   WHERE id = %s::uuid""",
+                (tier, expires_at, user_id)
+            )
+            cur.execute(
+                """INSERT INTO user_subscriptions
+                   (user_id, tier, started_at, expires_at,
+                    razorpay_subscription_id, razorpay_payment_id, status)
+                   VALUES (%s::uuid, %s, now(), %s, %s, %s, 'active')""",
+                (user_id, tier, expires_at, subscription_id, payment_id)
+            )
+        conn.commit()
+        log.info(f"tier activated: user={user_id} tier={tier} expires={expires_at}")
+    finally:
+        conn.close()
+
+
+def _deactivate_tier(user_id: str, subscription_id: str = None):
+    conn = _conn(5000)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE km_profiles
+                   SET tier = 'free', expires_at = null, updated_at = now()
+                   WHERE id = %s::uuid""",
+                (user_id,)
+            )
+            if subscription_id:
+                cur.execute(
+                    """UPDATE user_subscriptions SET status = 'cancelled'
+                       WHERE razorpay_subscription_id = %s""",
+                    (subscription_id,)
+                )
+        conn.commit()
+        log.info(f"tier deactivated: user={user_id}")
+    finally:
+        conn.close()
+
+
+@app.post('/api/payments/create-subscription')
+def payments_create_subscription(
+    req: CreateSubscriptionRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    """Creates a Razorpay subscription for quarterly or annual tier."""
+    if caller_id != req.user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+    if req.tier not in ('quarterly', 'annual'):
+        raise HTTPException(status_code=400, detail='Use create-trial-order for trial tier')
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(status_code=503, detail='Payment gateway not configured')
+
+    plan_key = f'razorpay_plan_{req.tier}'
+    plan_id  = _KM_CONFIG.get(plan_key)
+    if not plan_id:
+        raise HTTPException(status_code=503, detail=f'Plan not configured: {plan_key}')
+
+    try:
+        import razorpay as _rzp
+        client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        sub = client.subscription.create({
+            'plan_id':         plan_id,
+            'total_count':     12,  # max renewal cycles
+            'quantity':        1,
+            'notes':           {'tier': req.tier, 'user_id': req.user_id},
+        })
+        return {'subscription_id': sub['id'], 'tier': req.tier}
+    except ImportError:
+        raise HTTPException(status_code=503, detail='razorpay SDK not installed')
+    except Exception as exc:
+        log.error(f'create_subscription error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post('/api/payments/create-trial-order')
+def payments_create_trial_order(
     req: CreateOrderRequest,
     caller_id: str = Depends(_get_current_user_id),
 ):
+    """Creates a one-time Razorpay order for trial tier."""
     if caller_id != req.user_id:
         raise HTTPException(status_code=403, detail='Forbidden')
-    if req.tier not in TIER_AMOUNTS_PAISE:
-        raise HTTPException(status_code=400, detail=f'Unknown tier: {req.tier}')
     if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
         raise HTTPException(status_code=503, detail='Payment gateway not configured')
 
+    amount = int(_KM_CONFIG.get('price_trial_paise', '19900'))
+
     try:
-        import razorpay as _rzp  # type: ignore
+        import razorpay as _rzp
         client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-        order  = client.order.create({
-            'amount':   TIER_AMOUNTS_PAISE[req.tier],
+        order = client.order.create({
+            'amount':   amount,
             'currency': 'INR',
-            'notes':    {'tier': req.tier, 'user_id': req.user_id},
+            'notes':    {'tier': 'trial', 'user_id': req.user_id},
         })
-        return {
-            'order_id': order['id'],
-            'amount':   order['amount'],
-            'currency': order['currency'],
-        }
+        return {'order_id': order['id'], 'amount': order['amount'], 'currency': order['currency']}
     except ImportError:
-        raise HTTPException(status_code=503, detail='razorpay SDK not installed — run pip install razorpay')
+        raise HTTPException(status_code=503, detail='razorpay SDK not installed')
     except Exception as exc:
-        log.error(f'payments_create_order error: {exc}')
+        log.error(f'create_trial_order error: {exc}')
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.post('/api/payments/verify')
-def payments_verify(
-    req: VerifyPaymentRequest,
-    caller_id: str = Depends(_get_current_user_id),
-):
-    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
-        raise HTTPException(status_code=503, detail='Payment gateway not configured')
+@app.post('/api/payments/webhook')
+async def payments_webhook(request: Request):
+    """
+    Handles Razorpay webhook events.
+    Events handled:
+      - payment.captured         → trial tier activation (one-time order)
+      - subscription.charged     → quarterly/annual renewal
+      - subscription.halted      → payment failed, downgrade to free
+      - subscription.cancelled   → user cancelled, downgrade to free
+
+    Webhook secret must be set in Razorpay dashboard and stored as
+    RAZORPAY_WEBHOOK_SECRET in .env
+    """
+    import hmac as _hmac, hashlib as _hashlib
+
+    body_bytes = await request.body()
+
+    # Verify webhook signature
+    if RAZORPAY_WEBHOOK_SECRET:
+        sig = request.headers.get('x-razorpay-signature', '')
+        expected = _hmac.new(
+            RAZORPAY_WEBHOOK_SECRET.encode(), body_bytes, _hashlib.sha256
+        ).hexdigest()
+        if not _hmac.compare_digest(expected, sig):
+            raise HTTPException(status_code=400, detail='Invalid webhook signature')
+
+    payload = json.loads(body_bytes)
+    event   = payload.get('event')
+    entity  = payload.get('payload', {})
 
     try:
-        import razorpay as _rzp  # type: ignore
-        import hmac as _hmac, hashlib as _hashlib
+        if event == 'payment.captured':
+            # Trial one-time order
+            payment = entity.get('payment', {}).get('entity', {})
+            notes   = payment.get('notes', {})
+            tier    = notes.get('tier', 'trial')
+            user_id = notes.get('user_id')
+            if user_id and tier == 'trial':
+                _activate_tier(user_id, tier, days=3, payment_id=payment.get('id'))
 
-        # Verify signature
-        body       = f'{req.razorpay_order_id}|{req.razorpay_payment_id}'.encode()
-        expected   = _hmac.new(RAZORPAY_KEY_SECRET.encode(), body, _hashlib.sha256).hexdigest()
-        if not _hmac.compare_digest(expected, req.razorpay_signature):
-            raise HTTPException(status_code=400, detail='Invalid payment signature')
-
-        # Fetch order from Razorpay to get tier from notes
-        client = _rzp.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-        order  = client.order.fetch(req.razorpay_order_id)
-        tier   = order.get('notes', {}).get('tier', 'trial')
-        user_id = order.get('notes', {}).get('user_id', caller_id)
-
-        # Determine expires_at based on tier
-        from datetime import timedelta
-        tier_durations = {'trial': 3, 'quarterly': 90, 'annual': 365}
-        days_valid     = tier_durations.get(tier, 3)
-        expires_at     = datetime.utcnow() + timedelta(days=days_valid)
-
-        # Upgrade km_profiles.tier + insert user_subscriptions row
-        conn = _conn(5000)
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE km_profiles SET tier = %s, updated_at = now() WHERE id = %s::uuid",
-                    (tier, user_id),
+        elif event == 'subscription.charged':
+            sub     = entity.get('subscription', {}).get('entity', {})
+            payment = entity.get('payment', {}).get('entity', {})
+            notes   = sub.get('notes', {})
+            tier    = notes.get('tier')
+            user_id = notes.get('user_id')
+            days    = 90 if tier == 'quarterly' else 365
+            if user_id and tier:
+                _activate_tier(
+                    user_id, tier, days=days,
+                    subscription_id=sub.get('id'),
+                    payment_id=payment.get('id')
                 )
-                cur.execute(
-                    """
-                    INSERT INTO user_subscriptions (user_id, tier, started_at, expires_at)
-                    VALUES (%s::uuid, %s, now(), %s)
-                    """,
-                    (user_id, tier, expires_at),
-                )
-                conn.commit()
-        finally:
-            conn.close()
 
-        return {'tier': tier, 'expires_at': expires_at.isoformat()}
+        elif event in ('subscription.halted', 'subscription.cancelled'):
+            sub     = entity.get('subscription', {}).get('entity', {})
+            notes   = sub.get('notes', {})
+            user_id = notes.get('user_id')
+            if user_id:
+                _deactivate_tier(user_id, sub.get('id'))
 
-    except HTTPException:
-        raise
-    except ImportError:
-        raise HTTPException(status_code=503, detail='razorpay SDK not installed — run pip install razorpay')
     except Exception as exc:
-        log.error(f'payments_verify error: {exc}')
-        raise HTTPException(status_code=500, detail=str(exc))
+        log.error(f'webhook handler error: {event} {exc}')
+        # Always return 200 to Razorpay — never let webhook retry loop
+
+    return {'ok': True}
