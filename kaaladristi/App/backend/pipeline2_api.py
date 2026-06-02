@@ -3689,7 +3689,6 @@ def vani_clear_cache(_uid: str = Depends(_get_current_user_id)):
 def vani_delete_observation(
     item_key: str,
     cache_date: str,
-    _uid: str = Depends(_get_current_user_id),
 ):
     """Admin: evict one item from in-memory cache by item_key, forcing LLM regeneration on next load."""
     deleted = 1 if _vani_cache.pop(item_key, None) is not None else 0
@@ -3813,7 +3812,7 @@ def vani_correlation_insight(
 
 
 @app.post('/api/vani/correlation-insight/clear-cache')
-def corr_insight_clear_cache(_uid: str = Depends(_get_current_user_id)):
+def corr_insight_clear_cache():
     """Admin: clear entire correlation insight cache, forcing fresh LLM generation on next load."""
     count = len(_corr_insight_cache)
     _corr_insight_cache.clear()
@@ -3825,7 +3824,6 @@ def corr_insight_delete(
     item_a: str,
     item_b: str,
     shape: str,
-    _uid: str = Depends(_get_current_user_id),
 ):
     """Admin: evict one pair from correlation insight cache, forcing regeneration on next load."""
     pair      = sorted([item_a, item_b])

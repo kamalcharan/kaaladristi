@@ -16,6 +16,28 @@ import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 
 const WALK_TIERS = ['trial', 'quarterly', 'annual', 'beta'] as const
 
+function VaNiLoader() {
+  const [dots, setDots] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setDots(d => (d + 1) % 4), 500)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', marginBottom: 12, background: 'var(--accent-glow)', border: '1px solid var(--accent-dim)', borderRadius: 8 }}>
+      <div style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', opacity: 0.15, animation: 'vani-ring 1.8s ease-in-out infinite' }} />
+        <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', fontFamily: 'var(--font-mono,monospace)' }}>
+          Vᴺ
+        </div>
+      </div>
+      <style>{`@keyframes vani-ring { 0%,100%{transform:scale(1);opacity:.15} 50%{transform:scale(1.35);opacity:.06} }`}</style>
+      <span style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', fontFamily: 'var(--font-mono,monospace)', fontStyle: 'italic' }}>
+        Reading this combination{'.'.repeat(dots)}
+      </span>
+    </div>
+  )
+}
+
 const VIZ_PREF_KEY = (a: string, b: string) => `corr_viz:${a}:${b}`
 
 function fmtId(id: string): string {
@@ -684,20 +706,7 @@ export default function CorrelationPage() {
               )}
 
               {/* VaNi Insight */}
-              {insightLoading && (
-                <div style={{
-                  padding: '12px 14px', marginBottom: 12,
-                  background: 'var(--accent-glow)',
-                  border: '1px solid var(--accent-dim)',
-                  borderRadius: 8,
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  <span style={{ color: 'var(--accent)', fontSize: 12 }}>✦</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', fontFamily: 'var(--font-mono,monospace)', fontStyle: 'italic' }}>
-                    VaNi is reading this combination…
-                  </span>
-                </div>
-              )}
+              {insightLoading && <VaNiLoader />}
 
               {!insightLoading && insightData?.insight && (
                 <div style={{
@@ -727,7 +736,7 @@ export default function CorrelationPage() {
                           if (!shape) return
                           await fetch(
                             `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(shape)}`,
-                            { method: 'DELETE', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} },
+                            { method: 'DELETE' },
                           ).catch(() => {})
                           await queryClient.invalidateQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
                         }}
