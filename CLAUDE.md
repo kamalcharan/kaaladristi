@@ -888,6 +888,15 @@ Top to bottom (after `result` loads):
 | ~~Morning brief cache strategy review~~ | **Closed** — in-memory `_vani_cache` confirmed as final approach | Done |
 | ~~CatalogDrawer compatibility~~ | **Done** — widened to 520px, `compact` prop added to `IndicatorsSection` (2-col grid) and `WidgetsSection`. | Done |
 
+## Product Direction — Unified Rule Architecture (Do Not Build Yet)
+- All overlays (astro, technical, compound) to be treated as first-class rules
+- Single rule registry covers astro_rule, tech_rule, compound_rule types
+- Discovery, correlation engine, and VaNi cache to operate on the same rule abstraction
+- Enables NLP queries: "what happens when SMA 20 crosses SMA 50 above EMA 200"
+- Enables indicator behaviour analysis N days before/after astro rule trigger
+- Pre-condition: technical indicators need transit/signal rows in km_rule_signals equivalent
+- Target: post-cashflow, requires separate design session
+
 ## Astro Market-Book 2026
 
 Three new tables as of migrations 047-050:

@@ -3765,7 +3765,6 @@ def vani_correlation_insight(
                         temperature=0.3, no_think=True)
     _lat = int((time.monotonic() - _t0) * 1000)
 
-    log.info(f"corr_insight raw response: {raw[:200]}")
     if not raw:
         return {'insight': None, 'cached': False}
 
@@ -3794,7 +3793,6 @@ def vani_correlation_insight(
             log.warning(f"corr_insight forbidden phrase '{phrase}': {insight[:100]}")
             return {'insight': None, 'cached': False}
 
-    log.info(f"corr_insight passed all checks, calling _log_interaction")
     log_id = _log_interaction(
         product='dristiq',
         endpoint='/api/vani/correlation-insight',
