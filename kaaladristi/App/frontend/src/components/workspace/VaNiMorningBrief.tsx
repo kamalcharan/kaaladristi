@@ -371,9 +371,14 @@ function MorningModal({ items, profile, onClose }: {
 
   useEffect(() => {
     if (!briefData) return
-    // Start with whatever the batch call returned
-    setLiveObs(briefData.observations ?? [])
     setAllCached(briefData.cached ?? false)
+    const obs = briefData.observations ?? []
+    setLiveObs([])
+    obs.forEach((item, i) => {
+      setTimeout(() => {
+        setLiveObs(prev => [...prev, item])
+      }, i * 350)
+    })
   }, [briefData])
 
   // Minimum loader display — 900ms even for cache hits
