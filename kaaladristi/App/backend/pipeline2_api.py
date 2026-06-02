@@ -3765,6 +3765,7 @@ def vani_correlation_insight(
                         temperature=0.3, no_think=True)
     _lat = int((time.monotonic() - _t0) * 1000)
 
+    log.info(f"corr_insight raw response: {raw[:200]}")
     if not raw:
         return {'insight': None, 'cached': False}
 
