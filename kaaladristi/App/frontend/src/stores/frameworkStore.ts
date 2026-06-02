@@ -5,6 +5,7 @@ import type { CatalogItem } from '@/constants/catalogItems'
 import { getCatalogItem } from '@/constants/catalogItems'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import { useAuthStore } from '@/stores/authStore'
+import { onAuthStateChange } from '@/services/auth'
 import type { CorrelationResult } from '@/hooks/useCorrelationResult'
 
 const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
@@ -477,3 +478,14 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
 
 // Re-export getCatalogItem so callers can resolve items without a separate import
 export { getCatalogItem }
+
+// Reset all user-specific state on signout to prevent cross-user leakage
+onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') {
+    _suppressedUntil.clear()
+    useFrameworkStore.setState({
+      framework: null,
+      vaniCorrelations: [],
+    })
+  }
+})
