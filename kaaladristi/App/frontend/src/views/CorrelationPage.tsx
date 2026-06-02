@@ -165,6 +165,47 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
           Green = positive 5D return · Red = negative · Blue = approaching or active
         </span>
       </p>
+
+      {/* Compact instance table */}
+      <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 12 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {['Date', 'Duration', '5D Return', 'Outcome'].map(col => (
+                <th key={col} style={{
+                  padding: '4px 10px', textAlign: 'left',
+                  fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+                  color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
+                  fontWeight: 400,
+                }}>
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...instances]
+              .filter(i => i.return_5d != null)
+              .sort((a, b) => b.start_date.localeCompare(a.start_date))
+              .map((inst, i) => (
+                <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
+                    {fmtDate(inst.start_date)}
+                  </td>
+                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                    {inst.duration_days}d
+                  </td>
+                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: (inst.return_5d ?? 0) > 0 ? 'var(--bull)' : 'var(--bear)' }}>
+                    {fmtPct(inst.return_5d)}
+                  </td>
+                  <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: (inst.return_5d ?? 0) > 0 ? 'var(--bull)' : 'var(--bear)' }}>
+                    {(inst.return_5d ?? 0) > 0 ? '↑' : '↓'}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

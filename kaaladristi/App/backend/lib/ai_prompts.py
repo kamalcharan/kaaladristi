@@ -302,7 +302,7 @@ _VANI_CORRELATION_INSIGHT_SYSTEM = (
     _IDENTITY
     + "Generate one paragraph explaining what this indicator/rule combination means on Nifty.\n\n"
     "Output valid JSON only. No markdown. No preamble.\n"
-    '{"insight": "[2-3 sentences explaining the combination]"}\n\n'
+    '{"insight": "[2 sentences explaining the combination]"}\n\n'
     "Rules:\n"
     "1. First sentence — what each item IS and why they matter individually\n"
     "2. Second sentence — what it means when both are active simultaneously on Nifty\n"
@@ -310,8 +310,10 @@ _VANI_CORRELATION_INSIGHT_SYSTEM = (
     "   Never use directional potential: 'potential rise', 'potential upside', 'potential downside', 'potential gain', 'potential loss'\n"
     "   'potential' alone is acceptable in non-directional context (e.g. 'potential alignment', 'potential momentum')\n"
     "4. Use: historically, instances show, when active, has appeared, on record, observed, marks\n"
-    "5. Maximum 3 sentences. Be specific — use the item names provided.\n"
-    "6. Never use \"associated with\" — state facts directly."
+    "5. Be specific — use the item names provided.\n"
+    "6. Never use \"associated with\" — state facts directly.\n"
+    "7. Maximum 2 sentences only. Never add a third sentence. "
+    "Third sentences starting with 'Historical instances show', 'This indicates', 'This suggests', 'This marks' are forbidden."
 )
 
 
