@@ -19,7 +19,7 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 import psycopg2
@@ -3394,7 +3394,8 @@ def vani_daily(req: VaNiDailyRequest):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT vara, vara_lord, nakshatra_name, nakshatra_lord,
-                       tithi_name, yoga_name, paksha
+                       tithi_name, yoga_name, paksha,
+                       nakshatra_end_ist, tithi_end_ist
                 FROM km_daily_panchang WHERE date = %s
             """, (date_str,))
             panchang = cur.fetchone()
@@ -3414,10 +3415,33 @@ def vani_daily(req: VaNiDailyRequest):
         if not panchang:
             return {'date': date_str, 'observations': [], 'cached': False}
 
-        vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha = panchang
+        vara, vara_lord, nak_name, nak_lord, tithi, yoga, paksha, nak_end_ist, tit_end_ist = panchang
         total_signals = int(sig_row[0]) if sig_row else 0
         positive      = int(sig_row[1]) if sig_row else 0
         negative      = int(sig_row[2]) if sig_row else 0
+
+        # Detect market-hours transitions (09:15–15:30 IST)
+        MARKET_OPEN  = time(9, 15)
+        MARKET_CLOSE = time(15, 30)
+
+        transition_lines = []
+
+        if nak_end_ist and isinstance(nak_end_ist, time):
+            if MARKET_OPEN <= nak_end_ist <= MARKET_CLOSE:
+                transition_lines.append(
+                    f"Nakshatra changes at {nak_end_ist.strftime('%I:%M %p')} IST during market hours."
+                )
+
+        if tit_end_ist and isinstance(tit_end_ist, time):
+            if MARKET_OPEN <= tit_end_ist <= MARKET_CLOSE:
+                transition_lines.append(
+                    f"Tithi changes at {tit_end_ist.strftime('%I:%M %p')} IST during market hours."
+                )
+
+        transition_note = ("\n" + "\n".join(transition_lines)) if transition_lines else ""
+
+        # Invalidate stale panchang cache so next request picks up transition data
+        # _vani_cache.pop(f"panchang:{date_str}", None)  ← remove after first test run
 
         # Build ordered item list — panchang first, confluences second, astro fills remaining
         panchang_item = {
@@ -3436,6 +3460,7 @@ def vani_daily(req: VaNiDailyRequest):
                 f'Explain: First sentence — state today\'s conditions directly using this exact format:\n'
                 f'"Today is {vara} (lord: {vara_lord}), Nakshatra {nak_name} (lord: {nak_lord}), Tithi {tithi} {paksha}, Yoga {yoga}."\n'
                 f'Second sentence must be exactly: "{total_signals} rule signals active today — {positive} positive, {negative} negative."\n'
+                f"{transition_note}\n"
                 f"Do not use the word \"associated\". Do not interpret. Just state the facts."
             ),
         }
