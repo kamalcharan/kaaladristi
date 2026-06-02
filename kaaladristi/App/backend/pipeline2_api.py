@@ -1,1 +1,1 @@
-$(cat /tmp/pipeline2_api_fixed.py)
+$(cat /tmp/pipeline2_api_fixed.py | python3 -c "import sys,base64; print(base64.b64encode(sys.stdin.buffer.read()).decode())")
