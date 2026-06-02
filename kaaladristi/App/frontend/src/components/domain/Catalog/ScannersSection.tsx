@@ -11,6 +11,7 @@ const ICONS: Record<string, string> = {
   distribution_warning: '⊘',
   conviction_flow:      '⊙',
   breakout_surge:       '⇑',
+  stage_2_leaders:      '②',
 }
 
 // Color per preset
@@ -23,6 +24,7 @@ const ACCENT: Record<string, string> = {
   distribution_warning: '#f87171',
   conviction_flow:      '#7c6af7',
   breakout_surge:       '#4ade80',
+  stage_2_leaders:      '#f59e0b',
 }
 
 const ACCENT_BG: Record<string, string> = {
@@ -34,6 +36,7 @@ const ACCENT_BG: Record<string, string> = {
   distribution_warning: 'rgba(248,113,113,0.06)',
   conviction_flow:      'rgba(124,106,247,0.06)',
   breakout_surge:       'rgba(74,222,128,0.06)',
+  stage_2_leaders:      'rgba(245,158,11,0.06)',
 }
 
 // Tags per preset
@@ -46,6 +49,7 @@ const TAGS: Record<string, string[]> = {
   distribution_warning: ['risk', 'exit-watch'],
   conviction_flow:      ['delivery', 'institutional'],
   breakout_surge:       ['momentum', 'high-rvol'],
+  stage_2_leaders:      ['trend-following', 'stage2', 'golden-cross'],
 }
 
 const TAG_COLOR: Record<string, { color: string; border: string }> = {
@@ -61,6 +65,9 @@ const TAG_COLOR: Record<string, { color: string; border: string }> = {
   'exit-watch':        { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
   'delivery':          { color: '#c9a84c', border: 'rgba(201,168,76,0.3)' },
   'high-rvol':         { color: '#4ade80', border: 'rgba(74,222,128,0.3)' },
+  'trend-following':   { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+  'stage2':            { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+  'golden-cross':      { color: '#fbbf24', border: 'rgba(251,191,36,0.3)' },
 }
 
 export default function ScannersSection() {
@@ -81,7 +88,7 @@ export default function ScannersSection() {
           Scan<em style={{ color: 'var(--gold)', fontStyle: 'italic' }}>ners</em>
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          Eight pre-built market scans. All logic runs in TypeScript — no backend needed.
+          Nine pre-built market scans. All logic runs in TypeScript — no backend needed.
           Click any scanner to open it with full results.
         </p>
       </div>

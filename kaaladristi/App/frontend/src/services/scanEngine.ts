@@ -87,6 +87,14 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     limit: 50,
     universe: 'NSE_ONLY',
   },
+  {
+    id: 'stage_2_leaders',
+    name: 'Stage 2 Leaders',
+    description: 'Stocks in Weinstein Stage 2 — above rising SMA_200, golden cross confirmed, strong relative strength',
+    tooltip: 'Price > rising SMA_200 + SMA_50 > SMA_200 (golden cross) + in sweet spot of 52-week range. VaNi gate: RS > 80, RVOL > 2.5, RSI 50–75, supertrend up, fresh longs or short covering.',
+    limit: 50,
+    universe: 'NSE_BSE',
+  },
 ];
 
 // ── Data Loading ───────────────────────────────────────────────
@@ -208,7 +216,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -400,6 +408,10 @@ async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<Scan
     delivery_pct: r.avg_deliv_pct ?? null, // remap
     delivery_qty: r.deliv_qty ?? null,     // remap
     w52_high: r.w52_high ?? null,
+    sma_50: null,
+    sma_200: null,
+    w52_low: null,
+    supertrend_dir: null,
   }));
 
   // Build industry data
@@ -657,6 +669,10 @@ function buildScanStock(
     atr_14: atr14,
     delivery_pct: eod.delivery_pct ?? null,
     w52_high: eod.w52_high ?? null,
+    sma_50: eod.sma_50 ?? null,
+    sma_200: eod.sma_200 ?? null,
+    w52_low: eod.w52_low ?? null,
+    supertrend_dir: eod.supertrend_dir ?? null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
@@ -1057,6 +1073,64 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   return results.sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0));
 }
 
+/** Scan 9: Stage 2 Leaders (Weinstein Stage 2) */
+function scanStage2Leaders(bundle: ScanDataBundle): ScanStock[] {
+  const results: ScanStock[] = [];
+
+  for (const [id] of bundle.latestEod) {
+    const eod = bundle.latestEod.get(id);
+    if (!eod) continue;
+
+    const sma200 = eod.sma_200;
+    const sma50  = eod.sma_50;
+    const w52Low = eod.w52_low;
+    const w52High = eod.w52_high;
+
+    // All core indicators must be computed
+    if (!sma200 || !sma50) continue;
+
+    // Core Stage 2 filters
+    if (eod.close <= sma200)    continue;  // price above SMA_200
+    if (sma50   <= sma200)      continue;  // golden cross: SMA_50 > SMA_200
+    if (eod.close <= sma50)     continue;  // price above SMA_50
+    if (eod.close <= 30)        continue;  // minimum price filter
+
+    // 52-week range sweet spot — well off the low, not at extreme high
+    if (w52Low  && eod.low  < w52Low  * 1.25) continue;
+    if (w52High && eod.high > w52High * 0.75) continue;
+
+    // SMA_200 must be rising (vs 20, 80, or 100 bars ago — any one qualifies)
+    const history = bundle.eodHistory.get(id) ?? [];
+    const sma200_20  = history[20]?.sma_200  ?? null;
+    const sma200_80  = history[80]?.sma_200  ?? null;
+    const sma200_100 = history[100]?.sma_200 ?? null;
+
+    const sma200Rising =
+      (sma200_20  != null && sma200 > sma200_20)  ||
+      (sma200_80  != null && sma200 > sma200_80)  ||
+      (sma200_100 != null && sma200 > sma200_100);
+
+    if (!sma200Rising) continue;
+
+    const stock = buildScanStock(id, bundle, 'stage_2_leaders');
+    if (!stock) continue;
+
+    // VaNi opportunity — highest conviction Stage 2 entries
+    const vaniOpportunity =
+      (stock.magic_rs ?? 0) > 80 &&
+      (stock.rvol ?? 0) > 2.5 &&
+      (stock.rsi_14 ?? 0) >= 50 && (stock.rsi_14 ?? 0) <= 75 &&
+      eod.supertrend_dir === 1 &&
+      ['FRESH_LONGS', 'SHORT_COVERING'].includes(stock.flow_type ?? '');
+
+    results.push({ ...stock, vaniOpportunity });
+  }
+
+  return results
+    .sort((a, b) => (b.magic_rs ?? 0) - (a.magic_rs ?? 0))
+    .slice(0, 50);
+}
+
 // ── Public API ─────────────────────────────────────────────────
 
 const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
@@ -1068,6 +1142,7 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   distribution_warning: scanDistributionWarning,
   conviction_flow: scanConvictionFlow,
   breakout_surge: scanBreakoutSurge,
+  stage_2_leaders: scanStage2Leaders,
 };
 
 /**
@@ -1150,7 +1225,7 @@ export interface ScanCountsResult {
   latestDate: string | null;
 }
 
-/** Return result counts for all 8 scans — uses shared cached data */
+/** Return result counts for all 9 scans — uses shared cached data */
 export async function getAllScanCounts(
   exchangeFilter: ExchangeFilter = 'combined',
   timeframe: ScanTimeframe = 'daily',
@@ -1349,6 +1424,10 @@ function buildStockFromEod(
     atr_14: null,
     delivery_pct: null,
     w52_high: null,
+    sma_50: null,
+    sma_200: null,
+    w52_low: null,
+    supertrend_dir: null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
