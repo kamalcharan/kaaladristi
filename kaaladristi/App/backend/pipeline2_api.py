@@ -3544,6 +3544,7 @@ def vani_daily(req: VaNiDailyRequest):
                     obs.setdefault('action_label', 'View history →')
                     obs.setdefault('action', item.get('action'))
                     obs.setdefault('action_target', item.get('action_target'))
+                    obs['item_key'] = item_key
                     observations.append(obs)
                     continue
 
@@ -3591,6 +3592,7 @@ def vani_daily(req: VaNiDailyRequest):
             # Enrich with action routing (Fix 4)
             obs['action']        = item.get('action')
             obs['action_target'] = item.get('action_target')
+            obs['item_key']      = item_key
 
             # Cache this item individually
             _vani_cache[item_key] = {
