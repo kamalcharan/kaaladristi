@@ -3725,7 +3725,8 @@ def vani_correlation_insight(
     cache_key = f"corr_insight:{pair[0]}:{pair[1]}:{req.shape}"
 
     if cache_key in _corr_insight_cache:
-        return {**_corr_insight_cache[cache_key], 'cached': True}
+        cached = _corr_insight_cache[cache_key]
+        return {'insight': cached['insight'], 'log_id': cached.get('log_id'), 'cached': True}
 
     skill = _AI_SKILLS.get('vani_correlation_insight')
     if not skill:
@@ -3791,9 +3792,7 @@ def vani_correlation_insight(
             log.warning(f"corr_insight forbidden phrase '{phrase}': {insight[:100]}")
             return {'insight': None, 'cached': False}
 
-    _corr_insight_cache[cache_key] = {'insight': insight}
-
-    _log_interaction(
+    log_id = _log_interaction(
         product='dristiq',
         endpoint='/api/vani/correlation-insight',
         user_input=user_message,
@@ -3807,7 +3806,9 @@ def vani_correlation_insight(
         latency_ms=_lat,
     )
 
-    return {'insight': insight, 'cached': False}
+    _corr_insight_cache[cache_key] = {'insight': insight, 'log_id': str(log_id) if log_id else None}
+
+    return {'insight': insight, 'cached': False, 'log_id': str(log_id) if log_id else None}
 
 
 @app.post('/api/vani/correlation-insight/clear-cache')
