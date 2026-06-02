@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -397,9 +397,10 @@ export default function CorrelationPage() {
   const navigate          = useNavigate()
   const correlations      = useFrameworkStore(s => s.vaniCorrelations)
   const dismissCorrelation = useFrameworkStore(s => s.dismissVaNiCorrelation)
-  const { profile, session } = useAuthStore()
+  const { profile, session, isAdmin } = useAuthStore()
   const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
+  const queryClient          = useQueryClient()
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
 
@@ -464,6 +465,11 @@ export default function CorrelationPage() {
           avg_return_5d:      result?.avg_return_5d ?? 0,
           avg_return_22d:     result?.avg_return_22d ?? 0,
           currently_active:   result?.currently_active ?? false,
+          instances:          (result?.instances ?? []).slice(0, 5).map(i => ({
+            start_date:    i.start_date,
+            duration_days: i.duration_days,
+            return_5d:     i.return_5d,
+          })),
         }),
       })
       return r.json()
@@ -717,6 +723,33 @@ export default function CorrelationPage() {
                     }}>
                       {insightData.cached ? 'cached' : 'fresh'}
                     </span>
+                    {isAdmin && (
+                      <span
+                        title="Clear from cache (admin)"
+                        onClick={async () => {
+                          const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+                          const corr = correlations?.find(c =>
+                            (c.item_a === itemA && c.item_b === itemB) ||
+                            (c.item_a === itemB && c.item_b === itemA)
+                          )
+                          const shape = corr?.shape ?? result?.shape ?? ''
+                          await fetch(
+                            `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(shape)}`,
+                            { method: 'DELETE', headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} },
+                          ).catch(() => {})
+                          queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
+                        }}
+                        style={{
+                          fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                          color: 'var(--text-faint)', cursor: 'pointer',
+                          opacity: 0.4, transition: 'opacity 0.15s', userSelect: 'none',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = '0.4')}
+                      >
+                        ✕
+                      </span>
+                    )}
                   </div>
                   <div style={{
                     fontFamily: 'var(--font-display, serif)',

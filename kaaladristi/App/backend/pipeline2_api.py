@@ -3710,6 +3710,7 @@ class CorrelationInsightRequest(BaseModel):
     avg_return_5d:      float
     avg_return_22d:     float
     currently_active:   bool
+    instances:          list = []  # [{start_date, duration_days, return_5d}]
 
 
 _corr_insight_cache: dict = {}
@@ -3730,15 +3731,32 @@ def vani_correlation_insight(
     if not skill:
         return {'insight': None, 'cached': False}
 
+    recent = sorted(
+        [i for i in req.instances if i.get('return_5d') is not None],
+        key=lambda x: x.get('start_date', ''),
+        reverse=True,
+    )[:5]
+    instances_text = '\n'.join(
+        f"- {i['start_date']}: {i['duration_days']}d, "
+        f"5D return {'+' if i['return_5d'] >= 0 else ''}{i['return_5d']:.2f}%"
+        for i in recent
+    )
+
     user_message = (
         f"Combination: {req.item_a_display} ∩ {req.item_b_display}\n"
         f"Shape: {req.shape}\n\n"
         f"{req.item_a_display}: {req.item_a_description}\n"
         f"{req.item_b_display}: {req.item_b_description}\n\n"
         f"Historical instances on Nifty: {req.n_instances}\n"
-        f"Status: {'active' if req.currently_active else 'approaching'}\n\n"
-        "Explain what this combination means when both conditions are present simultaneously on Nifty."
+        f"Status: {'active' if req.currently_active else 'approaching'}\n"
     )
+    if instances_text:
+        user_message += (
+            f"\nMost recent instances:\n{instances_text}\n\n"
+            "Explain what this combination means and reference the pattern visible in the recent instances."
+        )
+    else:
+        user_message += "\nExplain what this combination means when both conditions are present simultaneously on Nifty."
 
     _t0  = time.monotonic()
     raw  = _ai_complete(system=skill.system, user=user_message, max_tokens=skill.max_tokens,
@@ -3790,6 +3808,28 @@ def vani_correlation_insight(
     )
 
     return {'insight': insight, 'cached': False}
+
+
+@app.post('/api/vani/correlation-insight/clear-cache')
+def corr_insight_clear_cache(_uid: str = Depends(_get_current_user_id)):
+    """Admin: clear entire correlation insight cache, forcing fresh LLM generation on next load."""
+    count = len(_corr_insight_cache)
+    _corr_insight_cache.clear()
+    return {'ok': True, 'cleared': count}
+
+
+@app.delete('/api/vani/correlation-insight/{item_a}/{item_b}/{shape}')
+def corr_insight_delete(
+    item_a: str,
+    item_b: str,
+    shape: str,
+    _uid: str = Depends(_get_current_user_id),
+):
+    """Admin: evict one pair from correlation insight cache, forcing regeneration on next load."""
+    pair      = sorted([item_a, item_b])
+    cache_key = f"corr_insight:{pair[0]}:{pair[1]}:{shape}"
+    deleted   = 1 if _corr_insight_cache.pop(cache_key, None) is not None else 0
+    return {'ok': True, 'deleted': deleted, 'cache_key': cache_key}
 
 
 # ── VaNi Intent System ────────────────────────────────────────────────────────
