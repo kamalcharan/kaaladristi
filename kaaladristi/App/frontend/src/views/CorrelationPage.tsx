@@ -401,6 +401,19 @@ export default function CorrelationPage() {
   const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
   const queryClient          = useQueryClient()
+  const [insightRating, setInsightRating] = useState<1 | -1 | null>(null)
+
+  function submitFeedback(logId: string, rating: 1 | -1) {
+    const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+    fetch(`${pipelineUrl}/api/vani/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ log_id: logId, rating }),
+    }).catch(() => {})
+  }
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
 
@@ -759,6 +772,36 @@ export default function CorrelationPage() {
                   }}>
                     {insightData.insight}
                   </div>
+                  {/* Feedback thumbs */}
+                  {insightData.log_id && (
+                    <div style={{
+                      display: 'flex', gap: 8, marginTop: 10,
+                      paddingTop: 8, borderTop: '1px solid var(--border)',
+                    }}>
+                      {([1, -1] as const).map(rating => (
+                        <button
+                          key={rating}
+                          title={rating === 1 ? 'Helpful' : 'Not helpful'}
+                          onClick={() => {
+                            if (insightRating !== null) return
+                            setInsightRating(rating)
+                            submitFeedback(insightData.log_id!, rating)
+                          }}
+                          style={{
+                            background: insightRating === rating ? 'var(--accent-glow)' : 'none',
+                            border: '1px solid var(--border)',
+                            borderRadius: 4, padding: '3px 10px',
+                            fontSize: 11, cursor: insightRating !== null ? 'default' : 'pointer',
+                            opacity: insightRating === null ? 0.7 : insightRating === rating ? 1 : 0.25,
+                            fontFamily: 'var(--font-mono)',
+                            transition: 'opacity 0.15s',
+                          }}
+                        >
+                          {rating === 1 ? '👍' : '👎'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
