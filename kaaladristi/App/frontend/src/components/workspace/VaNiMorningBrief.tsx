@@ -479,33 +479,6 @@ function MorningModal({ items, profile, onClose }: {
                     borderLeft: `3px solid ${dotColor}`,
                   }}
                 >
-                  {isAdmin && obs.item_key && (
-                    <button
-                      title="Clear this observation's cache"
-                      onClick={async (e) => {
-                        e.stopPropagation()
-                        await fetch(
-                          `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
-                          { method: 'DELETE' },
-                        ).catch(() => {})
-                        queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
-                        refetch()
-                      }}
-                      style={{
-                        position: 'absolute', top: 8, right: 10,
-                        display: 'flex', alignItems: 'center', gap: 3,
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
-                        color: 'rgba(239,68,68,0.35)',
-                        padding: 0,
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
-                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
-                    >
-                      <Trash2 style={{ width: 10, height: 10 }} />
-                      <span>clear cache</span>
-                    </button>
-                  )}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.3 }}>
                       {obs.title}
@@ -535,7 +508,35 @@ function MorningModal({ items, profile, onClose }: {
                     >
                       {obs.action_label}
                     </span>
-                    {obs.log_id && <VaNiFeedback logId={obs.log_id} />}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {obs.log_id && <VaNiFeedback logId={obs.log_id} />}
+                      {isAdmin && obs.item_key && (
+                        <button
+                          title="Clear this observation's cache"
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            await fetch(
+                              `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(obs.item_key!)}/${today}`,
+                              { method: 'DELETE' },
+                            ).catch(() => {})
+                            queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
+                            refetch()
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 3,
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                            color: 'rgba(239,68,68,0.6)',
+                            padding: 0,
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,1)')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.6)')}
+                        >
+                          <Trash2 style={{ width: 11, height: 11 }} />
+                          <span>clear</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
