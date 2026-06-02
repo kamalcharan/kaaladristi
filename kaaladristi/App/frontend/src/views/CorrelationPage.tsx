@@ -424,7 +424,8 @@ export default function CorrelationPage() {
   const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
   const [vaniTriggered, setVaniTriggered] = useState(false)
-  const queryClient          = useQueryClient()
+  const [vaniMinWait, setVaniMinWait] = useState(false)
+  const queryClient = useQueryClient()
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
 
@@ -625,7 +626,11 @@ export default function CorrelationPage() {
               {/* VaNi trigger — top of panel, disappears once triggered */}
               {!vaniTriggered && (
                 <button
-                  onClick={() => setVaniTriggered(true)}
+                  onClick={() => {
+                    setVaniTriggered(true)
+                    setVaniMinWait(true)
+                    setTimeout(() => setVaniMinWait(false), 900)
+                  }}
                   style={{
                     width: '100%', marginBottom: 16,
                     display: 'flex', alignItems: 'center', gap: 10,
@@ -727,9 +732,9 @@ export default function CorrelationPage() {
               )}
 
               {/* VaNi loader + insight — shown after trigger, in original position */}
-              {vaniTriggered && insightLoading && <VaNiLoader />}
+              {vaniTriggered && (insightLoading || vaniMinWait) && <VaNiLoader />}
 
-              {vaniTriggered && !insightLoading && insightData?.insight && (
+              {vaniTriggered && !insightLoading && !vaniMinWait && insightData?.insight && (
                 <div style={{
                   padding: '12px 14px', marginBottom: 12,
                   background: 'var(--accent-glow)',
@@ -751,33 +756,33 @@ export default function CorrelationPage() {
                     {isAdmin && (
                       <button
                         title="Regenerate — bypasses cache"
-                        onClick={() => {
+                        onClick={async () => {
+                          const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+                          const token = session?.access_token
+                          setVaniMinWait(true)
+                          setTimeout(() => setVaniMinWait(false), 900)
                           queryClient.setQueryData(['corr-insight', itemA, itemB, result?.shape], undefined)
-                          queryClient.fetchQuery({
-                            queryKey: ['corr-insight', itemA, itemB, result?.shape],
-                            queryFn: async () => {
-                              const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-                              const token = session?.access_token
-                              const r = await fetch(`${pipelineUrl}/api/vani/correlation-insight`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                                body: JSON.stringify({
-                                  item_a: itemA, item_b: itemB,
-                                  item_a_display: resolveDisplayName(itemA ?? ''),
-                                  item_b_display: resolveDisplayName(itemB ?? ''),
-                                  item_a_description: resolveDescription(itemA ?? ''),
-                                  item_b_description: resolveDescription(itemB ?? ''),
-                                  shape: result?.shape ?? '', n_instances: result?.n_instances ?? 0,
-                                  hit_rate: hitRate, avg_return_5d: result?.avg_return_5d ?? 0,
-                                  avg_return_22d: result?.avg_return_22d ?? 0,
-                                  currently_active: result?.currently_active ?? false,
-                                  instances: (result?.instances ?? []).slice(0, 5).map(i => ({ start_date: i.start_date, duration_days: i.duration_days, return_5d: i.return_5d })),
-                                  force_refresh: true,
-                                }),
-                              })
-                              return r.json()
-                            },
-                          })
+                          const r = await fetch(`${pipelineUrl}/api/vani/correlation-insight`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                            body: JSON.stringify({
+                              item_a: itemA, item_b: itemB,
+                              item_a_display: resolveDisplayName(itemA ?? ''),
+                              item_b_display: resolveDisplayName(itemB ?? ''),
+                              item_a_description: resolveDescription(itemA ?? ''),
+                              item_b_description: resolveDescription(itemB ?? ''),
+                              shape: result?.shape ?? '', n_instances: result?.n_instances ?? 0,
+                              hit_rate: hitRate, avg_return_5d: result?.avg_return_5d ?? 0,
+                              avg_return_22d: result?.avg_return_22d ?? 0,
+                              currently_active: result?.currently_active ?? false,
+                              instances: (result?.instances ?? []).slice(0, 5).map(i => ({ start_date: i.start_date, duration_days: i.duration_days, return_5d: i.return_5d })),
+                              force_refresh: true,
+                            }),
+                          }).catch(() => null)
+                          if (r?.ok) {
+                            const fresh = await r.json()
+                            queryClient.setQueryData(['corr-insight', itemA, itemB, result?.shape], fresh)
+                          }
                         }}
                         style={{
                           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3,
