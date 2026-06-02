@@ -785,14 +785,11 @@ export default function CorrelationPage() {
                     {isAdmin && (
                       <button
                         title="Regenerate — bypasses cache"
-                        onClick={async () => {
-                          const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-                          try {
-                            await fetch(`${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA)}/${encodeURIComponent(itemB)}/${encodeURIComponent(result?.shape ?? '')}`, { method: 'DELETE' })
-                          } catch {}
-                          // Remove all cached versions of this query (any refreshCount)
-                          queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
-                          setRefreshCount(0)
+                        onClick={() => {
+                          // Evict all cached variants for this pair from React Query
+                          queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB] })
+                          // Increment so next fetch sends force_refresh:true, bypassing backend cache
+                          setRefreshCount(c => c + 1)
                           setVaniTriggered(false)
                         }}
                         style={{
