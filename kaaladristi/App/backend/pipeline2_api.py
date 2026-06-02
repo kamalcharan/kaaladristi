@@ -19,7 +19,7 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import psycopg2
@@ -3421,18 +3421,19 @@ def vani_daily(req: VaNiDailyRequest):
         negative      = int(sig_row[2]) if sig_row else 0
 
         # Detect market-hours transitions (09:15–15:30 IST)
-        MARKET_OPEN  = time(9, 15)
-        MARKET_CLOSE = time(15, 30)
+        import datetime as _dt
+        MARKET_OPEN  = _dt.time(9, 15)
+        MARKET_CLOSE = _dt.time(15, 30)
 
         transition_lines = []
 
-        if nak_end_ist and isinstance(nak_end_ist, time):
+        if nak_end_ist and isinstance(nak_end_ist, _dt.time):
             if MARKET_OPEN <= nak_end_ist <= MARKET_CLOSE:
                 transition_lines.append(
                     f"Nakshatra changes at {nak_end_ist.strftime('%I:%M %p')} IST during market hours."
                 )
 
-        if tit_end_ist and isinstance(tit_end_ist, time):
+        if tit_end_ist and isinstance(tit_end_ist, _dt.time):
             if MARKET_OPEN <= tit_end_ist <= MARKET_CLOSE:
                 transition_lines.append(
                     f"Tithi changes at {tit_end_ist.strftime('%I:%M %p')} IST during market hours."
