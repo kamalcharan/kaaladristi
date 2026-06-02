@@ -458,10 +458,18 @@ function MorningModal({ items, profile, onClose }: {
                           { method: 'DELETE' },
                         ).catch(() => {})
                       }}
-                      className="absolute top-2 right-2 flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                      style={{
+                        position: 'absolute', top: 8, right: 10,
+                        display: 'flex', alignItems: 'center', gap: 3,
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
+                        color: 'rgba(239,68,68,0.35)',
+                        padding: 0,
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 style={{ width: 10, height: 10 }} />
                       <span>clear cache</span>
                     </button>
                   )}
