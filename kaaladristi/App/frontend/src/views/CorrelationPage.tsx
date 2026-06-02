@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { useCorrelationResult, type CorrelationInstance } from '@/hooks/useCorrelationResult'
 import ConfidenceDial from '@/components/correlation/ConfidenceDial'
+import { DataQualityPill } from '@/components/correlation/DataQualityPill'
 import { recommendVisualisations } from '@/utils/correlationVizSkill'
 import type { VisualisationOption } from '@/utils/correlationVizSkill'
 import InlineGate from '@/components/workspace/InlineGate'
@@ -430,6 +431,12 @@ export default function CorrelationPage() {
     retry: 1,
   })
 
+  // Fix 4 — debug: remove after confirming insight fires
+  console.log('insight query enabled:', !!result)
+  console.log('insightData:', insightData)
+  console.log('insightLoading:', insightLoading)
+  console.log('ema20 catalog:', getCatalogItem('ema_20')?.display_name, getCatalogItem('ema_20')?.vani_explanation?.slice(0, 50))
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text-primary)' }}>
 
@@ -549,23 +556,16 @@ export default function CorrelationPage() {
 
           {result && (
             <>
-              {/* Confidence dial */}
-              <div style={{ marginBottom: 24 }}>
-                <div style={{
-                  fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-                  color: 'var(--text-muted)', letterSpacing: '0.1em',
-                  textTransform: 'uppercase', marginBottom: 10,
-                }}>
-                  Confidence
-                </div>
+              {/* Confidence dial — label rendered inside ConfidenceDial */}
+              <div style={{ marginBottom: 20 }}>
                 <ConfidenceDial
                   n_instances={result.n_instances}
-                  coverage_pct={result.coverage_pct}
+                  hit_rate={hitRate}
                 />
               </div>
 
               {/* Stats 2×2 grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                 {[
                   { label: 'Total Instances', value: result.n_instances },
                   { label: 'Resolved',        value: result.bullish_count + result.bearish_count },
@@ -591,6 +591,18 @@ export default function CorrelationPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Data quality pill */}
+              {result.coverage_pct != null && (
+                <div style={{ marginBottom: 16 }}>
+                  <DataQualityPill
+                    coverage_pct={result.coverage_pct}
+                    days_covered={result.days_covered ?? 0}
+                    date_from={result.date_from ?? ''}
+                    date_to={result.date_to ?? ''}
+                  />
+                </div>
+              )}
 
               {/* Outcome split bar */}
               {total > 0 && (
