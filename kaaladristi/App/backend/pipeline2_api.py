@@ -3756,12 +3756,21 @@ def vani_correlation_insight(
         log.warning(f'corr_insight parse failed: {raw[:100]}')
         return {'insight': None, 'cached': False}
 
-    _forbidden = {'buy', 'sell', 'bullish', 'bearish', 'rise', 'fall',
-                  'predict', 'forecast', 'recommend', 'potential', 'may', 'could'}
-    lower = insight.lower()
-    for word in _forbidden:
-        if word in lower:
-            log.warning(f"corr_insight forbidden word '{word}': {insight[:100]}")
+    _forbidden_phrases = [
+        'buy ', 'sell ', 'bullish', 'bearish',
+        'price will', 'market will', 'expect',
+        'rise ', 'fall ', 'rally', 'correction',
+        'predict', 'forecast', 'recommend',
+        'potential rise', 'potential fall',
+        'potential gain', 'potential loss',
+        'potential upside', 'potential downside',
+        'could rise', 'could fall', 'may rise', 'may fall',
+        'likely to', 'expected to',
+    ]
+    insight_lower = insight.lower()
+    for phrase in _forbidden_phrases:
+        if phrase in insight_lower:
+            log.warning(f"corr_insight forbidden phrase '{phrase}': {insight[:100]}")
             return {'insight': None, 'cached': False}
 
     _corr_insight_cache[cache_key] = {'insight': insight}
