@@ -492,15 +492,24 @@ function MorningModal({ items, profile, onClose }: {
                         refetch()
                       }}
                       style={{
-                        position: 'absolute', top: 8, right: 10,
-                        display: 'flex', alignItems: 'center', gap: 3,
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
-                        color: 'rgba(239,68,68,0.35)',
-                        padding: 0,
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        background: 'rgba(239,68,68,0.08)',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
+                        color: 'rgba(239,68,68,0.75)',
+                        padding: '2px 7px',
+                        marginBottom: 6,
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
-                      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.color = 'rgba(239,68,68,1)'
+                        e.currentTarget.style.background = 'rgba(239,68,68,0.15)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.color = 'rgba(239,68,68,0.75)'
+                        e.currentTarget.style.background = 'rgba(239,68,68,0.08)'
+                      }}
                     >
                       <Trash2 style={{ width: 10, height: 10 }} />
                       <span>clear cache</span>
