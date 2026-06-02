@@ -423,6 +423,7 @@ export default function CorrelationPage() {
   const { profile, session, isAdmin } = useAuthStore()
   const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
+  const [vaniTriggered, setVaniTriggered] = useState(false)
   const queryClient          = useQueryClient()
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
@@ -497,16 +498,10 @@ export default function CorrelationPage() {
       })
       return r.json()
     },
-    enabled: !!result && !!itemA && !!itemB,
+    enabled: vaniTriggered && !!result && !!itemA && !!itemB,
     staleTime: Infinity,
     retry: 1,
   })
-
-  // Fix 4 — debug: remove after confirming insight fires
-  console.log('insight query enabled:', !!result)
-  console.log('insightData:', insightData)
-  console.log('insightLoading:', insightLoading)
-  console.log('ema20 catalog:', getCatalogItem('ema_20')?.display_name, getCatalogItem('ema_20')?.vani_explanation?.slice(0, 50))
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text-primary)' }}>
@@ -627,6 +622,32 @@ export default function CorrelationPage() {
 
           {result && (
             <>
+              {/* VaNi trigger — top of panel, disappears once triggered */}
+              {!vaniTriggered && (
+                <button
+                  onClick={() => setVaniTriggered(true)}
+                  style={{
+                    width: '100%', marginBottom: 16,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                    background: 'var(--accent-glow)',
+                    border: '1px solid var(--accent-dim)',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', opacity: 0.2 }} />
+                    <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#fff', fontFamily: 'var(--font-mono,monospace)' }}>
+                      Vᴺ
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', fontFamily: 'var(--font-mono,monospace)', letterSpacing: '0.08em' }}>Ask VaNi</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>What does this combination mean?</div>
+                  </div>
+                </button>
+              )}
+
               {/* Confidence dial — label rendered inside ConfidenceDial */}
               <div style={{ marginBottom: 20 }}>
                 <ConfidenceDial
@@ -705,10 +726,10 @@ export default function CorrelationPage() {
                 </div>
               )}
 
-              {/* VaNi Insight */}
-              {insightLoading && <VaNiLoader />}
+              {/* VaNi loader + insight — shown after trigger, in original position */}
+              {vaniTriggered && insightLoading && <VaNiLoader />}
 
-              {!insightLoading && insightData?.insight && (
+              {vaniTriggered && !insightLoading && insightData?.insight && (
                 <div style={{
                   padding: '12px 14px', marginBottom: 12,
                   background: 'var(--accent-glow)',
@@ -729,21 +750,45 @@ export default function CorrelationPage() {
                     }}>VaNi</span>
                     {isAdmin && (
                       <button
-                        title="Clear this insight's cache"
-                        onClick={async () => {
-                          const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
-                          const shape = result?.shape ?? activeCorr?.shape ?? ''
-                          if (!shape) return
-                          await fetch(
-                            `${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(shape)}`,
-                            { method: 'DELETE' },
-                          ).catch(() => {})
-                          await queryClient.invalidateQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
+                        title="Regenerate — bypasses cache"
+                        onClick={() => {
+                          queryClient.setQueryData(['corr-insight', itemA, itemB, result?.shape], undefined)
+                          queryClient.fetchQuery({
+                            queryKey: ['corr-insight', itemA, itemB, result?.shape],
+                            queryFn: async () => {
+                              const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
+                              const token = session?.access_token
+                              const r = await fetch(`${pipelineUrl}/api/vani/correlation-insight`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                                body: JSON.stringify({
+                                  item_a: itemA, item_b: itemB,
+                                  item_a_display: resolveDisplayName(itemA ?? ''),
+                                  item_b_display: resolveDisplayName(itemB ?? ''),
+                                  item_a_description: resolveDescription(itemA ?? ''),
+                                  item_b_description: resolveDescription(itemB ?? ''),
+                                  shape: result?.shape ?? '', n_instances: result?.n_instances ?? 0,
+                                  hit_rate: hitRate, avg_return_5d: result?.avg_return_5d ?? 0,
+                                  avg_return_22d: result?.avg_return_22d ?? 0,
+                                  currently_active: result?.currently_active ?? false,
+                                  instances: (result?.instances ?? []).slice(0, 5).map(i => ({ start_date: i.start_date, duration_days: i.duration_days, return_5d: i.return_5d })),
+                                  force_refresh: true,
+                                }),
+                              })
+                              return r.json()
+                            },
+                          })
                         }}
-                        className="ml-auto flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                        style={{
+                          marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3,
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
+                          color: 'rgba(239,68,68,0.35)', padding: 0,
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 style={{ width: 10, height: 10 }} />
                         <span>clear cache</span>
                       </button>
                     )}
