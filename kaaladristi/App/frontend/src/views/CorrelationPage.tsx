@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Trash2 } from 'lucide-react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -444,6 +444,7 @@ export default function CorrelationPage() {
   const correlations      = useFrameworkStore(s => s.vaniCorrelations)
   const dismissCorrelation = useFrameworkStore(s => s.dismissVaNiCorrelation)
   const { profile, session, isAdmin } = useAuthStore()
+  const queryClient = useQueryClient()
   const canWalk              = WALK_TIERS.includes(profile?.tier as typeof WALK_TIERS[number])
   const [walkGateOpen, setWalkGateOpen] = useState(false)
   const [vaniTriggered, setVaniTriggered] = useState(false)
@@ -789,6 +790,9 @@ export default function CorrelationPage() {
                           try {
                             await fetch(`${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA)}/${encodeURIComponent(itemB)}/${encodeURIComponent(result?.shape ?? '')}`, { method: 'DELETE' })
                           } catch {}
+                          // Remove all cached versions of this query (any refreshCount)
+                          queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
+                          setRefreshCount(0)
                           setVaniTriggered(false)
                         }}
                         style={{
