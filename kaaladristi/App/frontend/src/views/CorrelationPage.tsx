@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2, Trash2 } from 'lucide-react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -425,7 +425,6 @@ export default function CorrelationPage() {
   const [walkGateOpen, setWalkGateOpen] = useState(false)
   const [vaniTriggered, setVaniTriggered] = useState(false)
   const [vaniMinWait, setVaniMinWait] = useState(false)
-  const queryClient = useQueryClient()
 
   const { result, loading } = useCorrelationResult(itemA ?? '', itemB ?? '')
 
@@ -466,10 +465,11 @@ export default function CorrelationPage() {
   const total     = bullCount + bearCount
   const hitRate   = total > 0 ? Math.max(bullCount, bearCount) / total : 0
 
-  const forceRefreshRef = useRef(false)
+  const [refreshCount, setRefreshCount] = useState(0)
+  const isForceRefresh = refreshCount > 0
 
-  const { data: insightData, isLoading: insightLoading, refetch: refetchInsight } = useQuery({
-    queryKey: ['corr-insight', itemA, itemB, result?.shape],
+  const { data: insightData, isLoading: insightLoading } = useQuery({
+    queryKey: ['corr-insight', itemA, itemB, result?.shape, refreshCount],
     queryFn: async () => {
       const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
       const token = session?.access_token
@@ -497,10 +497,9 @@ export default function CorrelationPage() {
             duration_days: i.duration_days,
             return_5d:     i.return_5d,
           })),
-          force_refresh:      forceRefreshRef.current,
+          force_refresh:      isForceRefresh,
         }),
       })
-      forceRefreshRef.current = false
       return r.json()
     },
     enabled: vaniTriggered && !!result && !!itemA && !!itemB,
@@ -761,11 +760,9 @@ export default function CorrelationPage() {
                       <button
                         title="Regenerate — bypasses cache"
                         onClick={() => {
-                          forceRefreshRef.current = true
                           setVaniMinWait(true)
                           setTimeout(() => setVaniMinWait(false), 900)
-                          queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
-                          refetchInsight()
+                          setRefreshCount(c => c + 1)
                         }}
                         style={{
                           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3,
