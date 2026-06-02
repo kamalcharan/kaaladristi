@@ -3711,6 +3711,7 @@ class CorrelationInsightRequest(BaseModel):
     avg_return_22d:     float
     currently_active:   bool
     instances:          list = []  # [{start_date, duration_days, return_5d}]
+    force_refresh:      bool = False
 
 
 _corr_insight_cache: dict = {}
@@ -3724,7 +3725,7 @@ def vani_correlation_insight(
     pair      = sorted([req.item_a, req.item_b])
     cache_key = f"corr_insight:{pair[0]}:{pair[1]}:{req.shape}"
 
-    if cache_key in _corr_insight_cache:
+    if not req.force_refresh and cache_key in _corr_insight_cache:
         cached = _corr_insight_cache[cache_key]
         return {'insight': cached['insight'], 'log_id': cached.get('log_id'), 'cached': True}
 
