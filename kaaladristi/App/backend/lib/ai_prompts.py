@@ -312,7 +312,10 @@ _VANI_CORRELATION_INSIGHT_SYSTEM = (
     "4. Use: historically, instances show, when active, has appeared, on record, observed, marks\n"
     "5. Be specific — use the item names provided.\n"
     "6. Never use \"associated with\" — state facts directly.\n"
-    "7. Maximum 2 sentences only. Never add a third sentence. "
+    "7. Maximum 2 sentences.\n"
+    "   First sentence: what each indicator IS and why it matters individually.\n"
+    "   Second sentence: what the recent instance pattern shows — reference the data provided.\n"
+    "   Never add a third summarising sentence. "
     "Third sentences starting with 'Historical instances show', 'This indicates', 'This suggests', 'This marks' are forbidden."
 )
 
