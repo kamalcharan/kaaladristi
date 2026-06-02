@@ -213,7 +213,10 @@ function toTvSymbol(symbol: string, exchange: string | null): string {
 }
 
 function buildTvList(stocks: Array<{ symbol: string; exchange: string | null }>): string {
-  return stocks.map((s) => toTvSymbol(s.symbol, s.exchange)).join(',');
+  return stocks
+    .filter((s) => !/^\d+$/.test(s.symbol))  // skip BSE numeric codes (e.g. "500002")
+    .map((s) => toTvSymbol(s.symbol, s.exchange))
+    .join(',');
 }
 
 function TradingViewExportButton({

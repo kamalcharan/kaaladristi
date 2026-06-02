@@ -1076,8 +1076,11 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
 /** Scan 9: Stage 2 Leaders (Weinstein Stage 2) */
 function scanStage2Leaders(bundle: ScanDataBundle): ScanStock[] {
   const results: ScanStock[] = [];
+  // Process only the NSE-preferred equity_id per ISIN to avoid BSE numeric-code duplicates.
+  const nsePreferred = buildNsePreferredIds(bundle.symbols);
 
   for (const [id] of bundle.latestEod) {
+    if (!nsePreferred.has(id)) continue;
     const eod = bundle.latestEod.get(id);
     if (!eod) continue;
 
@@ -1144,6 +1147,26 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   breakout_surge: scanBreakoutSurge,
   stage_2_leaders: scanStage2Leaders,
 };
+
+/**
+ * Build a Set of equity_ids that are the NSE-preferred representative per ISIN.
+ * For dual-listed stocks this picks the NSE row; for NSE-only or BSE-only it picks whichever exists.
+ * Used by scan functions to avoid processing BSE numeric-code duplicates.
+ */
+export function buildNsePreferredIds(symbols: Map<number, EquitySymbolRow>): Set<number> {
+  const isinToId = new Map<string, { id: number; exchange: string }>();
+  for (const [id, sym] of symbols) {
+    const isin = sym.isin;
+    if (!isin) continue;
+    const existing = isinToId.get(isin);
+    if (!existing || sym.exchange === 'NSE') {
+      isinToId.set(isin, { id, exchange: sym.exchange ?? '' });
+    }
+  }
+  const ids = new Set<number>();
+  for (const v of isinToId.values()) ids.add(v.id);
+  return ids;
+}
 
 /**
  * Deduplicate scan results by ISIN (prefer VaNi opportunity, then NSE over BSE).
