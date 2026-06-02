@@ -8,38 +8,15 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-// Load Razorpay checkout.js once
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if ((window as unknown as Record<string, unknown>)['Razorpay']) {
-      resolve()
-      return
-    }
+    if ((window as any)['Razorpay']) { resolve(); return }
     const script = document.createElement('script')
     script.src = 'https://checkout.razorpay.com/v1/checkout.js'
     script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Failed to load Razorpay checkout'))
+    script.onerror = () => reject(new Error('Failed to load Razorpay'))
     document.head.appendChild(script)
   })
-}
-
-export interface RazorpayOrder {
-  order_id: string
-  amount:   number   // paise
-  currency: string
-}
-
-export async function createOrder(tier: string, user_id: string): Promise<RazorpayOrder> {
-  const res = await fetch(`${PIPELINE_URL}/api/payments/create-order`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body:    JSON.stringify({ tier, user_id }),
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Order creation failed: ${err}`)
-  }
-  return res.json()
 }
 
 export interface UserInfo {
@@ -48,52 +25,67 @@ export interface UserInfo {
   phone?: string | null
 }
 
-export async function openCheckout(
-  order: RazorpayOrder,
+// ── Trial (one-time order) ──────────────────────────────────────────
+
+export async function startTrialCheckout(
+  user_id: string,
   user: UserInfo,
-  onSuccess: (paymentId: string, orderId: string, signature: string) => void,
+  onSuccess: () => void,
   onDismiss?: () => void,
 ): Promise<void> {
+  const res = await fetch(`${PIPELINE_URL}/api/payments/create-trial-order`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body:    JSON.stringify({ user_id }),
+  })
+  if (!res.ok) throw new Error(`Order creation failed: ${await res.text()}`)
+  const order = await res.json()
+
   await loadRazorpayScript()
-
-  const RazorpayConstructor = (window as unknown as Record<string, unknown>)['Razorpay'] as new (opts: unknown) => { open(): void }
-
-  const rzp = new RazorpayConstructor({
+  const RzpCtor = (window as any)['Razorpay'] as new (o: any) => { open(): void }
+  const rzp = new RzpCtor({
     key:         RAZORPAY_KEY_ID,
     order_id:    order.order_id,
     amount:      order.amount,
     currency:    order.currency,
-    name:        'Kāla-Drishti',
-    description: 'Market Intelligence Platform',
-    prefill: {
-      name:    user.name  ?? '',
-      email:   user.email ?? '',
-      contact: user.phone ?? '',
-    },
-    theme: { color: '#8b5cf6' },
-    handler(response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) {
-      onSuccess(response.razorpay_payment_id, response.razorpay_order_id, response.razorpay_signature)
-    },
-    modal: {
-      ondismiss() { onDismiss?.() },
-    },
+    name:        'DristiQ',
+    description: 'Trial — 3 days full access',
+    prefill:     { name: user.name ?? '', email: user.email ?? '' },
+    theme:       { color: '#8b5cf6' },
+    handler()   { onSuccess() },
+    modal:       { ondismiss() { onDismiss?.() } },
   })
   rzp.open()
 }
 
-export async function verifyPayment(
-  razorpay_payment_id: string,
-  razorpay_order_id:   string,
-  razorpay_signature:  string,
-): Promise<{ tier: string }> {
-  const res = await fetch(`${PIPELINE_URL}/api/payments/verify`, {
+// ── Quarterly / Annual (subscription) ──────────────────────────────
+
+export async function startSubscriptionCheckout(
+  tier: 'quarterly' | 'annual',
+  user_id: string,
+  user: UserInfo,
+  onSuccess: () => void,
+  onDismiss?: () => void,
+): Promise<void> {
+  const res = await fetch(`${PIPELINE_URL}/api/payments/create-subscription`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body:    JSON.stringify({ razorpay_payment_id, razorpay_order_id, razorpay_signature }),
+    body:    JSON.stringify({ tier, user_id }),
   })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Payment verification failed: ${err}`)
-  }
-  return res.json()
+  if (!res.ok) throw new Error(`Subscription creation failed: ${await res.text()}`)
+  const { subscription_id } = await res.json()
+
+  await loadRazorpayScript()
+  const RzpCtor = (window as any)['Razorpay'] as new (o: any) => { open(): void }
+  const rzp = new RzpCtor({
+    key:             RAZORPAY_KEY_ID,
+    subscription_id: subscription_id,
+    name:            'DristiQ',
+    description:     tier === 'quarterly' ? 'Quarterly — ₹1,999 / 90 days' : 'Annual — ₹4,999 / year',
+    prefill:         { name: user.name ?? '', email: user.email ?? '' },
+    theme:           { color: '#8b5cf6' },
+    handler()        { onSuccess() },
+    modal:           { ondismiss() { onDismiss?.() } },
+  })
+  rzp.open()
 }

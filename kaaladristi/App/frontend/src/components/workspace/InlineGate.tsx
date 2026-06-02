@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Lock, Zap, TrendingUp, BarChart2, Clock, Activity } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { createOrder, openCheckout, verifyPayment } from '@/services/razorpayService'
+import { startTrialCheckout, startSubscriptionCheckout } from '@/services/razorpayService'
 
 export type GateContext =
   | 'add_rule'
@@ -66,9 +66,28 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
   const { profile, refreshProfile } = useAuthStore()
   const [visible, setVisible]     = useState(false)
   const [paying, setPaying]       = useState(false)
+  const [activating, setActivating] = useState(false)
   const [payError, setPayError]   = useState<string | null>(null)
   const primaryBtnRef = useRef<HTMLButtonElement>(null)
   const triggerRef    = useRef<HTMLElement | null>(null)
+
+  async function pollProfileUntilUpgraded() {
+    setActivating(true)
+    const startTier = profile?.tier ?? 'free'
+    const deadline  = Date.now() + 30_000  // 30 second max
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2000))
+      await refreshProfile()
+      const current = useAuthStore.getState().profile
+      if (current?.tier && current.tier !== startTier && current.tier !== 'free') {
+        setActivating(false)
+        onDismiss()
+        navigate('/workspace')
+        return
+      }
+    }
+    setActivating(false)
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -96,19 +115,46 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
     setPaying(true)
     setPayError(null)
     try {
-      const order = await createOrder('trial', profile.id)
-      await openCheckout(
-        order,
-        { name: profile.full_name, email: profile.email, phone: profile.phone },
-        async (paymentId, orderId, signature) => {
-          try {
-            await verifyPayment(paymentId, orderId, signature)
-            await refreshProfile()
-            onDismiss()
-          } catch (err) {
-            setPayError(String(err))
-          }
-        },
+      await startTrialCheckout(
+        profile.id,
+        { name: profile.full_name, email: profile.email },
+        () => pollProfileUntilUpgraded(),
+        () => setPaying(false),
+      )
+    } catch (err) {
+      setPayError(String(err))
+      setPaying(false)
+    }
+  }
+
+  async function handleQuarterlyPurchase() {
+    if (!profile?.id) return
+    setPaying(true)
+    setPayError(null)
+    try {
+      await startSubscriptionCheckout(
+        'quarterly',
+        profile.id,
+        { name: profile.full_name, email: profile.email },
+        () => pollProfileUntilUpgraded(),
+        () => setPaying(false),
+      )
+    } catch (err) {
+      setPayError(String(err))
+      setPaying(false)
+    }
+  }
+
+  async function handleAnnualPurchase() {
+    if (!profile?.id) return
+    setPaying(true)
+    setPayError(null)
+    try {
+      await startSubscriptionCheckout(
+        'annual',
+        profile.id,
+        { name: profile.full_name, email: profile.email },
+        () => pollProfileUntilUpgraded(),
         () => setPaying(false),
       )
     } catch (err) {
@@ -202,32 +248,55 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
           </div>
         )}
 
+        {/* Activating spinner */}
+        {activating && (
+          <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 8, fontSize: 12,
+            background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+            color: 'var(--accent)', textAlign: 'center' }}>
+            Activating your plan…
+          </div>
+        )}
+
         {/* CTAs */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
             ref={primaryBtnRef}
             onClick={handleTrialPurchase}
-            disabled={paying}
+            disabled={paying || activating}
             style={{
               padding: '11px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-              background: paying
+              background: paying || activating
                 ? 'color-mix(in srgb, var(--accent) 30%, transparent)'
                 : 'color-mix(in srgb, var(--accent) 90%, transparent)',
-              border: 'none', color: '#fff', cursor: paying ? 'wait' : 'pointer',
+              border: 'none', color: '#fff', cursor: paying || activating ? 'wait' : 'pointer',
               transition: 'background .15s',
             }}>
             {paying ? 'Opening checkout…' : 'Try everything for 3 days · ₹199 one-time'}
           </button>
 
           <button
-            onClick={() => navigate('/pricing')}
+            onClick={handleQuarterlyPurchase}
+            disabled={paying || activating}
             style={{
-              padding: '9px 16px', borderRadius: 10, fontSize: 12,
+              padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 500,
               background: 'var(--surface-dim, rgba(255,255,255,.05))',
-              border: '1px solid var(--border)',
-              color: 'var(--text-muted)', cursor: 'pointer',
+              border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+              color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
             }}>
-            See all plans →
+            Quarterly · ₹1,999 / 90 days
+          </button>
+
+          <button
+            onClick={handleAnnualPurchase}
+            disabled={paying || activating}
+            style={{
+              padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 500,
+              background: 'var(--surface-dim, rgba(255,255,255,.05))',
+              border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+              color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
+            }}>
+            Annual · ₹4,999 / year
           </button>
 
           <button
