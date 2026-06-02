@@ -821,31 +821,35 @@ export default function CorrelationPage() {
                 </div>
               )}
 
-              {/* Walk mode CTA */}
-              <button
-                onClick={() => canWalk ? undefined : setWalkGateOpen(true)}
-                style={{
-                  width: '100%', padding: '10px', borderRadius: 8, fontSize: 12,
-                  border: '1px solid rgba(124,106,247,0.35)',
-                  background: canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)',
-                  color: canWalk ? '#8b7af8' : 'var(--text-muted)',
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  marginTop: 8, transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => {
-                  if (canWalk) {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.18)'
-                    ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.55)'
-                  }
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.background = canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)'
-                  ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.35)'
-                }}
-              >
-                {!canWalk && <span style={{ marginRight: 5 }}>🔒</span>}
-                Walk through all {result.n_instances} instances on chart →
-              </button>
+              {false && (
+                <>
+                  {/* Walk mode CTA */}
+                  <button
+                    onClick={() => canWalk ? undefined : setWalkGateOpen(true)}
+                    style={{
+                      width: '100%', padding: '10px', borderRadius: 8, fontSize: 12,
+                      border: '1px solid rgba(124,106,247,0.35)',
+                      background: canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)',
+                      color: canWalk ? '#8b7af8' : 'var(--text-muted)',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      marginTop: 8, transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      if (canWalk) {
+                        (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.18)'
+                        ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.55)'
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.background = canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)'
+                      ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.35)'
+                    }}
+                  >
+                    {!canWalk && <span style={{ marginRight: 5 }}>🔒</span>}
+                    Walk through all {result.n_instances} instances on chart →
+                  </button>
+                </>
+              )}
 
               {/* Dismiss */}
               <button
