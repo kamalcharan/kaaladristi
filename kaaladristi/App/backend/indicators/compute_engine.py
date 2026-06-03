@@ -680,10 +680,18 @@ def compute_rolling_metrics_for_date(db, trade_date, verbose: bool = False) -> i
     lifetime_high expanding max), computes via compute_rolling_range(), then
     batch-updates only the row for trade_date.
 
+    d365_pct_chng uses calendar-date bisect (not 252-bar count) matching
+    backfill_d365.py: finds closest trading day on or before trade_date - 365 days
+    within a ±30-day tolerance.
+
     Returns number of rows updated.
     """
     import psycopg2
     import psycopg2.extras
+    from bisect import bisect_left
+    from datetime import timedelta
+
+    D365_TOLERANCE = 30  # days
 
     conn = db._conn()
     total = 0
@@ -738,11 +746,32 @@ def compute_rolling_metrics_for_date(db, trade_date, verbose: bool = False) -> i
 
             record = {'id': int(df.loc[idx, 'id'])}
             for col in ROLLING_COLUMNS:
+                if col == 'd365_pct_chng':
+                    continue  # computed separately below via calendar-date bisect
                 if col in result:
                     val = result[col].iloc[idx]
                     record[col] = None if (val is None or (isinstance(val, float) and np.isnan(val))) else round(float(val), 4)
                 else:
                     record[col] = None
+
+            # ── d365 via calendar-date bisect (mirrors backfill_d365.py) ──
+            dates_list  = [r['trade_date'] for r in rows]   # already datetime.date from psycopg2
+            closes_list = [float(r['close']) if r['close'] is not None else None for r in rows]
+            from datetime import date as _date
+            td_date = trade_date if isinstance(trade_date, _date) else trade_date.date()
+            target  = td_date - timedelta(days=365)
+            j = bisect_left(dates_list, target, 0, idx)
+            if j > 0 and (j >= idx or dates_list[j] > target):
+                j -= 1
+            d365 = None
+            if 0 <= j < idx:
+                diff = abs((dates_list[j] - target).days)
+                past_close = closes_list[j]
+                if diff <= D365_TOLERANCE and past_close and past_close != 0:
+                    cur_close = closes_list[idx]
+                    if cur_close is not None:
+                        d365 = round((cur_close - past_close) / past_close * 100, 2)
+            record['d365_pct_chng'] = d365
 
             batch.append(record)
 
