@@ -208,9 +208,35 @@ function MrsPill({
   );
 }
 
+// ── Stage Badge ───────────────────────────────────────────────
+
+export function StageBadge({ stage }: { stage: string }) {
+  const isS2 = stage === 'S2';
+  const isS1 = stage === 'S1';
+  return (
+    <span style={{
+      fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '2px 7px',
+      borderRadius: '4px', fontWeight: 700,
+      background: isS2 ? 'rgba(34,197,94,0.1)' : isS1 ? 'rgba(59,130,246,0.08)' : 'rgba(249,115,22,0.08)',
+      color: isS2 ? 'var(--bull)' : isS1 ? '#60a5fa' : '#fb923c',
+      border: `1px solid ${isS2 ? 'rgba(34,197,94,0.2)' : isS1 ? 'rgba(59,130,246,0.2)' : 'rgba(249,115,22,0.2)'}`,
+    }}>
+      {stage}
+    </span>
+  );
+}
+
 // ── Stock Card — 3-zone grid layout ──────────────────────────
 
-export function StockCard({ stock }: { stock: ScanStock }) {
+export function StockCard({
+  stock,
+  stageBadge,
+  extraRight,
+}: {
+  stock: ScanStock;
+  stageBadge?: string;
+  extraRight?: React.ReactNode;
+}) {
   const navigate = useNavigate();
   const heroName = displaySymbol(stock);
   const subName = displaySubName(stock);
@@ -266,6 +292,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
               {flowCfg.label}
             </span>
           )}
+          {stageBadge && <StageBadge stage={stageBadge} />}
           {stock.vaniOpportunity && <VaniBadge />}
         </div>
 
@@ -393,7 +420,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         </div>
       </div>
 
-      {/* Zone 3: RS zone pill + 52W% */}
+      {/* Zone 3: RS zone pill + 52W% + screener-specific extra */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
         {stock.magic_rs_zone && (
           <span style={zonePillStyle(stock.magic_rs_zone)}>
@@ -408,6 +435,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
             {stock.pctBelow52wHigh.toFixed(1)}% off high
           </span>
         )}
+        {extraRight}
       </div>
     </div>
   </ScanCardWrapper>

@@ -718,13 +718,15 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
 
 @app.get('/api/scan/presets')
 def scan_presets():
-    """Return all active scan preset definitions ordered by sort_order."""
+    """Return all active scan preset definitions ordered by category_sort, sort_order."""
     conn = _conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT id,name,description,tooltip,sort_order,result_limit,is_active "
-                "FROM kd_scan_presets WHERE is_active = true ORDER BY sort_order"
+                "SELECT id,name,description,tooltip,sort_order,result_limit,is_active,"
+                "       category,category_label,category_color,category_sort,universe,timeframe "
+                "FROM kd_scan_presets WHERE is_active = true "
+                "ORDER BY category_sort, sort_order"
             )
             return cur.fetchall() or []
     finally:
