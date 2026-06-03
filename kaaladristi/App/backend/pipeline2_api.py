@@ -733,6 +733,211 @@ def scan_presets():
         conn.close()
 
 
+# ── Stage 2 Leaders scan ───────────────────────────────────────────────────
+
+@app.get('/api/scan/run/stage_2_leaders')
+def scan_stage_2_leaders(
+    exchange: str = 'combined',
+    industry: str = '',
+    mcap_min: float = 0,
+    mcap_max: float = 0,
+    pct_ath_min: float = 0,
+    rs_min: float = 0,
+    supertrend: str = '',
+    sort: str = 'magic_rs',
+    order: str = 'desc',
+):
+    """Stage 2 Leaders (Weinstein) — server-side scan with LAG-based SMA_200 slope."""
+    VALID_SORT = {'magic_rs', 'close', 'rss_spread', 'pct_of_ath', 'mcap_cr'}
+    sort = sort if sort in VALID_SORT else 'magic_rs'
+    order_dir = 'DESC' if order != 'asc' else 'ASC'
+
+    params: list = []
+
+    exchange_filter = ''
+    if exchange == 'NSE':
+        exchange_filter = "AND es.exchange = 'NSE'"
+    elif exchange == 'BSE':
+        exchange_filter = "AND es.exchange = 'BSE'"
+
+    industry_filter = ''
+    if industry:
+        params.append(industry)
+        industry_filter = f"AND es.industry = ${len(params)}"
+
+    mcap_min_filter = ''
+    if mcap_min > 0:
+        params.append(mcap_min)
+        mcap_min_filter = f"AND es.mcap_cr >= ${len(params)}"
+
+    mcap_max_filter = ''
+    if mcap_max > 0:
+        params.append(mcap_max)
+        mcap_max_filter = f"AND es.mcap_cr <= ${len(params)}"
+
+    pct_ath_filter = ''
+    if pct_ath_min > 0:
+        params.append(pct_ath_min)
+        pct_ath_filter = f"AND (e.close / NULLIF(e.lifetime_high, 0) * 100) >= ${len(params)}"
+
+    rs_filter = ''
+    if rs_min > 0:
+        params.append(rs_min)
+        rs_filter = f"AND e.magic_rs >= ${len(params)}"
+
+    supertrend_filter = ''
+    if supertrend == 'bull':
+        supertrend_filter = "AND e.supertrend_dir = 1"
+    elif supertrend == 'bear':
+        supertrend_filter = "AND e.supertrend_dir = -1"
+
+    sql = f"""
+WITH latest_date AS (
+    SELECT MAX(trade_date) AS td FROM km_equity_eod
+),
+deduped AS (
+    SELECT DISTINCT ON (es.isin)
+        e.equity_id,
+        e.trade_date,
+        e.close,
+        e.sma_50,
+        e.sma_150,
+        e.sma_200,
+        e.magic_rs,
+        e.magic_rs_zone,
+        e.flow_type,
+        e.sniper_inst,
+        e.supertrend_dir,
+        e.rss_spread,
+        e.rvol,
+        e.w52_high,
+        e.w52_low,
+        e.lifetime_high,
+        e.avg_amt_5d,
+        e.avg_amt_22d,
+        e.delivery_surge_x,
+        es.symbol,
+        es.company_name,
+        es.industry,
+        es.exchange,
+        es.isin,
+        es.mcap_cr
+    FROM km_equity_eod e
+    JOIN km_equity_symbols es ON e.equity_id = es.id
+    CROSS JOIN latest_date ld
+    WHERE e.trade_date = ld.td
+      AND es.is_active = true
+      {exchange_filter}
+      {industry_filter}
+      {mcap_min_filter}
+      {mcap_max_filter}
+    ORDER BY es.isin,
+             CASE es.exchange WHEN 'NSE' THEN 0 ELSE 1 END
+),
+with_slope AS (
+    SELECT
+        d.*,
+        LAG(e2.sma_200, 20) OVER (PARTITION BY d.isin ORDER BY e2.trade_date) AS sma200_20d_ago,
+        LAG(e2.sma_200, 80) OVER (PARTITION BY d.isin ORDER BY e2.trade_date) AS sma200_80d_ago
+    FROM deduped d
+    JOIN km_equity_eod e2 ON e2.equity_id = d.equity_id
+    WHERE e2.trade_date >= (SELECT td - INTERVAL '120 days' FROM latest_date)
+),
+latest_slope AS (
+    SELECT DISTINCT ON (equity_id)
+        equity_id, sma200_20d_ago, sma200_80d_ago
+    FROM with_slope
+    ORDER BY equity_id, trade_date DESC
+),
+filtered AS (
+    SELECT
+        d.*,
+        ls.sma200_20d_ago,
+        ls.sma200_80d_ago,
+        CASE WHEN d.lifetime_high > 0 THEN ROUND((d.close / d.lifetime_high * 100)::NUMERIC, 1) END AS pct_of_ath,
+        CASE WHEN d.w52_low > 0 THEN ROUND((d.close / d.w52_low * 100)::NUMERIC, 1) END AS pct_of_52wl,
+        CASE
+            WHEN d.avg_amt_5d IS NOT NULL AND d.avg_amt_22d IS NOT NULL
+                 AND d.avg_amt_22d > 0 AND d.avg_amt_5d > (d.avg_amt_22d * 1.5)
+                 AND d.magic_rs_zone IN ('Strong Bull', 'Mild Bull')
+            THEN true ELSE false
+        END AS is_vani
+    FROM deduped d
+    JOIN latest_slope ls ON d.equity_id = ls.equity_id
+    WHERE
+        -- Stage 2 core: price above all 3 MAs
+        d.close > d.sma_50
+        AND d.close > d.sma_150
+        AND d.close > d.sma_200
+        -- MA ordering: sma_50 > sma_150 > sma_200
+        AND d.sma_50 > d.sma_150
+        AND d.sma_150 > d.sma_200
+        -- SMA_200 is rising (compare to 20 days ago)
+        AND d.sma_200 > COALESCE(ls.sma200_20d_ago, 0)
+        -- Not extended from lows (w52_low gate)
+        AND d.close < COALESCE(d.w52_low * 1.25, d.close + 1)
+        {pct_ath_filter}
+        {rs_filter}
+        {supertrend_filter}
+)
+SELECT
+    equity_id,
+    trade_date,
+    symbol,
+    company_name,
+    industry,
+    exchange,
+    isin,
+    mcap_cr,
+    close,
+    sma_50,
+    sma_150,
+    sma_200,
+    sma200_20d_ago,
+    sma200_80d_ago,
+    magic_rs,
+    magic_rs_zone,
+    flow_type,
+    sniper_inst,
+    supertrend_dir,
+    rss_spread,
+    rvol,
+    w52_high,
+    w52_low,
+    lifetime_high,
+    avg_amt_5d,
+    avg_amt_22d,
+    delivery_surge_x,
+    pct_of_ath,
+    pct_of_52wl,
+    is_vani
+FROM filtered
+ORDER BY {sort} {order_dir} NULLS LAST
+LIMIT 200
+"""
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            stocks = []
+            for r in rows:
+                row = dict(r)
+                row['trade_date'] = row['trade_date'].isoformat() if row.get('trade_date') else None
+                row['pct_of_ath'] = float(row['pct_of_ath']) if row.get('pct_of_ath') else None
+                row['pct_of_52wl'] = float(row['pct_of_52wl']) if row.get('pct_of_52wl') else None
+                row['is_vani'] = bool(row.get('is_vani', False))
+                stocks.append(row)
+            vani_count = sum(1 for s in stocks if s['is_vani'])
+            return {
+                'stocks': stocks,
+                'total': len(stocks),
+                'vani_count': vani_count,
+            }
+    finally:
+        conn.close()
+
+
 # ── Shared helper ─────────────────────────────────────────────────────────
 
 def _db_query(sql: str, params: tuple = ()) -> list[dict]:
