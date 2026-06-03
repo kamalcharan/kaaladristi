@@ -2,20 +2,24 @@
 d365_pct_chng Backfill Script
 ==============================
 Computes d365_pct_chng for all rows in km_equity_eod using actual calendar
-dates: for each row, finds the close price closest to exactly 365 days ago
-(not 252 bars), then computes (current - past) / past * 100.
+dates: for each row finds the closest trading-day close on or before
+365 calendar days ago (tolerance: within 30 days), then computes
+(current - past) / past * 100.
+
+Uses bisect_left for O(log n) date lookup per row.
 
 Usage:
     cd App/backend
     python scripts/backfill_d365.py              # all equities
-    python scripts/backfill_d365.py TITAN        # single symbol (test)
     python scripts/backfill_d365.py --verify     # just run verification
 """
 
 import sys
 import os
 import time
-from datetime import date, timedelta
+from bisect import bisect_left
+from datetime import timedelta
+from collections import defaultdict
 
 import psycopg2
 import psycopg2.extras
@@ -23,107 +27,15 @@ import psycopg2.extras
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
 
-BATCH_SIZE = 5000
-TARGET_DAYS = 365
+BATCH_SIZE   = 5000
+TARGET_DAYS  = 365
+MAX_LOOKBACK = 30   # days tolerance
 
 
 def get_conn():
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
-    return psycopg2.connect(DATABASE_URL, connect_timeout=15)
-
-
-def load_equity_ids(conn, symbol_filter=None):
-    with conn.cursor() as cur:
-        if symbol_filter:
-            cur.execute(
-                "SELECT id FROM km_equity_symbols WHERE symbol = %s",
-                [symbol_filter],
-            )
-        else:
-            cur.execute(
-                "SELECT DISTINCT equity_id AS id FROM km_equity_eod ORDER BY equity_id"
-            )
-        return [r[0] for r in cur.fetchall()]
-
-
-def load_rows_for_equity(conn, equity_id):
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT id, trade_date, close
-            FROM km_equity_eod
-            WHERE equity_id = %s AND close IS NOT NULL
-            ORDER BY trade_date ASC
-            """,
-            [equity_id],
-        )
-        return cur.fetchall()
-
-
-def compute_d365(rows):
-    """
-    For each row find the close price closest to exactly 365 calendar days ago.
-    Returns list of (id, d365_value) — skips rows with no past reference.
-    """
-    if not rows:
-        return []
-
-    dates = [r['trade_date'] for r in rows]
-    closes = {r['trade_date']: float(r['close']) for r in rows}
-    results = []
-
-    for i, row in enumerate(rows):
-        td = row['trade_date']
-        target = td - timedelta(days=TARGET_DAYS)
-
-        # Binary search for closest date to target
-        lo, hi = 0, i - 1
-        if hi < 0:
-            continue
-
-        best_date = None
-        best_diff = None
-
-        while lo <= hi:
-            mid = (lo + hi) // 2
-            d = dates[mid]
-            diff = abs((d - target).days)
-            if best_diff is None or diff < best_diff:
-                best_diff = diff
-                best_date = d
-            if d < target:
-                lo = mid + 1
-            elif d > target:
-                hi = mid - 1
-            else:
-                break
-
-        # Only use if within 10 trading days (~14 calendar days) of target
-        if best_date is None or best_diff > 14:
-            continue
-
-        past_close = closes[best_date]
-        if past_close == 0:
-            continue
-
-        d365 = round((float(row['close']) - past_close) / past_close * 100, 2)
-        results.append((row['id'], d365))
-
-    return results
-
-
-def batch_update(conn, updates):
-    """updates: list of (d365_pct_chng, id)"""
-    sql = """
-        UPDATE km_equity_eod AS e
-        SET d365_pct_chng = v.d365
-        FROM (VALUES %s) AS v(d365, id)
-        WHERE e.id = v.id
-    """
-    with conn.cursor() as cur:
-        psycopg2.extras.execute_values(cur, sql, updates, page_size=BATCH_SIZE)
-    conn.commit()
+    return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
 def run_verification(conn):
@@ -131,27 +43,26 @@ def run_verification(conn):
         cur.execute(
             """
             SELECT
-              COUNT(*)                 AS total,
-              COUNT(d365_pct_chng)     AS with_d365,
-              MIN(d365_pct_chng)       AS min_val,
-              MAX(d365_pct_chng)       AS max_val,
-              ROUND(AVG(d365_pct_chng)::numeric, 2) AS avg_val
+              COUNT(*)                                              AS total,
+              COUNT(d365_pct_chng)                                  AS filled,
+              ROUND(
+                COUNT(d365_pct_chng)::numeric / COUNT(*)::numeric * 100, 1
+              )                                                     AS fill_pct
             FROM km_equity_eod
             WHERE trade_date = (SELECT MAX(trade_date) FROM km_equity_eod)
             """
         )
         row = dict(cur.fetchone())
 
-    print(f'\n── Verification (latest date) ────────────────')
-    print(f'  Total rows     : {row["total"]}')
-    print(f'  With d365      : {row["with_d365"]}')
-    print(f'  Min / Max / Avg: {row["min_val"]} / {row["max_val"]} / {row["avg_val"]}')
+    print(f'\n── Verification (latest date) ────────────────────')
+    print(f'  Total rows : {row["total"]}')
+    print(f'  Filled     : {row["filled"]}')
+    print(f'  Fill %     : {row["fill_pct"]}%')
 
-    # Spot check
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT s.symbol, e.close, e.d365_pct_chng, e.d30_pct_chng, e.trade_date
+            SELECT s.symbol, e.close, e.d30_pct_chng, e.d365_pct_chng
             FROM km_equity_eod e
             JOIN km_equity_symbols s ON e.equity_id = s.id
             WHERE e.trade_date = (SELECT MAX(trade_date) FROM km_equity_eod)
@@ -166,7 +77,7 @@ def run_verification(conn):
         print(f'  {"Symbol":<14} {"Close":>8}  {"d30%":>8}  {"d365%":>8}')
         print(f'  {"-"*44}')
         for r in rows:
-            d30  = f'{r["d30_pct_chng"]:>8.2f}' if r['d30_pct_chng']  is not None else f'{"NULL":>8}'
+            d30  = f'{r["d30_pct_chng"]:>8.2f}'  if r['d30_pct_chng']  is not None else f'{"NULL":>8}'
             d365 = f'{r["d365_pct_chng"]:>8.2f}' if r['d365_pct_chng'] is not None else f'{"NULL":>8}'
             print(f'  {r["symbol"]:<14} {float(r["close"]):>8.2f}  {d30}  {d365}')
 
@@ -174,7 +85,6 @@ def run_verification(conn):
 def main():
     args        = sys.argv[1:]
     verify_only = '--verify' in args
-    symbol      = next((a for a in args if not a.startswith('--')), None)
 
     conn = get_conn()
 
@@ -183,54 +93,100 @@ def main():
         conn.close()
         return
 
-    print(f'd365_pct_chng backfill — calendar-date 365-day lookback, batch={BATCH_SIZE}')
-    if symbol:
-        print(f'  Mode: single symbol "{symbol}"')
-    else:
-        print(f'  Mode: all equities')
+    print(f'd365_pct_chng backfill — calendar 365-day lookback, batch={BATCH_SIZE}')
+    print(f'  Loading all rows from km_equity_eod...')
 
-    equity_ids = load_equity_ids(conn, symbol_filter=symbol)
-    if not equity_ids:
-        print('  No equities found')
-        conn.close()
-        return
+    t0 = time.time()
 
-    total_symbols = len(equity_ids)
-    print(f'  Processing {total_symbols} equity ID(s)...\n')
+    # ── Step 1: fetch all rows in one query ────────────────────────────────
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT id, equity_id, trade_date, close
+            FROM km_equity_eod
+            WHERE close IS NOT NULL
+            ORDER BY equity_id, trade_date ASC
+            """
+        )
+        all_rows = cur.fetchall()
 
-    t0            = time.time()
+    print(f'  Fetched {len(all_rows):,} rows in {time.time()-t0:.1f}s')
+
+    # ── Step 2: group by equity_id ─────────────────────────────────────────
+    groups = defaultdict(list)
+    for row in all_rows:
+        groups[row['equity_id']].append(row)
+
+    print(f'  {len(groups):,} equity groups found. Computing d365...\n')
+
+    # ── Step 3: compute per group ──────────────────────────────────────────
+    pending_batch = []   # (d365_value, row_id)
     total_rows    = 0
-    pending_batch = []   # (d365_pct_chng, id)
+    rows_computed = 0
 
-    for i, eid in enumerate(equity_ids, 1):
-        rows    = load_rows_for_equity(conn, eid)
-        results = compute_d365(rows)
+    t1 = time.time()
 
-        for (row_id, d365_val) in results:
-            pending_batch.append((d365_val, row_id))
+    for equity_id, rows in groups.items():
+        dates  = [r['trade_date'] for r in rows]
+        closes = [float(r['close']) for r in rows]
+
+        for i, row in enumerate(rows):
+            target_date = row['trade_date'] - timedelta(days=TARGET_DAYS)
+
+            # bisect_left: find leftmost position where dates[j] >= target_date
+            j = bisect_left(dates, target_date, 0, i)
+
+            # Step back to last date <= target_date
+            if j > 0 and (j >= i or dates[j] > target_date):
+                j -= 1
+
+            if j < 0 or j >= i:
+                continue
+
+            # Tolerance check: past date must be within MAX_LOOKBACK days of target
+            diff = abs((dates[j] - target_date).days)
+            if diff > MAX_LOOKBACK:
+                continue
+
+            past_close = closes[j]
+            if past_close == 0:
+                continue
+
+            d365 = round((closes[i] - past_close) / past_close * 100, 2)
+            pending_batch.append((d365, row['id']))
+            rows_computed += 1
 
         if len(pending_batch) >= BATCH_SIZE:
-            batch_update(conn, pending_batch)
-            total_rows    += len(pending_batch)
+            sql = """
+                UPDATE km_equity_eod AS e
+                SET d365_pct_chng = v.d365
+                FROM (VALUES %s) AS v(d365, id)
+                WHERE e.id = v.id
+            """
+            with conn.cursor() as cur:
+                psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=BATCH_SIZE)
+            conn.commit()
+            total_rows   += len(pending_batch)
             pending_batch  = []
 
-        if i % 500 == 0 or i == total_symbols:
-            elapsed = time.time() - t0
-            rate    = i / elapsed
-            eta     = (total_symbols - i) / rate if rate > 0 else 0
-            print(
-                f'  [{i:>5}/{total_symbols}]  '
-                f'{total_rows + len(pending_batch):>7} rows staged  '
-                f'{elapsed:>5.0f}s elapsed  '
-                f'ETA {eta:>4.0f}s'
-            )
+            elapsed = time.time() - t1
+            print(f'  {total_rows:>8,} rows written  ({elapsed:.0f}s)')
 
+    # Flush remainder
     if pending_batch:
-        batch_update(conn, pending_batch)
+        sql = """
+            UPDATE km_equity_eod AS e
+            SET d365_pct_chng = v.d365
+            FROM (VALUES %s) AS v(d365, id)
+            WHERE e.id = v.id
+        """
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=BATCH_SIZE)
+        conn.commit()
         total_rows += len(pending_batch)
 
     elapsed = time.time() - t0
-    print(f'\n  Done — {total_rows} rows updated in {elapsed:.1f}s')
+    print(f'\n  Done — {total_rows:,} rows updated in {elapsed:.1f}s')
 
     run_verification(conn)
     conn.close()
