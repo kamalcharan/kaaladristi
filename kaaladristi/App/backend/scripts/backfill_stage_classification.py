@@ -165,9 +165,9 @@ def process_equity(rows):
 def flush_batch(conn, batch):
     sql = """
         UPDATE km_equity_eod
-        SET sma200_rising = data.rising,
+        SET sma200_rising = data.rising::boolean,
             stage         = data.stage,
-            is_vani_s2    = data.is_vani
+            is_vani_s2    = data.is_vani::boolean
         FROM (VALUES %s) AS data(row_id, rising, stage, is_vani)
         WHERE km_equity_eod.id = data.row_id::int
     """
