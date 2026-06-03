@@ -809,13 +809,11 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
     const sniperSlope = sniperNow - sniper5;
     if (sniperSlope <= 0) continue;
 
-    // rss_value recovering from < 30 (now > 30)
+    // rss_value must be positive and rising (not requiring prior dip below 30)
     const rssNow = stock.rss_value ?? 0;
-    const hadLowRss = history.slice(0, 6).some((h) => (h.rss_value ?? 100) < 30);
-    if (rssNow <= 30 || !hadLowRss) continue;
+    if (rssNow <= 0) continue;
 
-    const rssRecovery = rssNow - 30;
-    const score = sniperSlope * rssRecovery;
+    const score = sniperSlope * (rssNow + 1);
     results.push({ ...stock, _sortScore: score } as ScanStock & { _sortScore: number });
   }
 
@@ -1100,11 +1098,10 @@ function scanStage2Leaders(bundle: ScanDataBundle): ScanStock[] {
     if (eod.close <= sma50)     continue;  // price above SMA_50
     if (eod.close <= 30)        continue;  // minimum price filter
 
-    // 52-week range sweet spot — well off the low, not at extreme high
-    if (w52Low  && eod.low  < w52Low  * 1.25) continue;
-    if (w52High && eod.high > w52High * 0.75) continue;
+    // 52-week range: must be at least 25% above 52w-low (well off the base)
+    if (w52Low && eod.close < w52Low * 1.25) continue;
 
-    // Not too far from all-time high (within 75% of ATH = still in strong uptrend)
+    // Not too far from all-time high (price >= 75% of ATH confirms uptrend intact)
     const lifetimeHigh = eod.lifetime_high;
     if (lifetimeHigh && eod.close < lifetimeHigh * 0.75) continue;
 
