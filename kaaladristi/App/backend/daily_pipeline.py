@@ -59,6 +59,7 @@ from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
+from indicators.compute_engine import compute_rolling_metrics_for_date
 
 
 def is_week_end(d: date) -> bool:
@@ -341,6 +342,17 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.complete('equity_monthly', rows=em_count)
         except Exception as e:
             tracker.fail('equity_monthly', str(e))
+
+    # ── Step 6g: Rolling metrics (d30, d365, avg_amt, delivery_surge, w52, lifetime_high) ──
+    # These columns are not computed by the PostgreSQL RPC (compute_all_pending_indicators).
+    # Run a dedicated Python step so they are always populated for today's rows.
+    if not skip_indicators:
+        tracker.start('rolling_metrics')
+        try:
+            rm_count = compute_rolling_metrics_for_date(db, trade_date, verbose=True)
+            tracker.complete('rolling_metrics', rows=rm_count)
+        except Exception as e:
+            tracker.fail('rolling_metrics', str(e))
 
     # ── Step 7: Refresh views ──
     tracker.start('views')

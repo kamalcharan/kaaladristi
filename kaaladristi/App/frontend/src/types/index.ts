@@ -491,6 +491,12 @@ export interface ScanStock {
   atr_14: number | null;
   delivery_pct: number | null;
   w52_high: number | null;
+  // Stage 2 / Weinstein additions
+  sma_50: number | null;
+  sma_200: number | null;
+  w52_low: number | null;
+  supertrend_dir: number | null;
+  lifetime_high: number | null;
   // Sprint 3 additions
   open: number | null;
   high: number | null;
@@ -607,6 +613,12 @@ export interface EquityEodSnapshot {
   delivery_pct: number | null;
   delivery_qty: number | null;
   w52_high: number | null;
+  // Stage 2 / Weinstein additions
+  sma_50: number | null;
+  sma_200: number | null;
+  w52_low: number | null;
+  supertrend_dir: number | null;
+  lifetime_high: number | null;
 }
 
 // ── Astro Daily Signal (from km_astro_daily_signal) ──

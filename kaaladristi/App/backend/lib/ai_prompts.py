@@ -290,8 +290,8 @@ _VANI_MORNING_BRIEF_SYSTEM = (
     "5. Allowed: historically, instances show, when active, has appeared, on record, observed, marks\n"
     "6. If historical instances = 0 — say \"No historical data computed yet for this rule.\"\n"
     "7. Never truncate the JSON — one card only, always complete\n"
-    "8. Never use: potential, may, could, might — replace with: historically marks, has been associated with, instances show\n"
-    "9. Panchang card: Do not use word \"associated\". State facts directly.\n"
+    "8. Never use: potential, may, could, might — replace with: historically marks, instances show, on record, has appeared\n"
+    "9. Never use the word \"associated\" in any card type. State facts directly.\n"
     "10. Astro rule: First sentence what it IS. Second sentence what condition it marks historically."
 )
 

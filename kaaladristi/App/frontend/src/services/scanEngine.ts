@@ -87,6 +87,14 @@ export const SCAN_PRESETS: ScanDefinition[] = [
     limit: 50,
     universe: 'NSE_ONLY',
   },
+  {
+    id: 'stage_2_leaders',
+    name: 'Stage 2 Leaders',
+    description: 'Stocks in Weinstein Stage 2 — above rising SMA_200, golden cross confirmed, strong relative strength',
+    tooltip: 'Price > rising SMA_200 + SMA_50 > SMA_200 (golden cross) + in sweet spot of 52-week range. VaNi gate: RS > 80, RVOL > 2.5, RSI 50–75, supertrend up, fresh longs or short covering.',
+    limit: 50,
+    universe: 'NSE_BSE',
+  },
 ];
 
 // ── Data Loading ───────────────────────────────────────────────
@@ -208,7 +216,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -400,6 +408,11 @@ async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<Scan
     delivery_pct: r.avg_deliv_pct ?? null, // remap
     delivery_qty: r.deliv_qty ?? null,     // remap
     w52_high: r.w52_high ?? null,
+    sma_50: null,
+    sma_200: null,
+    w52_low: null,
+    supertrend_dir: null,
+    lifetime_high: null,
   }));
 
   // Build industry data
@@ -657,6 +670,11 @@ function buildScanStock(
     atr_14: atr14,
     delivery_pct: eod.delivery_pct ?? null,
     w52_high: eod.w52_high ?? null,
+    sma_50: eod.sma_50 ?? null,
+    sma_200: eod.sma_200 ?? null,
+    w52_low: eod.w52_low ?? null,
+    supertrend_dir: eod.supertrend_dir ?? null,
+    lifetime_high: eod.lifetime_high ?? null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
@@ -791,13 +809,11 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
     const sniperSlope = sniperNow - sniper5;
     if (sniperSlope <= 0) continue;
 
-    // rss_value recovering from < 30 (now > 30)
+    // rss_value must be positive and rising (not requiring prior dip below 30)
     const rssNow = stock.rss_value ?? 0;
-    const hadLowRss = history.slice(0, 6).some((h) => (h.rss_value ?? 100) < 30);
-    if (rssNow <= 30 || !hadLowRss) continue;
+    if (rssNow <= 0) continue;
 
-    const rssRecovery = rssNow - 30;
-    const score = sniperSlope * rssRecovery;
+    const score = sniperSlope * (rssNow + 1);
     results.push({ ...stock, _sortScore: score } as ScanStock & { _sortScore: number });
   }
 
@@ -1057,6 +1073,74 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   return results.sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0));
 }
 
+/** Scan 9: Stage 2 Leaders (Weinstein Stage 2) */
+function scanStage2Leaders(bundle: ScanDataBundle): ScanStock[] {
+  const results: ScanStock[] = [];
+  // Process only the NSE-preferred equity_id per ISIN to avoid BSE numeric-code duplicates.
+  const nsePreferred = buildNsePreferredIds(bundle.symbols);
+
+  for (const [id] of bundle.latestEod) {
+    if (!nsePreferred.has(id)) continue;
+    const eod = bundle.latestEod.get(id);
+    if (!eod) continue;
+
+    const sma200 = eod.sma_200;
+    const sma50  = eod.sma_50;
+    const w52Low = eod.w52_low;
+    const w52High = eod.w52_high;
+
+    // All core indicators must be computed
+    if (!sma200 || !sma50) continue;
+
+    // Core Stage 2 filters
+    if (eod.close <= sma200)    continue;  // price above SMA_200
+    if (sma50   <= sma200)      continue;  // golden cross: SMA_50 > SMA_200
+    if (eod.close <= sma50)     continue;  // price above SMA_50
+    if (eod.close <= 30)        continue;  // minimum price filter
+
+    // 52-week range: must be at least 25% above 52w-low (well off the base)
+    if (w52Low && eod.close < w52Low * 1.25) continue;
+
+    // Not too far from all-time high (price >= 75% of ATH confirms uptrend intact)
+    const lifetimeHigh = eod.lifetime_high;
+    if (lifetimeHigh && eod.close < lifetimeHigh * 0.75) continue;
+
+    // SMA_200 must be rising (vs 20, 80, or 100 bars ago — any one qualifies)
+    const history = bundle.eodHistory.get(id) ?? [];
+    const sma200_20  = history[20]?.sma_200  ?? null;
+    const sma200_80  = history[80]?.sma_200  ?? null;
+    const sma200_100 = history[100]?.sma_200 ?? null;
+
+    const sma200Rising =
+      (sma200_20  != null && sma200 > sma200_20)  ||
+      (sma200_80  != null && sma200 > sma200_80)  ||
+      (sma200_100 != null && sma200 > sma200_100);
+
+    if (!sma200Rising) continue;
+
+    const stock = buildScanStock(id, bundle, 'stage_2_leaders');
+    if (!stock) continue;
+
+    // VaNi opportunity — highest conviction Stage 2 entries
+    const pctOfLifetimeHigh = lifetimeHigh && lifetimeHigh > 0 ? eod.close / lifetimeHigh : null;
+    const pctOfW52High      = w52High      && w52High      > 0 ? eod.close / w52High      : null;
+
+    const vaniOpportunity =
+      (stock.magic_rs ?? 0) > 40 &&
+      (stock.rvol ?? 0) > 1.5 &&
+      (stock.rsi_14 ?? 0) >= 50 && (stock.rsi_14 ?? 0) <= 80 &&
+      (pctOfLifetimeHigh === null || pctOfLifetimeHigh >= 0.75) &&
+      (pctOfW52High      === null || pctOfW52High      >= 0.85) &&
+      eod.supertrend_dir === 1;
+
+    results.push({ ...stock, vaniOpportunity });
+  }
+
+  return results
+    .sort((a, b) => (b.magic_rs ?? 0) - (a.magic_rs ?? 0))
+    .slice(0, 50);
+}
+
 // ── Public API ─────────────────────────────────────────────────
 
 const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
@@ -1068,7 +1152,28 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   distribution_warning: scanDistributionWarning,
   conviction_flow: scanConvictionFlow,
   breakout_surge: scanBreakoutSurge,
+  stage_2_leaders: scanStage2Leaders,
 };
+
+/**
+ * Build a Set of equity_ids that are the NSE-preferred representative per ISIN.
+ * For dual-listed stocks this picks the NSE row; for NSE-only or BSE-only it picks whichever exists.
+ * Used by scan functions to avoid processing BSE numeric-code duplicates.
+ */
+export function buildNsePreferredIds(symbols: Map<number, EquitySymbolRow>): Set<number> {
+  const isinToId = new Map<string, { id: number; exchange: string }>();
+  for (const [id, sym] of symbols) {
+    const isin = sym.isin;
+    if (!isin) continue;
+    const existing = isinToId.get(isin);
+    if (!existing || sym.exchange === 'NSE') {
+      isinToId.set(isin, { id, exchange: sym.exchange ?? '' });
+    }
+  }
+  const ids = new Set<number>();
+  for (const v of isinToId.values()) ids.add(v.id);
+  return ids;
+}
 
 /**
  * Deduplicate scan results by ISIN (prefer VaNi opportunity, then NSE over BSE).
@@ -1150,7 +1255,7 @@ export interface ScanCountsResult {
   latestDate: string | null;
 }
 
-/** Return result counts for all 8 scans — uses shared cached data */
+/** Return result counts for all 9 scans — uses shared cached data */
 export async function getAllScanCounts(
   exchangeFilter: ExchangeFilter = 'combined',
   timeframe: ScanTimeframe = 'daily',
@@ -1349,6 +1454,11 @@ function buildStockFromEod(
     atr_14: null,
     delivery_pct: null,
     w52_high: null,
+    sma_50: null,
+    sma_200: null,
+    w52_low: null,
+    supertrend_dir: null,
+    lifetime_high: null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,

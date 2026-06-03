@@ -101,7 +101,7 @@ export default function WorkspacePage() {
           )}
 
           {/* VaNi confluence pills */}
-          {vaniCorrelations.map(c => {
+          {vaniCorrelations.slice(0, 4).map(c => {
             const key    = `${c.item_a}:${c.item_b}`
             const active = c.currently_active
             return (
