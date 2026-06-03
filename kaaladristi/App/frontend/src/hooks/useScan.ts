@@ -31,7 +31,7 @@ export interface Stage2Stock {
   avg_amt_22d: number | null;
   delivery_surge_x: number | null;
   pct_of_ath: number | null;
-  pct_of_52wl: number | null;
+  pct_of_52wh: number | null;
   is_vani: boolean;
 }
 
