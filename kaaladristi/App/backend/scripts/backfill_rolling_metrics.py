@@ -25,7 +25,7 @@ from datetime import date
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
-from lib.db_client import PostgreSQLClient
+from lib.db_client import get_db
 
 
 def verify(target_date: str):
@@ -82,7 +82,7 @@ def main():
     # Run via the existing compute function
     from indicators.compute_engine import compute_rolling_metrics_for_date
 
-    db = PostgreSQLClient(DATABASE_URL)
+    db = get_db()
     updated = compute_rolling_metrics_for_date(db, target_date, verbose=True)
     print(f"\n[rolling_metrics] Updated {updated} rows for {target_date}")
 
