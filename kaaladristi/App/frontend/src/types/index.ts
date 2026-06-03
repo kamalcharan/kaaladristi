@@ -538,6 +538,11 @@ export interface ScanDefinition {
   tooltip?: string;
   limit: number;
   universe: 'NSE_ONLY' | 'NSE_BSE';
+  category: string;
+  category_label: string;
+  category_color: string;
+  category_sort: number;
+  timeframe: 'daily' | 'weekly' | 'monthly';
 }
 
 export interface VaniOpportunityConfig {

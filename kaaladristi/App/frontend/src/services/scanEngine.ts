@@ -26,75 +26,19 @@ const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 
 // ── Scan Definitions ───────────────────────────────────────────
 
+// Minimal placeholder used only as React Query placeholderData during initial load.
+// universe, category, category_label, category_color, category_sort, timeframe
+// are NOT included here — they come from DB only via fetchScanPresets().
 export const SCAN_PRESETS: ScanDefinition[] = [
-  {
-    id: 'power_buy',
-    name: 'Strength Confluence',
-    description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries',
-    tooltip: 'Stocks where multiple positive conditions are converging — strong relative strength, accumulation patterns, recent institutional fingerprints, in rotating-in or leading industries. Not a buy recommendation.',
-    limit: 25,
-    universe: 'NSE_BSE',
-  },
-  {
-    id: 'power_sell',
-    name: 'Weakness Confluence',
-    description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries',
-    tooltip: 'Stocks where multiple negative conditions are converging — weakness, distribution, selling pressure, in rotating-out industries. Not a sell recommendation.',
-    limit: 25,
-    universe: 'NSE_BSE',
-  },
-  {
-    id: 'smart_money',
-    name: 'Smart Money Loading',
-    description: 'Industries with heavy accumulation and rising institutional presence',
-    limit: 25,
-    universe: 'NSE_ONLY',
-  },
-  {
-    id: 'fresh_breakout',
-    name: 'Fresh Breakouts',
-    description: 'Stocks breaking above recent highs with strong volume in leading industries',
-    limit: 25,
-    universe: 'NSE_ONLY',
-  },
-  {
-    id: 'quiet_accumulation',
-    name: 'Quiet Accumulation',
-    description: 'Under-the-radar industries where smart money is quietly building positions',
-    limit: 25,
-    universe: 'NSE_ONLY',
-  },
-  {
-    id: 'distribution_warning',
-    name: 'Distribution Warnings',
-    description: 'Previously strong stocks showing signs of institutional exit',
-    limit: 25,
-    universe: 'NSE_BSE',
-  },
-  {
-    id: 'conviction_flow',
-    name: 'Conviction Flow',
-    description: 'Stocks where 5-day delivery value is outpacing the 22-day norm — rising institutional commitment',
-    tooltip: 'delivery_surge_x = avg_amt_5d / avg_amt_22d. Surge > 1.5× means recent delivery is accelerating vs baseline. VaNi gate: surge > 2×, price near EMA20, avg_amt_22d > 2 Cr.',
-    limit: 50,
-    universe: 'NSE_ONLY',
-  },
-  {
-    id: 'breakout_surge',
-    name: 'Breakout Surge',
-    description: 'NSE stocks breaking above 20-day highs with RVOL > 2× — fresh momentum with institutional volume',
-    tooltip: 'Close > 20-day high + RVOL > 2 + Close > 100. VaNi gate: RVOL > 5, 0–5% above breakout level, RSI < 75, price within 15% of EMA20.',
-    limit: 50,
-    universe: 'NSE_ONLY',
-  },
-  {
-    id: 'stage_2_leaders',
-    name: 'Stage 2 Leaders',
-    description: 'Stocks in Weinstein Stage 2 — above rising SMA_200, golden cross confirmed, strong relative strength',
-    tooltip: 'Price > rising SMA_200 + SMA_50 > SMA_200 (golden cross) + in sweet spot of 52-week range. VaNi gate: RS > 80, RVOL > 2.5, RSI 50–75, supertrend up, fresh longs or short covering.',
-    limit: 50,
-    universe: 'NSE_BSE',
-  },
+  { id: 'power_buy',           name: 'Strength Confluence',   description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries', limit: 25, universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'power_sell',          name: 'Weakness Confluence',   description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries', limit: 25, universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'smart_money',         name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'fresh_breakout',      name: 'Fresh Breakouts',       description: 'Stocks breaking above recent highs with strong volume in leading industries',              limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'quiet_accumulation',  name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'distribution_warning',name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25, universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'conviction_flow',     name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'breakout_surge',      name: 'Breakout Surge',        description: 'NSE stocks breaking above 20-day highs with RVOL > 2×',                                   limit: 50, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'stage_2_leaders',     name: 'Stage 2 Leaders',       description: 'Stocks in Weinstein Stage 2 — above rising SMA_200, golden cross confirmed',               limit: 50, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
 ];
 
 // ── Data Loading ───────────────────────────────────────────────
@@ -1238,7 +1182,12 @@ export async function fetchScanPresets(): Promise<ScanDefinition[]> {
     tooltip: string | null;
     sort_order: number;
     result_limit: number;
-    universe?: string;
+    universe: string;
+    category: string;
+    category_label: string;
+    category_color: string;
+    category_sort: number;
+    timeframe: string;
   }>;
   return rows.map((r) => ({
     id: r.id,
@@ -1246,7 +1195,12 @@ export async function fetchScanPresets(): Promise<ScanDefinition[]> {
     description: r.description ?? '',
     tooltip: r.tooltip ?? undefined,
     limit: r.result_limit,
-    universe: (r.universe === 'NSE_ONLY' || r.universe === 'NSE_BSE') ? r.universe : (SCAN_PRESETS.find((p) => p.id === r.id)?.universe ?? 'NSE_BSE'),
+    universe: (r.universe === 'NSE_ONLY' || r.universe === 'NSE_BSE') ? r.universe : 'NSE_BSE',
+    category: r.category ?? '',
+    category_label: r.category_label ?? '',
+    category_color: r.category_color ?? '#3b82f6',
+    category_sort: r.category_sort ?? 99,
+    timeframe: (r.timeframe === 'weekly' || r.timeframe === 'monthly') ? r.timeframe : 'daily',
   }));
 }
 
