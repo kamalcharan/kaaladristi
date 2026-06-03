@@ -85,6 +85,11 @@ def run_verification(conn):
 def main():
     args        = sys.argv[1:]
     verify_only = '--verify' in args
+    date_arg    = next((a.split('=',1)[1] if '=' in a else None
+                        for a in args if a.startswith('--date')), None)
+    if date_arg is None:
+        date_arg = next((a for a in args
+                         if not a.startswith('--') and len(a) == 10 and a[4] == '-'), None)
 
     conn = get_conn()
 
@@ -94,20 +99,39 @@ def main():
         return
 
     print(f'd365_pct_chng backfill — calendar 365-day lookback, batch={BATCH_SIZE}')
-    print(f'  Loading all rows from km_equity_eod...')
+    if date_arg:
+        print(f'  Mode: single date {date_arg}')
+    print(f'  Loading rows from km_equity_eod...')
 
     t0 = time.time()
 
     # ── Step 1: fetch all rows in one query ────────────────────────────────
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute(
-            """
-            SELECT id, equity_id, trade_date, close
-            FROM km_equity_eod
-            WHERE close IS NOT NULL
-            ORDER BY equity_id, trade_date ASC
-            """
-        )
+        if date_arg:
+            # Load full history so lookback windows are correct, but only
+            # compute and write rows for the target date.
+            cur.execute(
+                """
+                SELECT id, equity_id, trade_date, close
+                FROM km_equity_eod
+                WHERE close IS NOT NULL
+                  AND equity_id IN (
+                    SELECT DISTINCT equity_id FROM km_equity_eod
+                    WHERE trade_date = %s
+                  )
+                ORDER BY equity_id, trade_date ASC
+                """,
+                [date_arg],
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, equity_id, trade_date, close
+                FROM km_equity_eod
+                WHERE close IS NOT NULL
+                ORDER BY equity_id, trade_date ASC
+                """
+            )
         all_rows = cur.fetchall()
 
     print(f'  Fetched {len(all_rows):,} rows in {time.time()-t0:.1f}s')
@@ -131,6 +155,10 @@ def main():
         closes = [float(r['close']) for r in rows]
 
         for i, row in enumerate(rows):
+            # --date mode: skip rows that aren't the target date
+            if date_arg and str(row['trade_date']) != date_arg:
+                continue
+
             target_date = row['trade_date'] - timedelta(days=TARGET_DAYS)
 
             # bisect_left: find leftmost position where dates[j] >= target_date
