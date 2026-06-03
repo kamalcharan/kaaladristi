@@ -57,6 +57,10 @@ INDICATOR_COLUMNS = [
     'flow_type', 'vacuum_flag', 'accum_distrib',
     # Rolling range (equity-only; index tables don't have these columns but upsert ignores missing cols)
     'w52_high', 'w52_low', 'lifetime_high',
+    # Momentum returns
+    'd30_pct_chng', 'd365_pct_chng',
+    # Delivery value averages
+    'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
 ]
 
 
@@ -235,12 +239,31 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
             st_value[i] = round(st_val, 4)
             st_dir[i]   = direction
 
+    # ── Momentum returns ──────────────────────────────────────────────────
+    close = df['close']
+    d30_pct_chng  = close.pct_change(periods=22).mul(100).round(2)   # ~1 month (22 trading days)
+    d365_pct_chng = close.pct_change(periods=252).mul(100).round(2)  # ~1 year  (252 trading days)
+
+    # ── Delivery value rolling averages ───────────────────────────────────
+    # value_cr = traded value in crores; use 0 where missing so window stays valid
+    value_cr = df.get('value_cr', pd.Series(dtype=float))
+    if value_cr is None or value_cr.empty:
+        value_cr = pd.Series(np.nan, index=df.index)
+    avg_amt_5d  = value_cr.rolling(window=5,  min_periods=1).mean().round(4)
+    avg_amt_22d = value_cr.rolling(window=22, min_periods=1).mean().round(4)
+    delivery_surge_x = avg_amt_5d.div(avg_amt_22d.replace(0, np.nan)).round(4)
+
     return {
-        'w52_high':      w52_high,
-        'w52_low':       w52_low,
-        'lifetime_high': lifetime_high,
-        'supertrend':    pd.Series(st_value, index=df.index),
-        'supertrend_dir': pd.Series(st_dir, index=df.index),
+        'w52_high':           w52_high,
+        'w52_low':            w52_low,
+        'lifetime_high':      lifetime_high,
+        'supertrend':         pd.Series(st_value, index=df.index),
+        'supertrend_dir':     pd.Series(st_dir, index=df.index),
+        'd30_pct_chng':       d30_pct_chng,
+        'd365_pct_chng':      d365_pct_chng,
+        'avg_amt_5d':         avg_amt_5d,
+        'avg_amt_22d':        avg_amt_22d,
+        'delivery_surge_x':   delivery_surge_x,
     }
 
 
