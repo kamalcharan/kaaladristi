@@ -658,3 +658,141 @@ class IndicatorEngine:
                 print('nothing to update')
 
         return total
+
+
+# ── Standalone rolling-metrics step for the daily pipeline ────────────────────
+
+ROLLING_COLUMNS = [
+    'w52_high', 'w52_low', 'lifetime_high',
+    'd30_pct_chng', 'd365_pct_chng',
+    'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+]
+
+
+def compute_rolling_metrics_for_date(db, trade_date, verbose: bool = False) -> int:
+    """
+    Compute rolling-range and momentum columns for all equity rows on trade_date.
+
+    Called as a dedicated pipeline step (step 6g) so these columns are populated
+    even after the PostgreSQL RPC has already set indicators_computed_at.
+
+    Loads full per-symbol history (needed for d365 calendar-date lookback and
+    lifetime_high expanding max), computes via compute_rolling_range(), then
+    batch-updates only the row for trade_date.
+
+    Returns number of rows updated.
+    """
+    import psycopg2
+    import psycopg2.extras
+
+    conn = db._conn()
+    total = 0
+    batch = []
+    BATCH = 500
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT DISTINCT equity_id FROM km_equity_eod WHERE trade_date = %s ORDER BY equity_id',
+                [str(trade_date)],
+            )
+            equity_ids = [r[0] for r in cur.fetchall()]
+
+        if verbose:
+            print(f'    [rolling_metrics] {len(equity_ids)} symbols for {trade_date}')
+
+        for eid in equity_ids:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, trade_date, high, low, close, atr_10, value_cr
+                    FROM km_equity_eod
+                    WHERE equity_id = %s
+                    ORDER BY trade_date ASC
+                    """,
+                    [eid],
+                )
+                rows = cur.fetchall()
+
+            if not rows:
+                continue
+
+            df = pd.DataFrame([dict(r) for r in rows])
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            for col in ['high', 'low', 'close', 'atr_10', 'value_cr']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            try:
+                result = compute_rolling_range(df)
+            except Exception as e:
+                if verbose:
+                    print(f'      [rolling_metrics] equity_id={eid} error: {e}')
+                continue
+
+            # Find the row for trade_date
+            mask = df['trade_date'] == pd.Timestamp(trade_date)
+            if not mask.any():
+                continue
+            idx = mask.idxmax()
+
+            record = {'id': int(df.loc[idx, 'id'])}
+            for col in ROLLING_COLUMNS:
+                if col in result:
+                    val = result[col].iloc[idx]
+                    record[col] = None if (val is None or (isinstance(val, float) and np.isnan(val))) else round(float(val), 4)
+                else:
+                    record[col] = None
+
+            batch.append(record)
+
+            if len(batch) >= BATCH:
+                _flush_rolling_batch(conn, batch)
+                total += len(batch)
+                batch = []
+
+        if batch:
+            _flush_rolling_batch(conn, batch)
+            total += len(batch)
+
+    finally:
+        conn.close()
+
+    if verbose:
+        print(f'    [rolling_metrics] {total} rows updated for {trade_date}')
+
+    return total
+
+
+def _flush_rolling_batch(conn, batch: list):
+    import psycopg2.extras
+
+    sql = """
+        UPDATE km_equity_eod AS e
+        SET
+          w52_high         = v.w52_high,
+          w52_low          = v.w52_low,
+          lifetime_high    = v.lifetime_high,
+          d30_pct_chng     = v.d30_pct_chng,
+          d365_pct_chng    = v.d365_pct_chng,
+          avg_amt_5d       = v.avg_amt_5d,
+          avg_amt_22d      = v.avg_amt_22d,
+          delivery_surge_x = v.delivery_surge_x
+        FROM (VALUES %s) AS v(
+          id, w52_high, w52_low, lifetime_high,
+          d30_pct_chng, d365_pct_chng,
+          avg_amt_5d, avg_amt_22d, delivery_surge_x
+        )
+        WHERE e.id = v.id::int
+    """
+    rows = [
+        (
+            r['id'], r['w52_high'], r['w52_low'], r['lifetime_high'],
+            r['d30_pct_chng'], r['d365_pct_chng'],
+            r['avg_amt_5d'], r['avg_amt_22d'], r['delivery_surge_x'],
+        )
+        for r in batch
+    ]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows)
+    conn.commit()
