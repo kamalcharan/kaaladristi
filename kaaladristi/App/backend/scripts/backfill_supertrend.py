@@ -207,13 +207,19 @@ def run_verification(conn):
         print(f'  {"Symbol":<14} {"Close":>8}  {"Supertrend":>10}  {"Dir":>4}  {"ATR":>7}')
         print(f'  {"-"*50}')
         for r in rows:
-            arrow = '▲' if r['supertrend_dir'] == 1 else '▼'
+            st   = r['supertrend']
+            atr  = r['atr_10']
+            d    = r['supertrend_dir']
+            arrow = ('▲' if d == 1 else '▼') if d is not None else ' '
+            st_str  = f'{float(st):>10.2f}' if st  is not None else f'{"NULL":>10}'
+            atr_str = f'{float(atr):>7.2f}'  if atr is not None else f'{"NULL":>7}'
+            dir_str = f'{arrow}{d:>2}'        if d   is not None else f'  --'
             print(
                 f'  {r["symbol"]:<14} '
                 f'{float(r["close"]):>8.2f}  '
-                f'{float(r["supertrend"]):>10.2f}  '
-                f'{arrow}{r["supertrend_dir"]:>2}  '
-                f'{float(r["atr_10"]):>7.2f}'
+                f'{st_str}  '
+                f'{dir_str}  '
+                f'{atr_str}'
             )
 
 
