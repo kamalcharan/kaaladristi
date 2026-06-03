@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, ChevronLeft, Download, Copy, Check } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
+import { useScan, useAllScanCounts, useScanPresets, useStage2Scan, type Stage2Stock, type Stage2Filters } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe } from '@/services/scanEngine';
 import { StockCard, StageBadge } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
@@ -338,8 +338,8 @@ function VaniSectionHeader({
   scanName: string;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const { data: ltDate } = useLastTradingDate(today);
-  const { data: astro } = useAstroSignal(ltDate ?? today);
+  const { lastTradingDate } = useLastTradingDate(today);
+  const { data: astro } = useAstroSignal(lastTradingDate);
   const atm = atmosphericConfig(astro?.net_score ?? 0);
 
   return (
@@ -608,41 +608,108 @@ function ScannerHub() {
 
 // ── Stage 2 Leaders results ───────────────────────────────────
 
+type S2SortKey = 'magic_rs' | 'close' | 'rss_spread' | 'pct_of_ath' | 'mcap_cr';
+
+const S2_SORT_OPTIONS: { key: S2SortKey; label: string }[] = [
+  { key: 'magic_rs',   label: 'RS' },
+  { key: 'pct_of_ath', label: '% of ATH' },
+  { key: 'close',      label: 'Price' },
+  { key: 'mcap_cr',    label: 'MCap' },
+];
+
+function sortStage2(arr: Stage2Stock[], key: S2SortKey, dir: SortDir): Stage2Stock[] {
+  return [...arr].sort((a, b) => {
+    const av = a[key] ?? -Infinity;
+    const bv = b[key] ?? -Infinity;
+    return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0) : (av > bv ? -1 : av < bv ? 1 : 0);
+  });
+}
+
+function s2ToScanStock(s: Stage2Stock): ScanStock {
+  return {
+    equity_id: s.equity_id,
+    symbol: s.symbol,
+    company_name: s.company_name,
+    industry: s.industry ?? null,
+    exchange: s.exchange,
+    mcap_cr: s.mcap_cr,
+    close: s.close,
+    pct_chng: null,
+    magic_rs: s.magic_rs,
+    magic_rs_zone: s.magic_rs_zone,
+    flow_type: s.flow_type,
+    sniper_inst: s.sniper_inst,
+    sniper_hot: null,
+    accum_distrib: null,
+    rss_value: null,
+    rss_spread: s.rss_spread,
+    sma_150: s.sma_150,
+    supertrend_dir: s.supertrend_dir,
+    rvol: s.rvol,
+    rsi_14: null,
+    ema_20: null,
+    atr_14: null,
+    delivery_pct: null,
+    w52_high: s.w52_high,
+    w52_low: s.w52_low,
+    sma_50: s.sma_50,
+    sma_200: s.sma_200,
+    lifetime_high: s.lifetime_high,
+    open: null, high: null, low: null,
+    avg_amt_66d: null,
+    xAmt: null,
+    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
+    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+    magicRsTrend: [],
+    reward: null, rewardPct: null, pctBelow52wHigh: null,
+    vaniOpportunity: s.is_vani,
+    volume_divergence_flag: null,
+    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
+    trade_date: s.trade_date,
+    avg_amt_5d: s.avg_amt_5d,
+    avg_amt_22d: s.avg_amt_22d,
+    delivery_surge_x: s.delivery_surge_x,
+    ret_5d: null, ret_22d: null, ret_66d: null,
+  } as ScanStock;
+}
+
 function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timeframe: ScanTimeframe }) {
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const disabledExchangeOptions: ExchangeFilter[] = preset.universe === 'NSE_ONLY' ? ['BSE'] : [];
-  const { data: stocks = [], isLoading, error } = useScan('stage_2_leaders', exchangeFilter, timeframe);
-  const [sortKey, setSortKey] = useState<SortKey>('magic_rs');
+  const [s2Sort, setS2Sort] = useState<S2SortKey>('magic_rs');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [vaniOnly, setVaniOnly] = useState(false);
   const [mfOpen, setMfOpen] = useState(false);
+  const [pctAthMin, setPctAthMin] = useState(0);
+  const [supertrendFilter, setSupertrendFilter] = useState('');
   const { show: showToast, Toast } = useToast();
 
-  const vaniStocks = useMemo(() => stocks.filter((s) => s.vaniOpportunity), [stocks]);
+  const filters: Stage2Filters = useMemo(() => ({
+    exchange: exchangeFilter,
+    pct_ath_min: pctAthMin,
+    supertrend: supertrendFilter,
+    sort: s2Sort,
+    order: sortDir,
+  }), [exchangeFilter, pctAthMin, supertrendFilter, s2Sort, sortDir]);
 
-  const sorted = useMemo(() => {
-    let arr = vaniOnly ? stocks.filter((s) => s.vaniOpportunity) : stocks;
-    return sortStocks(arr, sortKey, sortDir);
-  }, [stocks, sortKey, sortDir, vaniOnly]);
+  const { data: result, isLoading, error, refetch } = useStage2Scan(filters);
+  const stocks: Stage2Stock[] = result?.stocks ?? [];
+  const vaniCount = result?.vani_count ?? 0;
 
-  const vaniSorted = useMemo(() => sortStocks(vaniStocks, sortKey, sortDir), [vaniStocks, sortKey, sortDir]);
-  const restSorted = useMemo(() => sorted.filter((s) => !s.vaniOpportunity), [sorted]);
+  const vaniStocks = useMemo(() => stocks.filter((s) => s.is_vani), [stocks]);
+  const displayStocks = useMemo(() => vaniOnly ? vaniStocks : stocks, [stocks, vaniStocks, vaniOnly]);
+  const vaniSorted = useMemo(() => sortStage2(vaniStocks, s2Sort, sortDir), [vaniStocks, s2Sort, sortDir]);
+  const restSorted = useMemo(() => sortStage2(displayStocks.filter((s) => !s.is_vani), s2Sort, sortDir), [displayStocks, s2Sort, sortDir]);
 
-  const exportStocks = useMemo(() => vaniOnly ? vaniStocks : stocks, [stocks, vaniStocks, vaniOnly]);
+  const exportStocks = useMemo(() => displayStocks.map(s2ToScanStock), [displayStocks]);
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortKey(key); setSortDir('desc'); }
+  const toggleSort = (key: S2SortKey) => {
+    if (s2Sort === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setS2Sort(key); setSortDir('desc'); }
   };
 
-  const pctAth = (stock: ScanStock) => {
-    const lh = stock.lifetime_high;
-    if (!lh || lh <= 0) return null;
-    return (stock.close / lh) * 100;
-  };
-
-  const athLabel = (stock: ScanStock) => {
-    const p = pctAth(stock);
+  const athLabel = (stock: Stage2Stock) => {
+    const p = stock.pct_of_ath;
     if (p == null) return null;
     const pctOff = 100 - p;
     return (
@@ -655,13 +722,22 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
     );
   };
 
-  const renderCard = (stock: ScanStock) => (
+  const renderCard = (stock: Stage2Stock) => (
     <StockCard
       key={stock.equity_id}
-      stock={stock}
+      stock={s2ToScanStock(stock)}
       stageBadge="S2"
       extraRight={athLabel(stock)}
     />
+  );
+
+  const SkeletonCard = () => (
+    <div style={{
+      height: '64px', borderRadius: '10px',
+      background: 'linear-gradient(90deg, var(--card) 25%, rgba(255,255,255,0.03) 50%, var(--card) 75%)',
+      backgroundSize: '200% 100%', animation: 'pulse 1.5s ease-in-out infinite',
+      border: '1px solid var(--border)',
+    }} />
   );
 
   return (
@@ -674,7 +750,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
         padding: '10px 0', flexWrap: 'wrap', marginBottom: '4px',
       }}>
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
-        <VaniFilterButton active={vaniOnly} count={vaniStocks.length} onToggle={() => setVaniOnly((f) => !f)} />
+        <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
 
         {/* Contextual filter chips */}
         <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginLeft: '4px' }}>
@@ -725,8 +801,8 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
           }}>
             Sort
           </span>
-          {SORT_OPTIONS.map((opt) => {
-            const active = sortKey === opt.key;
+          {S2_SORT_OPTIONS.map((opt) => {
+            const active = s2Sort === opt.key;
             return (
               <button
                 key={opt.key}
@@ -758,7 +834,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
           overflow: 'hidden', background: 'rgba(240,165,0,0.015)',
         }}>
           <VaniSectionHeader
-            vaniCount={vaniSorted.length}
+            vaniCount={vaniCount}
             scanName={preset.name}
             onAddWidget={() => showToast(`✦ ${preset.name} widget added to Workspace`)}
           />
@@ -770,14 +846,28 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
 
       {/* All Results */}
       {isLoading ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
-          <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
-          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Scanning Stage 2 universe…</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : error ? (
-        <Card rounded="xxl" className="py-12 text-center">
-          <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>
-        </Card>
+        <div style={{
+          padding: '32px 24px', textAlign: 'center',
+          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
+        }}>
+          <p style={{ fontSize: '13px', color: 'var(--bear)', marginBottom: '12px' }}>
+            Failed to run scan. Check data connection.
+          </p>
+          <button
+            onClick={() => refetch()}
+            style={{
+              padding: '6px 16px', background: 'rgba(59,130,246,0.1)',
+              border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px',
+              color: '#60a5fa', fontSize: '12px', cursor: 'pointer',
+            }}
+          >
+            Retry
+          </button>
+        </div>
       ) : restSorted.length > 0 ? (
         <>
           {!vaniOnly && (
@@ -786,10 +876,10 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
             </ScanSectionLabel>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {(vaniOnly ? sorted : restSorted).map(renderCard)}
+            {(vaniOnly ? sortStage2(vaniStocks, s2Sort, sortDir) : restSorted).map(renderCard)}
           </div>
         </>
-      ) : !isLoading && sorted.length === 0 ? (
+      ) : !isLoading && stocks.length === 0 ? (
         <div style={{
           padding: '64px 24px', textAlign: 'center',
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
@@ -853,10 +943,15 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
             Min % of ATH
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input type="range" min={50} max={100} defaultValue={75} style={{ flex: 1, accentColor: 'var(--gold)' }}
-              onChange={(e) => (e.currentTarget.nextElementSibling as HTMLElement).textContent = `${e.currentTarget.value}%`}
+            <input
+              type="range" min={0} max={100} step={5}
+              value={pctAthMin}
+              style={{ flex: 1, accentColor: 'var(--gold)' }}
+              onChange={(e) => setPctAthMin(Number(e.currentTarget.value))}
             />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', minWidth: '36px' }}>75%</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', minWidth: '36px' }}>
+              {pctAthMin > 0 ? `${pctAthMin}%` : 'Any'}
+            </span>
           </div>
         </div>
 
@@ -866,32 +961,18 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
             Supertrend
           </div>
           <div style={{ display: 'flex', gap: '6px' }}>
-            {['Bullish ▲', 'Any'].map((opt, i) => (
-              <button key={opt} style={{
-                padding: '5px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'var(--font-body)',
-                background: i === 0 ? 'rgba(59,130,246,0.1)' : 'var(--card)',
-                border: `1px solid ${i === 0 ? 'rgba(59,130,246,0.3)' : 'var(--border)'}`,
-                color: i === 0 ? '#60a5fa' : 'var(--text-muted)',
-              }}>{opt}</button>
-            ))}
-          </div>
-        </div>
-
-        {/* RS Zone */}
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: '8px' }}>
-            RS Zone
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {['Strong Bull', 'Mild Bull', 'Neutral', 'Any'].map((opt, i) => (
-              <button key={opt} style={{
-                padding: '5px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'var(--font-body)',
-                background: i < 2 ? 'rgba(59,130,246,0.1)' : 'var(--card)',
-                border: `1px solid ${i < 2 ? 'rgba(59,130,246,0.3)' : 'var(--border)'}`,
-                color: i < 2 ? '#60a5fa' : 'var(--text-muted)',
-              }}>{opt}</button>
+            {[{ label: 'Bullish ▲', value: 'bull' }, { label: 'Any', value: '' }].map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setSupertrendFilter(opt.value)}
+                style={{
+                  padding: '5px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 500,
+                  cursor: 'pointer', fontFamily: 'var(--font-body)',
+                  background: supertrendFilter === opt.value ? 'rgba(59,130,246,0.1)' : 'var(--card)',
+                  border: `1px solid ${supertrendFilter === opt.value ? 'rgba(59,130,246,0.3)' : 'var(--border)'}`,
+                  color: supertrendFilter === opt.value ? '#60a5fa' : 'var(--text-muted)',
+                }}
+              >{opt.label}</button>
             ))}
           </div>
         </div>
@@ -915,11 +996,11 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
         <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
           Showing{' '}
           <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
-            {sorted.length}
+            {displayStocks.length}
           </em>
-          {' '}Stage 2 setup{sorted.length !== 1 ? 's' : ''}
+          {' '}Stage 2 setup{displayStocks.length !== 1 ? 's' : ''}
         </span>
-        {vaniSorted.length > 0 && !vaniOnly && (
+        {vaniCount > 0 && !vaniOnly && (
           <>
             <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
             <button
@@ -931,7 +1012,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
                 fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
               }}
             >
-              {vaniSorted.length} opportunit{vaniSorted.length !== 1 ? 'ies' : 'y'}
+              {vaniCount} opportunit{vaniCount !== 1 ? 'ies' : 'y'}
             </button>
           </>
         )}
@@ -984,186 +1065,43 @@ function sortCFStocks(stocks: ScanStock[], key: CFSortKey, dir: SortDir): ScanSt
 // ── Conviction Flow results (server-side RPC, different columns) ───────────
 
 function ConvictionFlowResults({ preset, timeframe }: { preset: ScanDefinition; timeframe: ScanTimeframe }) {
-
-  const totalSetups = useMemo(
-    () => Object.values(allCounts ?? {}).reduce((s, n) => s + n, 0),
-    [allCounts],
-  );
-  const activePresets = useMemo(
-    () => Object.values(allCounts ?? {}).filter((n) => n > 0).length,
-    [allCounts],
-  );
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
+  const { data: stocks = [], isLoading, error } = useScan('conviction_flow', exchangeFilter, timeframe);
+  const { show: showToast, Toast } = useToast();
+  const vaniCount = useMemo(() => stocks.filter((s) => s.vaniOpportunity).length, [stocks]);
 
   return (
-    <div style={{ paddingBottom: '100px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 500,
-          letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '8px',
-          color: 'var(--text-primary)',
-        }}>
-          Scanner{' '}
-          <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
-            · thesis search
-          </em>
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          Eight condition-convergence presets, arranged against today's market structure.
-        </p>
+    <>
+      {Toast}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '10px 0', flexWrap: 'wrap', marginBottom: '4px',
+      }}>
+        <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={[]} />
+        <div style={{ marginLeft: 'auto' }}>
+          <TradingViewExportButton stocks={stocks} scanName={preset.name} />
+        </div>
       </div>
 
-      {/* Preset grid — 3 columns, taller cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-        {presets.map((preset) => {
-          const count = allCounts?.[preset.id] ?? null;
-          const rel = count != null ? getRelevance(count) : 1;
-          const bar = REL_BAR[rel];
-          const isHighRelevance = rel >= 3;
-          const isLowRelevance = rel === 0;
-          const hasResults = (count ?? 0) > 0;
+      <VaniSectionHeader
+        vaniCount={vaniCount}
+        scanName={preset.name}
+        onAddWidget={() => showToast(`✦ ${preset.name} widget added to Workspace`)}
+      />
 
-          return (
-            <div
-              key={preset.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => navigate(`/scanner/${preset.id}`)}
-              onKeyDown={(e) => e.key === 'Enter' && navigate(`/scanner/${preset.id}`)}
-              title={preset.tooltip}
-              style={{
-                background: isHighRelevance
-                  ? 'linear-gradient(180deg, var(--gold-bg) 0%, var(--card) 80%)'
-                  : 'var(--card)',
-                border: `1px solid ${isHighRelevance ? 'var(--border-gold)' : 'var(--border)'}`,
-                borderRadius: '14px',
-                padding: '22px 18px 18px',
-                cursor: 'pointer',
-                position: 'relative',
-                overflow: 'hidden',
-                opacity: isLowRelevance ? 0.55 : 1,
-                transition: 'all 0.2s',
-              }}
-            >
-              {/* Preset name — 18px Fraunces */}
-              <div style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '18px',
-                fontWeight: 500,
-                color: isHighRelevance ? 'var(--text-primary)' : 'var(--text-secondary)',
-                lineHeight: 1.2,
-                marginBottom: '10px',
-              }}>
-                {preset.name}
-              </div>
-
-              {/* Description */}
-              <div style={{
-                fontSize: '13px',
-                color: 'var(--text-muted)',
-                lineHeight: 1.5,
-                marginBottom: '16px',
-              }}>
-                {preset.description}
-              </div>
-
-              {/* Match count */}
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '13px',
-                color: hasResults ? 'var(--text-secondary)' : 'var(--text-faint)',
-                marginBottom: '14px',
-              }}>
-                {count != null ? `${count} setup${count !== 1 ? 's' : ''} today` : '…'}
-              </div>
-
-              {/* D / W / M dot row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                {/* D — Daily: clickable, gold if has results */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); navigate(`/scanner/${preset.id}`); }}
-                  title={`Daily · ${count ?? 0} setup${(count ?? 0) !== 1 ? 's' : ''} as of ${latestDate ?? '…'}`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                  }}
-                >
-                  <span style={{
-                    width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
-                    background: hasResults ? 'var(--gold)' : 'var(--text-faint)',
-                    opacity: hasResults ? 1 : 0.35,
-                  }} />
-                  <span style={{
-                    fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600,
-                    color: hasResults ? 'var(--gold)' : 'var(--text-faint)',
-                    opacity: hasResults ? 1 : 0.5,
-                  }}>
-                    D
-                  </span>
-                </button>
-
-                {/* W — Weekly */}
-                {preset.universe === 'NSE_ONLY' ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/scanner/${preset.id}?timeframe=weekly`); }}
-                    title="Weekly scan"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  >
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'var(--indigo)', opacity: 0.7 }} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--indigo)', opacity: 0.8 }}>W</span>
-                  </button>
-                ) : (
-                  <span title="Weekly · coming soon" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}>
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', opacity: 0.35 }} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--text-faint)', opacity: 0.4 }}>W</span>
-                  </span>
-                )}
-
-                {/* M — Monthly */}
-                {preset.universe === 'NSE_ONLY' ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/scanner/${preset.id}?timeframe=monthly`); }}
-                    title="Monthly scan"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  >
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'var(--indigo)', opacity: 0.7 }} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--indigo)', opacity: 0.8 }}>M</span>
-                  </button>
-                ) : (
-                  <span title="Monthly · coming soon" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}>
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: 'transparent', border: '1px solid var(--border-strong)', opacity: 0.35 }} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 600, color: 'var(--text-faint)', opacity: 0.4 }}>M</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Relevance bar */}
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0,
-                width: bar.width, height: '2px', borderRadius: '2px',
-                background: bar.color, opacity: bar.opacity,
-              }} />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Action Island */}
-      <ActionIsland>
-        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0 }} />
-        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-          VaNi is watching{' '}
-          <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
-            {allCounts ? totalSetups : '…'} setup{totalSetups !== 1 ? 's' : ''}
-          </em>
-          {' '}across{' '}
-          <em style={{ fontStyle: 'italic', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontWeight: 500 }}>
-            {activePresets}
-          </em>
-          {' '}preset{activePresets !== 1 ? 's' : ''} today
-        </span>
-      </ActionIsland>
-    </div>
+      {isLoading ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
+          <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
+          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Scanning…</span>
+        </div>
+      ) : error ? (
+        <Card rounded="xxl" className="py-12 text-center">
+          <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
+        </Card>
+      ) : (
+        <ConvictionFlowCards stocks={stocks} />
+      )}
+    </>
   );
 }
 
@@ -1283,7 +1221,18 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <BreakoutSurgeResults preset={preset} timeframe={timeframe} />
+        {isLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
+            <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
+            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Scanning…</span>
+          </div>
+        ) : error ? (
+          <Card rounded="xxl" className="py-12 text-center">
+            <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
+          </Card>
+        ) : (
+          <BreakoutSurgeCards stocks={stocks ?? []} />
+        )}
       </div>
     );
   }
