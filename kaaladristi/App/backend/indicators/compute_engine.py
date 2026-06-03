@@ -157,23 +157,90 @@ def compute_flow_intelligence(df: pd.DataFrame) -> dict:
 
 def compute_rolling_range(df: pd.DataFrame) -> dict:
     """
-    Compute w52_high, w52_low (252-bar rolling window) and lifetime_high
-    (expanding max from first bar) from OHLCV data.
+    Compute w52_high, w52_low (252-bar rolling window), lifetime_high
+    (expanding max), and SuperTrend (ATR period=10, multiplier=3.0).
 
-    Uses 252 bars = ~1 trading year.  Rolling window requires at least
-    1 bar; no minimum enforced here — caller's df always has full history.
+    SuperTrend requires sequential bar-by-bar state — cannot be vectorised.
+    Direction: 1 = bullish, -1 = bearish.
     """
-    high = df['high']
-    low  = df['low']
+    high  = df['high'].values
+    low   = df['low'].values
+    close = df['close'].values
+    n     = len(df)
 
-    w52_high     = high.rolling(window=252, min_periods=1).max()
-    w52_low      = low.rolling(window=252, min_periods=1).min()
-    lifetime_high = high.expanding(min_periods=1).max()
+    # ── Rolling / expanding range ──────────────────────────────────────────
+    h_series = df['high']
+    l_series = df['low']
+    w52_high      = h_series.rolling(window=252, min_periods=1).max()
+    w52_low       = l_series.rolling(window=252, min_periods=1).min()
+    lifetime_high = h_series.expanding(min_periods=1).max()
+
+    # ── SuperTrend ─────────────────────────────────────────────────────────
+    ST_MULTIPLIER = 3.0
+    atr_col = df.get('atr_10') if 'atr_10' in df.columns else None
+
+    st_value = np.full(n, np.nan)
+    st_dir   = np.full(n, np.nan)
+
+    if atr_col is not None:
+        atr_vals = atr_col.values.astype(float)
+
+        prev_dir   = 1
+        prev_lower = 0.0
+        prev_upper = 0.0
+        first_valid = True
+
+        for i in range(n):
+            atr = atr_vals[i]
+            if np.isnan(atr):
+                continue
+
+            hl2   = (high[i] + low[i]) / 2.0
+            upper = hl2 + ST_MULTIPLIER * atr
+            lower = hl2 - ST_MULTIPLIER * atr
+
+            if first_valid:
+                direction   = 1
+                final_lower = lower
+                final_upper = upper
+                st_val      = lower
+                first_valid = False
+            else:
+                if prev_dir == 1:
+                    final_lower = max(lower, prev_lower)
+                    final_upper = upper
+                else:
+                    final_upper = min(upper, prev_upper)
+                    final_lower = lower
+
+                if prev_dir == 1:
+                    if close[i] < final_lower:
+                        direction = -1
+                        st_val    = final_upper
+                    else:
+                        direction = 1
+                        st_val    = final_lower
+                else:
+                    if close[i] > final_upper:
+                        direction = 1
+                        st_val    = final_lower
+                    else:
+                        direction = -1
+                        st_val    = final_upper
+
+            prev_dir   = direction
+            prev_lower = final_lower
+            prev_upper = final_upper
+
+            st_value[i] = round(st_val, 4)
+            st_dir[i]   = direction
 
     return {
         'w52_high':      w52_high,
         'w52_low':       w52_low,
         'lifetime_high': lifetime_high,
+        'supertrend':    pd.Series(st_value, index=df.index),
+        'supertrend_dir': pd.Series(st_dir, index=df.index),
     }
 
 
