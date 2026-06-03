@@ -55,6 +55,8 @@ INDICATOR_COLUMNS = [
     'magic_rs', 'magic_rs_sma144', 'magic_ma', 'magic_rs_zone',
     # Flow Intelligence (derived from existing indicators)
     'flow_type', 'vacuum_flag', 'accum_distrib',
+    # Rolling range (equity-only; index tables don't have these columns but upsert ignores missing cols)
+    'w52_high', 'w52_low', 'lifetime_high',
 ]
 
 
@@ -150,6 +152,28 @@ def compute_flow_intelligence(df: pd.DataFrame) -> dict:
         'flow_type': flow,
         'vacuum_flag': vacuum,
         'accum_distrib': accum,
+    }
+
+
+def compute_rolling_range(df: pd.DataFrame) -> dict:
+    """
+    Compute w52_high, w52_low (252-bar rolling window) and lifetime_high
+    (expanding max from first bar) from OHLCV data.
+
+    Uses 252 bars = ~1 trading year.  Rolling window requires at least
+    1 bar; no minimum enforced here — caller's df always has full history.
+    """
+    high = df['high']
+    low  = df['low']
+
+    w52_high     = high.rolling(window=252, min_periods=1).max()
+    w52_low      = low.rolling(window=252, min_periods=1).min()
+    lifetime_high = high.expanding(min_periods=1).max()
+
+    return {
+        'w52_high':      w52_high,
+        'w52_low':       w52_low,
+        'lifetime_high': lifetime_high,
     }
 
 
@@ -289,6 +313,14 @@ class IndicatorEngine:
                 df[col] = series
         except Exception as e:
             print(f'    [error] compute_flow_intelligence: {e}')
+
+        # Rolling range — w52_high, w52_low, lifetime_high
+        try:
+            range_result = compute_rolling_range(df)
+            for col, series in range_result.items():
+                df[col] = series.values
+        except Exception as e:
+            print(f'    [error] compute_rolling_range: {e}')
 
         df['indicators_computed_at'] = datetime.utcnow().isoformat()
         return df

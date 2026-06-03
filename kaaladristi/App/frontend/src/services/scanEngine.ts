@@ -216,7 +216,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -412,6 +412,7 @@ async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<Scan
     sma_200: null,
     w52_low: null,
     supertrend_dir: null,
+    lifetime_high: null,
   }));
 
   // Build industry data
@@ -673,6 +674,7 @@ function buildScanStock(
     sma_200: eod.sma_200 ?? null,
     w52_low: eod.w52_low ?? null,
     supertrend_dir: eod.supertrend_dir ?? null,
+    lifetime_high: eod.lifetime_high ?? null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
@@ -1102,6 +1104,10 @@ function scanStage2Leaders(bundle: ScanDataBundle): ScanStock[] {
     if (w52Low  && eod.low  < w52Low  * 1.25) continue;
     if (w52High && eod.high > w52High * 0.75) continue;
 
+    // Not too far from all-time high (within 75% of ATH = still in strong uptrend)
+    const lifetimeHigh = eod.lifetime_high;
+    if (lifetimeHigh && eod.close < lifetimeHigh * 0.75) continue;
+
     // SMA_200 must be rising (vs 20, 80, or 100 bars ago — any one qualifies)
     const history = bundle.eodHistory.get(id) ?? [];
     const sma200_20  = history[20]?.sma_200  ?? null;
@@ -1451,6 +1457,7 @@ function buildStockFromEod(
     sma_200: null,
     w52_low: null,
     supertrend_dir: null,
+    lifetime_high: null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
