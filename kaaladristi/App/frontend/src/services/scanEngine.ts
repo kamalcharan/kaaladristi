@@ -1125,12 +1125,16 @@ function scanStage2Leaders(bundle: ScanDataBundle): ScanStock[] {
     if (!stock) continue;
 
     // VaNi opportunity — highest conviction Stage 2 entries
+    const pctOfLifetimeHigh = lifetimeHigh && lifetimeHigh > 0 ? eod.close / lifetimeHigh : null;
+    const pctOfW52High      = w52High      && w52High      > 0 ? eod.close / w52High      : null;
+
     const vaniOpportunity =
-      (stock.magic_rs ?? 0) > 80 &&
-      (stock.rvol ?? 0) > 2.5 &&
-      (stock.rsi_14 ?? 0) >= 50 && (stock.rsi_14 ?? 0) <= 75 &&
-      eod.supertrend_dir === 1 &&
-      ['FRESH_LONGS', 'SHORT_COVERING'].includes(stock.flow_type ?? '');
+      (stock.magic_rs ?? 0) > 40 &&
+      (stock.rvol ?? 0) > 1.5 &&
+      (stock.rsi_14 ?? 0) >= 50 && (stock.rsi_14 ?? 0) <= 80 &&
+      (pctOfLifetimeHigh === null || pctOfLifetimeHigh >= 0.75) &&
+      (pctOfW52High      === null || pctOfW52High      >= 0.85) &&
+      eod.supertrend_dir === 1;
 
     results.push({ ...stock, vaniOpportunity });
   }
