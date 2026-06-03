@@ -496,6 +496,7 @@ export interface ScanStock {
   sma_200: number | null;
   w52_low: number | null;
   supertrend_dir: number | null;
+  lifetime_high: number | null;
   // Sprint 3 additions
   open: number | null;
   high: number | null;
@@ -617,6 +618,7 @@ export interface EquityEodSnapshot {
   sma_200: number | null;
   w52_low: number | null;
   supertrend_dir: number | null;
+  lifetime_high: number | null;
 }
 
 // ── Astro Daily Signal (from km_astro_daily_signal) ──
