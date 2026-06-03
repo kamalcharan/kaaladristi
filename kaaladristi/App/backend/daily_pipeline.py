@@ -60,6 +60,7 @@ from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
 from indicators.compute_engine import compute_rolling_metrics_for_date
+from scripts.backfill_stage_classification import compute_stage_for_date
 
 
 def is_week_end(d: date) -> bool:
@@ -353,6 +354,16 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.complete('rolling_metrics', rows=rm_count)
         except Exception as e:
             tracker.fail('rolling_metrics', str(e))
+
+    # ── Step 6h: Stage classification (sma200_rising, stage, is_vani_s2) ──
+    # Depends on w52_high/w52_low/lifetime_high from step 6g — must run after.
+    if not skip_indicators:
+        tracker.start('stage_classification')
+        try:
+            sc_count = compute_stage_for_date(db, trade_date, verbose=True)
+            tracker.complete('stage_classification', rows=sc_count)
+        except Exception as e:
+            tracker.fail('stage_classification', str(e))
 
     # ── Step 7: Refresh views ──
     tracker.start('views')
