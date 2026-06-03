@@ -31,7 +31,119 @@ Date scoping (migration 039):
 
 from __future__ import annotations
 
+import sys
+import os
 from datetime import date, timedelta
+
+import pandas as pd
+import numpy as np
+
+
+def _compute_rolling_range_for_table(
+    db,
+    table: str,
+    id_col: str,
+    from_date: date | None,
+    w52_window: int,
+    verbose: bool = False,
+) -> int:
+    """
+    Compute w52_high, w52_low, lifetime_high for weekly or monthly tables.
+
+    w52_window: number of bars in one year
+      - weekly:  52
+      - monthly: 12
+
+    Loads full history per symbol (needed for lifetime_high expanding max),
+    computes via pandas, batch-upserts only rows >= from_date.
+    Returns total rows updated.
+    """
+    import psycopg2
+    import psycopg2.extras
+
+    conn = db._conn()
+    total = 0
+    batch_size = 500
+
+    try:
+        # Get all equity_ids that have data in this table
+        with conn.cursor() as cur:
+            cur.execute(f'SELECT DISTINCT {id_col} FROM {table} ORDER BY {id_col}')
+            equity_ids = [r[0] for r in cur.fetchall()]
+
+        if verbose:
+            print(f'    [rolling_range] {table}: {len(equity_ids)} symbols')
+
+        pending_batch = []
+
+        for i, eid in enumerate(equity_ids):
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    f'SELECT id, trade_date, high, low FROM {table} '
+                    f'WHERE {id_col} = %s ORDER BY trade_date ASC',
+                    [eid],
+                )
+                rows = cur.fetchall()
+
+            if not rows:
+                continue
+
+            df = pd.DataFrame([dict(r) for r in rows])
+            df['high'] = pd.to_numeric(df['high'], errors='coerce')
+            df['low']  = pd.to_numeric(df['low'],  errors='coerce')
+
+            df['w52_high']      = df['high'].rolling(window=w52_window, min_periods=1).max()
+            df['w52_low']       = df['low'].rolling(window=w52_window,  min_periods=1).min()
+            df['lifetime_high'] = df['high'].expanding(min_periods=1).max()
+
+            # Only update rows >= from_date (or all if from_date is None)
+            if from_date is not None:
+                df = df[df['trade_date'] >= pd.Timestamp(from_date)]
+
+            for _, row in df.iterrows():
+                w52h = round(float(row['w52_high']),      4) if pd.notna(row['w52_high'])      else None
+                w52l = round(float(row['w52_low']),       4) if pd.notna(row['w52_low'])       else None
+                lth  = round(float(row['lifetime_high']), 4) if pd.notna(row['lifetime_high']) else None
+                if w52h is None and w52l is None and lth is None:
+                    continue
+                pending_batch.append((w52h, w52l, lth, int(row['id'])))
+
+            if len(pending_batch) >= batch_size:
+                sql = f"""
+                    UPDATE {table} AS t
+                    SET w52_high = v.w52h, w52_low = v.w52l, lifetime_high = v.lth
+                    FROM (VALUES %s) AS v(w52h, w52l, lth, id)
+                    WHERE t.id = v.id
+                """
+                with conn.cursor() as cur:
+                    psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=batch_size)
+                conn.commit()
+                total += len(pending_batch)
+                pending_batch = []
+
+            if verbose and (i + 1) % 200 == 0:
+                print(f'      {i + 1}/{len(equity_ids)} symbols, {total:,} rows so far')
+
+        # Flush remainder
+        if pending_batch:
+            sql = f"""
+                UPDATE {table} AS t
+                SET w52_high = v.w52h, w52_low = v.w52l, lifetime_high = v.lth
+                FROM (VALUES %s) AS v(w52h, w52l, lth, id)
+                WHERE t.id = v.id
+            """
+            with conn.cursor() as cur:
+                psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=batch_size)
+            conn.commit()
+            total += len(pending_batch)
+
+    finally:
+        conn.close()
+
+    if verbose:
+        print(f'    [rolling_range] {table}: {total:,} rows updated')
+
+    return total
 
 
 def _all_symbol_ids(db, table: str, id_col: str) -> list[int]:
@@ -199,5 +311,18 @@ def run_indicator_chain(
         results['flow'] = sum(r.get('rows_updated', 0) for r in (flow_result or []))
         if verbose:
             print(f'      → {results["flow"]:,} rows updated')
+
+    # ── 4. Rolling range (w52_high, w52_low, lifetime_high) ───────────────
+    # weekly = 52 bars per year, monthly = 12 bars per year
+    w52_window = 12 if 'monthly' in table else 52
+    try:
+        range_rows = _compute_rolling_range_for_table(
+            db, table, id_col, from_date, w52_window, verbose=verbose,
+        )
+        results['rolling_range'] = range_rows
+    except Exception as e:
+        if verbose:
+            print(f'    [chain] rolling_range error: {e}')
+        results['rolling_range'] = 0
 
     return results
