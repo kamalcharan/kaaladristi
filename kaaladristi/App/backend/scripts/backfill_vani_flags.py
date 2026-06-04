@@ -353,8 +353,15 @@ def diagnose_nulls(conn, target_date: str):
 # ── Pipeline entry point ──────────────────────────────────────────────────
 
 def compute_vani_flags_for_date(db_conn, trade_date, verbose=False) -> int:
-    """Called from daily_pipeline.py step 6h extension."""
-    return _update_flags_for_date(db_conn, str(trade_date), verbose=verbose)
+    """Called from daily_pipeline.py step 6j.
+    Opens its own psycopg2 connection — db_conn is accepted but unused
+    (PgClient from daily_pipeline doesn't support cursor()/commit()).
+    """
+    conn = get_conn()
+    try:
+        return _update_flags_for_date(conn, str(trade_date), verbose=verbose)
+    finally:
+        conn.close()
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────
