@@ -55,7 +55,8 @@ class SymbolMatcher:
 
             row = {**rec, 'equity_id': eq_id}
             row.pop('symbol', None)
-            row.pop('isin', None)  # Not stored in EOD table
+            # Keep 'isin' — used by sync_isin_from_bhav() to update km_equity_symbols.
+            # upsert_equity_eod() filters it out via EOD_COLUMNS allowlist.
             matched.append(row)
 
         unmatched_list = sorted(unmatched)

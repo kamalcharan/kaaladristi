@@ -57,7 +57,7 @@ from pipeline.downloaders.nse_index_bhav import (
 from pipeline.downloaders.nse_fiidii import download_nse_fiidii, upsert_fii_dii
 from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav
 from pipeline.processors.symbol_matcher import SymbolMatcher
-from pipeline.processors.inserter import upsert_equity_eod, update_delivery
+from pipeline.processors.inserter import upsert_equity_eod, update_delivery, sync_isin_from_bhav
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
 from indicators.compute_engine import compute_rolling_metrics_for_date
 from scripts.backfill_stage_classification import compute_stage_for_date
@@ -240,6 +240,16 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.fail('insert', str(e))
         mark_day_status(db, trade_date, 'NSE', 'failed')
         return False
+
+    # ── Step 4b: Sync ISINs from bhavcopy → km_equity_symbols ──
+    # Bhavcopy already contains ISIN per symbol; use equity_id resolved by
+    # SymbolMatcher to update any NULL isin rows without symbol-format ambiguity.
+    try:
+        isin_updated = sync_isin_from_bhav(db, matched)
+        if isin_updated:
+            print(f'  [isin-sync] {isin_updated} NULL ISINs populated from bhavcopy')
+    except Exception as e:
+        print(f'  [isin-sync] Non-critical error: {e}')
 
     # ── Step 5: Download + apply delivery data ──
     tracker.start('delivery')
