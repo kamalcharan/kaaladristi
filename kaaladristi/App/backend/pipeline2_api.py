@@ -830,8 +830,12 @@ sma_slope AS (
         LAG(sma_200, 80) OVER (PARTITION BY equity_id ORDER BY trade_date) AS sma200_80d_ago
     FROM km_equity_eod
 ),
+-- nse_ids: set of equity_ids that have an NSE listing (used to drop orphan BSE rows)
+nse_ids AS (
+    SELECT id FROM km_equity_symbols WHERE exchange = 'NSE' AND is_active = true
+),
 stage2 AS (
-    SELECT DISTINCT ON (s.isin)
+    SELECT DISTINCT ON (COALESCE(s.isin, s.symbol))
         e.equity_id,
         e.trade_date,
         s.symbol,
@@ -879,7 +883,19 @@ stage2 AS (
     JOIN sma_slope ss          ON ss.equity_id = e.equity_id AND ss.trade_date = e.trade_date
     WHERE e.trade_date = (SELECT dt FROM latest)
       AND s.is_active = true
-      AND s.isin IS NOT NULL
+      -- Drop BSE-numeric stocks whose ISIN is NULL and an NSE peer exists for same ISIN;
+      -- keep BSE-only stocks (isin IS NOT NULL but no NSE equivalent is fine,
+      -- but pure-numeric-symbol + null-isin + NSE peer = duplicate → skip)
+      AND NOT (
+          s.exchange = 'BSE'
+          AND s.isin IS NULL
+          AND EXISTS (
+              SELECT 1 FROM km_equity_symbols n
+              WHERE n.exchange = 'NSE'
+                AND n.is_active = true
+                AND LOWER(n.company_name) = LOWER(s.company_name)
+          )
+      )
       AND e.close > e.sma_50
       AND e.sma_50 > e.sma_200
       AND e.close > e.sma_200
@@ -898,7 +914,7 @@ stage2 AS (
       {pct_ath_filter}
       {rs_filter}
       {supertrend_filter}
-    ORDER BY s.isin, CASE WHEN s.exchange = 'NSE' THEN 0 ELSE 1 END
+    ORDER BY COALESCE(s.isin, s.symbol), CASE WHEN s.exchange = 'NSE' THEN 0 ELSE 1 END
 )
 SELECT * FROM stage2
 ORDER BY is_vani DESC, {sort} {order_dir} NULLS LAST
