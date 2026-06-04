@@ -61,16 +61,10 @@ from pipeline.processors.inserter import upsert_equity_eod, update_delivery, syn
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
 from scripts.backfill_supertrend import compute_supertrend_for_date
 from scripts.backfill_d365 import compute_d365_for_date
+from scripts.backfill_rolling_metrics import compute_rolling_metrics_for_date
 from scripts.backfill_stage_classification import compute_stage_for_date
 from scripts.backfill_vani_flags import compute_vani_flags_for_date
 from scripts.sync_nse_isin_master import sync_nse_isin_master
-
-# indicators.compute_engine imports indicators.calculators which is a compiled
-# package present on the VPS but not in the local repo. Lazy-import it inside
-# the functions that need it so the module loads cleanly everywhere.
-def _import_rolling_metrics():
-    from indicators.compute_engine import compute_rolling_metrics_for_date
-    return compute_rolling_metrics_for_date
 
 
 def is_week_end(d: date) -> bool:
@@ -297,18 +291,14 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             tracker.fail('supertrend', str(e))
 
-    # ── Step 6g: Rolling metrics (w52_high, w52_low, lifetime_high, d30, avg_amt, delivery_surge) ──
-    # Must run BEFORE magic_rs and flow_intelligence — those signals depend on
-    # w52_high/w52_low/lifetime_high/delivery_surge_x populated here.
-    # NOTE: indicators.calculators is a compiled C extension installed on the VPS.
-    # This step will fail on Windows/dev — that is expected. On VPS it runs fine.
+    # ── Step 6g: Rolling metrics (w52_high, w52_low, lifetime_high) ──
+    # Pure SQL window function — no compiled package dependency.
+    # Must run BEFORE magic_rs and flow_intelligence.
     if not skip_indicators:
         tracker.start('rolling_metrics')
         try:
-            rm_count = _import_rolling_metrics()(db, trade_date, verbose=True)
+            rm_count = compute_rolling_metrics_for_date(db, trade_date, verbose=True)
             tracker.complete('rolling_metrics', rows=rm_count)
-        except ImportError as e:
-            tracker.skip('rolling_metrics', f'VPS-only compiled package not available: {e}')
         except Exception as e:
             tracker.fail('rolling_metrics', str(e))
 
