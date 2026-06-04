@@ -151,6 +151,36 @@ WHERE e.id = c.id
 """
 
 
+def _apply_unknown_stage(conn, target_date: str = None) -> int:
+    """Set stage = 'UNKNOWN' for rows where sma_200 IS NULL (insufficient history).
+    If target_date is given, scoped to that date only; otherwise all-history."""
+    if target_date:
+        sql = """
+            UPDATE km_equity_eod
+            SET stage = 'UNKNOWN'
+            WHERE trade_date = %s
+              AND stage IS NULL
+              AND sma_200 IS NULL
+        """
+        params = [target_date]
+    else:
+        sql = """
+            UPDATE km_equity_eod
+            SET stage = 'UNKNOWN'
+            WHERE stage IS NULL
+              AND sma_200 IS NULL
+        """
+        params = []
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        updated = cur.rowcount
+    conn.commit()
+    if updated:
+        scope = f"date={target_date}" if target_date else "all history"
+        print(f"  [unknown-stage] {updated:,} rows → 'UNKNOWN' ({scope})")
+    return updated
+
+
 def _run_sql(conn, where_clause: str, update_filter: str, label: str, timeout_ms: int = 600_000):
     sql = _BASE_CTE.format(where_clause=where_clause, update_filter=update_filter)
     t0 = time.time()
@@ -168,19 +198,22 @@ def _run_sql(conn, where_clause: str, update_filter: str, label: str, timeout_ms
 
 def run_missing(conn):
     """Update only rows where stage IS NULL (default mode)."""
-    # Restrict the CTE scan to equities that have any NULL stage row
     where = """
         WHERE equity_id IN (
             SELECT DISTINCT equity_id FROM km_equity_eod WHERE stage IS NULL
         )
     """
     update_filter = "AND e.stage IS NULL"
-    return _run_sql(conn, where, update_filter, "missing", timeout_ms=1_800_000)
+    n = _run_sql(conn, where, update_filter, "missing", timeout_ms=1_800_000)
+    _apply_unknown_stage(conn)
+    return n
 
 
 def run_full(conn):
     """Reprocess all rows."""
-    return _run_sql(conn, "", "", "full", timeout_ms=1_800_000)
+    n = _run_sql(conn, "", "", "full", timeout_ms=1_800_000)
+    _apply_unknown_stage(conn)
+    return n
 
 
 def run_date(conn, target_date: str):
@@ -202,6 +235,7 @@ def run_date(conn, target_date: str):
     conn.commit()
     elapsed = time.time() - t0
     print(f"  Done — {updated:,} rows updated in {elapsed:.0f}s")
+    _apply_unknown_stage(conn, target_date)
     return updated
 
 
@@ -215,6 +249,7 @@ def verify(conn):
                 COUNT(*) FILTER (WHERE stage = 'S1')           AS s1,
                 COUNT(*) FILTER (WHERE stage = 'S3')           AS s3,
                 COUNT(*) FILTER (WHERE stage = 'S4')           AS s4,
+                COUNT(*) FILTER (WHERE stage = 'UNKNOWN')      AS unknown,
                 COUNT(*) FILTER (WHERE stage IS NULL)          AS unclassified,
                 COUNT(*) FILTER (WHERE is_vani_s2 = TRUE)      AS vani_s2
             FROM km_equity_eod
@@ -223,14 +258,15 @@ def verify(conn):
         """)
         row = cur.fetchone()
         if row:
-            dt, s2, s2c, s1, s3, s4, null_, vani = row
+            dt, s2, s2c, s1, s3, s4, unk, null_, vani = row
             print(f"\n[verify] Latest trade_date = {dt}")
             print(f"  S2            = {s2:>6,}")
             print(f"  S2_CANDIDATE  = {s2c:>6,}")
             print(f"  S1            = {s1:>6,}")
             print(f"  S3            = {s3:>6,}")
             print(f"  S4            = {s4:>6,}")
-            print(f"  unclassified  = {null_:>6,}")
+            print(f"  UNKNOWN       = {unk:>6,}")
+            print(f"  unclassified  = {null_:>6,}  ← should be 0")
             print(f"  VaNi S2       = {vani:>6,}")
         # Total null check across all dates
         cur.execute("SELECT COUNT(*) FROM km_equity_eod WHERE stage IS NULL AND sma_200 IS NOT NULL")
