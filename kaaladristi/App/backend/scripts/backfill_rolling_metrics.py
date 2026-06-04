@@ -105,6 +105,16 @@ WHERE e.id = sub.id
         conn.close()
 
 
+def compute_rolling_metrics_for_date(db_conn, trade_date, verbose=False) -> int:
+    """Pipeline entry point. Pure SQL — no indicators.calculators dependency.
+    db_conn is accepted but unused (opens its own psycopg2 connection).
+    """
+    n = run_update(str(trade_date))
+    if verbose:
+        print(f"  [rolling_metrics] {n} rows updated for {trade_date}")
+    return n
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--date', default=str(date.today()), help='Trade date YYYY-MM-DD (default: today)')
