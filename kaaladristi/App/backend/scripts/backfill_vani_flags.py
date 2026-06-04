@@ -281,10 +281,12 @@ def verify(conn, target_date: str = None):
         cols = ', '.join(
             f"SUM(CASE WHEN {col} THEN 1 ELSE 0 END) AS {col}" for col in _FLAG_EXPRS
         )
+        # is_vani_s2 is owned by backfill_stage_classification.py — shown here
+        # for reference only, never written by this script.
         cur.execute(f"""
             SELECT
                 COUNT(*) AS total_rows,
-                SUM(CASE WHEN is_vani_s2 THEN 1 ELSE 0 END) AS is_vani_s2,
+                SUM(CASE WHEN is_vani_s2 THEN 1 ELSE 0 END) AS is_vani_s2__readonly,
                 {cols}
             FROM km_equity_eod
             WHERE trade_date = %s
@@ -299,6 +301,55 @@ def verify(conn, target_date: str = None):
         print(f"  {col:<25} {val or 0:>5}  {bar}")
 
 
+# ── NULL column diagnostic ────────────────────────────────────────────────
+
+def diagnose_nulls(conn, target_date: str):
+    """Report fill rates for columns that VaNi flags depend on."""
+    print(f"\n[diagnose] NULL check for trade_date = {target_date}")
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                COUNT(*)               AS total,
+                COUNT(w52_high)        AS w52_high,
+                COUNT(w52_low)         AS w52_low,
+                COUNT(lifetime_high)   AS lifetime_high,
+                COUNT(ema_20)          AS ema_20,
+                COUNT(sma_50)          AS sma_50,
+                COUNT(sma_150)         AS sma_150,
+                COUNT(sma_200)         AS sma_200,
+                COUNT(supertrend_dir)  AS supertrend_dir,
+                COUNT(delivery_surge_x) AS delivery_surge_x,
+                COUNT(delivery_pct)    AS delivery_pct,
+                COUNT(magic_rs)        AS magic_rs,
+                COUNT(magic_rs_zone)   AS magic_rs_zone,
+                COUNT(rss_value)       AS rss_value,
+                COUNT(sniper_inst)     AS sniper_inst,
+                COUNT(rvol)            AS rvol,
+                COUNT(rsi_14)          AS rsi_14,
+                COUNT(flow_type)       AS flow_type,
+                COUNT(dot_svd)         AS dot_svd,
+                COUNT(dot_sbd)         AS dot_sbd,
+                COUNT(dot_syd)         AS dot_syd,
+                COUNT(volume_divergence_flag) AS volume_div_flag,
+                COUNT(value_cr)        AS value_cr
+            FROM km_equity_eod
+            WHERE trade_date = %s
+        """, [target_date])
+        row = cur.fetchone()
+        desc = [d[0] for d in cur.description]
+
+    total = row[0]
+    print(f"  total rows : {total:,}")
+    print(f"\n  {'Column':<25} {'Filled':>7}  {'Null':>7}  {'%':>6}")
+    print(f"  {'-'*25} {'-'*7}  {'-'*7}  {'-'*6}")
+    for col, filled in zip(desc[1:], row[1:]):
+        filled = filled or 0
+        null   = total - filled
+        pct    = filled / total * 100 if total else 0
+        flag   = '' if filled == total else '  ← NULL'
+        print(f"  {col:<25} {filled:>7,}  {null:>7,}  {pct:>5.1f}%{flag}")
+
+
 # ── Pipeline entry point ──────────────────────────────────────────────────
 
 def compute_vani_flags_for_date(db_conn, trade_date, verbose=False) -> int:
@@ -310,13 +361,19 @@ def compute_vani_flags_for_date(db_conn, trade_date, verbose=False) -> int:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--date',   default='', help='Single date YYYY-MM-DD')
-    parser.add_argument('--full',   action='store_true', help='All history')
-    parser.add_argument('--verify', action='store_true', help='Counts only, no writes')
+    parser.add_argument('--date',     default='', help='Single date YYYY-MM-DD')
+    parser.add_argument('--full',     action='store_true', help='All history')
+    parser.add_argument('--verify',   action='store_true', help='Counts only, no writes')
+    parser.add_argument('--diagnose', action='store_true', help='NULL column fill-rate report')
     args = parser.parse_args()
 
     conn = get_conn()
     try:
+        if args.diagnose:
+            target = args.date or _get_latest_date(conn)
+            diagnose_nulls(conn, target)
+            return
+
         if args.verify:
             verify(conn, args.date or None)
             return
