@@ -322,17 +322,28 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.fail('d365', str(e))
 
     # ── Step 6a: MagicRS for equities ──
-    # p_from_date passed as Python date object (not string) so psycopg2 binds
-    # it as PostgreSQL DATE — avoids overload resolution picking an old INTEGER variant.
+    # Direct psycopg2 call with explicit ::text/::date casts — the generic
+    # rpc() helper passes string literals as 'unknown' type which causes
+    # PostgreSQL to fail overload resolution for this function.
     if not skip_indicators:
         tracker.start('magic_rs')
         try:
-            result = db.rpc('compute_all_magic_rs', {
-                'p_table': 'km_equity_eod',
-                'p_id_col': 'equity_id',
-                'p_from_date': trade_date,   # datetime.date → PostgreSQL DATE
-            })
-            mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            import psycopg2 as _pg2
+            import psycopg2.extras as _pg2x
+            from lib.config import DATABASE_URL as _DBURL
+            _conn = _pg2.connect(_DBURL, connect_timeout=30)
+            try:
+                with _conn.cursor(cursor_factory=_pg2x.RealDictCursor) as _cur:
+                    _cur.execute(
+                        "SELECT * FROM compute_all_magic_rs"
+                        "(%s::text, %s::text, %s::date)",
+                        ['km_equity_eod', 'equity_id', str(trade_date)],
+                    )
+                    _rows = _cur.fetchall()
+                _conn.commit()
+                mrs_count = sum(r.get('rows_updated', 0) for r in _rows)
+            finally:
+                _conn.close()
             actual, expected = get_step_coverage(db, 'magic_rs', trade_date, 'NSE')
             tracker.complete('magic_rs', rows=actual or mrs_count, rows_expected=expected)
         except Exception as e:
