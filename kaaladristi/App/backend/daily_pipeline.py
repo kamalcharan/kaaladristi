@@ -298,15 +298,12 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.fail('rolling_metrics', str(e))
 
     # ── Step 6a: MagicRS for equities ──
-    # Migration 038 made p_from_date required — pass trade_date explicitly
-    # so an older scheduler run doesn't silently clip to "last 90 days".
     if not skip_indicators:
         tracker.start('magic_rs')
         try:
             result = db.rpc('compute_all_magic_rs', {
                 'p_table': 'km_equity_eod',
                 'p_id_col': 'equity_id',
-                'p_from_date': str(trade_date),
             })
             mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
             actual, expected = get_step_coverage(db, 'magic_rs', trade_date, 'NSE')
