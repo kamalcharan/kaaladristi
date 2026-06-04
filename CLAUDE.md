@@ -63,7 +63,7 @@ kaaladristi/
 | `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
 | `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
 
-Latest migration: **090** (`km_migration_090_tier_subscriptions.sql`)
+Latest migration: **095** (`km_migration_095_delivery_columns.sql`)
 
 | Table | Description |
 |---|---|
@@ -92,6 +92,9 @@ Latest migration: **090** (`km_migration_090_tier_subscriptions.sql`)
 | `km_sector_sensitivity` | Per factor_type × sector sensitivity pct (migration 071) |
 | `km_technical_signals` | Technical signal instances per (asset_type, symbol_id, trade_date, signal_type) — schema only, never populated (migration 071) |
 | `km_score_calibration` | Score normalizer registry; one row per score_name, stores divisor/percentile for Plan Score etc. (migration 072) |
+| `kd_scan_presets` | Scanner preset definitions — id, name, description, tooltip, sort_order, result_limit. One row per scan. Source of truth for `fetchScanPresets()`. Mutations via direct SQL migration only. |
+| `km_equity_eod` (extended) | New columns added migration 094/095: `w52_high`, `w52_low`, `lifetime_high`, `avg_amt_5d`, `avg_amt_22d`, `delivery_surge_x`, `d30_pct_chng`, `d365_pct_chng`. All populated by `compute_rolling_metrics_for_date()` in pipeline step 6g. |
+| `km_equity_weekly` / `km_equity_monthly` | Also carry `lifetime_high` column (migration 094). |
 
 ### Deprecated Tables — DO NOT USE
 
@@ -117,6 +120,20 @@ Frontend `masterData.ts` still references these legacy tables — to be migrated
 
 ---
 
+## Two Databases
+
+The project uses **two separate PostgreSQL instances**:
+
+| Instance | Env var | Purpose |
+|---|---|---|
+| `kaala_dristi_db` | `DB_PRIMARY` | All market data, pipeline, user, rule, and framework tables |
+| `vani_db` | `VANI_DB_URL` | VaNi AI layer only: `vn_interaction_log`, `vani_observation_cache` |
+
+Migration 092 (`km_migration_092_vani_observation_cache.sql`) targets **`vani_db`**, not the main DB.
+All other migrations target `kaala_dristi_db`.
+
+---
+
 ## Environment Variables
 
 All env vars live in `App/.env` (single file for both frontend and backend).
@@ -131,6 +148,10 @@ VITE_THEME=kaaladristi               # or tech-ai or jade-thorn
 BREEZE_API_KEY=...
 BREEZE_API_SECRET=...
 BREEZE_SESSION_TOKEN=...
+VANI_DB_URL=postgresql://...   # vani_db — separate from DB_PRIMARY
+RAZORPAY_KEY_ID=...            # backend only
+RAZORPAY_KEY_SECRET=...        # backend only
+VITE_RAZORPAY_KEY_ID=...       # frontend public key
 ```
 
 ---
@@ -198,6 +219,31 @@ npm run dev
 > **⚠ Do not run `pipeline_api.py`** — it is the old v1 file, superseded by `pipeline2_api.py`.
 > The frontend calls `/api/pipeline2/` routes which only exist in `pipeline2_api.py`.
 > If the backend crashes and is restarted, make sure to start `pipeline2_api.py`, not `pipeline_api.py`.
+
+### Daily Pipeline Steps (daily_pipeline.py — `run_nse_pipeline`)
+
+Steps run sequentially for a trade date:
+1–5. Download + ingest (NSE/BSE bhav, FII/DII)
+6. `compute_all_pending_indicators()` — PostgreSQL RPC, sets `indicators_computed_at`
+6a. `compute_all_magic_rs()` for equities
+6b. `compute_all_flow_intelligence()`
+6c. `compute_all_industry_composites()`
+6d. Index returns (ret_5d/ret_22d/ret_66d)
+6e. Weekly aggregate (Fridays only)
+6f. Monthly aggregate (last calendar day only)
+**6g. `compute_rolling_metrics_for_date(db, trade_date)`** — populates `d30_pct_chng`, `d365_pct_chng`, `avg_amt_5d`, `avg_amt_22d`, `delivery_surge_x`, `w52_high`, `w52_low`, `lifetime_high`. This step exists because the PostgreSQL RPC (step 6) sets `indicators_computed_at` but never computes these rolling columns.
+
+### One-Shot Backfill Scripts
+
+```bash
+cd App/backend/scripts
+KD_DB_PASSWORD=... python backfill_d365.py          # backfill d365_pct_chng (calendar-date bisect)
+KD_DB_PASSWORD=... python backfill_d365.py --date 2026-06-03  # single date
+KD_DB_PASSWORD=... python backfill_supertrend.py    # backfill supertrend_dir
+KD_DB_PASSWORD=... python rule_discovery.py         # populate km_rule_signals from all active rules
+KD_DB_PASSWORD=... python rule_discovery.py 2026    # single year test mode
+python rule_discovery_test.py                        # quick test (2026 only)
+```
 
 ### Running locally
 ```bash
@@ -301,7 +347,9 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **089**.
+Next migration number: **096**.
+
+**Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
 ---
 
@@ -634,6 +682,71 @@ import {
 
 ---
 
+## Scanner System (`/scan`)
+
+### Architecture
+
+All scan logic is pure TypeScript — no backend RPC. The scan engine fetches broad market data once and filters it client-side.
+
+```
+services/scanEngine.ts   ← all 9 scan functions + data fetching + types
+hooks/useScan.ts         ← React Query wrappers: useScan(), useAllScanCounts(), useScanPresets()
+views/ScanView.tsx       ← page, sort, TradingView export, per-preset layouts
+kd_scan_presets (DB)     ← preset metadata (name/description/tooltip/limit); fetched via fetchScanPresets()
+```
+
+### 9 Current Scan Presets
+
+| ID | Display Name |
+|---|---|
+| `power_buy` | Strength Confluence |
+| `power_sell` | Weakness Confluence |
+| `smart_money` | Smart Money Loading |
+| `fresh_breakout` | Fresh Breakouts |
+| `quiet_accumulation` | Quiet Accumulation |
+| `distribution_warning` | Distribution Warnings |
+| `conviction_flow` | Conviction Flow |
+| `breakout_surge` | Breakout Surge |
+| `stage_2_leaders` | Stage 2 Leaders |
+
+**Adding a new scan**: (1) add `ScanDefinition` entry to `SCAN_PRESETS` in `scanEngine.ts`, (2) implement `scanXxx(bundle)` function, (3) register in the `SCAN_HANDLERS` dispatch map, (4) insert DB row via SQL migration into `kd_scan_presets`.
+
+### Key Scan Engine Patterns
+
+- **`ScanDataBundle`**: all data loaded once (symbols map, industry EOD, equity snapshots), passed to every scan function.
+- **`buildNsePreferredIds(symbols)`**: returns `Set<number>` of equity IDs where NSE is preferred over BSE for dual-listed stocks — apply to scans with `universe: 'NSE_ONLY'` to prevent numeric BSE scrip codes appearing in results.
+- **`displaySymbol(stock)`** in `lib/symbolUtils.ts`: BSE stocks have numeric symbols (e.g. `500325`). Always use `displaySymbol()` for UI rendering; it derives a short human-readable name from `company_name` when symbol is purely numeric.
+- **`VaNiOpportunityConfig`**: fetched from `kd_vani_opportunity_config` DB table; `vaniOpportunity: boolean` flag set per stock based on ATR reward/risk gate.
+- **`ExchangeFilter`**: `'combined' | 'NSE' | 'BSE'` — passed to `executeScan()` and `getAllScanCounts()`.
+- **`ScanTimeframe`**: `'daily' | 'weekly' | 'monthly'` — determines which EOD table (daily/weekly/monthly) to pull from.
+
+### TradingView Export
+
+All 9 scans have a `TradingViewExportButton` component (in `ScanView.tsx`) that:
+- Copies `NSE:SYMBOL,NSE:SYMBOL,...` to clipboard
+- Downloads a `.txt` file
+- Filters out purely numeric symbols (BSE scrip codes) from the export
+
+### New Columns Available for Scan Filters (migration 094/095)
+
+These are now populated daily via pipeline step 6g:
+
+| Column | Meaning |
+|---|---|
+| `d30_pct_chng` | % price change over 30 calendar days |
+| `d365_pct_chng` | % price change over 365 calendar days (calendar-date bisect, ±30 day tolerance) |
+| `avg_amt_5d` | 5-day avg delivery amount in Cr |
+| `avg_amt_22d` | 22-day avg delivery amount in Cr |
+| `delivery_surge_x` | `avg_amt_5d / avg_amt_22d` — recent vs baseline delivery |
+| `w52_high` / `w52_low` | 52-week (252-bar) rolling high/low |
+| `lifetime_high` | Expanding max from each stock's first record |
+
+### Stage 2 Leaders (Weinstein) Filter Logic
+
+`w52_low_gate`: close must be `< w52Low * 1.25` (not extended from lows). **Note**: the gate is `close < threshold`, meaning stocks already too extended are excluded — the inequality direction is critical. An inverted gate caused zero results (bug fixed in session 2026-06-02).
+
+---
+
 ## Industry Rotation MVP (Sprint: 2026-04-14)
 
 ### km_industry_eod (Migration 033)
@@ -693,6 +806,21 @@ Tap stock row → modal detail card (price, RS, flow, dots).
 | SBD signal | Accumulation Signature |
 | SVD signal | Strong Volume Drive / Volume Drive |
 | SYD signal | Distribution Signal |
+
+---
+
+## Critical Lessons (Patterns That Burned Us)
+
+These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
+
+- **Threshold calibration**: always check actual data distribution before setting numeric thresholds. `sniper_inst` ranges 0–40 (not 0–100). Run `SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY col) FROM table` first.
+- **Silent NULL columns**: a column can exist with no error but be NULL for all rows. Any RPC that silently returns 0 rows (no exception) is a landmine. Verify both index AND equity tables.
+- **BSE numeric symbols**: 82% of equity universe has numeric scrip codes. Always use `displaySymbol(stock)` from `lib/symbolUtils.ts` for UI. Filter numeric codes out of TradingView exports.
+- **Scan filter polarity**: inequality direction is critical. `close < w52Low * 1.25` means "not extended from lows". If you invert it, you exclude healthy stocks and get zero results.
+- **PostgREST boolean filters**: use `is.true` / `is.false` (not `eq.true`). The QueryBuilder has an `is()` method for this.
+- **RLS on pipeline-computed tables**: don't add RLS to aggregate tables (`km_industry_eod`, etc.) — they contain no user data and RLS creates silent access bugs when `kd_app` role differs from `authenticated`.
+- **Coverage metrics**: `coverage_pct NUMERIC(5,2)` overflows on multi-date RPC results. Use `NUMERIC(7,2)` and cap at 999.99 in Python.
+- **KaalaDristi voice is observational**: "Strength Confluence" not "Power Buy". Surface conditions, don't issue trade commands.
 
 ---
 

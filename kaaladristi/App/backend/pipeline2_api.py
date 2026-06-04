@@ -718,15 +718,227 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
 
 @app.get('/api/scan/presets')
 def scan_presets():
-    """Return all active scan preset definitions ordered by sort_order."""
+    """Return all active scan preset definitions ordered by category_sort, sort_order."""
     conn = _conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT id,name,description,tooltip,sort_order,result_limit,is_active "
-                "FROM kd_scan_presets WHERE is_active = true ORDER BY sort_order"
+                "SELECT id,name,description,tooltip,sort_order,result_limit,is_active,"
+                "       category,category_label,category_color,category_sort,universe,timeframe "
+                "FROM kd_scan_presets WHERE is_active = true "
+                "ORDER BY category_sort, sort_order"
             )
             return cur.fetchall() or []
+    finally:
+        conn.close()
+
+
+# ── Stage 2 Leaders scan ───────────────────────────────────────────────────
+
+@app.get('/api/scan/run/stage_2_leaders')
+def scan_stage_2_leaders(
+    exchange: str = 'combined',
+    industry: str = '',
+    mcap_min: float = 0,
+    mcap_max: float = 0,
+    pct_ath_min: float = 0,
+    rs_min: float = 0,
+    supertrend: str = '',
+    sort: str = 'magic_rs',
+    order: str = 'desc',
+):
+    """Stage 2 Leaders (Weinstein) — server-side scan.
+
+    Computes w52_high, w52_low, lifetime_high on the fly using window functions
+    so results are always correct regardless of whether pipeline step 6g has run
+    for today's date.
+    """
+    VALID_SORT = {'magic_rs', 'close', 'rss_spread', 'pct_of_ath', 'mcap_cr'}
+    sort = sort if sort in VALID_SORT else 'magic_rs'
+    order_dir = 'DESC' if order != 'asc' else 'ASC'
+
+    params: list = []
+
+    exchange_filter = ''
+    if exchange == 'NSE':
+        exchange_filter = "AND s.exchange = 'NSE'"
+    elif exchange == 'BSE':
+        exchange_filter = "AND s.exchange = 'BSE'"
+
+    industry_filter = ''
+    if industry:
+        params.append(industry)
+        industry_filter = f"AND s.industry = ${len(params)}"
+
+    mcap_min_filter = ''
+    if mcap_min > 0:
+        params.append(mcap_min)
+        mcap_min_filter = f"AND s.mcap_cr >= ${len(params)}"
+
+    mcap_max_filter = ''
+    if mcap_max > 0:
+        params.append(mcap_max)
+        mcap_max_filter = f"AND s.mcap_cr <= ${len(params)}"
+
+    pct_ath_filter = ''
+    if pct_ath_min > 0:
+        params.append(pct_ath_min)
+        pct_ath_filter = f"AND (e.close / NULLIF(r.lth_calc, 0) * 100) >= ${len(params)}"
+
+    rs_filter = ''
+    if rs_min > 0:
+        params.append(rs_min)
+        rs_filter = f"AND e.magic_rs >= ${len(params)}"
+
+    supertrend_filter = ''
+    if supertrend == 'bull':
+        supertrend_filter = "AND e.supertrend_dir = 1"
+    elif supertrend == 'bear':
+        supertrend_filter = "AND e.supertrend_dir = -1"
+
+    sql = f"""
+WITH latest AS (
+    SELECT MAX(trade_date) AS dt FROM km_equity_eod
+),
+rolling AS (
+    SELECT
+        equity_id,
+        trade_date,
+        MAX(high) OVER (
+            PARTITION BY equity_id
+            ORDER BY trade_date
+            ROWS BETWEEN 251 PRECEDING AND CURRENT ROW
+        ) AS w52_high_calc,
+        MIN(low) OVER (
+            PARTITION BY equity_id
+            ORDER BY trade_date
+            ROWS BETWEEN 251 PRECEDING AND CURRENT ROW
+        ) AS w52_low_calc,
+        MAX(high) OVER (
+            PARTITION BY equity_id
+            ORDER BY trade_date
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS lth_calc
+    FROM km_equity_eod
+),
+sma_slope AS (
+    SELECT
+        equity_id,
+        trade_date,
+        sma_200,
+        LAG(sma_200, 20) OVER (PARTITION BY equity_id ORDER BY trade_date) AS sma200_20d_ago,
+        LAG(sma_200, 80) OVER (PARTITION BY equity_id ORDER BY trade_date) AS sma200_80d_ago
+    FROM km_equity_eod
+),
+-- nse_ids: set of equity_ids that have an NSE listing (used to drop orphan BSE rows)
+nse_ids AS (
+    SELECT id FROM km_equity_symbols WHERE exchange = 'NSE' AND is_active = true
+),
+stage2 AS (
+    SELECT DISTINCT ON (COALESCE(s.isin, s.symbol))
+        e.equity_id,
+        e.trade_date,
+        s.symbol,
+        s.company_name,
+        s.exchange,
+        s.industry,
+        s.mcap_cr,
+        s.isin,
+        e.close,
+        e.pct_chng,
+        e.magic_rs,
+        e.magic_rs_zone,
+        e.rss_spread,
+        e.rsi_14,
+        e.rvol,
+        e.flow_type,
+        e.sniper_inst,
+        e.supertrend_dir,
+        e.sma_50,
+        e.sma_150,
+        e.sma_200,
+        e.ema_20,
+        e.atr_14,
+        e.avg_amt_5d,
+        e.avg_amt_22d,
+        e.delivery_surge_x,
+        r.w52_high_calc                                                          AS w52_high,
+        r.w52_low_calc                                                           AS w52_low,
+        r.lth_calc                                                               AS lifetime_high,
+        ss.sma200_20d_ago,
+        ss.sma200_80d_ago,
+        ROUND((e.close / NULLIF(r.lth_calc, 0) * 100)::NUMERIC, 1)              AS pct_of_ath,
+        ROUND((e.close / NULLIF(r.w52_high_calc, 0) * 100)::NUMERIC, 1)         AS pct_of_52wh,
+        CASE
+            WHEN e.magic_rs > 40
+                 AND e.rvol > 1.5
+                 AND e.rsi_14 BETWEEN 50 AND 80
+                 AND e.close / NULLIF(r.lth_calc, 0) >= 0.75
+                 AND e.close / NULLIF(r.w52_high_calc, 0) >= 0.85
+            THEN true ELSE false
+        END AS is_vani
+    FROM km_equity_eod e
+    JOIN km_equity_symbols s   ON e.equity_id = s.id
+    JOIN rolling r             ON r.equity_id = e.equity_id AND r.trade_date = e.trade_date
+    JOIN sma_slope ss          ON ss.equity_id = e.equity_id AND ss.trade_date = e.trade_date
+    WHERE e.trade_date = (SELECT dt FROM latest)
+      AND s.is_active = true
+      -- Drop BSE-numeric stocks whose ISIN is NULL and an NSE peer exists for same ISIN;
+      -- keep BSE-only stocks (isin IS NOT NULL but no NSE equivalent is fine,
+      -- but pure-numeric-symbol + null-isin + NSE peer = duplicate → skip)
+      AND NOT (
+          s.exchange = 'BSE'
+          AND s.isin IS NULL
+          AND EXISTS (
+              SELECT 1 FROM km_equity_symbols n
+              WHERE n.exchange = 'NSE'
+                AND n.is_active = true
+                AND LOWER(n.company_name) = LOWER(s.company_name)
+          )
+      )
+      AND e.close > e.sma_50
+      AND e.sma_50 > e.sma_200
+      AND e.close > e.sma_200
+      AND e.sma_200 IS NOT NULL
+      AND e.close > 30
+      AND r.w52_low_calc * 1.25 <= e.close
+      AND r.w52_high_calc * 0.75 <= e.close
+      AND (
+          e.sma_200 > ss.sma200_20d_ago
+          OR e.sma_200 > ss.sma200_80d_ago
+      )
+      {exchange_filter}
+      {industry_filter}
+      {mcap_min_filter}
+      {mcap_max_filter}
+      {pct_ath_filter}
+      {rs_filter}
+      {supertrend_filter}
+    ORDER BY COALESCE(s.isin, s.symbol), CASE WHEN s.exchange = 'NSE' THEN 0 ELSE 1 END
+)
+SELECT * FROM stage2
+ORDER BY is_vani DESC, {sort} {order_dir} NULLS LAST
+LIMIT 200
+"""
+    conn = _conn(statement_timeout_ms=120000)
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            stocks = []
+            for r in rows:
+                row = dict(r)
+                row['trade_date'] = row['trade_date'].isoformat() if row.get('trade_date') else None
+                row['pct_of_ath'] = float(row['pct_of_ath']) if row.get('pct_of_ath') else None
+                row['pct_of_52wh'] = float(row['pct_of_52wh']) if row.get('pct_of_52wh') else None
+                row['is_vani'] = bool(row.get('is_vani', False))
+                stocks.append(row)
+            vani_count = sum(1 for s in stocks if s['is_vani'])
+            return {
+                'stocks': stocks,
+                'total': len(stocks),
+                'vani_count': vani_count,
+            }
     finally:
         conn.close()
 

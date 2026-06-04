@@ -57,9 +57,14 @@ from pipeline.downloaders.nse_index_bhav import (
 from pipeline.downloaders.nse_fiidii import download_nse_fiidii, upsert_fii_dii
 from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav
 from pipeline.processors.symbol_matcher import SymbolMatcher
-from pipeline.processors.inserter import upsert_equity_eod, update_delivery
+from pipeline.processors.inserter import upsert_equity_eod, update_delivery, sync_isin_from_bhav
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
-from indicators.compute_engine import compute_rolling_metrics_for_date
+from scripts.backfill_supertrend import compute_supertrend_for_date
+from scripts.backfill_d365 import compute_d365_for_date
+from scripts.backfill_rolling_metrics import compute_rolling_metrics_for_date
+from scripts.backfill_stage_classification import compute_stage_for_date
+from scripts.backfill_vani_flags import compute_vani_flags_for_date
+from scripts.sync_nse_isin_master import sync_nse_isin_master
 
 
 def is_week_end(d: date) -> bool:
@@ -239,6 +244,16 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         mark_day_status(db, trade_date, 'NSE', 'failed')
         return False
 
+    # ── Step 4b: Sync ISINs from bhavcopy → km_equity_symbols ──
+    # Bhavcopy already contains ISIN per symbol; use equity_id resolved by
+    # SymbolMatcher to update any NULL isin rows without symbol-format ambiguity.
+    try:
+        isin_updated = sync_isin_from_bhav(db, matched)
+        if isin_updated:
+            print(f'  [isin-sync] {isin_updated} NULL ISINs populated from bhavcopy')
+    except Exception as e:
+        print(f'  [isin-sync] Non-critical error: {e}')
+
     # ── Step 5: Download + apply delivery data ──
     tracker.start('delivery')
     try:
@@ -267,18 +282,58 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             tracker.fail('indicators', str(e))
 
+    # ── Step 6_super: SuperTrend (needs atr_10 from step 6) ──
+    if not skip_indicators:
+        tracker.start('supertrend')
+        try:
+            st_count = compute_supertrend_for_date(db, trade_date, verbose=True)
+            tracker.complete('supertrend', rows=st_count)
+        except Exception as e:
+            tracker.fail('supertrend', str(e))
+
+    # ── Step 6g: Rolling metrics (w52_high, w52_low, lifetime_high) ──
+    # Pure SQL window function — no compiled package dependency.
+    # Must run BEFORE magic_rs and flow_intelligence.
+    if not skip_indicators:
+        tracker.start('rolling_metrics')
+        try:
+            rm_count = compute_rolling_metrics_for_date(db, trade_date, verbose=True)
+            tracker.complete('rolling_metrics', rows=rm_count)
+        except Exception as e:
+            tracker.fail('rolling_metrics', str(e))
+
+    # ── Step 6_d365: d365_pct_chng (calendar 365-day lookback) ──
+    if not skip_indicators:
+        tracker.start('d365')
+        try:
+            d365_count = compute_d365_for_date(db, trade_date, verbose=True)
+            tracker.complete('d365', rows=d365_count)
+        except Exception as e:
+            tracker.fail('d365', str(e))
+
     # ── Step 6a: MagicRS for equities ──
-    # Migration 038 made p_from_date required — pass trade_date explicitly
-    # so an older scheduler run doesn't silently clip to "last 90 days".
+    # Direct psycopg2 call with explicit ::text/::date casts — the generic
+    # rpc() helper passes string literals as 'unknown' type which causes
+    # PostgreSQL to fail overload resolution for this function.
     if not skip_indicators:
         tracker.start('magic_rs')
         try:
-            result = db.rpc('compute_all_magic_rs', {
-                'p_table': 'km_equity_eod',
-                'p_id_col': 'equity_id',
-                'p_from_date': str(trade_date),
-            })
-            mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
+            import psycopg2 as _pg2
+            import psycopg2.extras as _pg2x
+            from lib.config import DATABASE_URL as _DBURL
+            _conn = _pg2.connect(_DBURL, connect_timeout=30)
+            try:
+                with _conn.cursor(cursor_factory=_pg2x.RealDictCursor) as _cur:
+                    _cur.execute(
+                        "SELECT * FROM compute_all_magic_rs"
+                        "(%s::text, %s::text, %s::date)",
+                        ['km_equity_eod', 'equity_id', str(trade_date)],
+                    )
+                    _rows = _cur.fetchall()
+                _conn.commit()
+                mrs_count = sum(r.get('rows_updated', 0) for r in _rows)
+            finally:
+                _conn.close()
             actual, expected = get_step_coverage(db, 'magic_rs', trade_date, 'NSE')
             tracker.complete('magic_rs', rows=actual or mrs_count, rows_expected=expected)
         except Exception as e:
@@ -343,16 +398,36 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             tracker.fail('equity_monthly', str(e))
 
-    # ── Step 6g: Rolling metrics (d30, d365, avg_amt, delivery_surge, w52, lifetime_high) ──
-    # These columns are not computed by the PostgreSQL RPC (compute_all_pending_indicators).
-    # Run a dedicated Python step so they are always populated for today's rows.
+    # ── Step 6h: Stage classification (sma200_rising, stage, is_vani_s2) ──
+    # Depends on w52_high/w52_low/lifetime_high from step 6g — must run after.
     if not skip_indicators:
-        tracker.start('rolling_metrics')
+        tracker.start('stage_classification')
         try:
-            rm_count = compute_rolling_metrics_for_date(db, trade_date, verbose=True)
-            tracker.complete('rolling_metrics', rows=rm_count)
+            sc_count = compute_stage_for_date(db, trade_date, verbose=True)
+            tracker.complete('stage_classification', rows=sc_count)
         except Exception as e:
-            tracker.fail('rolling_metrics', str(e))
+            tracker.fail('stage_classification', str(e))
+
+    # ── Step 6j: VaNi screener flags (all is_vani_* columns except is_vani_s2) ──
+    # Depends on magic_rs/flow_type/rsi/rvol/w52/ema_20/supertrend from all prior steps.
+    if not skip_indicators:
+        tracker.start('vani_flags')
+        try:
+            vf_count = compute_vani_flags_for_date(db, trade_date, verbose=False)
+            tracker.complete('vani_flags', rows=vf_count)
+        except Exception as e:
+            tracker.fail('vani_flags', str(e))
+
+    # ── Step 6i: ISIN master sync (weekly — Mondays only) ──
+    # Downloads NSE EQUITY_L.csv and backfills any missing/changed ISINs in
+    # km_equity_symbols. Runs weekly to avoid a daily network call.
+    if not skip_indicators and trade_date.weekday() == 0:  # Monday
+        tracker.start('isin_sync')
+        try:
+            isin_count = sync_nse_isin_master(verbose=True)
+            tracker.complete('isin_sync', rows=isin_count)
+        except Exception as e:
+            tracker.fail('isin_sync', str(e))
 
     # ── Step 7: Refresh views ──
     tracker.start('views')

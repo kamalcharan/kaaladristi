@@ -17,6 +17,8 @@ Usage:
 import sys
 import os
 import time
+from collections import defaultdict
+from datetime import date as _date
 import psycopg2
 import psycopg2.extras
 
@@ -223,17 +225,89 @@ def run_verification(conn):
             )
 
 
+# ── Pipeline entry point ──────────────────────────────────────────────────
+
+def compute_supertrend_for_date(db_conn, trade_date, verbose=False) -> int:
+    """Called from daily_pipeline.py after compute_all_pending_indicators.
+    Opens its own psycopg2 connection — db_conn is accepted but unused.
+    Loads full equity history per stock so the state machine is correct,
+    but only writes supertrend/supertrend_dir for rows on trade_date.
+    """
+    conn = get_conn()
+    try:
+        target = str(trade_date)
+        target_dt = _date.fromisoformat(target)
+
+        # Equities that have a row on this date with atr_10 populated
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT DISTINCT equity_id FROM km_equity_eod
+                WHERE trade_date = %s AND atr_10 IS NOT NULL
+            """, [target])
+            equity_ids = [r[0] for r in cur.fetchall()]
+
+        if not equity_ids:
+            if verbose:
+                print(f"  [supertrend] No equities with atr_10 for {target}")
+            return 0
+
+        # Load full history for all affected equities (state machine needs it)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, equity_id, trade_date, high, low, close, atr_10
+                FROM km_equity_eod
+                WHERE equity_id = ANY(%s)
+                ORDER BY equity_id, trade_date ASC
+            """, [equity_ids])
+            all_rows = cur.fetchall()
+
+        groups = defaultdict(list)
+        for r in all_rows:
+            groups[r['equity_id']].append(r)
+
+        pending_batch = []
+        for eid, rows in groups.items():
+            results = compute_supertrend(rows)
+            target_ids = {r['id'] for r in rows if r['trade_date'] == target_dt}
+            for (row_id, st_val, st_dir) in results:
+                if row_id in target_ids:
+                    pending_batch.append((st_val, st_dir, row_id))
+
+        if not pending_batch:
+            return 0
+
+        batch_update(conn, pending_batch)
+        if verbose:
+            print(f"  [supertrend] {len(pending_batch)} rows updated for {target}")
+        return len(pending_batch)
+    finally:
+        conn.close()
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 def main():
     args        = sys.argv[1:]
     verify_only = '--verify' in args
-    symbol      = next((a for a in args if not a.startswith('--')), None)
+    date_arg    = next((a.split('=', 1)[1] if '=' in a else None
+                        for a in args if a.startswith('--date')), None)
+    if date_arg is None:
+        date_arg = next((a for a in args
+                         if not a.startswith('--') and len(a) == 10 and a[4] == '-'), None)
+    symbol      = next((a for a in args
+                        if not a.startswith('--') and not (len(a) == 10 and a[4] == '-')), None)
 
     conn = get_conn()
 
     if verify_only:
         run_verification(conn)
+        conn.close()
+        return
+
+    if date_arg:
+        print(f'SuperTrend for single date {date_arg}')
+        n = compute_supertrend_for_date(None, date_arg, verbose=True)
+        print(f'  Done — {n} rows updated')
         conn.close()
         return
 

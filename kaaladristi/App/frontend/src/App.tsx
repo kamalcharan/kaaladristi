@@ -116,6 +116,8 @@ function AppRoutes() {
           <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />
           <Route path="/intraday/:indexId" element={<IntradayPage />} />
           <Route path="/scan" element={<Navigate to="/scanner" replace />} />
+          <Route path="/scanners" element={<Navigate to="/scanner" replace />} />
+          <Route path="/scanners/:presetId" element={<ScanView />} />
           <Route path="/scanner" element={<ScanView />} />
           <Route path="/scanner/:presetId" element={<ScanView />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
