@@ -59,6 +59,8 @@ from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery, sync_isin_from_bhav
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
+from scripts.backfill_supertrend import compute_supertrend_for_date
+from scripts.backfill_d365 import compute_d365_for_date
 from scripts.backfill_stage_classification import compute_stage_for_date
 from scripts.backfill_vani_flags import compute_vani_flags_for_date
 from scripts.sync_nse_isin_master import sync_nse_isin_master
@@ -286,24 +288,49 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             tracker.fail('indicators', str(e))
 
-    # ── Step 6g: Rolling metrics (d30, d365, avg_amt, delivery_surge, w52, lifetime_high) ──
+    # ── Step 6_super: SuperTrend (needs atr_10 from step 6) ──
+    if not skip_indicators:
+        tracker.start('supertrend')
+        try:
+            st_count = compute_supertrend_for_date(db, trade_date, verbose=True)
+            tracker.complete('supertrend', rows=st_count)
+        except Exception as e:
+            tracker.fail('supertrend', str(e))
+
+    # ── Step 6g: Rolling metrics (w52_high, w52_low, lifetime_high, d30, avg_amt, delivery_surge) ──
     # Must run BEFORE magic_rs and flow_intelligence — those signals depend on
     # w52_high/w52_low/lifetime_high/delivery_surge_x populated here.
+    # NOTE: indicators.calculators is a compiled C extension installed on the VPS.
+    # This step will fail on Windows/dev — that is expected. On VPS it runs fine.
     if not skip_indicators:
         tracker.start('rolling_metrics')
         try:
             rm_count = _import_rolling_metrics()(db, trade_date, verbose=True)
             tracker.complete('rolling_metrics', rows=rm_count)
+        except ImportError as e:
+            tracker.skip('rolling_metrics', f'VPS-only compiled package not available: {e}')
         except Exception as e:
             tracker.fail('rolling_metrics', str(e))
 
+    # ── Step 6_d365: d365_pct_chng (calendar 365-day lookback) ──
+    if not skip_indicators:
+        tracker.start('d365')
+        try:
+            d365_count = compute_d365_for_date(db, trade_date, verbose=True)
+            tracker.complete('d365', rows=d365_count)
+        except Exception as e:
+            tracker.fail('d365', str(e))
+
     # ── Step 6a: MagicRS for equities ──
+    # p_from_date passed as Python date object (not string) so psycopg2 binds
+    # it as PostgreSQL DATE — avoids overload resolution picking an old INTEGER variant.
     if not skip_indicators:
         tracker.start('magic_rs')
         try:
             result = db.rpc('compute_all_magic_rs', {
                 'p_table': 'km_equity_eod',
                 'p_id_col': 'equity_id',
+                'p_from_date': trade_date,   # datetime.date → PostgreSQL DATE
             })
             mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
             actual, expected = get_step_coverage(db, 'magic_rs', trade_date, 'NSE')

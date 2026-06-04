@@ -18,7 +18,7 @@ import sys
 import os
 import time
 from bisect import bisect_left
-from datetime import timedelta
+from datetime import timedelta, date as _date
 from collections import defaultdict
 
 import psycopg2
@@ -82,6 +82,106 @@ def run_verification(conn):
             print(f'  {r["symbol"]:<14} {float(r["close"]):>8.2f}  {d30}  {d365}')
 
 
+def _compute_d365(conn, date_arg=None) -> int:
+    """Core d365 computation. Shared by main() CLI and compute_d365_for_date() pipeline."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        if date_arg:
+            cur.execute("""
+                SELECT id, equity_id, trade_date, close
+                FROM km_equity_eod
+                WHERE close IS NOT NULL
+                  AND equity_id IN (
+                    SELECT DISTINCT equity_id FROM km_equity_eod
+                    WHERE trade_date = %s
+                  )
+                ORDER BY equity_id, trade_date ASC
+            """, [date_arg])
+        else:
+            cur.execute("""
+                SELECT id, equity_id, trade_date, close
+                FROM km_equity_eod
+                WHERE close IS NOT NULL
+                ORDER BY equity_id, trade_date ASC
+            """)
+        all_rows = cur.fetchall()
+
+    groups = defaultdict(list)
+    for row in all_rows:
+        groups[row['equity_id']].append(row)
+
+    pending_batch = []
+    total_rows = 0
+    # psycopg2 returns datetime.date objects; convert target for comparison
+    target_dt = _date.fromisoformat(date_arg) if date_arg else None
+
+    for equity_id, rows in groups.items():
+        dates  = [r['trade_date'] for r in rows]
+        closes = [float(r['close']) for r in rows]
+
+        for i, row in enumerate(rows):
+            if target_dt and row['trade_date'] != target_dt:
+                continue
+
+            target_date = row['trade_date'] - timedelta(days=TARGET_DAYS)
+            j = bisect_left(dates, target_date, 0, i)
+            if j > 0 and (j >= i or dates[j] > target_date):
+                j -= 1
+            if j < 0 or j >= i:
+                continue
+            diff = abs((dates[j] - target_date).days)
+            if diff > MAX_LOOKBACK:
+                continue
+            past_close = closes[j]
+            if past_close == 0:
+                continue
+
+            d365 = round((closes[i] - past_close) / past_close * 100, 2)
+            pending_batch.append((d365, row['id']))
+
+        if len(pending_batch) >= BATCH_SIZE:
+            sql = """
+                UPDATE km_equity_eod AS e
+                SET d365_pct_chng = v.d365
+                FROM (VALUES %s) AS v(d365, id)
+                WHERE e.id = v.id
+            """
+            with conn.cursor() as cur:
+                psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=BATCH_SIZE)
+            conn.commit()
+            total_rows   += len(pending_batch)
+            pending_batch  = []
+
+    if pending_batch:
+        sql = """
+            UPDATE km_equity_eod AS e
+            SET d365_pct_chng = v.d365
+            FROM (VALUES %s) AS v(d365, id)
+            WHERE e.id = v.id
+        """
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=BATCH_SIZE)
+        conn.commit()
+        total_rows += len(pending_batch)
+
+    return total_rows
+
+
+# ── Pipeline entry point ──────────────────────────────────────────────────
+
+def compute_d365_for_date(db_conn, trade_date, verbose=False) -> int:
+    """Called from daily_pipeline.py after rolling_metrics.
+    Opens its own psycopg2 connection — db_conn is accepted but unused.
+    """
+    conn = get_conn()
+    try:
+        n = _compute_d365(conn, date_arg=str(trade_date))
+        if verbose:
+            print(f"  [d365] {n} rows updated for {trade_date}")
+        return n
+    finally:
+        conn.close()
+
+
 def main():
     args        = sys.argv[1:]
     verify_only = '--verify' in args
@@ -101,118 +201,12 @@ def main():
     print(f'd365_pct_chng backfill — calendar 365-day lookback, batch={BATCH_SIZE}')
     if date_arg:
         print(f'  Mode: single date {date_arg}')
+    else:
+        print(f'  Mode: full history')
     print(f'  Loading rows from km_equity_eod...')
 
     t0 = time.time()
-
-    # ── Step 1: fetch all rows in one query ────────────────────────────────
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        if date_arg:
-            # Load full history so lookback windows are correct, but only
-            # compute and write rows for the target date.
-            cur.execute(
-                """
-                SELECT id, equity_id, trade_date, close
-                FROM km_equity_eod
-                WHERE close IS NOT NULL
-                  AND equity_id IN (
-                    SELECT DISTINCT equity_id FROM km_equity_eod
-                    WHERE trade_date = %s
-                  )
-                ORDER BY equity_id, trade_date ASC
-                """,
-                [date_arg],
-            )
-        else:
-            cur.execute(
-                """
-                SELECT id, equity_id, trade_date, close
-                FROM km_equity_eod
-                WHERE close IS NOT NULL
-                ORDER BY equity_id, trade_date ASC
-                """
-            )
-        all_rows = cur.fetchall()
-
-    print(f'  Fetched {len(all_rows):,} rows in {time.time()-t0:.1f}s')
-
-    # ── Step 2: group by equity_id ─────────────────────────────────────────
-    groups = defaultdict(list)
-    for row in all_rows:
-        groups[row['equity_id']].append(row)
-
-    print(f'  {len(groups):,} equity groups found. Computing d365...\n')
-
-    # ── Step 3: compute per group ──────────────────────────────────────────
-    pending_batch = []   # (d365_value, row_id)
-    total_rows    = 0
-    rows_computed = 0
-
-    t1 = time.time()
-
-    for equity_id, rows in groups.items():
-        dates  = [r['trade_date'] for r in rows]
-        closes = [float(r['close']) for r in rows]
-
-        for i, row in enumerate(rows):
-            # --date mode: skip rows that aren't the target date
-            if date_arg and str(row['trade_date']) != date_arg:
-                continue
-
-            target_date = row['trade_date'] - timedelta(days=TARGET_DAYS)
-
-            # bisect_left: find leftmost position where dates[j] >= target_date
-            j = bisect_left(dates, target_date, 0, i)
-
-            # Step back to last date <= target_date
-            if j > 0 and (j >= i or dates[j] > target_date):
-                j -= 1
-
-            if j < 0 or j >= i:
-                continue
-
-            # Tolerance check: past date must be within MAX_LOOKBACK days of target
-            diff = abs((dates[j] - target_date).days)
-            if diff > MAX_LOOKBACK:
-                continue
-
-            past_close = closes[j]
-            if past_close == 0:
-                continue
-
-            d365 = round((closes[i] - past_close) / past_close * 100, 2)
-            pending_batch.append((d365, row['id']))
-            rows_computed += 1
-
-        if len(pending_batch) >= BATCH_SIZE:
-            sql = """
-                UPDATE km_equity_eod AS e
-                SET d365_pct_chng = v.d365
-                FROM (VALUES %s) AS v(d365, id)
-                WHERE e.id = v.id
-            """
-            with conn.cursor() as cur:
-                psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=BATCH_SIZE)
-            conn.commit()
-            total_rows   += len(pending_batch)
-            pending_batch  = []
-
-            elapsed = time.time() - t1
-            print(f'  {total_rows:>8,} rows written  ({elapsed:.0f}s)')
-
-    # Flush remainder
-    if pending_batch:
-        sql = """
-            UPDATE km_equity_eod AS e
-            SET d365_pct_chng = v.d365
-            FROM (VALUES %s) AS v(d365, id)
-            WHERE e.id = v.id
-        """
-        with conn.cursor() as cur:
-            psycopg2.extras.execute_values(cur, sql, pending_batch, page_size=BATCH_SIZE)
-        conn.commit()
-        total_rows += len(pending_batch)
-
+    total_rows = _compute_d365(conn, date_arg=date_arg)
     elapsed = time.time() - t0
     print(f'\n  Done — {total_rows:,} rows updated in {elapsed:.1f}s')
 
