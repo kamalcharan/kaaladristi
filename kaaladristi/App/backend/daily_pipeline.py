@@ -59,9 +59,15 @@ from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery, sync_isin_from_bhav
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
-from indicators.compute_engine import compute_rolling_metrics_for_date
 from scripts.backfill_stage_classification import compute_stage_for_date
 from scripts.sync_nse_isin_master import sync_nse_isin_master
+
+# indicators.compute_engine imports indicators.calculators which is a compiled
+# package present on the VPS but not in the local repo. Lazy-import it inside
+# the functions that need it so the module loads cleanly everywhere.
+def _import_rolling_metrics():
+    from indicators.compute_engine import compute_rolling_metrics_for_date
+    return compute_rolling_metrics_for_date
 
 
 def is_week_end(d: date) -> bool:
@@ -361,7 +367,7 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     if not skip_indicators:
         tracker.start('rolling_metrics')
         try:
-            rm_count = compute_rolling_metrics_for_date(db, trade_date, verbose=True)
+            rm_count = _import_rolling_metrics()(db, trade_date, verbose=True)
             tracker.complete('rolling_metrics', rows=rm_count)
         except Exception as e:
             tracker.fail('rolling_metrics', str(e))
