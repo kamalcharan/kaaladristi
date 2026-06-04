@@ -300,11 +300,15 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     # ── Step 6g: Rolling metrics (w52_high, w52_low, lifetime_high, d30, avg_amt, delivery_surge) ──
     # Must run BEFORE magic_rs and flow_intelligence — those signals depend on
     # w52_high/w52_low/lifetime_high/delivery_surge_x populated here.
+    # NOTE: indicators.calculators is a compiled C extension installed on the VPS.
+    # This step will fail on Windows/dev — that is expected. On VPS it runs fine.
     if not skip_indicators:
         tracker.start('rolling_metrics')
         try:
             rm_count = _import_rolling_metrics()(db, trade_date, verbose=True)
             tracker.complete('rolling_metrics', rows=rm_count)
+        except ImportError as e:
+            tracker.skip('rolling_metrics', f'VPS-only compiled package not available: {e}')
         except Exception as e:
             tracker.fail('rolling_metrics', str(e))
 
@@ -318,12 +322,15 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.fail('d365', str(e))
 
     # ── Step 6a: MagicRS for equities ──
+    # p_from_date passed as Python date object (not string) so psycopg2 binds
+    # it as PostgreSQL DATE — avoids overload resolution picking an old INTEGER variant.
     if not skip_indicators:
         tracker.start('magic_rs')
         try:
             result = db.rpc('compute_all_magic_rs', {
                 'p_table': 'km_equity_eod',
                 'p_id_col': 'equity_id',
+                'p_from_date': trade_date,   # datetime.date → PostgreSQL DATE
             })
             mrs_count = sum(r.get('rows_updated', 0) for r in (result or []))
             actual, expected = get_step_coverage(db, 'magic_rs', trade_date, 'NSE')
