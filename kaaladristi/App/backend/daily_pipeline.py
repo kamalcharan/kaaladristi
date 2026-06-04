@@ -61,6 +61,7 @@ from pipeline.processors.inserter import upsert_equity_eod, update_delivery
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
 from indicators.compute_engine import compute_rolling_metrics_for_date
 from scripts.backfill_stage_classification import compute_stage_for_date
+from scripts.sync_nse_isin_master import sync_nse_isin_master
 
 
 def is_week_end(d: date) -> bool:
@@ -364,6 +365,17 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.complete('stage_classification', rows=sc_count)
         except Exception as e:
             tracker.fail('stage_classification', str(e))
+
+    # ── Step 6i: ISIN master sync (weekly — Mondays only) ──
+    # Downloads NSE EQUITY_L.csv and backfills any missing/changed ISINs in
+    # km_equity_symbols. Runs weekly to avoid a daily network call.
+    if not skip_indicators and trade_date.weekday() == 0:  # Monday
+        tracker.start('isin_sync')
+        try:
+            isin_count = sync_nse_isin_master(verbose=True)
+            tracker.complete('isin_sync', rows=isin_count)
+        except Exception as e:
+            tracker.fail('isin_sync', str(e))
 
     # ── Step 7: Refresh views ──
     tracker.start('views')
