@@ -250,8 +250,15 @@ def get_conn():
 # ── Pipeline entry point ───────────────────────────────────────────────────
 
 def compute_stage_for_date(db_conn, trade_date, verbose=False):
-    """Called from daily_pipeline.py step 6h for a single trade date."""
-    return run_date(db_conn, str(trade_date))
+    """Called from daily_pipeline.py step 6h for a single trade date.
+    Opens its own psycopg2 connection — db_conn is accepted but unused
+    (PgClient from daily_pipeline doesn't support cursor()/commit()).
+    """
+    conn = get_conn()
+    try:
+        return run_date(conn, str(trade_date))
+    finally:
+        conn.close()
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────
