@@ -207,10 +207,10 @@ _FLAG_EXPRS: dict[str, str] = {
 
     # Smart Money Loading — high institutional proxy + RSS momentum
     'is_vani_smart': """
-        sniper_inst > 20
-        AND rss_value > 60
-        AND magic_rs > 10
-        AND rvol > 1.0
+        sniper_inst > 40
+        AND rss_value > 70
+        AND magic_rs > 20
+        AND rvol > 1.5
     """,
 }
 
