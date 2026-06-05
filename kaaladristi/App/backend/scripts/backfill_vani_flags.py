@@ -94,11 +94,11 @@ _FLAG_EXPRS: dict[str, str] = {
 
     # RS Leaders — top RS + strong zone + supertrend confirmed
     'is_vani_rs': """
-        magic_rs > 80
-        AND rvol > 1.5
-        AND rsi_14 BETWEEN 50 AND 80
+        magic_rs > 60
+        AND rvol > 1.2
+        AND rsi_14 BETWEEN 45 AND 82
         AND supertrend_dir = 1
-        AND magic_rs_zone = 'Strong Bull'
+        AND magic_rs_zone IN ('Strong Bull', 'Mild Bull')
     """,
 
     # 52-Week High — AT or within 2% of 52w high + volume
