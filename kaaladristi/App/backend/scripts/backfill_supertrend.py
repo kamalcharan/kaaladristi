@@ -251,14 +251,26 @@ def compute_supertrend_for_date(db_conn, trade_date, verbose=False) -> int:
                 print(f"  [supertrend] No equities with atr_10 for {target}")
             return 0
 
-        # Load full history for all affected equities (state machine needs it)
+        # Load last 600 trading days per equity — the supertrend state machine
+        # converges within ~50 bars so 600 bars is accurate and avoids loading
+        # millions of rows (full-history scan was causing multi-hour hangs).
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, equity_id, trade_date, high, low, close, atr_10
                 FROM km_equity_eod
                 WHERE equity_id = ANY(%s)
+                  AND trade_date <= %s
+                  AND trade_date >= (
+                      SELECT MIN(d) FROM (
+                          SELECT trade_date AS d
+                          FROM km_equity_eod
+                          WHERE trade_date <= %s
+                          ORDER BY trade_date DESC
+                          LIMIT 600
+                      ) sub
+                  )
                 ORDER BY equity_id, trade_date ASC
-            """, [equity_ids])
+            """, [equity_ids, target, target])
             all_rows = cur.fetchall()
 
         groups = defaultdict(list)
