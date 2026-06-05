@@ -1,8 +1,9 @@
 """Execution order for pipeline v2 daily runs.
 
-The daily run is a sequence of 14 steps:
-  Steps 1-3: Download index bhav + NSE equity bhav + BSE equity bhav.
-  Steps 4-14: Compute indicators, flow, magic_rs, industry composites,
+The daily run is a sequence of 19 steps:
+  Steps 1-3:  Download index bhav + NSE equity bhav + BSE equity bhav.
+  Steps 4-19: Compute indicators, flow, magic_rs, supertrend, rolling metrics,
+              d365, stage classification, VaNi flags, industry composites,
               market breadth, and breadth ROC.
 
 Each step:
@@ -41,6 +42,11 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('bse_flow',              'BSE'),
     ('nse_magic_rs',          'NSE'),
     ('bse_magic_rs',          'BSE'),
+    ('supertrend',            None),
+    ('rolling_metrics',       None),
+    ('d365',                  None),
+    ('stage_classification',  None),
+    ('vani_flags',            None),
     ('industry_composites',   None),
     ('market_breadth',        None),
     ('breadth_roc',           None),
@@ -98,8 +104,9 @@ def run_daily(conn: 'psycopg2.extensions.connection',
     """Run the full daily pipeline for `trade_date`: download then compute.
 
     Steps 1-3 fetch NSE index bhav, NSE equity bhav, and BSE equity bhav.
-    Steps 4-14 compute indicators, flow, magic_rs, industry composites,
-    market breadth, and breadth ROC. A failed download step does not abort
+    Steps 4-19 compute indicators, flow, magic_rs, supertrend, rolling metrics,
+    d365, stage classification, VaNi flags, industry composites, market breadth,
+    and breadth ROC. A failed download step does not abort
     compute — downstream steps run against whatever rows are already present.
     """
     outcome = RunOutcome(trade_date=str(trade_date))
