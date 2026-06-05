@@ -1,1 +1,375 @@
-IiIiClN1cGVyVHJlbmQgQmFja2ZpbGwgU2NyaXB0Cj09PT09PT09PT09PT09PT09PT09PT09PT09CkNvbXB1dGVzIHN1cGVydHJlbmQgYW5kIHN1cGVydHJlbmRfZGlyIGZvciBhbGwgcm93cyBpbiBrbV9lcXVpdHlfZW9kCndoZXJlIGF0cl8xMCBJUyBOT1QgTlVMTC4KClBhcmFtZXRlcnM6IEFUUiBwZXJpb2Q9MTAsIG11bHRpcGxpZXI9My4wIChzdGFuZGFyZCBzZXR0aW5ncykKQ29sdW1uIHdyaXR0ZW46IHN1cGVydHJlbmQgKE5VTUVSSUMpLCBzdXBlcnRyZW5kX2RpciAoU01BTExJTlQ6IDEgb3IgLTEpCgpVc2FnZToKICAgIGNkIEFwcC9iYWNrZW5kCiAgICBweXRob24gc2NyaXB0cy9iYWNrZmlsbF9zdXBlcnRyZW5kLnB5ICAgICAgICAgICAgICAjIGFsbCBlcXVpdGllcwogICAgcHl0aG9uIHNjcmlwdHMvYmFja2ZpbGxfc3VwZXJ0cmVuZC5weSBUSVRBTiAgICAgICAgIyBzaW5nbGUgc3ltYm9sICh0ZXN0KQogICAgcHl0aG9uIHNjcmlwdHMvYmFja2ZpbGxfc3VwZXJ0cmVuZC5weSAtLXZlcmlmeSAgICAgIyBqdXN0IHJ1biB2ZXJpZmljYXRpb24gcXVlcnkKIiIiCgppbXBvcnQgc3lzCmltcG9ydCBvcwppbXBvcnQgdGltZQpmcm9tIGNvbGxlY3Rpb25zIGltcG9ydCBkZWZhdWx0ZGljdApmcm9tIGRhdGV0aW1lIGltcG9ydCBkYXRlIGFzIF9kYXRlCmltcG9ydCBwc3ljb3BnMgppbXBvcnQgcHN5Y29wZzIuZXh0cmFzCgojIOKUgOKUgCBEQiBjb25uZWN0aW9uIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAoKc3lzLnBhdGguaW5zZXJ0KDAsIG9zLnBhdGguam9pbihvcy5wYXRoLmRpcm5hbWUoX19maWxlX18pLCAnLi4nKSkKZnJvbSBsaWIuY29uZmlnIGltcG9ydCBEQVRBQkFTRV9VUkwKCk1VTFRJUExJRVIgPSAzLjAKQkFUQ0hfU0laRSA9IDEwMDAKCgpkZWYgZ2V0X2Nvbm4oKToKICAgIGlmIG5vdCBEQVRBQkFTRV9VUkw6CiAgICAgICAgcmFpc2UgUnVudGltZUVycm9yKCdEQVRBQkFTRV9VUkwgLyBEQl9QUklNQVJZIG5vdCBzZXQgaW4gLmVudicpCiAgICByZXR1cm4gcHN5Y29wZzIuY29ubmVjdChEQVRBQkFTRV9VUkwsIGNvbm5lY3RfdGltZW91dD0xNSkKCgojIOKUgOKUgCBDb3JlIGFsZ29yaXRobSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCmRlZiBjb21wdXRlX3N1cGVydHJlbmQocm93cyk6CiAgICAiIiIKICAgIEdpdmVuIGEgbGlzdCBvZiBkaWN0cyAoaWQsIGhpZ2gsIGxvdywgY2xvc2UsIGF0cl8xMCkgc29ydGVkIEFTQyBieSB0cmFkZV9kYXRlLAogICAgcmV0dXJuIGEgbGlzdCBvZiAoaWQsIHN1cGVydHJlbmRfdmFsdWUsIGRpcmVjdGlvbikgdHVwbGVzLgoKICAgIGRpcmVjdGlvbjogMSA9IGJ1bGxpc2ggKHByaWNlIGFib3ZlIHN1cGVydHJlbmQpLCAtMSA9IGJlYXJpc2guCiAgICBSb3dzIHdpdGhvdXQgYXRyXzEwIGFyZSBza2lwcGVkOyB0aGVpciBpZCBpcyBOT1QgaW5jbHVkZWQgaW4gb3V0cHV0LgogICAgIiIiCiAgICBwcmV2X2RpcmVjdGlvbiAgPSAxCiAgICBwcmV2X2xvd2VyX2JhbmQgPSAwLjAKICAgIHByZXZfdXBwZXJfYmFuZCA9IDAuMAogICAgZmlyc3RfdmFsaWQgICAgID0gVHJ1ZQogICAgcmVzdWx0cyAgICAgICAgID0gW10KCiAgICBmb3Igcm93IGluIHJvd3M6CiAgICAgICAgYXRyID0gcm93WydhdHJfMTAnXQogICAgICAgIGlmIGF0ciBpcyBOb25lOgogICAgICAgICAgICBjb250aW51ZQoKICAgICAgICBoaWdoICA9IGZsb2F0KHJvd1snaGlnaCddKQogICAgICAgIGxvdyAgID0gZmxvYXQocm93Wydsb3cnXSkKICAgICAgICBjbG9zZSA9IGZsb2F0KHJvd1snY2xvc2UnXSkKICAgICAgICBhdHIgICA9IGZsb2F0KGF0cikKCiAgICAgICAgaGwyICAgICAgICAgPSAoaGlnaCArIGxvdykgLyAyLjAKICAgICAgICB1cHBlcl9iYW5kICA9IGhsMiArIE1VTFRJUExJRVIgKiBhdHIKICAgICAgICBsb3dlcl9iYW5kICA9IGhsMiAtIE1VTFRJUExJRVIgKiBhdHIKCiAgICAgICAgaWYgZmlyc3RfdmFsaWQ6CiAgICAgICAgICAgIGRpcmVjdGlvbiAgICAgICA9IDEKICAgICAgICAgICAgZmluYWxfdXBwZXIgICAgID0gdXBwZXJfYmFuZAogICAgICAgICAgICBmaW5hbF9sb3dlciAgICAgPSBsb3dlcl9iYW5kCiAgICAgICAgICAgIHN1cGVydHJlbmRfdmFsICA9IGxvd2VyX2JhbmQKICAgICAgICAgICAgZmlyc3RfdmFsaWQgICAgID0gRmFsc2UKICAgICAgICBlbHNlOgogICAgICAgICAgICAjIENhcnJ5LWZvcndhcmQgYmFuZHMgKHByZXZlbnQgYmFuZCBmcm9tIG1vdmluZyBhZ2FpbnN0IHRyZW5kKQogICAgICAgICAgICBpZiBwcmV2X2RpcmVjdGlvbiA9PSAxOgogICAgICAgICAgICAgICAgZmluYWxfbG93ZXIgPSBtYXgobG93ZXJfYmFuZCwgcHJldl9sb3dlcl9iYW5kKQogICAgICAgICAgICAgICAgZmluYWxfdXBwZXIgPSB1cHBlcl9iYW5kCiAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICBmaW5hbF91cHBlciA9IG1pbih1cHBlcl9iYW5kLCBwcmV2X3VwcGVyX2JhbmQpCiAgICAgICAgICAgICAgICBmaW5hbF9sb3dlciA9IGxvd2VyX2JhbmQKCiAgICAgICAgICAgICMgRGlyZWN0aW9uIGZsaXAgbG9naWMKICAgICAgICAgICAgaWYgcHJldl9kaXJlY3Rpb24gPT0gMToKICAgICAgICAgICAgICAgIGlmIGNsb3NlIDwgZmluYWxfbG93ZXI6CiAgICAgICAgICAgICAgICAgICAgZGlyZWN0aW9uICAgICAgPSAtMQogICAgICAgICAgICAgICAgICAgIHN1cGVydHJlbmRfdmFsID0gZmluYWxfdXBwZXIKICAgICAgICAgICAgICAgIGVsc2U6CiAgICAgICAgICAgICAgICAgICAgZGlyZWN0aW9uICAgICAgPSAxCiAgICAgICAgICAgICAgICAgICAgc3VwZXJ0cmVuZF92YWwgPSBmaW5hbF9sb3dlcgogICAgICAgICAgICBlbHNlOgogICAgICAgICAgICAgICAgaWYgY2xvc2UgPiBmaW5hbF91cHBlcjoKICAgICAgICAgICAgICAgICAgICBkaXJlY3Rpb24gICAgICA9IDEKICAgICAgICAgICAgICAgICAgICBzdXBlcnRyZW5kX3ZhbCA9IGZpbmFsX2xvd2VyCiAgICAgICAgICAgICAgICBlbHNlOgogICAgICAgICAgICAgICAgICAgIGRpcmVjdGlvbiAgICAgID0gLTEKICAgICAgICAgICAgICAgICAgICBzdXBlcnRyZW5kX3ZhbCA9IGZpbmFsX3VwcGVyCgogICAgICAgIHByZXZfZGlyZWN0aW9uICA9IGRpcmVjdGlvbgogICAgICAgIHByZXZfbG93ZXJfYmFuZCA9IGZpbmFsX2xvd2VyCiAgICAgICAgcHJldl91cHBlcl9iYW5kID0gZmluYWxfdXBwZXIKCiAgICAgICAgcmVzdWx0cy5hcHBlbmQoKHJvd1snaWQnXSwgcm91bmQoc3VwZXJ0cmVuZF92YWwsIDQpLCBkaXJlY3Rpb24pKQoKICAgIHJldHVybiByZXN1bHRzCgoKIyDilIDilIAgREIgaGVscGVycyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKCmRlZiBsb2FkX2VxdWl0eV9pZHMoY29ubiwgc3ltYm9sX2ZpbHRlcj1Ob25lKToKICAgICIiIlJldHVybiBsaXN0IG9mIGVxdWl0eV9pZHMgdG8gcHJvY2VzcyAoYWxsLCBvciBvbmUgYnkgc3ltYm9sIG5hbWUpLiIiIgogICAgd2l0aCBjb25uLmN1cnNvcigpIGFzIGN1cjoKICAgICAgICBpZiBzeW1ib2xfZmlsdGVyOgogICAgICAgICAgICBjdXIuZXhlY3V0ZSgKICAgICAgICAgICAgICAgICJTRUxFQ1QgaWQgRlJPTSBrbV9lcXVpdHlfc3ltYm9scyBXSEVSRSBzeW1ib2wgPSAlcyIsCiAgICAgICAgICAgICAgICBbc3ltYm9sX2ZpbHRlcl0sCiAgICAgICAgICAgICkKICAgICAgICBlbHNlOgogICAgICAgICAgICBjdXIuZXhlY3V0ZSgKICAgICAgICAgICAgICAgICIiIgogICAgICAgICAgICAgICAgU0VMRUNUIERJU1RJTkNUIGVxdWl0eV9pZCBBUyBpZAogICAgICAgICAgICAgICAgRlJPTSBrbV9lcXVpdHlfZW9kCiAgICAgICAgICAgICAgICBXSEVSRSBhdHJfMTAgSVMgTk9UIE5VTEwKICAgICAgICAgICAgICAgIE9SREVSIEJZIGVxdWl0eV9pZAogICAgICAgICAgICAgICAgIiIiCiAgICAgICAgICAgICkKICAgICAgICByZXR1cm4gW3JbMF0gZm9yIHIgaW4gY3VyLmZldGNoYWxsKCldCgoKZGVmIGxvYWRfcm93c19mb3JfZXF1aXR5KGNvbm4sIGVxdWl0eV9pZCk6CiAgICAiIiJMb2FkIGFsbCBPSExDViArIGF0cl8xMCByb3dzIGZvciBvbmUgZXF1aXR5LCBzb3J0ZWQgQVNDLiIiIgogICAgd2l0aCBjb25uLmN1cnNvcihjdXJzb3JfZmFjdG9yeT1wc3ljb3BnMi5leHRyYXMuUmVhbERpY3RDdXJzb3IpIGFzIGN1cjoKICAgICAgICBjdXIuZXhlY3V0ZSgKICAgICAgICAgICAgIiIiCiAgICAgICAgICAgIFNFTEVDVCBpZCwgaGlnaCwgbG93LCBjbG9zZSwgYXRyXzEwCiAgICAgICAgICAgIEZST00ga21fZXF1aXR5X2VvZAogICAgICAgICAgICBXSEVSRSBlcXVpdHlfaWQgPSAlcwogICAgICAgICAgICBPUkRFUiBCWSB0cmFkZV9kYXRlIEFTQwogICAgICAgICAgICAiIiIsCiAgICAgICAgICAgIFtlcXVpdHlfaWRdLAogICAgICAgICkKICAgICAgICByZXR1cm4gY3VyLmZldGNoYWxsKCkKCgpkZWYgYmF0Y2hfdXBkYXRlKGNvbm4sIHVwZGF0ZXMpOgogICAgIiIiCiAgICBCYXRjaCBVUERBVEUgdXNpbmcgZXhlY3V0ZV92YWx1ZXMgZm9yIHNwZWVkLgogICAgdXBkYXRlczogbGlzdCBvZiAoc3VwZXJ0cmVuZCwgc3VwZXJ0cmVuZF9kaXIsIGlkKQogICAgIiIiCiAgICBzcWwgPSAiIiIKICAgICAgICBVUERBVEUga21fZXF1aXR5X2VvZCBBUyBlCiAgICAgICAgU0VUIHN1cGVydHJlbmQgICAgID0gdi5zdXBlcnRyZW5kLAogICAgICAgICAgICBzdXBlcnRyZW5kX2RpciA9IHYuc3VwZXJ0cmVuZF9kaXIKICAgICAgICBGUk9NIChWQUxVRVMgJXMpIEFTIHYoc3VwZXJ0cmVuZCwgc3VwZXJ0cmVuZF9kaXIsIGlkKQogICAgICAgIFdIRVJFIGUuaWQgPSB2LmlkCiAgICAiIiIKICAgIHdpdGggY29ubi5jdXJzb3IoKSBhcyBjdXI6CiAgICAgICAgcHN5Y29wZzIuZXh0cmFzLmV4ZWN1dGVfdmFsdWVzKGN1ciwgc3FsLCB1cGRhdGVzLCBwYWdlX3NpemU9QkFUQ0hfU0laRSkKICAgIGNvbm4uY29tbWl0KCkKCgojIOKUgOKUgCBWZXJpZmljYXRpb24g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgpkZWYgcnVuX3ZlcmlmaWNhdGlvbihjb25uKToKICAgIHdpdGggY29ubi5jdXJzb3IoY3Vyc29yX2ZhY3Rvcnk9cHN5Y29wZzIuZXh0cmFzLlJlYWxEaWN0Q3Vyc29yKSBhcyBjdXI6CiAgICAgICAgY3VyLmV4ZWN1dGUoCiAgICAgICAgICAgICIiIgogICAgICAgICAgICBTRUxFQ1QKICAgICAgICAgICAgICBDT1VOVCgqKSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgQVMgdG90YWwsCiAgICAgICAgICAgICAgQ09VTlQoc3VwZXJ0cmVuZF9kaXIpICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIEFTIHdpdGhfZGlyLAogICAgICAgICAgICAgIFNVTShDQVNFIFdIRU4gc3VwZXJ0cmVuZF9kaXIgPSAgMSBUSEVOIDEgRUxTRSAwIEVORCkgIEFTIGJ1bGxpc2gsCiAgICAgICAgICAgICAgU1VNKENBU0UgV0hFTiBzdXBlcnRyZW5kX2RpciA9IC0xIFRIRU4gMSBFTFNFIDAgRU5EKSAgQVMgYmVhcmlzaAogICAgICAgICAgICBGUk9NIGttX2VxdWl0eV9lb2QKICAgICAgICAgICAgV0hFUkUgdHJhZGVfZGF0ZSA9IChTRUxFQ1QgTUFYKHRyYWRlX2RhdGUpIEZST00ga21fZXF1aXR5X2VvZCkKICAgICAgICAgICAgIiIiCiAgICAgICAgKQogICAgICAgIHJvdyA9IGRpY3QoY3VyLmZldGNob25lKCkpCiAgICB0b3RhbCAgID0gcm93Wyd0b3RhbCddCiAgICB3aXRoX2QgID0gcm93Wyd3aXRoX2RpciddCiAgICBidWxsICAgID0gcm93WydidWxsaXNoJ10gb3IgMAogICAgYmVhciAgICA9IHJvd1snYmVhcmlzaCddIG9yIDAKICAgIHBjdF9iICAgPSByb3VuZChidWxsIC8gd2l0aF9kICogMTAwLCAxKSBpZiB3aXRoX2QgZWxzZSAwCiAgICBwcmludChmJ1xu4pSA4pSAIFZlcmlmaWNhdGlvbiDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAnKQogICAgcHJpbnQoZicgIExhdGVzdC1kYXRlIHJvd3MgICA6IHt0b3RhbH0nKQogICAgcHJpbnQoZicgIFdpdGggc3VwZXJ0cmVuZF9kaXI6IHt3aXRoX2R9JykKICAgIHByaW50KGYnICBCdWxsaXNoIChkaXI9MSkgICAgOiB7YnVsbH0gICh7cGN0X2J9JSknKQogICAgcHJpbnQoZicgIEJlYXJpc2ggKGRpcj0tMSkgICA6IHtiZWFyfSAgKHsxMDAgLSBwY3RfYn0lKScpCgogICAgIyBTcG90IGNoZWNrCiAgICBjdXIyID0gY29ubi5jdXJzb3IoY3Vyc29yX2ZhY3Rvcnk9cHN5Y29wZzIuZXh0cmFzLlJlYWxEaWN0Q3Vyc29yKQogICAgY3VyMi5leGVjdXRlKAogICAgICAgICIiIgogICAgICAgIFNFTEVDVCBzLnN5bWJvbCwgZS5jbG9zZSwgZS5zdXBlcnRyZW5kLCBlLnN1cGVydHJlbmRfZGlyLCBlLmF0cl8xMAogICAgICAgIEZST00ga21fZXF1aXR5X2VvZCBlCiAgICAgICAgSk9JTiBrbV9lcXVpdHlfc3ltYm9scyBzIE9OIGUuZXF1aXR5X2lkID0gcy5pZAogICAgICAgIFdIRVJFIGUudHJhZGVfZGF0ZSA9IChTRUxFQ1QgTUFYKHRyYWRlX2RhdGUpIEZST00ga21fZXF1aXR5X2VvZCkKICAgICAgICAgIEFORCBzLnN5bWJvbCBJTiAoCiAgICAgICAgICAgICdTVExURUNIJywnQkFKRklOQU5DRScsJ0JFTCcsJ1RJVEFOJywnSEZDTCcsJ1RWU01PVE9SJwogICAgICAgICAgKQogICAgICAgIE9SREVSIEJZIHMuc3ltYm9sCiAgICAgICAgIiIiCiAgICApCiAgICByb3dzID0gY3VyMi5mZXRjaGFsbCgpCiAgICBjdXIyLmNsb3NlKCkKICAgIGlmIHJvd3M6CiAgICAgICAgcHJpbnQoZidcbiAgU3BvdCBjaGVjazonKQogICAgICAgIHByaW50KGYnICB7IlN5bWJvbCI6PDE0fSB7IkNsb3NlIjo+OH0gIHsiU3VwZXJ0cmVuZCI6PjEwfSAgeyJEaXIiOj40fSAgeyJBVFIiOj83fScpCiAgICAgICAgcHJpbnQoZicgIHsiLSIqNTB9JykKICAgICAgICBmb3IgciBpbiByb3dzOgogICAgICAgICAgICBzdCAgID0gclsnc3VwZXJ0cmVuZCddCiAgICAgICAgICAgIGF0ciAgPSByWydhdHJfMTAnXQogICAgICAgICAgICBkICAgID0gclsnc3VwZXJ0cmVuZF9kaXInXQogICAgICAgICAgICBhcnJvdyA9ICgn4payJyBpZiBkID09IDEgZWxzZSAn4pa8JykgaWYgZCBpcyBub3QgTm9uZSBlbHNlICcgJwogICAgICAgICAgICBzdF9zdHIgID0gZid7ZmxvYXQoc3QpOj4xMC4yZn0nIGlmIHN0ICBpcyBub3QgTm9uZSBlbHNlIGYneyJOVUxMIjo+MTB9JwogICAgICAgICAgICBhdHJfc3RyID0gZid7ZmxvYXQoYXRyKTo+Ny4yZn0nICBpZiBhdHIgaXMgbm90IE5vbmUgZWxzZSBmJ3siTlVMTCI6Pjd9JwogICAgICAgICAgICBkaXJfc3RyID0gZid7YXJyb3d9e2Q6PjJ9JyAgICAgICAgaWYgZCAgIGlzIG5vdCBOb25lIGVsc2UgZicgIC0tJwogICAgICAgICAgICBwcmludCgKICAgICAgICAgICAgICAgIGYnICB7clsic3ltYm9sIl06PDE0fSAnCiAgICAgICAgICAgICAgICBmJ3tmbG9hdChyWyJjbG9zZSJdKTo+OC4yZn0gICcKICAgICAgICAgICAgICAgIGYne3N0X3N0cn0gICcKICAgICAgICAgICAgICAgIGYne2Rpcl9zdHJ9ICAnCiAgICAgICAgICAgICAgICBmJ3thdHJfc3RyfScKICAgICAgICAgICAgKQoKCiMg4pSA4pSAIFBpcGVsaW5lIGVudHJ5IHBvaW50IOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAoKZGVmIGNvbXB1dGVfc3VwZXJ0cmVuZF9mb3JfZGF0ZShkYl9jb25uLCB0cmFkZV9kYXRlLCB2ZXJib3NlPUZhbHNlKSAtPiBpbnQ6CiAgICAiIiJDYWxsZWQgZnJvbSBkYWlseV9waXBlbGluZS5weSBhZnRlciBjb21wdXRlX2FsbF9wZW5kaW5nX2luZGljYXRvcnMuCiAgICBPcGVucyBpdHMgb3duIHBzeWNvcGcyIGNvbm5lY3Rpb24g4oCUIGRiX2Nvbm4gaXMgYWNjZXB0ZWQgYnV0IHVudXNlZC4KICAgIExvYWRzIGxhc3QgNjAwIHRyYWRpbmcgZGF5cyBwZXIgZXF1aXR5IOKAlCBzdWZmaWNpZW50IGZvciBzdGF0ZSBtYWNoaW5lCiAgICBhY2N1cmFjeSAoY29udmVyZ2VzIHdpdGhpbiB+NTAgYmFycyksIGF2b2lkcyBmdWxsLWhpc3Rvcnkgc2Nhbi4KICAgICIiIgogICAgY29ubiA9IGdldF9jb25uKCkKICAgIHRyeToKICAgICAgICB0YXJnZXQgPSBzdHIodHJhZGVfZGF0ZSkKICAgICAgICB0YXJnZXRfZHQgPSBfZGF0ZS5mcm9taXNvZm9ybWF0KHRhcmdldCkKCiAgICAgICAgIyBFcXVpdGllcyB0aGF0IGhhdmUgYSByb3cgb24gdGhpcyBkYXRlIHdpdGggYXRyXzEwIHBvcHVsYXRlZAogICAgICAgIHdpdGggY29ubi5jdXJzb3IoKSBhcyBjdXI6CiAgICAgICAgICAgIGN1ci5leGVjdXRlKCIiIgogICAgICAgICAgICAgICAgU0VMRUNUIERJU1RJTkNUIGVxdWl0eV9pZCBGUk9NIGttX2VxdWl0eV9lb2QKICAgICAgICAgICAgICAgIFdIRVJFIHRyYWRlX2RhdGUgPSAlcyBBTkQgYXRyXzEwIElTIE5PVCBOVUxMCiAgICAgICAgICAgICIiIiwgW3RhcmdldF0pCiAgICAgICAgICAgIGVxdWl0eV9pZHMgPSBbclswXSBmb3IgciBpbiBjdXIuZmV0Y2hhbGwoKV0KCiAgICAgICAgaWYgbm90IGVxdWl0eV9pZHM6CiAgICAgICAgICAgIGlmIHZlcmJvc2U6CiAgICAgICAgICAgICAgICBwcmludChmIiAgW3N1cGVydHJlbmRdIE5vIGVxdWl0aWVzIHdpdGggYXRyXzEwIGZvciB7dGFyZ2V0fSIpCiAgICAgICAgICAgIHJldHVybiAwCgogICAgICAgICMgTG9hZCBsYXN0IDYwMCB0cmFkaW5nIGRheXMgcGVyIGVxdWl0eSDigJQgdGhlIHN1cGVydHJlbmQgc3RhdGUgbWFjaGluZQogICAgICAgICMgY29udmVyZ2VzIHdpdGhpbiB+NTAgYmFycyBzbyA2MDAgYmFycyBpcyBhY2N1cmF0ZSBhbmQgYXZvaWRzIGxvYWRpbmcKICAgICAgICAjIG1pbGxpb25zIG9mIHJvd3MgKGZ1bGwtaGlzdG9yeSBzY2FuIHdhcyBjYXVzaW5nIG11bHRpLWhvdXIgaGFuZ3MpLgogICAgICAgIHdpdGggY29ubi5jdXJzb3IoY3Vyc29yX2ZhY3Rvcnk9cHN5Y29wZzIuZXh0cmFzLlJlYWxEaWN0Q3Vyc29yKSBhcyBjdXI6CiAgICAgICAgICAgIGN1ci5leGVjdXRlKCIiIgogICAgICAgICAgICAgICAgU0VMRUNUIGlkLCBlcXVpdHlfaWQsIHRyYWRlX2RhdGUsIGhpZ2gsIGxvdywgY2xvc2UsIGF0cl8xMAogICAgICAgICAgICAgICAgRlJPTSBrbV9lcXVpdHlfZW9kCiAgICAgICAgICAgICAgICBXSEVSRSBlcXVpdHlfaWQgPSBBTlkoJXMpCiAgICAgICAgICAgICAgICAgIEFORCB0cmFkZV9kYXRlIDw9ICVzCiAgICAgICAgICAgICAgICAgIEFORCB0cmFkZV9kYXRlID49ICgKICAgICAgICAgICAgICAgICAgICAgIFNFTEVDVCBNSU4oZCkgRlJPTSAoCiAgICAgICAgICAgICAgICAgICAgICAgICAgU0VMRUNUIHRyYWRlX2RhdGUgQVMgZAogICAgICAgICAgICAgICAgICAgICAgICAgIEZST00ga21fZXF1aXR5X2VvZAogICAgICAgICAgICAgICAgICAgICAgICAgIFdIRVJFIHRyYWRlX2RhdGUgPD0gJXMKICAgICAgICAgICAgICAgICAgICAgICAgICBPUkRFUiBCWSB0cmFkZV9kYXRlIERFU0MKICAgICAgICAgICAgICAgICAgICAgICAgICBMSU1JVCA2MDAKICAgICAgICAgICAgICAgICAgICAgICkgc3ViCiAgICAgICAgICAgICAgICAgICkKICAgICAgICAgICAgICAgIE9SREVSIEJZIGVxdWl0eV9pZCwgdHJhZGVfZGF0ZSBBU0MKICAgICAgICAgICAgIiIiLCBbZXF1aXR5X2lkcywgdGFyZ2V0LCB0YXJnZXRdKQogICAgICAgICAgICBhbGxfcm93cyA9IGN1ci5mZXRjaGFsbCgpCgogICAgICAgIGdyb3VwcyA9IGRlZmF1bHRkaWN0KGxpc3QpCiAgICAgICAgZm9yIHIgaW4gYWxsX3Jvd3M6CiAgICAgICAgICAgIGdyb3Vwc1tyWydlcXVpdHlfaWQnXV0uYXBwZW5kKHIpCgogICAgICAgIHBlbmRpbmdfYmF0Y2ggPSBbXQogICAgICAgIGZvciBlaWQsIHJvd3MgaW4gZ3JvdXBzLml0ZW1zKCk6CiAgICAgICAgICAgIHJlc3VsdHMgPSBjb21wdXRlX3N1cGVydHJlbmQocm93cykKICAgICAgICAgICAgdGFyZ2V0X2lkcyA9IHtyWydpZCddIGZvciByIGluIHJvd3MgaWYgclsndHJhZGVfZGF0ZSddID09IHRhcmdldF9kdH0KICAgICAgICAgICAgZm9yIChyb3dfaWQsIHN0X3ZhbCwgc3RfZGlyKSBpbiByZXN1bHRzOgogICAgICAgICAgICAgICAgaWYgcm93X2lkIGluIHRhcmdldF9pZHM6CiAgICAgICAgICAgICAgICAgICAgcGVuZGluZ19iYXRjaC5hcHBlbmQoKHN0X3ZhbCwgc3RfZGlyLCByb3dfaWQpKQoKICAgICAgICBpZiBub3QgcGVuZGluZ19iYXRjaDoKICAgICAgICAgICAgcmV0dXJuIDAKCiAgICAgICAgYmF0Y2hfdXBkYXRlKGNvbm4sIHBlbmRpbmdfYmF0Y2gpCiAgICAgICAgaWYgdmVyYm9zZToKICAgICAgICAgICAgcHJpbnQoZiIgIFtzdXBlcnRyZW5kXSB7bGVuKHBlbmRpbmdfYmF0Y2gpfSByb3dzIHVwZGF0ZWQgZm9yIHt0YXJnZXR9IikKICAgICAgICByZXR1cm4gbGVuKHBlbmRpbmdfYmF0Y2gpCiAgICBmaW5hbGx5OgogICAgICAgIGNvbm4uY2xvc2UoKQoKCiMg4pSA4pSAIE1haW4g4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACgpkZWYgbWFpbigpOgogICAgYXJncyAgICAgICAgPSBzeXMuYXJndlsxOl0KICAgIHZlcmlmeV9vbmx5ID0gJy0tdmVyaWZ5JyBpbiBhcmdzCiAgICBkYXRlX2FyZyAgICA9IG5leHQoKGEuc3BsaXQoJz0nLCAxKVsxXSBpZiAnPScgaW4gYSBlbHNlIE5vbmUKICAgICAgICAgICAgICAgICAgICAgICAgZm9yIGEgaW4gYXJncyBpZiBhLnN0YXJ0c3dpdGgoJy0tZGF0ZScpKSwgTm9uZSkKICAgIGlmIGRhdGVfYXJnIGlzIE5vbmU6CiAgICAgICAgZGF0ZV9hcmcgPSBuZXh0KChhIGZvciBhIGluIGFyZ3MKICAgICAgICAgICAgICAgICAgICAgICAgIGlmIG5vdCBhLnN0YXJ0c3dpdGgoJy0tJykgYW5kIGxlbihhKSA9PSAxMCBhbmQgYVs0XSA9PSAnLScpLCBOb25lKQogICAgc3ltYm9sICAgICAgPSBuZXh0KChhIGZvciBhIGluIGFyZ3MKICAgICAgICAgICAgICAgICAgICAgICAgaWYgbm90IGEuc3RhcnRzd2l0aCgnLS0nKSBhbmQgbm90IChsZW4oYSkgPT0gMTAgYW5kIGFbNF0gPT0gJy0nKSksIE5vbmUpCgogICAgY29ubiA9IGdldF9jb25uKCkKCiAgICBpZiB2ZXJpZnlfb25seToKICAgICAgICBydW5fdmVyaWZpY2F0aW9uKGNvbm4pCiAgICAgICAgY29ubi5jbG9zZSgpCiAgICAgICAgcmV0dXJuCgogICAgaWYgZGF0ZV9hcmc6CiAgICAgICAgcHJpbnQoZidTdXBlclRyZW5kIGZvciBzaW5nbGUgZGF0ZSB7ZGF0ZV9hcmd9JykKICAgICAgICBuID0gY29tcHV0ZV9zdXBlcnRyZW5kX2Zvcl9kYXRlKE5vbmUsIGRhdGVfYXJnLCB2ZXJib3NlPVRydWUpCiAgICAgICAgcHJpbnQoZicgIERvbmUg4oCUIHtufSByb3dzIHVwZGF0ZWQnKQogICAgICAgIGNvbm4uY2xvc2UoKQogICAgICAgIHJldHVybgoKICAgIHByaW50KGYnU3VwZXJUcmVuZCBiYWNrZmlsbCDigJQgbXVsdGlwbGllcj17TVVMVFBJWUVSX, BiYXRjaD17QkFUQ0hfU0laRX0nKQogICAgaWYgc3ltYm9sOgogICAgICAgIHByaW50KGYnICBNb2RlOiBzaW5nbGUgc3ltYm9sICJ7c3ltYm9sfSInKQogICAgZWxzZToKICAgICAgICBwcmludChmJyAgTW9kZTogYWxsIGVxdWl0aWVzIHdpdGggYXRyXzEwJykKCiAgICBlcXVpdHlfaWRzID0gbG9hZF9lcXVpdHlfaWRzKGNvbm4sIHN5bWJvbF9maWx0ZXI9c3ltYm9sKQogICAgaWYgbm90IGVxdWl0eV9pZHM6CiAgICAgICAgcHJpbnQoJyAgTm8gZXF1aXRpZXMgZm91bmQg4oCUIGNoZWNrIHN5bWJvbCBuYW1lIG9yIGF0cl8xMCBwb3B1bGF0aW9uJykKICAgICAgICBjb25uLmNsb3NlKCkKICAgICAgICByZXR1cm4KCiAgICB0b3RhbF9zeW1ib2xzID0gbGVuKGVxdWl0eV9pZHMpCiAgICBwcmludChmJyAgUHJvY2Vzc2luZyB7dG90YWxfc3ltYm9sc30gZXF1aXR5IElEKHMpLi4uXG4nKQoKICAgIHQwICAgICAgICAgICAgID0gdGltZS50aW1lKCkKICAgIHRvdGFsX3Jvd3MgICAgID0gMAogICAgcGVuZGluZ19iYXRjaCAgPSBbXSAgICMgKHN1cGVydHJlbmQsIHN1cGVydHJlbmRfZGlyLCBpZCkKCiAgICBmb3IgaSwgZWlkIGluIGVudW1lcmF0ZShlcXVpdHlfaWRzLCAxKToKICAgICAgICByb3dzICAgID0gbG9hZF9yb3dzX2Zvcl9lcXVpdHkoY29ubiwgZWlkKQogICAgICAgIHJlc3VsdHMgPSBjb21wdXRlX3N1cGVydHJlbmQocm93cykKCiAgICAgICAgZm9yIChyb3dfaWQsIHN0X3ZhbCwgc3RfZGlyKSBpbiByZXN1bHRzOgogICAgICAgICAgICBwZW5kaW5nX2JhdGNoLmFwcGVuZCgoc3RfdmFsLCBzdF9kaXIsIHJvd19pZCkpCgogICAgICAgIGlmIGxlbihwZW5kaW5nX2JhdGNoKSA+PSBCQVRDSF9TSVpFOgogICAgICAgICAgICBiYXRjaF91cGRhdGUoY29ubiwgcGVuZGluZ19iYXRjaCkKICAgICAgICAgICAgdG90YWxfcm93cyAgICArPSBsZW4ocGVuZGluZ19iYXRjaCkKICAgICAgICAgICAgcGVuZGluZ19iYXRjaCAgPSBbXQoKICAgICAgICBpZiBpICUgNTAwID09IDAgb3IgaSA9PSB0b3RhbF9zeW1ib2xzOgogICAgICAgICAgICBlbGFwc2VkID0gdGltZS50aW1lKCkgLSB0MAogICAgICAgICAgICByYXRlICAgID0gaSAvIGVsYXBzZWQKICAgICAgICAgICAgZXRhICAgICA9ICh0b3RhbF9zeW1ib2xzIC0gaSkgLyByYXRlIGlmIHJhdGUgPiAwIGVsc2UgMAogICAgICAgICAgICBwcmludCgKICAgICAgICAgICAgICAgIGYnICBbe2k6PjV9L3t0b3RhbF9zeW1ib2xzfV0gICcKICAgICAgICAgICAgICAgIGYne3RvdGFsX3Jvd3MgKyBsZW4ocGVuZGluZ19iYXRjaCk6Pjd9IHJvd3Mgc3RhZ2VkICAnCiAgICAgICAgICAgICAgICBmJ3tlbGFwc2VkOj41LjBmfXMgZWxhcHNlZCAgJwogICAgICAgICAgICAgICAgZidFVEEge2V0YTo+NC4wZn1zJwogICAgICAgICAgICApCgogICAgIyBGbHVzaCByZW1haW5pbmcKICAgIGlmIHBlbmRpbmdfYmF0Y2g6CiAgICAgICAgYmF0Y2hfdXBkYXRlKGNvbm4sIHBlbmRpbmdfYmF0Y2gpCiAgICAgICAgdG90YWxfcm93cyArPSBsZW4ocGVuZGluZ19iYXRjaCkKCiAgICBlbGFwc2VkID0gdGltZS50aW1lKCkgLSB0MAogICAgcHJpbnQoZidcbiAgRG9uZSDigJQge3RvdGFsX3Jvd3N9IHJvd3MgdXBkYXRlZCBpbiB7ZWxhcHNlZDouMWZ9cycpCgogICAgcnVuX3ZlcmlmaWNhdGlvbihjb25uKQogICAgY29ubi5jbG9zZSgpCgoKaWYgX19uYW1lX18gPT0gJ19fbWFpbl9fJzoKICAgIG1haW4oKQo=
+"""
+SuperTrend Backfill Script
+==========================
+Computes supertrend and supertrend_dir for all rows in km_equity_eod
+where atr_10 IS NOT NULL.
+
+Parameters: ATR period=10, multiplier=3.0 (standard settings)
+Column written: supertrend (NUMERIC), supertrend_dir (SMALLINT: 1 or -1)
+
+Usage:
+    cd App/backend
+    python scripts/backfill_supertrend.py              # all equities
+    python scripts/backfill_supertrend.py TITAN        # single symbol (test)
+    python scripts/backfill_supertrend.py --verify     # just run verification query
+"""
+
+import sys
+import os
+import time
+from collections import defaultdict
+from datetime import date as _date
+import psycopg2
+import psycopg2.extras
+
+# ── DB connection ──────────────────────────────────────────────────────────
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from lib.config import DATABASE_URL
+
+MULTIPLIER = 3.0
+BATCH_SIZE = 1000
+
+
+def get_conn():
+    if not DATABASE_URL:
+        raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
+    return psycopg2.connect(DATABASE_URL, connect_timeout=15)
+
+
+# ── Core algorithm ─────────────────────────────────────────────────────────
+
+def compute_supertrend(rows):
+    """
+    Given a list of dicts (id, high, low, close, atr_10) sorted ASC by trade_date,
+    return a list of (id, supertrend_value, direction) tuples.
+
+    direction: 1 = bullish (price above supertrend), -1 = bearish.
+    Rows without atr_10 are skipped; their id is NOT included in output.
+    """
+    prev_direction  = 1
+    prev_lower_band = 0.0
+    prev_upper_band = 0.0
+    first_valid     = True
+    results         = []
+
+    for row in rows:
+        atr = row['atr_10']
+        if atr is None:
+            continue
+
+        high  = float(row['high'])
+        low   = float(row['low'])
+        close = float(row['close'])
+        atr   = float(atr)
+
+        hl2         = (high + low) / 2.0
+        upper_band  = hl2 + MULTIPLIER * atr
+        lower_band  = hl2 - MULTIPLIER * atr
+
+        if first_valid:
+            direction       = 1
+            final_upper     = upper_band
+            final_lower     = lower_band
+            supertrend_val  = lower_band
+            first_valid     = False
+        else:
+            # Carry-forward bands (prevent band from moving against trend)
+            if prev_direction == 1:
+                final_lower = max(lower_band, prev_lower_band)
+                final_upper = upper_band
+            else:
+                final_upper = min(upper_band, prev_upper_band)
+                final_lower = lower_band
+
+            # Direction flip logic
+            if prev_direction == 1:
+                if close < final_lower:
+                    direction      = -1
+                    supertrend_val = final_upper
+                else:
+                    direction      = 1
+                    supertrend_val = final_lower
+            else:
+                if close > final_upper:
+                    direction      = 1
+                    supertrend_val = final_lower
+                else:
+                    direction      = -1
+                    supertrend_val = final_upper
+
+        prev_direction  = direction
+        prev_lower_band = final_lower
+        prev_upper_band = final_upper
+
+        results.append((row['id'], round(supertrend_val, 4), direction))
+
+    return results
+
+
+# ── DB helpers ─────────────────────────────────────────────────────────────
+
+def load_equity_ids(conn, symbol_filter=None):
+    """Return list of equity_ids to process (all, or one by symbol name)."""
+    with conn.cursor() as cur:
+        if symbol_filter:
+            cur.execute(
+                "SELECT id FROM km_equity_symbols WHERE symbol = %s",
+                [symbol_filter],
+            )
+        else:
+            cur.execute(
+                """
+                SELECT DISTINCT equity_id AS id
+                FROM km_equity_eod
+                WHERE atr_10 IS NOT NULL
+                ORDER BY equity_id
+                """
+            )
+        return [r[0] for r in cur.fetchall()]
+
+
+def load_rows_for_equity(conn, equity_id):
+    """Load all OHLCV + atr_10 rows for one equity, sorted ASC."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT id, high, low, close, atr_10
+            FROM km_equity_eod
+            WHERE equity_id = %s
+            ORDER BY trade_date ASC
+            """,
+            [equity_id],
+        )
+        return cur.fetchall()
+
+
+def batch_update(conn, updates):
+    """
+    Batch UPDATE using execute_values for speed.
+    updates: list of (supertrend, supertrend_dir, id)
+    """
+    sql = """
+        UPDATE km_equity_eod AS e
+        SET supertrend     = v.supertrend,
+            supertrend_dir = v.supertrend_dir
+        FROM (VALUES %s) AS v(supertrend, supertrend_dir, id)
+        WHERE e.id = v.id
+    """
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, updates, page_size=BATCH_SIZE)
+    conn.commit()
+
+
+# ── Verification ───────────────────────────────────────────────────────────
+
+def run_verification(conn):
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT
+              COUNT(*)                                               AS total,
+              COUNT(supertrend_dir)                                  AS with_dir,
+              SUM(CASE WHEN supertrend_dir =  1 THEN 1 ELSE 0 END)  AS bullish,
+              SUM(CASE WHEN supertrend_dir = -1 THEN 1 ELSE 0 END)  AS bearish
+            FROM km_equity_eod
+            WHERE trade_date = (SELECT MAX(trade_date) FROM km_equity_eod)
+            """
+        )
+        row = dict(cur.fetchone())
+    total   = row['total']
+    with_d  = row['with_dir']
+    bull    = row['bullish'] or 0
+    bear    = row['bearish'] or 0
+    pct_b   = round(bull / with_d * 100, 1) if with_d else 0
+    print(f'\n── Verification ──────────────────────────────')
+    print(f'  Latest-date rows   : {total}')
+    print(f'  With supertrend_dir: {with_d}')
+    print(f'  Bullish (dir=1)    : {bull}  ({pct_b}%)')
+    print(f'  Bearish (dir=-1)   : {bear}  ({100 - pct_b}%)')
+
+    cur2 = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur2.execute(
+        """
+        SELECT s.symbol, e.close, e.supertrend, e.supertrend_dir, e.atr_10
+        FROM km_equity_eod e
+        JOIN km_equity_symbols s ON e.equity_id = s.id
+        WHERE e.trade_date = (SELECT MAX(trade_date) FROM km_equity_eod)
+          AND s.symbol IN (
+            'STLTECH','BAJFINANCE','BEL','TITAN','HFCL','TVSMOTOR'
+          )
+        ORDER BY s.symbol
+        """
+    )
+    rows = cur2.fetchall()
+    cur2.close()
+    if rows:
+        print(f'\n  Spot check:')
+        print(f'  {"Symbol":<14} {"Close":>8}  {"Supertrend":>10}  {"Dir":>4}  {"ATR":>7}')
+        print(f'  {"-"*50}')
+        for r in rows:
+            st   = r['supertrend']
+            atr  = r['atr_10']
+            d    = r['supertrend_dir']
+            arrow = ('▲' if d == 1 else '▼') if d is not None else ' '
+            st_str  = f'{float(st):>10.2f}' if st  is not None else f'{"NULL":>10}'
+            atr_str = f'{float(atr):>7.2f}'  if atr is not None else f'{"NULL":>7}'
+            dir_str = f'{arrow}{d:>2}'        if d   is not None else f'  --'
+            print(
+                f'  {r["symbol"]:<14} '
+                f'{float(r["close"]):>8.2f}  '
+                f'{st_str}  '
+                f'{dir_str}  '
+                f'{atr_str}'
+            )
+
+
+# ── Pipeline entry point ──────────────────────────────────────────────────
+
+def compute_supertrend_for_date(db_conn, trade_date, verbose=False) -> int:
+    """Called from daily_pipeline.py after compute_all_pending_indicators.
+    Opens its own psycopg2 connection -- db_conn is accepted but unused.
+    Loads last 600 trading days per equity -- sufficient for state machine
+    accuracy (converges within ~50 bars), avoids full-history scan.
+    """
+    conn = get_conn()
+    try:
+        target = str(trade_date)
+        target_dt = _date.fromisoformat(target)
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT DISTINCT equity_id FROM km_equity_eod
+                WHERE trade_date = %s AND atr_10 IS NOT NULL
+            """, [target])
+            equity_ids = [r[0] for r in cur.fetchall()]
+
+        if not equity_ids:
+            if verbose:
+                print(f"  [supertrend] No equities with atr_10 for {target}")
+            return 0
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, equity_id, trade_date, high, low, close, atr_10
+                FROM km_equity_eod
+                WHERE equity_id = ANY(%s)
+                  AND trade_date <= %s
+                  AND trade_date >= (
+                      SELECT MIN(d) FROM (
+                          SELECT trade_date AS d
+                          FROM km_equity_eod
+                          WHERE trade_date <= %s
+                          ORDER BY trade_date DESC
+                          LIMIT 600
+                      ) sub
+                  )
+                ORDER BY equity_id, trade_date ASC
+            """, [equity_ids, target, target])
+            all_rows = cur.fetchall()
+
+        groups = defaultdict(list)
+        for r in all_rows:
+            groups[r['equity_id']].append(r)
+
+        pending_batch = []
+        for eid, rows in groups.items():
+            results = compute_supertrend(rows)
+            target_ids = {r['id'] for r in rows if r['trade_date'] == target_dt}
+            for (row_id, st_val, st_dir) in results:
+                if row_id in target_ids:
+                    pending_batch.append((st_val, st_dir, row_id))
+
+        if not pending_batch:
+            return 0
+
+        batch_update(conn, pending_batch)
+        if verbose:
+            print(f"  [supertrend] {len(pending_batch)} rows updated for {target}")
+        return len(pending_batch)
+    finally:
+        conn.close()
+
+
+# ── Main ───────────────────────────────────────────────────────────────────
+
+def main():
+    args        = sys.argv[1:]
+    verify_only = '--verify' in args
+    date_arg    = next((a.split('=', 1)[1] if '=' in a else None
+                        for a in args if a.startswith('--date')), None)
+    if date_arg is None:
+        date_arg = next((a for a in args
+                         if not a.startswith('--') and len(a) == 10 and a[4] == '-'), None)
+    symbol      = next((a for a in args
+                        if not a.startswith('--') and not (len(a) == 10 and a[4] == '-')), None)
+
+    conn = get_conn()
+
+    if verify_only:
+        run_verification(conn)
+        conn.close()
+        return
+
+    if date_arg:
+        print(f'SuperTrend for single date {date_arg}')
+        n = compute_supertrend_for_date(None, date_arg, verbose=True)
+        print(f'  Done -- {n} rows updated')
+        conn.close()
+        return
+
+    print(f'SuperTrend backfill -- multiplier={MULTIPLIER}, batch={BATCH_SIZE}')
+    if symbol:
+        print(f'  Mode: single symbol "{symbol}"')
+    else:
+        print(f'  Mode: all equities with atr_10')
+
+    equity_ids = load_equity_ids(conn, symbol_filter=symbol)
+    if not equity_ids:
+        print('  No equities found -- check symbol name or atr_10 population')
+        conn.close()
+        return
+
+    total_symbols = len(equity_ids)
+    print(f'  Processing {total_symbols} equity ID(s)...\n')
+
+    t0             = time.time()
+    total_rows     = 0
+    pending_batch  = []
+
+    for i, eid in enumerate(equity_ids, 1):
+        rows    = load_rows_for_equity(conn, eid)
+        results = compute_supertrend(rows)
+
+        for (row_id, st_val, st_dir) in results:
+            pending_batch.append((st_val, st_dir, row_id))
+
+        if len(pending_batch) >= BATCH_SIZE:
+            batch_update(conn, pending_batch)
+            total_rows    += len(pending_batch)
+            pending_batch  = []
+
+        if i % 500 == 0 or i == total_symbols:
+            elapsed = time.time() - t0
+            rate    = i / elapsed
+            eta     = (total_symbols - i) / rate if rate > 0 else 0
+            print(
+                f'  [{i:>5}/{total_symbols}]  '
+                f'{total_rows + len(pending_batch):>7} rows staged  '
+                f'{elapsed:>5.0f}s elapsed  '
+                f'ETA {eta:>4.0f}s'
+            )
+
+    if pending_batch:
+        batch_update(conn, pending_batch)
+        total_rows += len(pending_batch)
+
+    elapsed = time.time() - t0
+    print(f'\n  Done -- {total_rows} rows updated in {elapsed:.1f}s')
+
+    run_verification(conn)
+    conn.close()
+
+
+if __name__ == '__main__':
+    main()
