@@ -58,15 +58,15 @@ def verify(target_date: str):
 def run_update(target_date: str):
     """
     UPDATE km_equity_eod for target_date using window functions over full
-    history. Computes w52_high (252-bar max high), w52_low (252-bar min low),
-    lifetime_high (expanding max high).
+    history. Computes w52_high, w52_low, lifetime_high, and delivery_surge_x.
     """
     sql = """
 UPDATE km_equity_eod e
 SET
-    w52_high      = sub.w52h,
-    w52_low       = sub.w52l,
-    lifetime_high = sub.lth
+    w52_high          = sub.w52h,
+    w52_low           = sub.w52l,
+    lifetime_high     = sub.lth,
+    delivery_surge_x  = sub.surge_x
 FROM (
     SELECT
         id,
@@ -85,14 +85,19 @@ FROM (
             PARTITION BY equity_id
             ORDER BY trade_date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) AS lth
+        ) AS lth,
+        CASE
+            WHEN avg_amt_22d > 0
+            THEN ROUND(avg_amt_5d / avg_amt_22d, 4)
+            ELSE NULL
+        END AS surge_x
     FROM km_equity_eod
 ) sub
 WHERE e.id = sub.id
   AND sub.trade_date = %s
 """
     print(f"\n[update] Running window-function UPDATE for {target_date}...")
-    print("  (scans full history — may take 30-90 seconds)")
+    print("  (scans full history -- may take 30-90 seconds)")
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -106,7 +111,7 @@ WHERE e.id = sub.id
 
 
 def compute_rolling_metrics_for_date(db_conn, trade_date, verbose=False) -> int:
-    """Pipeline entry point. Pure SQL — no indicators.calculators dependency.
+    """Pipeline entry point. Pure SQL -- no indicators.calculators dependency.
     db_conn is accepted but unused (opens its own psycopg2 connection).
     """
     n = run_update(str(trade_date))

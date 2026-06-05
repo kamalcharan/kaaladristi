@@ -92,13 +92,13 @@ _FLAG_EXPRS: dict[str, str] = {
         AND magic_rs > 0
     """,
 
-    # RS Leaders — top RS + strong zone + supertrend confirmed
+    # RS Leaders — top RS + strong/mild bull zone + supertrend confirmed
     'is_vani_rs': """
-        magic_rs > 80
-        AND rvol > 1.5
-        AND rsi_14 BETWEEN 50 AND 80
+        magic_rs > 60
+        AND rvol > 1.2
+        AND rsi_14 BETWEEN 45 AND 82
         AND supertrend_dir = 1
-        AND magic_rs_zone = 'Strong Bull'
+        AND magic_rs_zone IN ('Strong Bull', 'Mild Bull')
     """,
 
     # 52-Week High — AT or within 2% of 52w high + volume
@@ -281,8 +281,6 @@ def verify(conn, target_date: str = None):
         cols = ', '.join(
             f"SUM(CASE WHEN {col} THEN 1 ELSE 0 END) AS {col}" for col in _FLAG_EXPRS
         )
-        # is_vani_s2 is owned by backfill_stage_classification.py — shown here
-        # for reference only, never written by this script.
         cur.execute(f"""
             SELECT
                 COUNT(*) AS total_rows,
@@ -354,8 +352,7 @@ def diagnose_nulls(conn, target_date: str):
 
 def compute_vani_flags_for_date(db_conn, trade_date, verbose=False) -> int:
     """Called from daily_pipeline.py step 6j.
-    Opens its own psycopg2 connection — db_conn is accepted but unused
-    (PgClient from daily_pipeline doesn't support cursor()/commit()).
+    Opens its own psycopg2 connection — db_conn is accepted but unused.
     """
     conn = get_conn()
     try:
@@ -399,7 +396,6 @@ def main():
             print(f"\n[full] Done in {time.time() - t0:.0f}s")
         else:
             target = args.date or str(date.today())
-            # Resolve 'today' to actual latest trade date if no rows for today
             conn2 = get_conn()
             try:
                 latest = _get_latest_date(conn2)
@@ -415,11 +411,10 @@ def main():
             n = _update_flags_for_date(conn, target, verbose=True)
             print(f"\n  Updated {n:,} rows")
 
-        # Always verify the latest date after a run
         if not args.full:
             verify(conn, args.date or None)
         else:
-            verify(conn, None)  # latest date only
+            verify(conn, None)
 
     finally:
         conn.close()
