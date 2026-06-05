@@ -86,6 +86,8 @@ def _compute_d365(conn, date_arg=None) -> int:
     """Core d365 computation. Shared by main() CLI and compute_d365_for_date() pipeline."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         if date_arg:
+            # Only need ~400 trading days back (365 calendar days + 30 day tolerance).
+            # Loading full history caused multi-hour hangs on ~1.7M rows.
             cur.execute("""
                 SELECT id, equity_id, trade_date, close
                 FROM km_equity_eod
@@ -94,8 +96,18 @@ def _compute_d365(conn, date_arg=None) -> int:
                     SELECT DISTINCT equity_id FROM km_equity_eod
                     WHERE trade_date = %s
                   )
+                  AND trade_date <= %s
+                  AND trade_date >= (
+                      SELECT MIN(d) FROM (
+                          SELECT trade_date AS d
+                          FROM km_equity_eod
+                          WHERE trade_date <= %s
+                          ORDER BY trade_date DESC
+                          LIMIT 450
+                      ) sub
+                  )
                 ORDER BY equity_id, trade_date ASC
-            """, [date_arg])
+            """, [date_arg, date_arg, date_arg])
         else:
             cur.execute("""
                 SELECT id, equity_id, trade_date, close
