@@ -180,13 +180,49 @@ def _compute_d365(conn, date_arg=None) -> int:
 
 # ── Pipeline entry point ──────────────────────────────────────────────────
 
+def _sql_d365_for_date(conn, target_date: str) -> int:
+    """Pure SQL LATERAL join UPDATE — no Python fetchall, runs in seconds."""
+    sql = """
+        UPDATE km_equity_eod AS e
+        SET d365_pct_chng = sub.d365
+        FROM (
+            SELECT curr.id,
+                ROUND(
+                    (curr.close::numeric - past.close::numeric)
+                    / past.close::numeric * 100.0, 2
+                ) AS d365
+            FROM km_equity_eod curr
+            JOIN LATERAL (
+                SELECT p.close
+                FROM km_equity_eod p
+                WHERE p.equity_id = curr.equity_id
+                  AND p.close IS NOT NULL
+                  AND p.close > 0
+                  AND p.trade_date BETWEEN curr.trade_date - INTERVAL '395 days'
+                                       AND curr.trade_date - INTERVAL '335 days'
+                ORDER BY p.trade_date DESC
+                LIMIT 1
+            ) past ON true
+            WHERE curr.trade_date = %s
+              AND curr.close IS NOT NULL
+        ) sub
+        WHERE e.id = sub.id
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, [target_date])
+        n = cur.rowcount
+    conn.commit()
+    return n
+
+
 def compute_d365_for_date(db_conn, trade_date, verbose=False) -> int:
     """Called from daily_pipeline.py after rolling_metrics.
-    Opens its own psycopg2 connection — db_conn is accepted but unused.
+    Uses pure SQL LATERAL join — no Python fetchall, no full-history scan.
+    db_conn accepted but unused; opens its own psycopg2 connection.
     """
     conn = get_conn()
     try:
-        n = _compute_d365(conn, date_arg=str(trade_date))
+        n = _sql_d365_for_date(conn, str(trade_date))
         if verbose:
             print(f"  [d365] {n} rows updated for {trade_date}")
         return n
