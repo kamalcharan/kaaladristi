@@ -2,7 +2,7 @@
 Rolling Metrics Backfill — pure SQL, no Python import chain
 =============================================================
 Computes w52_high, w52_low, lifetime_high, avg_amt_5d, avg_amt_22d,
-and delivery_surge_x directly via PostgreSQL window functions.
+d30_pct_chng, and delivery_surge_x directly via PostgreSQL window functions.
 No dependency on compute_engine.py or indicators package.
 
 Usage:
@@ -34,26 +34,28 @@ def verify(target_date: str):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT
-                    COUNT(*)               AS total_rows,
-                    COUNT(w52_high)        AS w52_high_count,
-                    COUNT(w52_low)         AS w52_low_count,
-                    COUNT(lifetime_high)   AS lifetime_high_count,
-                    COUNT(avg_amt_5d)      AS avg_amt_5d_count,
-                    COUNT(avg_amt_22d)     AS avg_amt_22d_count,
+                    COUNT(*)                AS total_rows,
+                    COUNT(w52_high)         AS w52_high_count,
+                    COUNT(w52_low)          AS w52_low_count,
+                    COUNT(lifetime_high)    AS lifetime_high_count,
+                    COUNT(avg_amt_5d)       AS avg_amt_5d_count,
+                    COUNT(avg_amt_22d)      AS avg_amt_22d_count,
+                    COUNT(d30_pct_chng)     AS d30_count,
                     COUNT(delivery_surge_x) AS surge_x_count
                 FROM km_equity_eod
                 WHERE trade_date = %s
             """, [target_date])
             row = cur.fetchone()
-            total, w52h, w52l, lth, amt5, amt22, surge = row
+            total, w52h, w52l, lth, amt5, amt22, d30, surge = row
             print(f"\n[verify] trade_date = {target_date}")
-            print(f"  total_rows      = {total}")
-            print(f"  w52_high        = {w52h}")
-            print(f"  w52_low         = {w52l}")
-            print(f"  lifetime_high   = {lth}")
-            print(f"  avg_amt_5d      = {amt5}")
-            print(f"  avg_amt_22d     = {amt22}")
-            print(f"  delivery_surge_x= {surge}")
+            print(f"  total_rows       = {total}")
+            print(f"  w52_high         = {w52h}")
+            print(f"  w52_low          = {w52l}")
+            print(f"  lifetime_high    = {lth}")
+            print(f"  avg_amt_5d       = {amt5}")
+            print(f"  avg_amt_22d      = {amt22}")
+            print(f"  d30_pct_chng     = {d30}")
+            print(f"  delivery_surge_x = {surge}")
             if total and w52h and total == w52h:
                 print(f"\n✓ All {total} rows populated correctly.")
             else:
@@ -70,6 +72,7 @@ def run_update(target_date: str):
       - lifetime_high        : expanding max from first record
       - avg_amt_5d/22d       : AVG(delivery_qty * close / 10M) over 5/22 bars
                                matches migration 054 definition (delivery value in Cr)
+      - d30_pct_chng         : % change vs 22 trading days ago (LAG 22)
       - delivery_surge_x     : avg_amt_5d / avg_amt_22d
     No dependency on compute_engine.py.
     """
@@ -81,6 +84,7 @@ SET
     lifetime_high     = sub.lth,
     avg_amt_5d        = sub.amt5,
     avg_amt_22d       = sub.amt22,
+    d30_pct_chng      = sub.d30,
     delivery_surge_x  = sub.surge_x
 FROM (
     SELECT
@@ -111,6 +115,13 @@ FROM (
             ORDER BY trade_date
             ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
         ), 4) AS amt22,
+        ROUND(
+            (close - LAG(close, 22) OVER (
+                PARTITION BY equity_id ORDER BY trade_date
+            )) / NULLIF(LAG(close, 22) OVER (
+                PARTITION BY equity_id ORDER BY trade_date
+            ), 0) * 100.0
+        , 2) AS d30,
         CASE
             WHEN ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                 PARTITION BY equity_id

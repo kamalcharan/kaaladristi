@@ -43,7 +43,7 @@ import psycopg2.extras
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
 
-# ── Flag definitions ───────────────────────────────────────────────────────
+# ── Flag definitions ──────────────────────────────────────────────────────
 # Each value is a SQL boolean expression referencing km_equity_eod columns.
 # All columns referenced must exist in km_equity_eod.
 # NULL-safe: use COALESCE or IS NOT NULL guards where a NULL would silently
@@ -92,7 +92,7 @@ _FLAG_EXPRS: dict[str, str] = {
         AND magic_rs > 0
     """,
 
-    # RS Leaders — top RS + strong/mild bull zone + supertrend confirmed
+    # RS Leaders — top RS + strong zone + supertrend confirmed
     'is_vani_rs': """
         magic_rs > 60
         AND rvol > 1.2
@@ -141,26 +141,23 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # Overbought + Volume — RSI hot + volume spike + distribution signal
+    # Overbought + Volume — RSI hot + volume spike (dot_syd removed: always false)
     'is_vani_overbought': """
-        rsi_14 > 78
+        rsi_14 > 75
         AND rvol > 2.5
-        AND dot_syd = true
         AND magic_rs_zone IN ('Strong Bull', 'Mild Bull')
     """,
 
-    # Oversold + Volume — RSI washed out + volume spike + still above 200
+    # Oversold + Volume — RSI washed out + volume spike + still above 200 (dot signals removed: always false)
     'is_vani_oversold': """
-        rsi_14 < 28
+        rsi_14 < 30
         AND rvol > 2.0
-        AND (dot_svd = true OR dot_sbd = true)
         AND close > sma_200
     """,
 
-    # Distribution Warning — SYD signal + volume divergence + negative RS
+    # Distribution Warning — volume divergence + negative RS (dot_syd removed: always false)
     'is_vani_distrib': """
-        dot_syd = true
-        AND volume_divergence_flag = 'VOLUME_DIV_DOWN'
+        volume_divergence_flag = 'VOLUME_DIV_DOWN'
         AND magic_rs < 0
         AND rvol > 1.5
     """,
@@ -180,12 +177,11 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # Score 22D — medium-term momentum: RS + RSS + price vs MA + d30 return
+    # Score 22D — medium-term momentum: RS + RSS + price vs MA + trend (d30 removed: NULL until rolling_metrics runs)
     'is_vani_score22d': """
         magic_rs > 20
         AND rss_value > 60
         AND close > sma_150
-        AND d30_pct_chng > 5
         AND supertrend_dir = 1
     """,
 
@@ -197,12 +193,12 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # 52-Week Low — at the low + volume spike + potential reversal signal
+    # 52-Week Low — at the low + volume spike + RSI oversold (dot signals removed: always false)
     'is_vani_52wl': """
         w52_low IS NOT NULL
         AND close <= w52_low * 1.05
         AND rvol > 2.0
-        AND (dot_svd = true OR dot_sbd = true)
+        AND rsi_14 < 40
     """,
 
     # Smart Money Loading — high institutional proxy + RSS momentum
@@ -221,7 +217,7 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
-# ── Core update ────────────────────────────────────────────────────────────
+# ── Core update ──────────────────────────────────────────────────────────
 
 def _update_flags_for_date(conn, target_date: str, verbose: bool = False) -> int:
     """Run one UPDATE per flag for a single trade_date. Returns total rows updated."""
@@ -253,7 +249,7 @@ def _update_flags_for_date(conn, target_date: str, verbose: bool = False) -> int
     return total_updated
 
 
-# ── Date-range helpers ─────────────────────────────────────────────────────
+# ── Date-range helpers ────────────────────────────────────────────────────────
 
 def _get_all_trade_dates(conn) -> list[str]:
     with conn.cursor() as cur:
@@ -281,6 +277,8 @@ def verify(conn, target_date: str = None):
         cols = ', '.join(
             f"SUM(CASE WHEN {col} THEN 1 ELSE 0 END) AS {col}" for col in _FLAG_EXPRS
         )
+        # is_vani_s2 is owned by backfill_stage_classification.py — shown here
+        # for reference only, never written by this script.
         cur.execute(f"""
             SELECT
                 COUNT(*) AS total_rows,
@@ -299,7 +297,7 @@ def verify(conn, target_date: str = None):
         print(f"  {col:<25} {val or 0:>5}  {bar}")
 
 
-# ── NULL column diagnostic ────────────────────────────────────────────────
+# ── NULL column diagnostic ──────────────────────────────────────────────────────
 
 def diagnose_nulls(conn, target_date: str):
     """Report fill rates for columns that VaNi flags depend on."""
@@ -348,11 +346,12 @@ def diagnose_nulls(conn, target_date: str):
         print(f"  {col:<25} {filled:>7,}  {null:>7,}  {pct:>5.1f}%{flag}")
 
 
-# ── Pipeline entry point ──────────────────────────────────────────────────
+# ── Pipeline entry point ──────────────────────────────────────────────────────
 
 def compute_vani_flags_for_date(db_conn, trade_date, verbose=False) -> int:
     """Called from daily_pipeline.py step 6j.
-    Opens its own psycopg2 connection — db_conn is accepted but unused.
+    Opens its own psycopg2 connection — db_conn is accepted but unused
+    (PgClient from daily_pipeline doesn't support cursor()/commit()).
     """
     conn = get_conn()
     try:
@@ -396,6 +395,7 @@ def main():
             print(f"\n[full] Done in {time.time() - t0:.0f}s")
         else:
             target = args.date or str(date.today())
+            # Resolve 'today' to actual latest trade date if no rows for today
             conn2 = get_conn()
             try:
                 latest = _get_latest_date(conn2)
@@ -411,10 +411,11 @@ def main():
             n = _update_flags_for_date(conn, target, verbose=True)
             print(f"\n  Updated {n:,} rows")
 
+        # Always verify the latest date after a run
         if not args.full:
             verify(conn, args.date or None)
         else:
-            verify(conn, None)
+            verify(conn, None)  # latest date only
 
     finally:
         conn.close()
