@@ -68,7 +68,8 @@ SET
     lifetime_high     = sub.lth,
     avg_amt_5d        = sub.amt5,
     avg_amt_22d       = sub.amt22,
-    delivery_surge_x  = sub.surge_x
+    delivery_surge_x  = sub.surge_x,
+    d30_pct_chng      = sub.d30
 FROM (
     SELECT
         id,
@@ -98,6 +99,13 @@ FROM (
             ORDER BY trade_date
             ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
         ), 4) AS amt22,
+        ROUND(
+            (close - LAG(close, 22) OVER (
+                PARTITION BY equity_id ORDER BY trade_date
+            )) / NULLIF(LAG(close, 22) OVER (
+                PARTITION BY equity_id ORDER BY trade_date
+            ), 0) * 100.0
+        , 2) AS d30,
         CASE
             WHEN ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                 PARTITION BY equity_id

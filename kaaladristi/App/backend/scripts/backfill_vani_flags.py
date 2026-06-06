@@ -141,26 +141,23 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # Overbought + Volume — RSI hot + volume spike + distribution signal
+    # Overbought + Volume — RSI hot + volume spike (dot_syd removed: always false)
     'is_vani_overbought': """
-        rsi_14 > 78
+        rsi_14 > 75
         AND rvol > 2.5
-        AND dot_syd = true
         AND magic_rs_zone IN ('Strong Bull', 'Mild Bull')
     """,
 
-    # Oversold + Volume — RSI washed out + volume spike + still above 200
+    # Oversold + Volume — RSI washed out + volume spike + still above 200 (dot signals removed: always false)
     'is_vani_oversold': """
-        rsi_14 < 28
+        rsi_14 < 30
         AND rvol > 2.0
-        AND (dot_svd = true OR dot_sbd = true)
         AND close > sma_200
     """,
 
-    # Distribution Warning — SYD signal + volume divergence + negative RS
+    # Distribution Warning — volume divergence + negative RS (dot_syd removed: always false)
     'is_vani_distrib': """
-        dot_syd = true
-        AND volume_divergence_flag = 'VOLUME_DIV_DOWN'
+        volume_divergence_flag = 'VOLUME_DIV_DOWN'
         AND magic_rs < 0
         AND rvol > 1.5
     """,
@@ -180,12 +177,11 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # Score 22D — medium-term momentum: RS + RSS + price vs MA + d30 return
+    # Score 22D — medium-term momentum: RS + RSS + price vs MA + trend (d30 removed: NULL pending fix)
     'is_vani_score22d': """
         magic_rs > 20
         AND rss_value > 60
         AND close > sma_150
-        AND d30_pct_chng > 5
         AND supertrend_dir = 1
     """,
 
@@ -197,12 +193,12 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # 52-Week Low — at the low + volume spike + potential reversal signal
+    # 52-Week Low — at the low + volume spike + RSI oversold (dot signals removed: always false)
     'is_vani_52wl': """
         w52_low IS NOT NULL
         AND close <= w52_low * 1.05
         AND rvol > 2.0
-        AND (dot_svd = true OR dot_sbd = true)
+        AND rsi_14 < 40
     """,
 
     # Smart Money Loading — high institutional proxy + RSS momentum
