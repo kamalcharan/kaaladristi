@@ -148,11 +148,11 @@ _FLAG_EXPRS: dict[str, str] = {
         AND magic_rs_zone IN ('Strong Bull', 'Mild Bull')
     """,
 
-    # Oversold + Volume — RSI washed out + volume spike + still above 200 (dot signals removed: always false)
+    # Oversold + Volume — RSI washed out + volume spike (sma_200 NULL for many rows, use price floor)
     'is_vani_oversold': """
         rsi_14 < 30
         AND rvol > 2.0
-        AND close > sma_200
+        AND close > 50
     """,
 
     # Distribution Warning — volume divergence + negative RS (dot_syd removed: always false)
@@ -177,12 +177,13 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # Score 22D — medium-term momentum: RS + RSS + price vs MA + trend (d30 removed: NULL until rolling_metrics runs)
+    # Score 22D — medium-term momentum: RS + RSS trending up + price vs MA + trend
     'is_vani_score22d': """
-        magic_rs > 20
-        AND rss_value > 60
+        magic_rs > 30
+        AND rss_value > 65
         AND close > sma_150
         AND supertrend_dir = 1
+        AND rss_spread > 0
     """,
 
     # High Trade Value — extreme volume in value terms + uptrend
@@ -277,8 +278,6 @@ def verify(conn, target_date: str = None):
         cols = ', '.join(
             f"SUM(CASE WHEN {col} THEN 1 ELSE 0 END) AS {col}" for col in _FLAG_EXPRS
         )
-        # is_vani_s2 is owned by backfill_stage_classification.py — shown here
-        # for reference only, never written by this script.
         cur.execute(f"""
             SELECT
                 COUNT(*) AS total_rows,
@@ -350,8 +349,7 @@ def diagnose_nulls(conn, target_date: str):
 
 def compute_vani_flags_for_date(db_conn, trade_date, verbose=False) -> int:
     """Called from daily_pipeline.py step 6j.
-    Opens its own psycopg2 connection — db_conn is accepted but unused
-    (PgClient from daily_pipeline doesn't support cursor()/commit()).
+    Opens its own psycopg2 connection — db_conn is accepted but unused.
     """
     conn = get_conn()
     try:
@@ -395,7 +393,6 @@ def main():
             print(f"\n[full] Done in {time.time() - t0:.0f}s")
         else:
             target = args.date or str(date.today())
-            # Resolve 'today' to actual latest trade date if no rows for today
             conn2 = get_conn()
             try:
                 latest = _get_latest_date(conn2)
@@ -411,11 +408,10 @@ def main():
             n = _update_flags_for_date(conn, target, verbose=True)
             print(f"\n  Updated {n:,} rows")
 
-        # Always verify the latest date after a run
         if not args.full:
             verify(conn, args.date or None)
         else:
-            verify(conn, None)  # latest date only
+            verify(conn, None)
 
     finally:
         conn.close()
