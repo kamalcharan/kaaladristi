@@ -66,6 +66,8 @@ SET
     w52_high          = sub.w52h,
     w52_low           = sub.w52l,
     lifetime_high     = sub.lth,
+    avg_amt_5d        = sub.amt5,
+    avg_amt_22d       = sub.amt22,
     delivery_surge_x  = sub.surge_x
 FROM (
     SELECT
@@ -86,9 +88,35 @@ FROM (
             ORDER BY trade_date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         ) AS lth,
+        ROUND(AVG(value_cr) OVER (
+            PARTITION BY equity_id
+            ORDER BY trade_date
+            ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
+        )::numeric, 4) AS amt5,
+        ROUND(AVG(value_cr) OVER (
+            PARTITION BY equity_id
+            ORDER BY trade_date
+            ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
+        )::numeric, 4) AS amt22,
         CASE
-            WHEN avg_amt_22d > 0
-            THEN ROUND(avg_amt_5d / avg_amt_22d, 4)
+            WHEN ROUND(AVG(value_cr) OVER (
+                PARTITION BY equity_id
+                ORDER BY trade_date
+                ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
+            )::numeric, 4) > 0
+            THEN ROUND(
+                ROUND(AVG(value_cr) OVER (
+                    PARTITION BY equity_id
+                    ORDER BY trade_date
+                    ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
+                )::numeric, 4)
+                /
+                ROUND(AVG(value_cr) OVER (
+                    PARTITION BY equity_id
+                    ORDER BY trade_date
+                    ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
+                )::numeric, 4)
+            , 4)
             ELSE NULL
         END AS surge_x
     FROM km_equity_eod
