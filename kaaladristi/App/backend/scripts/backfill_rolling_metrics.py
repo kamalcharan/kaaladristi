@@ -1,8 +1,9 @@
 """
 Rolling Metrics Backfill — pure SQL, no Python import chain
 =============================================================
-Computes w52_high, w52_low, lifetime_high directly via PostgreSQL window
-functions. No dependency on compute_engine.py or indicators package.
+Computes w52_high, w52_low, lifetime_high, avg_amt_5d, avg_amt_22d,
+and delivery_surge_x directly via PostgreSQL window functions.
+No dependency on compute_engine.py or indicators package.
 
 Usage:
     cd App/backend
@@ -36,17 +37,23 @@ def verify(target_date: str):
                     COUNT(*)               AS total_rows,
                     COUNT(w52_high)        AS w52_high_count,
                     COUNT(w52_low)         AS w52_low_count,
-                    COUNT(lifetime_high)   AS lifetime_high_count
+                    COUNT(lifetime_high)   AS lifetime_high_count,
+                    COUNT(avg_amt_5d)      AS avg_amt_5d_count,
+                    COUNT(avg_amt_22d)     AS avg_amt_22d_count,
+                    COUNT(delivery_surge_x) AS surge_x_count
                 FROM km_equity_eod
                 WHERE trade_date = %s
             """, [target_date])
             row = cur.fetchone()
-            total, w52h, w52l, lth = row
+            total, w52h, w52l, lth, amt5, amt22, surge = row
             print(f"\n[verify] trade_date = {target_date}")
-            print(f"  total_rows    = {total}")
-            print(f"  w52_high      = {w52h}")
-            print(f"  w52_low       = {w52l}")
-            print(f"  lifetime_high = {lth}")
+            print(f"  total_rows      = {total}")
+            print(f"  w52_high        = {w52h}")
+            print(f"  w52_low         = {w52l}")
+            print(f"  lifetime_high   = {lth}")
+            print(f"  avg_amt_5d      = {amt5}")
+            print(f"  avg_amt_22d     = {amt22}")
+            print(f"  delivery_surge_x= {surge}")
             if total and w52h and total == w52h:
                 print(f"\n✓ All {total} rows populated correctly.")
             else:
@@ -58,7 +65,9 @@ def verify(target_date: str):
 def run_update(target_date: str):
     """
     UPDATE km_equity_eod for target_date using window functions over full
-    history. Computes w52_high, w52_low, lifetime_high, and delivery_surge_x.
+    history. Computes w52_high, w52_low, lifetime_high, avg_amt_5d,
+    avg_amt_22d, and delivery_surge_x entirely from raw columns.
+    No dependency on compute_engine.py.
     """
     sql = """
 UPDATE km_equity_eod e
@@ -66,6 +75,8 @@ SET
     w52_high          = sub.w52h,
     w52_low           = sub.w52l,
     lifetime_high     = sub.lth,
+    avg_amt_5d        = sub.amt5,
+    avg_amt_22d       = sub.amt22,
     delivery_surge_x  = sub.surge_x
 FROM (
     SELECT
@@ -86,9 +97,35 @@ FROM (
             ORDER BY trade_date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         ) AS lth,
+        ROUND(AVG(value_cr) OVER (
+            PARTITION BY equity_id
+            ORDER BY trade_date
+            ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
+        )::numeric, 4) AS amt5,
+        ROUND(AVG(value_cr) OVER (
+            PARTITION BY equity_id
+            ORDER BY trade_date
+            ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
+        )::numeric, 4) AS amt22,
         CASE
-            WHEN avg_amt_22d > 0
-            THEN ROUND(avg_amt_5d / avg_amt_22d, 4)
+            WHEN ROUND(AVG(value_cr) OVER (
+                PARTITION BY equity_id
+                ORDER BY trade_date
+                ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
+            )::numeric, 4) > 0
+            THEN ROUND(
+                ROUND(AVG(value_cr) OVER (
+                    PARTITION BY equity_id
+                    ORDER BY trade_date
+                    ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
+                )::numeric, 4)
+                /
+                ROUND(AVG(value_cr) OVER (
+                    PARTITION BY equity_id
+                    ORDER BY trade_date
+                    ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
+                )::numeric, 4)
+            , 4)
             ELSE NULL
         END AS surge_x
     FROM km_equity_eod
@@ -97,7 +134,7 @@ WHERE e.id = sub.id
   AND sub.trade_date = %s
 """
     print(f"\n[update] Running window-function UPDATE for {target_date}...")
-    print("  (scans full history -- may take 30-90 seconds)")
+    print("  (scans full history — may take 30-90 seconds)")
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -111,7 +148,7 @@ WHERE e.id = sub.id
 
 
 def compute_rolling_metrics_for_date(db_conn, trade_date, verbose=False) -> int:
-    """Pipeline entry point. Pure SQL -- no indicators.calculators dependency.
+    """Pipeline entry point. Pure SQL — no indicators.calculators dependency.
     db_conn is accepted but unused (opens its own psycopg2 connection).
     """
     n = run_update(str(trade_date))
