@@ -177,13 +177,14 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # Score 22D — medium-term momentum: RS + RSS trending up + price vs MA + trend
+    # Score 22D — medium-term momentum: RS + RSS trending up + price vs MA + trend + 1yr return
     'is_vani_score22d': """
-        magic_rs > 30
-        AND rss_value > 65
+        magic_rs > 40
+        AND rss_value > 70
+        AND rss_spread > 5
         AND close > sma_150
         AND supertrend_dir = 1
-        AND rss_spread > 0
+        AND d365_pct_chng > 10
     """,
 
     # High Trade Value — extreme volume in value terms + uptrend
@@ -235,9 +236,8 @@ def _update_flags_for_date(conn, target_date: str, verbose: bool = False) -> int
             """
             cur.execute(sql, [target_date])
             n = cur.rowcount
-            total_updated = max(total_updated, n)   # all flags update same rows
+            total_updated = max(total_updated, n)
             if verbose:
-                # Count how many were set to TRUE
                 cur.execute(
                     f"SELECT COUNT(*) FROM km_equity_eod "
                     f"WHERE trade_date = %s AND {col} = true",
