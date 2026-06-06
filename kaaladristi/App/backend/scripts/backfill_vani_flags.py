@@ -148,11 +148,11 @@ _FLAG_EXPRS: dict[str, str] = {
         AND magic_rs_zone IN ('Strong Bull', 'Mild Bull')
     """,
 
-    # Oversold + Volume — RSI washed out + volume spike + still above 200 (dot signals removed: always false)
+    # Oversold + Volume — RSI washed out + volume spike (sma_200 NULL for many rows, use price floor)
     'is_vani_oversold': """
         rsi_14 < 30
         AND rvol > 2.0
-        AND close > sma_200
+        AND close > 50
     """,
 
     # Distribution Warning — volume divergence + negative RS (dot_syd removed: always false)
@@ -177,12 +177,13 @@ _FLAG_EXPRS: dict[str, str] = {
         AND supertrend_dir = 1
     """,
 
-    # Score 22D — medium-term momentum: RS + RSS + price vs MA + trend (d30 removed: NULL pending fix)
+    # Score 22D — medium-term momentum: RS + RSS trending up + price vs MA + trend
     'is_vani_score22d': """
-        magic_rs > 20
-        AND rss_value > 60
+        magic_rs > 30
+        AND rss_value > 65
         AND close > sma_150
         AND supertrend_dir = 1
+        AND rss_spread > 0
     """,
 
     # High Trade Value — extreme volume in value terms + uptrend
