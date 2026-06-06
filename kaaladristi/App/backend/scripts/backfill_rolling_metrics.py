@@ -88,34 +88,34 @@ FROM (
             ORDER BY trade_date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         ) AS lth,
-        ROUND(AVG(value_cr) OVER (
+        ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
             PARTITION BY equity_id
             ORDER BY trade_date
             ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-        )::numeric, 4) AS amt5,
-        ROUND(AVG(value_cr) OVER (
+        ), 4) AS amt5,
+        ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
             PARTITION BY equity_id
             ORDER BY trade_date
             ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-        )::numeric, 4) AS amt22,
+        ), 4) AS amt22,
         CASE
-            WHEN ROUND(AVG(value_cr) OVER (
+            WHEN ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                 PARTITION BY equity_id
                 ORDER BY trade_date
                 ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-            )::numeric, 4) > 0
+            ), 4) > 0
             THEN ROUND(
-                ROUND(AVG(value_cr) OVER (
+                ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                     PARTITION BY equity_id
                     ORDER BY trade_date
                     ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-                )::numeric, 4)
+                ), 4)
                 /
-                ROUND(AVG(value_cr) OVER (
+                ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                     PARTITION BY equity_id
                     ORDER BY trade_date
                     ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-                )::numeric, 4)
+                ), 4)
             , 4)
             ELSE NULL
         END AS surge_x
