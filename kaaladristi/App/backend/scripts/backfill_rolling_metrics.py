@@ -65,8 +65,12 @@ def verify(target_date: str):
 def run_update(target_date: str):
     """
     UPDATE km_equity_eod for target_date using window functions over full
-    history. Computes w52_high, w52_low, lifetime_high, avg_amt_5d,
-    avg_amt_22d, and delivery_surge_x entirely from raw columns.
+    history. Computes:
+      - w52_high, w52_low    : 52-week (252-bar) rolling high/low
+      - lifetime_high        : expanding max from first record
+      - avg_amt_5d/22d       : AVG(delivery_qty * close / 10M) over 5/22 bars
+                               matches migration 054 definition (delivery value in Cr)
+      - delivery_surge_x     : avg_amt_5d / avg_amt_22d
     No dependency on compute_engine.py.
     """
     sql = """
@@ -97,34 +101,34 @@ FROM (
             ORDER BY trade_date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         ) AS lth,
-        ROUND(AVG(value_cr) OVER (
+        ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
             PARTITION BY equity_id
             ORDER BY trade_date
             ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-        )::numeric, 4) AS amt5,
-        ROUND(AVG(value_cr) OVER (
+        ), 4) AS amt5,
+        ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
             PARTITION BY equity_id
             ORDER BY trade_date
             ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-        )::numeric, 4) AS amt22,
+        ), 4) AS amt22,
         CASE
-            WHEN ROUND(AVG(value_cr) OVER (
+            WHEN ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                 PARTITION BY equity_id
                 ORDER BY trade_date
                 ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-            )::numeric, 4) > 0
+            ), 4) > 0
             THEN ROUND(
-                ROUND(AVG(value_cr) OVER (
+                ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                     PARTITION BY equity_id
                     ORDER BY trade_date
                     ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-                )::numeric, 4)
+                ), 4)
                 /
-                ROUND(AVG(value_cr) OVER (
+                ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
                     PARTITION BY equity_id
                     ORDER BY trade_date
                     ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-                )::numeric, 4)
+                ), 4)
             , 4)
             ELSE NULL
         END AS surge_x
