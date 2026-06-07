@@ -186,8 +186,10 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.start('index_flow_intelligence')
         try:
             result = db.rpc('compute_all_flow_intelligence', {
-                'p_table': 'km_index_eod',
-                'p_id_col': 'index_id',
+                'p_table':     'km_index_eod',
+                'p_id_col':    'index_id',
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
             tracker.complete('index_flow_intelligence', rows=fi_count)
@@ -344,8 +346,10 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.start('flow_intelligence')
         try:
             result = db.rpc('compute_all_flow_intelligence', {
-                'p_table': 'km_equity_eod',
-                'p_id_col': 'equity_id',
+                'p_table':     'km_equity_eod',
+                'p_id_col':    'equity_id',
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
             actual, expected = get_step_coverage(db, 'flow_intelligence', trade_date, 'NSE')
@@ -534,8 +538,10 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         try:
             print(f'  [flow-intel] Computing flow intelligence...')
             result = db.rpc('compute_all_flow_intelligence', {
-                'p_table': 'km_equity_eod',
-                'p_id_col': 'equity_id',
+                'p_table':     'km_equity_eod',
+                'p_id_col':    'equity_id',
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
             print(f'  [flow-intel] Updated {fi_count} rows')
