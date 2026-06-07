@@ -716,6 +716,12 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
     return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
 
 
+@app.get('/api/vani-opportunity/config')
+def vani_opportunity_config():
+    """Stub endpoint — frontend falls back to defaults when this returns empty list."""
+    return []
+
+
 @app.get('/api/scan/presets')
 def scan_presets():
     """Return all active scan preset definitions ordered by category_sort, sort_order."""
