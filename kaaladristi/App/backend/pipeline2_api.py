@@ -718,8 +718,15 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
 
 @app.get('/api/vani-opportunity/config')
 def vani_opportunity_config():
-    """Stub endpoint — frontend falls back to defaults when this returns empty list."""
-    return []
+    return {
+        "presets": {},
+        "default": {
+            "min_rvol": 1.5,
+            "min_magic_rs": 20,
+            "min_rsi": 50,
+            "max_rsi": 80,
+        },
+    }
 
 
 @app.get('/api/scan/presets')
