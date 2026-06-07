@@ -113,6 +113,7 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     nse = NseSession()
 
     # ── Step 0: Download + insert index bhav ──
+    market_holiday = False
     tracker.start('index_download')
     try:
         idx_csv = download_nse_index_bhav(trade_date, session=nse)
@@ -127,9 +128,20 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             })
             print(f'  [index] {idx_count} indexes upserted, {len(idx_unmatched)} unmatched')
         else:
+            market_holiday = True
             tracker.skip('index_download', 'No index data available')
     except Exception as e:
         tracker.fail('index_download', str(e))
+
+    # If index data is missing on a weekday, it's almost certainly a market holiday.
+    # Skip TRI + FII/DII immediately — no retries needed for a holiday.
+    if market_holiday:
+        tracker.skip('tri_download', 'Skipped — likely market holiday')
+        tracker.skip('fii_dii', 'Skipped — likely market holiday')
+        mark_day_status(db, trade_date, 'NSE', 'holiday')
+        print(f'  [pipeline] {trade_date} appears to be a market holiday — skipping')
+        print(f'  ✓ NSE pipeline skipped for {trade_date} (holiday)')
+        return True
 
     # ── Step 0b: Download + insert TRI data ──
     tracker.start('tri_download')
