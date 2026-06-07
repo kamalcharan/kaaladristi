@@ -776,7 +776,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
 
       {/* All Results */}
       {isLoading ? (
-        <DristiQLoader message="Reading planetary alignments…" />
+        <DristiQLoader message="Preparing Data For You…" />
       ) : error ? (
         <div style={{
           padding: '32px 24px', textAlign: 'center',
