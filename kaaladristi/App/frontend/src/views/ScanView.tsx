@@ -645,7 +645,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
   const vaniSorted = useMemo(() => sortStage2(vaniStocks, s2Sort, sortDir), [vaniStocks, s2Sort, sortDir]);
   const restSorted = useMemo(() => sortStage2(displayStocks.filter((s) => !s.vaniOpportunity), s2Sort, sortDir), [displayStocks, s2Sort, sortDir]);
 
-  const exportStocks = useMemo(() => displayStocks, [displayStocks]);
+  const exportStocks = useMemo(() => rawStocks, [rawStocks]);
 
   const toggleSort = (key: S2SortKey) => {
     if (s2Sort === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));

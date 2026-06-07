@@ -1017,72 +1017,124 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
   return results.sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0));
 }
 
-/** Scan 9: Stage 2 Leaders (Weinstein Stage 2) */
-function scanStage2Leaders(bundle: ScanDataBundle): ScanStock[] {
-  const results: ScanStock[] = [];
-  // Process only the NSE-preferred equity_id per ISIN to avoid BSE numeric-code duplicates.
-  const nsePreferred = buildNsePreferredIds(bundle.symbols);
+/** Scan 9: Stage 2 Leaders — direct PostgREST query on pre-computed stage column.
+ *  Returns all stocks where stage = 'S2' on the latest trade date.
+ *  VaNi = is_vani_s2 from DB. ISIN-deduped (NSE preferred).
+ */
+async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  // 1. Get latest trade date
+  const { data: dateRows } = await from('km_equity_eod')
+    .select('trade_date')
+    .order('trade_date', { ascending: false })
+    .limit(1)
+    .execute();
+  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  if (!latestDate) return [];
 
-  for (const [id] of bundle.latestEod) {
-    if (!nsePreferred.has(id)) continue;
-    const eod = bundle.latestEod.get(id);
-    if (!eod) continue;
+  // 2. Fetch all S2 stocks with embedded symbol data
+  const { data: rows } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_200', 'sma_150', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'stage', 'is_vani_s2',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('stage', 'S2')
+    .eq('trade_date', latestDate)
+    .order('magic_rs', { ascending: false })
+    .limit(500)
+    .execute();
 
-    const sma200 = eod.sma_200;
-    const sma50  = eod.sma_50;
-    const w52Low = eod.w52_low;
-    const w52High = eod.w52_high;
+  const eodRows = (rows ?? []) as any[];
 
-    // All core indicators must be computed
-    if (!sma200 || !sma50) continue;
-
-    // Core Stage 2 filters
-    if (eod.close <= sma200)    continue;  // price above SMA_200
-    if (sma50   <= sma200)      continue;  // golden cross: SMA_50 > SMA_200
-    if (eod.close <= sma50)     continue;  // price above SMA_50
-    if (eod.close <= 30)        continue;  // minimum price filter
-
-    // 52-week range: must be at least 25% above 52w-low (well off the base)
-    if (w52Low && eod.close < w52Low * 1.25) continue;
-
-    // Not too far from all-time high (price >= 75% of ATH confirms uptrend intact)
-    const lifetimeHigh = eod.lifetime_high;
-    if (lifetimeHigh && eod.close < lifetimeHigh * 0.75) continue;
-
-    // SMA_200 must be rising (vs 20, 80, or 100 bars ago — any one qualifies)
-    const history = bundle.eodHistory.get(id) ?? [];
-    const sma200_20  = history[20]?.sma_200  ?? null;
-    const sma200_80  = history[80]?.sma_200  ?? null;
-    const sma200_100 = history[100]?.sma_200 ?? null;
-
-    const sma200Rising =
-      (sma200_20  != null && sma200 > sma200_20)  ||
-      (sma200_80  != null && sma200 > sma200_80)  ||
-      (sma200_100 != null && sma200 > sma200_100);
-
-    if (!sma200Rising) continue;
-
-    const stock = buildScanStock(id, bundle, 'stage_2_leaders');
-    if (!stock) continue;
-
-    // VaNi opportunity — highest conviction Stage 2 entries
-    const pctOfLifetimeHigh = lifetimeHigh && lifetimeHigh > 0 ? eod.close / lifetimeHigh : null;
-    const pctOfW52High      = w52High      && w52High      > 0 ? eod.close / w52High      : null;
-
-    const vaniOpportunity =
-      (stock.magic_rs ?? 0) > 40 &&
-      (stock.rvol ?? 0) > 1.5 &&
-      (stock.rsi_14 ?? 0) >= 50 && (stock.rsi_14 ?? 0) <= 80 &&
-      (pctOfLifetimeHigh === null || pctOfLifetimeHigh >= 0.75) &&
-      (pctOfW52High      === null || pctOfW52High      >= 0.85) &&
-      eod.supertrend_dir === 1;
-
-    results.push({ ...stock, vaniOpportunity });
+  // 3. ISIN-dedup: prefer NSE over BSE
+  const isinMap = new Map<string, any>();
+  for (const row of eodRows) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) {
+      // no isin — include as-is keyed by equity_id
+      isinMap.set(`noisin:${row.equity_id}`, row);
+      continue;
+    }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') {
+      isinMap.set(isin, row);
+    }
   }
 
-  return results
-    .sort((a, b) => (b.magic_rs ?? 0) - (a.magic_rs ?? 0))
-    .slice(0, 50);
+  // 4. Map to ScanStock
+  return Array.from(isinMap.values()).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const pctBelow52wHigh = row.w52_high && row.w52_high > 0
+      ? ((row.w52_high - row.close) / row.w52_high) * 100
+      : null;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    const reward = ema20 && atr14 ? (ema20 + atr14) - row.close : null;
+    const rewardPct = ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null;
+
+    return {
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 row.open ?? null,
+      high:                 row.high ?? null,
+      low:                  row.low ?? null,
+      pct_chng:             row.pct_chng ?? null,
+      magic_rs:             row.magic_rs ?? null,
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            row.rss_value ?? null,
+      rss_spread:           row.rss_spread ?? null,
+      rsi_14:               row.rsi_14 ?? null,
+      rvol:                 row.rvol ?? null,
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       row.supertrend_dir ?? null,
+      sma_50:               row.sma_50 ?? null,
+      sma_200:              row.sma_200 ?? null,
+      sma_150:              row.sma_150 ?? null,
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             row.w52_high ?? null,
+      w52_low:              row.w52_low ?? null,
+      lifetime_high:        row.lifetime_high ?? null,
+      avg_amt_5d:           row.avg_amt_5d ?? null,
+      avg_amt_22d:          row.avg_amt_22d ?? null,
+      delivery_surge_x:     row.delivery_surge_x ?? null,
+      sniper_inst:          row.sniper_inst ?? null,
+      sniper_hot:           row.sniper_hot ?? null,
+      accum_distrib:        row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct:         row.delivery_pct ?? null,
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh,
+      reward,
+      rewardPct,
+      magicRsTrend:         [],
+      avg_amt_66d:          null,
+      xAmt:                 null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      !!row.is_vani_s2,
+    };
+  });
 }
 
 // ── Public API ─────────────────────────────────────────────────
@@ -1096,7 +1148,7 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   distribution_warning: scanDistributionWarning,
   conviction_flow: scanConvictionFlow,
   breakout_surge: scanBreakoutSurge,
-  stage_2_leaders: scanStage2Leaders,
+  // stage_2_leaders handled separately in executeScan via fetchStage2Leaders()
 };
 
 /**
@@ -1149,6 +1201,11 @@ export async function executeScan(
   exchangeFilter: ExchangeFilter = 'combined',
   timeframe: ScanTimeframe = 'daily',
 ): Promise<ScanStock[]> {
+  // Stage 2 Leaders: skip bundle entirely — query pre-computed stage column directly
+  if (scanId === 'stage_2_leaders') {
+    return fetchStage2Leaders(exchangeFilter);
+  }
+
   const fn = SCAN_FUNCTIONS[scanId];
   if (!fn) throw new Error(`Unknown scan: ${scanId}`);
 
