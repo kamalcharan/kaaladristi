@@ -11,6 +11,7 @@ import { createRule, toggleRuleActive, fetchRules, fetchConfidence, type AstroRu
 import DiscoveryPanel from './DiscoveryPanel';
 import { fetchSignalCounts } from './discoveryService';
 import { IMPACT_OPTIONS, SIGNAL_LABELS } from '@/constants/signalScale';
+import { TagChip } from '@/constants/ruleTagColors';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -473,7 +474,7 @@ export default function RuleList() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-kd-border bg-kd-elevated/60">
-                      {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Signals', 'Source'].map(h => (
+                      {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Signals', 'Source', 'Tags'].map(h => (
                         <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
                           {h}
                         </th>
@@ -505,9 +506,16 @@ export default function RuleList() {
                             />
                           </td>
 
-                          {/* Code */}
+                          {/* Code + catalog dot */}
                           <td className="px-3 py-2.5 whitespace-nowrap">
-                            <span className="font-mono text-[11px] text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-1.5 py-0.5 rounded">
+                            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-accent-indigo/80 bg-accent-indigo/10 border border-accent-indigo/20 px-1.5 py-0.5 rounded">
+                              <span
+                                title={rule.catalog_visible ? 'Visible in Catalog' : 'Hidden from Catalog'}
+                                className={cn(
+                                  'w-1.5 h-1.5 rounded-full shrink-0',
+                                  rule.catalog_visible ? 'bg-risk-green' : 'bg-kd-border',
+                                )}
+                              />
                               {rule.rule_code}
                             </span>
                           </td>
@@ -555,6 +563,22 @@ export default function RuleList() {
                               <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', isAvailable ? 'bg-risk-green/70' : 'bg-kd-border')} />
                               {rule.data_source === 'user_defined' ? 'Custom' : isAvailable ? 'Available' : 'N/A'}
                             </span>
+                          </td>
+
+                          {/* Tags */}
+                          <td className="px-3 py-2.5">
+                            {rule.tags?.length > 0 ? (
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {rule.tags.slice(0, 3).map(tag => (
+                                  <TagChip key={tag} tag={tag} />
+                                ))}
+                                {rule.tags.length > 3 && (
+                                  <span className="text-[10px] text-muted font-mono">+{rule.tags.length - 3}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted text-xs">—</span>
+                            )}
                           </td>
                         </tr>
                       );

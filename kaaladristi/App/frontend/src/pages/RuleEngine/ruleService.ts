@@ -16,6 +16,7 @@ export interface AstroRule {
   is_active: boolean;
   catalog_visible: boolean;
   remarks: string | null;
+  tags: string[];
 }
 
 export interface RuleConfidence {
@@ -33,6 +34,8 @@ export interface RuleInput {
   probability_label?: string | null;
   conditions?: Record<string, unknown> | null;
   remarks?: string | null;
+  tags?: string[];
+  catalog_visible?: boolean;
 }
 
 export interface AstroRuleFull {
@@ -50,6 +53,8 @@ export interface AstroRuleFull {
   conditions: Record<string, unknown> | null;
   is_active: boolean;
   is_deleted: boolean;
+  catalog_visible: boolean;
+  tags: string[];
   created_at: string;
   updated_at: string | null;
 }
@@ -60,7 +65,7 @@ const TABLE = 'km_astro_rule_master';
 
 export async function fetchRules(): Promise<AstroRule[]> {
   const { data, error } = await from(TABLE)
-    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,catalog_visible,remarks')
+    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,catalog_visible,remarks,tags')
     .is('is_deleted', 'false')
     .order('rule_type')
     .order('rule_code')
@@ -72,7 +77,7 @@ export async function fetchRules(): Promise<AstroRule[]> {
 /** Catalog-only fetch: admin-approved rules visible to end users. */
 export async function fetchCatalogRules(): Promise<AstroRule[]> {
   const { data, error } = await from(TABLE)
-    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,catalog_visible,remarks')
+    .select('id,rule_code,rule_type,display_name,outcome,base_bias,scope,probability_label,data_source,is_active,catalog_visible,remarks,tags')
     .is('is_deleted', 'false')
     .eq('catalog_visible', 'true')
     .eq('is_active', 'true')
