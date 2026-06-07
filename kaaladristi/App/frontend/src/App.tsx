@@ -3,27 +3,37 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import { useMidnightDateRefresh } from '@/stores/appStore';
 import { ErrorBoundary } from '@/components/ui';
 import Layout from '@/components/domain/Layout';
 import ProtectedRoute from '@/components/domain/ProtectedRoute';
 import LandingPage from '@/views/LandingPage';
+import LoginPage from '@/views/LoginPage';
 import ProfileSetup from '@/views/ProfileSetup';
-import DashboardPage from '@/views/DashboardPage';
+import DashboardV3Page from '@/views/DashboardV3Page';
 import MarketsView from '@/views/MarketsView';
-import CalendarView from '@/views/CalendarView';
-import TransmissionView from '@/views/TransmissionView';
-import BacktestView from '@/views/BacktestView';
 import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
 import RuleEvalView from '@/views/RuleEvalView';
-import DCCalendarView from '@/views/DCCalendarView';
+import CalendarView from '@/views/CalendarView';
 import ChartView from '@/views/ChartView';
 import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
+import { IntradayPage } from '@/components/domain/Intraday';
 import ScanView from '@/views/ScanView';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
 import DataPipelinePage from '@/pages/DataPipeline';
+import PanchangView from '@/views/PanchangView';
+import AdminPanchangView from '@/views/AdminPanchangView';
+import { RuleList, RuleDetail } from '@/pages/RuleEngine';
+import MarketStructureView from '@/views/MarketStructureView';
+import PlanetaryIntelView from '@/views/PlanetaryIntelView';
+import WorkspacePage from '@/views/WorkspacePage'
+import CatalogPage from '@/views/CatalogPage';
+import PricingPage from '@/views/PricingPage'
+import AccountPage from '@/views/AccountPage';
+import CorrelationPage from '@/views/CorrelationPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +46,7 @@ const queryClient = new QueryClient({
 
 function AppRoutes() {
   const { isLoading, authError, initialize } = useAuthStore();
+  useMidnightDateRefresh();
 
   useEffect(() => {
     initialize().catch((err) => {
@@ -47,7 +58,7 @@ function AppRoutes() {
     return (
       <div className="min-h-screen bg-kd-bg flex flex-col items-center justify-center gap-4">
         <Loader2 className="w-8 h-8 text-accent-indigo animate-spin" />
-        <p className="text-sm text-muted">Connecting to Kala-Drishti...</p>
+        <p className="text-sm text-muted">Connecting to DristiQ...</p>
       </div>
     );
   }
@@ -82,6 +93,7 @@ function AppRoutes() {
     <Routes>
       {/* Public: Landing / Auth */}
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
 
       {/* Authenticated but not yet onboarded */}
       <Route element={<ProtectedRoute requireOnboarded={false} />}>
@@ -91,24 +103,35 @@ function AppRoutes() {
       {/* Authenticated + onboarded: App shell */}
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/catalog" element={<CatalogPage />} />
+          <Route path="/correlation/:itemA/:itemB" element={<CorrelationPage />} />
+          <Route path="/dashboard" element={<DashboardV3Page />} />
           <Route path="/markets" element={<MarketsView />} />
-          <Route path="/calendar" element={<CalendarView />} />
-          <Route path="/transmission" element={<TransmissionView />} />
           <Route path="/inference" element={<InferenceView />} />
           <Route path="/rule-eval" element={<RuleEvalView />} />
-          <Route path="/astro-calendar" element={<DCCalendarView />} />
-          <Route path="/history" element={<BacktestView />} />
+          <Route path="/astro-calendar" element={<CalendarView />} />
           <Route path="/chart/:type/:id" element={<ChartView />} />
           <Route path="/pulse/:indexId" element={<VisualPulsePage />} />
           <Route path="/pulse/equity/:equityId" element={<EquityVisualPulsePage />} />
+          <Route path="/intraday/:indexId" element={<IntradayPage />} />
           <Route path="/scan" element={<Navigate to="/scanner" replace />} />
+          <Route path="/scanners" element={<Navigate to="/scanner" replace />} />
+          <Route path="/scanners/:presetId" element={<ScanView />} />
           <Route path="/scanner" element={<ScanView />} />
           <Route path="/scanner/:presetId" element={<ScanView />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
           <Route path="/industry-transition" element={<IndustryTransitionView />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="/data-pipeline" element={<DataPipelinePage />} />
+          <Route path="/panchang" element={<PanchangView />} />
+          <Route path="/admin/panchang" element={<AdminPanchangView />} />
+          <Route path="/market-structure" element={<MarketStructureView />} />
+          <Route path="/planetary-intel" element={<PlanetaryIntelView />} />
+          <Route path="/rules" element={<RuleList />} />
+          <Route path="/rules/:id" element={<RuleDetail />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/account" element={<AccountPage />} />
         </Route>
       </Route>
 

@@ -9,7 +9,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import type { VaNiPage } from '@/config/vaniIntents';
 
 const pipelineUrl =
-  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +34,7 @@ export interface VaNiAskResponse {
   ai: boolean;
   cached: boolean;
   provider: string | null;
+  log_id?: string | null;
   error?: string;
 }
 

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc } from '@/services/panchang';
+import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc, fetchConfluenceHistorical, fetchConfluenceHeatmap, fetchConfluenceTimeline } from '@/services/panchang';
+import { fetchAstroSignal, fetchAstroWeek, fetchAstroTransits } from '@/services/astro';
 import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
 import type { IndexCatalogItem } from '@/types';
@@ -36,7 +37,7 @@ export function useBreadthRoc(days = 66) {
 }
 
 export function useBreadthRocInsight() {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['breadth_roc_insight'],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
@@ -50,7 +51,7 @@ export function useBreadthRocInsight() {
 }
 
 export function useBreadthInsight() {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['breadth_insight'],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
@@ -64,7 +65,7 @@ export function useBreadthInsight() {
 }
 
 export function usePanchangInsight(date: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['panchang_insight', date],
     queryFn: async (): Promise<{ date: string; insight: string | null; ai: boolean }> => {
@@ -79,7 +80,7 @@ export function usePanchangInsight(date: string) {
 }
 
 export function useInstrumentInsight(id: number, type: string = 'index', date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['instrument_insight', type, id, date],
     queryFn: async (): Promise<{
@@ -99,7 +100,7 @@ export function useInstrumentInsight(id: number, type: string = 'index', date?: 
 }
 
 export function useMarketPulseInsight(date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['market_pulse_insight', date],
     queryFn: async (): Promise<{
@@ -127,6 +128,38 @@ export function useOutlookInferences(fromDate: string) {
   });
 }
 
+export function useAstroSignal(date: string) {
+  return useQuery({
+    queryKey: ['astro_signal', date],
+    queryFn: () => fetchAstroSignal(date),
+    staleTime: 24 * 60 * 60 * 1000,
+    enabled: !!date,
+  });
+}
+
+export function useAstroTransits(from: string, to: string) {
+  return useQuery({
+    queryKey: ['astro_transits', from, to],
+    queryFn: () => fetchAstroTransits(from, to),
+    staleTime: 24 * 60 * 60 * 1000,
+    enabled: !!from && !!to,
+  });
+}
+
+export function useAstroWeek(fromDate: string) {
+  const toDate = (() => {
+    if (!fromDate) return '';
+    const [y, m, d] = fromDate.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + 7)).toISOString().slice(0, 10);
+  })();
+  return useQuery({
+    queryKey: ['astro_week', fromDate],
+    queryFn: () => fetchAstroWeek(fromDate, toDate),
+    staleTime: 24 * 60 * 60 * 1000,
+    enabled: !!fromDate,
+  });
+}
+
 export function useActiveIndexes() {
   return useQuery({
     queryKey: ['active_indexes'],
@@ -142,5 +175,33 @@ export function useActiveIndexes() {
       return rows.filter(r => r.is_active && r.record_count > 0);
     },
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useConfluenceHeatmap(date: string) {
+  return useQuery({
+    queryKey: ['confluence_heatmap', date],
+    queryFn: () => fetchConfluenceHeatmap(date),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!date,
+    retry: false,
+  });
+}
+
+export function useConfluenceHistorical() {
+  return useQuery({
+    queryKey: ['confluence_historical'],
+    queryFn: fetchConfluenceHistorical,
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useConfluenceTimeline(days: number) {
+  return useQuery({
+    queryKey: ['confluence_timeline', days],
+    queryFn: () => fetchConfluenceTimeline(days),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }

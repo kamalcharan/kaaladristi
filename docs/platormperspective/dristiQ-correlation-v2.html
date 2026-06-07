@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DristiQ — Correlation Views v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#090c10;--bg2:#0d1117;--bg3:#131920;--bg4:#1a2030;
+  --border:rgba(255,255,255,0.06);--border-hi:rgba(255,255,255,0.13);
+  --text:#e8eaed;--text-dim:#6b7280;--text-muted:#2e3440;
+  --gold:#c9a84c;--gold-glow:rgba(201,168,76,0.15);--gold-dim:rgba(201,168,76,0.35);
+  --teal:#2dd4bf;--teal-dim:rgba(45,212,191,0.12);
+  --green:#4ade80;--red:#f87171;
+  --vani:#7c6af7;--vani-dim:rgba(124,106,247,0.08);
+  --sidebar:200px;--topbar:52px;
+}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);
+  font-family:'DM Sans',sans-serif;overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:999;}
+
+/* TOP BAR */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar);
+  border-bottom:1px solid var(--border);background:rgba(9,12,16,0.95);
+  backdrop-filter:blur(16px);display:flex;align-items:center;
+  padding:0 20px 0 0;z-index:300;}
+.logo{width:var(--sidebar);display:flex;align-items:center;padding:0 20px;
+  font-family:'Fraunces',serif;font-size:17px;font-weight:400;
+  letter-spacing:-0.02em;color:var(--text);border-right:1px solid var(--border);
+  height:100%;flex-shrink:0;}
+.logo span{color:var(--gold);}
+.tb-bc{display:flex;align-items:center;gap:8px;padding:0 20px;
+  font-size:12px;color:var(--text-dim);}
+.tb-bc span{color:var(--text-muted);}
+.tb-bc strong{color:var(--text);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.vani-pill{display:flex;align-items:center;gap:7px;padding:5px 12px;
+  border:1px solid rgba(124,106,247,0.25);border-radius:100px;
+  background:var(--vani-dim);}
+.vd{width:6px;height:6px;border-radius:50%;background:var(--vani);
+  animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+.vt{font-size:11px;color:var(--vani);font-family:'DM Mono',monospace;}
+.btn-back{padding:7px 14px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text-dim);font-size:12px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all .2s;}
+.btn-back:hover{border-color:var(--border-hi);color:var(--text);}
+
+/* SIDEBAR */
+.sidebar{position:fixed;left:0;top:var(--topbar);bottom:0;
+  width:var(--sidebar);border-right:1px solid var(--border);
+  background:rgba(9,12,16,0.9);display:flex;flex-direction:column;
+  padding:16px 0;z-index:200;}
+.nav-s{padding:0 12px;margin-bottom:20px;}
+.nav-sl{font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-muted);padding:0 8px;margin-bottom:5px;
+  font-family:'DM Mono',monospace;}
+.nav-i{display:flex;align-items:center;gap:9px;padding:7px 10px;
+  border-radius:6px;font-size:12px;color:var(--text-dim);cursor:pointer;
+  transition:all .15s;margin-bottom:1px;}
+.nav-i:hover{background:var(--bg2);color:var(--text);}
+.nav-i.active{background:var(--vani-dim);color:var(--vani);
+  border:1px solid rgba(124,106,247,0.18);}
+.nav-i .ni{font-size:13px;width:15px;text-align:center;}
+.nav-badge{margin-left:auto;background:var(--gold-glow);border:1px solid var(--gold-dim);
+  color:var(--gold);font-size:8px;padding:1px 5px;border-radius:3px;
+  font-family:'DM Mono',monospace;}
+.su{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:9px;}
+.su-av{width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#5b4fd4,#2dd4bf);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;color:#fff;}
+
+/* MAIN */
+.main{position:fixed;left:var(--sidebar);top:var(--topbar);right:0;bottom:0;
+  display:flex;flex-direction:column;overflow:hidden;}
+
+/* TYPE NAV */
+.type-nav{display:flex;gap:0;border-bottom:1px solid var(--border);
+  background:var(--bg2);flex-shrink:0;padding:0 24px;}
+.tn-item{display:flex;align-items:center;gap:8px;padding:13px 18px;
+  font-size:13px;color:var(--text-dim);cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+.tn-item:hover{color:var(--text);}
+.tn-item.active{color:var(--text);border-bottom-color:var(--vani);}
+.tn-dot{width:8px;height:8px;border-radius:50%;}
+.tn-current{font-size:9px;font-family:'DM Mono',monospace;
+  padding:2px 6px;border-radius:3px;margin-left:4px;}
+
+/* CONTENT */
+.content{flex:1;overflow-y:auto;}
+.content::-webkit-scrollbar{width:3px;}
+.content::-webkit-scrollbar-thumb{background:var(--border);}
+
+/* ═══════════════════════════════════
+   SHARED ANATOMY — applies to ALL sections
+═══════════════════════════════════ */
+.corr-section{display:none;padding:0 0 100px;}
+.corr-section.active{display:block;animation:sec-in .3s ease both;}
+@keyframes sec-in{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* Header */
+.corr-header{display:flex;align-items:flex-start;justify-content:space-between;
+  padding:20px 28px 16px;border-bottom:1px solid var(--border);}
+.ch-left{}
+.ch-type{font-size:9px;font-family:'DM Mono',monospace;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;}
+.ch-title{font-family:'Fraunces',serif;font-size:24px;font-weight:300;
+  color:var(--text);letter-spacing:-0.03em;margin-bottom:3px;}
+.ch-title em{font-style:italic;}
+.ch-sub{font-size:12px;color:var(--text-dim);line-height:1.6;}
+.ch-right{text-align:right;flex-shrink:0;}
+.ch-cur-label{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;}
+.ch-cur-val{font-family:'Fraunces',serif;font-size:28px;font-weight:300;
+  letter-spacing:-0.03em;line-height:1;}
+.ch-cur-state{font-size:10px;font-family:'DM Mono',monospace;margin-top:4px;}
+
+/* Controls bar */
+.corr-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:12px 28px;border-bottom:1px solid var(--border);
+  background:rgba(13,17,23,0.5);}
+
+/* Benchmark selector */
+.bench-label{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);letter-spacing:.08em;white-space:nowrap;}
+.bench-tabs{display:flex;gap:3px;padding:3px;background:var(--bg3);
+  border-radius:7px;border:1px solid var(--border);}
+.bench-tab{padding:5px 12px;border-radius:5px;font-size:11px;
+  font-family:'DM Mono',monospace;color:var(--text-dim);cursor:pointer;
+  transition:all .2s;border:none;background:transparent;white-space:nowrap;}
+.bench-tab.active{background:var(--bg2);color:var(--text);
+  box-shadow:0 1px 4px rgba(0,0,0,0.4);}
+
+/* Timeframe */
+.tf-tabs{display:flex;gap:3px;padding:3px;background:var(--bg3);
+  border-radius:7px;border:1px solid var(--border);}
+.tf-tab{padding:5px 10px;border-radius:5px;font-size:11px;
+  font-family:'DM Mono',monospace;color:var(--text-dim);cursor:pointer;
+  transition:all .2s;border:none;background:transparent;}
+.tf-tab.active{background:var(--bg2);color:var(--gold);}
+
+/* Compare toggle */
+.compare-btn{display:flex;align-items:center;gap:6px;padding:6px 12px;
+  border-radius:7px;border:1px solid var(--border);background:var(--bg3);
+  color:var(--text-dim);font-size:11px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all .2s;margin-left:auto;}
+.compare-btn:hover{border-color:var(--border-hi);color:var(--text);}
+.compare-btn.active{border-color:rgba(201,168,76,0.4);color:var(--gold);
+  background:rgba(201,168,76,0.06);}
+.compare-btn .cb-icon{font-size:13px;}
+
+/* compare second bench */
+.compare-second{display:none;align-items:center;gap:8px;}
+.compare-second.show{display:flex;}
+.cs-vs{font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* ═══════════════════════════════════
+   DATA QUALITY — SHARED
+═══════════════════════════════════ */
+.corr-quality{padding:10px 28px;border-bottom:1px solid var(--border);
+  background:rgba(9,12,16,0.6);display:flex;align-items:center;gap:16px;}
+.dq-label{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);
+  white-space:nowrap;flex-shrink:0;}
+.dq-track{flex:1;max-width:200px;height:5px;background:var(--bg3);
+  border-radius:3px;overflow:hidden;cursor:pointer;position:relative;}
+.dq-fill{height:100%;border-radius:3px;transition:width .8s ease;}
+.dq-pct{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;
+  white-space:nowrap;}
+.dq-detail{font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;
+  flex:1;}
+.dq-info{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;
+  transition:all .2s;position:relative;}
+.dq-info:hover{border-color:var(--border-hi);color:var(--text);}
+
+/* DQ tooltip */
+.dq-tooltip{position:absolute;bottom:calc(100% + 6px);right:0;
+  background:var(--bg2);border:1px solid var(--border-hi);
+  border-radius:9px;padding:12px 14px;min-width:260px;z-index:100;
+  display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5);}
+.dq-info:hover .dq-tooltip{display:block;}
+.dq-tip-title{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);
+  margin-bottom:8px;}
+.dq-issue{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;
+  font-size:11px;color:var(--text-dim);}
+.dq-issue:last-child{margin-bottom:0;}
+.dqi-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.dq-tip-footer{margin-top:10px;padding-top:8px;border-top:1px solid var(--border);
+  font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* data quality on stat cards */
+.stat-dq{display:flex;align-items:center;gap:5px;margin-top:4px;}
+.sdq-bar{flex:1;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.sdq-fill{height:100%;border-radius:2px;}
+.sdq-pct{font-size:8px;font-family:'DM Mono',monospace;color:var(--text-muted);}
+
+/* compare strip */
+.compare-strip{display:none;padding:10px 28px;
+  border-bottom:1px solid var(--border);
+  background:rgba(201,168,76,0.03);}
+.compare-strip.show{display:flex;flex-direction:column;gap:8px;}
+.cs-title{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:4px;}
+.cs-row{display:flex;align-items:center;gap:10px;}
+.cs-bench{font-size:11px;color:var(--text-dim);width:90px;
+  font-family:'DM Mono',monospace;}
+.cs-val{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;width:60px;}
+.cs-bar-wrap{flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.cs-bar{height:100%;border-radius:3px;}
+.cs-delta{font-size:10px;font-family:'DM Mono',monospace;width:60px;text-align:right;}
+
+/* ═══════════════════════════════════
+   MAIN LAYOUT — SHARED
+═══════════════════════════════════ */
+.corr-main{display:grid;grid-template-columns:1fr 300px;gap:20px;
+  padding:20px 28px;}
+
+/* VaNi block — SHARED POSITION/STYLE */
+.vani-card{border:1px solid rgba(124,106,247,0.25);border-radius:12px;
+  background:linear-gradient(145deg,rgba(124,106,247,0.06),var(--bg2));
+  overflow:hidden;position:sticky;top:0;}
+.vc-hdr{padding:11px 15px;border-bottom:1px solid rgba(124,106,247,0.12);
+  display:flex;align-items:center;gap:8px;}
+.vc-orb{width:20px;height:20px;border-radius:6px;
+  background:linear-gradient(135deg,#9d8ff9,#5b4fd4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:8px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;}
+.vc-label{font-size:10px;font-family:'DM Mono',monospace;
+  color:var(--vani);letter-spacing:.1em;}
+.vc-body{padding:13px 15px;font-size:12px;color:var(--text-dim);line-height:1.7;}
+.vc-body strong{color:var(--text);}
+.vc-body em{color:var(--gold);font-style:normal;}
+.vc-body .teal{color:var(--teal);}
+.vc-body .red{color:var(--red);}
+.vc-body .green{color:var(--green);}
+
+/* VaNi confidence footer */
+.vc-footer{padding:10px 15px;border-top:1px solid rgba(124,106,247,0.1);}
+.vcf-label{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);letter-spacing:.08em;margin-bottom:5px;}
+.vcf-bar-wrap{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.vcf-bar{height:100%;border-radius:2px;
+  background:linear-gradient(90deg,var(--vani),rgba(124,106,247,0.4));}
+.vcf-note{font-size:9px;color:var(--text-muted);margin-top:5px;
+  font-family:'DM Mono',monospace;line-height:1.5;}
+
+/* card */
+.card{border:1px solid var(--border);border-radius:12px;
+  background:var(--bg2);overflow:hidden;margin-bottom:14px;}
+.card-hdr{padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:10px;font-family:'DM Mono',monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);}
+.card-meta{font-size:10px;font-family:'DM Mono',monospace;color:var(--text-muted);}
+.card-body{padding:16px;}
+
+/* ═══════════════════════════
+   MAGICRS SPECIFIC
+═══════════════════════════ */
+.bucket-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+.bucket-label{font-family:'DM Mono',monospace;font-size:10px;
+  color:var(--text-dim);width:54px;flex-shrink:0;text-align:right;}
+.bucket-wrap{flex:1;height:34px;background:var(--bg3);
+  border-radius:6px;overflow:hidden;position:relative;
+  border:1px solid var(--border);cursor:pointer;transition:border-color .2s;}
+.bucket-wrap:hover{border-color:var(--border-hi);}
+.bucket-wrap.current{border-color:rgba(45,212,191,0.5);
+  box-shadow:0 0 12px rgba(45,212,191,0.1);}
+.bucket-bar{height:100%;border-radius:5px;display:flex;align-items:center;
+  padding-left:10px;position:relative;z-index:1;}
+.bucket-bar.pos{background:linear-gradient(90deg,rgba(74,222,128,0.22),rgba(74,222,128,0.06));}
+.bucket-bar.neg{background:linear-gradient(90deg,rgba(248,113,113,0.22),rgba(248,113,113,0.06));}
+.bucket-ret{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;}
+/* compare bar overlay */
+.bucket-compare-bar{position:absolute;top:0;left:0;height:100%;
+  border-radius:5px;opacity:0;pointer-events:none;
+  transition:opacity .3s ease;}
+.compare-mode .bucket-compare-bar{opacity:1;}
+.current-badge{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  font-size:8px;font-family:'DM Mono',monospace;padding:2px 6px;
+  background:rgba(45,212,191,0.15);border:1px solid rgba(45,212,191,0.3);
+  color:var(--teal);border-radius:3px;z-index:2;}
+.bucket-n{font-family:'DM Mono',monospace;font-size:9px;
+  color:var(--text-muted);width:44px;text-align:right;flex-shrink:0;}
+/* compare delta badge on bucket */
+.bucket-delta{font-size:9px;font-family:'DM Mono',monospace;
+  width:48px;text-align:right;flex-shrink:0;display:none;}
+.compare-mode .bucket-delta{display:block;}
+.compare-mode .bucket-n{display:none;}
+
+.bucket-legend{display:flex;gap:14px;margin-top:10px;padding-top:10px;
+  border-top:1px solid var(--border);}
+.bl-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-dim);}
+.bl-dot{width:7px;height:7px;border-radius:50%;}
+/* compare legend items */
+.bl-compare{display:none;}
+.compare-mode .bl-compare{display:flex;}
+
+/* histogram */
+.histogram{display:flex;align-items:flex-end;gap:3px;height:80px;
+  padding-bottom:20px;position:relative;}
+.hist-bar{flex:1;border-radius:3px 3px 0 0;position:relative;cursor:pointer;}
+.hist-bar:hover{opacity:.75;}
+.hist-tip{position:absolute;bottom:calc(100%+4px);left:50%;
+  transform:translateX(-50%);font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);white-space:nowrap;opacity:0;pointer-events:none;
+  background:var(--bg2);border:1px solid var(--border);
+  padding:3px 7px;border-radius:4px;z-index:10;}
+.hist-bar:hover .hist-tip{opacity:1;}
+.hist-axis{position:absolute;bottom:16px;left:0;right:0;
+  height:1px;background:var(--border);}
+.hist-labels{display:flex;gap:3px;margin-top:3px;}
+.hl{flex:1;font-size:8px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);text-align:center;}
+
+/* ═══════════════════════════
+   BREADTH STATE
+═══════════════════════════ */
+.state-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.state-card{border:1px solid var(--border);border-radius:10px;
+  background:var(--bg);padding:14px;cursor:pointer;
+  transition:all .2s;position:relative;}
+.state-card:hover{border-color:var(--border-hi);}
+.state-card.cur-state{border-width:2px;}
+.sc-now-badge{position:absolute;top:9px;right:9px;
+  font-size:8px;font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;}
+.state-dir{font-size:18px;margin-bottom:6px;}
+.state-name{font-size:12px;font-weight:500;color:var(--text);margin-bottom:2px;}
+.state-zone{font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;margin-bottom:10px;}
+.state-ret{font-family:'DM Mono',monospace;font-size:20px;font-weight:400;
+  letter-spacing:-0.02em;margin-bottom:2px;}
+.state-ret-l{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+/* compare value */
+.state-compare-val{font-size:11px;font-family:'DM Mono',monospace;
+  margin-top:4px;display:none;}
+.compare-mode .state-compare-val{display:block;}
+.state-n{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;
+  margin-top:6px;}
+
+/* ═══════════════════════════
+   SCANNER SPECIFIC
+═══════════════════════════ */
+.outcome-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  margin-bottom:14px;}
+.og-card{border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);padding:12px;text-align:center;}
+.og-val{font-family:'DM Mono',monospace;font-size:20px;font-weight:500;
+  letter-spacing:-0.02em;margin-bottom:2px;}
+.og-lbl{font-size:9px;color:var(--text-dim);font-family:'DM Mono',monospace;}
+.og-compare{font-size:9px;font-family:'DM Mono',monospace;
+  margin-top:3px;display:none;}
+.compare-mode .og-compare{display:block;}
+
+.comp-table{width:100%;border-collapse:collapse;}
+.comp-table th{padding:8px 12px;text-align:left;font-size:9px;
+  font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-muted);border-bottom:1px solid var(--border);}
+.comp-table td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px;}
+.comp-table tr:last-child td{border-bottom:none;}
+.comp-table tr:hover td{background:rgba(255,255,255,.02);}
+.ct-label{color:var(--text-dim);}
+.ct-bar-td{width:160px;}
+.ct-bar-wrap{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.ct-bar{height:100%;border-radius:3px;}
+.ct-val{font-family:'DM Mono',monospace;font-size:12px;text-align:right;}
+/* compare column */
+.ct-compare{font-family:'DM Mono',monospace;font-size:11px;
+  text-align:right;display:none;color:var(--gold);}
+.compare-mode .ct-compare{display:table-cell;}
+
+/* ═══════════════════════════
+   RSI SPECIFIC
+═══════════════════════════ */
+.zone-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+  margin-bottom:14px;}
+.zone-card{border:1px solid var(--border);border-radius:10px;
+  background:var(--bg);padding:16px;cursor:pointer;
+  transition:all .2s;position:relative;overflow:hidden;}
+.zone-card:hover{transform:translateY(-1px);}
+.zone-card.cur-zone{border-width:2px;}
+.zone-now{position:absolute;top:10px;right:10px;font-size:8px;
+  font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;}
+.zone-icon{font-size:20px;margin-bottom:8px;}
+.zone-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px;}
+.zone-range{font-size:10px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);margin-bottom:10px;}
+.zone-ret{font-family:'DM Mono',monospace;font-size:24px;font-weight:300;
+  letter-spacing:-0.03em;line-height:1;margin-bottom:2px;}
+.zone-ret-l{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+.zone-compare-val{font-size:11px;font-family:'DM Mono',monospace;
+  margin-top:4px;display:none;}
+.compare-mode .zone-compare-val{display:block;}
+.zone-stats{display:flex;gap:10px;margin-top:10px;padding-top:10px;
+  border-top:1px solid var(--border);}
+.zs-v{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);}
+.zs-l{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;margin-top:1px;}
+
+.rsi-timeline{margin-bottom:14px;}
+.rt-label{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;}
+.rt-bar{height:18px;border-radius:5px;overflow:hidden;
+  display:flex;border:1px solid var(--border);}
+.rt-seg{height:100%;display:flex;align-items:center;
+  justify-content:center;font-size:8px;font-family:'DM Mono',monospace;}
+.rts-n{background:rgba(45,212,191,0.12);color:var(--teal);}
+.rts-ob{background:rgba(248,113,113,0.15);color:var(--red);}
+.rts-os{background:rgba(74,222,128,0.12);color:var(--green);}
+.rts-active{animation:rts-p 1.5s ease-in-out infinite;
+  border-left:2px solid var(--red);}
+@keyframes rts-p{0%,100%{opacity:1;}50%{opacity:.5;}}
+
+.rev-dist{display:flex;flex-direction:column;gap:7px;}
+.rd-row{display:flex;align-items:center;gap:10px;}
+.rd-label{font-size:11px;color:var(--text-dim);width:110px;flex-shrink:0;}
+.rd-bw{flex:1;height:7px;background:var(--bg3);border-radius:4px;overflow:hidden;}
+.rd-b{height:100%;border-radius:4px;}
+.rd-v{font-family:'DM Mono',monospace;font-size:11px;width:34px;text-align:right;}
+.rd-current{border:1px solid rgba(248,113,113,0.35);border-radius:6px;
+  padding:4px 8px;background:rgba(248,113,113,0.04);}
+
+/* ACTION ISLAND */
+.action-island{position:fixed;bottom:20px;
+  left:calc(var(--sidebar) + 50%);transform:translateX(-50%);
+  background:rgba(9,12,16,0.97);border:1px solid rgba(124,106,247,0.28);
+  border-radius:28px;padding:10px 18px 10px 12px;
+  display:flex;align-items:center;gap:11px;backdrop-filter:blur(24px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:400;
+  animation:island-in .5s ease both;}
+@keyframes island-in{
+  from{opacity:0;transform:translateX(-50%) translateY(16px);}
+  to{opacity:1;transform:translateX(-50%) translateY(0);}}
+.ai-orb{width:22px;height:22px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle at 35% 35%,#9d8ff9,#5b4fd4);
+  animation:pulse 2.5s ease-in-out infinite;}
+.ai-text{font-size:13px;color:var(--text);}
+.ai-text strong{color:var(--gold);font-weight:500;}
+.ai-text em{color:var(--vani);font-style:normal;}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">dristi<span>Q</span></div>
+  <div class="tb-bc">
+    Workspace <span>/</span> Correlation <span>/</span> <strong id="bc-name">MagicRS</strong>
+  </div>
+  <div class="tb-right">
+    <div class="vani-pill"><div class="vd"></div><div class="vt">VaNi watching</div></div>
+    <div class="btn-back">← Workspace</div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="nav-s">
+    <div class="nav-i active"><span class="ni">⬡</span>Workspace</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">View</div>
+    <div class="nav-i"><span class="ni">◎</span>Dashboard</div>
+    <div class="nav-i"><span class="ni">⊙</span>Scanner</div>
+    <div class="nav-i"><span class="ni">⊞</span>Market Structure</div>
+    <div class="nav-i"><span class="ni">☽</span>Planetary Intel</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">Catalog</div>
+    <div class="nav-i"><span class="ni">✦</span>Astro Rules<span class="nav-badge">216</span></div>
+    <div class="nav-i"><span class="ni">◈</span>Widgets</div>
+  </div>
+  <div class="su">
+    <div class="su-av">R</div>
+    <div><div style="font-size:12px;color:var(--text)">Rajesh</div>
+    <div style="font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace">Sun 25 May</div></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TYPE NAV -->
+  <div class="type-nav">
+    <div class="tn-item active" id="tn-magicrs" onclick="showSection('magicrs')">
+      <div class="tn-dot" style="background:var(--teal)"></div>MagicRS
+      <span class="tn-current" style="background:rgba(45,212,191,.1);color:var(--teal)">68.4</span>
+    </div>
+    <div class="tn-item" id="tn-breadth" onclick="showSection('breadth')">
+      <div class="tn-dot" style="background:var(--vani)"></div>Breadth ROC
+      <span class="tn-current" style="background:var(--vani-dim);color:var(--vani)">37.2 ↓</span>
+    </div>
+    <div class="tn-item" id="tn-scanner" onclick="showSection('scanner')">
+      <div class="tn-dot" style="background:var(--gold)"></div>Conviction Flow
+      <span class="tn-current" style="background:var(--gold-glow);color:var(--gold)">42 hits</span>
+    </div>
+    <div class="tn-item" id="tn-rsi" onclick="showSection('rsi')">
+      <div class="tn-dot" style="background:var(--red)"></div>RSI (14)
+      <span class="tn-current" style="background:rgba(248,113,113,.1);color:var(--red)">72.4 OB</span>
+    </div>
+  </div>
+
+  <div class="content" id="content-wrap">
+
+  <!-- ═══════════════ MAGICRS ═══════════════ -->
+  <div class="corr-section active" id="sec-magicrs">
+
+    <!-- HEADER -->
+    <div class="corr-header">
+      <div class="ch-left">
+        <div class="ch-type">Widget · DristiQ IP</div>
+        <div class="ch-title">MagicRS <em>Correlation</em></div>
+        <div class="ch-sub">Forward returns by value bucket. What has each range historically meant for the benchmark?</div>
+      </div>
+      <div class="ch-right">
+        <div class="ch-cur-label">Current Value</div>
+        <div class="ch-cur-val" style="color:var(--teal)">68.4</div>
+        <div class="ch-cur-state" style="color:var(--teal)">60–80 bucket · Bullish zone</div>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="corr-controls">
+      <span class="bench-label">Benchmark</span>
+      <div class="bench-tabs" id="bench-magicrs">
+        <button class="bench-tab active" onclick="setBench(this,'magicrs','nifty50')">Nifty 50</button>
+        <button class="bench-tab" onclick="setBench(this,'magicrs','nifty500')">Nifty 500</button>
+        <button class="bench-tab" onclick="setBench(this,'magicrs','banknifty')">Bank Nifty</button>
+      </div>
+      <div class="tf-tabs" id="tf-magicrs">
+        <button class="tf-tab active" onclick="setTf(this,'magicrs','5d')">5D</button>
+        <button class="tf-tab" onclick="setTf(this,'magicrs','22d')">22D</button>
+        <button class="tf-tab" onclick="setTf(this,'magicrs','3m')">3M</button>
+      </div>
+      <button class="compare-btn" id="cmp-magicrs" onclick="toggleCompare('magicrs')">
+        <span class="cb-icon">⊞</span> Compare
+      </button>
+      <div class="compare-second" id="cs-magicrs">
+        <span class="cs-vs">vs</span>
+        <div class="bench-tabs">
+          <button class="bench-tab active" style="color:var(--gold)">Nifty 500</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA QUALITY -->
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:98.7%;background:linear-gradient(90deg,var(--teal),rgba(45,212,191,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--teal)">98.7%</span>
+      <span class="dq-detail">1,563 of 1,584 trading days · 21 excluded · Jan 2020 – May 2026</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">
+          <div class="dq-tip-title">Excluded Days · MagicRS</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--red)"></div>12 days — Volume data anomaly detected (Mar 2026 · ICICI Breeze feed)</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--gold)"></div>6 days — Missing EOD close prices (Feb 2024 · NSE bhav gap)</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--text-muted)"></div>3 days — MagicRS recompute pending (Jan 2023 · corp action)</div>
+          <div class="dq-tip-footer">Excluded days are removed from all correlation calculations. Stats are based on clean data only.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPARE STRIP -->
+    <div class="compare-strip" id="cstrip-magicrs">
+      <div class="cs-title">Comparison · Nifty 50 vs Nifty 500 · 60–80 Bucket · 5D Avg Return</div>
+      <div class="cs-row">
+        <span class="cs-bench">Nifty 50</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:68%;background:var(--teal);opacity:.6;"></div></div>
+        <span class="cs-val" style="color:var(--teal)">+2.1%</span>
+        <span class="cs-delta"></span>
+      </div>
+      <div class="cs-row">
+        <span class="cs-bench">Nifty 500</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:52%;background:var(--gold);opacity:.6;"></div></div>
+        <span class="cs-val" style="color:var(--gold)">+1.6%</span>
+        <span class="cs-delta" style="color:var(--red)">–0.5%</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">
+        MagicRS signal is <strong style="color:var(--teal)">stronger on Nifty 50</strong> — broader index dilutes the effect
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="corr-main" id="main-magicrs">
+      <div>
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Forward Return by MagicRS Bucket · 5D · Nifty 50</div>
+            <div class="card-meta">n=1,563 clean days</div>
+          </div>
+          <div class="card-body">
+            <!-- bucket rows -->
+            <div class="bucket-row">
+              <div class="bucket-label">0–20</div>
+              <div class="bucket-wrap">
+                <div class="bucket-bar neg" style="width:42%"><span class="bucket-ret" style="color:var(--red)">-1.8%</span></div>
+                <div class="bucket-compare-bar" style="width:38%;background:rgba(201,168,76,0.15);border:1px dashed rgba(201,168,76,0.3);"></div>
+              </div>
+              <div class="bucket-n">n=89</div>
+              <div class="bucket-delta" style="color:var(--gold)">-2.1%</div>
+            </div>
+            <div class="bucket-row">
+              <div class="bucket-label">20–40</div>
+              <div class="bucket-wrap">
+                <div class="bucket-bar neg" style="width:24%"><span class="bucket-ret" style="color:var(--red)">-0.6%</span></div>
+                <div class="bucket-compare-bar" style="width:28%;background:rgba(201,168,76,0.15);border:1px dashed rgba(201,168,76,0.3);"></div>
+              </div>
+              <div class="bucket-n">n=187</div>
+              <div class="bucket-delta" style="color:var(--red)">-0.9%</div>
+            </div>
+            <div class="bucket-row">
+              <div class="bucket-label">40–60</div>
+              <div class="bucket-wrap">
+                <div class="bucket-bar pos" style="width:30%"><span class="bucket-ret" style="color:var(--green)">+0.4%</span></div>
+                <div class="bucket-compare-bar" style="width:26%;background:rgba(201,168,76,0.15);border:1px dashed rgba(201,168,76,0.3);"></div>
+              </div>
+              <div class="bucket-n">n=312</div>
+              <div class="bucket-delta" style="color:var(--gold)">+0.3%</div>
+            </div>
+            <!-- CURRENT -->
+            <div class="bucket-row">
+              <div class="bucket-label" style="color:var(--teal)">60–80</div>
+              <div class="bucket-wrap current">
+                <div class="bucket-bar pos" style="width:68%"><span class="bucket-ret" style="color:var(--teal)">+2.1%</span></div>
+                <div class="bucket-compare-bar" style="width:52%;background:rgba(201,168,76,0.18);border:1px dashed rgba(201,168,76,0.4);"></div>
+                <span class="current-badge">Now · 68.4</span>
+              </div>
+              <div class="bucket-n" style="color:var(--teal)">n=448</div>
+              <div class="bucket-delta" style="color:var(--red)">+1.6%</div>
+            </div>
+            <div class="bucket-row">
+              <div class="bucket-label">80–100</div>
+              <div class="bucket-wrap">
+                <div class="bucket-bar pos" style="width:52%"><span class="bucket-ret" style="color:var(--green)">+1.4%</span></div>
+                <div class="bucket-compare-bar" style="width:44%;background:rgba(201,168,76,0.15);border:1px dashed rgba(201,168,76,0.3);"></div>
+              </div>
+              <div class="bucket-n">n=168</div>
+              <div class="bucket-delta" style="color:var(--red)">+1.1%</div>
+            </div>
+            <div class="bucket-legend">
+              <div class="bl-item"><div class="bl-dot" style="background:var(--teal)"></div>Current bucket</div>
+              <div class="bl-item"><div class="bl-dot" style="background:var(--green)"></div>Positive</div>
+              <div class="bl-item"><div class="bl-dot" style="background:var(--red)"></div>Negative</div>
+              <div class="bl-item bl-compare"><div class="bl-dot" style="background:var(--gold);border:1px dashed rgba(201,168,76,0.6)"></div>Nifty 500</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Return Distribution · 60–80 Bucket · 5D</div>
+            <div class="card-meta">448 instances · 21 excluded from quality filter</div>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <div class="stat-dq" style="flex:1;">
+                <span style="font-size:9px;font-family:'DM Mono',monospace;color:var(--text-muted);margin-right:4px;">Bucket quality</span>
+                <div class="sdq-bar" style="max-width:120px;">
+                  <div class="sdq-fill" style="width:95.3%;background:var(--teal);opacity:.6;"></div>
+                </div>
+                <span class="sdq-pct">95.3%</span>
+              </div>
+            </div>
+            <div class="histogram">
+              <div class="hist-bar" style="height:20%;background:rgba(248,113,113,.5)"><div class="hist-tip">&lt;-4%: 28</div></div>
+              <div class="hist-bar" style="height:35%;background:rgba(248,113,113,.4)"><div class="hist-tip">-4 to -2%: 49</div></div>
+              <div class="hist-bar" style="height:55%;background:rgba(248,113,113,.3)"><div class="hist-tip">-2 to 0%: 78</div></div>
+              <div class="hist-bar" style="height:90%;background:rgba(74,222,128,.4)"><div class="hist-tip">0 to +2%: 127</div></div>
+              <div class="hist-bar" style="height:75%;background:rgba(74,222,128,.5)"><div class="hist-tip">+2 to +4%: 106</div></div>
+              <div class="hist-bar" style="height:45%;background:rgba(74,222,128,.55)"><div class="hist-tip">+4 to +6%: 64</div></div>
+              <div class="hist-bar" style="height:25%;background:rgba(74,222,128,.65)"><div class="hist-tip">&gt;+6%: 43</div></div>
+              <div class="hist-axis"></div>
+            </div>
+            <div class="hist-labels">
+              <div class="hl">&lt;-4</div><div class="hl">-4</div><div class="hl">-2</div>
+              <div class="hl">0</div><div class="hl">+2</div><div class="hl">+4</div><div class="hl">&gt;+6%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VaNi -->
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            MagicRS at <span class="teal">68.4</span> sits in the <strong>60–80 bucket</strong> — historically the strongest zone on Nifty 50 with <em>+2.1% average 5-day return</em> across 448 clean instances.<br><br>
+            The distribution skews right. However, <strong>25% of instances still saw negative outcomes</strong>, typically during deteriorating breadth — which is your current context.<br><br>
+            Note: the <strong>Nifty 500 comparison shows a weaker +1.6%</strong> for the same bucket — the signal is more concentrated in large-caps. If you're trading mid/small-cap stocks, temper expectations.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:78%"></div></div>
+            <div class="vcf-note">Based on 1,563 clean days (98.7% coverage). Low confidence periods: Mar 2026, Feb 2024.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ BREADTH ROC ═══════════════ -->
+  <div class="corr-section" id="sec-breadth">
+    <div class="corr-header">
+      <div class="ch-left">
+        <div class="ch-type">Widget · DristiQ IP</div>
+        <div class="ch-title">Breadth ROC <em>Correlation</em></div>
+        <div class="ch-sub">Four market states. Direction × level. What has each meant for the benchmark?</div>
+      </div>
+      <div class="ch-right">
+        <div class="ch-cur-label">Current State</div>
+        <div class="ch-cur-val" style="color:var(--red)">37.2</div>
+        <div class="ch-cur-state" style="color:var(--red)">↓ Falling · Above Zero</div>
+      </div>
+    </div>
+    <div class="corr-controls">
+      <span class="bench-label">Benchmark</span>
+      <div class="bench-tabs">
+        <button class="bench-tab active">Nifty 50</button>
+        <button class="bench-tab">Nifty 500</button>
+        <button class="bench-tab">Bank Nifty</button>
+      </div>
+      <div class="tf-tabs">
+        <button class="tf-tab active">5D</button>
+        <button class="tf-tab">22D</button>
+        <button class="tf-tab">3M</button>
+      </div>
+      <button class="compare-btn" id="cmp-breadth" onclick="toggleCompare('breadth')">
+        <span class="cb-icon">⊞</span> Compare
+      </button>
+      <div class="compare-second" id="cs-breadth">
+        <span class="cs-vs">vs</span>
+        <div class="bench-tabs"><button class="bench-tab active" style="color:var(--gold)">Nifty 500</button></div>
+      </div>
+    </div>
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:97.2%;background:linear-gradient(90deg,var(--teal),rgba(45,212,191,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--teal)">97.2%</span>
+      <span class="dq-detail">1,541 of 1,584 days · 43 excluded · Jan 2020 – May 2026</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">
+          <div class="dq-tip-title">Excluded Days · Breadth ROC</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--red)"></div>28 days — RVOL anomaly causing breadth miscalculation (multiple periods)</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--gold)"></div>9 days — SHANTHALA phantom index contamination (pre-fix)</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--text-muted)"></div>6 days — Dual-listed equity over-count (deduped view not applied)</div>
+          <div class="dq-tip-footer">Breadth data is more sensitive to equity universe integrity. Higher exclusion rate reflects this complexity.</div>
+        </div>
+      </div>
+    </div>
+    <div class="compare-strip" id="cstrip-breadth">
+      <div class="cs-title">Comparison · Current State: Falling Above Zero · 5D Avg Return</div>
+      <div class="cs-row">
+        <span class="cs-bench">Nifty 50</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:42%;background:var(--red);opacity:.5;"></div></div>
+        <span class="cs-val" style="color:var(--red)">-1.4%</span>
+      </div>
+      <div class="cs-row">
+        <span class="cs-bench">Nifty 500</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:60%;background:var(--red);opacity:.6;"></div></div>
+        <span class="cs-val" style="color:var(--red)">-1.9%</span>
+        <span class="cs-delta" style="color:var(--red)">–0.5%</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">
+        Nifty 500 falls harder in this state — broader market more sensitive to breadth deterioration
+      </div>
+    </div>
+    <div class="corr-main">
+      <div>
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Four Market States · Nifty 50 · 5D Avg Return</div>
+            <div class="card-meta">1,541 clean days</div>
+          </div>
+          <div class="card-body">
+            <div class="state-grid">
+              <div class="state-card" style="border-color:rgba(74,222,128,0.25);background:rgba(74,222,128,0.03);">
+                <div class="state-dir">↗</div>
+                <div class="state-name">Rising · Below Zero</div>
+                <div class="state-zone">Breadth recovering</div>
+                <div class="state-ret" style="color:var(--green)">+3.2%</div>
+                <div class="state-ret-l">Avg 5D return</div>
+                <div class="state-compare-val" style="color:var(--gold)">Nifty 500: +2.8%</div>
+                <div class="state-n">n=187 instances · 96.8% clean</div>
+              </div>
+              <div class="state-card" style="border-color:rgba(45,212,191,0.25);background:rgba(45,212,191,0.03);">
+                <div class="state-dir">↑</div>
+                <div class="state-name">Rising · Above Zero</div>
+                <div class="state-zone">Strong expansion</div>
+                <div class="state-ret" style="color:var(--teal)">+2.1%</div>
+                <div class="state-ret-l">Avg 5D return</div>
+                <div class="state-compare-val" style="color:var(--gold)">Nifty 500: +1.9%</div>
+                <div class="state-n">n=312 instances · 98.1% clean</div>
+              </div>
+              <div class="state-card cur-state" style="border-color:rgba(248,113,113,0.5);background:rgba(248,113,113,0.04);">
+                <div class="sc-now-badge" style="background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:var(--red);">NOW ●</div>
+                <div class="state-dir">↘</div>
+                <div class="state-name">Falling · Above Zero</div>
+                <div class="state-zone">Deteriorating from high</div>
+                <div class="state-ret" style="color:var(--red)">-1.4%</div>
+                <div class="state-ret-l">Avg 5D return</div>
+                <div class="state-compare-val" style="color:var(--gold)">Nifty 500: -1.9%</div>
+                <div class="state-n">n=248 instances · 97.6% clean</div>
+              </div>
+              <div class="state-card" style="border-color:rgba(248,113,113,0.2);">
+                <div class="state-dir">↓</div>
+                <div class="state-name">Falling · Below Zero</div>
+                <div class="state-zone">Sustained weakness</div>
+                <div class="state-ret" style="color:var(--red)">-2.8%</div>
+                <div class="state-ret-l">Avg 5D return</div>
+                <div class="state-compare-val" style="color:var(--gold)">Nifty 500: -3.4%</div>
+                <div class="state-n">n=156 instances · 94.2% clean</div>
+              </div>
+            </div>
+            <div style="margin-top:14px;">
+              <div class="dq-label" style="margin-bottom:8px;">State-level data quality</div>
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:var(--text-dim);width:140px;font-family:'DM Mono',monospace;">Rising · Below Zero</span>
+                  <div class="sdq-bar"><div class="sdq-fill" style="width:96.8%;background:var(--green);opacity:.6;"></div></div>
+                  <span class="sdq-pct">96.8%</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:var(--text-dim);width:140px;font-family:'DM Mono',monospace;">Rising · Above Zero</span>
+                  <div class="sdq-bar"><div class="sdq-fill" style="width:98.1%;background:var(--green);opacity:.6;"></div></div>
+                  <span class="sdq-pct">98.1%</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:var(--gold);width:140px;font-family:'DM Mono',monospace;">Falling · Above Zero ←</span>
+                  <div class="sdq-bar"><div class="sdq-fill" style="width:97.6%;background:var(--gold);opacity:.6;"></div></div>
+                  <span class="sdq-pct" style="color:var(--gold)">97.6%</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:var(--red);width:140px;font-family:'DM Mono',monospace;">Falling · Below Zero</span>
+                  <div class="sdq-bar"><div class="sdq-fill" style="width:94.2%;background:var(--red);opacity:.5;"></div></div>
+                  <span class="sdq-pct" style="color:var(--red)">94.2% ⚠</span>
+                </div>
+              </div>
+              <div style="font-size:9px;color:var(--text-muted);margin-top:6px;font-family:'DM Mono',monospace;">
+                ⚠ Falling · Below Zero has lowest quality — interpret its -2.8% avg with caution
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- ROC chart -->
+        <div class="card">
+          <div class="card-hdr"><div class="card-title">Breadth ROC · Last 60 Days</div></div>
+          <div class="card-body">
+            <svg width="100%" height="70" viewBox="0 0 600 70" preserveAspectRatio="none">
+              <rect x="0" y="0" width="600" height="35" fill="rgba(74,222,128,0.03)"/>
+              <line x1="0" y1="35" x2="600" y2="35" stroke="rgba(255,255,255,.07)" stroke-width="1" stroke-dasharray="3 3"/>
+              <text x="4" y="31" fill="rgba(255,255,255,.1)" font-size="7" font-family="monospace">0</text>
+              <polyline points="0,48 60,44 120,36 180,29 240,21 300,17 360,22 400,28 440,32 480,37 520,43 560,49 600,51"
+                fill="none" stroke="rgba(124,106,247,.65)" stroke-width="2"/>
+              <polygon points="0,48 60,44 120,36 180,29 240,21 300,17 360,22 400,28 440,32 480,37 520,43 560,49 600,51 600,70 0,70"
+                fill="rgba(124,106,247,0.05)"/>
+              <circle cx="600" cy="51" r="4" fill="var(--red)"/>
+              <text x="588" y="46" fill="rgba(248,113,113,.8)" font-size="8" font-family="monospace">37.2</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            Breadth ROC at <span class="red">37.2 and falling</span> — currently in <strong>"Falling · Above Zero"</strong> state. Historically returns <em>-1.4% over 5 days on Nifty 50.</em><br><br>
+            The Nifty 500 comparison shows <strong>-1.9%</strong> in the same state — the broader market suffers more when breadth deteriorates.<br><br>
+            Critical watch: if breadth crosses zero, state transitions to <em>"Falling Below Zero"</em> — worst state at -2.8%. Note: that state has <span class="red">lower data quality (94.2%)</span> — interpret with appropriate caution.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:72%"></div></div>
+            <div class="vcf-note">Current state: 97.6% coverage. Caution: Falling Below Zero state at 94.2% — SHANTHALA index exclusion affected this period.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SCANNER ═══════════════ -->
+  <div class="corr-section" id="sec-scanner">
+    <div class="corr-header">
+      <div class="ch-left">
+        <div class="ch-type">Scanner · Output Panel</div>
+        <div class="ch-title">Conviction Flow <em>Correlation</em></div>
+        <div class="ch-sub">When a stock appears in this scan — what has historically happened to it forward?</div>
+      </div>
+      <div class="ch-right">
+        <div class="ch-cur-label">Today's Results</div>
+        <div class="ch-cur-val" style="color:var(--gold)">42</div>
+        <div class="ch-cur-state" style="color:var(--gold)">stocks in scan · Sun 25 May</div>
+      </div>
+    </div>
+    <div class="corr-controls">
+      <span class="bench-label">Score View</span>
+      <div class="bench-tabs">
+        <button class="bench-tab active">5D Score</button>
+        <button class="bench-tab">22D Score</button>
+      </div>
+      <div class="tf-tabs">
+        <button class="tf-tab active">5D</button>
+        <button class="tf-tab">22D</button>
+        <button class="tf-tab">3M</button>
+      </div>
+      <button class="compare-btn" id="cmp-scanner" onclick="toggleCompare('scanner')">
+        <span class="cb-icon">⊞</span> Compare
+      </button>
+      <div class="compare-second" id="cs-scanner">
+        <span class="cs-vs">vs</span>
+        <div class="bench-tabs"><button class="bench-tab active" style="color:var(--gold)">Without Astro</button></div>
+      </div>
+    </div>
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:99.1%;background:linear-gradient(90deg,var(--green),rgba(74,222,128,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--green)">99.1%</span>
+      <span class="dq-detail">3,410 of 3,441 scan appearances · 31 excluded · 2020–2026</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">
+          <div class="dq-tip-title">Excluded Appearances · Conviction Flow</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--red)"></div>18 appearances — xTrades column missing for these dates (pre-build)</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--gold)"></div>13 appearances — Dual-listed stock deduplication issue (resolved Feb 2024)</div>
+          <div class="dq-tip-footer">Scanner correlation is the cleanest dataset. 99.1% coverage is high confidence.</div>
+        </div>
+      </div>
+    </div>
+    <div class="compare-strip" id="cstrip-scanner">
+      <div class="cs-title">Comparison · Scan Alone vs Scan + Astro Context · 5D Avg Return</div>
+      <div class="cs-row">
+        <span class="cs-bench">No astro signal</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:85%;background:var(--green);opacity:.5;"></div></div>
+        <span class="cs-val" style="color:var(--green)">+5.9%</span>
+      </div>
+      <div class="cs-row">
+        <span class="cs-bench">Panchak active</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:12%;background:var(--red);opacity:.5;"></div></div>
+        <span class="cs-val" style="color:var(--red)">-0.8%</span>
+        <span class="cs-delta" style="color:var(--red)">–6.7%</span>
+      </div>
+      <div class="cs-row">
+        <span class="cs-bench">Mercury Retro</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:18%;background:var(--red);opacity:.4;"></div></div>
+        <span class="cs-val" style="color:var(--red)">-1.4%</span>
+        <span class="cs-delta" style="color:var(--red)">–7.3%</span>
+      </div>
+      <div class="cs-row">
+        <span class="cs-bench">Jupiter positive</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:92%;background:var(--teal);opacity:.5;"></div></div>
+        <span class="cs-val" style="color:var(--teal)">+6.4%</span>
+        <span class="cs-delta" style="color:var(--teal)">+0.5%</span>
+      </div>
+    </div>
+    <div class="corr-main">
+      <div>
+        <div class="outcome-grid">
+          <div class="og-card">
+            <div class="og-val" style="color:var(--teal)">+4.8%</div>
+            <div class="og-lbl">Median 5D return</div>
+            <div class="og-compare" style="color:var(--gold)">All benchmarks: +4.2%</div>
+          </div>
+          <div class="og-card">
+            <div class="og-val" style="color:var(--green)">68%</div>
+            <div class="og-lbl">Positive rate 5D</div>
+            <div class="og-compare" style="color:var(--gold)">With Panchak: 41%</div>
+          </div>
+          <div class="og-card">
+            <div class="og-val">3,410</div>
+            <div class="og-lbl">Clean appearances</div>
+            <div class="og-compare" style="color:var(--text-muted)">31 excluded</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">5D Return Distribution · All Scan Appearances</div>
+            <div class="card-meta">3,410 clean · 99.1% quality</div>
+          </div>
+          <div class="card-body">
+            <div class="histogram">
+              <div class="hist-bar" style="height:18%;background:rgba(248,113,113,.5)"><div class="hist-tip">&lt;-10%: 62</div></div>
+              <div class="hist-bar" style="height:28%;background:rgba(248,113,113,.4)"><div class="hist-tip">-10 to -5%: 96</div></div>
+              <div class="hist-bar" style="height:45%;background:rgba(248,113,113,.3)"><div class="hist-tip">-5 to -2%: 155</div></div>
+              <div class="hist-bar" style="height:62%;background:rgba(248,113,113,.2)"><div class="hist-tip">-2 to 0%: 212</div></div>
+              <div class="hist-bar" style="height:85%;background:rgba(74,222,128,.4)"><div class="hist-tip">0 to +5%: 289</div></div>
+              <div class="hist-bar" style="height:100%;background:rgba(74,222,128,.5)"><div class="hist-tip">+5 to +10%: 341</div></div>
+              <div class="hist-bar" style="height:80%;background:rgba(74,222,128,.55)"><div class="hist-tip">+10 to +15%: 274</div></div>
+              <div class="hist-bar" style="height:55%;background:rgba(74,222,128,.6)"><div class="hist-tip">+15 to +20%: 187</div></div>
+              <div class="hist-bar" style="height:35%;background:rgba(74,222,128,.65)"><div class="hist-tip">&gt;+20%: 120</div></div>
+              <div class="hist-axis"></div>
+            </div>
+            <div class="hist-labels">
+              <div class="hl">&lt;-10</div><div class="hl">-10</div><div class="hl">-5</div>
+              <div class="hl">-2</div><div class="hl">0</div><div class="hl">+5</div>
+              <div class="hl">+10</div><div class="hl">+15</div><div class="hl">&gt;+20%</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Astro Context Impact · Avg 5D Return</div>
+            <div class="card-meta">Same stocks, different astro conditions</div>
+          </div>
+          <div class="card-body">
+            <table class="comp-table">
+              <thead><tr>
+                <th>Condition</th><th class="ct-bar-td">Return bar</th>
+                <th style="text-align:right">Nifty 50</th>
+                <th style="text-align:right;display:none;" class="ct-compare">Nifty 500</th>
+              </tr></thead>
+              <tbody>
+                <tr><td class="ct-label">Scan · No astro headwind</td>
+                  <td><div class="ct-bar-wrap"><div class="ct-bar" style="width:85%;background:rgba(74,222,128,.5)"></div></div></td>
+                  <td class="ct-val" style="color:var(--green)">+5.9%</td>
+                  <td class="ct-compare">+5.2%</td></tr>
+                <tr><td class="ct-label">Scan + Jupiter positive</td>
+                  <td><div class="ct-bar-wrap"><div class="ct-bar" style="width:92%;background:rgba(45,212,191,.5)"></div></div></td>
+                  <td class="ct-val" style="color:var(--teal)">+6.4%</td>
+                  <td class="ct-compare">+5.8%</td></tr>
+                <tr><td class="ct-label" style="color:var(--gold)">Scan + Panchak active ←</td>
+                  <td><div class="ct-bar-wrap"><div class="ct-bar" style="width:12%;background:rgba(248,113,113,.5)"></div></div></td>
+                  <td class="ct-val" style="color:var(--red)">-0.8%</td>
+                  <td class="ct-compare">-1.2%</td></tr>
+                <tr><td class="ct-label">Scan + Mercury retrograde</td>
+                  <td><div class="ct-bar-wrap"><div class="ct-bar" style="width:18%;background:rgba(248,113,113,.4)"></div></div></td>
+                  <td class="ct-val" style="color:var(--red)">-1.4%</td>
+                  <td class="ct-compare">-1.8%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            Conviction Flow has a strong track record — <em>68% positive rate, +4.8% median 5D return</em> across 3,410 clean appearances.<br><br>
+            The key finding: <strong>astro context dramatically changes outcomes.</strong> The same scan appearing under Panchak returns <span class="red">-0.8%</span> vs <span class="green">+5.9%</span> without it.<br><br>
+            <strong>Today, Panchak is active.</strong> The 42 scan hits are historically suppressed. The data quality here is high at 99.1% — this inference is reliable.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:88%"></div></div>
+            <div class="vcf-note">Highest quality dataset — 99.1% coverage. Astro-context segmentation based on 847 astro-active appearances.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ RSI ═══════════════ -->
+  <div class="corr-section" id="sec-rsi">
+    <div class="corr-header">
+      <div class="ch-left">
+        <div class="ch-type">Indicator · Momentum</div>
+        <div class="ch-title">RSI <em>Correlation</em></div>
+        <div class="ch-sub">Three zones, three market personalities. Duration, reversal timing, and forward return distribution.</div>
+      </div>
+      <div class="ch-right">
+        <div class="ch-cur-label">Current RSI</div>
+        <div class="ch-cur-val" style="color:var(--red)">72.4</div>
+        <div class="ch-cur-state" style="color:var(--red)">Overbought · 8 sessions in zone</div>
+      </div>
+    </div>
+    <div class="corr-controls">
+      <span class="bench-label">Benchmark</span>
+      <div class="bench-tabs">
+        <button class="bench-tab active">Nifty 50</button>
+        <button class="bench-tab">Nifty 500</button>
+        <button class="bench-tab">Bank Nifty</button>
+      </div>
+      <div class="tf-tabs">
+        <button class="tf-tab active">5D</button>
+        <button class="tf-tab">22D</button>
+        <button class="tf-tab">3M</button>
+      </div>
+      <button class="compare-btn" id="cmp-rsi" onclick="toggleCompare('rsi')">
+        <span class="cb-icon">⊞</span> Compare
+      </button>
+      <div class="compare-second" id="cs-rsi">
+        <span class="cs-vs">vs</span>
+        <div class="bench-tabs"><button class="bench-tab active" style="color:var(--gold)">Nifty 500</button></div>
+      </div>
+    </div>
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:98.1%;background:linear-gradient(90deg,var(--teal),rgba(45,212,191,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--teal)">98.1%</span>
+      <span class="dq-detail">1,554 of 1,584 days · 30 excluded · Jan 2020 – May 2026</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">
+          <div class="dq-tip-title">Excluded Days · RSI (14)</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--red)"></div>18 days — RSI recompute triggered by RVOL volume discontinuity (post-Mar 2026)</div>
+          <div class="dq-issue"><div class="dqi-dot" style="background:var(--gold)"></div>12 days — Missing close price data (various dates · NSE holiday schedule gap)</div>
+          <div class="dq-tip-footer">RSI quality is strong. The 18-day RVOL issue is known — volume discontinuity post-March 2026 affects RSI slightly. Under review.</div>
+        </div>
+      </div>
+    </div>
+    <div class="compare-strip" id="cstrip-rsi">
+      <div class="cs-title">Comparison · Overbought Zone (RSI > 70) · 5D Avg Return</div>
+      <div class="cs-row">
+        <span class="cs-bench">Nifty 50</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:30%;background:var(--red);opacity:.5;"></div></div>
+        <span class="cs-val" style="color:var(--red)">-0.8%</span>
+      </div>
+      <div class="cs-row">
+        <span class="cs-bench">Nifty 500</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:42%;background:var(--red);opacity:.6;"></div></div>
+        <span class="cs-val" style="color:var(--red)">-1.2%</span>
+        <span class="cs-delta" style="color:var(--red)">–0.4%</span>
+      </div>
+      <div class="cs-row">
+        <span class="cs-bench">Bank Nifty</span>
+        <div class="cs-bar-wrap"><div class="cs-bar" style="width:20%;background:var(--red);opacity:.4;"></div></div>
+        <span class="cs-val" style="color:var(--red)">-0.4%</span>
+        <span class="cs-delta" style="color:var(--green)">+0.4%</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">
+        Bank Nifty is more resilient in RSI overbought — financials sustain momentum longer
+      </div>
+    </div>
+    <div class="corr-main">
+      <div>
+        <div class="rsi-timeline">
+          <div class="rt-label">RSI Zone History · Last 60 Trading Days</div>
+          <div class="rt-bar">
+            <div class="rt-seg rts-n" style="width:25%">Neutral</div>
+            <div class="rt-seg rts-ob" style="width:12%"></div>
+            <div class="rt-seg rts-n" style="width:28%">Neutral</div>
+            <div class="rt-seg rts-os" style="width:8%"></div>
+            <div class="rt-seg rts-n" style="width:14%"></div>
+            <div class="rt-seg rts-ob rts-active" style="width:13%;border-left:2px solid var(--red)">
+              <span style="color:var(--red)">Now</span>
+            </div>
+          </div>
+        </div>
+        <div class="zone-grid">
+          <!-- OB CURRENT -->
+          <div class="zone-card ob cur-zone" style="border-color:rgba(248,113,113,0.55);background:rgba(248,113,113,0.04);">
+            <div class="zone-now" style="background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:var(--red);">NOW ●</div>
+            <div class="zone-icon">🔴</div>
+            <div class="zone-name">Overbought</div>
+            <div class="zone-range">RSI > 70</div>
+            <div class="zone-ret" style="color:var(--red)">-0.8%</div>
+            <div class="zone-ret-l">Avg 5D return · Nifty 50</div>
+            <div class="zone-compare-val" style="color:var(--gold)">Nifty 500: -1.2%</div>
+            <div class="zone-stats">
+              <div><div class="zs-v">8.2d</div><div class="zs-l">Avg duration</div></div>
+              <div><div class="zs-v" style="color:var(--red)">44%</div><div class="zs-l">Positive rate</div></div>
+            </div>
+          </div>
+          <!-- NEUTRAL -->
+          <div class="zone-card neutral" style="border-color:rgba(45,212,191,0.2);">
+            <div class="zone-icon">🟡</div>
+            <div class="zone-name">Neutral</div>
+            <div class="zone-range">RSI 30–70</div>
+            <div class="zone-ret" style="color:var(--teal)">+1.2%</div>
+            <div class="zone-ret-l">Avg 5D return · Nifty 50</div>
+            <div class="zone-compare-val" style="color:var(--gold)">Nifty 500: +1.0%</div>
+            <div class="zone-stats">
+              <div><div class="zs-v">18.4d</div><div class="zs-l">Avg duration</div></div>
+              <div><div class="zs-v" style="color:var(--green)">62%</div><div class="zs-l">Positive rate</div></div>
+            </div>
+          </div>
+          <!-- OVERSOLD -->
+          <div class="zone-card os" style="border-color:rgba(74,222,128,0.2);">
+            <div class="zone-icon">🟢</div>
+            <div class="zone-name">Oversold</div>
+            <div class="zone-range">RSI < 30</div>
+            <div class="zone-ret" style="color:var(--green)">+2.9%</div>
+            <div class="zone-ret-l">Avg 5D return · Nifty 50</div>
+            <div class="zone-compare-val" style="color:var(--gold)">Nifty 500: +3.4%</div>
+            <div class="zone-stats">
+              <div><div class="zs-v">4.8d</div><div class="zs-l">Avg duration</div></div>
+              <div><div class="zs-v" style="color:var(--green)">74%</div><div class="zs-l">Positive rate</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Reversal Timing · Overbought Zone</div>
+            <div class="card-meta">Current: 8 sessions ← in range</div>
+          </div>
+          <div class="card-body">
+            <div class="rev-dist">
+              <div class="rd-row">
+                <div class="rd-label" style="font-size:11px;color:var(--text-dim);width:110px;flex-shrink:0;">1–3 sessions</div>
+                <div class="rd-bw"><div class="rd-b" style="width:35%;background:var(--red);opacity:.5;"></div></div>
+                <div class="rd-v" style="color:var(--text-dim)">35%</div>
+              </div>
+              <div class="rd-row">
+                <div class="rd-label" style="font-size:11px;color:var(--text-dim);width:110px;flex-shrink:0;">4–7 sessions</div>
+                <div class="rd-bw"><div class="rd-b" style="width:28%;background:var(--gold);opacity:.6;"></div></div>
+                <div class="rd-v" style="color:var(--gold)">28%</div>
+              </div>
+              <div class="rd-row rd-current" style="border:1px solid rgba(248,113,113,0.35);border-radius:6px;padding:5px 8px;background:rgba(248,113,113,0.04);">
+                <div class="rd-label" style="font-size:11px;color:var(--red);width:110px;flex-shrink:0;">8–12 sessions ←</div>
+                <div class="rd-bw"><div class="rd-b" style="width:22%;background:var(--red);opacity:.8;"></div></div>
+                <div class="rd-v" style="color:var(--red)">22%</div>
+              </div>
+              <div class="rd-row">
+                <div class="rd-label" style="font-size:11px;color:var(--text-dim);width:110px;flex-shrink:0;">&gt; 12 sessions</div>
+                <div class="rd-bw"><div class="rd-b" style="width:15%;background:var(--vani);opacity:.5;"></div></div>
+                <div class="rd-v" style="color:var(--text-dim)">15%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><div class="card-title">Zone-Level Data Quality</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:7px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:var(--red);width:100px;font-family:'DM Mono',monospace;">Overbought ←</span>
+              <div class="sdq-bar"><div class="sdq-fill" style="width:96.4%;background:var(--gold);opacity:.7;"></div></div>
+              <span class="sdq-pct" style="color:var(--gold)">96.4%</span>
+              <span style="font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;">214 clean / 222 instances</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:var(--teal);width:100px;font-family:'DM Mono',monospace;">Neutral</span>
+              <div class="sdq-bar"><div class="sdq-fill" style="width:99.1%;background:var(--green);opacity:.6;"></div></div>
+              <span class="sdq-pct">99.1%</span>
+              <span style="font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;">1,108 clean / 1,118</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:var(--green);width:100px;font-family:'DM Mono',monospace;">Oversold</span>
+              <div class="sdq-bar"><div class="sdq-fill" style="width:98.7%;background:var(--green);opacity:.6;"></div></div>
+              <span class="sdq-pct">98.7%</span>
+              <span style="font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;">232 clean / 235</span>
+            </div>
+            <div style="font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;margin-top:4px;padding-top:8px;border-top:1px solid var(--border);">
+              ⚠ Overbought zone at 96.4% — RVOL volume discontinuity (post Mar 2026) affects 8 instances. Reversal timing stats may slightly understate risk.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            RSI at <span class="red">72.4</span> — overbought for <strong>8 consecutive sessions.</strong> Historically, overbought periods return <em>-0.8% over 5 days on Nifty 50</em>, with just 44% positive rate.<br><br>
+            The reversal timing is now elevated — <strong>22% of overbought periods reverse in the 8–12 session window</strong>, which is exactly where we are.<br><br>
+            Comparing benchmarks: Bank Nifty shows only <span class="green">-0.4%</span> in this zone — financials sustain momentum longer. Nifty 500 is weaker at <span class="red">-1.2%</span>.<br><br>
+            Note: <em>Overbought quality is 96.4%</em> — the RVOL issue post-March 2026 affects 8 recent instances. Reversal stats for the current period carry slightly higher uncertainty.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:71%"></div></div>
+            <div class="vcf-note">Overbought zone: 96.4% quality. Caution: recent RVOL anomaly affects 8 instances in this zone. Use with awareness.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- content -->
+</div><!-- main -->
+
+<!-- ACTION ISLAND -->
+<div class="action-island" id="action-island">
+  <div class="ai-orb"></div>
+  <div class="ai-text" id="ai-text">
+    <em>MagicRS 60–80</em> · <strong>+2.1% avg 5D</strong> · 98.7% data quality
+  </div>
+</div>
+
+<script>
+const bcNames={magicrs:'MagicRS',breadth:'Breadth ROC',scanner:'Conviction Flow',rsi:'RSI (14)'};
+const aiMsgs={
+  magicrs:'<em>MagicRS 60–80</em> · <strong>+2.1% avg 5D</strong> · 98.7% data quality',
+  breadth:'<em>Falling Above Zero</em> · <strong>-1.4% avg 5D</strong> · 97.2% quality',
+  scanner:'<em>Conviction Flow</em> · <strong>42 hits · Panchak active</strong> · 99.1% quality',
+  rsi:'<em>RSI Overbought 8 sessions</em> · <strong>-0.8% avg 5D</strong> · 96.4% zone quality'
+};
+
+function showSection(name){
+  document.querySelectorAll('.corr-section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tn-item').forEach(t=>t.classList.remove('active'));
+  document.getElementById('sec-'+name).classList.add('active');
+  document.getElementById('tn-'+name).classList.add('active');
+  document.getElementById('bc-name').textContent=bcNames[name];
+  document.getElementById('ai-text').innerHTML=aiMsgs[name];
+  document.getElementById('content-wrap').scrollTop=0;
+}
+
+function toggleCompare(name){
+  const btn=document.getElementById('cmp-'+name);
+  const cs=document.getElementById('cs-'+name);
+  const strip=document.getElementById('cstrip-'+name);
+  const section=document.getElementById('sec-'+name);
+  const isOn=btn.classList.toggle('active');
+  cs.classList.toggle('show',isOn);
+  if(strip) strip.classList.toggle('show',isOn);
+  if(isOn){
+    section.querySelectorAll('.bucket-compare-bar,.bl-compare,.bucket-delta,.state-compare-val,.zone-compare-val,.og-compare').forEach(el=>{
+      if(el.classList.contains('bucket-n')) return;
+    });
+    section.classList.add('compare-mode');
+    document.querySelectorAll('.ct-compare').forEach(el=>el.style.display='table-cell');
+  } else {
+    section.classList.remove('compare-mode');
+    document.querySelectorAll('.ct-compare').forEach(el=>el.style.display='none');
+  }
+}
+
+function setBench(btn,section,bench){
+  btn.closest('.bench-tabs').querySelectorAll('.bench-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function setTf(btn,section,tf){
+  btn.closest('.tf-tabs').querySelectorAll('.tf-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>

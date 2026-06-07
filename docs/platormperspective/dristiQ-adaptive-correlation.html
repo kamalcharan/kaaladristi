@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DristiQ — Adaptive Correlation Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#090c10;--bg2:#0d1117;--bg3:#131920;--bg4:#1a2030;
+  --border:rgba(255,255,255,0.06);--border-hi:rgba(255,255,255,0.13);
+  --text:#e8eaed;--text-dim:#6b7280;--text-muted:#2e3440;
+  --gold:#c9a84c;--gold-glow:rgba(201,168,76,0.15);--gold-dim:rgba(201,168,76,0.35);
+  --teal:#2dd4bf;--teal-dim:rgba(45,212,191,0.12);
+  --green:#4ade80;--red:#f87171;
+  --vani:#7c6af7;--vani-glow:rgba(124,106,247,0.22);--vani-dim:rgba(124,106,247,0.08);
+  --sidebar:200px;--topbar:52px;
+}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);
+  font-family:'DM Sans',sans-serif;overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:999;}
+
+/* TOP BAR */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar);
+  border-bottom:1px solid var(--border);background:rgba(9,12,16,0.95);
+  backdrop-filter:blur(16px);display:flex;align-items:center;
+  padding:0 20px 0 0;z-index:300;}
+.logo{width:var(--sidebar);display:flex;align-items:center;padding:0 20px;
+  font-family:'Fraunces',serif;font-size:17px;font-weight:400;
+  letter-spacing:-0.02em;color:var(--text);border-right:1px solid var(--border);
+  height:100%;flex-shrink:0;}
+.logo span{color:var(--gold);}
+.tb-bc{display:flex;align-items:center;gap:8px;padding:0 20px;
+  font-size:12px;color:var(--text-dim);}
+.tb-bc span{color:var(--text-muted);}
+.tb-bc strong{color:var(--text);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.vani-pill{display:flex;align-items:center;gap:7px;padding:5px 12px;
+  border:1px solid rgba(124,106,247,0.35);border-radius:100px;
+  background:rgba(124,106,247,0.1);}
+.vd{width:6px;height:6px;border-radius:50%;background:var(--vani);
+  animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+.vt{font-size:11px;color:var(--vani);font-family:'DM Mono',monospace;}
+.btn-back{padding:7px 14px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text-dim);font-size:12px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;}
+
+/* SIDEBAR */
+.sidebar{position:fixed;left:0;top:var(--topbar);bottom:0;
+  width:var(--sidebar);border-right:1px solid var(--border);
+  background:rgba(9,12,16,0.9);display:flex;flex-direction:column;
+  padding:16px 0;z-index:200;}
+.nav-s{padding:0 12px;margin-bottom:20px;}
+.nav-sl{font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-muted);padding:0 8px;margin-bottom:5px;font-family:'DM Mono',monospace;}
+.nav-i{display:flex;align-items:center;gap:9px;padding:7px 10px;
+  border-radius:6px;font-size:12px;color:var(--text-dim);cursor:pointer;transition:all .15s;margin-bottom:1px;}
+.nav-i:hover{background:var(--bg2);color:var(--text);}
+.nav-i.active{background:var(--vani-dim);color:var(--vani);border:1px solid rgba(124,106,247,0.18);}
+.nav-i .ni{font-size:13px;width:15px;text-align:center;}
+.su{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:9px;}
+.su-av{width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#5b4fd4,#2dd4bf);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;color:#fff;}
+
+/* MAIN */
+.main{position:fixed;left:var(--sidebar);top:var(--topbar);right:0;bottom:0;
+  display:flex;flex-direction:column;overflow:hidden;}
+
+/* SHAPE NAV */
+.shape-nav{display:flex;border-bottom:1px solid var(--border);
+  background:var(--bg2);flex-shrink:0;padding:0 24px;overflow-x:auto;}
+.sn-item{display:flex;align-items:center;gap:8px;padding:13px 16px;
+  font-size:12px;color:var(--text-dim);cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;flex-shrink:0;}
+.sn-item:hover{color:var(--text);}
+.sn-item.active{color:var(--text);border-bottom-color:var(--vani);}
+.sn-shape-badge{font-size:8px;font-family:'DM Mono',monospace;padding:2px 6px;
+  border-radius:3px;letter-spacing:.06em;}
+
+/* CONTENT */
+.content{flex:1;overflow-y:auto;}
+.content::-webkit-scrollbar{width:3px;}
+.content::-webkit-scrollbar-thumb{background:var(--border);}
+
+/* SECTION */
+.section{display:none;padding:0 0 100px;animation:sec-in .35s ease both;}
+.section.active{display:block;}
+@keyframes sec-in{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* ═══════════════════════════════════
+   VANI DETECTION BANNER
+   Appears at top, fades after 5s
+═══════════════════════════════════ */
+.vani-detection{padding:10px 28px;
+  background:linear-gradient(90deg,rgba(124,106,247,0.08),rgba(124,106,247,0.03));
+  border-bottom:1px solid rgba(124,106,247,0.15);
+  display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.vd-orb{width:24px;height:24px;border-radius:7px;flex-shrink:0;
+  background:linear-gradient(135deg,#9d8ff9,#5b4fd4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;}
+.vd-msg{font-size:12px;color:var(--text-dim);flex:1;}
+.vd-msg strong{color:var(--text);}
+.vd-msg em{color:var(--vani);font-style:normal;}
+.vd-time{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* ═══════════════════════════════════
+   SHARED ANATOMY (all 4 shapes)
+═══════════════════════════════════ */
+/* Combination Header */
+.combo-header{padding:20px 28px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;justify-content:space-between;gap:20px;}
+.ch-left{}
+.ch-shape-tag{font-size:9px;font-family:'DM Mono',monospace;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;
+  display:flex;align-items:center;gap:8px;}
+.cst-dot{width:6px;height:6px;border-radius:50%;}
+.combo-pills{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+.cp-pill{padding:5px 12px;border-radius:6px;font-size:12px;
+  font-family:'DM Mono',monospace;border:1px solid;font-weight:500;}
+.cp-astro{border-color:rgba(201,168,76,0.4);color:var(--gold);background:rgba(201,168,76,0.08);}
+.cp-tech{border-color:rgba(45,212,191,0.4);color:var(--teal);background:rgba(45,212,191,0.08);}
+.cp-widget{border-color:rgba(124,106,247,0.4);color:var(--vani);background:var(--vani-dim);}
+.cp-op{font-size:14px;color:var(--text-muted);font-weight:300;}
+.ch-sub{font-size:12px;color:var(--text-dim);line-height:1.6;}
+.ch-right{text-align:right;flex-shrink:0;}
+.chr-label{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;}
+.chr-instances{font-family:'Fraunces',serif;font-size:28px;font-weight:300;
+  color:var(--text);letter-spacing:-0.03em;line-height:1;}
+.chr-sub{font-size:10px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);margin-top:3px;}
+
+/* Controls */
+.combo-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:10px 28px;border-bottom:1px solid var(--border);
+  background:rgba(13,17,23,0.5);}
+.bench-label{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);letter-spacing:.08em;white-space:nowrap;}
+.mini-tabs{display:flex;gap:3px;padding:3px;background:var(--bg3);
+  border-radius:7px;border:1px solid var(--border);}
+.mt-btn{padding:4px 10px;border-radius:5px;font-size:11px;
+  font-family:'DM Mono',monospace;color:var(--text-dim);cursor:pointer;
+  transition:all .2s;border:none;background:transparent;}
+.mt-btn.active{background:var(--bg2);color:var(--text);}
+.save-combo{display:flex;align-items:center;gap:6px;padding:6px 12px;
+  border-radius:7px;border:1px solid rgba(201,168,76,0.3);
+  background:rgba(201,168,76,0.06);color:var(--gold);font-size:11px;
+  cursor:pointer;margin-left:auto;transition:all .2s;font-family:'DM Sans',sans-serif;}
+.save-combo:hover{background:rgba(201,168,76,0.12);}
+
+/* Data Quality Bar — same as known views */
+.corr-quality{padding:9px 28px;border-bottom:1px solid var(--border);
+  background:rgba(9,12,16,0.6);display:flex;align-items:center;gap:14px;}
+.dq-label{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);white-space:nowrap;flex-shrink:0;}
+.dq-track{flex:1;max-width:180px;height:5px;background:var(--bg3);
+  border-radius:3px;overflow:hidden;}
+.dq-fill{height:100%;border-radius:3px;}
+.dq-pct{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;}
+.dq-detail{font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;flex:1;}
+.dq-info{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;color:var(--text-muted);cursor:pointer;flex-shrink:0;position:relative;}
+.dq-tooltip{position:absolute;bottom:calc(100%+6px);right:0;
+  background:var(--bg2);border:1px solid var(--border-hi);
+  border-radius:9px;padding:12px 14px;min-width:240px;z-index:100;
+  display:none;box-shadow:0 8px 32px rgba(0,0,0,0.5);font-size:11px;}
+.dq-info:hover .dq-tooltip{display:block;}
+
+/* Two-col layout */
+.corr-main{display:grid;grid-template-columns:1fr 300px;gap:18px;padding:20px 28px;}
+
+/* Card */
+.card{border:1px solid var(--border);border-radius:12px;background:var(--bg2);
+  overflow:hidden;margin-bottom:14px;}
+.card-hdr{padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:10px;font-family:'DM Mono',monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);}
+.card-meta{font-size:10px;font-family:'DM Mono',monospace;color:var(--text-muted);}
+.card-body{padding:16px;}
+
+/* VaNi card — right column, same always */
+.vani-card{border:1px solid rgba(124,106,247,0.25);border-radius:12px;
+  background:linear-gradient(145deg,rgba(124,106,247,0.06),var(--bg2));
+  overflow:hidden;position:sticky;top:0;}
+.vc-hdr{padding:11px 15px;border-bottom:1px solid rgba(124,106,247,0.12);
+  display:flex;align-items:center;gap:8px;}
+.vc-orb{width:20px;height:20px;border-radius:6px;
+  background:linear-gradient(135deg,#9d8ff9,#5b4fd4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:8px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;}
+.vc-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--vani);letter-spacing:.1em;}
+.vc-body{padding:13px 15px;font-size:12px;color:var(--text-dim);line-height:1.7;}
+.vc-body strong{color:var(--text);}
+.vc-body em{color:var(--gold);font-style:normal;}
+.vc-body .teal{color:var(--teal);}
+.vc-body .red{color:var(--red);}
+.vc-body .green{color:var(--green);}
+.vc-footer{padding:10px 15px;border-top:1px solid rgba(124,106,247,0.1);}
+.vcf-label{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);letter-spacing:.08em;margin-bottom:5px;}
+.vcf-bar-wrap{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.vcf-bar{height:100%;border-radius:2px;
+  background:linear-gradient(90deg,var(--vani),rgba(124,106,247,0.4));}
+.vcf-note{font-size:9px;color:var(--text-muted);margin-top:5px;
+  font-family:'DM Mono',monospace;line-height:1.5;}
+
+/* stats row */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.sr-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.sr-val{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;
+  color:var(--text);margin-bottom:2px;}
+.sr-lbl{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* outcome bar */
+.outcome-bar{height:8px;border-radius:4px;overflow:hidden;
+  background:var(--bg3);display:flex;margin-bottom:6px;}
+.ob-bear{height:100%;background:var(--red);opacity:.7;}
+.ob-bull{height:100%;background:var(--green);opacity:.7;}
+
+/* histogram */
+.histogram{display:flex;align-items:flex-end;gap:3px;height:80px;
+  padding-bottom:20px;position:relative;}
+.hist-bar{flex:1;border-radius:3px 3px 0 0;position:relative;cursor:pointer;}
+.hist-tip{position:absolute;bottom:calc(100%+4px);left:50%;
+  transform:translateX(-50%);font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);white-space:nowrap;opacity:0;
+  background:var(--bg2);border:1px solid var(--border);
+  padding:3px 7px;border-radius:4px;z-index:10;pointer-events:none;}
+.hist-bar:hover .hist-tip{opacity:1;}
+.hist-axis{position:absolute;bottom:16px;left:0;right:0;
+  height:1px;background:var(--border);}
+.hist-labels{display:flex;gap:3px;margin-top:3px;}
+.hl{flex:1;font-size:8px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);text-align:center;}
+
+/* ACTION ISLAND */
+.action-island{position:fixed;bottom:20px;
+  left:calc(var(--sidebar) + 50%);transform:translateX(-50%);
+  background:rgba(9,12,16,0.97);border:1px solid rgba(124,106,247,0.28);
+  border-radius:28px;padding:10px 18px 10px 12px;
+  display:flex;align-items:center;gap:11px;backdrop-filter:blur(24px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:400;
+  animation:island-in .5s ease both;}
+@keyframes island-in{
+  from{opacity:0;transform:translateX(-50%) translateY(16px);}
+  to{opacity:1;transform:translateX(-50%) translateY(0);}}
+.ai-orb{width:22px;height:22px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle at 35% 35%,#9d8ff9,#5b4fd4);
+  animation:pulse 2.5s ease-in-out infinite;}
+.ai-text{font-size:13px;color:var(--text);}
+.ai-text strong{color:var(--gold);font-weight:500;}
+.ai-text em{color:var(--vani);font-style:normal;}
+
+/* ═══════════════════════
+   SHAPE 1: EVENT OVERLAP
+   Both event-based rules
+   E.g. Mercury Retro + Panchak
+═══════════════════════ */
+/* dual timeline */
+.dual-timeline{position:relative;margin-bottom:20px;}
+.dt-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.dt-label{font-size:10px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);width:130px;flex-shrink:0;text-align:right;}
+.dt-track{flex:1;height:18px;background:var(--bg3);border-radius:4px;
+  overflow:hidden;position:relative;}
+.dt-segment{position:absolute;height:100%;border-radius:3px;top:0;}
+.dt-overlap-row{display:flex;align-items:center;gap:10px;margin-top:2px;}
+.dt-overlap-label{font-size:10px;font-family:'DM Mono',monospace;
+  color:var(--vani);width:130px;flex-shrink:0;text-align:right;font-weight:500;}
+.dt-overlap-track{flex:1;height:14px;background:var(--bg3);
+  border-radius:4px;overflow:hidden;position:relative;
+  border:1px solid rgba(124,106,247,0.2);}
+.dt-overlap-seg{position:absolute;height:100%;background:var(--vani);opacity:.4;
+  border-radius:2px;top:0;}
+.dt-overlap-dot{position:absolute;top:50%;transform:translateY(-50%);
+  width:10px;height:10px;border-radius:50%;
+  background:var(--vani);box-shadow:0 0 6px rgba(124,106,247,0.7);cursor:pointer;}
+/* time axis */
+.dt-axis{display:flex;justify-content:space-between;margin-top:6px;
+  padding-left:140px;}
+.dta-label{font-size:8px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* instance list */
+.instance-list{display:flex;flex-direction:column;gap:8px;}
+.il-item{display:flex;align-items:center;gap:10px;padding:10px 12px;
+  border-radius:8px;border:1px solid var(--border);background:var(--bg);
+  cursor:pointer;transition:all .2s;}
+.il-item:hover{border-color:var(--border-hi);background:var(--bg3);}
+.il-item.overlap-active{border-color:rgba(124,106,247,0.35);
+  background:rgba(124,106,247,0.04);}
+.ili-date{font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--text-dim);width:80px;flex-shrink:0;}
+.ili-duration{font-size:10px;color:var(--text-muted);
+  font-family:'DM Mono',monospace;width:60px;}
+.ili-bar{flex:1;height:5px;border-radius:3px;}
+.ili-return{font-family:'DM Mono',monospace;font-size:12px;
+  font-weight:500;width:52px;text-align:right;}
+.ili-badge{font-size:8px;font-family:'DM Mono',monospace;
+  padding:2px 6px;border-radius:3px;flex-shrink:0;}
+
+/* ═══════════════════════
+   SHAPE 2: THRESHOLD CROSS
+   Event-based + threshold
+   E.g. Mercury Retro + RSI > 70
+═══════════════════════ */
+/* combo chart */
+.combo-chart{position:relative;height:140px;margin-bottom:6px;}
+.cc-overlay-label{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);margin-bottom:6px;}
+
+/* threshold instances grid */
+.threshold-instances{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.ti-card{border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  padding:12px;cursor:pointer;transition:all .2s;}
+.ti-card:hover{border-color:var(--border-hi);}
+.tic-date{font-size:10px;font-family:'DM Mono',monospace;color:var(--text-dim);margin-bottom:6px;}
+.tic-indicators{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+.tic-pill{font-size:9px;font-family:'DM Mono',monospace;
+  padding:2px 6px;border-radius:3px;border:1px solid;}
+.tic-return{font-family:'DM Mono',monospace;font-size:18px;font-weight:400;
+  letter-spacing:-0.02em;}
+.tic-return-l{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;margin-top:2px;}
+.tic-context{font-size:10px;color:var(--text-dim);margin-top:6px;line-height:1.4;}
+
+/* ═══════════════════════
+   SHAPE 3: ZONE CONFLUENCE
+   Both continuous with zones
+   E.g. RSI > 70 + MagicRS > 60
+═══════════════════════ */
+/* gantt bars */
+.gantt-chart{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+.gc-row{display:flex;align-items:center;gap:10px;}
+.gc-label{font-family:'DM Mono',monospace;font-size:10px;
+  color:var(--text-dim);width:68px;flex-shrink:0;text-align:right;}
+.gc-track{flex:1;height:22px;background:var(--bg3);border-radius:5px;
+  overflow:hidden;position:relative;border:1px solid var(--border);}
+.gc-bar{position:absolute;height:100%;border-radius:4px;top:0;
+  display:flex;align-items:center;padding:0 8px;
+  font-size:9px;font-family:'DM Mono',monospace;}
+.gc-return{font-family:'DM Mono',monospace;font-size:11px;
+  width:52px;text-align:right;flex-shrink:0;}
+/* active now indicator */
+.gc-active-bar{position:absolute;height:100%;border-radius:4px;top:0;
+  border:2px solid var(--vani);background:rgba(124,106,247,0.15);
+  display:flex;align-items:center;padding:0 6px;
+  font-size:8px;font-family:'DM Mono',monospace;color:var(--vani);}
+.gc-pulse{width:6px;height:6px;border-radius:50%;background:var(--vani);
+  margin-right:4px;animation:pulse 1.2s ease-in-out infinite;}
+/* current state callout */
+.current-state-card{border:1px solid rgba(124,106,247,0.4);border-radius:10px;
+  background:rgba(124,106,247,0.06);padding:14px;margin-bottom:14px;
+  display:flex;align-items:center;gap:12px;}
+.csc-indicator{width:40px;height:40px;border-radius:10px;
+  background:linear-gradient(135deg,rgba(124,106,247,0.3),rgba(124,106,247,0.1));
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;}
+.csc-label{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--vani);letter-spacing:.08em;margin-bottom:3px;}
+.csc-state{font-size:13px;font-weight:500;color:var(--text);}
+.csc-since{font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;margin-top:2px;}
+.csc-pulse{width:8px;height:8px;border-radius:50%;background:var(--vani);
+  margin-left:auto;animation:pulse 1.2s ease-in-out infinite;flex-shrink:0;}
+
+/* ═══════════════════════
+   SHAPE 4: EVENT IN STATE
+   Event-based + state-based
+   E.g. Sankranti + Breadth ROC state
+═══════════════════════ */
+/* event breakdown grid */
+.event-breakdown{display:grid;grid-template-columns:repeat(5,1fr);
+  gap:6px;margin-bottom:16px;}
+.eb-cell{border:1px solid var(--border);border-radius:7px;
+  background:var(--bg);padding:8px 6px;text-align:center;
+  cursor:pointer;transition:all .15s;position:relative;}
+.eb-cell:hover{border-color:var(--border-hi);}
+.eb-date{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);margin-bottom:4px;}
+.eb-state-dot{width:10px;height:10px;border-radius:50%;
+  margin:0 auto 4px;}
+.eb-return{font-size:11px;font-family:'DM Mono',monospace;font-weight:500;}
+.eb-cell-tooltip{position:absolute;bottom:calc(100%+4px);left:50%;
+  transform:translateX(-50%);background:var(--bg2);
+  border:1px solid var(--border-hi);border-radius:6px;
+  padding:6px 10px;font-size:10px;white-space:nowrap;
+  z-index:10;display:none;
+  box-shadow:0 4px 16px rgba(0,0,0,0.4);}
+.eb-cell:hover .eb-cell-tooltip{display:block;}
+
+/* conditional return table */
+.cond-table{width:100%;border-collapse:collapse;}
+.cond-table th{padding:9px 12px;text-align:left;font-size:9px;
+  font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-muted);border-bottom:1px solid var(--border);}
+.cond-table th:not(:first-child){text-align:center;}
+.cond-table td{padding:10px 12px;border-bottom:1px solid var(--border);
+  font-size:12px;}
+.cond-table tr:last-child td{border-bottom:none;}
+.cond-table tr:hover td{background:rgba(255,255,255,.015);}
+.ct-state{display:flex;align-items:center;gap:8px;}
+.ct-dot{width:8px;height:8px;border-radius:50%;}
+.ct-n{font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--text-muted);text-align:center;}
+.ct-ret{font-family:'DM Mono',monospace;font-size:12px;
+  font-weight:500;text-align:center;}
+.ct-pos-rate{font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--text-dim);text-align:center;}
+.ct-current-row td{background:rgba(124,106,247,0.04);
+  border-left:2px solid rgba(124,106,247,0.3);}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">dristi<span>Q</span></div>
+  <div class="tb-bc">
+    Workspace <span>/</span> VaNi Detected <span>/</span>
+    <strong id="bc-name">Event Overlap</strong>
+  </div>
+  <div class="tb-right">
+    <div class="vani-pill"><div class="vd"></div><div class="vt">VaNi active</div></div>
+    <div class="btn-back">← Workspace</div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="nav-s">
+    <div class="nav-i active"><span class="ni">⬡</span>Workspace</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">View</div>
+    <div class="nav-i"><span class="ni">◎</span>Dashboard</div>
+    <div class="nav-i"><span class="ni">⊙</span>Scanner</div>
+    <div class="nav-i"><span class="ni">⊞</span>Market Structure</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">Catalog</div>
+    <div class="nav-i"><span class="ni">✦</span>Astro Rules</div>
+    <div class="nav-i"><span class="ni">∿</span>Indicators</div>
+    <div class="nav-i"><span class="ni">◈</span>Widgets</div>
+  </div>
+  <div class="su">
+    <div class="su-av">R</div>
+    <div><div style="font-size:12px;color:var(--text)">Rajesh</div>
+    <div style="font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace">Sun 25 May</div></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SHAPE NAV -->
+  <div class="shape-nav">
+    <div class="sn-item active" id="sn-s1" onclick="showShape('s1')">
+      <span class="sn-shape-badge" style="background:rgba(201,168,76,0.1);color:var(--gold);">Shape 1</span>
+      Mercury Retro ∩ Panchak
+    </div>
+    <div class="sn-item" id="sn-s2" onclick="showShape('s2')">
+      <span class="sn-shape-badge" style="background:rgba(45,212,191,0.1);color:var(--teal);">Shape 2</span>
+      Mercury Retro + RSI > 70
+    </div>
+    <div class="sn-item" id="sn-s3" onclick="showShape('s3')">
+      <span class="sn-shape-badge" style="background:rgba(124,106,247,0.1);color:var(--vani);">Shape 3</span>
+      RSI > 70 + MagicRS > 60
+    </div>
+    <div class="sn-item" id="sn-s4" onclick="showShape('s4')">
+      <span class="sn-shape-badge" style="background:rgba(74,222,128,0.1);color:var(--green);">Shape 4</span>
+      Sankranti → Breadth State
+    </div>
+  </div>
+
+  <div class="content">
+
+  <!-- ═══════════════════════════════
+       SHAPE 1: EVENT OVERLAP
+       Mercury Retrograde ∩ Panchak
+  ═══════════════════════════════ -->
+  <div class="section active" id="sec-s1">
+
+    <div class="vani-detection">
+      <div class="vd-orb">V</div>
+      <div class="vd-msg">VaNi detected <strong>two active astro rules overlapping</strong> on your chart — <em>Mercury Retrograde ∩ Panchak.</em> Here's what history says when these fired together.</div>
+      <div class="vd-time">Just now</div>
+    </div>
+
+    <div class="combo-header">
+      <div class="ch-left">
+        <div class="ch-shape-tag">
+          <div class="cst-dot" style="background:var(--gold)"></div>
+          Event Overlap · Both rules are period-based
+        </div>
+        <div class="combo-pills">
+          <div class="cp-pill cp-astro">Mercury Retrograde</div>
+          <div class="cp-op">∩</div>
+          <div class="cp-pill cp-astro">Panchak</div>
+        </div>
+        <div class="ch-sub">Periods where both astro rules were simultaneously active. What did Nifty do during each overlap?</div>
+      </div>
+      <div class="ch-right">
+        <div class="chr-label">Overlap Instances</div>
+        <div class="chr-instances">7</div>
+        <div class="chr-sub">since 2018 · Nifty 50</div>
+      </div>
+    </div>
+
+    <div class="combo-controls">
+      <span class="bench-label">Benchmark</span>
+      <div class="mini-tabs">
+        <button class="mt-btn active">Nifty 50</button>
+        <button class="mt-btn">Nifty 500</button>
+      </div>
+      <div class="mini-tabs">
+        <button class="mt-btn active">5D</button>
+        <button class="mt-btn">22D</button>
+        <button class="mt-btn">3M</button>
+      </div>
+      <div class="save-combo">✦ Save this combination</div>
+    </div>
+
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:94.3%;background:linear-gradient(90deg,var(--gold),rgba(201,168,76,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--gold)">94.3%</span>
+      <span class="dq-detail">Panchak: 98.1% · Mercury Retro: 96.4% · Overlap: 94.3% · 7 of 8 instances clean</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">1 instance excluded — Feb 2024 overlap had incomplete EOD data for 3 of the 7 overlap days. Stats based on 7 clean instances.</div>
+      </div>
+    </div>
+
+    <div class="corr-main">
+      <div>
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="sr-card">
+            <div class="sr-val">7</div>
+            <div class="sr-lbl">Overlap instances</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--red)">5/7</div>
+            <div class="sr-lbl">Bearish outcomes</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--red)">-2.8%</div>
+            <div class="sr-lbl">Avg 5D return</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val">8.4d</div>
+            <div class="sr-lbl">Avg overlap duration</div>
+          </div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <div style="font-size:9px;font-family:'DM Mono',monospace;color:var(--text-muted);margin-bottom:6px;letter-spacing:.08em;text-transform:uppercase;">Outcome distribution</div>
+          <div class="outcome-bar">
+            <div class="ob-bear" style="width:71%"></div>
+            <div class="ob-bull" style="width:29%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;font-family:'DM Mono',monospace;color:var(--text-muted);">
+            <span style="color:var(--red)">71% bearish (5/7)</span>
+            <span style="color:var(--green)">29% bullish (2/7)</span>
+          </div>
+        </div>
+
+        <!-- Dual timeline -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Event Timeline · 2018–2026</div>
+            <div class="card-meta">Purple = overlap periods</div>
+          </div>
+          <div class="card-body">
+            <div class="dual-timeline">
+              <div class="dt-row">
+                <div class="dt-label" style="color:var(--gold)">Mercury Retro</div>
+                <div class="dt-track">
+                  <div class="dt-segment" style="left:4%;width:6%;background:rgba(201,168,76,0.4)"></div>
+                  <div class="dt-segment" style="left:18%;width:5%;background:rgba(201,168,76,0.4)"></div>
+                  <div class="dt-segment" style="left:29%;width:6%;background:rgba(201,168,76,0.4)"></div>
+                  <div class="dt-segment" style="left:42%;width:5%;background:rgba(201,168,76,0.4)"></div>
+                  <div class="dt-segment" style="left:55%;width:6%;background:rgba(201,168,76,0.4)"></div>
+                  <div class="dt-segment" style="left:67%;width:5%;background:rgba(201,168,76,0.4)"></div>
+                  <div class="dt-segment" style="left:82%;width:6%;background:rgba(201,168,76,0.4)"></div>
+                  <div class="dt-segment" style="left:94%;width:5%;background:rgba(201,168,76,0.6)"></div>
+                </div>
+              </div>
+              <div class="dt-row">
+                <div class="dt-label" style="color:var(--teal)">Panchak</div>
+                <div class="dt-track">
+                  <div class="dt-segment" style="left:2%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:8%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:20%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:30%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:43%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:57%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:68%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:84%;width:3%;background:rgba(45,212,191,0.35)"></div>
+                  <div class="dt-segment" style="left:95%;width:3%;background:rgba(45,212,191,0.5)"></div>
+                </div>
+              </div>
+              <div class="dt-overlap-row">
+                <div class="dt-overlap-label">Overlap</div>
+                <div class="dt-overlap-track">
+                  <div class="dt-overlap-seg" style="left:5%;width:2%"></div>
+                  <div class="dt-overlap-seg" style="left:20%;width:2%"></div>
+                  <div class="dt-overlap-seg" style="left:30%;width:2%"></div>
+                  <div class="dt-overlap-seg" style="left:43%;width:2%"></div>
+                  <div class="dt-overlap-seg" style="left:57%;width:2%"></div>
+                  <div class="dt-overlap-seg" style="left:68%;width:2%"></div>
+                  <div class="dt-overlap-seg" style="left:95%;width:3%;opacity:.8;animation:pulse 1.2s ease-in-out infinite;"></div>
+                  <div class="dt-overlap-dot" style="left:5%;background:var(--red)"></div>
+                  <div class="dt-overlap-dot" style="left:20%;background:var(--red)"></div>
+                  <div class="dt-overlap-dot" style="left:30%;background:var(--red)"></div>
+                  <div class="dt-overlap-dot" style="left:43%;background:var(--red)"></div>
+                  <div class="dt-overlap-dot" style="left:57%;background:var(--red)"></div>
+                  <div class="dt-overlap-dot" style="left:68%;background:var(--green)"></div>
+                  <div class="dt-overlap-dot" style="left:95%;background:var(--vani);animation:pulse 1.2s ease-in-out infinite;box-shadow:0 0 8px rgba(124,106,247,0.7);"></div>
+                </div>
+              </div>
+              <div class="dt-axis">
+                <span class="dta-label">2018</span>
+                <span class="dta-label">2019</span>
+                <span class="dta-label">2020</span>
+                <span class="dta-label">2021</span>
+                <span class="dta-label">2022</span>
+                <span class="dta-label">2023</span>
+                <span class="dta-label">2024</span>
+                <span class="dta-label">2025</span>
+                <span class="dta-label" style="color:var(--vani)">Now</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Instance list -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Overlap Instances · 5D Outcome</div>
+            <div class="card-meta">7 clean instances</div>
+          </div>
+          <div class="card-body">
+            <div class="instance-list">
+              <div class="il-item">
+                <div class="ili-date">Apr 2018</div>
+                <div class="ili-duration">9 days</div>
+                <div class="ili-bar" style="background:linear-gradient(90deg,rgba(248,113,113,.6),transparent);width:72%;"></div>
+                <div class="ili-return" style="color:var(--red)">-4.2%</div>
+                <div class="ili-badge" style="background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.25);">Bear</div>
+              </div>
+              <div class="il-item">
+                <div class="ili-date">Jul 2019</div>
+                <div class="ili-duration">6 days</div>
+                <div class="ili-bar" style="background:linear-gradient(90deg,rgba(248,113,113,.6),transparent);width:45%;"></div>
+                <div class="ili-return" style="color:var(--red)">-2.1%</div>
+                <div class="ili-badge" style="background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.25);">Bear</div>
+              </div>
+              <div class="il-item">
+                <div class="ili-date">Nov 2020</div>
+                <div class="ili-duration">11 days</div>
+                <div class="ili-bar" style="background:linear-gradient(90deg,rgba(74,222,128,.6),transparent);width:28%;"></div>
+                <div class="ili-return" style="color:var(--green)">+1.4%</div>
+                <div class="ili-badge" style="background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.25);">Bull</div>
+              </div>
+              <div class="il-item">
+                <div class="ili-date">Jun 2022</div>
+                <div class="ili-duration">8 days</div>
+                <div class="ili-bar" style="background:linear-gradient(90deg,rgba(248,113,113,.6),transparent);width:84%;"></div>
+                <div class="ili-return" style="color:var(--red)">-5.8%</div>
+                <div class="ili-badge" style="background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.25);">Bear</div>
+              </div>
+              <div class="il-item overlap-active">
+                <div class="ili-date" style="color:var(--vani)">May 2026 ●</div>
+                <div class="ili-duration" style="color:var(--vani)">Active</div>
+                <div style="flex:1;font-size:10px;color:var(--vani);font-family:'DM Mono',monospace;">Currently overlapping · Day 3 of overlap</div>
+                <div class="ili-return" style="color:var(--vani)">—</div>
+                <div class="ili-badge" style="background:rgba(124,106,247,.12);color:var(--vani);border:1px solid rgba(124,106,247,.3);">Now</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VaNi -->
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            Mercury Retrograde and Panchak have overlapped <strong>7 times since 2018</strong> — with <em>5 of 7 producing bearish outcomes</em> on Nifty over the following 5 days.<br><br>
+            The two instances that were bullish both occurred during strong trending up-markets (Nov 2020 recovery, Feb 2023 bounce). Current market context is not strongly trending.<br><br>
+            <strong>We are currently in day 3 of an overlap.</strong> Based on historical avg duration of 8.4 days, this overlap has approximately 5 more days to run.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:66%"></div></div>
+            <div class="vcf-note">7 instances is a small sample. 94.3% quality. Treat as strong directional bias, not certainty.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+       SHAPE 2: THRESHOLD CROSS
+       Mercury Retrograde + RSI > 70
+  ═══════════════════════════════ -->
+  <div class="section" id="sec-s2">
+
+    <div class="vani-detection">
+      <div class="vd-orb">V</div>
+      <div class="vd-msg">VaNi detected <strong>RSI crossing above 70</strong> while <em>Mercury Retrograde is active.</em> Showing instances where this threshold was crossed during the event period.</div>
+      <div class="vd-time">Just now</div>
+    </div>
+
+    <div class="combo-header">
+      <div class="ch-left">
+        <div class="ch-shape-tag">
+          <div class="cst-dot" style="background:var(--teal)"></div>
+          Threshold Cross · Event active when indicator crosses level
+        </div>
+        <div class="combo-pills">
+          <div class="cp-pill cp-astro">Mercury Retrograde</div>
+          <div class="cp-op">+</div>
+          <div class="cp-pill cp-tech">RSI > 70</div>
+        </div>
+        <div class="ch-sub">When RSI crossed overbought during a Mercury Retrograde period — what happened next?</div>
+      </div>
+      <div class="ch-right">
+        <div class="chr-label">Cross Instances</div>
+        <div class="chr-instances">6</div>
+        <div class="chr-sub">since 2015 · Nifty 50</div>
+      </div>
+    </div>
+
+    <div class="combo-controls">
+      <span class="bench-label">Benchmark</span>
+      <div class="mini-tabs">
+        <button class="mt-btn active">Nifty 50</button>
+        <button class="mt-btn">Nifty 500</button>
+        <button class="mt-btn">Bank Nifty</button>
+      </div>
+      <div class="mini-tabs">
+        <button class="mt-btn active">5D</button>
+        <button class="mt-btn">22D</button>
+      </div>
+      <div class="save-combo">✦ Save this combination</div>
+    </div>
+
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:97.2%;background:linear-gradient(90deg,var(--teal),rgba(45,212,191,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--teal)">97.2%</span>
+      <span class="dq-detail">6 of 6 instances clean · Mercury periods: 96.4% · RSI data: 98.1%</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">All 6 instances have clean data. RSI recompute post-March 2026 may affect 1 instance slightly — flagged but included.</div>
+      </div>
+    </div>
+
+    <div class="corr-main">
+      <div>
+        <div class="stats-row">
+          <div class="sr-card">
+            <div class="sr-val">6</div>
+            <div class="sr-lbl">Cross instances</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--red)">5/6</div>
+            <div class="sr-lbl">Bearish 5D</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--red)">-3.1%</div>
+            <div class="sr-lbl">Avg 5D return</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val">2.8d</div>
+            <div class="sr-lbl">Avg to reversal</div>
+          </div>
+        </div>
+
+        <!-- Combo chart — RSI line + Mercury shaded zones -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">RSI with Mercury Retrograde Zones</div>
+            <div class="card-meta">Gold dots = threshold cross during event</div>
+          </div>
+          <div class="card-body">
+            <svg width="100%" height="120" viewBox="0 0 800 120" preserveAspectRatio="none">
+              <!-- Mercury retrograde shaded zones -->
+              <rect x="40" y="0" width="48" height="120" fill="rgba(201,168,76,0.06)"/>
+              <rect x="148" y="0" width="44" height="120" fill="rgba(201,168,76,0.06)"/>
+              <rect x="268" y="0" width="48" height="120" fill="rgba(201,168,76,0.06)"/>
+              <rect x="388" y="0" width="44" height="120" fill="rgba(201,168,76,0.06)"/>
+              <rect x="508" y="0" width="48" height="120" fill="rgba(201,168,76,0.06)"/>
+              <rect x="660" y="0" width="44" height="120" fill="rgba(201,168,76,0.08)"/>
+              <!-- mercury zone labels -->
+              <text x="64" y="10" fill="rgba(201,168,76,.4)" font-size="7" font-family="monospace" text-anchor="middle">☿</text>
+              <text x="170" y="10" fill="rgba(201,168,76,.4)" font-size="7" font-family="monospace" text-anchor="middle">☿</text>
+              <text x="292" y="10" fill="rgba(201,168,76,.4)" font-size="7" font-family="monospace" text-anchor="middle">☿</text>
+              <text x="410" y="10" fill="rgba(201,168,76,.4)" font-size="7" font-family="monospace" text-anchor="middle">☿</text>
+              <text x="532" y="10" fill="rgba(201,168,76,.4)" font-size="7" font-family="monospace" text-anchor="middle">☿</text>
+              <text x="682" y="10" fill="rgba(201,168,76,.6)" font-size="7" font-family="monospace" text-anchor="middle">☿ Now</text>
+              <!-- overbought line (RSI 70) -->
+              <line x1="0" y1="40" x2="800" y2="40" stroke="rgba(248,113,113,0.25)" stroke-width="1" stroke-dasharray="4 4"/>
+              <text x="790" y="36" fill="rgba(248,113,113,.4)" font-size="7" font-family="monospace" text-anchor="end">70</text>
+              <!-- oversold line -->
+              <line x1="0" y1="90" x2="800" y2="90" stroke="rgba(74,222,128,0.15)" stroke-width="1" stroke-dasharray="4 4"/>
+              <!-- RSI line -->
+              <polyline points="0,65 40,60 55,42 70,50 88,62 120,58 148,54 162,36 176,45 192,58 220,65 250,55 268,50 282,34 296,48 316,62 340,68 370,60 388,52 402,35 416,50 430,65 460,70 490,65 508,60 522,38 536,52 550,68 590,72 620,64 650,55 660,52 680,33 700,48 750,60 800,55"
+                fill="none" stroke="rgba(248,113,113,.65)" stroke-width="1.8"/>
+              <!-- Threshold cross dots (inside mercury zones) -->
+              <circle cx="62" cy="36" r="6" fill="var(--gold)" stroke="rgba(201,168,76,.5)" stroke-width="2"/>
+              <circle cx="165" cy="34" r="6" fill="var(--gold)" stroke="rgba(201,168,76,.5)" stroke-width="2"/>
+              <circle cx="285" cy="32" r="6" fill="var(--gold)" stroke="rgba(201,168,76,.5)" stroke-width="2"/>
+              <circle cx="405" cy="33" r="6" fill="var(--gold)" stroke="rgba(201,168,76,.5)" stroke-width="2"/>
+              <circle cx="525" cy="36" r="6" fill="var(--gold)" stroke="rgba(201,168,76,.5)" stroke-width="2"/>
+              <circle cx="683" cy="31" r="7" fill="var(--vani)" stroke="rgba(124,106,247,.6)" stroke-width="2"/>
+              <text x="683" y="22" fill="var(--vani)" font-size="8" font-family="monospace" text-anchor="middle">Now</text>
+            </svg>
+            <div style="display:flex;gap:14px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);">
+                <div style="width:12px;height:12px;border-radius:50%;background:var(--gold)"></div>Historical cross
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--vani);">
+                <div style="width:12px;height:12px;border-radius:50%;background:var(--vani)"></div>Current cross
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);">
+                <div style="width:20px;height:8px;background:rgba(201,168,76,0.2);border-radius:2px;"></div>Mercury zone
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Instance cards -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Cross Instances · Detail</div>
+          </div>
+          <div class="card-body">
+            <div class="threshold-instances">
+              <div class="ti-card">
+                <div class="tic-date">Mar 2018 · Mercury Retrograde</div>
+                <div class="tic-indicators">
+                  <div class="tic-pill" style="border-color:rgba(248,113,113,.3);color:var(--red)">RSI: 74.2</div>
+                  <div class="tic-pill" style="border-color:rgba(201,168,76,.3);color:var(--gold)">Day 8 of retro</div>
+                </div>
+                <div class="tic-return" style="color:var(--red)">-4.8%</div>
+                <div class="tic-return-l">5D return after cross</div>
+                <div class="tic-context">Sharp reversal. Mercury retro + overbought momentum reversed hard.</div>
+              </div>
+              <div class="ti-card">
+                <div class="tic-date">Jul 2019 · Mercury Retrograde</div>
+                <div class="tic-indicators">
+                  <div class="tic-pill" style="border-color:rgba(248,113,113,.3);color:var(--red)">RSI: 71.8</div>
+                  <div class="tic-pill" style="border-color:rgba(201,168,76,.3);color:var(--gold)">Day 4 of retro</div>
+                </div>
+                <div class="tic-return" style="color:var(--red)">-2.3%</div>
+                <div class="tic-return-l">5D return after cross</div>
+                <div class="tic-context">Gradual pullback. RSI stayed elevated for 3 days before reversal.</div>
+              </div>
+              <div class="ti-card">
+                <div class="tic-date">Oct 2021 · Mercury Retrograde</div>
+                <div class="tic-indicators">
+                  <div class="tic-pill" style="border-color:rgba(248,113,113,.3);color:var(--red)">RSI: 72.6</div>
+                  <div class="tic-pill" style="border-color:rgba(201,168,76,.3);color:var(--gold)">Day 12 of retro</div>
+                </div>
+                <div class="tic-return" style="color:var(--green)">+1.1%</div>
+                <div class="tic-return-l">5D return after cross</div>
+                <div class="tic-context">Bullish exception. Strong FII inflows overrode the signal.</div>
+              </div>
+              <div class="ti-card" style="border-color:rgba(124,106,247,0.35);background:rgba(124,106,247,0.04);">
+                <div class="tic-date" style="color:var(--vani)">May 2026 · Active Now ●</div>
+                <div class="tic-indicators">
+                  <div class="tic-pill" style="border-color:rgba(248,113,113,.3);color:var(--red)">RSI: 72.4</div>
+                  <div class="tic-pill" style="border-color:rgba(124,106,247,.4);color:var(--vani)">Day 3 of retro</div>
+                </div>
+                <div class="tic-return" style="color:var(--vani)">—</div>
+                <div class="tic-return-l">Outcome pending</div>
+                <div class="tic-context" style="color:var(--vani)">Cross just occurred. History favours a pullback within 2-3 days.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            RSI crossing above 70 during Mercury Retrograde has occurred <strong>6 times since 2015.</strong> In <em>5 of those, Nifty fell within 5 days</em> — average decline of -3.1%.<br><br>
+            The mechanism appears clear: retrograde periods suppress momentum follow-through. When RSI signals overbought during a retrograde, reversals tend to be sharp rather than gradual.<br><br>
+            <strong>We are currently in this exact setup.</strong> RSI crossed 70 on day 3 of Mercury Retrograde. The single bullish exception (Oct 2021) was driven by exceptional FII inflows — current FII activity does not replicate that context.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:76%"></div></div>
+            <div class="vcf-note">6 instances · 97.2% quality · Small sample but high directional consistency (83% hit rate).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+       SHAPE 3: ZONE CONFLUENCE
+       RSI > 70 + MagicRS > 60
+  ═══════════════════════════════ -->
+  <div class="section" id="sec-s3">
+
+    <div class="vani-detection">
+      <div class="vd-orb">V</div>
+      <div class="vd-msg">VaNi detected <strong>two indicators simultaneously in elevated zones</strong> — <em>RSI > 70 and MagicRS > 60.</em> Showing periods where both zones were active together.</div>
+      <div class="vd-time">Just now</div>
+    </div>
+
+    <div class="combo-header">
+      <div class="ch-left">
+        <div class="ch-shape-tag">
+          <div class="cst-dot" style="background:var(--vani)"></div>
+          Zone Confluence · Both continuous indicators in elevated zones
+        </div>
+        <div class="combo-pills">
+          <div class="cp-pill cp-tech">RSI > 70</div>
+          <div class="cp-op">+</div>
+          <div class="cp-pill cp-widget">MagicRS > 60</div>
+        </div>
+        <div class="ch-sub">Periods where both indicators were simultaneously in their elevated zones. Forward return distribution and current status.</div>
+      </div>
+      <div class="ch-right">
+        <div class="chr-label">Confluence Periods</div>
+        <div class="chr-instances">34</div>
+        <div class="chr-sub">since 2020 · Nifty 50</div>
+      </div>
+    </div>
+
+    <div class="combo-controls">
+      <span class="bench-label">Benchmark</span>
+      <div class="mini-tabs">
+        <button class="mt-btn active">Nifty 50</button>
+        <button class="mt-btn">Nifty 500</button>
+      </div>
+      <div class="mini-tabs">
+        <button class="mt-btn active">5D</button>
+        <button class="mt-btn">22D</button>
+        <button class="mt-btn">3M</button>
+      </div>
+      <div class="save-combo">✦ Save this combination</div>
+    </div>
+
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:95.9%;background:linear-gradient(90deg,var(--vani),rgba(124,106,247,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--vani)">95.9%</span>
+      <span class="dq-detail">33 of 34 periods clean · 1 period excluded (RVOL anomaly Mar 2026)</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">1 of 34 confluence periods excluded — Mar 2026 RVOL anomaly affected MagicRS computation for that period. Stats based on 33 clean periods.</div>
+      </div>
+    </div>
+
+    <div class="corr-main">
+      <div>
+        <!-- Current state callout -->
+        <div class="current-state-card">
+          <div class="csc-indicator">⚡</div>
+          <div>
+            <div class="csc-label">VaNi · Current Status</div>
+            <div class="csc-state">Currently in Zone Confluence — Day 8</div>
+            <div class="csc-since">RSI: 72.4 · MagicRS: 68.4 · Both in elevated zones</div>
+          </div>
+          <div class="csc-pulse"></div>
+        </div>
+
+        <div class="stats-row">
+          <div class="sr-card">
+            <div class="sr-val">34</div>
+            <div class="sr-lbl">Confluence periods</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--red)">-0.6%</div>
+            <div class="sr-lbl">Avg 5D return</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val">48%</div>
+            <div class="sr-lbl">Positive rate</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val">6.4d</div>
+            <div class="sr-lbl">Avg duration</div>
+          </div>
+        </div>
+
+        <!-- Gantt chart -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Confluence Periods · Gantt View · 2020–2026</div>
+            <div class="card-meta">Colour = 5D outcome · Purple = active now</div>
+          </div>
+          <div class="card-body">
+            <div class="gantt-chart">
+              <div class="gc-row">
+                <div class="gc-label">Jan 2020</div>
+                <div class="gc-track">
+                  <div class="gc-bar" style="left:2%;width:8%;background:rgba(74,222,128,0.25);color:var(--green)">+2.1%</div>
+                </div>
+                <div class="gc-return" style="color:var(--green)">+2.1%</div>
+              </div>
+              <div class="gc-row">
+                <div class="gc-label">Jun 2020</div>
+                <div class="gc-track">
+                  <div class="gc-bar" style="left:5%;width:12%;background:rgba(248,113,113,0.2);color:var(--red)">-3.4%</div>
+                </div>
+                <div class="gc-return" style="color:var(--red)">-3.4%</div>
+              </div>
+              <div class="gc-row">
+                <div class="gc-label">Feb 2021</div>
+                <div class="gc-track">
+                  <div class="gc-bar" style="left:3%;width:7%;background:rgba(74,222,128,0.25);color:var(--green)">+1.8%</div>
+                </div>
+                <div class="gc-return" style="color:var(--green)">+1.8%</div>
+              </div>
+              <div class="gc-row">
+                <div class="gc-label">Sep 2021</div>
+                <div class="gc-track">
+                  <div class="gc-bar" style="left:8%;width:10%;background:rgba(248,113,113,0.2);color:var(--red)">-2.1%</div>
+                </div>
+                <div class="gc-return" style="color:var(--red)">-2.1%</div>
+              </div>
+              <div class="gc-row">
+                <div class="gc-label">Mar 2022</div>
+                <div class="gc-track">
+                  <div class="gc-bar" style="left:4%;width:9%;background:rgba(248,113,113,0.2);color:var(--red)">-4.2%</div>
+                </div>
+                <div class="gc-return" style="color:var(--red)">-4.2%</div>
+              </div>
+              <div class="gc-row">
+                <div class="gc-label">Now</div>
+                <div class="gc-track">
+                  <div class="gc-active-bar" style="left:2%;width:7%;"><div class="gc-pulse"></div>Active · Day 8</div>
+                </div>
+                <div class="gc-return" style="color:var(--vani)">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Return distribution -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">5D Return Distribution · 33 Clean Periods</div>
+          </div>
+          <div class="card-body">
+            <div class="histogram">
+              <div class="hist-bar" style="height:25%;background:rgba(248,113,113,.5)"><div class="hist-tip">&lt;-4%: 8</div></div>
+              <div class="hist-bar" style="height:40%;background:rgba(248,113,113,.4)"><div class="hist-tip">-4 to -2%: 5</div></div>
+              <div class="hist-bar" style="height:55%;background:rgba(248,113,113,.3)"><div class="hist-tip">-2 to 0%: 4</div></div>
+              <div class="hist-bar" style="height:75%;background:rgba(74,222,128,.4)"><div class="hist-tip">0 to +2%: 7</div></div>
+              <div class="hist-bar" style="height:60%;background:rgba(74,222,128,.5)"><div class="hist-tip">+2 to +4%: 5</div></div>
+              <div class="hist-bar" style="height:30%;background:rgba(74,222,128,.6)"><div class="hist-tip">&gt;+4%: 4</div></div>
+              <div class="hist-axis"></div>
+            </div>
+            <div class="hist-labels">
+              <div class="hl">&lt;-4</div><div class="hl">-4</div><div class="hl">-2</div>
+              <div class="hl">0</div><div class="hl">+2</div><div class="hl">&gt;+4%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            RSI and MagicRS both in elevated zones simultaneously — <strong>34 periods since 2020.</strong> The distribution is nearly balanced: <em>48% positive, 52% negative</em> — this confluence alone is not a strong directional signal.<br><br>
+            However, the return distribution has fat tails on both sides. This is a <strong>high volatility setup</strong> — outcomes are more extreme than average, in either direction.<br><br>
+            <teal class="teal">We are currently in day 8 of this confluence.</teal> Historical avg duration is 6.4 days — we are above average duration, which historically increases reversal probability slightly.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:58%"></div></div>
+            <div class="vcf-note">33 clean instances · 95.9% quality. Balanced outcome distribution — directional confidence is moderate. Better as volatility signal than direction signal.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════
+       SHAPE 4: EVENT IN STATE
+       Sankranti → Breadth ROC State
+  ═══════════════════════════════ -->
+  <div class="section" id="sec-s4">
+
+    <div class="vani-detection">
+      <div class="vd-orb">V</div>
+      <div class="vd-msg">VaNi is correlating <strong>Sankranti events</strong> against the <em>Breadth ROC state at the time of each firing.</em> The state conditions the outcome.</div>
+      <div class="vd-time">Just now</div>
+    </div>
+
+    <div class="combo-header">
+      <div class="ch-left">
+        <div class="ch-shape-tag">
+          <div class="cst-dot" style="background:var(--green)"></div>
+          Event in State · Astro event conditioned by indicator state
+        </div>
+        <div class="combo-pills">
+          <div class="cp-pill cp-astro">Sankranti</div>
+          <div class="cp-op">→</div>
+          <div class="cp-pill cp-widget">Breadth ROC State</div>
+        </div>
+        <div class="ch-sub">For each Sankranti, what state was Breadth ROC in? Does the state at firing change the outcome?</div>
+      </div>
+      <div class="ch-right">
+        <div class="chr-label">Total Sankrantis</div>
+        <div class="chr-instances">72</div>
+        <div class="chr-sub">2020–2026 · 12/year · Nifty 50</div>
+      </div>
+    </div>
+
+    <div class="combo-controls">
+      <span class="bench-label">Benchmark</span>
+      <div class="mini-tabs">
+        <button class="mt-btn active">Nifty 50</button>
+        <button class="mt-btn">Nifty 500</button>
+        <button class="mt-btn">Bank Nifty</button>
+      </div>
+      <div class="mini-tabs">
+        <button class="mt-btn active">5D</button>
+        <button class="mt-btn">22D</button>
+        <button class="mt-btn">3M</button>
+      </div>
+      <div class="save-combo">✦ Save this combination</div>
+    </div>
+
+    <div class="corr-quality">
+      <span class="dq-label">Data Coverage</span>
+      <div class="dq-track">
+        <div class="dq-fill" style="width:97.2%;background:linear-gradient(90deg,var(--green),rgba(74,222,128,.5))"></div>
+      </div>
+      <span class="dq-pct" style="color:var(--green)">97.2%</span>
+      <span class="dq-detail">70 of 72 Sankrantis clean · Breadth ROC: 97.2% coverage · 2 excluded</span>
+      <div class="dq-info">ⓘ
+        <div class="dq-tooltip">2 Sankrantis excluded — SHANTHALA phantom index contamination affected breadth state reading on those dates. Stats based on 70 clean instances.</div>
+      </div>
+    </div>
+
+    <div class="corr-main">
+      <div>
+        <div class="stats-row">
+          <div class="sr-card">
+            <div class="sr-val">70</div>
+            <div class="sr-lbl">Clean instances</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--teal)">+1.4%</div>
+            <div class="sr-lbl">Overall avg 5D</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--green)">61%</div>
+            <div class="sr-lbl">Positive rate</div>
+          </div>
+          <div class="sr-card">
+            <div class="sr-val" style="color:var(--gold)">4 states</div>
+            <div class="sr-lbl">Breadth conditions</div>
+          </div>
+        </div>
+
+        <!-- Event breakdown grid -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Each Sankranti · Coloured by Breadth State at Firing</div>
+            <div class="card-meta">70 instances · 2020–2026</div>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);">
+                <div style="width:10px;height:10px;border-radius:50%;background:var(--green)"></div>Rising Below Zero
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);">
+                <div style="width:10px;height:10px;border-radius:50%;background:var(--teal)"></div>Rising Above Zero
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);">
+                <div style="width:10px;height:10px;border-radius:50%;background:var(--red)"></div>Falling Above Zero
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);">
+                <div style="width:10px;height:10px;border-radius:50%;background:rgba(248,113,113,.4)"></div>Falling Below Zero
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--vani);">
+                <div style="width:10px;height:10px;border-radius:50%;background:var(--vani);animation:pulse 1.2s ease-in-out infinite;"></div>Current
+              </div>
+            </div>
+            <div class="event-breakdown">
+              <!-- Row 1 (14 cells) -->
+              <div class="eb-cell"><div class="eb-date">Jan20</div><div class="eb-state-dot" style="background:var(--teal)"></div><div class="eb-return" style="color:var(--green)">+2.1%</div><div class="eb-cell-tooltip">Jan 2020 · Rising Above Zero · +2.1%</div></div>
+              <div class="eb-cell"><div class="eb-date">Feb20</div><div class="eb-state-dot" style="background:var(--teal)"></div><div class="eb-return" style="color:var(--green)">+1.8%</div><div class="eb-cell-tooltip">Feb 2020 · Rising Above Zero · +1.8%</div></div>
+              <div class="eb-cell"><div class="eb-date">Mar20</div><div class="eb-state-dot" style="background:rgba(248,113,113,.5)"></div><div class="eb-return" style="color:var(--red)">-8.4%</div><div class="eb-cell-tooltip">Mar 2020 · Falling Below Zero · -8.4% (COVID)</div></div>
+              <div class="eb-cell"><div class="eb-date">Apr20</div><div class="eb-state-dot" style="background:var(--green)"></div><div class="eb-return" style="color:var(--green)">+4.2%</div><div class="eb-cell-tooltip">Apr 2020 · Rising Below Zero · +4.2%</div></div>
+              <div class="eb-cell"><div class="eb-date">May20</div><div class="eb-state-dot" style="background:var(--green)"></div><div class="eb-return" style="color:var(--green)">+3.8%</div><div class="eb-cell-tooltip">May 2020 · Rising Below Zero · +3.8%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jun20</div><div class="eb-state-dot" style="background:var(--teal)"></div><div class="eb-return" style="color:var(--green)">+2.4%</div><div class="eb-cell-tooltip">Jun 2020 · Rising Above Zero · +2.4%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jul20</div><div class="eb-state-dot" style="background:var(--red)"></div><div class="eb-return" style="color:var(--red)">-1.8%</div><div class="eb-cell-tooltip">Jul 2020 · Falling Above Zero · -1.8%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jan22</div><div class="eb-state-dot" style="background:var(--red)"></div><div class="eb-return" style="color:var(--red)">-2.4%</div><div class="eb-cell-tooltip">Jan 2022 · Falling Above Zero · -2.4%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jun22</div><div class="eb-state-dot" style="background:rgba(248,113,113,.5)"></div><div class="eb-return" style="color:var(--red)">-4.1%</div><div class="eb-cell-tooltip">Jun 2022 · Falling Below Zero · -4.1%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jan23</div><div class="eb-state-dot" style="background:var(--green)"></div><div class="eb-return" style="color:var(--green)">+3.2%</div><div class="eb-cell-tooltip">Jan 2023 · Rising Below Zero · +3.2%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jun23</div><div class="eb-state-dot" style="background:var(--teal)"></div><div class="eb-return" style="color:var(--green)">+1.9%</div><div class="eb-cell-tooltip">Jun 2023 · Rising Above Zero · +1.9%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jan24</div><div class="eb-state-dot" style="background:var(--red)"></div><div class="eb-return" style="color:var(--red)">-1.2%</div><div class="eb-cell-tooltip">Jan 2024 · Falling Above Zero · -1.2%</div></div>
+              <div class="eb-cell"><div class="eb-date">Jun24</div><div class="eb-state-dot" style="background:var(--teal)"></div><div class="eb-return" style="color:var(--green)">+2.8%</div><div class="eb-cell-tooltip">Jun 2024 · Rising Above Zero · +2.8%</div></div>
+              <div class="eb-cell" style="border-color:rgba(124,106,247,.4);background:rgba(124,106,247,.06)">
+                <div class="eb-date" style="color:var(--vani)">Jun26</div>
+                <div class="eb-state-dot" style="background:var(--vani);animation:pulse 1.2s ease-in-out infinite;"></div>
+                <div class="eb-return" style="color:var(--vani)">—</div>
+                <div class="eb-cell-tooltip">Jun 2026 · Falling Above Zero · Outcome pending</div>
+              </div>
+            </div>
+            <div style="font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;margin-top:6px;">Showing 14 of 70 representative instances · hover for detail</div>
+          </div>
+        </div>
+
+        <!-- Conditional return table -->
+        <div class="card">
+          <div class="card-hdr">
+            <div class="card-title">Conditional Returns · Breadth State at Sankranti</div>
+            <div class="card-meta">5D avg return · Nifty 50</div>
+          </div>
+          <div class="card-body">
+            <table class="cond-table">
+              <thead>
+                <tr>
+                  <th>Breadth State</th>
+                  <th>n</th>
+                  <th>5D Avg</th>
+                  <th>22D Avg</th>
+                  <th>Positive Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="ct-state"><div class="ct-dot" style="background:var(--green)"></div>Rising · Below Zero</div></td>
+                  <td class="ct-n">18</td>
+                  <td class="ct-ret" style="color:var(--green)">+3.4%</td>
+                  <td class="ct-ret" style="color:var(--green)">+6.8%</td>
+                  <td class="ct-pos-rate">78%</td>
+                </tr>
+                <tr>
+                  <td><div class="ct-state"><div class="ct-dot" style="background:var(--teal)"></div>Rising · Above Zero</div></td>
+                  <td class="ct-n">22</td>
+                  <td class="ct-ret" style="color:var(--teal)">+2.1%</td>
+                  <td class="ct-ret" style="color:var(--teal)">+4.2%</td>
+                  <td class="ct-pos-rate">68%</td>
+                </tr>
+                <tr class="ct-current-row">
+                  <td><div class="ct-state"><div class="ct-dot" style="background:var(--red)"></div>Falling · Above Zero ←</div></td>
+                  <td class="ct-n">20</td>
+                  <td class="ct-ret" style="color:var(--red)">-1.2%</td>
+                  <td class="ct-ret" style="color:var(--red)">-0.8%</td>
+                  <td class="ct-pos-rate">42%</td>
+                </tr>
+                <tr>
+                  <td><div class="ct-state"><div class="ct-dot" style="background:rgba(248,113,113,.6)"></div>Falling · Below Zero</div></td>
+                  <td class="ct-n">10</td>
+                  <td class="ct-ret" style="color:var(--red)">-3.8%</td>
+                  <td class="ct-ret" style="color:var(--red)">-5.1%</td>
+                  <td class="ct-pos-rate">30%</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="margin-top:10px;padding:8px 10px;border-radius:6px;
+              background:rgba(248,113,113,0.04);border:1px solid rgba(248,113,113,0.15);
+              font-size:10px;color:var(--text-dim);">
+              ← <strong style="color:var(--red)">Current:</strong> Breadth is Falling Above Zero at this Sankranti — historically the second-weakest state at -1.2% avg 5D.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="vani-card">
+          <div class="vc-hdr"><div class="vc-orb">V</div><div class="vc-label">VaNi · Inference</div></div>
+          <div class="vc-body">
+            Sankranti's outcome is <strong>strongly conditioned by the Breadth ROC state at the time of firing.</strong> This is the key insight from this combination.<br><br>
+            When breadth is rising — Sankranti has been consistently positive (<em>+3.4% when rising from below zero, +2.1% from above</em>). When breadth is falling — outcomes reverse sharply.<br><br>
+            <strong>Current Sankranti fired with breadth falling above zero</strong> — the second-weakest historical state at <span class="red">-1.2% avg 5D, 42% positive rate.</span><br><br>
+            This combination is the most informative type — it shows that the astro event alone is neutral, but the market state at firing is what determines direction.
+          </div>
+          <div class="vc-footer">
+            <div class="vcf-label">Inference confidence</div>
+            <div class="vcf-bar-wrap"><div class="vcf-bar" style="width:84%"></div></div>
+            <div class="vcf-note">70 clean instances · 97.2% quality · Largest sample of all 4 shapes. Conditional table is statistically robust.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- content -->
+</div><!-- main -->
+
+<!-- ACTION ISLAND -->
+<div class="action-island" id="action-island">
+  <div class="ai-orb"></div>
+  <div class="ai-text" id="ai-text">
+    <em>Mercury Retro ∩ Panchak</em> · <strong>5/7 bearish</strong> · Currently overlapping Day 3
+  </div>
+</div>
+
+<script>
+const bcNames = {
+  s1:'Event Overlap',
+  s2:'Threshold Cross',
+  s3:'Zone Confluence',
+  s4:'Event in State'
+};
+const aiMsgs = {
+  s1:'<em>Mercury Retro ∩ Panchak</em> · <strong>5/7 bearish</strong> · Currently overlapping Day 3',
+  s2:'<em>Mercury Retro + RSI > 70</em> · <strong>5/6 bearish · Active now</strong> · -3.1% avg',
+  s3:'<em>RSI > 70 + MagicRS > 60</em> · <strong>Day 8 · high volatility setup</strong> · 48% positive',
+  s4:'<em>Sankranti → Breadth Falling Above Zero</em> · <strong>-1.2% avg · 42% positive</strong>'
+};
+
+function showShape(id) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.sn-item').forEach(t=>t.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  document.getElementById('sn-'+id).classList.add('active');
+  document.getElementById('bc-name').textContent = bcNames[id];
+  document.getElementById('ai-text').innerHTML = aiMsgs[id];
+  document.querySelector('.content').scrollTop = 0;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+-- Migration 060: SUPERSEDED — DO NOT RUN
+-- nakshatra_end_ist already exists in km_daily_panchang (migration 018).
+-- The API now JOINs km_daily_panchang to read it directly.
+-- No schema change needed.

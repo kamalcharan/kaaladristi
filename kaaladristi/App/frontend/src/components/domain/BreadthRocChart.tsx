@@ -75,8 +75,16 @@ export default function BreadthRocChart() {
 
   const { data = [], isLoading, isError } = useBreadthRoc(days);
   const latest = data[data.length - 1];
-  const bullish = (latest?.roc_13 ?? 0) >= 0;
-  const smaConfirms = (latest?.sma_breadth ?? 0) >= 0 === bullish;
+
+  // 4-state ROC status based on crossover relationship
+  const rocStatus = (() => {
+    const r = latest?.roc_13 ?? 0;
+    const s = latest?.sma_breadth ?? 0;
+    if (r > 0 && r > s) return { label: 'Bull ✓',    style: { background: 'var(--bull-bg)', color: 'var(--bull)', border: '1px solid color-mix(in srgb, var(--bull) 40%, transparent)' } };
+    if (r > 0 && r <= s) return { label: 'Caution',  style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
+    if (r <= 0 && r > s)  return { label: 'Recovering', style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
+    return                       { label: 'Bear',     style: { background: 'var(--bear-bg)',  color: 'var(--bear)', border: '1px solid color-mix(in srgb, var(--bear) 40%, transparent)'  } };
+  })();
 
   // Dynamic Y domain with some padding
   const allVals = data.flatMap(d => [d.roc_13, d.roc_55, d.sma_breadth].filter((v): v is number => v != null));
@@ -121,7 +129,7 @@ export default function BreadthRocChart() {
             <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
               <div className="text-center">
                 <div className="text-[9px] text-muted font-bold uppercase tracking-wider mb-0.5">ROC 13</div>
-                <div className={cn('text-[12px] font-bold mono', bullish ? 'text-risk-green' : 'text-risk-red')}>
+                <div className={cn('text-[12px] font-bold mono', (latest.roc_13 ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red')}>
                   {fmtRoc(latest.roc_13)}
                 </div>
               </div>
@@ -142,14 +150,11 @@ export default function BreadthRocChart() {
 
           {/* Bias badge */}
           {latest && (
-            <span className={cn(
-              'px-2.5 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-wider',
-              bullish
-                ? 'bg-risk-green/10 text-risk-green border-risk-green/40'
-                : 'bg-risk-red/10 text-risk-red border-risk-red/40',
-            )}>
-              {bullish ? 'Bull' : 'Bear'}
-              {smaConfirms ? ' ✓' : ' ⚠'}
+            <span
+              style={rocStatus.style}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider"
+            >
+              {rocStatus.label}
             </span>
           )}
         </div>
@@ -186,18 +191,18 @@ export default function BreadthRocChart() {
           <ComposedChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="rocBullGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#10b981" stopOpacity={0.30} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                <stop offset="5%"  stopColor="var(--bull)" stopOpacity={0.30} />
+                <stop offset="95%" stopColor="var(--bull)" stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="rocBearGrad" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.30} />
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02} />
+                <stop offset="5%"  stopColor="var(--bear)" stopOpacity={0.30} />
+                <stop offset="95%" stopColor="var(--bear)" stopOpacity={0.02} />
               </linearGradient>
             </defs>
 
             {/* Zero-line background zones */}
-            <ReferenceArea y1={0} y2={yDomain[1]}  fill="#10b981" fillOpacity={0.04} />
-            <ReferenceArea y1={yDomain[0]} y2={0}  fill="#ef4444" fillOpacity={0.04} />
+            <ReferenceArea y1={0} y2={yDomain[1]}  fill="var(--bull)" fillOpacity={0.04} />
+            <ReferenceArea y1={yDomain[0]} y2={0}  fill="var(--bear)" fillOpacity={0.04} />
 
             <XAxis
               dataKey="trade_date"
@@ -228,7 +233,7 @@ export default function BreadthRocChart() {
             {/* ROC 55 — slow structural line */}
             <Line
               dataKey="roc_55"
-              stroke="#8b5cf6"
+              stroke="var(--accent)"
               strokeWidth={1}
               dot={false}
               strokeDasharray="4 2"
@@ -239,20 +244,20 @@ export default function BreadthRocChart() {
             {/* ROC 13 area — fast signal with dual-color fill */}
             <Area
               dataKey="roc_13"
-              stroke="#6366f1"
+              stroke="var(--accent)"
               strokeWidth={1.5}
               fill="url(#rocBullGrad)"
               dot={false}
-              activeDot={{ r: 3, fill: '#6366f1' }}
+              activeDot={{ r: 3, fill: 'var(--accent)' }}
             />
 
             {/* SMA 5 — smoothed signal */}
             <Line
               dataKey="sma_breadth"
-              stroke="#f59e0b"
+              stroke="var(--caution)"
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 3, fill: '#f59e0b' }}
+              activeDot={{ r: 3, fill: 'var(--caution)' }}
             />
           </ComposedChart>
         </ResponsiveContainer>

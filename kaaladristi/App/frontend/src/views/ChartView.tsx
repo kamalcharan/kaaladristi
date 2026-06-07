@@ -32,7 +32,7 @@ import {
   VaNiSentence,
   TimelineSlider,
 } from '@/components/domain/VisualPulse';
-import SevenDayStrip from '@/components/domain/SevenDayStrip';
+
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 
 // Equity-specific pulse components
@@ -275,13 +275,6 @@ export default function ChartView() {
             {/* Intelligence Panel — hidden when Visual Pulse cards are showing */}
             {!showPulse && !isLoading && !isError && rows.length > 0 && (
               <InstrumentIntelligence id={numId} type={type ?? 'index'} />
-            )}
-
-            {/* Astro Strip (above chart) — both index and equity */}
-            {showPulse && (
-              <div className="mt-2">
-                <SevenDayStrip selectedDate={pulseBars[pulseIdx]?.trade_date ?? latest?.trade_date ?? new Date().toISOString().split('T')[0]} />
-              </div>
             )}
 
             {/* Chart area */}

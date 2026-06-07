@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DristiQ — Workspace</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#090c10;--bg2:#0d1117;--bg3:#131920;--bg4:#1a2030;
+  --border:rgba(255,255,255,0.06);--border-hi:rgba(255,255,255,0.13);
+  --text:#e8eaed;--text-dim:#6b7280;--text-muted:#2e3440;
+  --gold:#c9a84c;--gold-glow:rgba(201,168,76,0.15);--gold-dim:rgba(201,168,76,0.35);
+  --teal:#2dd4bf;--teal-dim:rgba(45,212,191,0.12);
+  --green:#4ade80;--red:#f87171;
+  --vani:#7c6af7;--vani-glow:rgba(124,106,247,0.2);--vani-dim:rgba(124,106,247,0.08);
+  --sidebar:200px;--topbar:52px;
+}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);
+  font-family:'DM Sans',sans-serif;overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:999;}
+
+/* ── TOP BAR ── */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar);
+  border-bottom:1px solid var(--border);background:rgba(9,12,16,0.95);
+  backdrop-filter:blur(16px);display:flex;align-items:center;
+  padding:0 16px 0 0;z-index:300;gap:0;}
+.logo{width:var(--sidebar);display:flex;align-items:center;padding:0 20px;
+  font-family:'Fraunces',serif;font-size:17px;font-weight:400;
+  letter-spacing:-0.02em;color:var(--text);border-right:1px solid var(--border);
+  height:100%;flex-shrink:0;}
+.logo span{color:var(--gold);}
+.tb-instrument{display:flex;align-items:center;gap:8px;padding:0 20px;
+  border-right:1px solid var(--border);height:100%;}
+.tb-sym{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--text);}
+.tb-price{font-family:'DM Mono',monospace;font-size:13px;color:var(--green);}
+.tb-chg{font-size:11px;color:var(--green);font-family:'DM Mono',monospace;}
+.tb-tf{display:flex;gap:2px;padding:0 16px;border-right:1px solid var(--border);height:100%;align-items:center;}
+.tf-btn{padding:4px 9px;border-radius:5px;font-size:11px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);cursor:pointer;transition:all .15s;border:none;background:transparent;}
+.tf-btn:hover{color:var(--text);background:var(--bg3);}
+.tf-btn.active{background:var(--bg3);color:var(--gold);}
+.tb-overlays{display:flex;gap:6px;padding:0 16px;align-items:center;
+  border-right:1px solid var(--border);height:100%;}
+.ov-tag{padding:3px 9px;border-radius:4px;font-size:10px;
+  font-family:'DM Mono',monospace;border:1px solid;cursor:pointer;transition:all .2s;}
+.ov-teal{border-color:rgba(45,212,191,0.35);color:var(--teal);background:rgba(45,212,191,0.06);}
+.ov-gold{border-color:rgba(201,168,76,0.35);color:var(--gold);background:rgba(201,168,76,0.06);}
+.ov-vani{border-color:rgba(124,106,247,0.35);color:var(--vani);background:rgba(124,106,247,0.06);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;padding-right:16px;}
+.vani-indicator{display:flex;align-items:center;gap:7px;padding:5px 12px;
+  border:1px solid rgba(124,106,247,0.25);border-radius:100px;
+  background:var(--vani-dim);cursor:pointer;transition:all .2s;}
+.vani-indicator:hover{border-color:rgba(124,106,247,0.5);background:rgba(124,106,247,0.12);}
+.vi-dot{width:6px;height:6px;border-radius:50%;background:var(--vani);
+  animation:vdot-pulse 2s ease-in-out infinite;}
+@keyframes vdot-pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+.vi-text{font-size:11px;color:var(--vani);font-family:'DM Mono',monospace;}
+
+/* EDIT CANVAS BUTTON */
+.btn-edit{display:flex;align-items:center;gap:7px;padding:7px 16px;
+  border-radius:8px;border:1px solid var(--border-hi);background:var(--bg3);
+  color:var(--text-dim);font-size:12px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all .25s ease;}
+.btn-edit:hover{border-color:var(--vani);color:var(--vani);background:var(--vani-dim);}
+.btn-edit.active{background:var(--vani);border-color:var(--vani);
+  color:#fff;box-shadow:0 0 16px rgba(124,106,247,0.4);}
+.btn-edit .edit-icon{font-size:13px;transition:transform .3s ease;}
+.btn-edit.active .edit-icon{transform:rotate(45deg);}
+
+/* ── SIDEBAR ── */
+.sidebar{position:fixed;left:0;top:var(--topbar);bottom:0;
+  width:var(--sidebar);border-right:1px solid var(--border);
+  background:rgba(9,12,16,0.9);display:flex;flex-direction:column;
+  padding:16px 0;z-index:200;transition:transform .3s ease;}
+.nav-s{padding:0 12px;margin-bottom:20px;}
+.nav-sl{font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-muted);padding:0 8px;margin-bottom:5px;
+  font-family:'DM Mono',monospace;}
+.nav-i{display:flex;align-items:center;gap:9px;padding:7px 10px;
+  border-radius:6px;font-size:12px;color:var(--text-dim);cursor:pointer;
+  transition:all .15s;margin-bottom:1px;position:relative;}
+.nav-i:hover{background:var(--bg2);color:var(--text);}
+.nav-i.active{background:var(--vani-dim);color:var(--vani);
+  border:1px solid rgba(124,106,247,0.18);}
+.nav-i .ni{font-size:13px;width:15px;text-align:center;}
+.nav-badge{margin-left:auto;background:var(--gold-glow);border:1px solid var(--gold-dim);
+  color:var(--gold);font-size:8px;padding:1px 5px;border-radius:3px;
+  font-family:'DM Mono',monospace;}
+.sidebar-user{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:9px;}
+.su-av{width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#5b4fd4,#2dd4bf);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;color:#fff;}
+.su-name{font-size:12px;color:var(--text);}
+.su-meta{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* ── CANVAS AREA ── */
+.canvas-area{
+  position:fixed;
+  left:var(--sidebar);top:var(--topbar);right:0;
+  bottom:0;overflow:hidden;
+  transition:right .35s cubic-bezier(.22,1,.36,1);}
+.canvas-area.drawer-open{right:340px;}
+
+/* CANVAS GRID */
+.canvas-grid{
+  width:100%;height:100%;
+  display:grid;
+  grid-template-columns:repeat(12,1fr);
+  grid-template-rows:repeat(10,1fr);
+  gap:10px;padding:12px;
+  position:relative;
+  transition:all .4s ease;}
+
+/* grid lines overlay (edit mode) */
+.canvas-grid::before{
+  content:'';position:absolute;inset:12px;
+  background-image:
+    linear-gradient(rgba(124,106,247,0.04) 1px, transparent 1px),
+    linear-gradient(90deg,rgba(124,106,247,0.04) 1px,transparent 1px);
+  background-size:calc(100%/12) 10%;
+  pointer-events:none;opacity:0;
+  transition:opacity .4s ease;border-radius:8px;}
+.edit-mode .canvas-grid::before{opacity:1;}
+
+/* ── BLOCKS ── */
+.block{
+  border:1px solid var(--border);
+  border-radius:10px;background:var(--bg2);
+  overflow:hidden;position:relative;
+  transition:
+    box-shadow .35s cubic-bezier(.22,1,.36,1),
+    border-color .35s ease,
+    transform .35s cubic-bezier(.22,1,.36,1);}
+
+/* edit mode: blocks lift */
+.edit-mode .block{
+  box-shadow:0 8px 32px rgba(0,0,0,0.5),0 2px 8px rgba(0,0,0,0.3);
+  transform:translateZ(0);
+  border-color:var(--border-hi);}
+.edit-mode .block:hover{
+  border-color:rgba(124,106,247,0.4);
+  box-shadow:0 12px 40px rgba(0,0,0,0.6),0 0 0 1px rgba(124,106,247,0.2);}
+
+/* block drag handle (edit only) */
+.block-handle{
+  position:absolute;top:8px;left:8px;
+  width:20px;height:20px;border-radius:5px;
+  background:var(--bg3);border:1px solid var(--border-hi);
+  display:flex;align-items:center;justify-content:center;
+  cursor:grab;opacity:0;transition:opacity .25s;z-index:10;
+  font-size:10px;color:var(--text-dim);}
+.edit-mode .block:hover .block-handle{opacity:1;}
+.block-handle:active{cursor:grabbing;}
+
+/* block resize handle */
+.block-resize{
+  position:absolute;bottom:6px;right:6px;
+  width:14px;height:14px;cursor:se-resize;
+  opacity:0;transition:opacity .25s;z-index:10;}
+.block-resize::before,.block-resize::after{
+  content:'';position:absolute;
+  background:var(--text-muted);border-radius:1px;}
+.block-resize::before{right:0;bottom:4px;width:10px;height:1.5px;}
+.block-resize::after{right:4px;bottom:0;width:1.5px;height:10px;}
+.edit-mode .block:hover .block-resize{opacity:1;}
+
+/* block remove */
+.block-rm{
+  position:absolute;top:8px;right:8px;
+  width:22px;height:22px;border-radius:5px;
+  background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;opacity:0;transition:all .2s;z-index:10;
+  font-size:11px;color:rgba(248,113,113,0.5);}
+.block-rm:hover{background:rgba(248,113,113,0.15);color:var(--red);}
+.edit-mode .block:hover .block-rm{opacity:1;}
+
+/* block header */
+.bh{display:flex;align-items:center;gap:8px;
+  padding:10px 14px 8px;border-bottom:1px solid var(--border);}
+.bh-title{font-size:10px;font-weight:500;color:var(--text-dim);
+  letter-spacing:.06em;text-transform:uppercase;font-family:'DM Mono',monospace;}
+.bh-tag{font-size:9px;font-family:'DM Mono',monospace;padding:2px 6px;
+  border-radius:3px;margin-left:auto;}
+.bh-live{display:flex;align-items:center;gap:4px;margin-left:auto;}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);
+  animation:vdot-pulse 2s ease-in-out infinite;}
+.live-txt{font-size:9px;color:var(--text-dim);font-family:'DM Mono',monospace;}
+.bd{padding:12px 14px;height:calc(100% - 37px);overflow:hidden;}
+
+/* block positions (12-col, 10-row grid) */
+#b-chart    {grid-column:1/9; grid-row:1/9;}
+#b-magicrs  {grid-column:9/13;grid-row:1/4;}
+#b-astro    {grid-column:9/13;grid-row:4/7;}
+#b-sixday   {grid-column:9/13;grid-row:7/9;}
+#b-conviction{grid-column:1/5; grid-row:9/11;}
+#b-breadth  {grid-column:5/13; grid-row:9/11;}
+
+/* ── CHART BLOCK ── */
+.chart-topbar{display:flex;align-items:center;gap:10px;padding:8px 14px;
+  border-bottom:1px solid var(--border);flex-shrink:0;}
+.chart-body{flex:1;position:relative;overflow:hidden;}
+#b-chart .bd{padding:0;display:flex;flex-direction:column;height:calc(100% - 37px);}
+.chart-svg{width:100%;height:100%;}
+
+/* panchak overlay */
+.pzone{position:absolute;top:0;bottom:20%;pointer-events:none;
+  background:rgba(201,168,76,0.04);border-left:1px dashed rgba(201,168,76,0.25);}
+.pzone-lbl{position:absolute;top:8px;left:4px;
+  font-size:8px;font-family:'DM Mono',monospace;
+  color:rgba(201,168,76,0.5);letter-spacing:.08em;
+  writing-mode:vertical-rl;}
+.indicator-strip{height:56px;border-top:1px solid var(--border);
+  padding:6px 14px;flex-shrink:0;}
+.is-lbl{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-muted);margin-bottom:3px;}
+
+/* ── MAGICRS BLOCK ── */
+.rs-big{font-family:'Fraunces',serif;font-size:38px;font-weight:300;
+  color:var(--teal);letter-spacing:-0.03em;line-height:1;}
+.rs-sub{font-size:11px;color:var(--text-dim);margin-top:4px;}
+.rs-bar{margin-top:10px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.rs-fill{height:100%;width:68%;
+  background:linear-gradient(90deg,var(--teal),rgba(45,212,191,0.3));border-radius:2px;}
+.rs-row{display:flex;justify-content:space-between;margin-top:10px;}
+.rs-stat{text-align:center;}
+.rs-stat-v{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);}
+.rs-stat-l{font-size:9px;color:var(--text-dim);margin-top:2px;}
+
+/* ── ASTRO EVENTS BLOCK ── */
+.ae{display:flex;align-items:flex-start;gap:9px;margin-bottom:9px;}
+.ae-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+.ae-name{font-size:12px;color:var(--text);line-height:1.4;}
+.ae-time{font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;}
+.add-rule-btn{margin-top:10px;padding:6px 12px;border-radius:6px;
+  border:1px dashed rgba(124,106,247,0.3);background:var(--vani-dim);
+  color:var(--vani);font-size:11px;cursor:pointer;width:100%;text-align:center;
+  transition:all .2s;}
+.add-rule-btn:hover{border-color:rgba(124,106,247,0.6);background:rgba(124,106,247,0.12);}
+
+/* ── SIX-DAY BLOCK ── */
+.sixday-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;height:100%;}
+.sd-cell{border-radius:6px;background:var(--bg3);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:6px 4px;cursor:pointer;transition:all .2s;}
+.sd-cell:hover{background:var(--bg4);}
+.sd-cell.today{border:1px solid rgba(201,168,76,0.3);background:rgba(201,168,76,0.06);}
+.sd-date{font-size:10px;font-family:'DM Mono',monospace;color:var(--text-dim);margin-bottom:5px;}
+.sd-bar{width:100%;height:3px;border-radius:2px;}
+
+/* ── CONVICTION BLOCK ── */
+.scan-row{display:flex;align-items:center;padding:6px 0;
+  border-bottom:1px solid var(--border);cursor:pointer;
+  transition:background .15s;}
+.scan-row:hover{background:rgba(255,255,255,0.02);margin:0 -14px;padding:6px 14px;}
+.scan-row:last-child{border-bottom:none;}
+.sr-sym{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--text);width:90px;}
+.sr-surge{font-size:10px;color:var(--text-dim);flex:1;}
+.sr-chg{font-family:'DM Mono',monospace;font-size:11px;width:52px;text-align:right;}
+
+/* ── BREADTH BLOCK ── */
+.brc-val{font-family:'Fraunces',serif;font-size:36px;font-weight:300;
+  color:var(--text);letter-spacing:-0.03em;}
+.brc-sub{font-size:11px;color:var(--text-dim);margin-top:2px;}
+.brc-chart{margin-top:8px;flex:1;}
+
+/* ════════════════════════════════════
+   CATALOG DRAWER
+════════════════════════════════════ */
+.catalog-drawer{
+  position:fixed;right:-340px;top:var(--topbar);bottom:0;width:340px;
+  background:var(--bg2);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:250;
+  transition:right .35s cubic-bezier(.22,1,.36,1);}
+.catalog-drawer.open{right:0;}
+
+.cd-header{padding:16px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.cd-title{font-family:'Fraunces',serif;font-size:17px;font-weight:300;
+  color:var(--text);letter-spacing:-0.02em;flex:1;}
+.cd-close{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);
+  background:var(--bg3);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--text-dim);font-size:14px;transition:all .15s;}
+.cd-close:hover{border-color:var(--border-hi);color:var(--text);}
+
+.cd-search{padding:10px 18px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cd-search input{width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:7px;padding:8px 12px;font-size:12px;color:var(--text);
+  font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+.cd-search input::placeholder{color:var(--text-muted);}
+.cd-search input:focus{border-color:rgba(124,106,247,0.4);}
+
+.cd-tabs{display:flex;padding:0 18px;border-bottom:1px solid var(--border);
+  gap:0;flex-shrink:0;}
+.cd-tab{padding:10px 12px;font-size:11px;font-family:'DM Mono',monospace;
+  color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;
+  transition:all .2s;white-space:nowrap;}
+.cd-tab:hover{color:var(--text);}
+.cd-tab.active{color:var(--vani);border-bottom-color:var(--vani);}
+
+.cd-list{flex:1;overflow-y:auto;padding:12px;}
+.cd-list::-webkit-scrollbar{width:3px;}
+.cd-list::-webkit-scrollbar-thumb{background:var(--border);}
+
+/* catalog item */
+.ci{border:1px solid var(--border);border-radius:9px;background:var(--bg);
+  padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:all .2s;
+  position:relative;}
+.ci:hover{border-color:var(--border-hi);background:var(--bg3);}
+.ci.on-canvas{border-color:rgba(124,106,247,0.25);background:var(--bg3);}
+.ci-row{display:flex;align-items:center;gap:10px;}
+.ci-icon{font-size:18px;flex-shrink:0;}
+.ci-info{flex:1;}
+.ci-type{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-muted);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;}
+.ci-name{font-size:13px;font-weight:500;color:var(--text);}
+.ci-desc{font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.4;}
+.ci-add{padding:5px 12px;border-radius:5px;font-size:11px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;border:1px solid;transition:all .15s;flex-shrink:0;}
+.ci-add.add{border-color:rgba(124,106,247,0.4);color:var(--vani);background:var(--vani-dim);}
+.ci-add.add:hover{background:rgba(124,106,247,0.15);}
+.ci-add.added{border-color:rgba(45,212,191,0.3);color:var(--teal);background:rgba(45,212,191,0.06);cursor:default;}
+
+/* section label */
+.cd-section{font-size:9px;font-family:'DM Mono',monospace;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);
+  padding:8px 2px 6px;margin-bottom:4px;}
+
+/* ════════════════════════════════════
+   VANI ACTION ISLAND
+════════════════════════════════════ */
+.action-island{
+  position:fixed;bottom:20px;
+  left:calc(var(--sidebar) + 50%);
+  transform:translateX(-50%);
+  background:rgba(9,12,16,0.96);
+  border:1px solid rgba(124,106,247,0.28);
+  border-radius:28px;padding:10px 18px 10px 12px;
+  display:flex;align-items:center;gap:11px;
+  backdrop-filter:blur(24px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 1px rgba(124,106,247,0.06);
+  z-index:400;cursor:pointer;transition:all .3s ease;
+  animation:island-in .6s cubic-bezier(.34,1.56,.64,1) both;}
+@keyframes island-in{
+  from{opacity:0;transform:translateX(-50%) translateY(20px);}
+  to{opacity:1;transform:translateX(-50%) translateY(0);}}
+.action-island:hover{
+  border-color:rgba(124,106,247,0.5);
+  box-shadow:0 12px 40px rgba(0,0,0,0.6),0 0 20px rgba(124,106,247,0.12);}
+
+/* edit mode: island morphs */
+.action-island.edit{
+  border-color:rgba(201,168,76,0.4);
+  background:rgba(9,12,16,0.97);}
+.action-island.edit:hover{
+  border-color:rgba(201,168,76,0.6);
+  box-shadow:0 12px 40px rgba(0,0,0,0.6),0 0 20px rgba(201,168,76,0.1);}
+
+.ai-orb{width:22px;height:22px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle at 35% 35%,#9d8ff9,#5b4fd4);
+  animation:vdot-pulse 2.5s ease-in-out infinite;transition:all .3s;}
+.action-island.edit .ai-orb{
+  background:radial-gradient(circle at 35% 35%,#e6c56a,var(--gold));
+  box-shadow:0 0 10px rgba(201,168,76,0.4);}
+.ai-text{font-size:13px;color:var(--text);white-space:nowrap;}
+.ai-text strong{color:var(--gold);font-weight:500;}
+.action-island.edit .ai-text strong{color:var(--vani);}
+.ai-caret{font-size:10px;color:var(--text-muted);margin-left:2px;}
+
+/* island tooltip */
+.island-tooltip{
+  position:fixed;bottom:72px;
+  left:calc(var(--sidebar) + 50%);
+  transform:translateX(-50%);
+  background:var(--bg2);border:1px solid rgba(124,106,247,0.28);
+  border-radius:14px;padding:16px 20px;
+  max-width:420px;width:90%;z-index:390;
+  opacity:0;pointer-events:none;
+  transition:all .3s ease;backdrop-filter:blur(20px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);}
+.island-tooltip.show{opacity:1;pointer-events:all;}
+.it-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.it-orb{width:18px;height:18px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#9d8ff9,#5b4fd4);}
+.it-lbl{font-family:'DM Mono',monospace;font-size:10px;color:var(--vani);letter-spacing:.1em;}
+.it-close{margin-left:auto;font-size:15px;color:var(--text-dim);cursor:pointer;}
+.it-msg{font-size:13px;color:var(--text);line-height:1.65;}
+.it-msg em{color:var(--gold);font-style:normal;}
+.it-actions{display:flex;gap:8px;margin-top:12px;}
+.it-btn{padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;border:1px solid;transition:all .15s;}
+.it-yes{background:var(--vani-dim);border-color:rgba(124,106,247,0.4);color:var(--vani);}
+.it-yes:hover{background:rgba(124,106,247,0.18);}
+.it-no{background:transparent;border-color:var(--border);color:var(--text-dim);}
+
+/* ── BLOCK ADD ANIMATION ── */
+@keyframes block-drop{
+  0%{opacity:0;transform:scale(.9) translateY(-8px);}
+  60%{transform:scale(1.02) translateY(2px);}
+  100%{opacity:1;transform:scale(1) translateY(0);}
+}
+.block.just-added{animation:block-drop .45s cubic-bezier(.34,1.4,.64,1) forwards;}
+
+/* ── VANI NUDGE (edit mode) ── */
+.vani-nudge{
+  position:absolute;top:-32px;left:50%;transform:translateX(-50%);
+  background:var(--bg2);border:1px solid rgba(124,106,247,0.2);
+  border-radius:6px;padding:4px 10px;font-size:10px;color:var(--vani);
+  font-family:'DM Mono',monospace;white-space:nowrap;pointer-events:none;
+  opacity:0;transition:opacity .3s;}
+.edit-mode .canvas-grid .vani-nudge{opacity:1;}
+
+/* add block zone */
+.add-zone{
+  border:1px dashed rgba(124,106,247,0.2);
+  border-radius:10px;background:rgba(124,106,247,0.02);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;opacity:0;transition:all .3s ease;pointer-events:none;}
+.add-zone:hover{background:var(--vani-dim);border-color:rgba(124,106,247,0.4);}
+.add-zone-icon{font-size:20px;color:var(--text-muted);margin-bottom:6px;}
+.add-zone-txt{font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+.edit-mode .add-zone{opacity:1;pointer-events:all;}
+#b-add1{grid-column:1/5;grid-row:9/11;}
+#b-add2{grid-column:5/9;grid-row:9/11;}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">dristi<span>Q</span></div>
+  <div class="tb-instrument">
+    <span class="tb-sym">NIFTY 50</span>
+    <span class="tb-price">24,853.15</span>
+    <span class="tb-chg">+0.38%</span>
+  </div>
+  <div class="tb-tf">
+    <div class="tf-btn">15m</div>
+    <div class="tf-btn">1H</div>
+    <div class="tf-btn active">D</div>
+    <div class="tf-btn">W</div>
+  </div>
+  <div class="tb-overlays">
+    <div class="ov-tag ov-teal">EMA 20/50 ✓</div>
+    <div class="ov-tag ov-gold">Panchak ✓</div>
+    <div class="ov-tag ov-vani" onclick="openCatalog()">+ overlay</div>
+  </div>
+  <div class="tb-right">
+    <div class="vani-indicator" onclick="toggleTooltip()">
+      <div class="vi-dot"></div>
+      <div class="vi-text">VaNi watching</div>
+    </div>
+    <button class="btn-edit" id="edit-btn" onclick="toggleEdit()">
+      <span class="edit-icon">✦</span>
+      <span id="edit-label">Edit Canvas</span>
+    </button>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="nav-s">
+    <div class="nav-i active"><span class="ni">⬡</span>Workspace</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">View</div>
+    <div class="nav-i"><span class="ni">◎</span>Dashboard</div>
+    <div class="nav-i"><span class="ni">⊙</span>Scanner</div>
+    <div class="nav-i"><span class="ni">⊞</span>Market Structure</div>
+    <div class="nav-i"><span class="ni">☽</span>Planetary Intel</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">Catalog</div>
+    <div class="nav-i" onclick="openCatalog()"><span class="ni">✦</span>Astro Rules<span class="nav-badge">216</span></div>
+    <div class="nav-i" onclick="openCatalog()"><span class="ni">⊘</span>Scanners</div>
+    <div class="nav-i" onclick="openCatalog()"><span class="ni">∿</span>Indicators</div>
+    <div class="nav-i" onclick="openCatalog()"><span class="ni">◈</span>Widgets</div>
+    <div class="nav-i" onclick="openCatalog()"><span class="ni">⬡</span>Master Frameworks</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">Admin</div>
+    <div class="nav-i"><span class="ni">◉</span>Markets</div>
+    <div class="nav-i"><span class="ni">⇌</span>Industry</div>
+    <div class="nav-i"><span class="ni">☿</span>Panchang</div>
+    <div class="nav-i"><span class="ni">◌</span>Visual Pulse</div>
+  </div>
+  <div class="sidebar-user">
+    <div class="su-av">R</div>
+    <div><div class="su-name">Rajesh</div><div class="su-meta">Sun 25 May</div></div>
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div class="canvas-area" id="canvas-area">
+  <div class="canvas-grid" id="canvas-grid">
+
+    <!-- VaNi nudge in edit mode -->
+    <div class="vani-nudge" style="position:fixed;top:64px;left:50%;z-index:350;">
+      ✦ VaNi arranged this — drag blocks to rearrange
+    </div>
+
+    <!-- CHART BLOCK -->
+    <div class="block" id="b-chart">
+      <div class="block-handle">⠿</div>
+      <div class="block-rm" onclick="removeBlock('b-chart')">✕</div>
+      <div class="block-resize"></div>
+      <div class="bh">
+        <div class="bh-title">Chart</div>
+        <div class="bh-live"><div class="live-dot"></div><div class="live-txt">live</div></div>
+      </div>
+      <div class="bd">
+        <!-- chart SVG -->
+        <div class="chart-body" style="flex:1;position:relative;">
+          <svg class="chart-svg" viewBox="0 0 900 280" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#4ade80" stop-opacity=".12"/>
+                <stop offset="100%" stop-color="#4ade80" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#7c6af7" stop-opacity=".06"/>
+                <stop offset="100%" stop-color="#7c6af7" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <!-- grid -->
+            <line x1="0" y1="70" x2="900" y2="70" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
+            <line x1="0" y1="140" x2="900" y2="140" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
+            <line x1="0" y1="210" x2="900" y2="210" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
+            <!-- ema50 -->
+            <polyline points="0,200 100,190 200,188 300,192 400,178 500,162 600,150 700,140 800,130 900,122"
+              fill="none" stroke="rgba(201,168,76,0.45)" stroke-width="1.5"/>
+            <!-- ema20 -->
+            <polyline points="0,182 100,175 200,168 300,172 400,155 500,138 600,125 700,112 800,100 900,90"
+              fill="none" stroke="rgba(45,212,191,0.45)" stroke-width="1.5"/>
+            <!-- area -->
+            <polygon points="0,210 80,195 160,185 240,198 320,170 400,178 480,150 560,128 640,118 720,102 800,88 900,78 900,280 0,280"
+              fill="url(#cg)"/>
+            <!-- price line -->
+            <polyline points="0,210 80,195 160,185 240,198 320,170 400,178 480,150 560,128 640,118 720,102 800,88 900,78"
+              fill="none" stroke="#4ade80" stroke-width="1.8"/>
+            <!-- candles -->
+            <g opacity=".8">
+              <rect x="72" y="190" width="7" height="12" fill="#4ade80" rx="1"/>
+              <rect x="84" y="187" width="7" height="14" fill="#f87171" rx="1"/>
+              <rect x="96" y="188" width="7" height="10" fill="#4ade80" rx="1"/>
+              <rect x="232" y="193" width="7" height="12" fill="#f87171" rx="1"/>
+              <rect x="316" y="166" width="7" height="12" fill="#4ade80" rx="1"/>
+              <rect x="476" y="145" width="7" height="12" fill="#4ade80" rx="1"/>
+              <rect x="556" y="123" width="7" height="12" fill="#4ade80" rx="1"/>
+              <rect x="636" y="113" width="7" height="13" fill="#f87171" rx="1"/>
+              <rect x="716" y="97"  width="7" height="12" fill="#4ade80" rx="1"/>
+              <rect x="793" y="83"  width="7" height="13" fill="#4ade80" rx="1"/>
+              <rect x="885" y="73"  width="7" height="12" fill="#4ade80" rx="1"/>
+            </g>
+            <!-- price label -->
+            <rect x="830" y="62" width="68" height="21" rx="4" fill="#4ade80" opacity=".9"/>
+            <text x="864" y="76" fill="#090c10" font-size="10" font-family="monospace" text-anchor="middle" font-weight="700">24,853</text>
+          </svg>
+          <!-- panchak zone -->
+          <div class="pzone" style="left:54%;width:10%;">
+            <div class="pzone-lbl">PANCHAK</div>
+          </div>
+        </div>
+        <!-- indicator strip -->
+        <div class="indicator-strip">
+          <div class="is-lbl">MagicRS · MagicMA</div>
+          <svg width="100%" height="36" viewBox="0 0 900 36" preserveAspectRatio="none">
+            <polyline points="0,28 100,26 200,20 300,23 400,16 500,10 600,7 700,4 800,3 900,2"
+              fill="none" stroke="rgba(45,212,191,.65)" stroke-width="1.5"/>
+            <polyline points="0,30 100,28 200,26 300,25 400,22 500,18 600,14 700,11 800,9 900,8"
+              fill="none" stroke="rgba(201,168,76,.45)" stroke-width="1.5"/>
+            <line x1="0" y1="18" x2="900" y2="18" stroke="rgba(255,255,255,.05)" stroke-dasharray="4 4"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAGIC RS BLOCK -->
+    <div class="block" id="b-magicrs">
+      <div class="block-handle">⠿</div>
+      <div class="block-rm" onclick="removeBlock('b-magicrs')">✕</div>
+      <div class="block-resize"></div>
+      <div class="bh">
+        <div class="bh-title">MagicRS</div>
+        <div class="bh-tag" style="background:rgba(45,212,191,.08);color:var(--teal);font-size:9px;font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;">Widget</div>
+      </div>
+      <div class="bd" style="display:flex;flex-direction:column;justify-content:center;">
+        <div class="rs-big">68.4</div>
+        <div class="rs-sub">Relative Strength · Above Market</div>
+        <div class="rs-bar"><div class="rs-fill"></div></div>
+        <div class="rs-row">
+          <div class="rs-stat"><div class="rs-stat-v" style="color:var(--green)">+4.2%</div><div class="rs-stat-l">5D</div></div>
+          <div class="rs-stat"><div class="rs-stat-v" style="color:var(--green)">+11.8%</div><div class="rs-stat-l">22D</div></div>
+          <div class="rs-stat"><div class="rs-stat-v">Bull</div><div class="rs-stat-l">Zone</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ASTRO EVENTS BLOCK -->
+    <div class="block" id="b-astro">
+      <div class="block-handle">⠿</div>
+      <div class="block-rm" onclick="removeBlock('b-astro')">✕</div>
+      <div class="block-resize"></div>
+      <div class="bh">
+        <div class="bh-title">Active Astro Rules</div>
+        <div class="bh-tag" style="background:rgba(201,168,76,.08);color:var(--gold);font-size:9px;font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;">Overlay</div>
+      </div>
+      <div class="bd">
+        <div class="ae"><div class="ae-dot" style="background:var(--gold)"></div>
+          <div><div class="ae-name">Panchak Active</div><div class="ae-time">Until 28 May · 4d remaining</div></div></div>
+        <div class="ae"><div class="ae-dot" style="background:var(--teal)"></div>
+          <div><div class="ae-name">Jupiter in Gemini</div><div class="ae-time">Ongoing · Banking positive</div></div></div>
+        <div class="ae"><div class="ae-dot" style="background:var(--text-muted)"></div>
+          <div><div class="ae-name">Mercury Combust</div><div class="ae-time">Ends 05 Feb · Comm. risk</div></div></div>
+        <div class="add-rule-btn" onclick="openCatalog()">+ Add rule from Catalog</div>
+      </div>
+    </div>
+
+    <!-- SIX-DAY BLOCK -->
+    <div class="block" id="b-sixday">
+      <div class="block-handle">⠿</div>
+      <div class="block-rm" onclick="removeBlock('b-sixday')">✕</div>
+      <div class="block-resize"></div>
+      <div class="bh"><div class="bh-title">Six-Day Outlook</div></div>
+      <div class="bd">
+        <div class="sixday-grid">
+          <div class="sd-cell"><div class="sd-date">25</div><div class="sd-bar" style="background:rgba(74,222,128,.5)"></div></div>
+          <div class="sd-cell today"><div class="sd-date" style="color:var(--gold)">26</div><div class="sd-bar" style="background:var(--gold);opacity:.6"></div></div>
+          <div class="sd-cell"><div class="sd-date">27</div><div class="sd-bar" style="background:rgba(74,222,128,.4)"></div></div>
+          <div class="sd-cell"><div class="sd-date">28</div><div class="sd-bar" style="background:rgba(248,113,113,.4)"></div></div>
+          <div class="sd-cell"><div class="sd-date">29</div><div class="sd-bar" style="background:rgba(74,222,128,.5)"></div></div>
+          <div class="sd-cell"><div class="sd-date">30</div><div class="sd-bar" style="background:rgba(74,222,128,.65)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONVICTION FLOW BLOCK -->
+    <div class="block" id="b-conviction">
+      <div class="block-handle">⠿</div>
+      <div class="block-rm" onclick="removeBlock('b-conviction')">✕</div>
+      <div class="block-resize"></div>
+      <div class="bh">
+        <div class="bh-title">Conviction Flow</div>
+        <div class="bh-tag" style="background:var(--vani-dim);color:var(--vani);font-size:9px;font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;">Scanner</div>
+      </div>
+      <div class="bd">
+        <div class="scan-row"><div class="sr-sym">BBOX</div><div class="sr-surge">Surge 4.9x</div><div class="sr-chg" style="color:var(--green)">+11.5%</div></div>
+        <div class="scan-row"><div class="sr-sym">SAREGAMA</div><div class="sr-surge">Surge 56x</div><div class="sr-chg" style="color:var(--green)">+19.1%</div></div>
+        <div class="scan-row"><div class="sr-sym">SATIN</div><div class="sr-surge">Surge 7.6x</div><div class="sr-chg" style="color:var(--green)">+4.1%</div></div>
+      </div>
+    </div>
+
+    <!-- BREADTH ROC BLOCK -->
+    <div class="block" id="b-breadth">
+      <div class="block-handle">⠿</div>
+      <div class="block-rm" onclick="removeBlock('b-breadth')">✕</div>
+      <div class="block-resize"></div>
+      <div class="bh">
+        <div class="bh-title">Breadth ROC</div>
+        <div class="bh-tag" style="background:var(--gold-glow);color:var(--gold);font-size:9px;font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;">Widget</div>
+      </div>
+      <div class="bd" style="display:flex;gap:20px;align-items:center;">
+        <div>
+          <div class="brc-val">37.2</div>
+          <div class="brc-sub">Breadth Score · Recovering</div>
+        </div>
+        <div style="flex:1;height:100%;">
+          <svg width="100%" height="60" viewBox="0 0 400 60" preserveAspectRatio="none">
+            <polygon points="0,50 60,45 120,35 180,40 240,28 300,18 360,10 400,8 400,60 0,60"
+              fill="url(#cg2)"/>
+            <polyline points="0,50 60,45 120,35 180,40 240,28 300,18 360,10 400,8"
+              fill="none" stroke="rgba(124,106,247,.65)" stroke-width="2"/>
+            <polyline points="0,52 60,50 120,46 180,48 240,42 300,36 360,30 400,28"
+              fill="none" stroke="rgba(201,168,76,.4)" stroke-width="1.5"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADD ZONES (edit mode only) -->
+    <div class="add-zone" id="b-add1" onclick="openCatalog()">
+      <div class="add-zone-icon">+</div>
+      <div class="add-zone-txt">Add block</div>
+    </div>
+    <div class="add-zone" id="b-add2" onclick="openCatalog()">
+      <div class="add-zone-icon">+</div>
+      <div class="add-zone-txt">Add block</div>
+    </div>
+
+  </div><!-- /canvas-grid -->
+</div><!-- /canvas-area -->
+
+<!-- CATALOG DRAWER -->
+<div class="catalog-drawer" id="catalog-drawer">
+  <div class="cd-header">
+    <div class="cd-title">Catalog</div>
+    <div class="cd-close" onclick="closeCatalog()">✕</div>
+  </div>
+  <div class="cd-search"><input type="text" placeholder="Search rules, indicators, widgets…"></div>
+  <div class="cd-tabs">
+    <div class="cd-tab active" onclick="switchTab(this,'all')">All</div>
+    <div class="cd-tab" onclick="switchTab(this,'astro')">Astro</div>
+    <div class="cd-tab" onclick="switchTab(this,'tech')">Technical</div>
+    <div class="cd-tab" onclick="switchTab(this,'widget')">Widgets</div>
+    <div class="cd-tab" onclick="switchTab(this,'scan')">Scanners</div>
+  </div>
+  <div class="cd-list" id="cd-list">
+
+    <div class="cd-section">On Your Canvas</div>
+
+    <div class="ci on-canvas" data-id="ema">
+      <div class="ci-row">
+        <div class="ci-icon">〰️</div>
+        <div class="ci-info">
+          <div class="ci-type">Indicator</div>
+          <div class="ci-name">EMA 20 / 50</div>
+          <div class="ci-desc">Trend direction overlay. Continuous.</div>
+        </div>
+        <div class="ci-add added">✓ Active</div>
+      </div>
+    </div>
+    <div class="ci on-canvas" data-id="magicrs">
+      <div class="ci-row">
+        <div class="ci-icon">⚡</div>
+        <div class="ci-info">
+          <div class="ci-type">Widget · DristiQ IP</div>
+          <div class="ci-name">MagicRS</div>
+          <div class="ci-desc">Proprietary relative strength signal.</div>
+        </div>
+        <div class="ci-add added">✓ Active</div>
+      </div>
+    </div>
+    <div class="ci on-canvas" data-id="panchak">
+      <div class="ci-row">
+        <div class="ci-icon">🪐</div>
+        <div class="ci-info">
+          <div class="ci-type">Astro Rule</div>
+          <div class="ci-name">Panchak</div>
+          <div class="ci-desc">5-star caution zone. Chart overlay.</div>
+        </div>
+        <div class="ci-add added">✓ Active</div>
+      </div>
+    </div>
+
+    <div class="cd-section" style="margin-top:12px;">Available to Add</div>
+
+    <div class="ci" data-id="mercury">
+      <div class="ci-row">
+        <div class="ci-icon">☿</div>
+        <div class="ci-info">
+          <div class="ci-type">Astro Rule</div>
+          <div class="ci-name">Mercury Retrograde</div>
+          <div class="ci-desc">Communication & tech disruption periods. 104 historical signals.</div>
+        </div>
+        <div class="ci-add add" onclick="addToCanvas('mercury','☿','Astro Rule','Mercury Retrograde','Retrograde periods on chart.')">+ Add</div>
+      </div>
+    </div>
+    <div class="ci" data-id="saturn">
+      <div class="ci-row">
+        <div class="ci-icon">🪐</div>
+        <div class="ci-info">
+          <div class="ci-type">Astro Rule</div>
+          <div class="ci-name">Saturn Transit</div>
+          <div class="ci-desc">Long-cycle structural market pressure. 67% bearish correlation.</div>
+        </div>
+        <div class="ci-add add" onclick="addToCanvas('saturn','🪐','Astro Rule','Saturn Transit','Saturn transit zones.')">+ Add</div>
+      </div>
+    </div>
+    <div class="ci" data-id="rsi">
+      <div class="ci-row">
+        <div class="ci-icon">📐</div>
+        <div class="ci-info">
+          <div class="ci-type">Indicator</div>
+          <div class="ci-name">RSI (14)</div>
+          <div class="ci-desc">Relative Strength Index. Overbought / oversold detection.</div>
+        </div>
+        <div class="ci-add add" onclick="addToCanvas('rsi','📐','Indicator','RSI (14)','Momentum oscillator.')">+ Add</div>
+      </div>
+    </div>
+    <div class="ci" data-id="smartmoney">
+      <div class="ci-row">
+        <div class="ci-icon">💠</div>
+        <div class="ci-info">
+          <div class="ci-type">Widget · DristiQ IP</div>
+          <div class="ci-name">Smart Money</div>
+          <div class="ci-desc">Institutional vs retail flow divergence signal.</div>
+        </div>
+        <div class="ci-add add" onclick="addToCanvas('smartmoney','💠','Widget','Smart Money','Institutional flow signal.')">+ Add</div>
+      </div>
+    </div>
+    <div class="ci" data-id="strength">
+      <div class="ci-row">
+        <div class="ci-icon">🔬</div>
+        <div class="ci-info">
+          <div class="ci-type">Scanner</div>
+          <div class="ci-name">Strength Confluence</div>
+          <div class="ci-desc">Stocks where RS + volume + EMA alignment converge.</div>
+        </div>
+        <div class="ci-add add" onclick="addToCanvas('strength','🔬','Scanner','Strength Confluence','RS + volume confluence.')">+ Add</div>
+      </div>
+    </div>
+    <div class="ci" data-id="sankranti">
+      <div class="ci-row">
+        <div class="ci-icon">☀️</div>
+        <div class="ci-info">
+          <div class="ci-type">Astro Rule</div>
+          <div class="ci-name">Sankranti</div>
+          <div class="ci-desc">Solar ingress. Historically marks sector rotation triggers.</div>
+        </div>
+        <div class="ci-add add" onclick="addToCanvas('sankranti','☀️','Astro Rule','Sankranti','Solar ingress markers.')">+ Add</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ACTION ISLAND -->
+<div class="action-island" id="action-island" onclick="toggleTooltip()">
+  <div class="ai-orb"></div>
+  <div class="ai-text" id="ai-text">
+    Panchak ends <strong>28 May</strong> — next window looks constructive
+  </div>
+  <div class="ai-caret">↑</div>
+</div>
+
+<!-- ISLAND TOOLTIP -->
+<div class="island-tooltip" id="island-tooltip">
+  <div class="it-head">
+    <div class="it-orb"></div>
+    <div class="it-lbl">VaNi · Observation</div>
+    <div class="it-close" onclick="closeTooltip()">✕</div>
+  </div>
+  <div class="it-msg">
+    Panchak + RSI overbought have aligned <em>8 times since 2015.</em>
+    Nifty fell in 6 of those within 3 days. Current setup is approaching that confluence.
+    Want me to mark all instances on the chart?
+  </div>
+  <div class="it-actions">
+    <button class="it-btn it-yes" onclick="closeTooltip()">Show on chart</button>
+    <button class="it-btn it-no" onclick="closeTooltip()">Not now</button>
+  </div>
+</div>
+
+<script>
+let editMode = false;
+let drawerOpen = false;
+let tooltipOpen = false;
+const blockCount = {current:6};
+
+function toggleEdit() {
+  editMode = !editMode;
+  const btn = document.getElementById('edit-btn');
+  const label = document.getElementById('edit-label');
+  const island = document.getElementById('action-island');
+  const aiText = document.getElementById('ai-text');
+  const body = document.body;
+
+  if (editMode) {
+    body.classList.add('edit-mode');
+    btn.classList.add('active');
+    label.textContent = 'Done Editing';
+    island.classList.add('edit');
+    aiText.innerHTML = '<strong>6 blocks</strong> on canvas — drag to rearrange, + to add more';
+    // show add zones
+    document.getElementById('b-add1').style.display = 'flex';
+    document.getElementById('b-add2').style.display = 'flex';
+  } else {
+    body.classList.remove('edit-mode');
+    btn.classList.remove('active');
+    label.textContent = 'Edit Canvas';
+    island.classList.remove('edit');
+    aiText.innerHTML = 'Panchak ends <strong>28 May</strong> — next window looks constructive';
+    closeCatalog();
+  }
+}
+
+function openCatalog() {
+  drawerOpen = true;
+  document.getElementById('catalog-drawer').classList.add('open');
+  document.getElementById('canvas-area').classList.add('drawer-open');
+}
+
+function closeCatalog() {
+  drawerOpen = false;
+  document.getElementById('catalog-drawer').classList.remove('open');
+  document.getElementById('canvas-area').classList.remove('drawer-open');
+}
+
+function switchTab(el, tab) {
+  document.querySelectorAll('.cd-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function addToCanvas(id, icon, type, name, desc) {
+  // Mark as added in catalog
+  const ci = document.querySelector(`.ci[data-id="${id}"]`);
+  if (ci) {
+    ci.classList.add('on-canvas');
+    const btn = ci.querySelector('.ci-add');
+    if (btn) { btn.className = 'ci-add added'; btn.textContent = '✓ Active'; }
+  }
+
+  // Create new block on canvas
+  const grid = document.getElementById('canvas-grid');
+  const block = document.createElement('div');
+  block.className = 'block just-added';
+  block.id = 'b-new-'+id;
+
+  // assign grid position dynamically
+  const col = (blockCount.current % 2 === 0) ? '1/5' : '5/9';
+  const row = Math.floor(blockCount.current / 2) + 9;
+  block.style.gridColumn = col;
+  block.style.gridRow = `${row}/${row+2}`;
+  blockCount.current++;
+
+  block.innerHTML = `
+    <div class="block-handle">⠿</div>
+    <div class="block-rm" onclick="removeBlock('b-new-${id}')">✕</div>
+    <div class="block-resize"></div>
+    <div class="bh">
+      <div class="bh-title">${name}</div>
+      <div class="bh-tag" style="background:var(--vani-dim);color:var(--vani);font-size:9px;font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;">${type}</div>
+    </div>
+    <div class="bd" style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;opacity:.7;">
+      <div style="font-size:28px;">${icon}</div>
+      <div style="font-size:12px;color:var(--text-dim);text-align:center;">${desc}</div>
+      <div style="font-size:10px;font-family:'DM Mono',monospace;color:var(--vani);margin-top:4px;">Added to canvas</div>
+    </div>`;
+
+  // insert before add zones
+  const addZone = document.getElementById('b-add1');
+  grid.insertBefore(block, addZone);
+
+  // update island text
+  if (editMode) {
+    document.getElementById('ai-text').innerHTML =
+      `<strong>${blockCount.current} blocks</strong> on canvas — drag to rearrange`;
+  }
+  // Update add zones position
+  updateAddZones();
+}
+
+function updateAddZones() {
+  const n = blockCount.current;
+  const col1 = '1/5', col2 = '5/9';
+  const row = Math.floor(n/2) + 9;
+  document.getElementById('b-add1').style.gridColumn = col1;
+  document.getElementById('b-add1').style.gridRow = `${row}/${row+2}`;
+  document.getElementById('b-add2').style.gridColumn = col2;
+  document.getElementById('b-add2').style.gridRow = `${row}/${row+2}`;
+}
+
+function removeBlock(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.transition = 'all .3s ease';
+  el.style.opacity = '0';
+  el.style.transform = 'scale(.92)';
+  setTimeout(()=>el.remove(), 300);
+  blockCount.current = Math.max(0, blockCount.current-1);
+  if(editMode) {
+    document.getElementById('ai-text').innerHTML =
+      `<strong>${blockCount.current} blocks</strong> on canvas`;
+  }
+}
+
+function toggleTooltip() {
+  if (editMode) { openCatalog(); return; }
+  tooltipOpen = !tooltipOpen;
+  document.getElementById('island-tooltip').classList.toggle('show', tooltipOpen);
+}
+
+function closeTooltip() {
+  tooltipOpen = false;
+  document.getElementById('island-tooltip').classList.remove('show');
+}
+
+// tf buttons
+document.querySelectorAll('.tf-btn').forEach(b=>{
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.tf-btn').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

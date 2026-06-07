@@ -413,7 +413,7 @@ function HealthRowComponent({ row, period, onFix, onMark, onFixDay }: {
 // ── Data fetch ───────────────────────────────────────────────────────────────
 
 function useHealthChecks(days: number) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['health_checks', days],
     queryFn: async (): Promise<HealthRow[]> => {
@@ -427,7 +427,7 @@ function useHealthChecks(days: number) {
 }
 
 function useHealthInsight(days: number) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['health_insight', days],
     queryFn: async (): Promise<{ insight: string | null; ai: boolean }> => {
@@ -478,7 +478,7 @@ export default function DataHealthGrid() {
   const { data: checks, isLoading } = useHealthChecks(period);
   const { data: healthInsight, isLoading: insightLoading } = useHealthInsight(period);
 
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   const fixMutation = useMutation({
     mutationFn: async ({ dimension, days }: { dimension: string; days: number }) => {
       const res = await fetch(`${pipelineUrl}/api/pipeline/fix`, {

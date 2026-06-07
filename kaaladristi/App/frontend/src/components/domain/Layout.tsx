@@ -1,25 +1,23 @@
 import { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useVaNiStore } from '@/stores/vaniStore';
 import Sidebar from './Sidebar';
 import DataFreshnessChip from './DataFreshnessChip';
 import SearchStrip from './SearchStrip';
 import VaNiChatPanel from './VaNiChatPanel';
+import JobMonitor from './JobMonitor';
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('kd_sidebar_collapsed') === 'true'
   );
   const { open: vaniOpen, toggle: toggleVani } = useVaNiStore();
-  const location = useLocation();
 
   const toggle = () => setCollapsed(v => {
     localStorage.setItem('kd_sidebar_collapsed', String(!v));
     return !v;
   });
-
-  const isFullWidth = location.pathname.startsWith('/chart/') || location.pathname.startsWith('/pulse/');
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>
@@ -34,7 +32,7 @@ export default function Layout() {
           className="sticky top-0 z-40 flex items-center justify-between border-b"
           style={{
             padding: '18px 40px',
-            background: 'rgba(11,17,32,0.75)',
+            background: 'var(--card)',
             backdropFilter: 'blur(10px)',
             borderBottomColor: 'var(--border)',
           }}
@@ -75,14 +73,13 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <div
-          className={`relative z-10 p-4 pb-8 ${isFullWidth ? 'max-w-full' : 'max-w-6xl mx-auto'}`}
-        >
+        <div className="relative z-10 p-4 pb-8">
           <Outlet />
         </div>
       </main>
 
       <VaNiChatPanel />
+      <JobMonitor />
     </div>
   );
 }

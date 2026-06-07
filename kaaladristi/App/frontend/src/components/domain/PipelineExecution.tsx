@@ -224,7 +224,7 @@ function DateSection({ view, defaultOpen }: { view: DateView; defaultOpen: boole
 // ── Data fetch ───────────────────────────────────────────────────────────────
 
 function usePipelineLive(enabled: boolean) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['pipeline_live'],
     queryFn: async (): Promise<LiveData> => {
@@ -255,7 +255,7 @@ const FIX_LABELS: Record<string, string> = {
 export default function PipelineExecution() {
   const { data: live, isLoading } = usePipelineLive(true);
   const qc = useQueryClient();
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
   const cancelMutation = useMutation({
     mutationFn: async () => {

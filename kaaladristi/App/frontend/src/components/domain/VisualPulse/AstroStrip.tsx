@@ -20,23 +20,23 @@ const ASTRO_WEIGHTS: Record<string, number> = {
 };
 
 const IMPACT_COLORS: Record<string, string> = {
-  major_positive: '#10b981',
-  bullish:        '#34d399',
-  minor_positive: '#6ee7b7',
+  major_positive: 'var(--bull)',
+  bullish:        'var(--bull)',
+  minor_positive: 'var(--bull)',
   neutral:        '#64748b',
-  minor_negative: '#fb923c',
-  bearish:        '#ef4444',
-  major_negative: '#dc2626',
+  minor_negative: 'var(--caution)',
+  bearish:        'var(--bear)',
+  major_negative: 'var(--bear)',
 };
 
 function scoreToColor(score: number): string {
-  if (score >= 6) return 'rgba(16,185,129,0.3)';
-  if (score >= 3) return 'rgba(52,211,153,0.2)';
-  if (score >= 1) return 'rgba(110,231,183,0.12)';
-  if (score === 0) return '#0d1628';
-  if (score >= -1) return 'rgba(251,146,60,0.15)';
-  if (score >= -3) return 'rgba(239,68,68,0.2)';
-  return 'rgba(239,68,68,0.3)';
+  if (score >= 6) return 'var(--bull-bg)';
+  if (score >= 3) return 'var(--bull-bg)';
+  if (score >= 1) return 'var(--bull-bg)';
+  if (score === 0) return 'var(--bg)';
+  if (score >= -1) return 'var(--caution-bg)';
+  if (score >= -3) return 'var(--bear-bg)';
+  return 'var(--bear-bg)';
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -142,10 +142,10 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
         </span>
         <div style={{ display: 'flex', gap: 10 }}>
           {[
-            { label: 'Major+', color: '#10b981' },
-            { label: 'Minor+', color: '#6ee7b7' },
-            { label: 'Minor−', color: '#fb923c' },
-            { label: 'Bearish', color: '#ef4444' },
+            { label: 'Major+', color: 'var(--bull)' },
+            { label: 'Minor+', color: 'var(--bull)' },
+            { label: 'Minor−', color: 'var(--caution)' },
+            { label: 'Bearish', color: 'var(--bear)' },
           ].map((item) => (
             <span key={item.label} style={{
               display: 'flex', alignItems: 'center', gap: 3,
@@ -225,7 +225,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
                 <span style={{
                   position: 'absolute', bottom: -10,
                   fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
-                  color: day.score > 0 ? '#10b981' : '#ef4444',
+                  color: day.score > 0 ? 'var(--bull)' : 'var(--bear)',
                 }}>
                   {day.score > 0 ? '+' : ''}{day.score}
                 </span>
@@ -279,7 +279,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
             <span style={{
               fontFamily: 'var(--font-mono, monospace)', fontWeight: 600,
               fontSize: 10,
-              color: tooltip.score > 0 ? '#10b981' : tooltip.score < 0 ? '#ef4444' : 'var(--text-muted)',
+              color: tooltip.score > 0 ? 'var(--bull)' : tooltip.score < 0 ? 'var(--bear)' : 'var(--text-muted)',
             }}>
               Score: {tooltip.score > 0 ? '+' : ''}{tooltip.score}
             </span>

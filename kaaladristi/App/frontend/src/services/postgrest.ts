@@ -17,7 +17,7 @@ const anonKey = (
 
 if (!postgrestUrl) {
   console.error(
-    '[Kala-Drishti] PostgREST URL missing!\n' +
+    '[DristiQ] PostgREST URL missing!\n' +
     '  VITE_POSTGREST_URL:', postgrestUrl ? 'set' : 'MISSING', '\n' +
     '  Make sure .env file exists in App/frontend/ with this value.'
   );
@@ -34,7 +34,7 @@ function resolveBase(url: string): string {
 
 const BASE_URL = resolveBase(postgrestUrl || '');
 
-console.log('[Kala-Drishti] PostgREST URL:', BASE_URL || '(not set)');
+console.log('[DristiQ] PostgREST URL:', BASE_URL || '(not set)');
 
 /** Get current auth token (JWT from localStorage, or anon key) */
 function getAuthToken(): string {
@@ -99,7 +99,6 @@ class QueryBuilder {
 
   select(columns: string = '*'): this {
     this.state.params.set('select', columns);
-    this.state.method = 'GET';
     return this;
   }
 
@@ -126,7 +125,8 @@ class QueryBuilder {
 
   /** IN filter: column IN (val1, val2, ...) */
   in(column: string, values: (string | number)[]): this {
-    this.state.params.append(column, `in.(${values.join(',')})`);
+    const formatted = values.map(v => typeof v === 'string' ? `"${v}"` : v);
+    this.state.params.append(column, `in.(${formatted.join(',')})`);
     return this;
   }
 
@@ -154,6 +154,12 @@ class QueryBuilder {
     return this;
   }
 
+  /** NOT NULL filter */
+  notNull(column: string): this {
+    this.state.params.append(column, 'not.is.null');
+    return this;
+  }
+
   /** Request total row count — PostgREST returns it in Content-Range header */
   withCount(): this {
     this._withCount = true;
@@ -161,9 +167,12 @@ class QueryBuilder {
     return this;
   }
 
-  order(column: string, opts?: { ascending?: boolean }): this {
-    const dir = opts?.ascending === false ? 'desc' : 'asc';
-    this.state.params.append('order', `${column}.${dir}`);
+  order(column: string, opts?: { ascending?: boolean; nullsFirst?: boolean }): this {
+    const dir   = opts?.ascending === false ? 'desc' : 'asc';
+    const nulls = opts?.nullsFirst === true ? '.nullsfirst'
+                : opts?.nullsFirst === false ? '.nullslast'
+                : '';
+    this.state.params.append('order', `${column}.${dir}${nulls}`);
     return this;
   }
 
@@ -210,6 +219,17 @@ class QueryBuilder {
     this.state.headers = {
       ...this.state.headers,
       'Prefer': 'return=representation',
+    };
+    return this;
+  }
+
+  /** POST with resolution=merge-duplicates — creates if absent, updates if present */
+  upsert(data: Record<string, unknown>): this {
+    this.state.method = 'POST';
+    this.state.body = data;
+    this.state.headers = {
+      ...this.state.headers,
+      'Prefer': 'return=representation,resolution=merge-duplicates',
     };
     return this;
   }

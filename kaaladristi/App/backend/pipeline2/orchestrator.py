@@ -1,16 +1,17 @@
 """Execution order for pipeline v2 daily runs.
 
-The daily run is a sequence of 12 steps. Each step:
-  1. Runs its dimension handler (compute RPC + fill-rate read).
+The daily run is a sequence of 19 steps:
+  Steps 1-3:  Download index bhav + NSE equity bhav + BSE equity bhav.
+  Steps 4-19: Compute indicators, flow, magic_rs, supertrend, rolling metrics,
+              d365, stage classification, VaNi flags, industry composites,
+              market breadth, and breadth ROC.
+
+Each step:
+  1. Runs its dimension handler (download/compute + fill-rate read).
   2. Writes fill_rate_after to km_jobs.
   3. If after < threshold, marks the step 'partial' but continues —
-     downstream steps may still succeed (e.g. index_indicators partial
-     doesn't prevent equity indicators).
-
-Step 1 (download) is delegated to the legacy daily_pipeline.run_nse_pipeline
-/ run_bse_pipeline functions because their download + parse + insert +
-delivery logic is still sound. v2 orchestrates compute on top of v1
-downloads until the download layer is rebuilt.
+     downstream steps may still succeed (e.g. a partial index download
+     doesn't prevent equity indicator compute for already-present rows).
 """
 
 from __future__ import annotations
@@ -28,7 +29,11 @@ from . import health
 # Sequence executed for a daily_run job. Each entry: (dimension, exchange_hint).
 # exchange_hint narrows magic_rs / flow jobs to one exchange; None means
 # the dimension key itself carries the exchange (e.g. 'nse_flow').
+# Downloads run first so compute steps always operate on fresh data.
 DAILY_STEPS: list[tuple[str, Optional[str]]] = [
+    ('index_eod_download',    None),
+    ('nse_eod_download',      'NSE'),
+    ('bse_eod_download',      'BSE'),
     ('index_indicators',      None),
     ('nse_equity_indicators', 'NSE'),
     ('bse_equity_indicators', 'BSE'),
@@ -37,6 +42,11 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('bse_flow',              'BSE'),
     ('nse_magic_rs',          'NSE'),
     ('bse_magic_rs',          'BSE'),
+    ('supertrend',            None),
+    ('rolling_metrics',       None),
+    ('d365',                  None),
+    ('stage_classification',  None),
+    ('vani_flags',            None),
     ('industry_composites',   None),
     ('market_breadth',        None),
     ('breadth_roc',           None),
@@ -91,10 +101,13 @@ def run_daily(conn: 'psycopg2.extensions.connection',
               trade_date: date,
               on_progress: ProgressFn,
               force: bool = False) -> RunOutcome:
-    """Run the full daily compute chain for `trade_date`.
+    """Run the full daily pipeline for `trade_date`: download then compute.
 
-    Does NOT run the download step — callers should ensure NSE/BSE bhavs
-    are already in km_equity_eod / km_index_eod before calling this.
+    Steps 1-3 fetch NSE index bhav, NSE equity bhav, and BSE equity bhav.
+    Steps 4-19 compute indicators, flow, magic_rs, supertrend, rolling metrics,
+    d365, stage classification, VaNi flags, industry composites, market breadth,
+    and breadth ROC. A failed download step does not abort
+    compute — downstream steps run against whatever rows are already present.
     """
     outcome = RunOutcome(trade_date=str(trade_date))
     total_steps = len(DAILY_STEPS)

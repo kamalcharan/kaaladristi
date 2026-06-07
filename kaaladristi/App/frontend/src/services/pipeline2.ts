@@ -1,6 +1,6 @@
 // Pipeline API client — /api/pipeline2/* routes on pipeline2_api.py.
 
-const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || 'http://localhost:8101');
+const PIPELINE_API = (import.meta.env.VITE_PIPELINE_API_URL?.trim() || '');
 
 async function apiGet<T>(path: string): Promise<T> {
   const resp = await fetch(`${PIPELINE_API}${path}`);

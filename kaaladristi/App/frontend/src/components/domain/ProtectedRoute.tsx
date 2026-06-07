@@ -23,7 +23,7 @@ export default function ProtectedRoute({ requireOnboarded = true }: ProtectedRou
     return <Navigate to="/" replace />;
   }
 
-  // Authenticated but not onboarded → profile setup
+  // Authenticated but not onboarded → send to setup
   if (requireOnboarded && profile && !profile.onboarded) {
     return <Navigate to="/setup" replace />;
   }

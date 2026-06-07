@@ -55,6 +55,12 @@ INDICATOR_COLUMNS = [
     'magic_rs', 'magic_rs_sma144', 'magic_ma', 'magic_rs_zone',
     # Flow Intelligence (derived from existing indicators)
     'flow_type', 'vacuum_flag', 'accum_distrib',
+    # Rolling range (equity-only; index tables don't have these columns but upsert ignores missing cols)
+    'w52_high', 'w52_low', 'lifetime_high',
+    # Momentum returns
+    'd30_pct_chng', 'd365_pct_chng',
+    # Delivery value averages
+    'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
 ]
 
 
@@ -150,6 +156,114 @@ def compute_flow_intelligence(df: pd.DataFrame) -> dict:
         'flow_type': flow,
         'vacuum_flag': vacuum,
         'accum_distrib': accum,
+    }
+
+
+def compute_rolling_range(df: pd.DataFrame) -> dict:
+    """
+    Compute w52_high, w52_low (252-bar rolling window), lifetime_high
+    (expanding max), and SuperTrend (ATR period=10, multiplier=3.0).
+
+    SuperTrend requires sequential bar-by-bar state — cannot be vectorised.
+    Direction: 1 = bullish, -1 = bearish.
+    """
+    high  = df['high'].values
+    low   = df['low'].values
+    close = df['close'].values
+    n     = len(df)
+
+    # ── Rolling / expanding range ──────────────────────────────────────────
+    h_series = df['high']
+    l_series = df['low']
+    w52_high      = h_series.rolling(window=252, min_periods=1).max()
+    w52_low       = l_series.rolling(window=252, min_periods=1).min()
+    lifetime_high = h_series.expanding(min_periods=1).max()
+
+    # ── SuperTrend ─────────────────────────────────────────────────────────
+    ST_MULTIPLIER = 3.0
+    atr_col = df.get('atr_10') if 'atr_10' in df.columns else None
+
+    st_value = np.full(n, np.nan)
+    st_dir   = np.full(n, np.nan)
+
+    if atr_col is not None:
+        atr_vals = atr_col.values.astype(float)
+
+        prev_dir   = 1
+        prev_lower = 0.0
+        prev_upper = 0.0
+        first_valid = True
+
+        for i in range(n):
+            atr = atr_vals[i]
+            if np.isnan(atr):
+                continue
+
+            hl2   = (high[i] + low[i]) / 2.0
+            upper = hl2 + ST_MULTIPLIER * atr
+            lower = hl2 - ST_MULTIPLIER * atr
+
+            if first_valid:
+                direction   = 1
+                final_lower = lower
+                final_upper = upper
+                st_val      = lower
+                first_valid = False
+            else:
+                if prev_dir == 1:
+                    final_lower = max(lower, prev_lower)
+                    final_upper = upper
+                else:
+                    final_upper = min(upper, prev_upper)
+                    final_lower = lower
+
+                if prev_dir == 1:
+                    if close[i] < final_lower:
+                        direction = -1
+                        st_val    = final_upper
+                    else:
+                        direction = 1
+                        st_val    = final_lower
+                else:
+                    if close[i] > final_upper:
+                        direction = 1
+                        st_val    = final_lower
+                    else:
+                        direction = -1
+                        st_val    = final_upper
+
+            prev_dir   = direction
+            prev_lower = final_lower
+            prev_upper = final_upper
+
+            st_value[i] = round(st_val, 4)
+            st_dir[i]   = direction
+
+    # ── Momentum returns ──────────────────────────────────────────────────
+    close = df['close']
+    d30_pct_chng  = close.pct_change(periods=22).mul(100).round(2)   # ~1 month (22 trading days)
+    d365_pct_chng = close.pct_change(periods=252).mul(100).round(2)  # ~1 year  (252 trading days)
+
+    # ── Delivery value rolling averages ───────────────────────────────────
+    # value_cr = traded value in crores; use 0 where missing so window stays valid
+    value_cr = df.get('value_cr', pd.Series(dtype=float))
+    if value_cr is None or value_cr.empty:
+        value_cr = pd.Series(np.nan, index=df.index)
+    avg_amt_5d  = value_cr.rolling(window=5,  min_periods=1).mean().round(4)
+    avg_amt_22d = value_cr.rolling(window=22, min_periods=1).mean().round(4)
+    delivery_surge_x = avg_amt_5d.div(avg_amt_22d.replace(0, np.nan)).round(4)
+
+    return {
+        'w52_high':           w52_high,
+        'w52_low':            w52_low,
+        'lifetime_high':      lifetime_high,
+        'supertrend':         pd.Series(st_value, index=df.index),
+        'supertrend_dir':     pd.Series(st_dir, index=df.index),
+        'd30_pct_chng':       d30_pct_chng,
+        'd365_pct_chng':      d365_pct_chng,
+        'avg_amt_5d':         avg_amt_5d,
+        'avg_amt_22d':        avg_amt_22d,
+        'delivery_surge_x':   delivery_surge_x,
     }
 
 
@@ -289,6 +403,14 @@ class IndicatorEngine:
                 df[col] = series
         except Exception as e:
             print(f'    [error] compute_flow_intelligence: {e}')
+
+        # Rolling range — w52_high, w52_low, lifetime_high
+        try:
+            range_result = compute_rolling_range(df)
+            for col, series in range_result.items():
+                df[col] = series.values
+        except Exception as e:
+            print(f'    [error] compute_rolling_range: {e}')
 
         df['indicators_computed_at'] = datetime.utcnow().isoformat()
         return df
@@ -536,3 +658,170 @@ class IndicatorEngine:
                 print('nothing to update')
 
         return total
+
+
+# ── Standalone rolling-metrics step for the daily pipeline ────────────────────
+
+ROLLING_COLUMNS = [
+    'w52_high', 'w52_low', 'lifetime_high',
+    'd30_pct_chng', 'd365_pct_chng',
+    'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+]
+
+
+def compute_rolling_metrics_for_date(db, trade_date, verbose: bool = False) -> int:
+    """
+    Compute rolling-range and momentum columns for all equity rows on trade_date.
+
+    Called as a dedicated pipeline step (step 6g) so these columns are populated
+    even after the PostgreSQL RPC has already set indicators_computed_at.
+
+    Loads full per-symbol history (needed for d365 calendar-date lookback and
+    lifetime_high expanding max), computes via compute_rolling_range(), then
+    batch-updates only the row for trade_date.
+
+    d365_pct_chng uses calendar-date bisect (not 252-bar count) matching
+    backfill_d365.py: finds closest trading day on or before trade_date - 365 days
+    within a ±30-day tolerance.
+
+    Returns number of rows updated.
+    """
+    import psycopg2
+    import psycopg2.extras
+    from bisect import bisect_left
+    from datetime import timedelta
+
+    D365_TOLERANCE = 30  # days
+
+    conn = db._conn()
+    total = 0
+    batch = []
+    BATCH = 500
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT DISTINCT equity_id FROM km_equity_eod WHERE trade_date = %s ORDER BY equity_id',
+                [str(trade_date)],
+            )
+            equity_ids = [r[0] for r in cur.fetchall()]
+
+        if verbose:
+            print(f'    [rolling_metrics] {len(equity_ids)} symbols for {trade_date}')
+
+        for eid in equity_ids:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, trade_date, high, low, close, atr_10, value_cr
+                    FROM km_equity_eod
+                    WHERE equity_id = %s
+                    ORDER BY trade_date ASC
+                    """,
+                    [eid],
+                )
+                rows = cur.fetchall()
+
+            if not rows:
+                continue
+
+            df = pd.DataFrame([dict(r) for r in rows])
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            for col in ['high', 'low', 'close', 'atr_10', 'value_cr']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            try:
+                result = compute_rolling_range(df)
+            except Exception as e:
+                if verbose:
+                    print(f'      [rolling_metrics] equity_id={eid} error: {e}')
+                continue
+
+            # Find the row for trade_date
+            mask = df['trade_date'] == pd.Timestamp(trade_date)
+            if not mask.any():
+                continue
+            idx = mask.idxmax()
+
+            record = {'id': int(df.loc[idx, 'id'])}
+            for col in ROLLING_COLUMNS:
+                if col == 'd365_pct_chng':
+                    continue  # computed separately below via calendar-date bisect
+                if col in result:
+                    val = result[col].iloc[idx]
+                    record[col] = None if (val is None or (isinstance(val, float) and np.isnan(val))) else round(float(val), 4)
+                else:
+                    record[col] = None
+
+            # ── d365 via calendar-date bisect (mirrors backfill_d365.py) ──
+            dates_list  = [r['trade_date'] for r in rows]   # already datetime.date from psycopg2
+            closes_list = [float(r['close']) if r['close'] is not None else None for r in rows]
+            from datetime import date as _date
+            td_date = trade_date if isinstance(trade_date, _date) else trade_date.date()
+            target  = td_date - timedelta(days=365)
+            j = bisect_left(dates_list, target, 0, idx)
+            if j > 0 and (j >= idx or dates_list[j] > target):
+                j -= 1
+            d365 = None
+            if 0 <= j < idx:
+                diff = abs((dates_list[j] - target).days)
+                past_close = closes_list[j]
+                if diff <= D365_TOLERANCE and past_close and past_close != 0:
+                    cur_close = closes_list[idx]
+                    if cur_close is not None:
+                        d365 = round((cur_close - past_close) / past_close * 100, 2)
+            record['d365_pct_chng'] = d365
+
+            batch.append(record)
+
+            if len(batch) >= BATCH:
+                _flush_rolling_batch(conn, batch)
+                total += len(batch)
+                batch = []
+
+        if batch:
+            _flush_rolling_batch(conn, batch)
+            total += len(batch)
+
+    finally:
+        conn.close()
+
+    if verbose:
+        print(f'    [rolling_metrics] {total} rows updated for {trade_date}')
+
+    return total
+
+
+def _flush_rolling_batch(conn, batch: list):
+    import psycopg2.extras
+
+    sql = """
+        UPDATE km_equity_eod AS e
+        SET
+          w52_high         = v.w52_high,
+          w52_low          = v.w52_low,
+          lifetime_high    = v.lifetime_high,
+          d30_pct_chng     = v.d30_pct_chng,
+          d365_pct_chng    = v.d365_pct_chng,
+          avg_amt_5d       = v.avg_amt_5d,
+          avg_amt_22d      = v.avg_amt_22d,
+          delivery_surge_x = v.delivery_surge_x
+        FROM (VALUES %s) AS v(
+          id, w52_high, w52_low, lifetime_high,
+          d30_pct_chng, d365_pct_chng,
+          avg_amt_5d, avg_amt_22d, delivery_surge_x
+        )
+        WHERE e.id = v.id::int
+    """
+    rows = [
+        (
+            r['id'], r['w52_high'], r['w52_low'], r['lifetime_high'],
+            r['d30_pct_chng'], r['d365_pct_chng'],
+            r['avg_amt_5d'], r['avg_amt_22d'], r['delivery_surge_x'],
+        )
+        for r in batch
+    ]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows)
+    conn.commit()

@@ -63,14 +63,15 @@ def _daily_gap_sweep(dsn: str) -> None:
 
     Rules:
       * Only enqueues job_type='fix' — never backfill, never daily_run.
-      * Skips *_eod_download dims (download failures need human attention).
+      * Includes *_eod_download dims: if bhav wasn't published at 18:00
+        it is usually available by 19:30, so retrying makes sense.
       * Skips (dim, date) pairs that already have a queued or running job
         so we don't double-book the worker.
       * created_by = 'gap_sweep' so the operator can spot the source in
         Panel B.
     """
     # Lazy imports — avoid running health-grid queries at scheduler-start time.
-    from .health import health_grid, DOWNLOAD_DIMENSIONS
+    from .health import health_grid
 
     try:
         conn = psycopg2.connect(dsn)
@@ -91,7 +92,7 @@ def _daily_gap_sweep(dsn: str) -> None:
         with conn.cursor() as cur:
             for dim_row in grid:
                 dim_key = dim_row.get('dimension')
-                if not dim_key or dim_key in DOWNLOAD_DIMENSIONS:
+                if not dim_key:
                     continue
 
                 for day in dim_row.get('days') or []:

@@ -114,6 +114,19 @@ export async function resetPassword(token: string, newPassword: string): Promise
   return data.message;
 }
 
+/** Change password for the currently authenticated user. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<string> {
+  const { data, error } = await rpc('kd_auth_change_password', {
+    p_current_password: currentPassword,
+    p_new_password: newPassword,
+  });
+
+  if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.error);
+
+  return data.message;
+}
+
 /** Get current session from localStorage. */
 export async function getSession(): Promise<KdSession | null> {
   return getStoredSession();
@@ -140,19 +153,38 @@ export async function getProfile(): Promise<KmProfile | null> {
     throw new Error(error.message);
   }
 
-  return data as KmProfile | null;
+  const profile = data as KmProfile | null;
+
+  // Get latest active subscription expires_at
+  if (profile) {
+    const { data: subData } = await from('user_subscriptions')
+      .select('expires_at, status')
+      .eq('user_id', profile.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .execute();
+
+    if (subData) {
+      profile.expires_at = (subData as any).expires_at ?? null;
+    }
+  }
+
+  return profile;
 }
 
-/** Update profile for current user. */
+/** Update profile for current user.
+ *  Uses upsert so it works whether or not the km_profiles row already exists
+ *  (e.g. immediately after a fresh registration). */
 export async function updateProfile(
-  updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded'>>,
+  updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded' | 'theme'>>,
 ) {
   const user = getUser();
   if (!user) throw new Error('Not authenticated');
 
   const { data, error } = await from('km_profiles')
-    .update(updates)
-    .eq('id', user.id)
+    .upsert({ id: user.id, email: user.email, ...updates })
     .select('*')
     .single()
     .execute();

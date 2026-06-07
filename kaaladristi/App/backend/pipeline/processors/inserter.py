@@ -59,6 +59,53 @@ def upsert_equity_eod(db, records: list[dict]) -> int:
     return total
 
 
+def sync_isin_from_bhav(db, matched_records: list[dict]) -> int:
+    """
+    Update km_equity_symbols.isin for rows that are NULL using ISINs from the
+    day's bhavcopy. Uses equity_id (already resolved by SymbolMatcher) so there
+    is no symbol-format ambiguity — the match is by PK, not by symbol string.
+
+    Called after upsert_equity_eod() in the daily pipeline.
+    Returns count of rows updated.
+    """
+    import psycopg2
+    import psycopg2.extras
+    from lib.config import DATABASE_URL
+
+    updates = [
+        (rec['isin'], rec['equity_id'])
+        for rec in matched_records
+        if rec.get('isin') and rec.get('equity_id')
+    ]
+    if not updates:
+        return 0
+
+    if not DATABASE_URL:
+        return 0  # No direct PG available (PostgREST-only mode)
+
+    conn = psycopg2.connect(DATABASE_URL, connect_timeout=30)
+    try:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                """
+                UPDATE km_equity_symbols s
+                SET    isin = data.isin
+                FROM   (VALUES %s) AS data(isin, eq_id)
+                WHERE  s.id   = data.eq_id::int
+                  AND  s.isin IS NULL
+                """,
+                updates,
+                page_size=500,
+            )
+            updated = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    return updated
+
+
 def update_delivery(db, trade_date: str, delivery_map: dict[str, dict],
                     symbol_matcher) -> int:
     """

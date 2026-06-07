@@ -11,25 +11,10 @@ import { Card } from '@/components/ui';
 import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
 import React from 'react';
+import { ZONE_LABELS, FLOW_LABELS } from '@/constants/signalScale';
+import { ScanCardWrapper, VaniBadge, CardExchangeBadge } from './ScanCardShell';
 
-// ── Vocabulary mapping (kept for backward compat with IndustryTransitionView, ManipulationWatchView) ──
-
-export const ZONE_LABELS: Record<string, { label: string; color: string }> = {
-  'Strong Bull': { label: 'Strong Bull', color: 'text-risk-green' },
-  'Mild Bull':   { label: 'Mild Bull',   color: 'text-risk-green/70' },
-  'Neutral':     { label: 'Neutral',     color: 'text-muted' },
-  'Mild Bear':   { label: 'Mild Bear',   color: 'text-risk-red/70' },
-  'Strong Bear': { label: 'Strong Bear', color: 'text-risk-red' },
-};
-
-export const FLOW_LABELS: Record<string, { label: string; color: string }> = {
-  FRESH_LONGS:      { label: 'Fresh Longs',      color: 'text-risk-green' },
-  FRESH_SHORTS:     { label: 'Fresh Shorts',     color: 'text-risk-red' },
-  SHORT_COVERING:   { label: 'Short Covering',   color: 'text-risk-amber' },
-  LONG_LIQUIDATION: { label: 'Liquidation',      color: 'text-risk-red/80' },
-  LOW_VOLUME:       { label: 'Low Volume',        color: 'text-muted' },
-  MIXED:            { label: 'Mixed',             color: 'text-muted' },
-};
+export { ZONE_LABELS, FLOW_LABELS };
 
 // ── Exchange Badge (kept for backward compat) ─────────────────
 
@@ -92,15 +77,15 @@ const FLOW_DISPLAY: Record<string, { label: string; bull: boolean }> = {
   FRESH_LONGS:      { label: 'Fresh Longs',   bull: true },
   SHORT_COVERING:   { label: 'Short Covering', bull: true },
   FRESH_SHORTS:     { label: 'Fresh Shorts',   bull: false },
-  LONG_LIQUIDATION: { label: 'Liquidation',    bull: false },
+  LONG_LIQUIDATION: { label: 'Long Liquidation', bull: false },
   LOW_VOLUME:       { label: 'Low Volume',     bull: false },
   MIXED:            { label: 'Mixed',          bull: false },
 };
 
 function zoneColor(zone: string | null): string {
   if (zone === 'Strong Bull') return 'var(--bull)';
-  if (zone === 'Mild Bull')   return 'rgba(16,185,129,0.7)';
-  if (zone === 'Mild Bear')   return 'rgba(239,68,68,0.7)';
+  if (zone === 'Mild Bull')   return 'color-mix(in srgb, var(--bull) 70%, transparent)';
+  if (zone === 'Mild Bear')   return 'color-mix(in srgb, var(--bear) 70%, transparent)';
   if (zone === 'Strong Bear') return 'var(--bear)';
   return 'var(--text-muted)';
 }
@@ -116,7 +101,7 @@ function zonePillStyle(zone: string | null): React.CSSProperties {
     fontWeight: 600,
     letterSpacing: '0.03em',
     whiteSpace: 'nowrap' as const,
-    background: isBull ? 'rgba(16,185,129,0.06)' : isBear ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.04)',
+    background: isBull ? 'var(--bull-bg)' : isBear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
     color: zoneColor(zone),
   };
 }
@@ -130,7 +115,7 @@ function SigPill({ label, bull, bear }: { label: string; bull?: boolean; bear?: 
       borderRadius: '5px', fontWeight: 500,
       background: bull ? 'var(--bull-bg)' : bear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
       color: bull ? 'var(--bull)' : bear ? 'var(--bear)' : 'var(--text-muted)',
-      border: `1px solid ${bull ? 'rgba(16,185,129,0.2)' : bear ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
+      border: `1px solid ${bull ? 'var(--bull-dim, rgba(16,185,129,0.2))' : bear ? 'var(--bear-dim, rgba(239,68,68,0.2))' : 'var(--border)'}`,
     }}>
       {label}
     </span>
@@ -205,7 +190,7 @@ function MrsPill({
         borderRadius: '5px', fontWeight: 500,
         background: isBull ? 'var(--bull-bg)' : isBear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
         color: isBull ? 'var(--bull)' : isBear ? 'var(--bear)' : 'var(--text-muted)',
-        border: `1px solid ${isBull ? 'rgba(16,185,129,0.2)' : isBear ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
+        border: `1px solid ${isBull ? 'var(--bull-dim, rgba(16,185,129,0.2))' : isBear ? 'var(--bear-dim, rgba(239,68,68,0.2))' : 'var(--border)'}`,
         cursor: 'default',
       }}
     >
@@ -223,9 +208,35 @@ function MrsPill({
   );
 }
 
+// ── Stage Badge ───────────────────────────────────────────────
+
+export function StageBadge({ stage }: { stage: string }) {
+  const isS2 = stage === 'S2';
+  const isS1 = stage === 'S1';
+  return (
+    <span style={{
+      fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '2px 7px',
+      borderRadius: '4px', fontWeight: 700,
+      background: isS2 ? 'rgba(34,197,94,0.1)' : isS1 ? 'rgba(59,130,246,0.08)' : 'rgba(249,115,22,0.08)',
+      color: isS2 ? 'var(--bull)' : isS1 ? '#60a5fa' : '#fb923c',
+      border: `1px solid ${isS2 ? 'rgba(34,197,94,0.2)' : isS1 ? 'rgba(59,130,246,0.2)' : 'rgba(249,115,22,0.2)'}`,
+    }}>
+      {stage}
+    </span>
+  );
+}
+
 // ── Stock Card — 3-zone grid layout ──────────────────────────
 
-export function StockCard({ stock }: { stock: ScanStock }) {
+export function StockCard({
+  stock,
+  stageBadge,
+  extraRight,
+}: {
+  stock: ScanStock;
+  stageBadge?: string;
+  extraRight?: React.ReactNode;
+}) {
   const navigate = useNavigate();
   const heroName = displaySymbol(stock);
   const subName = displaySubName(stock);
@@ -254,69 +265,35 @@ export function StockCard({ stock }: { stock: ScanStock }) {
   );
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleClick}
-      onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-      style={{
-        background: 'var(--card)',
-        border: `1px solid ${stock.vaniOpportunity ? 'rgba(212,168,75,0.25)' : 'var(--border)'}`,
-        borderRadius: '12px',
-        padding: '14px 16px',
-        cursor: 'pointer',
-        display: 'grid',
-        gridTemplateColumns: '1fr 120px 100px',
-        gap: '18px',
-        alignItems: 'center',
-        boxShadow: stock.vaniOpportunity
-          ? '0 0 0 1px rgba(212,168,75,0.2), 0 8px 20px rgba(0,0,0,0.15)'
-          : undefined,
-        transition: 'all 0.18s',
-      }}
-    >
+    <ScanCardWrapper isVani={!!stock.vaniOpportunity} symbol={stock.symbol} onClick={handleClick}>
+      <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '1fr 120px 100px', gap: '18px', alignItems: 'center' }}>
       {/* Zone 1: Identity + Evidence strip */}
       <div style={{ minWidth: 0 }}>
         {/* Symbol + badges */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
+          {stock.vaniOpportunity && (
+            <span style={{ color: 'var(--gold)', fontSize: '10px', lineHeight: 1, flexShrink: 0 }}>✦</span>
+          )}
           <span style={{
-            fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 500,
-            color: 'var(--text-primary)', letterSpacing: '-0.01em',
+            fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 700,
+            color: stock.vaniOpportunity ? 'var(--gold)' : 'var(--text-primary)', letterSpacing: '-0.01em',
           }}>
             {heroName}
           </span>
-          {stock.exchange && (
-            <span style={{
-              fontFamily: 'var(--font-mono)', fontSize: '9px', padding: '2px 5px',
-              borderRadius: '4px', letterSpacing: '0.1em', fontWeight: 600,
-              background: stock.exchange === 'NSE' ? 'rgba(6,182,212,0.12)' : 'rgba(251,191,36,0.12)',
-              color: stock.exchange === 'NSE' ? '#06b6d4' : '#fbbf24',
-              border: `1px solid ${stock.exchange === 'NSE' ? 'rgba(6,182,212,0.25)' : 'rgba(251,191,36,0.25)'}`,
-            }}>
-              {stock.exchange}
-            </span>
-          )}
+          <CardExchangeBadge exchange={stock.exchange} />
           {flowCfg && (
             <span style={{
               fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '2px 7px',
               borderRadius: '5px', fontWeight: 500,
               background: isBullFlow ? 'var(--bull-bg)' : 'rgba(255,255,255,0.04)',
               color: isBullFlow ? 'var(--bull)' : 'var(--text-muted)',
-              border: `1px solid ${isBullFlow ? 'rgba(16,185,129,0.2)' : 'var(--border)'}`,
+              border: `1px solid ${isBullFlow ? 'var(--bull-dim, rgba(16,185,129,0.2))' : 'var(--border)'}`,
             }}>
               {flowCfg.label}
             </span>
           )}
-          {stock.vaniOpportunity && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '2px 8px', fontFamily: 'var(--font-mono)', fontSize: '9.5px',
-              borderRadius: '5px', letterSpacing: '0.06em', textTransform: 'uppercase',
-              fontWeight: 700, background: 'var(--gold)', color: '#1a1410', whiteSpace: 'nowrap',
-            }}>
-              ✦ Opportunity
-            </span>
-          )}
+          {stageBadge && <StageBadge stage={stageBadge} />}
+          {stock.vaniOpportunity && <VaniBadge />}
         </div>
 
         {/* Company + industry */}
@@ -443,7 +420,7 @@ export function StockCard({ stock }: { stock: ScanStock }) {
         </div>
       </div>
 
-      {/* Zone 3: RS zone pill + 52W% */}
+      {/* Zone 3: RS zone pill + 52W% + screener-specific extra */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
         {stock.magic_rs_zone && (
           <span style={zonePillStyle(stock.magic_rs_zone)}>
@@ -458,7 +435,9 @@ export function StockCard({ stock }: { stock: ScanStock }) {
             {stock.pctBelow52wHigh.toFixed(1)}% off high
           </span>
         )}
+        {extraRight}
       </div>
     </div>
+  </ScanCardWrapper>
   );
 }

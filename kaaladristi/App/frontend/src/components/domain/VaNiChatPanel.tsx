@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Loader2, Sparkles, ChevronRight, MessageCircle, RotateCcw, Trash2 } from 'lucide-react';
+import VaNiFeedback from './VaNi/VaNiFeedback';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
 import { getIntentsForPage, getEquityIntents } from '@/config/vaniIntents';
@@ -11,7 +12,7 @@ import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
 
 const pipelineUrl =
-  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
 interface ChatMessage {
   id: string;
@@ -19,6 +20,7 @@ interface ChatMessage {
   intentId?: string;
   text: string;
   cached?: boolean;
+  logId?: string;
   timestamp: number;
 }
 
@@ -99,6 +101,7 @@ export default function VaNiChatPanel() {
             intentId,
             text: data.response || 'VaNi could not generate a response right now.',
             cached: data.cached,
+            logId: data.log_id ?? undefined,
             timestamp: Date.now(),
           }]);
           setActiveIntentId(null);
@@ -131,8 +134,8 @@ export default function VaNiChatPanel() {
       className={cn(
         'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all group',
         variant === 'primary'
-          ? 'bg-[#1e1b4b]/60 border-2 border-[var(--accent-indigo)]/20 hover:border-[var(--accent-indigo)]/50 hover:bg-[#1e1b4b]/80'
-          : 'bg-[#1e1b4b]/30 border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 hover:bg-[#1e1b4b]/50',
+          ? 'bg-[var(--bg)]/60 border-2 border-[var(--accent-indigo)]/20 hover:border-[var(--accent-indigo)]/50 hover:bg-[var(--bg)]/80'
+          : 'bg-[var(--bg)]/30 border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 hover:bg-[var(--bg)]/50',
         askMutation.isPending && 'opacity-40 cursor-not-allowed',
       )}
     >
@@ -172,7 +175,7 @@ export default function VaNiChatPanel() {
         )}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[#0f0d22]">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[var(--bg)]">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
             <span className="text-white text-sm font-serif font-bold">V</span>
           </div>
@@ -269,28 +272,29 @@ export default function VaNiChatPanel() {
                         {msg.text}
                       </p>
                     </div>
-                    {(msg.cached || isAdmin) && (
-                      <div className="flex items-center gap-2 mt-1.5 px-2">
-                        {msg.cached && (
-                          <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
-                            instant response
-                          </span>
-                        )}
-                        {isAdmin && msg.intentId && (
-                          <button
-                            onClick={async () => {
-                              await fetch(`${pipelineUrl}/api/vani/cache?intent_id=${encodeURIComponent(msg.intentId!)}`, { method: 'DELETE' });
-                              setMessages(prev => prev.filter(m => m.id !== msg.id && !(m.type === 'intent' && m.intentId === msg.intentId)));
-                            }}
-                            title="Clear this intent's cache"
-                            className="ml-auto flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>clear cache</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 mt-1.5 px-2">
+                      {msg.logId && !msg.cached && (
+                        <VaNiFeedback logId={msg.logId} />
+                      )}
+                      {msg.cached && (
+                        <span className="text-[8px] font-mono text-[var(--accent-indigo)]/40 uppercase tracking-widest">
+                          instant response
+                        </span>
+                      )}
+                      {isAdmin && msg.intentId && (
+                        <button
+                          onClick={async () => {
+                            await fetch(`${pipelineUrl}/api/vani/cache?intent_id=${encodeURIComponent(msg.intentId!)}`, { method: 'DELETE' });
+                            setMessages(prev => prev.filter(m => m.id !== msg.id && !(m.type === 'intent' && m.intentId === msg.intentId)));
+                          }}
+                          title="Clear this intent's cache"
+                          className="ml-auto flex items-center gap-1 text-[8px] font-mono text-risk-red/30 hover:text-risk-red/70 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>clear cache</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

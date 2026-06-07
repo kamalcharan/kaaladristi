@@ -43,6 +43,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
     'index_flow', 'nse_flow', 'bse_flow',
     'nse_magic_rs', 'bse_magic_rs',
+    'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'industry_composites', 'market_breadth', 'breadth_roc',
 })
 
@@ -225,6 +226,79 @@ def _handle_columnfill(
     delta_rows = int(round(total * (after - before) / 100.0))
 
     return HandlerResult(status, before, after, max(delta_rows, 0))
+
+
+# ── Script-based compute handlers (supertrend / rolling_metrics / d365 / stage / vani) ──
+
+def _handle_script(
+    dim: str, conn, trade_date: date, force: bool, on_progress: ProgressFn,
+    script_fn,
+) -> HandlerResult:
+    """Generic wrapper for backfill script entry points."""
+    before = fill_rate(conn, dim, trade_date)
+    on_progress(f'before fill_rate = {before:.1f}%', 5)
+
+    if force:
+        meta = DIMENSION_HEALTH[dim]
+        table, _id_col, cols, _ok = meta
+        set_clause = ', '.join(f'{c} = NULL' for c in (cols or []))
+        if set_clause:
+            on_progress(f'force: nullifying {dim} columns for {trade_date}', 15)
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE {table} SET {set_clause} WHERE trade_date = %s",
+                            [str(trade_date)])
+            conn.commit()
+
+    on_progress(f'running {dim} for {trade_date}', 30)
+    try:
+        rows = script_fn(conn, trade_date, verbose=False)
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return HandlerResult('failed', before, before, 0, error_msg=str(e)[:500])
+
+    on_progress('measuring post-run fill_rate', 85)
+    after = fill_rate(conn, dim, trade_date)
+    ok_pct = (DIMENSION_HEALTH[dim][3] or 0) * 100.0
+    status = _classify(before, after, ok_pct)
+    return HandlerResult(status, before, after, rows or 0)
+
+
+def handle_supertrend(conn, trade_date: date, force: bool,
+                      exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    from scripts.backfill_supertrend import compute_supertrend_for_date
+    return _handle_script('supertrend', conn, trade_date, force, on_progress,
+                          compute_supertrend_for_date)
+
+
+def handle_rolling_metrics(conn, trade_date: date, force: bool,
+                           exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    from scripts.backfill_rolling_metrics import compute_rolling_metrics_for_date
+    return _handle_script('rolling_metrics', conn, trade_date, force, on_progress,
+                          compute_rolling_metrics_for_date)
+
+
+def handle_d365(conn, trade_date: date, force: bool,
+                exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    from scripts.backfill_d365 import compute_d365_for_date
+    return _handle_script('d365', conn, trade_date, force, on_progress,
+                          compute_d365_for_date)
+
+
+def handle_stage_classification(conn, trade_date: date, force: bool,
+                                exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    from scripts.backfill_stage_classification import compute_stage_for_date
+    return _handle_script('stage_classification', conn, trade_date, force, on_progress,
+                          compute_stage_for_date)
+
+
+def handle_vani_flags(conn, trade_date: date, force: bool,
+                      exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    from scripts.backfill_vani_flags import compute_vani_flags_for_date
+    return _handle_script('vani_flags', conn, trade_date, force, on_progress,
+                          compute_vani_flags_for_date)
 
 
 # ── Row-presence handlers (industry / breadth) ───────────────────────────
@@ -490,6 +564,16 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         'nse_magic_rs', 'bse_magic_rs',
     ):
         return _handle_columnfill(conn, dimension, trade_date, force, on_progress)
+    if dimension == 'supertrend':
+        return handle_supertrend(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'rolling_metrics':
+        return handle_rolling_metrics(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'd365':
+        return handle_d365(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'stage_classification':
+        return handle_stage_classification(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'vani_flags':
+        return handle_vani_flags(conn, trade_date, force, exchange, on_progress)
     if dimension == 'industry_composites':
         return handle_industry_composites(conn, trade_date, force, exchange, on_progress)
     if dimension == 'market_breadth':
@@ -512,6 +596,11 @@ KNOWN_DIMENSIONS = [
     'bse_flow',
     'nse_magic_rs',
     'bse_magic_rs',
+    'supertrend',
+    'rolling_metrics',
+    'd365',
+    'stage_classification',
+    'vani_flags',
     'industry_composites',
     'market_breadth',
     'breadth_roc',

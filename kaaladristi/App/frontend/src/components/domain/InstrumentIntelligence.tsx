@@ -138,7 +138,7 @@ function VolumeCharacter({ character, rvol }: { character: string; rvol: number 
 // ── Context hook ─────────────────────────────────────────────────────────────
 
 function useInstrumentContext(id: number, type: string, date?: string) {
-  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? 'http://localhost:8100';
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
   return useQuery({
     queryKey: ['instrument_ctx', type, id, date],
     queryFn: async (): Promise<InstrumentContext | null> => {

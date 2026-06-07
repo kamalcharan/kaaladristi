@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DristiQ — VaNi Correlation</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#090c10;--bg2:#0d1117;--bg3:#131920;--bg4:#1a2030;
+  --border:rgba(255,255,255,0.06);--border-hi:rgba(255,255,255,0.13);
+  --text:#e8eaed;--text-dim:#6b7280;--text-muted:#2e3440;
+  --gold:#c9a84c;--gold-glow:rgba(201,168,76,0.15);--gold-dim:rgba(201,168,76,0.35);
+  --teal:#2dd4bf;--teal-dim:rgba(45,212,191,0.12);
+  --green:#4ade80;--red:#f87171;
+  --vani:#7c6af7;--vani-glow:rgba(124,106,247,0.22);--vani-dim:rgba(124,106,247,0.08);
+  --sidebar:200px;--topbar:52px;
+}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);
+  font-family:'DM Sans',sans-serif;overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:999;}
+
+/* ── TOP BAR ── */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar);
+  border-bottom:1px solid var(--border);background:rgba(9,12,16,0.95);
+  backdrop-filter:blur(16px);display:flex;align-items:center;
+  padding:0 20px 0 0;z-index:300;gap:0;}
+.logo{width:var(--sidebar);display:flex;align-items:center;padding:0 20px;
+  font-family:'Fraunces',serif;font-size:17px;font-weight:400;
+  letter-spacing:-0.02em;color:var(--text);border-right:1px solid var(--border);
+  height:100%;flex-shrink:0;}
+.logo span{color:var(--gold);}
+.tb-instrument{display:flex;align-items:center;gap:8px;padding:0 20px;
+  border-right:1px solid var(--border);height:100%;}
+.tb-sym{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--text);}
+.tb-price{font-family:'DM Mono',monospace;font-size:13px;color:var(--green);}
+.tb-chg{font-size:11px;color:var(--green);font-family:'DM Mono',monospace;}
+.tb-overlays{display:flex;gap:6px;padding:0 16px;border-right:1px solid var(--border);
+  height:100%;align-items:center;}
+.ov-tag{padding:3px 9px;border-radius:4px;font-size:10px;
+  font-family:'DM Mono',monospace;border:1px solid;}
+.ov-teal{border-color:rgba(45,212,191,0.35);color:var(--teal);background:rgba(45,212,191,0.06);}
+.ov-gold{border-color:rgba(201,168,76,0.35);color:var(--gold);background:rgba(201,168,76,0.06);}
+.ov-vani{border-color:rgba(124,106,247,0.35);color:var(--vani);background:rgba(124,106,247,0.06);}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.vani-indicator{display:flex;align-items:center;gap:7px;padding:5px 12px;
+  border:1px solid rgba(124,106,247,0.4);border-radius:100px;
+  background:rgba(124,106,247,0.1);cursor:pointer;
+  animation:vani-alert 2s ease-in-out infinite;}
+@keyframes vani-alert{
+  0%,100%{box-shadow:0 0 0 0 rgba(124,106,247,0);}
+  50%{box-shadow:0 0 0 4px rgba(124,106,247,0.15);}
+}
+.vi-dot{width:6px;height:6px;border-radius:50%;background:var(--vani);
+  animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+.vi-text{font-size:11px;color:var(--vani);font-family:'DM Mono',monospace;}
+
+/* ── SIDEBAR ── */
+.sidebar{position:fixed;left:0;top:var(--topbar);bottom:0;
+  width:var(--sidebar);border-right:1px solid var(--border);
+  background:rgba(9,12,16,0.9);display:flex;flex-direction:column;
+  padding:16px 0;z-index:200;}
+.nav-s{padding:0 12px;margin-bottom:20px;}
+.nav-sl{font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-muted);padding:0 8px;margin-bottom:5px;
+  font-family:'DM Mono',monospace;}
+.nav-i{display:flex;align-items:center;gap:9px;padding:7px 10px;
+  border-radius:6px;font-size:12px;color:var(--text-dim);cursor:pointer;
+  transition:all .15s;margin-bottom:1px;}
+.nav-i:hover{background:var(--bg2);color:var(--text);}
+.nav-i.active{background:var(--vani-dim);color:var(--vani);
+  border:1px solid rgba(124,106,247,0.18);}
+.nav-i .ni{font-size:13px;width:15px;text-align:center;}
+.nav-badge{margin-left:auto;background:var(--gold-glow);border:1px solid var(--gold-dim);
+  color:var(--gold);font-size:8px;padding:1px 5px;border-radius:3px;
+  font-family:'DM Mono',monospace;}
+.sidebar-user{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:9px;}
+.su-av{width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#5b4fd4,#2dd4bf);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;color:#fff;}
+.su-name{font-size:12px;color:var(--text);}
+.su-meta{font-size:9px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* ── WORKSPACE LAYOUT ── */
+.ws{position:fixed;left:var(--sidebar);top:var(--topbar);right:0;bottom:0;
+  display:grid;grid-template-columns:1fr 300px;overflow:hidden;}
+
+/* CHART */
+.chart-area{border-right:1px solid var(--border);display:flex;
+  flex-direction:column;overflow:hidden;position:relative;}
+.chart-topbar{height:40px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0;}
+.ct-tf{display:flex;gap:2px;}
+.tf-btn{padding:3px 8px;border-radius:4px;font-size:10px;
+  font-family:'DM Mono',monospace;color:var(--text-dim);cursor:pointer;border:none;background:transparent;}
+.tf-btn.active{background:var(--bg3);color:var(--gold);}
+.chart-body{flex:1;position:relative;overflow:hidden;background:var(--bg);}
+
+/* chart markers */
+.cm-marker{position:absolute;top:0;bottom:15%;width:1px;
+  background:rgba(201,168,76,0.3);pointer-events:none;}
+.cm-dot{position:absolute;width:10px;height:10px;border-radius:50%;
+  background:var(--gold);border:2px solid rgba(201,168,76,0.3);
+  transform:translateX(-50%);pointer-events:none;cursor:pointer;
+  transition:all .2s;pointer-events:all;}
+.cm-dot:hover{transform:translateX(-50%) scale(1.4);
+  box-shadow:0 0 10px rgba(201,168,76,0.6);}
+.cm-dot.bear{background:var(--red);border-color:rgba(248,113,113,0.4);}
+.cm-dot.bull{background:var(--green);border-color:rgba(74,222,128,0.4);}
+.cm-dot.active-now{background:var(--gold);width:14px;height:14px;
+  box-shadow:0 0 12px rgba(201,168,76,0.7);
+  animation:active-pulse 1.5s ease-in-out infinite;}
+@keyframes active-pulse{
+  0%,100%{box-shadow:0 0 12px rgba(201,168,76,0.7),0 0 0 0 rgba(201,168,76,0);}
+  50%{box-shadow:0 0 16px rgba(201,168,76,0.9),0 0 0 6px rgba(201,168,76,0.1);}
+}
+
+/* marker tooltip */
+.cm-tooltip{position:absolute;background:var(--bg2);border:1px solid var(--border-hi);
+  border-radius:7px;padding:8px 12px;font-size:11px;z-index:50;
+  pointer-events:none;white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,0.4);}
+.cm-tooltip.hidden{display:none;}
+.cmt-date{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);margin-bottom:3px;}
+.cmt-return{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;}
+
+/* panchak zone */
+.pzone{position:absolute;top:0;bottom:15%;pointer-events:none;
+  background:rgba(201,168,76,0.04);border-left:1px dashed rgba(201,168,76,0.25);}
+.pzone-lbl{position:absolute;top:8px;left:4px;font-size:8px;
+  font-family:'DM Mono',monospace;color:rgba(201,168,76,0.5);
+  letter-spacing:.08em;writing-mode:vertical-rl;}
+
+/* active confluence zone */
+.conf-zone{position:absolute;top:0;bottom:15%;pointer-events:none;
+  background:rgba(124,106,247,0.06);
+  border-left:2px solid rgba(124,106,247,0.4);
+  border-right:2px solid rgba(124,106,247,0.4);}
+.conf-zone-lbl{position:absolute;top:8px;left:6px;
+  font-size:9px;font-family:'DM Mono',monospace;color:var(--vani);
+  letter-spacing:.06em;display:flex;align-items:center;gap:4px;}
+.conf-zone-dot{width:5px;height:5px;border-radius:50%;background:var(--vani);
+  animation:pulse 1.2s ease-in-out infinite;}
+
+.indicator-strip{height:52px;border-top:1px solid var(--border);
+  padding:5px 14px;flex-shrink:0;}
+.is-lbl{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-muted);margin-bottom:2px;}
+
+/* RIGHT PANEL */
+.right-panel{display:flex;flex-direction:column;overflow-y:auto;}
+.right-panel::-webkit-scrollbar{width:3px;}
+.right-panel::-webkit-scrollbar-thumb{background:var(--border);}
+
+/* standard block */
+.panel-block{border-bottom:1px solid var(--border);padding:14px 16px;}
+.pb-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.pb-title{font-size:10px;font-weight:500;color:var(--text-dim);
+  letter-spacing:.06em;text-transform:uppercase;font-family:'DM Mono',monospace;}
+
+/* ═══════════════════════════════════════
+   VANI CORRELATION BLOCK — hero element
+═══════════════════════════════════════ */
+.corr-block{
+  margin:10px;border-radius:12px;
+  border:1px solid rgba(124,106,247,0.4);
+  background:linear-gradient(135deg,rgba(124,106,247,0.06) 0%,var(--bg2) 60%);
+  overflow:hidden;position:relative;
+  box-shadow:0 0 0 1px rgba(124,106,247,0.08),
+             0 8px 32px rgba(124,106,247,0.1);
+  opacity:0;transform:translateY(16px) scale(.97);
+  animation:block-drop .6s cubic-bezier(.34,1.4,.64,1) 1.8s forwards;}
+@keyframes block-drop{
+  to{opacity:1;transform:translateY(0) scale(1);}
+}
+
+/* ambient glow behind block */
+.corr-block::before{content:'';position:absolute;
+  top:-40px;right:-40px;width:150px;height:150px;border-radius:50%;
+  background:radial-gradient(circle,rgba(124,106,247,0.12),transparent 70%);
+  pointer-events:none;}
+
+.cb-header{padding:12px 14px 10px;border-bottom:1px solid rgba(124,106,247,0.12);
+  display:flex;align-items:center;gap:8px;}
+.cb-vani-badge{display:flex;align-items:center;gap:5px;
+  padding:3px 8px;border-radius:100px;
+  background:rgba(124,106,247,0.15);border:1px solid rgba(124,106,247,0.3);}
+.cb-vani-orb{width:14px;height:14px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#9d8ff9,#5b4fd4);}
+.cb-vani-txt{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--vani);letter-spacing:.08em;font-weight:600;}
+.cb-status{margin-left:auto;display:flex;align-items:center;gap:5px;}
+.cb-status-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);
+  animation:pulse 1.2s ease-in-out infinite;}
+.cb-status-txt{font-size:10px;font-family:'DM Mono',monospace;color:var(--gold);}
+.cb-dismiss{width:22px;height:22px;border-radius:5px;
+  border:1px solid rgba(255,255,255,0.06);background:transparent;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--text-muted);font-size:11px;
+  transition:all .15s;margin-left:8px;}
+.cb-dismiss:hover{border-color:var(--border-hi);color:var(--text-dim);}
+
+.cb-body{padding:12px 14px;}
+
+/* confluence pills */
+.conf-rules{display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.cr-pill{padding:4px 10px;border-radius:5px;font-size:11px;
+  font-family:'DM Mono',monospace;border:1px solid;}
+.cr-astro{border-color:rgba(201,168,76,0.35);color:var(--gold);
+  background:rgba(201,168,76,0.08);}
+.cr-tech{border-color:rgba(45,212,191,0.35);color:var(--teal);
+  background:rgba(45,212,191,0.08);}
+.cr-op{font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;}
+
+/* stats row */
+.cb-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;}
+.cb-stat{background:rgba(0,0,0,0.2);border-radius:7px;padding:8px 10px;
+  border:1px solid rgba(255,255,255,0.04);}
+.cb-stat-v{font-family:'DM Mono',monospace;font-size:15px;font-weight:500;
+  color:var(--text);line-height:1;}
+.cb-stat-l{font-size:9px;color:var(--text-muted);margin-top:3px;
+  font-family:'DM Mono',monospace;}
+
+/* mini historical chart */
+.cb-chart{margin-bottom:12px;}
+.cb-chart-lbl{font-size:9px;font-family:'DM Mono',monospace;
+  color:var(--text-muted);letter-spacing:.08em;margin-bottom:6px;
+  display:flex;justify-content:space-between;align-items:center;}
+.cb-chart-legend{display:flex;gap:8px;}
+.ccl-item{display:flex;align-items:center;gap:3px;font-size:8px;color:var(--text-muted);}
+.ccl-dot{width:6px;height:6px;border-radius:50%;}
+
+/* outcome distribution */
+.outcome-bar{height:6px;border-radius:3px;overflow:hidden;
+  background:var(--bg3);display:flex;margin-bottom:8px;}
+.ob-bear{height:100%;background:var(--red);opacity:.7;}
+.ob-bull{height:100%;background:var(--green);opacity:.7;}
+
+/* instance rows */
+.instance-row{display:flex;align-items:center;padding:5px 0;
+  border-bottom:1px solid rgba(255,255,255,0.04);gap:8px;}
+.instance-row:last-child{border-bottom:none;}
+.ir-date{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);width:60px;}
+.ir-bar{flex:1;height:4px;border-radius:2px;}
+.ir-return{font-family:'DM Mono',monospace;font-size:10px;width:44px;text-align:right;}
+.ir-dur{font-size:9px;color:var(--text-muted);width:24px;text-align:right;
+  font-family:'DM Mono',monospace;}
+
+/* VaNi note */
+.cb-note{background:rgba(124,106,247,0.06);border:1px solid rgba(124,106,247,0.15);
+  border-radius:7px;padding:10px 12px;margin-bottom:12px;
+  font-size:11px;color:var(--text-dim);line-height:1.6;}
+.cb-note strong{color:var(--text);}
+.cb-note em{color:var(--vani);font-style:normal;}
+
+/* chart toggle */
+.cb-toggle{display:flex;align-items:center;gap:8px;margin-bottom:12px;
+  padding:8px 10px;border-radius:7px;background:rgba(0,0,0,0.2);
+  border:1px solid rgba(255,255,255,0.04);cursor:pointer;}
+.toggle-switch{width:32px;height:18px;border-radius:9px;
+  background:var(--vani);position:relative;flex-shrink:0;transition:background .2s;}
+.toggle-switch.off{background:var(--bg3);}
+.ts-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;
+  border-radius:50%;background:#fff;transition:transform .2s;
+  box-shadow:0 1px 4px rgba(0,0,0,0.3);}
+.toggle-switch.on .ts-thumb{transform:translateX(14px);}
+.cb-toggle-lbl{font-size:11px;color:var(--text-dim);}
+
+/* actions */
+.cb-actions{display:flex;gap:8px;}
+.cb-btn-save{flex:1;padding:9px;border-radius:7px;border:none;cursor:pointer;
+  font-size:12px;font-family:'DM Sans',sans-serif;transition:all .2s;
+  background:linear-gradient(135deg,var(--vani),#5b4fd4);color:#fff;
+  box-shadow:0 3px 12px rgba(124,106,247,0.35);}
+.cb-btn-save:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(124,106,247,0.45);}
+.cb-btn-dismiss{padding:9px 14px;border-radius:7px;
+  border:1px solid var(--border);background:transparent;
+  color:var(--text-dim);font-size:12px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all .2s;}
+.cb-btn-dismiss:hover{border-color:var(--border-hi);color:var(--text);}
+
+/* ── STANDARD BLOCKS ── */
+.rs-big{font-family:'Fraunces',serif;font-size:32px;font-weight:300;
+  color:var(--teal);letter-spacing:-0.03em;line-height:1;}
+.rs-sub{font-size:11px;color:var(--text-dim);margin-top:3px;}
+.rs-bar{margin-top:10px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.rs-fill{height:100%;width:68%;
+  background:linear-gradient(90deg,var(--teal),rgba(45,212,191,0.3));border-radius:2px;}
+.scan-row{display:flex;align-items:center;padding:6px 0;
+  border-bottom:1px solid var(--border);cursor:pointer;}
+.scan-row:last-child{border-bottom:none;}
+.sr-sym{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;
+  color:var(--text);width:80px;}
+.sr-surge{font-size:10px;color:var(--text-dim);flex:1;}
+.sr-chg{font-family:'DM Mono',monospace;font-size:11px;}
+
+/* ── ACTION ISLAND ── */
+.action-island{position:fixed;bottom:20px;
+  left:calc(var(--sidebar) + 50%);transform:translateX(-50%);
+  background:rgba(9,12,16,0.97);border:1px solid rgba(124,106,247,0.45);
+  border-radius:28px;padding:11px 20px 11px 13px;
+  display:flex;align-items:center;gap:12px;backdrop-filter:blur(24px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 24px rgba(124,106,247,0.12);
+  z-index:400;
+  opacity:0;animation:island-in .6s cubic-bezier(.34,1.56,.64,1) .6s forwards;}
+@keyframes island-in{
+  from{opacity:0;transform:translateX(-50%) translateY(20px);}
+  to{opacity:1;transform:translateX(-50%) translateY(0);}
+}
+.ai-orb{width:24px;height:24px;border-radius:50%;flex-shrink:0;
+  background:radial-gradient(circle at 35% 35%,#9d8ff9,#5b4fd4);
+  animation:pulse 2.5s ease-in-out infinite;
+  box-shadow:0 0 12px rgba(124,106,247,0.5);}
+.ai-text{font-size:13px;color:var(--text);}
+.ai-text strong{color:var(--gold);font-weight:500;}
+.ai-text em{color:var(--vani);font-style:normal;}
+.ai-caret{font-size:10px;color:var(--text-muted);}
+
+/* VaNi typing sequence at top */
+.vani-announcement{
+  position:fixed;top:calc(var(--topbar) + 12px);
+  left:calc(var(--sidebar) + 50%);transform:translateX(-50%);
+  background:var(--bg2);border:1px solid rgba(124,106,247,0.3);
+  border-radius:12px;padding:12px 18px;
+  display:flex;align-items:center;gap:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+  z-index:350;max-width:520px;
+  opacity:0;animation:ann-in .5s ease .3s forwards,ann-out .4s ease 7s forwards;}
+@keyframes ann-in{from{opacity:0;transform:translateX(-50%) translateY(-8px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+@keyframes ann-out{from{opacity:1;}to{opacity:0;pointer-events:none;}}
+.ann-orb{width:28px;height:28px;border-radius:8px;flex-shrink:0;
+  background:linear-gradient(135deg,#9d8ff9,#5b4fd4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;}
+.ann-msg{font-size:13px;color:var(--text);line-height:1.5;}
+.ann-msg strong{color:var(--gold);}
+.ann-msg em{color:var(--vani);font-style:normal;}
+
+/* marker tooltip */
+#cm-tip{position:absolute;background:rgba(13,17,23,0.97);
+  border:1px solid var(--border-hi);border-radius:8px;padding:8px 12px;
+  font-size:11px;z-index:50;pointer-events:none;display:none;
+  box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:120px;}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">dristi<span>Q</span></div>
+  <div class="tb-instrument">
+    <span class="tb-sym">NIFTY 50</span>
+    <span class="tb-price">24,853.15</span>
+    <span class="tb-chg">+0.38%</span>
+  </div>
+  <div class="tb-overlays">
+    <div class="ov-tag ov-teal">EMA 20/50</div>
+    <div class="ov-tag ov-gold">Panchak</div>
+    <div class="ov-tag ov-vani">RSI (14)</div>
+  </div>
+  <div class="tb-right">
+    <div class="vani-indicator">
+      <div class="vi-dot"></div>
+      <div class="vi-text">VaNi detected confluence</div>
+    </div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="nav-s">
+    <div class="nav-i active"><span class="ni">⬡</span>Workspace</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">View</div>
+    <div class="nav-i"><span class="ni">◎</span>Dashboard</div>
+    <div class="nav-i"><span class="ni">⊙</span>Scanner</div>
+    <div class="nav-i"><span class="ni">⊞</span>Market Structure</div>
+    <div class="nav-i"><span class="ni">☽</span>Planetary Intel</div>
+  </div>
+  <div class="nav-s">
+    <div class="nav-sl">Catalog</div>
+    <div class="nav-i"><span class="ni">✦</span>Astro Rules<span class="nav-badge">216</span></div>
+    <div class="nav-i"><span class="ni">⊘</span>Scanners</div>
+    <div class="nav-i"><span class="ni">∿</span>Indicators</div>
+    <div class="nav-i"><span class="ni">◈</span>Widgets</div>
+  </div>
+  <div class="sidebar-user">
+    <div class="su-av">R</div>
+    <div><div class="su-name">Rajesh</div><div class="su-meta">Sun 25 May</div></div>
+  </div>
+</div>
+
+<!-- VANI ANNOUNCEMENT -->
+<div class="vani-announcement" id="ann">
+  <div class="ann-orb">V</div>
+  <div class="ann-msg">
+    <strong>Panchak + RSI overbought</strong> are active simultaneously —
+    this confluence has appeared <em>8 times since 2015.</em>
+    Nifty fell in 6 of those. I've marked the chart and placed a correlation block.
+  </div>
+</div>
+
+<!-- WORKSPACE -->
+<div class="ws">
+
+  <!-- CHART -->
+  <div class="chart-area">
+    <div class="chart-topbar">
+      <div class="ct-tf">
+        <div class="tf-btn">15m</div>
+        <div class="tf-btn">1H</div>
+        <div class="tf-btn active">D</div>
+        <div class="tf-btn">W</div>
+      </div>
+      <div style="margin-left:auto;font-size:10px;font-family:'DM Mono',monospace;
+        color:var(--vani);display:flex;align-items:center;gap:5px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--gold);display:inline-block;"></span>
+        8 confluence instances marked
+      </div>
+    </div>
+
+    <div class="chart-body" id="chart-body">
+      <!-- main chart SVG -->
+      <svg width="100%" height="100%" viewBox="0 0 900 300" preserveAspectRatio="none" style="position:absolute;inset:0;">
+        <defs>
+          <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#4ade80" stop-opacity=".1"/>
+            <stop offset="100%" stop-color="#4ade80" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <!-- grid -->
+        <line x1="0" y1="75" x2="900" y2="75" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
+        <line x1="0" y1="150" x2="900" y2="150" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
+        <line x1="0" y1="225" x2="900" y2="225" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
+        <!-- ema50 -->
+        <polyline points="0,210 80,200 160,192 240,197 320,182 400,170 480,158 560,145 640,133 720,120 800,108 900,96"
+          fill="none" stroke="rgba(201,168,76,0.4)" stroke-width="1.5"/>
+        <!-- ema20 -->
+        <polyline points="0,195 80,185 160,175 240,180 320,162 400,150 480,135 560,118 640,105 720,90 800,76 900,64"
+          fill="none" stroke="rgba(45,212,191,0.4)" stroke-width="1.5"/>
+        <!-- price area -->
+        <polygon points="0,220 80,205 160,193 240,205 320,175 400,182 480,155 560,132 640,120 720,104 800,88 900,75 900,300 0,300"
+          fill="url(#cg)"/>
+        <!-- price -->
+        <polyline points="0,220 80,205 160,193 240,205 320,175 400,182 480,155 560,132 640,120 720,104 800,88 900,75"
+          fill="none" stroke="#4ade80" stroke-width="1.8"/>
+        <!-- candles -->
+        <rect x="72"  y="200" width="7" height="12" fill="#4ade80" rx="1" opacity=".8"/>
+        <rect x="155" y="190" width="7" height="14" fill="#f87171" rx="1" opacity=".8"/>
+        <rect x="315" y="170" width="7" height="12" fill="#4ade80" rx="1" opacity=".8"/>
+        <rect x="475" y="150" width="7" height="12" fill="#4ade80" rx="1" opacity=".8"/>
+        <rect x="635" y="115" width="7" height="14" fill="#f87171" rx="1" opacity=".8"/>
+        <rect x="715" y="99"  width="7" height="12" fill="#4ade80" rx="1" opacity=".8"/>
+        <rect x="795" y="83"  width="7" height="13" fill="#4ade80" rx="1" opacity=".8"/>
+        <rect x="888" y="70"  width="7" height="12" fill="#4ade80" rx="1" opacity=".8"/>
+        <!-- price label -->
+        <rect x="826" y="58" width="70" height="22" rx="4" fill="#4ade80" opacity=".9"/>
+        <text x="861" y="73" fill="#090c10" font-size="10" font-family="monospace" text-anchor="middle" font-weight="700">24,853</text>
+      </svg>
+
+      <!-- Panchak zones -->
+      <div class="pzone" style="left:28%;width:7%;">
+        <div class="pzone-lbl">PANCHAK</div>
+      </div>
+      <div class="pzone" style="left:60%;width:8%;">
+        <div class="pzone-lbl">PANCHAK</div>
+      </div>
+
+      <!-- Active confluence zone (current) -->
+      <div class="conf-zone" style="left:88%;width:10%;">
+        <div class="conf-zone-lbl">
+          <div class="conf-zone-dot"></div>
+          ACTIVE NOW
+        </div>
+      </div>
+
+      <!-- Historical markers -->
+      <!-- Bear instances -->
+      <div class="cm-marker" style="left:14%;"></div>
+      <div class="cm-dot bear" style="left:14%;top:38%;"
+        onmouseover="showTip(event,'Mar 2020','-5.8%','3d')"
+        onmouseout="hideTip()"></div>
+
+      <div class="cm-marker" style="left:29%;"></div>
+      <div class="cm-dot bear" style="left:29%;top:43%;"
+        onmouseover="showTip(event,'Oct 2021','-2.4%','4d')"
+        onmouseout="hideTip()"></div>
+
+      <div class="cm-marker" style="left:38%;"></div>
+      <div class="cm-dot bear" style="left:38%;top:36%;"
+        onmouseover="showTip(event,'Jun 2022','-3.1%','3d')"
+        onmouseout="hideTip()"></div>
+
+      <div class="cm-marker" style="left:52%;"></div>
+      <div class="cm-dot bear" style="left:52%;top:32%;"
+        onmouseover="showTip(event,'Feb 2023','-1.9%','2d')"
+        onmouseout="hideTip()"></div>
+
+      <div class="cm-marker" style="left:62%;"></div>
+      <div class="cm-dot bear" style="left:62%;top:28%;"
+        onmouseover="showTip(event,'Aug 2023','-4.2%','5d')"
+        onmouseout="hideTip()"></div>
+
+      <div class="cm-marker" style="left:72%;"></div>
+      <div class="cm-dot bear" style="left:72%;top:24%;"
+        onmouseover="showTip(event,'Jan 2024','-2.7%','3d')"
+        onmouseout="hideTip()"></div>
+
+      <!-- Bull instances -->
+      <div class="cm-marker" style="left:21%;background:rgba(74,222,128,0.25);"></div>
+      <div class="cm-dot bull" style="left:21%;top:40%;"
+        onmouseover="showTip(event,'Sep 2020','+1.2%','2d')"
+        onmouseout="hideTip()"></div>
+
+      <div class="cm-marker" style="left:45%;background:rgba(74,222,128,0.25);"></div>
+      <div class="cm-dot bull" style="left:45%;top:34%;"
+        onmouseover="showTip(event,'Nov 2022','+0.8%','1d')"
+        onmouseout="hideTip()"></div>
+
+      <!-- Active now marker -->
+      <div class="cm-marker" style="left:91%;background:rgba(124,106,247,0.4);width:2px;"></div>
+      <div class="cm-dot active-now" style="left:91%;top:20%;"
+        onmouseover="showTip(event,'Today','—','Active')"
+        onmouseout="hideTip()"></div>
+
+      <!-- Marker tooltip -->
+      <div id="cm-tip">
+        <div class="cmt-date" id="tip-date">Mar 2020</div>
+        <div class="cmt-return" id="tip-return" style="color:var(--red)">-5.8%</div>
+        <div style="font-size:9px;color:var(--text-dim);margin-top:2px;" id="tip-dur">3d duration</div>
+      </div>
+    </div>
+
+    <!-- Indicator strip -->
+    <div class="indicator-strip">
+      <div class="is-lbl">RSI (14) — overbought zone</div>
+      <svg width="100%" height="36" viewBox="0 0 900 36" preserveAspectRatio="none">
+        <!-- overbought zone -->
+        <rect x="0" y="0" width="900" height="10" fill="rgba(248,113,113,0.04)"/>
+        <line x1="0" y1="10" x2="900" y2="10" stroke="rgba(248,113,113,0.2)" stroke-width="1" stroke-dasharray="4 4"/>
+        <polyline points="0,20 100,18 200,14 300,16 400,12 500,8 600,6 700,4 800,3 900,2"
+          fill="none" stroke="rgba(248,113,113,0.7)" stroke-width="1.5"/>
+        <text x="892" y="8" fill="rgba(248,113,113,0.5)" font-size="8" font-family="monospace" text-anchor="end">70</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+
+    <!-- MagicRS -->
+    <div class="panel-block">
+      <div class="pb-hdr">
+        <div class="pb-title">MagicRS</div>
+        <div style="background:rgba(45,212,191,.08);color:var(--teal);font-size:9px;
+          font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;margin-left:auto;">Widget</div>
+      </div>
+      <div class="rs-big">68.4</div>
+      <div class="rs-sub">Above Market · Bullish zone</div>
+      <div class="rs-bar"><div class="rs-fill"></div></div>
+    </div>
+
+    <!-- VANI CORRELATION BLOCK -->
+    <div class="corr-block" id="corr-block">
+
+      <div class="cb-header">
+        <div class="cb-vani-badge">
+          <div class="cb-vani-orb"></div>
+          <div class="cb-vani-txt">VaNi ✦</div>
+        </div>
+        <div class="cb-status">
+          <div class="cb-status-dot"></div>
+          <div class="cb-status-txt">Active Now</div>
+        </div>
+        <div class="cb-dismiss" onclick="dismissBlock()" title="Dismiss">✕</div>
+      </div>
+
+      <div class="cb-body">
+
+        <!-- confluence rules -->
+        <div class="conf-rules">
+          <div class="cr-pill cr-astro">Panchak</div>
+          <div class="cr-op">∩</div>
+          <div class="cr-pill cr-tech">RSI > 70</div>
+        </div>
+
+        <!-- stats -->
+        <div class="cb-stats">
+          <div class="cb-stat">
+            <div class="cb-stat-v">8</div>
+            <div class="cb-stat-l">Instances since 2015</div>
+          </div>
+          <div class="cb-stat">
+            <div class="cb-stat-v" style="color:var(--red)">6 / 8</div>
+            <div class="cb-stat-l">Bearish outcomes</div>
+          </div>
+          <div class="cb-stat">
+            <div class="cb-stat-v" style="color:var(--red)">-2.6%</div>
+            <div class="cb-stat-l">Avg return</div>
+          </div>
+          <div class="cb-stat">
+            <div class="cb-stat-v">3.2d</div>
+            <div class="cb-stat-l">Avg duration</div>
+          </div>
+        </div>
+
+        <!-- outcome distribution bar -->
+        <div class="cb-chart">
+          <div class="cb-chart-lbl">
+            Outcome distribution
+            <div class="cb-chart-legend">
+              <div class="ccl-item"><div class="ccl-dot" style="background:var(--red)"></div>Bear</div>
+              <div class="ccl-item"><div class="ccl-dot" style="background:var(--green)"></div>Bull</div>
+            </div>
+          </div>
+          <div class="outcome-bar">
+            <div class="ob-bear" style="width:75%"></div>
+            <div class="ob-bull" style="width:25%"></div>
+          </div>
+
+          <!-- instance rows -->
+          <div class="instance-row">
+            <div class="ir-date">Mar 2020</div>
+            <div class="ir-bar" style="background:linear-gradient(90deg,rgba(248,113,113,.6),transparent);width:80%;"></div>
+            <div class="ir-return" style="color:var(--red)">-5.8%</div>
+            <div class="ir-dur">3d</div>
+          </div>
+          <div class="instance-row">
+            <div class="ir-date">Sep 2020</div>
+            <div class="ir-bar" style="background:linear-gradient(90deg,rgba(74,222,128,.6),transparent);width:20%;"></div>
+            <div class="ir-return" style="color:var(--green)">+1.2%</div>
+            <div class="ir-dur">2d</div>
+          </div>
+          <div class="instance-row">
+            <div class="ir-date">Oct 2021</div>
+            <div class="ir-bar" style="background:linear-gradient(90deg,rgba(248,113,113,.6),transparent);width:45%;"></div>
+            <div class="ir-return" style="color:var(--red)">-2.4%</div>
+            <div class="ir-dur">4d</div>
+          </div>
+          <div class="instance-row">
+            <div class="ir-date">Jun 2022</div>
+            <div class="ir-bar" style="background:linear-gradient(90deg,rgba(248,113,113,.6),transparent);width:55%;"></div>
+            <div class="ir-return" style="color:var(--red)">-3.1%</div>
+            <div class="ir-dur">3d</div>
+          </div>
+          <div class="instance-row">
+            <div class="ir-date">Aug 2023</div>
+            <div class="ir-bar" style="background:linear-gradient(90deg,rgba(248,113,113,.6),transparent);width:72%;"></div>
+            <div class="ir-return" style="color:var(--red)">-4.2%</div>
+            <div class="ir-dur">5d</div>
+          </div>
+          <div class="instance-row" style="opacity:.5;">
+            <div class="ir-date">+ 3 more</div>
+            <div style="font-size:10px;color:var(--text-muted);flex:1;font-family:'DM Mono',monospace;">…</div>
+            <div class="ir-return" style="color:var(--text-dim)">—</div>
+          </div>
+        </div>
+
+        <!-- VaNi note -->
+        <div class="cb-note">
+          <strong>Historically, this setup preceded a pullback</strong> in 6 of 8 cases.
+          Average decline of <em>-2.6%</em> over 3 days.
+          Two bull instances occurred during strong trending markets — current market context is <em>overbought.</em>
+        </div>
+
+        <!-- chart toggle -->
+        <div class="cb-toggle" onclick="toggleChart(this)">
+          <div class="toggle-switch on" id="chart-toggle">
+            <div class="ts-thumb"></div>
+          </div>
+          <div class="cb-toggle-lbl">Instances marked on chart</div>
+        </div>
+
+        <!-- actions -->
+        <div class="cb-actions">
+          <button class="cb-btn-save" onclick="saveObs(this)">Save observation</button>
+          <button class="cb-btn-dismiss" onclick="dismissBlock()">Dismiss</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Conviction Flow -->
+    <div class="panel-block">
+      <div class="pb-hdr">
+        <div class="pb-title">Conviction Flow</div>
+        <div style="background:var(--vani-dim);color:var(--vani);font-size:9px;
+          font-family:'DM Mono',monospace;padding:2px 6px;border-radius:3px;margin-left:auto;">Scanner</div>
+      </div>
+      <div class="scan-row"><div class="sr-sym">BBOX</div><div class="sr-surge">Surge 4.9x</div><div class="sr-chg" style="color:var(--green)">+11.5%</div></div>
+      <div class="scan-row"><div class="sr-sym">SAREGAMA</div><div class="sr-surge">Surge 56x</div><div class="sr-chg" style="color:var(--green)">+19.1%</div></div>
+      <div class="scan-row"><div class="sr-sym">SATIN</div><div class="sr-surge">Surge 7.6x</div><div class="sr-chg" style="color:var(--green)">+4.1%</div></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ACTION ISLAND -->
+<div class="action-island">
+  <div class="ai-orb"></div>
+  <div class="ai-text">
+    <em>Panchak ∩ RSI > 70</em> — <strong>6 of 8 historically bearish.</strong> Block placed ↑
+  </div>
+  <div class="ai-caret">↑</div>
+</div>
+
+<script>
+function showTip(e, date, ret, dur){
+  const tip = document.getElementById('cm-tip');
+  const isRed = ret.startsWith('-');
+  tip.style.display = 'block';
+  document.getElementById('tip-date').textContent = date;
+  document.getElementById('tip-return').textContent = ret;
+  document.getElementById('tip-return').style.color = dur === 'Active' ? 'var(--vani)' : isRed ? 'var(--red)' : 'var(--green)';
+  document.getElementById('tip-dur').textContent = dur === 'Active' ? 'Currently active' : dur + ' duration';
+  // position near cursor within chart
+  const rect = document.getElementById('chart-body').getBoundingClientRect();
+  const x = e.clientX - rect.left + 12;
+  const y = e.clientY - rect.top - 10;
+  tip.style.left = Math.min(x, rect.width - 140) + 'px';
+  tip.style.top = y + 'px';
+}
+function hideTip(){
+  document.getElementById('cm-tip').style.display = 'none';
+}
+function toggleChart(el){
+  const sw = document.getElementById('chart-toggle');
+  sw.classList.toggle('on');
+  sw.classList.toggle('off');
+}
+function saveObs(btn){
+  btn.textContent = '✓ Observation saved';
+  btn.style.background = 'linear-gradient(135deg,#2dd4bf,#059669)';
+}
+function dismissBlock(){
+  const b = document.getElementById('corr-block');
+  b.style.transition = 'all .35s ease';
+  b.style.opacity = '0';
+  b.style.transform = 'scale(.94) translateY(-8px)';
+  setTimeout(()=>b.style.display='none', 380);
+}
+document.querySelectorAll('.tf-btn').forEach(b=>{
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.tf-btn').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
