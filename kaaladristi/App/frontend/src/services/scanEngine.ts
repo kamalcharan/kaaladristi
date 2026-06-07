@@ -140,7 +140,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   // Scanner always uses the latest available km_equity_eod data regardless
   // of whether km_trading_calendar has been backfilled.
   // 100 calendar days ≈ 70 trading days (enough for 66D return + buffer).
-  const eodCutoff = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const eodCutoff = new Date(Date.now() - 160 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   // 20 calendar days ≈ 14 trading days for industry rotation detection.
   const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const last10days = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
