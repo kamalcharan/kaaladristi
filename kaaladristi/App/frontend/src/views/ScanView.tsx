@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, ChevronLeft, Download, Copy, Check } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useScan, useAllScanCounts, useScanPresets, useStage2Scan, type Stage2Stock, type Stage2Filters } from '@/hooks/useScan';
+import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe } from '@/services/scanEngine';
 import { StockCard, StageBadge } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
@@ -608,70 +608,23 @@ function ScannerHub() {
 
 // ── Stage 2 Leaders results ───────────────────────────────────
 
-type S2SortKey = 'magic_rs' | 'close' | 'rss_spread' | 'pct_of_ath' | 'mcap_cr';
+type S2SortKey = 'magic_rs' | 'close' | 'rss_spread' | 'mcap_cr';
 
 const S2_SORT_OPTIONS: { key: S2SortKey; label: string }[] = [
   { key: 'magic_rs',   label: 'RS' },
-  { key: 'pct_of_ath', label: '% of ATH' },
   { key: 'close',      label: 'Price' },
+  { key: 'rss_spread', label: 'RSS' },
   { key: 'mcap_cr',    label: 'MCap' },
 ];
 
-function sortStage2(arr: Stage2Stock[], key: S2SortKey, dir: SortDir): Stage2Stock[] {
+function sortStage2(arr: ScanStock[], key: S2SortKey, dir: SortDir): ScanStock[] {
   return [...arr].sort((a, b) => {
-    const av = a[key] ?? -Infinity;
-    const bv = b[key] ?? -Infinity;
+    const av = (a[key] as number | null) ?? -Infinity;
+    const bv = (b[key] as number | null) ?? -Infinity;
     return dir === 'asc' ? (av < bv ? -1 : av > bv ? 1 : 0) : (av > bv ? -1 : av < bv ? 1 : 0);
   });
 }
 
-function s2ToScanStock(s: Stage2Stock): ScanStock {
-  return {
-    equity_id: s.equity_id,
-    symbol: s.symbol,
-    company_name: s.company_name,
-    industry: s.industry ?? null,
-    exchange: s.exchange,
-    mcap_cr: s.mcap_cr,
-    close: s.close,
-    pct_chng: null,
-    magic_rs: s.magic_rs,
-    magic_rs_zone: s.magic_rs_zone,
-    flow_type: s.flow_type,
-    sniper_inst: s.sniper_inst,
-    sniper_hot: null,
-    accum_distrib: null,
-    rss_value: null,
-    rss_spread: s.rss_spread,
-    sma_150: s.sma_150,
-    supertrend_dir: s.supertrend_dir,
-    rvol: s.rvol,
-    rsi_14: null,
-    ema_20: null,
-    atr_14: null,
-    delivery_pct: null,
-    w52_high: s.w52_high,
-    w52_low: s.w52_low,
-    sma_50: s.sma_50,
-    sma_200: s.sma_200,
-    lifetime_high: s.lifetime_high,
-    open: null, high: null, low: null,
-    avg_amt_66d: null,
-    xAmt: null,
-    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
-    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-    magicRsTrend: [],
-    reward: null, rewardPct: null, pctBelow52wHigh: null,
-    vaniOpportunity: s.is_vani,
-    volume_divergence_flag: null,
-    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
-    trade_date: s.trade_date,
-    avg_amt_5d: s.avg_amt_5d,
-    avg_amt_22d: s.avg_amt_22d,
-    delivery_surge_x: s.delivery_surge_x,
-    ret_5d: null, ret_22d: null, ret_66d: null,
-  } as ScanStock;
-}
 
 function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timeframe: ScanTimeframe }) {
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
@@ -684,52 +637,29 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
   const [supertrendFilter, setSupertrendFilter] = useState('');
   const { show: showToast, Toast } = useToast();
 
-  const filters: Stage2Filters = useMemo(() => ({
-    exchange: exchangeFilter,
-    pct_ath_min: pctAthMin,
-    supertrend: supertrendFilter,
-    sort: s2Sort,
-    order: sortDir,
-  }), [exchangeFilter, pctAthMin, supertrendFilter, s2Sort, sortDir]);
+  const { data: rawStocks = [], isLoading, error, refetch } = useScan('stage_2_leaders', exchangeFilter, timeframe);
 
-  const { data: result, isLoading, error, refetch } = useStage2Scan(filters);
-  const stocks: Stage2Stock[] = result?.stocks ?? [];
-  const vaniCount = result?.vani_count ?? 0;
-
-  const vaniStocks = useMemo(() => stocks.filter((s) => s.is_vani), [stocks]);
-  const displayStocks = useMemo(() => vaniOnly ? vaniStocks : stocks, [stocks, vaniStocks, vaniOnly]);
+  const vaniStocks = useMemo(() => rawStocks.filter((s) => s.vaniOpportunity), [rawStocks]);
+  const vaniCount = vaniStocks.length;
+  const displayStocks = useMemo(() => vaniOnly ? vaniStocks : rawStocks, [rawStocks, vaniStocks, vaniOnly]);
   const vaniSorted = useMemo(() => sortStage2(vaniStocks, s2Sort, sortDir), [vaniStocks, s2Sort, sortDir]);
-  const restSorted = useMemo(() => sortStage2(displayStocks.filter((s) => !s.is_vani), s2Sort, sortDir), [displayStocks, s2Sort, sortDir]);
+  const restSorted = useMemo(() => sortStage2(displayStocks.filter((s) => !s.vaniOpportunity), s2Sort, sortDir), [displayStocks, s2Sort, sortDir]);
 
-  const exportStocks = useMemo(() => displayStocks.map(s2ToScanStock), [displayStocks]);
+  const exportStocks = useMemo(() => displayStocks, [displayStocks]);
 
   const toggleSort = (key: S2SortKey) => {
     if (s2Sort === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else { setS2Sort(key); setSortDir('desc'); }
   };
 
-  const athLabel = (stock: Stage2Stock) => {
-    const p = stock.pct_of_ath;
-    if (p == null) return null;
-    const pctOff = 100 - p;
-    return (
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: '10px',
-        color: pctOff < 10 ? 'var(--bull)' : pctOff < 25 ? 'var(--caution)' : 'var(--text-faint)',
-      }}>
-        {p.toFixed(1)}% of ATH
-      </span>
-    );
-  };
-
-  const renderCard = (stock: Stage2Stock) => (
+  const renderCard = (stock: ScanStock) => (
     <StockCard
       key={stock.equity_id}
-      stock={s2ToScanStock(stock)}
+      stock={stock}
       stageBadge="S2"
-      extraRight={athLabel(stock)}
     />
   );
+
 
   const SkeletonCard = () => (
     <div style={{
@@ -879,7 +809,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
             {(vaniOnly ? sortStage2(vaniStocks, s2Sort, sortDir) : restSorted).map(renderCard)}
           </div>
         </>
-      ) : !isLoading && stocks.length === 0 ? (
+      ) : !isLoading && rawStocks.length === 0 ? (
         <div style={{
           padding: '64px 24px', textAlign: 'center',
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
