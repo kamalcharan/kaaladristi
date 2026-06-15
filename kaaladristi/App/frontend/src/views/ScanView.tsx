@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, ChevronLeft, Download, Copy, Check } from 'lucide-react';
-import { Card } from '@/components/ui';
+import { Card, DristiQLoader } from '@/components/ui';
 import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe } from '@/services/scanEngine';
 import { StockCard, StageBadge } from '@/components/domain/StockCard';
@@ -645,7 +645,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
   const vaniSorted = useMemo(() => sortStage2(vaniStocks, s2Sort, sortDir), [vaniStocks, s2Sort, sortDir]);
   const restSorted = useMemo(() => sortStage2(displayStocks.filter((s) => !s.vaniOpportunity), s2Sort, sortDir), [displayStocks, s2Sort, sortDir]);
 
-  const exportStocks = useMemo(() => displayStocks, [displayStocks]);
+  const exportStocks = useMemo(() => rawStocks, [rawStocks]);
 
   const toggleSort = (key: S2SortKey) => {
     if (s2Sort === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -776,9 +776,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
 
       {/* All Results */}
       {isLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
-        </div>
+        <DristiQLoader message="Preparing Data For You…" />
       ) : error ? (
         <div style={{
           padding: '32px 24px', textAlign: 'center',
@@ -1020,10 +1018,7 @@ function ConvictionFlowResults({ preset, timeframe }: { preset: ScanDefinition; 
       />
 
       {isLoading ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
-          <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
-          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Scanning…</span>
-        </div>
+        <DristiQLoader />
       ) : error ? (
         <Card rounded="xxl" className="py-12 text-center">
           <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
@@ -1152,10 +1147,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
       <div style={{ paddingBottom: '100px' }}>
         {header}
         {isLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
-            <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Scanning…</span>
-          </div>
+          <DristiQLoader />
         ) : error ? (
           <Card rounded="xxl" className="py-12 text-center">
             <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
@@ -1247,10 +1239,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
 
       {/* Results */}
       {isLoading ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0' }}>
-          <Loader2 style={{ width: '20px', height: '20px', marginRight: '8px', color: 'var(--indigo)', animation: 'spin 1s linear infinite' }} />
-          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Scanning market…</span>
-        </div>
+        <DristiQLoader />
       ) : error ? (
         <Card rounded="xxl" className="py-12 text-center">
           <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>

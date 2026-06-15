@@ -113,6 +113,7 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
     nse = NseSession()
 
     # ── Step 0: Download + insert index bhav ──
+    market_holiday = False
     tracker.start('index_download')
     try:
         idx_csv = download_nse_index_bhav(trade_date, session=nse)
@@ -127,9 +128,20 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             })
             print(f'  [index] {idx_count} indexes upserted, {len(idx_unmatched)} unmatched')
         else:
+            market_holiday = True
             tracker.skip('index_download', 'No index data available')
     except Exception as e:
         tracker.fail('index_download', str(e))
+
+    # If index data is missing on a weekday, it's almost certainly a market holiday.
+    # Skip TRI + FII/DII immediately — no retries needed for a holiday.
+    if market_holiday:
+        tracker.skip('tri_download', 'Skipped — likely market holiday')
+        tracker.skip('fii_dii', 'Skipped — likely market holiday')
+        mark_day_status(db, trade_date, 'NSE', 'holiday')
+        print(f'  [pipeline] {trade_date} appears to be a market holiday — skipping')
+        print(f'  ✓ NSE pipeline skipped for {trade_date} (holiday)')
+        return True
 
     # ── Step 0b: Download + insert TRI data ──
     tracker.start('tri_download')
@@ -186,8 +198,10 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.start('index_flow_intelligence')
         try:
             result = db.rpc('compute_all_flow_intelligence', {
-                'p_table': 'km_index_eod',
-                'p_id_col': 'index_id',
+                'p_table':     'km_index_eod',
+                'p_id_col':    'index_id',
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
             tracker.complete('index_flow_intelligence', rows=fi_count)
@@ -344,8 +358,10 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.start('flow_intelligence')
         try:
             result = db.rpc('compute_all_flow_intelligence', {
-                'p_table': 'km_equity_eod',
-                'p_id_col': 'equity_id',
+                'p_table':     'km_equity_eod',
+                'p_id_col':    'equity_id',
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
             actual, expected = get_step_coverage(db, 'flow_intelligence', trade_date, 'NSE')
@@ -534,8 +550,10 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         try:
             print(f'  [flow-intel] Computing flow intelligence...')
             result = db.rpc('compute_all_flow_intelligence', {
-                'p_table': 'km_equity_eod',
-                'p_id_col': 'equity_id',
+                'p_table':     'km_equity_eod',
+                'p_id_col':    'equity_id',
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
             })
             fi_count = sum(r.get('rows_updated', 0) for r in (result or []))
             print(f'  [flow-intel] Updated {fi_count} rows')

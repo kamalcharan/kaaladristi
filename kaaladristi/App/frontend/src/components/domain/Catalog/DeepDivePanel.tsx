@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { from } from '@/services/postgrest'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
+import { TagChip } from '@/constants/ruleTagColors'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
 import { useAuthStore } from '@/stores/authStore'
@@ -23,6 +24,8 @@ export interface DeepDiveAstroRule {
   probability_label: string | null
   remarks: string | null
   conditions: Record<string, unknown> | null
+  tags?: string[]
+  catalog_visible?: boolean
 }
 
 export interface DeepDiveCatalogItem {
@@ -741,7 +744,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
 
               {/* Outcome badge (astro only) */}
               {item.mode === 'astro_rule' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{
                     fontSize: 11,
                     color: outcomeColor(item.outcome || item.base_bias),
@@ -759,6 +762,29 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
                       · {item.probability_label}
                     </span>
                   )}
+                  {/* Catalog status badge */}
+                  <span style={{
+                    fontSize: 9,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    padding: '1px 6px',
+                    borderRadius: 3,
+                    background: item.catalog_visible ? 'rgba(45,212,191,0.1)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${item.catalog_visible ? 'rgba(45,212,191,0.25)' : 'var(--border)'}`,
+                    color: item.catalog_visible ? '#2dd4bf' : 'var(--text-muted)',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase' as const,
+                  }}>
+                    {item.catalog_visible ? 'In Catalog' : 'Admin Only'}
+                  </span>
+                </div>
+              )}
+
+              {/* Tags row (astro only) */}
+              {item.mode === 'astro_rule' && (item.tags ?? []).length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                  {(item.tags ?? []).map(tag => (
+                    <TagChip key={tag} tag={tag} />
+                  ))}
                 </div>
               )}
             </>

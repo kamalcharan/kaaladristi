@@ -716,6 +716,19 @@ def refresh_breadth_roc(background_tasks: BackgroundTasks):
     return {'status': 'queued', 'message': 'Breadth ROC recompute queued'}
 
 
+@app.get('/api/vani-opportunity/config')
+def vani_opportunity_config():
+    return {
+        "presets": {},
+        "default": {
+            "min_rvol": 1.5,
+            "min_magic_rs": 20,
+            "min_rsi": 50,
+            "max_rsi": 80,
+        },
+    }
+
+
 @app.get('/api/scan/presets')
 def scan_presets():
     """Return all active scan preset definitions ordered by category_sort, sort_order."""

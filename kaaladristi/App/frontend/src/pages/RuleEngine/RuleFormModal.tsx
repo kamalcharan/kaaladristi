@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, type KeyboardEvent } from 'react';
 import { X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { RuleInput } from './ruleService';
+import { TagChip } from '@/constants/ruleTagColors';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,8 @@ export interface RuleFormValues {
   probability_label: string;
   conditions_text: string;
   remarks: string;
+  tags: string[];
+  catalog_visible: boolean;
 }
 
 export function emptyForm(): RuleFormValues {
@@ -65,6 +68,8 @@ export function emptyForm(): RuleFormValues {
     probability_label: '',
     conditions_text: '',
     remarks: '',
+    tags: [],
+    catalog_visible: false,
   };
 }
 
@@ -78,6 +83,8 @@ export function ruleToForm(rule: {
   probability_label: string | null;
   conditions: Record<string, unknown> | null;
   remarks: string | null;
+  tags?: string[];
+  catalog_visible?: boolean;
 }, mode: FormMode): RuleFormValues {
   return {
     rule_code:        mode === 'clone' ? '' : rule.rule_code,
@@ -89,6 +96,8 @@ export function ruleToForm(rule: {
     probability_label: rule.probability_label ?? '',
     conditions_text:  rule.conditions ? JSON.stringify(rule.conditions, null, 2) : '',
     remarks:          rule.remarks ?? '',
+    tags:             mode === 'clone' ? [] : (rule.tags ?? []),
+    catalog_visible:  mode === 'clone' ? false : (rule.catalog_visible ?? false),
   };
 }
 
@@ -111,6 +120,8 @@ export function formToInput(values: RuleFormValues): RuleInput {
     probability_label: values.probability_label || null,
     conditions,
     remarks:           values.remarks.trim() || null,
+    tags:              values.tags,
+    catalog_visible:   values.catalog_visible,
   };
 }
 
@@ -156,6 +167,54 @@ const errorCls = 'text-[11px] text-risk-red mt-1';
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return <p className={errorCls}>{msg}</p>;
+}
+
+// ── Admin tag chip input ──────────────────────────────────────────────────────
+
+function AdminTagsField({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
+  const [input, setInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function addTag(raw: string) {
+    const tag = raw.trim();
+    if (!tag || tags.includes(tag)) { setInput(''); return; }
+    onChange([...tags, tag]);
+    setInput('');
+  }
+
+  function handleKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTag(input);
+    } else if (e.key === 'Backspace' && input === '' && tags.length > 0) {
+      onChange(tags.slice(0, -1));
+    }
+  }
+
+  return (
+    <div>
+      <label className={labelCls}>Tags</label>
+      <div
+        className="flex flex-wrap gap-1.5 px-3 py-2 bg-kd-elevated border border-kd-border rounded-xl cursor-text min-h-[42px]"
+        onClick={() => inputRef.current?.focus()}
+      >
+        {tags.map(tag => (
+          <TagChip key={tag} tag={tag} onRemove={() => onChange(tags.filter(t => t !== tag))} />
+        ))}
+        <input
+          ref={inputRef}
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          onBlur={() => { if (input.trim()) addTag(input); }}
+          placeholder={tags.length === 0 ? 'e.g. Mercury, Retrograde, Panchak' : ''}
+          className="flex-1 min-w-[120px] bg-transparent text-sm text-[var(--text-primary)] placeholder:text-muted outline-none"
+        />
+      </div>
+      <p className="text-[10px] text-muted mt-1">Press Enter or comma to add a tag</p>
+    </div>
+  );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -400,6 +459,41 @@ export default function RuleFormModal({
               rows={3}
               className={cn(inputCls, 'resize-none')}
             />
+          </div>
+
+          {/* ── Admin section ── */}
+          <div className="pt-2">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-kd-border" />
+              <span className="text-[9px] font-mono uppercase tracking-widest text-muted px-1">Admin</span>
+              <div className="flex-1 h-px bg-kd-border" />
+            </div>
+
+            {/* catalog_visible toggle */}
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div className="flex-1">
+                <div className={labelCls}>Visible in Catalog</div>
+                <p className="text-[11px] text-muted leading-relaxed">
+                  When enabled, this rule appears in the user Catalog under Astro Rules.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => set('catalog_visible', !form.catalog_visible)}
+                className={cn(
+                  'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none mt-0.5',
+                  form.catalog_visible ? 'bg-risk-green/60' : 'bg-kd-border',
+                )}
+              >
+                <span className={cn(
+                  'inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform',
+                  form.catalog_visible ? 'translate-x-4' : 'translate-x-0.5',
+                )} />
+              </button>
+            </div>
+
+            {/* tags chip input */}
+            <AdminTagsField tags={form.tags} onChange={t => set('tags', t)} />
           </div>
 
           {/* Server error */}
