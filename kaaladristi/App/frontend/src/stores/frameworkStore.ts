@@ -101,6 +101,7 @@ interface FrameworkStore {
   removeOverlay: (catalogItemId: string) => void
   toggleOverlayVisibility: (catalogItemId: string) => void
   updateOverlayColor: (catalogItemId: string, color: string) => void
+  updateOverlayOpacity: (catalogItemId: string, opacity: number) => void
   addChartBlock: (instrument: InstrumentRef) => void
   switchPrimaryIndex: (instrument: InstrumentRef) => void
   addInstrument: (symbol: string) => void
@@ -370,6 +371,22 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
             ...s.framework,
             chart_overlays: s.framework.chart_overlays.map(o =>
               o.catalog_item_id === catalogItemId ? { ...o, color } : o
+            ),
+            version: s.framework.version + 1,
+          }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  updateOverlayOpacity: (catalogItemId: string, opacity: number) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? {
+            ...s.framework,
+            chart_overlays: s.framework.chart_overlays.map(o =>
+              o.catalog_item_id === catalogItemId ? { ...o, opacity } : o
             ),
             version: s.framework.version + 1,
           }

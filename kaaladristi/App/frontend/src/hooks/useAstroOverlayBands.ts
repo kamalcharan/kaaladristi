@@ -38,19 +38,36 @@ export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
     return map
   }, [activeAstro])
 
+  // Map ruleCode → user opacity (undefined = use tier default in service)
+  const overlayOpacities = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const o of activeAstro) {
+      if (o.opacity != null) {
+        const code = o.catalog_item_id.replace('astro_rule:', '')
+        map.set(code, o.opacity)
+      }
+    }
+    return map
+  }, [activeAstro])
+
   const since = useMemo(
     () => format(subYears(new Date(), 1), 'yyyy-MM-dd'),
     [],
   )
 
   const queryKey = useMemo(
-    () => ['astro-bands', Array.from(overlayColors.keys()).sort().join(','), since],
-    [overlayColors, since],
+    () => [
+      'astro-bands',
+      Array.from(overlayColors.keys()).sort().join(','),
+      Array.from(overlayOpacities.entries()).map(([k, v]) => `${k}:${v}`).join(','),
+      since,
+    ],
+    [overlayColors, overlayOpacities, since],
   )
 
   const { data } = useQuery({
     queryKey,
-    queryFn:  () => fetchAstroBands(overlayColors, since),
+    queryFn:  () => fetchAstroBands(overlayColors, overlayOpacities, since),
     staleTime: 5 * 60_000,
     enabled:  overlayColors.size > 0,
   })

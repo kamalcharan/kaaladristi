@@ -31,7 +31,8 @@ export interface ChartOverlay {
   type: ChartOverlayType
   visible: boolean
   color?: string
-  label?: string   // clean display label; set at add-time for astro rules
+  opacity?: number  // 0–1, applied to astro zone fills; default tier-specific
+  label?: string    // clean display label; set at add-time for astro rules
 }
 
 export interface UserFramework {
