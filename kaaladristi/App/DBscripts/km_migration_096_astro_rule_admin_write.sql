@@ -3,58 +3,51 @@
 --
 -- Problem: authenticated role only has SELECT on km_astro_rule_master (migration 051).
 -- Admin users need UPDATE access for Rule Engine UI (toggle is_active, catalog_visible,
--- and future inline edits). We enable RLS and add an admin-only UPDATE policy.
---
--- SELECT remains unrestricted (all authenticated + anon can read).
+-- insert new rules, soft-delete). Uses self-hosted PostgREST JWT claims pattern.
 
 BEGIN;
 
--- 1. Grant UPDATE to authenticated so PostgREST can attempt the call
-GRANT UPDATE ON km_astro_rule_master TO authenticated;
+-- 1. Grant write privileges to authenticated role
+GRANT INSERT, UPDATE, DELETE ON km_astro_rule_master TO authenticated;
 
--- 2. Grant INSERT/DELETE to authenticated (needed for Add Rule + soft delete from UI)
-GRANT INSERT, DELETE ON km_astro_rule_master TO authenticated;
-
--- 3. Enable RLS on the table
+-- 2. Enable RLS
 ALTER TABLE km_astro_rule_master ENABLE ROW LEVEL SECURITY;
 
--- 4. SELECT policy — everyone can read (matches current behaviour)
+-- 3. SELECT — open to everyone (no change in behaviour)
 CREATE POLICY "astro_rule_select_all"
   ON km_astro_rule_master
   FOR SELECT
   USING (true);
 
--- 5. INSERT policy — admin only
+-- 4. INSERT — admin only (role claim in JWT)
 CREATE POLICY "astro_rule_insert_admin"
   ON km_astro_rule_master
   FOR INSERT
   WITH CHECK (
-    EXISTS (SELECT 1 FROM km_profiles WHERE id = auth.uid() AND role = 'admin')
+    current_setting('request.jwt.claims', true)::json->>'role' = 'admin'
   );
 
--- 6. UPDATE policy — admin only
+-- 5. UPDATE — admin only
 CREATE POLICY "astro_rule_update_admin"
   ON km_astro_rule_master
   FOR UPDATE
   USING (
-    EXISTS (SELECT 1 FROM km_profiles WHERE id = auth.uid() AND role = 'admin')
+    current_setting('request.jwt.claims', true)::json->>'role' = 'admin'
   )
   WITH CHECK (
-    EXISTS (SELECT 1 FROM km_profiles WHERE id = auth.uid() AND role = 'admin')
+    current_setting('request.jwt.claims', true)::json->>'role' = 'admin'
   );
 
--- 7. DELETE policy — admin only (soft-delete uses UPDATE, but guard hard-delete too)
+-- 6. DELETE — admin only
 CREATE POLICY "astro_rule_delete_admin"
   ON km_astro_rule_master
   FOR DELETE
   USING (
-    EXISTS (SELECT 1 FROM km_profiles WHERE id = auth.uid() AND role = 'admin')
+    current_setting('request.jwt.claims', true)::json->>'role' = 'admin'
   );
 
--- 8. kd_app role bypasses RLS (backend pipeline can always write)
-ALTER TABLE km_astro_rule_master FORCE ROW LEVEL SECURITY;
-GRANT ALL ON km_astro_rule_master TO kd_app;
--- kd_app is a superuser-equivalent for this table; bypass RLS so pipeline is unaffected
--- (if kd_app is not a superuser, add: ALTER ROLE kd_app BYPASSRLS; -- run as superuser)
+-- 7. kd_app (backend pipeline) bypasses RLS so daily scripts are unaffected.
+--    Run this line as a PostgreSQL superuser if kd_app is not already a superuser:
+--    ALTER ROLE kd_app BYPASSRLS;
 
 COMMIT;
