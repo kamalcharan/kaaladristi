@@ -312,7 +312,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     }
   }
 
-  /** Add all inactive range-overlay rules belonging to a group tag in one shot. */
+  /** Add all inactive rules belonging to a group tag — range → overlay, point → panel_block. */
   function handleAddGroup(groupTag: string, e: React.MouseEvent) {
     e.stopPropagation()
     const tier = useAuthStore.getState().profile?.tier ?? 'free'
@@ -320,12 +320,15 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       setGateOpen(true)
       return
     }
-    const groupRules = rules.filter(
-      r => isRangeRule(r) && getGroupTag(r) === groupTag && !isOverlayActive(`astro_rule:${r.rule_code}`)
-    )
     const color = tagColors[groupTag] ?? getGroupDefaultColor(groupTag)
-    for (const r of groupRules) {
-      addOverlay(ruleToCatalogItem(r), color)
+    for (const r of rules) {
+      if (getGroupTag(r) !== groupTag) continue
+      const id = `astro_rule:${r.rule_code}`
+      if (isRangeRule(r)) {
+        if (!isOverlayActive(id)) addOverlay(ruleToCatalogItem(r), color)
+      } else {
+        if (!isBlockActive(id)) addBlock(ruleToCatalogItem(r))
+      }
     }
   }
 
@@ -466,10 +469,12 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           {allTags.map(tag => {
             const active = activeTags.includes(tag)
             const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
-            // Count range rules in this group that are not yet active
-            const unadded = rules.filter(
-              r => isRangeRule(r) && getGroupTag(r) === tag && !isOverlayActive(`astro_rule:${r.rule_code}`)
-            ).length
+            // Count ALL rules in this group not yet active (range or point)
+            const unadded = rules.filter(r => {
+              if (getGroupTag(r) !== tag) return false
+              const id = `astro_rule:${r.rule_code}`
+              return isRangeRule(r) ? !isOverlayActive(id) : !isBlockActive(id)
+            }).length
             return (
               <div key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <button
