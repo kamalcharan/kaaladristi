@@ -1057,3 +1057,37 @@ API endpoints:
 - Live keys: Charan provides before production launch
 - On successful verify: `km_profiles.tier` updated, `user_subscriptions` row inserted with `expires_at`
 - After verify: frontend calls `refreshProfile()` → gate disappears, beta/paid UI activates automatically
+
+---
+
+## Bayer Rules — Implementation Status
+
+### Implemented (mapped to existing rules):
+- Rule 1  → TRN-MER-MAN-TRN (Mercury direction change)
+- Rule 4A → TRN-MER-RIS-W-BUL (Mercury stations direct)
+- Rule 21 → CON-MER-VEN-CD-BEA (Retro Venus conjunct Direct Mercury)
+- Rule 22 → CON-SUN-MER-TRN (Sun conjunct Retro Mercury)
+
+### Implemented (new rules created):
+- Rule 2  → BAY-R02-MER-MAR-SPD (Mars-Mercury 59min speed diff)
+- Rule 3  → BAY-R03-VEN-RET (Venus Retrograde)
+- Rule 6  → BAY-R06-MAR-1635 (Mars at 16°35')
+- Rule 14 → BAY-R14-VEN-LON (Venus longitude unit)
+- Rule 27 → BAY-R27-MER-SPD59 (Mercury speed 59')
+
+### Transit data needed (scripts to write):
+- BAY-R02: compute from km_planetary_positions
+  WHERE ABS(mercury.speed - mars.speed) BETWEEN 0.95 AND 1.05
+- BAY-R06: compute from km_planetary_positions
+  WHERE planet='Mars' AND MOD(longitude::numeric,30) BETWEEN 16.4 AND 16.7
+- BAY-R27: compute from km_planetary_positions
+  WHERE planet='Mercury' AND (
+    speed BETWEEN 0.95 AND 1.05 OR speed BETWEEN 1.95 AND 1.99
+  )
+- BAY-R03: Venus retrograde windows (island pattern, same as Mercury)
+- BAY-R14: Venus longitude unit cycle (needs custom computation)
+
+### Rules NOT yet implemented (source material needed):
+- Rules 5,7,8,9,10-13,15-20,23-26,28-30,31-48
+- Require original Bayer 1940 handbook for accurate definition
+- Do not guess or approximate — wait for verified source
