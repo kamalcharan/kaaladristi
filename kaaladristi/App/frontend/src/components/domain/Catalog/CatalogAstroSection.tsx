@@ -106,6 +106,14 @@ function RangeOverlayControls({
   )
 }
 
+/** Bias-aware default color — green for bullish, red for bearish, indigo otherwise. */
+function getRuleDefaultColor(rule: AstroRule): string {
+  if ((rule.tags ?? []).includes('Panchak')) {
+    return rule.base_bias === 'bearish' ? '#ef4444' : '#22c55e'
+  }
+  return '#6366f1'
+}
+
 function isRangeRule(rule: AstroRule): boolean {
   if ((RANGE_RULE_TYPES as readonly string[]).includes(rule.rule_type)) return true
   // Panchak compound rules are date-range windows → chart overlay
@@ -142,7 +150,7 @@ function ruleToCatalogItem(rule: AstroRule): CatalogItem {
     block_type:   'astro_rule',
     placement:    range ? 'chart_overlay' : 'panel_block',
     overlay_type: range ? 'astro_zone' : undefined,
-    color:        isPanchak ? '#6366f1' : undefined,
+    color:        range ? getRuleDefaultColor(rule) : undefined,
     data_source:  'rule_engine',
     applicable_to: ['equity', 'index'],
     tier_required: 'free',
@@ -190,6 +198,20 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
   const framework = useFrameworkStore(s => s.framework)
 
+  /** Read stored color from framework (persisted), fall back to local pending, then default. */
+  function getEffectiveColor(rule: AstroRule): string {
+    const id = `astro_rule:${rule.rule_code}`
+    const stored = framework?.chart_overlays.find(o => o.catalog_item_id === id)
+    return stored?.color ?? overlayColors[rule.rule_code] ?? getRuleDefaultColor(rule)
+  }
+
+  /** Read stored opacity from framework (persisted), fall back to local pending, then tier default. */
+  function getEffectiveOpacity(rule: AstroRule): number {
+    const id = `astro_rule:${rule.rule_code}`
+    const stored = framework?.chart_overlays.find(o => o.catalog_item_id === id)
+    return stored?.opacity ?? overlayOpacities[rule.rule_code] ?? 0.08
+  }
+
   function isRuleActive(rule: AstroRule): boolean {
     const id = `astro_rule:${rule.rule_code}`
     return isRangeRule(rule) ? isOverlayActive(id) : isBlockActive(id)
@@ -216,13 +238,13 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
             r => r.rule_code === baseItemId.replace('astro_rule:', ''),
           )
           if (baseRule) {
-            addOverlay(ruleToCatalogItem(baseRule), '#6366f1')
+            addOverlay(ruleToCatalogItem(baseRule), getRuleDefaultColor(baseRule))
           }
         }
       }
     }
 
-    const pickedColor = overlayColors[rule.rule_code] ?? (isRangeRule(rule) ? '#6366f1' : undefined)
+    const pickedColor = overlayColors[rule.rule_code] ?? (isRangeRule(rule) ? getRuleDefaultColor(rule) : undefined)
     const item = ruleToCatalogItem(rule)
     if (isRangeRule(rule)) {
       addOverlay(item, pickedColor)
@@ -569,8 +591,8 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                       {range && (
                         <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'flex-end' }}>
                           <RangeOverlayControls
-                            color={overlayColors[rule.rule_code] ?? '#6366f1'}
-                            opacity={overlayOpacities[rule.rule_code] ?? 0.08}
+                            color={getEffectiveColor(rule)}
+                            opacity={getEffectiveOpacity(rule)}
                             onColorChange={c => handleColorChange(rule, c)}
                             onOpacityChange={o => handleOpacityChange(rule, o)}
                           />
