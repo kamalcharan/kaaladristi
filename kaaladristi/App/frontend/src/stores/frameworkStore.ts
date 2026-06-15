@@ -294,6 +294,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       type: overlayType,
       visible: true,
       ...(color ? { color } : {}),
+      ...(item.display_name ? { label: item.display_name } : {}),
     }
 
     set(s => ({

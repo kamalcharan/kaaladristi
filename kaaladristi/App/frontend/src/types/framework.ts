@@ -31,6 +31,7 @@ export interface ChartOverlay {
   type: ChartOverlayType
   visible: boolean
   color?: string
+  label?: string   // clean display label; set at add-time for astro rules
 }
 
 export interface UserFramework {

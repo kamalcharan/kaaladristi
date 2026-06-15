@@ -29,16 +29,24 @@ function overlayLabel(rule: AstroRule): string {
 }
 
 function ruleToCatalogItem(rule: AstroRule): CatalogItem {
-  const range = isRangeRule(rule)
+  const range    = isRangeRule(rule)
+  const isPanchak = (rule.tags ?? []).includes('Panchak')
+
+  // All Panchak overlays share the same catalog_item_id so the chart always
+  // fetches from PNK-ALL5-BUL/BEA which has all 549 windows. Individual
+  // PNK sub-rules (PNK-IND-BUL etc.) have far fewer transit rows.
+  const overlayId = isPanchak && range
+    ? `astro_rule:${rule.base_bias === 'bearish' ? 'PNK-ALL5-BEA' : 'PNK-ALL5-BUL'}`
+    : `astro_rule:${rule.rule_code}`
+
   return {
-    id: `astro_rule:${rule.rule_code}`,
+    id: overlayId,
     display_name: range ? overlayLabel(rule) : rule.display_name,
     description: rule.remarks ?? '',
     block_type: 'astro_rule',
     placement: range ? 'chart_overlay' : 'panel_block',
     overlay_type: range ? 'astro_zone' : undefined,
-    // Panchak = indigo to match tag color
-    color: (rule.tags ?? []).includes('Panchak') ? '#6366f1' : undefined,
+    color: isPanchak ? '#6366f1' : undefined,
     data_source: 'rule_engine',
     applicable_to: ['equity', 'index'],
     tier_required: 'free',

@@ -6,19 +6,27 @@ export interface AstroBand {
   from:        string   // YYYY-MM-DD
   to:          string   // YYYY-MM-DD
   matched:     boolean | null
+  baseBias:    string | null  // 'bullish' | 'bearish' | null
   color:       string   // user-picked overlay color
+  isPanchak:   boolean
 }
 
-interface RuleMeta { id: number; rule_code: string; display_name: string; tags: string[] | null }
+interface RuleMeta {
+  id:           number
+  rule_code:    string
+  display_name: string
+  base_bias:    string | null
+  tags:         string[] | null
+}
 
-/** Resolve rule codes → DB ids + display names in one request. */
+/** Resolve rule codes → DB ids + meta in one request. */
 async function fetchRuleMetaByCode(
   ruleCodes: string[],
 ): Promise<Map<string, RuleMeta>> {
   if (ruleCodes.length === 0) return new Map()
 
   const { data, error } = await from('km_astro_rule_master')
-    .select('id,rule_code,display_name,tags')
+    .select('id,rule_code,display_name,base_bias,tags')
     .in('rule_code', ruleCodes)
     .execute()
 
@@ -64,15 +72,15 @@ export async function fetchAstroBands(
 
   const bands: AstroBand[] = []
   for (const row of data as {
-    rule_id: number
+    rule_id:    number
     start_date: string
-    end_date: string
-    matched: boolean | null
+    end_date:   string
+    matched:    boolean | null
   }[]) {
     const meta = idToMeta.get(row.rule_id)
     if (!meta) continue
-    const isPanchak = (meta.tags ?? []).includes('Panchak')
-    const color = overlayColors.get(meta.rule_code)
+    const isPanchak   = (meta.tags ?? []).includes('Panchak')
+    const color       = overlayColors.get(meta.rule_code)
       ?? (isPanchak ? '#6366f1' : '#c9a84c')
     const displayName = isPanchak
       ? 'Panchak'
@@ -83,7 +91,9 @@ export async function fetchAstroBands(
       from:        row.start_date,
       to:          row.end_date,
       matched:     row.matched,
+      baseBias:    meta.base_bias ?? null,
       color,
+      isPanchak,
     })
   }
 
