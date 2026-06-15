@@ -40,6 +40,9 @@ from collections import defaultdict
 # ── DB connection ──────────────────────────────────────────────────────────────
 
 def get_conn():
+    # Accept either KD_DB_PASSWORD (password only) or DB_PRIMARY (full DSN)
+    if "DB_PRIMARY" in os.environ:
+        return psycopg2.connect(os.environ["DB_PRIMARY"])
     return psycopg2.connect(
         host="187.127.136.65", port=5432,
         dbname="kaala_dristi_db", user="postgres",
