@@ -423,99 +423,129 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
         padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,.07)',
         flexShrink: 0,
       }}>
-        {/* Overlay pills */}
+        {/* Overlay pills — grouped by tag so all Mercury rules = 1 pill, all Panchak = 1 pill */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
           flex: 1, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none',
         }}>
-          {framework.chart_overlays.map(o => {
-            const catalog  = getCatalogItem(o.catalog_item_id)
-            const rawCode  = o.catalog_item_id.replace('astro_rule:', '')
-            const label    = (() => {
-              if (rawCode.startsWith('PNK')) {
-                if (rawCode.includes('ALL5')) return 'Panchak'
-                if (rawCode.includes('IND'))  return 'Panchak · Indra'
-                if (rawCode.includes('VYA'))  return 'Panchak · Vyati'
-                if (rawCode.includes('VAI'))  return 'Panchak · Vaidh'
-                if (rawCode.includes('MON'))  return 'Panchak · Mon'
-                if (rawCode.includes('TUE'))  return 'Panchak · Tue'
-                if (rawCode.includes('WED'))  return 'Panchak · Wed'
-                if (rawCode.includes('THU'))  return 'Panchak · Thu'
-                if (rawCode.includes('FRI'))  return 'Panchak · Fri'
-                if (rawCode.includes('SAT'))  return 'Panchak · Sat'
-                if (rawCode.includes('SUN'))  return 'Panchak · Sun'
-                return 'Panchak'
+          {(() => {
+            // Derive a group key from an overlay's catalog_item_id
+            function overlayGroupKey(catalogItemId: string): string {
+              const rawCode = catalogItemId.replace('astro_rule:', '')
+              if (rawCode.startsWith('PNK')) return 'Panchak'
+              // For non-astro overlays (indicator lines etc.) use the id itself
+              if (!catalogItemId.startsWith('astro_rule:')) return catalogItemId
+              // For astro rules: use the stored label's first word, or rule_code prefix
+              return rawCode.split('-')[0] || rawCode
+            }
+
+            // Group overlays by their group key, preserving insertion order
+            const groups = new Map<string, typeof framework.chart_overlays>()
+            for (const o of framework.chart_overlays) {
+              const key = overlayGroupKey(o.catalog_item_id)
+              const arr = groups.get(key) ?? []
+              arr.push(o)
+              groups.set(key, arr)
+            }
+
+            // Group label — human-readable name for the pill
+            const GROUP_LABELS: Record<string, string> = {
+              Panchak: 'Panchak',
+              MER: 'Mercury', VEN: 'Venus', BAY: 'Bayer',
+              CON: 'Conjunction', TRN: 'Transit', TR: 'Transit',
+              DN: 'Day-Nakshatra',
+            }
+
+            return Array.from(groups.entries()).map(([groupKey, overlays]) => {
+              // Non-astro single overlay (indicator line etc.) — render as before
+              if (overlays.length === 1 && !overlays[0].catalog_item_id.startsWith('astro_rule:')) {
+                const o = overlays[0]
+                const catalog = getCatalogItem(o.catalog_item_id)
+                const label = o.label ?? catalog?.display_name ?? o.catalog_item_id
+                const dotColor = effectiveDotColor(o.catalog_item_id, o.type, o.color)
+                const isPickerOpen = picker?.id === o.catalog_item_id
+                return (
+                  <div key={groupKey}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 0, borderRadius: 100, flexShrink: 0,
+                      border: '1px solid rgba(255,255,255,.1)',
+                      background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
+                      opacity: o.visible ? 1 : 0.4, transition: 'all .15s' }}
+                  >
+                    <button onClick={e => { e.stopPropagation(); if (isPickerOpen) { setPicker(null); return }
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                        setPicker({ id: o.catalog_item_id, x: rect.left, y: rect.bottom }) }}
+                      title="Change color"
+                      style={{ width: 14, height: 14, marginLeft: 8, padding: 0,
+                        border: isPickerOpen ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.2)',
+                        borderRadius: '50%', cursor: 'pointer', background: dotColor, flexShrink: 0, transition: 'border-color .15s' }}
+                    />
+                    <button onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
+                      style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
+                        border: 'none', background: 'transparent', cursor: 'pointer',
+                        fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                        color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)' }}
+                    >{label}</button>
+                    <button onClick={() => removeOverlay(o.catalog_item_id)}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: 20, height: 20, borderRadius: '0 100px 100px 0',
+                        border: 'none', background: 'transparent', cursor: 'pointer',
+                        fontSize: 9, color: 'rgba(255,255,255,.25)', transition: 'color .15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.25)' }}
+                    >✕</button>
+                  </div>
+                )
               }
-              return o.label ?? catalog?.display_name ?? rawCode
-            })()
-            const dotColor = effectiveDotColor(o.catalog_item_id, o.type, o.color)
-            const isPickerOpen = picker?.id === o.catalog_item_id
 
-            return (
-              <div
-                key={o.catalog_item_id}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 0,
-                  borderRadius: 100, flexShrink: 0,
-                  border: '1px solid rgba(255,255,255,.1)',
-                  background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
-                  opacity: o.visible ? 1 : 0.4,
-                  transition: 'all .15s',
-                }}
-              >
-                {/* Color dot — click to open picker */}
-                <button
-                  onClick={e => {
-                    e.stopPropagation()
-                    if (isPickerOpen) { setPicker(null); return }
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                    setPicker({ id: o.catalog_item_id, x: rect.left, y: rect.bottom })
-                  }}
-                  title="Change color"
-                  style={{
-                    width: 14, height: 14, marginLeft: 8, padding: 0,
-                    border: isPickerOpen ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.2)',
-                    borderRadius: '50%', cursor: 'pointer',
-                    background: dotColor, flexShrink: 0,
-                    transition: 'border-color .15s',
-                  }}
-                />
+              // Grouped astro overlays — ONE pill for the whole group
+              const allVisible = overlays.every(o => o.visible)
+              const anyVisible = overlays.some(o => o.visible)
+              // Use color from the first overlay in the group
+              const groupColor = overlays[0].color ?? effectiveDotColor(overlays[0].catalog_item_id, overlays[0].type, overlays[0].color)
+              const pillLabel = GROUP_LABELS[groupKey] ?? groupKey
+              const countBadge = overlays.length > 1 ? ` ·${overlays.length}` : ''
 
-                {/* Toggle visibility */}
-                <button
-                  onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
-                  title={o.visible ? 'Click to hide' : 'Click to show'}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center',
-                    padding: '4px 6px 4px 4px',
-                    border: 'none', background: 'transparent',
-                    cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                    color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)',
-                  }}
+              return (
+                <div key={groupKey}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 0, borderRadius: 100, flexShrink: 0,
+                    border: '1px solid rgba(255,255,255,.1)',
+                    background: anyVisible ? 'rgba(255,255,255,.05)' : 'transparent',
+                    opacity: anyVisible ? 1 : 0.4, transition: 'all .15s' }}
                 >
-                  {label}
-                </button>
+                  {/* Group color dot */}
+                  <span style={{ width: 10, height: 10, marginLeft: 8, borderRadius: '50%', flexShrink: 0,
+                    background: groupColor, border: '2px solid rgba(255,255,255,.2)', display: 'inline-block' }} />
 
-                {/* Remove overlay */}
-                <button
-                  onClick={() => removeOverlay(o.catalog_item_id)}
-                  title="Remove overlay"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: 20, height: 20, borderRadius: '0 100px 100px 0',
-                    border: 'none', background: 'transparent',
-                    cursor: 'pointer', fontSize: 9,
-                    color: 'rgba(255,255,255,.25)',
-                    transition: 'color .15s',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.25)' }}
-                >
-                  ✕
-                </button>
-              </div>
-            )
-          })}
+                  {/* Toggle all in group */}
+                  <button
+                    onClick={() => { for (const o of overlays) if (o.visible === allVisible) toggleOverlayVisibility(o.catalog_item_id) }}
+                    title={allVisible ? 'Click to hide all' : 'Click to show all'}
+                    style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
+                      border: 'none', background: 'transparent', cursor: 'pointer',
+                      fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                      color: anyVisible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)' }}
+                  >
+                    {pillLabel}
+                    {countBadge && (
+                      <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>{countBadge}</span>
+                    )}
+                  </button>
+
+                  {/* Remove all in group */}
+                  <button
+                    onClick={() => { for (const o of overlays) removeOverlay(o.catalog_item_id) }}
+                    title={`Remove all ${pillLabel} overlays`}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 20, height: 20, borderRadius: '0 100px 100px 0',
+                      border: 'none', background: 'transparent', cursor: 'pointer',
+                      fontSize: 9, color: 'rgba(255,255,255,.25)', transition: 'color .15s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.25)' }}
+                  >✕</button>
+                </div>
+              )
+            })
+          })()}
 
           {/* + overlay — opens Catalog drawer in overlay context */}
           <button
