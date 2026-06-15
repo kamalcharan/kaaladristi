@@ -312,6 +312,23 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     }
   }
 
+  /** Add all inactive range-overlay rules belonging to a group tag in one shot. */
+  function handleAddGroup(groupTag: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    const tier = useAuthStore.getState().profile?.tier ?? 'free'
+    if (!PAID_TIERS.includes(tier as typeof PAID_TIERS[number])) {
+      setGateOpen(true)
+      return
+    }
+    const groupRules = rules.filter(
+      r => isRangeRule(r) && getGroupTag(r) === groupTag && !isOverlayActive(`astro_rule:${r.rule_code}`)
+    )
+    const color = tagColors[groupTag] ?? getGroupDefaultColor(groupTag)
+    for (const r of groupRules) {
+      addOverlay(ruleToCatalogItem(r), color)
+    }
+  }
+
   const ruleTypes = useMemo(
     () => Array.from(new Set(rules.map(r => r.rule_type))).sort(),
     [rules],
@@ -449,8 +466,12 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           {allTags.map(tag => {
             const active = activeTags.includes(tag)
             const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
+            // Count range rules in this group that are not yet active
+            const unadded = rules.filter(
+              r => isRangeRule(r) && getGroupTag(r) === tag && !isOverlayActive(`astro_rule:${r.rule_code}`)
+            ).length
             return (
-              <div key={tag} style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <div key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <button
                   onClick={() => toggleTag(tag)}
                   className={cn(
@@ -468,6 +489,23 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                   onColorChange={c => handleTagColorChange(tag, c)}
                   onOpacityChange={o => handleTagOpacityChange(tag, o)}
                 />
+                {/* Add all overlays in this group at once */}
+                {unadded > 0 && (
+                  <button
+                    title={`Add all ${tag} overlays (${unadded})`}
+                    onClick={e => handleAddGroup(tag, e)}
+                    style={{
+                      fontSize: 9, padding: '2px 6px', borderRadius: 4,
+                      border: '1px solid rgba(124,106,247,0.3)',
+                      background: 'rgba(124,106,247,0.08)',
+                      color: '#8b7af8', cursor: 'pointer',
+                      fontFamily: 'var(--font-mono, monospace)',
+                      whiteSpace: 'nowrap', lineHeight: 1.4,
+                    }}
+                  >
+                    +{unadded}
+                  </button>
+                )}
               </div>
             )
           })}
