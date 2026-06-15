@@ -248,12 +248,6 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     return activeOverlay?.opacity ?? tagOpacities[groupTag] ?? 0.08
   }
 
-  /** Returns true if any range-overlay rule for this group tag is active. */
-  function isTagGroupActive(groupTag: string): boolean {
-    return (rules ?? []).some(r =>
-      isRangeRule(r) && getGroupTag(r) === groupTag && isOverlayActive(`astro_rule:${r.rule_code}`)
-    )
-  }
 
   function isRuleActive(rule: AstroRule): boolean {
     const id = `astro_rule:${rule.rule_code}`
@@ -455,7 +449,6 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           {allTags.map(tag => {
             const active = activeTags.includes(tag)
             const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
-            const groupActive = isTagGroupActive(tag)
             return (
               <div key={tag} style={{ display: 'inline-flex', alignItems: 'center' }}>
                 <button
@@ -468,16 +461,13 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                 >
                   {tag}
                 </button>
-                {/* Color/opacity control — only shown when ≥1 overlay in this group is active */}
-                {groupActive && (
-                  <TagColorControl
-                    tag={tag}
-                    color={getTagColor(tag)}
-                    opacity={getTagOpacity(tag)}
-                    onColorChange={c => handleTagColorChange(tag, c)}
-                    onOpacityChange={o => handleTagOpacityChange(tag, o)}
-                  />
-                )}
+                <TagColorControl
+                  tag={tag}
+                  color={getTagColor(tag)}
+                  opacity={getTagOpacity(tag)}
+                  onColorChange={c => handleTagColorChange(tag, c)}
+                  onOpacityChange={o => handleTagOpacityChange(tag, o)}
+                />
               </div>
             )
           })}
