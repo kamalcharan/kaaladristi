@@ -1057,3 +1057,32 @@ API endpoints:
 - Live keys: Charan provides before production launch
 - On successful verify: `km_profiles.tier` updated, `user_subscriptions` row inserted with `expires_at`
 - After verify: frontend calls `refreshProfile()` → gate disappears, beta/paid UI activates automatically
+
+---
+
+## Bayer Rules — Implementation Status
+
+Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — George Bayer, 1940.
+
+### Mapped to existing rules (Bayer tag added via migration 101):
+- Rule 1  → TRN-MER-MAN-TRN      Mercury direction change
+- Rule 4A → TRN-MER-RIS-W-BUL   Mercury stations direct
+- Rule 9  → TR-MER-CMB-E-BEA    Mercury combust east
+- Rule 21 → CON-MER-VEN-CD-BEA  Retro Venus + Direct Mercury conjunction
+- Rule 22 → CON-SUN-MER-TRN     Sun conjunct Retro Mercury
+
+### New rules created with transit data (migration 101 + generate_bayer_windows.py):
+- Rule 2  → BAY-R02-MAR-MER-SPD  Mars-Mercury geocentric speed diff ≈ 59min
+- Rule 3  → BAY-R03-VEN-RET      Venus retrograde periods (island pattern)
+- Rule 6  → BAY-R06-MAR-1635     Mars crosses 16°35' in any zodiac sign
+- Rule 14 → BAY-R14-VEN-LON      Venus longitude unit cycle (unit = 1°9'13'')
+- Rule 27 → BAY-R27-MER-SPD      Mercury speed crosses 59min or 1°58' threshold
+
+### Transit generation scripts:
+- `App/backend/scripts/generate_bayer_windows.py` — covers all 5 new rules above
+- Run after migration 101: `DB_PRIMARY=... python3 generate_bayer_windows.py`
+
+### Rules NOT yet implemented (source material needed):
+- Rules 4B, 5, 7, 8, 10-13, 15-20, 23-26, 28-30, 31-48
+- Require original Bayer 1940 handbook for accurate definition
+- Do NOT guess or approximate — wait for verified source material
