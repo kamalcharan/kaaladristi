@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import InlineGate from '@/components/workspace/InlineGate'
 import type { CatalogItem } from '@/constants/catalogItems'
 import type { DeepDiveItem } from './DeepDivePanel'
+import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
 
 function isRangeRule(ruleType: string): boolean {
   return (RANGE_RULE_TYPES as readonly string[]).includes(ruleType)
@@ -42,6 +43,7 @@ interface CatalogAstroSectionProps {
 export default function CatalogAstroSection({ onSelect, compact = false }: CatalogAstroSectionProps) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [activeTags, setActiveTags] = useState<string[]>([])
 
   const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
   const [gateOpen, setGateOpen] = useState(false)
@@ -90,6 +92,17 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     [rules],
   )
 
+  const allTags = useMemo(
+    () => Array.from(new Set(rules.flatMap(r => r.tags ?? []))).sort(),
+    [rules],
+  )
+
+  function toggleTag(tag: string) {
+    setActiveTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    )
+  }
+
   const filtered = useMemo(() => {
     let list = rules
     if (search) {
@@ -99,8 +112,11 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       )
     }
     if (typeFilter) list = list.filter(r => r.rule_type === typeFilter)
+    if (activeTags.length > 0) {
+      list = list.filter(r => activeTags.some(t => (r.tags ?? []).includes(t)))
+    }
     return list
-  }, [rules, search, typeFilter])
+  }, [rules, search, typeFilter, activeTags])
 
   return (
     <>
@@ -186,6 +202,45 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
         </span>
       </div>
 
+      {/* Tag filter chips */}
+      {allTags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+          <button
+            onClick={() => setActiveTags([])}
+            style={{
+              padding: '3px 10px',
+              borderRadius: 20,
+              fontSize: 11,
+              cursor: 'pointer',
+              border: `1px solid ${activeTags.length === 0 ? 'rgba(124,106,247,0.5)' : 'var(--border)'}`,
+              background: activeTags.length === 0 ? 'rgba(124,106,247,0.15)' : 'rgba(255,255,255,0.03)',
+              color: activeTags.length === 0 ? '#8b7af8' : 'var(--text-muted)',
+              fontFamily: 'inherit',
+              transition: 'all 0.15s',
+            }}
+          >
+            All
+          </button>
+          {allTags.map(tag => {
+            const active = activeTags.includes(tag)
+            const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
+            return (
+              <button
+                key={tag}
+                onClick={() => toggleTag(tag)}
+                className={cn(
+                  'px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
+                  active ? colorCls : 'bg-transparent text-muted border-kd-border hover:border-kd-border-active',
+                )}
+                style={{ fontFamily: 'inherit' }}
+              >
+                {tag}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Table */}
       {isLoading ? (
         <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -206,8 +261,8 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
                 {(compact
-                  ? ['Rule', 'Type', '']
-                  : ['Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', '']
+                  ? ['Rule', 'Type', 'Tags', '']
+                  : ['Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Tags', '']
                 ).map(col => (
                   <th
                     key={col}
@@ -249,6 +304,8 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                       probability_label: rule.probability_label,
                       remarks: rule.remarks,
                       conditions: null,
+                      tags: rule.tags ?? [],
+                      catalog_visible: rule.catalog_visible,
                     })}
                     className={cn(
                       'transition-colors cursor-pointer',
@@ -329,6 +386,24 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                         <ConfidenceCell score={conf} />
                       </td>
                     )}
+
+                    {/* Tags */}
+                    <td style={{ padding: '10px 13px', verticalAlign: 'middle' }}>
+                      {(rule.tags ?? []).length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                          {rule.tags.slice(0, 3).map(tag => (
+                            <TagChip key={tag} tag={tag} />
+                          ))}
+                          {rule.tags.length > 3 && (
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
+                              +{rule.tags.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                      )}
+                    </td>
 
                     {/* Add / Active */}
                     <td style={{ padding: '10px 13px', verticalAlign: 'middle', textAlign: 'right' }}>
