@@ -7,6 +7,13 @@ export const RULE_TAG_COLORS: Record<string, string> = {
   Manifestation: 'bg-yellow-900/60 text-yellow-300 border-yellow-700',
   Yoga:          'bg-green-900/60 text-green-300 border-green-700',
   Transit:       'bg-rose-900/60 text-rose-300 border-rose-700',
+  Tithi:         'bg-amber-900/60 text-amber-300 border-amber-700',
+  Vedh:          'bg-cyan-900/60 text-cyan-300 border-cyan-700',
+  Eclipse:       'bg-red-900/60 text-red-300 border-red-700',
+  Seasonal:      'bg-lime-900/60 text-lime-300 border-lime-700',
+  SignPosition:  'bg-violet-900/60 text-violet-300 border-violet-700',
+  Lunar:         'bg-slate-800 text-slate-300 border-slate-600',
+  SpecialDay:    'bg-pink-900/60 text-pink-300 border-pink-700',
 }
 
 export const DEFAULT_TAG_COLOR = 'bg-gray-800 text-gray-400 border-gray-600'
