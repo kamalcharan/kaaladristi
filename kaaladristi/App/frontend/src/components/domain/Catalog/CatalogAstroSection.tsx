@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Loader2, AlertCircle, Database } from 'lucide-react'
 import { fetchCatalogRules, fetchConfidence, type AstroRule } from '@/pages/RuleEngine/ruleService'
@@ -11,6 +11,100 @@ import InlineGate from '@/components/workspace/InlineGate'
 import type { CatalogItem } from '@/constants/catalogItems'
 import type { DeepDiveItem } from './DeepDivePanel'
 import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
+
+const ASTRO_PALETTE = [
+  '#6366f1', '#8b7af8', '#2dd4bf', '#22c55e',
+  '#ef4444', '#f59e0b', '#e879f9', '#ffffff',
+]
+
+/** Inline color swatch + opacity slider for range overlay rules. */
+function RangeOverlayControls({
+  color, opacity, onColorChange, onOpacityChange,
+}: {
+  color: string
+  opacity: number
+  onColorChange: (c: string) => void
+  onOpacityChange: (o: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+      {/* Color dot */}
+      <button
+        title="Color & opacity"
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        style={{
+          width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+          background: color, border: '1px solid rgba(255,255,255,0.2)',
+          cursor: 'pointer',
+        }}
+      />
+      {/* Opacity readout */}
+      <span style={{
+        fontSize: 9, color: 'rgba(255,255,255,0.35)',
+        fontFamily: 'var(--font-mono, monospace)',
+      }}>
+        {Math.round(opacity * 100)}%
+      </span>
+
+      {open && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', bottom: 22, right: 0, zIndex: 400,
+            background: 'var(--card, #1a1a2e)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 8, padding: 10,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            width: 140,
+          }}
+        >
+          {/* Swatches */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5, marginBottom: 8 }}>
+            {ASTRO_PALETTE.map(s => (
+              <button
+                key={s}
+                onClick={() => onColorChange(s)}
+                style={{
+                  width: 22, height: 22, borderRadius: 4,
+                  background: s, cursor: 'pointer', border: 'none',
+                  outline: s === color ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
+                  outlineOffset: 1,
+                }}
+              />
+            ))}
+          </div>
+          {/* Opacity slider */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)',
+                fontFamily: 'var(--font-mono, monospace)' }}>opacity</span>
+              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)',
+                fontFamily: 'var(--font-mono, monospace)' }}>{Math.round(opacity * 100)}%</span>
+            </div>
+            <input
+              type="range" min={1} max={30} step={1}
+              value={Math.round(opacity * 100)}
+              onChange={e => onOpacityChange(Number(e.target.value) / 100)}
+              style={{ width: '100%', accentColor: color, cursor: 'pointer' }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function isRangeRule(rule: AstroRule): boolean {
   if ((RANGE_RULE_TYPES as readonly string[]).includes(rule.rule_type)) return true
@@ -69,8 +163,11 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
   const [typeFilter, setTypeFilter] = useState('')
   const [activeTags, setActiveTags] = useState<string[]>([])
 
-  const { addBlock, addOverlay, isBlockActive, isOverlayActive } = useFrameworkStore()
+  const { addBlock, addOverlay, isBlockActive, isOverlayActive, updateOverlayColor, updateOverlayOpacity } = useFrameworkStore()
   const [gateOpen, setGateOpen] = useState(false)
+  // Per-rule color/opacity before adding — keyed by rule_code
+  const [overlayColors, setOverlayColors]     = useState<Record<string, string>>({})
+  const [overlayOpacities, setOverlayOpacities] = useState<Record<string, number>>({})
 
   // Shared query keys with RuleList — no duplicate network calls when both are mounted
   const { data: rules = [], isLoading, isError } = useQuery({
@@ -125,12 +222,27 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       }
     }
 
+    const pickedColor = overlayColors[rule.rule_code] ?? (isRangeRule(rule) ? '#6366f1' : undefined)
     const item = ruleToCatalogItem(rule)
     if (isRangeRule(rule)) {
-      addOverlay(item, item.color)
+      addOverlay(item, pickedColor)
     } else {
       addBlock(item)
     }
+  }
+
+  function handleColorChange(rule: AstroRule, color: string) {
+    setOverlayColors(prev => ({ ...prev, [rule.rule_code]: color }))
+    // If already in framework, update live
+    const id = `astro_rule:${rule.rule_code}`
+    if (isOverlayActive(id)) updateOverlayColor(id, color)
+  }
+
+  function handleOpacityChange(rule: AstroRule, opacity: number) {
+    setOverlayOpacities(prev => ({ ...prev, [rule.rule_code]: opacity }))
+    // If already in framework, update live
+    const id = `astro_rule:${rule.rule_code}`
+    if (isOverlayActive(id)) updateOverlayOpacity(id, opacity)
   }
 
   const ruleTypes = useMemo(
@@ -452,7 +564,18 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                     </td>
 
                     {/* Add / Active */}
-                    <td style={{ padding: '10px 13px', verticalAlign: 'middle', textAlign: 'right' }}>
+                    <td style={{ padding: '10px 13px', verticalAlign: 'middle', textAlign: 'right', minWidth: 110 }}>
+                      {/* Color + opacity controls for range overlays */}
+                      {range && (
+                        <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'flex-end' }}>
+                          <RangeOverlayControls
+                            color={overlayColors[rule.rule_code] ?? '#6366f1'}
+                            opacity={overlayOpacities[rule.rule_code] ?? 0.08}
+                            onColorChange={c => handleColorChange(rule, c)}
+                            onOpacityChange={o => handleOpacityChange(rule, o)}
+                          />
+                        </div>
+                      )}
                       {active ? (
                         <span style={{
                           fontSize: 11,
