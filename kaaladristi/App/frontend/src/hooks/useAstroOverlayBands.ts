@@ -50,8 +50,10 @@ export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
     return map
   }, [activeAstro])
 
+  // 2-year lookback — Venus Rx ~every 18 months, Jupiter Rx ~13 months.
+  // 1 year was too narrow and missed slow-planet cycles.
   const since = useMemo(
-    () => format(subYears(new Date(), 1), 'yyyy-MM-dd'),
+    () => format(subYears(new Date(), 2), 'yyyy-MM-dd'),
     [],
   )
 
