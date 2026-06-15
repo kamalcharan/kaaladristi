@@ -503,6 +503,7 @@ id: `astro_rule:${rule.rule_code}`   // e.g. "astro_rule:SP-TAU-VEN-BUL"
 - Range rule types (`planet_transit`, `planet_state`, `planet_conjunction`, `vedh`, `planet_manifestation`) → `placement: 'chart_overlay'`, `overlay_type: 'astro_zone'`.
 - Point rule types (`nakshatra_vara`, `tithi_alone`, `eclipse`, `compound`) → `placement: 'panel_block'`.
 - `RANGE_RULE_TYPES` and `POINT_RULE_TYPES` are the canonical constants in `frameworkConstants.ts`.
+- **`compound` routing is explicit, not generic**: only `PNK*` compound rules get overlay treatment (date-range zones). All other compound rules (BAY-*, SEA-*, HEM-*, VOL-*) are panel blocks. To add a future compound group as overlay, add it explicitly: `rule.rule_code.startsWith('PNK') || rule.rule_code.startsWith('XXX')` — do NOT make the check generic.
 
 ### DeepDivePanel
 
