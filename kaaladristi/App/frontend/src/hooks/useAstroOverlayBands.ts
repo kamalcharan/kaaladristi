@@ -17,15 +17,21 @@ export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
   )
 
   // Map ruleCode → user color
+  // Any PNK-* sub-rule (e.g. PNK-IND-BUL) is redirected to PNK-ALL5-BUL so
+  // fetchAstroBands queries the master rule that has all 549 Panchak windows.
+  // PNK-ALL5-BEA is kept as-is (bearish master rule).
   const overlayColors = useMemo(() => {
     const map = new Map<string, string>()
     for (const o of activeAstro) {
-      const ruleCode = o.catalog_item_id.replace('astro_rule:', '')
-      const color    = o.color
+      const raw   = o.catalog_item_id.replace('astro_rule:', '')
+      const code  = raw.startsWith('PNK') && raw !== 'PNK-ALL5-BEA'
+        ? 'PNK-ALL5-BUL'
+        : raw
+      const color = o.color
         ?? ITEM_DEFAULT_COLOR[o.catalog_item_id]
         ?? TYPE_DEFAULT_COLOR[o.type]
-        ?? '#c9a84c'
-      map.set(ruleCode, color)
+        ?? '#6366f1'
+      map.set(code, color)
     }
     return map
   }, [activeAstro])
