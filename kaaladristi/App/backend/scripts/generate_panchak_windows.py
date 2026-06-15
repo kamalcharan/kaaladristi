@@ -25,7 +25,7 @@ Rule assignment logic:
 
 Run:
   cd App/backend/scripts
-  KD_DB_PASSWORD=... python generate_panchak_windows.py
+  DB_PRIMARY=postgresql://user:pass@host:5432/kaala_dristi_db python3 generate_panchak_windows.py
 
 DO NOT RUN AUTOMATICALLY — one-shot backfill + forward fill.
 """
@@ -40,9 +40,12 @@ from collections import defaultdict
 # ── DB connection ──────────────────────────────────────────────────────────────
 
 def get_conn():
+    # Prefer DB_PRIMARY full DSN; fall back to KD_DB_PASSWORD
+    if "DB_PRIMARY" in os.environ:
+        return psycopg2.connect(os.environ["DB_PRIMARY"])
     return psycopg2.connect(
         host="187.127.136.65", port=5432,
-        dbname="kaala_dristi_db", user="postgres",
+        dbname="kaala_dristi_db",
         password=os.environ["KD_DB_PASSWORD"],
     )
 
@@ -128,14 +131,14 @@ def fetch_windows(conn) -> list[dict]:
 # ── Step 2: Yoga lookup ────────────────────────────────────────────────────────
 
 def fetch_panchang_map(conn, start_dates: list[date]) -> dict[date, str]:
-    """Return {panchang_date: yoga_name} for all window start dates."""
+    """Return {date: yoga_name} for all window start dates."""
     if not start_dates:
         return {}
     cur = conn.cursor()
     cur.execute("""
-        SELECT panchang_date, yoga_name
+        SELECT date, yoga_name
         FROM km_daily_panchang
-        WHERE panchang_date = ANY(%s)
+        WHERE date = ANY(%s)
     """, (list(start_dates),))
     rows = cur.fetchall()
     cur.close()
@@ -161,9 +164,9 @@ def fetch_base_bias_map(conn, rule_ids: set[int]) -> dict[int, str]:
 
 INSERT_SQL = """
 INSERT INTO km_rule_transits
-  (rule_id, start_date, end_date, duration_days, conditions_snapshot)
+  (rule_id, start_date, end_date, conditions_snapshot)
 VALUES
-  (%(rule_id)s, %(start_date)s, %(end_date)s, %(duration_days)s, %(conditions_snapshot)s)
+  (%(rule_id)s, %(start_date)s, %(end_date)s, %(conditions_snapshot)s)
 ON CONFLICT (rule_id, start_date) DO NOTHING;
 """
 
@@ -219,7 +222,6 @@ def insert_windows(conn, windows: list[dict], panchang_map: dict, bias_map: dict
             "rule_id":              specific_rule_id,
             "start_date":           start,
             "end_date":             end,
-            "duration_days":        dur,
             "conditions_snapshot":  snapshot,
         })
         if cur.rowcount:
@@ -235,7 +237,6 @@ def insert_windows(conn, windows: list[dict], panchang_map: dict, bias_map: dict
             "rule_id":              all5_id,
             "start_date":           start,
             "end_date":             end,
-            "duration_days":        dur,
             "conditions_snapshot":  snapshot,
         })
         if cur.rowcount:

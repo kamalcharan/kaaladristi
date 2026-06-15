@@ -12,19 +12,33 @@ import type { CatalogItem } from '@/constants/catalogItems'
 import type { DeepDiveItem } from './DeepDivePanel'
 import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
 
-function isRangeRule(ruleType: string): boolean {
-  return (RANGE_RULE_TYPES as readonly string[]).includes(ruleType)
+function isRangeRule(rule: AstroRule): boolean {
+  if ((RANGE_RULE_TYPES as readonly string[]).includes(rule.rule_type)) return true
+  // Panchak compound rules are date-range windows → chart overlay
+  // Other compound rules (SEA-, HEM-, VOL-) remain panel blocks
+  if (rule.rule_type === 'compound' && rule.rule_code.startsWith('PNK')) return true
+  return false
+}
+
+/** Clean display name for chart overlay label. */
+function overlayLabel(rule: AstroRule): string {
+  if ((rule.tags ?? []).includes('Panchak')) return 'Panchak'
+  return rule.display_name
+    .replace(/\s+(Bullish|Bearish|Volatile)$/i, '')
+    .trim()
 }
 
 function ruleToCatalogItem(rule: AstroRule): CatalogItem {
-  const range = isRangeRule(rule.rule_type)
+  const range = isRangeRule(rule)
   return {
     id: `astro_rule:${rule.rule_code}`,
-    display_name: rule.display_name,
+    display_name: range ? overlayLabel(rule) : rule.display_name,
     description: rule.remarks ?? '',
     block_type: 'astro_rule',
     placement: range ? 'chart_overlay' : 'panel_block',
     overlay_type: range ? 'astro_zone' : undefined,
+    // Panchak = indigo to match tag color
+    color: (rule.tags ?? []).includes('Panchak') ? '#6366f1' : undefined,
     data_source: 'rule_engine',
     applicable_to: ['equity', 'index'],
     tier_required: 'free',
@@ -69,7 +83,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
   function isRuleActive(rule: AstroRule): boolean {
     const id = `astro_rule:${rule.rule_code}`
-    return isRangeRule(rule.rule_type) ? isOverlayActive(id) : isBlockActive(id)
+    return isRangeRule(rule) ? isOverlayActive(id) : isBlockActive(id)
   }
 
   function handleAdd(rule: AstroRule, e: React.MouseEvent) {
@@ -80,8 +94,8 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       return
     }
     const item = ruleToCatalogItem(rule)
-    if (isRangeRule(rule.rule_type)) {
-      addOverlay(item)
+    if (isRangeRule(rule)) {
+      addOverlay(item, item.color)
     } else {
       addBlock(item)
     }
@@ -288,7 +302,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                 const active  = isRuleActive(rule)
                 const outcome = effectiveOutcome(rule)
                 const conf    = confMap.get(rule.id)
-                const range   = isRangeRule(rule.rule_type)
+                const range   = isRangeRule(rule)
 
                 return (
                   <tr

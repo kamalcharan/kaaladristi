@@ -9,7 +9,7 @@ export interface AstroBand {
   color:       string   // user-picked overlay color
 }
 
-interface RuleMeta { id: number; rule_code: string; display_name: string }
+interface RuleMeta { id: number; rule_code: string; display_name: string; tags: string[] | null }
 
 /** Resolve rule codes → DB ids + display names in one request. */
 async function fetchRuleMetaByCode(
@@ -18,7 +18,7 @@ async function fetchRuleMetaByCode(
   if (ruleCodes.length === 0) return new Map()
 
   const { data, error } = await from('km_astro_rule_master')
-    .select('id,rule_code,display_name')
+    .select('id,rule_code,display_name,tags')
     .in('rule_code', ruleCodes)
     .execute()
 
@@ -71,10 +71,15 @@ export async function fetchAstroBands(
   }[]) {
     const meta = idToMeta.get(row.rule_id)
     if (!meta) continue
-    const color = overlayColors.get(meta.rule_code) ?? '#c9a84c'
+    const isPanchak = (meta.tags ?? []).includes('Panchak')
+    const color = overlayColors.get(meta.rule_code)
+      ?? (isPanchak ? '#6366f1' : '#c9a84c')
+    const displayName = isPanchak
+      ? 'Panchak'
+      : meta.display_name.replace(/\s+(Bullish|Bearish|Volatile)$/i, '').trim()
     bands.push({
       ruleCode:    meta.rule_code,
-      displayName: meta.display_name,
+      displayName,
       from:        row.start_date,
       to:          row.end_date,
       matched:     row.matched,
