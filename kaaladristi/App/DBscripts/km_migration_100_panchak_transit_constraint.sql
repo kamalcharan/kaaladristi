@@ -12,18 +12,14 @@ HAVING COUNT(*) > 1;
 -- DELETE FROM km_rule_transits a USING km_rule_transits b
 -- WHERE a.id > b.id AND a.rule_id = b.rule_id AND a.start_date = b.start_date;
 
--- Add the unique constraint (idempotent via DO $$ block)
+-- Add the unique constraint (idempotent — swallows duplicate_table error)
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'km_rule_transits'::regclass
-      AND conname = 'uq_rule_transits_rule_start'
-  ) THEN
-    ALTER TABLE km_rule_transits
-    ADD CONSTRAINT uq_rule_transits_rule_start
-    UNIQUE (rule_id, start_date);
-  END IF;
+  ALTER TABLE km_rule_transits
+  ADD CONSTRAINT uq_rule_transits_rule_start
+  UNIQUE (rule_id, start_date);
+EXCEPTION WHEN duplicate_table THEN
+  NULL; -- constraint already exists, skip
 END $$;
 
 -- Verify
