@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui';
 import { ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { emptyForm, type FormMode } from './RuleFormModal';
-import { createRule, toggleRuleActive, fetchRules, fetchConfidence, type AstroRuleFull, type AstroRule, type RuleConfidence } from './ruleService';
+import { createRule, toggleRuleActive, toggleCatalogVisible, fetchRules, fetchConfidence, type AstroRuleFull, type AstroRule, type RuleConfidence } from './ruleService';
 import DiscoveryPanel from './DiscoveryPanel';
 import { fetchSignalCounts } from './discoveryService';
 import { IMPACT_OPTIONS, SIGNAL_LABELS } from '@/constants/signalScale';
@@ -175,11 +175,20 @@ interface Filters {
   probability: string;
   dataSource: string;
   confidenceRange: string;
+  tag: string;
+  catalogVisible: string; // '' | 'yes' | 'no'
 }
 
-const EMPTY_FILTERS: Filters = { search: '', ruleType: '', outcome: '', probability: '', dataSource: '', confidenceRange: '' };
+const EMPTY_FILTERS: Filters = {
+  search: '', ruleType: '', outcome: '', probability: '',
+  dataSource: '', confidenceRange: '', tag: '', catalogVisible: '',
+};
 
-function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filters) => void }) {
+function FilterBar({ filters, onChange, allTags }: {
+  filters: Filters;
+  onChange: (f: Filters) => void;
+  allTags: string[];
+}) {
   const set = (key: keyof Filters) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     onChange({ ...filters, [key]: e.target.value });
 
@@ -213,6 +222,10 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filt
           <option key={k} value={k}>{v}</option>
         ))}
       </select>
+      <select value={filters.tag} onChange={set('tag')} style={selStyle}>
+        <option value="">All Tags</option>
+        {allTags.map(t => <option key={t} value={t}>{t}</option>)}
+      </select>
       <select value={filters.outcome} onChange={set('outcome')} style={selStyle}>
         <option value="">All Outcomes</option>
         {ALL_OUTCOMES.map(o => (
@@ -237,6 +250,11 @@ function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filt
         <option value="available">Available</option>
         <option value="unavailable">Unavailable</option>
         <option value="user_defined">User Defined</option>
+      </select>
+      <select value={filters.catalogVisible} onChange={set('catalogVisible')} style={{ ...selStyle, minWidth: '130px' }}>
+        <option value="">Catalog: All</option>
+        <option value="yes">Catalog: Visible</option>
+        <option value="no">Catalog: Hidden</option>
       </select>
       {Object.values(filters).some(v => v !== '') && (
         <button
@@ -373,6 +391,35 @@ export default function RuleList() {
     },
   });
 
+  // ── Toggle catalog visibility mutation (optimistic) ──
+  const toggleVisibleMutation = useMutation({
+    mutationFn: ({ id, visible }: { id: number; visible: boolean }) =>
+      toggleCatalogVisible(id, visible),
+    onMutate: async ({ id, visible }) => {
+      await qc.cancelQueries({ queryKey: ['rule-engine', 'rules'] });
+      const prev = qc.getQueryData<AstroRule[]>(['rule-engine', 'rules']);
+      qc.setQueryData<AstroRule[]>(['rule-engine', 'rules'], old =>
+        old?.map(r => r.id === id ? { ...r, catalog_visible: visible } : r) ?? []
+      );
+      // Also invalidate the catalog query so CatalogAstroSection refreshes
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'catalog-rules'] });
+      return { prev };
+    },
+    onError: (err: Error, _vars, ctx) => {
+      qc.setQueryData(['rule-engine', 'rules'], ctx?.prev);
+      toast('error', `Catalog visibility update failed: ${err.message}`);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'rules'] });
+      qc.invalidateQueries({ queryKey: ['rule-engine', 'catalog-rules'] });
+    },
+  });
+
+  const allTags = useMemo(
+    () => Array.from(new Set(rules.flatMap(r => r.tags ?? []))).sort(),
+    [rules],
+  );
+
   const filtered = useMemo(() => {
     let list = rules;
     if (filters.search) {
@@ -382,9 +429,12 @@ export default function RuleList() {
       );
     }
     if (filters.ruleType) list = list.filter(r => r.rule_type === filters.ruleType);
+    if (filters.tag) list = list.filter(r => (r.tags ?? []).includes(filters.tag));
     if (filters.outcome)  list = list.filter(r => effectiveOutcome(r) === filters.outcome);
     if (filters.probability) list = list.filter(r => r.probability_label === filters.probability);
     if (filters.dataSource) list = list.filter(r => r.data_source === filters.dataSource);
+    if (filters.catalogVisible === 'yes') list = list.filter(r => r.catalog_visible);
+    if (filters.catalogVisible === 'no')  list = list.filter(r => !r.catalog_visible);
     if (filters.confidenceRange) {
       list = list.filter(r => {
         const score = confMap.get(r.id)?.confidence_score;
@@ -461,7 +511,7 @@ export default function RuleList() {
         {activeTab === 'rules' && (
           <>
             {/* Filters */}
-            <FilterBar filters={filters} onChange={setFilters} />
+            <FilterBar filters={filters} onChange={setFilters} allTags={allTags} />
 
             {/* Table */}
             {filtered.length === 0 ? (
@@ -474,7 +524,7 @@ export default function RuleList() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-kd-border bg-kd-elevated/60">
-                      {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Signals', 'Source', 'Tags'].map(h => (
+                      {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Signals', 'Source', 'Tags', 'Catalog'].map(h => (
                         <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
                           {h}
                         </th>
@@ -579,6 +629,22 @@ export default function RuleList() {
                             ) : (
                               <span className="text-muted text-xs">—</span>
                             )}
+                          </td>
+
+                          {/* Catalog visibility toggle */}
+                          <td className="px-3 py-2.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => toggleVisibleMutation.mutate({ id: rule.id, visible: !rule.catalog_visible })}
+                              title={rule.catalog_visible ? 'Hide from Catalog' : 'Show in Catalog'}
+                              className={cn(
+                                'text-[11px] font-mono px-2 py-0.5 rounded border transition-colors',
+                                rule.catalog_visible
+                                  ? 'bg-risk-green/15 text-risk-green border-risk-green/30 hover:bg-risk-green/25'
+                                  : 'bg-kd-elevated text-muted border-kd-border hover:border-kd-border-active hover:text-secondary',
+                              )}
+                            >
+                              {rule.catalog_visible ? 'YES' : 'NO'}
+                            </button>
                           </td>
                         </tr>
                       );

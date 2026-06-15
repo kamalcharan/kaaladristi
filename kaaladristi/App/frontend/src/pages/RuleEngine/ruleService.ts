@@ -140,6 +140,15 @@ export async function toggleRuleActive(id: number, isActive: boolean): Promise<v
   if (error) throw new Error(`Failed to toggle rule: ${error.message}`);
 }
 
+export async function toggleCatalogVisible(id: number, visible: boolean): Promise<void> {
+  const { error } = await from(TABLE)
+    .eq('id', id)
+    .update({ catalog_visible: visible } as Record<string, unknown>)
+    .execute();
+
+  if (error) throw new Error(`Failed to toggle catalog visibility: ${error.message}`);
+}
+
 export async function softDeleteRule(id: number): Promise<void> {
   const { error } = await from(TABLE)
     .eq('id', id)
