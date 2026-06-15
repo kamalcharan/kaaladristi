@@ -8,6 +8,7 @@ export interface CatalogItem {
   placement: PlacementType
   data_source: DataSourceType
   overlay_type?: ChartOverlayType   // only when placement = 'chart_overlay'
+  color?: string                    // default overlay color hint (e.g. Panchak = indigo)
   // Array when column exists in multiple tables; omit for api/computed items
   db_table?: ('km_equity_eod' | 'km_index_eod' | 'km_index_15m' | 'km_equity_15m')[]
   db_column?: string                // canonical column name — never use legacy aliases
