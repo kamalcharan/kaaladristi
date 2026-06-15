@@ -531,25 +531,43 @@ export default function TradingChart({ data, height = 900, compact = false, work
         const bw   = Math.max(Math.abs(x2 - x1), 2);
 
         if (band.isPanchak) {
-          // ── Panchak: whisper fill, no borders, tiny "P" label ──────────────
+          // ── Panchak tiered rendering — no borders, no strokes ──────────────
+          const tier = band.panchakTier ?? 'base'
           const bias = band.baseBias ?? ''
+
           let fillColor: string
-          if (bias === 'bearish') {
-            fillColor = 'rgba(239,68,68,0.06)'   // red whisper
-          } else if (bias === 'bullish') {
-            fillColor = 'rgba(34,197,94,0.06)'   // green whisper
+          let labelChar: string
+          let labelOpacity: number
+          let labelSize: number
+
+          if (tier === 'yoga') {
+            // Tier 2 — yoga override: golden amber wash + ✦ glyph
+            fillColor    = 'rgba(245,166,35,0.10)'
+            labelChar    = '✦'
+            labelOpacity = 0.7
+            labelSize    = 10
           } else {
-            fillColor = 'rgba(99,102,241,0.08)'  // indigo default
+            // Tier 1 (base) and Tier 3 (vara) — bias-coloured whisper
+            if (bias === 'bearish') {
+              fillColor = 'rgba(239,68,68,0.06)'
+            } else if (bias === 'bullish') {
+              fillColor = 'rgba(34,197,94,0.06)'
+            } else {
+              fillColor = 'rgba(99,102,241,0.08)'
+            }
+            labelChar    = tier === 'vara' ? band.ruleCode.split('-')[1]?.slice(0, 3) ?? 'P' : 'P'
+            labelOpacity = 0.4
+            labelSize    = 9
           }
 
           ctx.fillStyle = fillColor
           ctx.fillRect(left, 0, bw, h)
 
-          // "P" label — only if zone is wide enough (> 10px ≈ ~3 candles)
+          // Label — only if zone is wide enough (> 10px ≈ ~3 candles)
           if (bw > 10) {
-            ctx.fillStyle = 'rgba(99,102,241,0.45)'
-            ctx.font      = '9px sans-serif'
-            ctx.fillText('P', left + 3, 14)
+            ctx.fillStyle = `rgba(99,102,241,${labelOpacity})`
+            ctx.font      = `${labelSize}px sans-serif`
+            ctx.fillText(labelChar, left + 3, 14)
           }
         } else {
           // ── Non-Panchak: existing matched/unmatched/future rendering ───────

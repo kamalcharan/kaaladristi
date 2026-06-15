@@ -1,14 +1,38 @@
+// OVERLAY ARCHITECTURE:
+// Each rule renders its own transit windows independently.
+// Rules within the same group (e.g. PNK-*) stack as layers.
+// Base rules show all occurrences (PNK-ALL5-BUL = all 549 windows).
+// Refinement rules show sub-conditions on top (yoga, vara).
+// NEVER redirect one rule_code to another — preserve identity.
+// This pattern applies to all future rule groups (Mercury, Venus etc.)
+
 import { from } from './postgrest'
 
+// Panchak tier classification by rule_id
+const PANCHAK_BASE_IDS  = [66, 67]
+const PANCHAK_YOGA_IDS  = [78, 79, 80]
+const PANCHAK_VARA_IDS  = [71, 72, 73, 74, 75, 76, 77]
+
+export type PanchakTier = 'base' | 'yoga' | 'vara'
+
+export function getPanchakTier(ruleId: number): PanchakTier {
+  if (PANCHAK_BASE_IDS.includes(ruleId)) return 'base'
+  if (PANCHAK_YOGA_IDS.includes(ruleId)) return 'yoga'
+  if (PANCHAK_VARA_IDS.includes(ruleId)) return 'vara'
+  return 'base'
+}
+
 export interface AstroBand {
-  ruleCode:    string
-  displayName: string
-  from:        string   // YYYY-MM-DD
-  to:          string   // YYYY-MM-DD
-  matched:     boolean | null
-  baseBias:    string | null  // 'bullish' | 'bearish' | null
-  color:       string   // user-picked overlay color
-  isPanchak:   boolean
+  ruleCode:     string
+  ruleId:       number
+  displayName:  string
+  from:         string         // YYYY-MM-DD
+  to:           string         // YYYY-MM-DD
+  matched:      boolean | null
+  baseBias:     string | null  // 'bullish' | 'bearish' | null
+  color:        string         // user-picked overlay color
+  isPanchak:    boolean
+  panchakTier?: PanchakTier   // only set when isPanchak = true
 }
 
 interface RuleMeta {
@@ -87,6 +111,7 @@ export async function fetchAstroBands(
       : meta.display_name.replace(/\s+(Bullish|Bearish|Volatile)$/i, '').trim()
     bands.push({
       ruleCode:    meta.rule_code,
+      ruleId:      row.rule_id,
       displayName,
       from:        row.start_date,
       to:          row.end_date,
@@ -94,6 +119,7 @@ export async function fetchAstroBands(
       baseBias:    meta.base_bias ?? null,
       color,
       isPanchak,
+      panchakTier: isPanchak ? getPanchakTier(row.rule_id) : undefined,
     })
   }
 

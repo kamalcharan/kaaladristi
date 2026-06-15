@@ -391,9 +391,23 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
           {framework.chart_overlays.map(o => {
             const catalog  = getCatalogItem(o.catalog_item_id)
             const rawCode  = o.catalog_item_id.replace('astro_rule:', '')
-            const label    = o.label
-              ?? catalog?.display_name
-              ?? (rawCode.startsWith('PNK') ? 'Panchak' : rawCode)
+            const label    = (() => {
+              if (rawCode.startsWith('PNK')) {
+                if (rawCode.includes('ALL5')) return 'Panchak'
+                if (rawCode.includes('IND'))  return 'Panchak · Indra'
+                if (rawCode.includes('VYA'))  return 'Panchak · Vyati'
+                if (rawCode.includes('VAI'))  return 'Panchak · Vaidh'
+                if (rawCode.includes('MON'))  return 'Panchak · Mon'
+                if (rawCode.includes('TUE'))  return 'Panchak · Tue'
+                if (rawCode.includes('WED'))  return 'Panchak · Wed'
+                if (rawCode.includes('THU'))  return 'Panchak · Thu'
+                if (rawCode.includes('FRI'))  return 'Panchak · Fri'
+                if (rawCode.includes('SAT'))  return 'Panchak · Sat'
+                if (rawCode.includes('SUN'))  return 'Panchak · Sun'
+                return 'Panchak'
+              }
+              return o.label ?? catalog?.display_name ?? rawCode
+            })()
             const dotColor = effectiveDotColor(o.catalog_item_id, o.type, o.color)
             const isPickerOpen = picker?.id === o.catalog_item_id
 
