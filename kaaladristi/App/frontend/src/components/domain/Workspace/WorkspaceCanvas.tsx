@@ -390,7 +390,10 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
         }}>
           {framework.chart_overlays.map(o => {
             const catalog  = getCatalogItem(o.catalog_item_id)
-            const label    = o.label ?? catalog?.display_name ?? o.catalog_item_id.replace('astro_rule:', '')
+            const rawCode  = o.catalog_item_id.replace('astro_rule:', '')
+            const label    = o.label
+              ?? catalog?.display_name
+              ?? (rawCode.startsWith('PNK') ? 'Panchak' : rawCode)
             const dotColor = effectiveDotColor(o.catalog_item_id, o.type, o.color)
             const isPickerOpen = picker?.id === o.catalog_item_id
 
