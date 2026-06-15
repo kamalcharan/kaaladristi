@@ -669,29 +669,28 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
       />
 
       {/* Color picker — rendered at root so overflow:auto on pill strip can't clip it */}
-      {picker && (
-        {(() => {
-          const pickerOverlay = framework.chart_overlays.find(o => o.catalog_item_id === picker.id)
-          const isAstroZone  = pickerOverlay?.type === 'astro_zone'
-          return (
-            <ColorPicker
-              anchorX={picker.x}
-              anchorY={picker.y}
-              current={effectiveDotColor(
-                picker.id,
-                pickerOverlay?.type ?? '',
-                pickerOverlay?.color,
-              )}
-              currentOpacity={pickerOverlay?.opacity}
-              onSelect={c => updateOverlayColor(picker.id, c)}
-              onSelectOpacity={isAstroZone
-                ? o => updateOverlayOpacity(picker.id, o)
-                : undefined}
-              onClose={() => setPicker(null)}
-            />
-          )
-        })()}
-      )}
+      {picker && (() => {
+        const pickerOverlay = framework.chart_overlays.find(o => o.catalog_item_id === picker.id)
+        const isAstroZone  = pickerOverlay?.type === 'astro_zone'
+        const handleOpacity = isAstroZone
+          ? (o: number) => updateOverlayOpacity(picker.id, o)
+          : undefined
+        return (
+          <ColorPicker
+            anchorX={picker.x}
+            anchorY={picker.y}
+            current={effectiveDotColor(
+              picker.id,
+              pickerOverlay?.type ?? '',
+              pickerOverlay?.color,
+            )}
+            currentOpacity={pickerOverlay?.opacity}
+            onSelect={c => updateOverlayColor(picker.id, c)}
+            onSelectOpacity={handleOpacity}
+            onClose={() => setPicker(null)}
+          />
+        )
+      })()}
 
       {/* Index dropdown */}
       {indexDropdown && (
