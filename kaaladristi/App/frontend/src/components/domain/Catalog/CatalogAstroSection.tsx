@@ -17,10 +17,27 @@ const ASTRO_PALETTE = [
   '#ef4444', '#f59e0b', '#e879f9', '#ffffff',
 ]
 
-/** Inline color swatch + opacity slider for range overlay rules. */
-function RangeOverlayControls({
-  color, opacity, onColorChange, onOpacityChange,
+// Default overlay color per group tag
+const GROUP_DEFAULT_COLORS: Record<string, string> = {
+  Panchak:    '#6366f1',
+  Mercury:    '#3b82f6',
+  Retrograde: '#f59e0b',
+  Conjunction:'#a855f7',
+  Nakshatra:  '#2dd4bf',
+  Eclipse:    '#ef4444',
+  Yoga:       '#22c55e',
+  Transit:    '#fb7185',
+}
+
+function getGroupDefaultColor(tag: string): string {
+  return GROUP_DEFAULT_COLORS[tag] ?? '#6366f1'
+}
+
+/** Color dot + opacity popover attached to a tag chip. */
+function TagColorControl({
+  tag, color, opacity, onColorChange, onOpacityChange,
 }: {
+  tag: string
   color: string
   opacity: number
   onColorChange: (c: string) => void
@@ -39,37 +56,32 @@ function RangeOverlayControls({
   }, [open])
 
   return (
-    <div ref={ref} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, position: 'relative' }}>
-      {/* Color dot */}
+    <div ref={ref} style={{ display: 'inline-flex', alignItems: 'center', position: 'relative' }}>
       <button
-        title="Color & opacity"
+        title={`${tag} overlay color & opacity`}
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
         style={{
-          width: 14, height: 14, borderRadius: 3, flexShrink: 0,
-          background: color, border: '1px solid rgba(255,255,255,0.2)',
-          cursor: 'pointer',
+          width: 10, height: 10, borderRadius: 2, flexShrink: 0,
+          background: color, border: '1px solid rgba(255,255,255,0.25)',
+          cursor: 'pointer', marginLeft: 5,
         }}
       />
-      {/* Opacity readout */}
-      <span style={{
-        fontSize: 9, color: 'rgba(255,255,255,0.35)',
-        fontFamily: 'var(--font-mono, monospace)',
-      }}>
-        {Math.round(opacity * 100)}%
-      </span>
-
       {open && (
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            position: 'absolute', bottom: 22, right: 0, zIndex: 400,
+            position: 'absolute', top: 18, left: 0, zIndex: 500,
             background: 'var(--card, #1a1a2e)',
             border: '1px solid rgba(255,255,255,0.12)',
             borderRadius: 8, padding: 10,
             boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-            width: 140,
+            width: 150,
           }}
         >
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 6,
+            fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {tag} color
+          </div>
           {/* Swatches */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5, marginBottom: 8 }}>
             {ASTRO_PALETTE.map(s => (
@@ -106,12 +118,13 @@ function RangeOverlayControls({
   )
 }
 
-/** Bias-aware default color — green for bullish, red for bearish, indigo otherwise. */
-function getRuleDefaultColor(rule: AstroRule): string {
-  if ((rule.tags ?? []).includes('Panchak')) {
-    return rule.base_bias === 'bearish' ? '#ef4444' : '#22c55e'
+/** Primary group tag for a rule — drives shared color/opacity. */
+function getGroupTag(rule: AstroRule): string {
+  const tags = rule.tags ?? []
+  for (const tag of tags) {
+    if (tag in GROUP_DEFAULT_COLORS || tag in RULE_TAG_COLORS) return tag
   }
-  return '#6366f1'
+  return tags[0] ?? rule.rule_code.split('-')[0]
 }
 
 function isRangeRule(rule: AstroRule): boolean {
@@ -150,7 +163,7 @@ function ruleToCatalogItem(rule: AstroRule): CatalogItem {
     block_type:   'astro_rule',
     placement:    range ? 'chart_overlay' : 'panel_block',
     overlay_type: range ? 'astro_zone' : undefined,
-    color:        range ? getRuleDefaultColor(rule) : undefined,
+    color:        range ? getGroupDefaultColor(getGroupTag(rule)) : undefined,
     data_source:  'rule_engine',
     applicable_to: ['equity', 'index'],
     tier_required: 'free',
@@ -173,9 +186,9 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
   const { addBlock, addOverlay, isBlockActive, isOverlayActive, updateOverlayColor, updateOverlayOpacity } = useFrameworkStore()
   const [gateOpen, setGateOpen] = useState(false)
-  // Per-rule color/opacity before adding — keyed by rule_code
-  const [overlayColors, setOverlayColors]     = useState<Record<string, string>>({})
-  const [overlayOpacities, setOverlayOpacities] = useState<Record<string, number>>({})
+  // Per-group-tag color/opacity — keyed by group tag (e.g. 'Panchak', 'Mercury')
+  const [tagColors, setTagColors]       = useState<Record<string, string>>({})
+  const [tagOpacities, setTagOpacities] = useState<Record<string, number>>({})
 
   // Shared query keys with RuleList — no duplicate network calls when both are mounted
   const { data: rules = [], isLoading, isError } = useQuery({
@@ -198,18 +211,48 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
   const framework = useFrameworkStore(s => s.framework)
 
-  /** Read stored color from framework (persisted), fall back to local pending, then default. */
+  /** Effective color: framework store → group tag state → group default. */
   function getEffectiveColor(rule: AstroRule): string {
     const id = `astro_rule:${rule.rule_code}`
     const stored = framework?.chart_overlays.find(o => o.catalog_item_id === id)
-    return stored?.color ?? overlayColors[rule.rule_code] ?? getRuleDefaultColor(rule)
+    const group = getGroupTag(rule)
+    return stored?.color ?? tagColors[group] ?? getGroupDefaultColor(group)
   }
 
-  /** Read stored opacity from framework (persisted), fall back to local pending, then tier default. */
+  /** Effective opacity: framework store → group tag state → 0.08. */
   function getEffectiveOpacity(rule: AstroRule): number {
     const id = `astro_rule:${rule.rule_code}`
     const stored = framework?.chart_overlays.find(o => o.catalog_item_id === id)
-    return stored?.opacity ?? overlayOpacities[rule.rule_code] ?? 0.08
+    const group = getGroupTag(rule)
+    return stored?.opacity ?? tagOpacities[group] ?? 0.08
+  }
+
+  /** Get the effective group color (for tag chip display). */
+  function getTagColor(groupTag: string): string {
+    // Check if any active overlay in this group has a stored color
+    const activeOverlay = framework?.chart_overlays.find(o => {
+      const code = o.catalog_item_id.replace('astro_rule:', '')
+      const rule = rules.find(r => r.rule_code === code)
+      return rule && getGroupTag(rule) === groupTag
+    })
+    return activeOverlay?.color ?? tagColors[groupTag] ?? getGroupDefaultColor(groupTag)
+  }
+
+  /** Get the effective group opacity (for tag chip display). */
+  function getTagOpacity(groupTag: string): number {
+    const activeOverlay = framework?.chart_overlays.find(o => {
+      const code = o.catalog_item_id.replace('astro_rule:', '')
+      const rule = rules.find(r => r.rule_code === code)
+      return rule && getGroupTag(rule) === groupTag
+    })
+    return activeOverlay?.opacity ?? tagOpacities[groupTag] ?? 0.08
+  }
+
+  /** Returns true if any range-overlay rule for this group tag is active. */
+  function isTagGroupActive(groupTag: string): boolean {
+    return (rules ?? []).some(r =>
+      isRangeRule(r) && getGroupTag(r) === groupTag && isOverlayActive(`astro_rule:${r.rule_code}`)
+    )
   }
 
   function isRuleActive(rule: AstroRule): boolean {
@@ -238,13 +281,15 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
             r => r.rule_code === baseItemId.replace('astro_rule:', ''),
           )
           if (baseRule) {
-            addOverlay(ruleToCatalogItem(baseRule), getRuleDefaultColor(baseRule))
+            const baseGroup = getGroupTag(baseRule)
+            addOverlay(ruleToCatalogItem(baseRule), tagColors[baseGroup] ?? getGroupDefaultColor(baseGroup))
           }
         }
       }
     }
 
-    const pickedColor = overlayColors[rule.rule_code] ?? (isRangeRule(rule) ? getRuleDefaultColor(rule) : undefined)
+    const group = getGroupTag(rule)
+    const pickedColor = isRangeRule(rule) ? (tagColors[group] ?? getGroupDefaultColor(group)) : undefined
     const item = ruleToCatalogItem(rule)
     if (isRangeRule(rule)) {
       addOverlay(item, pickedColor)
@@ -253,18 +298,24 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     }
   }
 
-  function handleColorChange(rule: AstroRule, color: string) {
-    setOverlayColors(prev => ({ ...prev, [rule.rule_code]: color }))
-    // If already in framework, update live
-    const id = `astro_rule:${rule.rule_code}`
-    if (isOverlayActive(id)) updateOverlayColor(id, color)
+  /** Update color for the entire group — all active overlays in the group get the new color. */
+  function handleTagColorChange(groupTag: string, color: string) {
+    setTagColors(prev => ({ ...prev, [groupTag]: color }))
+    for (const r of rules) {
+      if (!isRangeRule(r) || getGroupTag(r) !== groupTag) continue
+      const id = `astro_rule:${r.rule_code}`
+      if (isOverlayActive(id)) updateOverlayColor(id, color)
+    }
   }
 
-  function handleOpacityChange(rule: AstroRule, opacity: number) {
-    setOverlayOpacities(prev => ({ ...prev, [rule.rule_code]: opacity }))
-    // If already in framework, update live
-    const id = `astro_rule:${rule.rule_code}`
-    if (isOverlayActive(id)) updateOverlayOpacity(id, opacity)
+  /** Update opacity for the entire group. */
+  function handleTagOpacityChange(groupTag: string, opacity: number) {
+    setTagOpacities(prev => ({ ...prev, [groupTag]: opacity }))
+    for (const r of rules) {
+      if (!isRangeRule(r) || getGroupTag(r) !== groupTag) continue
+      const id = `astro_rule:${r.rule_code}`
+      if (isOverlayActive(id)) updateOverlayOpacity(id, opacity)
+    }
   }
 
   const ruleTypes = useMemo(
@@ -404,18 +455,30 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           {allTags.map(tag => {
             const active = activeTags.includes(tag)
             const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
+            const groupActive = isTagGroupActive(tag)
             return (
-              <button
-                key={tag}
-                onClick={() => toggleTag(tag)}
-                className={cn(
-                  'px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
-                  active ? colorCls : 'bg-transparent text-muted border-kd-border hover:border-kd-border-active',
+              <div key={tag} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <button
+                  onClick={() => toggleTag(tag)}
+                  className={cn(
+                    'px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
+                    active ? colorCls : 'bg-transparent text-muted border-kd-border hover:border-kd-border-active',
+                  )}
+                  style={{ fontFamily: 'inherit' }}
+                >
+                  {tag}
+                </button>
+                {/* Color/opacity control — only shown when ≥1 overlay in this group is active */}
+                {groupActive && (
+                  <TagColorControl
+                    tag={tag}
+                    color={getTagColor(tag)}
+                    opacity={getTagOpacity(tag)}
+                    onColorChange={c => handleTagColorChange(tag, c)}
+                    onOpacityChange={o => handleTagOpacityChange(tag, o)}
+                  />
                 )}
-                style={{ fontFamily: 'inherit' }}
-              >
-                {tag}
-              </button>
+              </div>
             )
           })}
         </div>
@@ -587,16 +650,13 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
                     {/* Add / Active */}
                     <td style={{ padding: '10px 13px', verticalAlign: 'middle', textAlign: 'right', minWidth: 110 }}>
-                      {/* Color + opacity controls for range overlays */}
-                      {range && (
-                        <div style={{ marginBottom: 4, display: 'flex', justifyContent: 'flex-end' }}>
-                          <RangeOverlayControls
-                            color={getEffectiveColor(rule)}
-                            opacity={getEffectiveOpacity(rule)}
-                            onColorChange={c => handleColorChange(rule, c)}
-                            onOpacityChange={o => handleOpacityChange(rule, o)}
-                          />
-                        </div>
+                      {/* Tiny group-color indicator dot (no popover — control is on the tag chip) */}
+                      {range && active && (
+                        <span style={{
+                          display: 'inline-block', width: 8, height: 8, borderRadius: 2,
+                          background: getEffectiveColor(rule),
+                          marginRight: 6, verticalAlign: 'middle', opacity: 0.8,
+                        }} />
                       )}
                       {active ? (
                         <span style={{
