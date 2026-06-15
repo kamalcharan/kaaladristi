@@ -14,6 +14,7 @@ export const RULE_TAG_COLORS: Record<string, string> = {
   SignPosition:  'bg-violet-900/60 text-violet-300 border-violet-700',
   Lunar:         'bg-slate-800 text-slate-300 border-slate-600',
   SpecialDay:    'bg-pink-900/60 text-pink-300 border-pink-700',
+  MajorTransit:  'bg-rose-900/60 text-rose-300 border-rose-700',
 }
 
 export const DEFAULT_TAG_COLOR = 'bg-gray-800 text-gray-400 border-gray-600'
