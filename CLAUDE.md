@@ -1062,32 +1062,27 @@ API endpoints:
 
 ## Bayer Rules — Implementation Status
 
-### Implemented (mapped to existing rules):
-- Rule 1  → TRN-MER-MAN-TRN (Mercury direction change)
-- Rule 4A → TRN-MER-RIS-W-BUL (Mercury stations direct)
-- Rule 21 → CON-MER-VEN-CD-BEA (Retro Venus conjunct Direct Mercury)
-- Rule 22 → CON-SUN-MER-TRN (Sun conjunct Retro Mercury)
+Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — George Bayer, 1940.
 
-### Implemented (new rules created):
-- Rule 2  → BAY-R02-MER-MAR-SPD (Mars-Mercury 59min speed diff)
-- Rule 3  → BAY-R03-VEN-RET (Venus Retrograde)
-- Rule 6  → BAY-R06-MAR-1635 (Mars at 16°35')
-- Rule 14 → BAY-R14-VEN-LON (Venus longitude unit)
-- Rule 27 → BAY-R27-MER-SPD59 (Mercury speed 59')
+### Mapped to existing rules (Bayer tag added via migration 101):
+- Rule 1  → TRN-MER-MAN-TRN      Mercury direction change
+- Rule 4A → TRN-MER-RIS-W-BUL   Mercury stations direct
+- Rule 9  → TR-MER-CMB-E-BEA    Mercury combust east
+- Rule 21 → CON-MER-VEN-CD-BEA  Retro Venus + Direct Mercury conjunction
+- Rule 22 → CON-SUN-MER-TRN     Sun conjunct Retro Mercury
 
-### Transit data needed (scripts to write):
-- BAY-R02: compute from km_planetary_positions
-  WHERE ABS(mercury.speed - mars.speed) BETWEEN 0.95 AND 1.05
-- BAY-R06: compute from km_planetary_positions
-  WHERE planet='Mars' AND MOD(longitude::numeric,30) BETWEEN 16.4 AND 16.7
-- BAY-R27: compute from km_planetary_positions
-  WHERE planet='Mercury' AND (
-    speed BETWEEN 0.95 AND 1.05 OR speed BETWEEN 1.95 AND 1.99
-  )
-- BAY-R03: Venus retrograde windows (island pattern, same as Mercury)
-- BAY-R14: Venus longitude unit cycle (needs custom computation)
+### New rules created with transit data (migration 101 + generate_bayer_windows.py):
+- Rule 2  → BAY-R02-MAR-MER-SPD  Mars-Mercury geocentric speed diff ≈ 59min
+- Rule 3  → BAY-R03-VEN-RET      Venus retrograde periods (island pattern)
+- Rule 6  → BAY-R06-MAR-1635     Mars crosses 16°35' in any zodiac sign
+- Rule 14 → BAY-R14-VEN-LON      Venus longitude unit cycle (unit = 1°9'13'')
+- Rule 27 → BAY-R27-MER-SPD      Mercury speed crosses 59min or 1°58' threshold
+
+### Transit generation scripts:
+- `App/backend/scripts/generate_bayer_windows.py` — covers all 5 new rules above
+- Run after migration 101: `DB_PRIMARY=... python3 generate_bayer_windows.py`
 
 ### Rules NOT yet implemented (source material needed):
-- Rules 5,7,8,9,10-13,15-20,23-26,28-30,31-48
+- Rules 4B, 5, 7, 8, 10-13, 15-20, 23-26, 28-30, 31-48
 - Require original Bayer 1940 handbook for accurate definition
-- Do not guess or approximate — wait for verified source
+- Do NOT guess or approximate — wait for verified source material
