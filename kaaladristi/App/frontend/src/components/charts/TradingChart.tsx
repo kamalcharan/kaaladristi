@@ -527,38 +527,61 @@ export default function TradingChart({ data, height = 900, compact = false, work
         const x2 = ts.timeToCoordinate(band.to   as Time);
         if (x1 == null || x2 == null) continue;
 
-        const left  = Math.min(x1, x2);
-        const bw    = Math.max(Math.abs(x2 - x1), 2);
-        const isFuture = band.from > today;
+        const left = Math.min(x1, x2);
+        const bw   = Math.max(Math.abs(x2 - x1), 2);
 
-        let fillColor: string;
-        let borderColor: string;
-        let dashed = false;
+        if (band.isPanchak) {
+          // ── Panchak: whisper fill, no borders, tiny "P" label ──────────────
+          const bias = band.baseBias ?? ''
+          let fillColor: string
+          if (bias === 'bearish') {
+            fillColor = 'rgba(239,68,68,0.06)'   // red whisper
+          } else if (bias === 'bullish') {
+            fillColor = 'rgba(34,197,94,0.06)'   // green whisper
+          } else {
+            fillColor = 'rgba(99,102,241,0.08)'  // indigo default
+          }
 
-        if (band.matched === true) {
-          fillColor   = hexToRgba(band.color, 0.12);
-          borderColor = hexToRgba(band.color, 0.75);
-        } else if (band.matched === false) {
-          fillColor   = 'var(--bear-bg)';
-          borderColor = 'var(--bear-dim)'; /* bear tint border */
+          ctx.fillStyle = fillColor
+          ctx.fillRect(left, 0, bw, h)
+
+          // "P" label — only if zone is wide enough (> 10px ≈ ~3 candles)
+          if (bw > 10) {
+            ctx.fillStyle = 'rgba(99,102,241,0.45)'
+            ctx.font      = '9px sans-serif'
+            ctx.fillText('P', left + 3, 14)
+          }
         } else {
-          // null — not yet validated (past unbacktested or future transit)
-          fillColor   = hexToRgba(band.color, 0.06);
-          borderColor = hexToRgba(band.color, isFuture ? 0.50 : 0.30);
-          dashed      = true;
+          // ── Non-Panchak: existing matched/unmatched/future rendering ───────
+          const isFuture = band.from > today
+          let fillColor: string
+          let borderColor: string
+          let dashed = false
+
+          if (band.matched === true) {
+            fillColor   = hexToRgba(band.color, 0.12)
+            borderColor = hexToRgba(band.color, 0.75)
+          } else if (band.matched === false) {
+            fillColor   = 'var(--bear-bg)'
+            borderColor = 'var(--bear-dim)'
+          } else {
+            fillColor   = hexToRgba(band.color, 0.06)
+            borderColor = hexToRgba(band.color, isFuture ? 0.50 : 0.30)
+            dashed      = true
+          }
+
+          ctx.fillStyle = fillColor
+          ctx.fillRect(left, 0, bw, h)
+
+          ctx.strokeStyle = borderColor
+          ctx.lineWidth   = 2
+          ctx.setLineDash(dashed ? [4, 3] : [])
+          ctx.beginPath()
+          ctx.moveTo(left + 1, 0)
+          ctx.lineTo(left + 1, h)
+          ctx.stroke()
+          ctx.setLineDash([])
         }
-
-        ctx.fillStyle = fillColor;
-        ctx.fillRect(left, 0, bw, h);
-
-        ctx.strokeStyle = borderColor;
-        ctx.lineWidth   = 2;
-        ctx.setLineDash(dashed ? [4, 3] : []);
-        ctx.beginPath();
-        ctx.moveTo(left + 1, 0);
-        ctx.lineTo(left + 1, h);
-        ctx.stroke();
-        ctx.setLineDash([]);
       }
     }
 
