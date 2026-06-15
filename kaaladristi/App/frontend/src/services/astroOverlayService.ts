@@ -22,6 +22,13 @@ export function getPanchakTier(ruleId: number): PanchakTier {
   return 'base'
 }
 
+// Default opacities per tier — used when user hasn't set a custom value
+export const PANCHAK_DEFAULT_OPACITY: Record<PanchakTier, number> = {
+  base: 0.08,
+  yoga: 0.12,
+  vara: 0.06,
+}
+
 export interface AstroBand {
   ruleCode:     string
   ruleId:       number
@@ -30,7 +37,8 @@ export interface AstroBand {
   to:           string         // YYYY-MM-DD
   matched:      boolean | null
   baseBias:     string | null  // 'bullish' | 'bearish' | null
-  color:        string         // user-picked overlay color
+  color:        string         // user-picked or default color
+  opacity:      number         // user-picked or tier default (0–1)
   isPanchak:    boolean
   panchakTier?: PanchakTier   // only set when isPanchak = true
 }
@@ -67,11 +75,13 @@ async function fetchRuleMetaByCode(
  * Fetch all transit windows for the given rules that overlap the chart's
  * 1Y window. Returns AstroBand[] ready to pass to TradingChart.
  *
- * @param overlayColors  Map of ruleCode → user-picked color
- * @param since          ISO date string — fetch transits ending on or after this date
+ * @param overlayColors    Map of ruleCode → user-picked hex color
+ * @param overlayOpacities Map of ruleCode → user-picked opacity (0–1)
+ * @param since            ISO date string — fetch transits ending on or after this date
  */
 export async function fetchAstroBands(
-  overlayColors: Map<string, string>,
+  overlayColors:    Map<string, string>,
+  overlayOpacities: Map<string, number>,
   since: string,
 ): Promise<AstroBand[]> {
   const ruleCodes = Array.from(overlayColors.keys())
@@ -104,8 +114,11 @@ export async function fetchAstroBands(
     const meta = idToMeta.get(row.rule_id)
     if (!meta) continue
     const isPanchak   = (meta.tags ?? []).includes('Panchak')
+    const tier        = isPanchak ? getPanchakTier(row.rule_id) : undefined
     const color       = overlayColors.get(meta.rule_code)
       ?? (isPanchak ? '#6366f1' : '#c9a84c')
+    const opacity     = overlayOpacities.get(meta.rule_code)
+      ?? (tier != null ? PANCHAK_DEFAULT_OPACITY[tier] : 0.10)
     const displayName = isPanchak
       ? 'Panchak'
       : meta.display_name.replace(/\s+(Bullish|Bearish|Volatile)$/i, '').trim()
@@ -118,8 +131,9 @@ export async function fetchAstroBands(
       matched:     row.matched,
       baseBias:    meta.base_bias ?? null,
       color,
+      opacity,
       isPanchak,
-      panchakTier: isPanchak ? getPanchakTier(row.rule_id) : undefined,
+      panchakTier: tier,
     })
   }
 

@@ -78,11 +78,16 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
 // container on the pill strip cannot clip it.
 
 function ColorPicker({
-  anchorX, anchorY, current, onSelect, onClose,
+  anchorX, anchorY, current, currentOpacity, onSelect, onSelectOpacity, onClose,
 }: {
   anchorX: number; anchorY: number
-  current: string; onSelect: (c: string) => void; onClose: () => void
+  current: string
+  currentOpacity?: number
+  onSelect: (c: string) => void
+  onSelectOpacity?: (o: number) => void
+  onClose: () => void
 }) {
+  const showOpacity = onSelectOpacity != null
   return (
     <>
       {/* Click-away backdrop */}
@@ -99,7 +104,7 @@ function ColorPicker({
           {COLOR_PRESETS.map(c => (
             <button
               key={c}
-              onClick={() => { onSelect(c); onClose() }}
+              onClick={() => { onSelect(c) }}
               title={c}
               style={{
                 width: 20, height: 20, borderRadius: 4, border: 'none',
@@ -118,12 +123,12 @@ function ColorPicker({
           placeholder="#rrggbb"
           onBlur={e => {
             const val = e.target.value.trim()
-            if (/^#[0-9a-fA-F]{6}$/.test(val)) { onSelect(val); onClose() }
+            if (/^#[0-9a-fA-F]{6}$/.test(val)) onSelect(val)
           }}
           onKeyDown={e => {
             if (e.key === 'Enter') {
               const val = (e.target as HTMLInputElement).value.trim()
-              if (/^#[0-9a-fA-F]{6}$/.test(val)) { onSelect(val); onClose() }
+              if (/^#[0-9a-fA-F]{6}$/.test(val)) onSelect(val)
             }
           }}
           style={{
@@ -136,6 +141,41 @@ function ColorPicker({
             outline: 'none',
           }}
         />
+        {/* Opacity slider — only for astro zone overlays */}
+        {showOpacity && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: 4,
+            }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,.4)',
+                fontFamily: 'var(--font-mono, monospace)' }}>opacity</span>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,.6)',
+                fontFamily: 'var(--font-mono, monospace)' }}>
+                {Math.round((currentOpacity ?? 0.08) * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1} max={30} step={1}
+              value={Math.round((currentOpacity ?? 0.08) * 100)}
+              onChange={e => onSelectOpacity(Number(e.target.value) / 100)}
+              style={{ width: '100%', accentColor: current, cursor: 'pointer' }}
+            />
+          </div>
+        )}
+        {/* Done button — closes without auto-close on swatch click */}
+        <button
+          onClick={onClose}
+          style={{
+            marginTop: 8, width: '100%', padding: '3px 0',
+            borderRadius: 5, border: '1px solid rgba(255,255,255,.1)',
+            background: 'rgba(255,255,255,.04)', color: 'rgba(255,255,255,.5)',
+            fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          done
+        </button>
       </div>
     </>
   )
@@ -276,7 +316,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
 
   const {
     removeBlock, updateBlockPosition, saveFramework,
-    toggleOverlayVisibility, removeOverlay, updateOverlayColor,
+    toggleOverlayVisibility, removeOverlay, updateOverlayColor, updateOverlayOpacity,
   } = useFrameworkStore()
 
   const primarySymbol = framework.blocks.find(b => b.type === 'chart')
@@ -630,17 +670,27 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
 
       {/* Color picker — rendered at root so overflow:auto on pill strip can't clip it */}
       {picker && (
-        <ColorPicker
-          anchorX={picker.x}
-          anchorY={picker.y}
-          current={effectiveDotColor(
-            picker.id,
-            framework.chart_overlays.find(o => o.catalog_item_id === picker.id)?.type ?? '',
-            framework.chart_overlays.find(o => o.catalog_item_id === picker.id)?.color,
-          )}
-          onSelect={c => updateOverlayColor(picker.id, c)}
-          onClose={() => setPicker(null)}
-        />
+        {(() => {
+          const pickerOverlay = framework.chart_overlays.find(o => o.catalog_item_id === picker.id)
+          const isAstroZone  = pickerOverlay?.type === 'astro_zone'
+          return (
+            <ColorPicker
+              anchorX={picker.x}
+              anchorY={picker.y}
+              current={effectiveDotColor(
+                picker.id,
+                pickerOverlay?.type ?? '',
+                pickerOverlay?.color,
+              )}
+              currentOpacity={pickerOverlay?.opacity}
+              onSelect={c => updateOverlayColor(picker.id, c)}
+              onSelectOpacity={isAstroZone
+                ? o => updateOverlayOpacity(picker.id, o)
+                : undefined}
+              onClose={() => setPicker(null)}
+            />
+          )
+        })()}
       )}
 
       {/* Index dropdown */}

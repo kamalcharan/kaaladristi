@@ -532,8 +532,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
         if (band.isPanchak) {
           // ── Panchak tiered rendering — no borders, no strokes ──────────────
-          const tier = band.panchakTier ?? 'base'
-          const bias = band.baseBias ?? ''
+          // band.color = user-picked hex (or tier default)
+          // band.opacity = user-picked opacity (or tier default)
+          const tier    = band.panchakTier ?? 'base'
+          const bias    = band.baseBias ?? ''
+          const userOpacity = band.opacity
 
           let fillColor: string
           let labelChar: string
@@ -541,19 +544,23 @@ export default function TradingChart({ data, height = 900, compact = false, work
           let labelSize: number
 
           if (tier === 'yoga') {
-            // Tier 2 — yoga override: golden amber wash + ✦ glyph
-            fillColor    = 'rgba(245,166,35,0.10)'
+            // Tier 2 — yoga override: user color at user opacity, ✦ glyph
+            fillColor    = hexToRgba(band.color, userOpacity)
             labelChar    = '✦'
             labelOpacity = 0.7
             labelSize    = 10
           } else {
-            // Tier 1 (base) and Tier 3 (vara) — bias-coloured whisper
-            if (bias === 'bearish') {
-              fillColor = 'rgba(239,68,68,0.06)'
+            // Tier 1 (base) and Tier 3 (vara): bias tints using user color as hue
+            // If user picked a custom color, honour it; otherwise use bias hue
+            const hasCustomColor = band.color !== '#6366f1'
+            if (hasCustomColor) {
+              fillColor = hexToRgba(band.color, userOpacity)
+            } else if (bias === 'bearish') {
+              fillColor = hexToRgba('#ef4444', userOpacity)
             } else if (bias === 'bullish') {
-              fillColor = 'rgba(34,197,94,0.06)'
+              fillColor = hexToRgba('#22c55e', userOpacity)
             } else {
-              fillColor = 'rgba(99,102,241,0.08)'
+              fillColor = hexToRgba(band.color, userOpacity)
             }
             labelChar    = tier === 'vara' ? band.ruleCode.split('-')[1]?.slice(0, 3) ?? 'P' : 'P'
             labelOpacity = 0.4
