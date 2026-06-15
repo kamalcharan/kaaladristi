@@ -522,7 +522,66 @@ export default function TradingChart({ data, height = 900, compact = false, work
       const today = new Date().toISOString().slice(0, 10);
       const ts    = mainChartRef.current.timeScale();
 
-      for (const band of astroBands) {
+      // Non-Panchak bands are merged per group tag so that 11 Mercury rules
+      // render as ONE visual layer instead of 11 stacking semi-transparent rects.
+      // Panchak keeps its tiered rendering (base / yoga / vara stacking is intentional).
+      //
+      // Merge algorithm:
+      //   1. Separate Panchak bands (draw as-is) from group bands
+      //   2. For each group, collect all date ranges and sort by start
+      //   3. Walk through and union overlapping ranges → one rect per merged period
+      //   4. Merged rect uses the group's shared color and opacity (taken from first band)
+      interface MergedBand {
+        from: string; to: string
+        color: string; opacity: number
+        matched: boolean | null
+        groupTag: string
+      }
+
+      const panchakBands = astroBands.filter(b => b.isPanchak)
+      const nonPanchak   = astroBands.filter(b => !b.isPanchak)
+
+      // Group by groupTag
+      const byGroup = new Map<string, typeof nonPanchak>()
+      for (const b of nonPanchak) {
+        const arr = byGroup.get(b.groupTag) ?? []
+        arr.push(b)
+        byGroup.set(b.groupTag, arr)
+      }
+
+      // Union date ranges per group
+      const mergedBands: MergedBand[] = []
+      for (const [groupTag, gbands] of byGroup) {
+        const sorted = [...gbands].sort((a, b) => a.from < b.from ? -1 : 1)
+        // Take color/opacity from the first band in the group (all share group color)
+        const refColor   = sorted[0].color
+        const refOpacity = sorted[0].opacity
+        let curFrom = sorted[0].from
+        let curTo   = sorted[0].to
+        // Track whether any band in the current merged window is matched/null
+        let curMatched: boolean | null = sorted[0].matched
+
+        for (let i = 1; i < sorted.length; i++) {
+          const b = sorted[i]
+          if (b.from <= curTo) {
+            // Overlaps — extend the window
+            if (b.to > curTo) curTo = b.to
+            // If any constituent is matched=true, the merged window is matched
+            if (b.matched === true) curMatched = true
+            else if (curMatched === null && b.matched === false) curMatched = false
+          } else {
+            mergedBands.push({ from: curFrom, to: curTo, color: refColor, opacity: refOpacity, matched: curMatched, groupTag })
+            curFrom = b.from; curTo = b.to; curMatched = b.matched
+          }
+        }
+        mergedBands.push({ from: curFrom, to: curTo, color: refColor, opacity: refOpacity, matched: curMatched, groupTag })
+      }
+
+      // Draw Panchak (tiered) first, then merged group bands on top
+      const allDrawBands = [...panchakBands.map(b => ({ ...b, _merged: false })),
+                           ...mergedBands.map(b => ({ ...b, _merged: true, isPanchak: false, panchakTier: undefined }))]
+
+      for (const band of allDrawBands) {
         const x1 = ts.timeToCoordinate(band.from as Time);
         const x2 = ts.timeToCoordinate(band.to   as Time);
         if (x1 == null || x2 == null) continue;
@@ -577,29 +636,32 @@ export default function TradingChart({ data, height = 900, compact = false, work
             ctx.fillText(labelChar, left + 3, 14)
           }
         } else {
-          // ── Non-Panchak: existing matched/unmatched/future rendering ───────
+          // ── Non-Panchak: merged group band — single opacity, no stacking ───
+          // band.opacity = group opacity (user-set or default 0.10)
           const isFuture = band.from > today
+          const op = (band as { opacity?: number }).opacity ?? 0.10
           let fillColor: string
           let borderColor: string
           let dashed = false
 
           if (band.matched === true) {
-            fillColor   = hexToRgba(band.color, 0.12)
-            borderColor = hexToRgba(band.color, 0.75)
+            fillColor   = hexToRgba(band.color, op)
+            borderColor = hexToRgba(band.color, Math.min(op * 6, 0.75))
           } else if (band.matched === false) {
-            fillColor   = 'var(--bear-bg)'
-            borderColor = 'var(--bear-dim)'
+            fillColor   = hexToRgba(band.color, op * 0.5)
+            borderColor = hexToRgba(band.color, Math.min(op * 3, 0.40))
           } else {
-            fillColor   = hexToRgba(band.color, 0.06)
-            borderColor = hexToRgba(band.color, isFuture ? 0.50 : 0.30)
-            dashed      = true
+            // null matched (most rules) — use group opacity directly
+            fillColor   = hexToRgba(band.color, op)
+            borderColor = hexToRgba(band.color, isFuture ? Math.min(op * 5, 0.50) : Math.min(op * 3, 0.30))
+            dashed      = isFuture
           }
 
           ctx.fillStyle = fillColor
           ctx.fillRect(left, 0, bw, h)
 
           ctx.strokeStyle = borderColor
-          ctx.lineWidth   = 2
+          ctx.lineWidth   = 1.5
           ctx.setLineDash(dashed ? [4, 3] : [])
           ctx.beginPath()
           ctx.moveTo(left + 1, 0)

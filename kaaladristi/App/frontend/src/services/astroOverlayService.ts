@@ -41,6 +41,7 @@ export interface AstroBand {
   opacity:      number         // user-picked or tier default (0–1)
   isPanchak:    boolean
   panchakTier?: PanchakTier   // only set when isPanchak = true
+  groupTag:     string         // primary tag group — used to merge co-group bands visually
 }
 
 interface RuleMeta {
@@ -122,6 +123,8 @@ export async function fetchAstroBands(
     const displayName = isPanchak
       ? 'Panchak'
       : meta.display_name.replace(/\s+(Bullish|Bearish|Volatile)$/i, '').trim()
+    // Primary group tag — first tag in the list, or rule_code prefix as fallback
+    const groupTag = (meta.tags ?? [])[0] ?? meta.rule_code.split('-')[0]
     bands.push({
       ruleCode:    meta.rule_code,
       ruleId:      row.rule_id,
@@ -134,6 +137,7 @@ export async function fetchAstroBands(
       opacity,
       isPanchak,
       panchakTier: tier,
+      groupTag,
     })
   }
 
