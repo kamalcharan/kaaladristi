@@ -28,26 +28,28 @@ function overlayLabel(rule: AstroRule): string {
     .trim()
 }
 
+// Base rule that must always be added first when a sub-rule is added.
+// Each group's base rule covers all windows; sub-rules layer on top.
+const BASE_RULE_MAP: Record<string, string> = {
+  PNK: 'astro_rule:PNK-ALL5-BUL',
+  // Future groups:
+  // MER: 'astro_rule:MER-ALL-BASE',
+  // VEN: 'astro_rule:VEN-ALL-BASE',
+}
+const BASE_RULE_CODES = ['PNK-ALL5-BUL', 'PNK-ALL5-BEA']
+
 function ruleToCatalogItem(rule: AstroRule): CatalogItem {
-  const range    = isRangeRule(rule)
+  const range     = isRangeRule(rule)
   const isPanchak = (rule.tags ?? []).includes('Panchak')
-
-  // All Panchak overlays share the same catalog_item_id so the chart always
-  // fetches from PNK-ALL5-BUL/BEA which has all 549 windows. Individual
-  // PNK sub-rules (PNK-IND-BUL etc.) have far fewer transit rows.
-  const overlayId = isPanchak && range
-    ? `astro_rule:${rule.base_bias === 'bearish' ? 'PNK-ALL5-BEA' : 'PNK-ALL5-BUL'}`
-    : `astro_rule:${rule.rule_code}`
-
   return {
-    id: overlayId,
+    id:           `astro_rule:${rule.rule_code}`,
     display_name: range ? overlayLabel(rule) : rule.display_name,
-    description: rule.remarks ?? '',
-    block_type: 'astro_rule',
-    placement: range ? 'chart_overlay' : 'panel_block',
+    description:  rule.remarks ?? '',
+    block_type:   'astro_rule',
+    placement:    range ? 'chart_overlay' : 'panel_block',
     overlay_type: range ? 'astro_zone' : undefined,
-    color: isPanchak ? '#6366f1' : undefined,
-    data_source: 'rule_engine',
+    color:        isPanchak ? '#6366f1' : undefined,
+    data_source:  'rule_engine',
     applicable_to: ['equity', 'index'],
     tier_required: 'free',
   }
@@ -89,6 +91,8 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     return m
   }, [confidence])
 
+  const framework = useFrameworkStore(s => s.framework)
+
   function isRuleActive(rule: AstroRule): boolean {
     const id = `astro_rule:${rule.rule_code}`
     return isRangeRule(rule) ? isOverlayActive(id) : isBlockActive(id)
@@ -101,6 +105,26 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       setGateOpen(true)
       return
     }
+
+    // Auto-add base layer silently when adding a sub-rule (yoga/vara)
+    if (isRangeRule(rule) && !BASE_RULE_CODES.includes(rule.rule_code)) {
+      const prefix     = rule.rule_code.split('-')[0]
+      const baseItemId = BASE_RULE_MAP[prefix]
+      if (baseItemId) {
+        const alreadyHasBase = framework?.chart_overlays.some(
+          o => o.catalog_item_id === baseItemId,
+        ) ?? false
+        if (!alreadyHasBase) {
+          const baseRule = rules.find(
+            r => r.rule_code === baseItemId.replace('astro_rule:', ''),
+          )
+          if (baseRule) {
+            addOverlay(ruleToCatalogItem(baseRule), '#6366f1')
+          }
+        }
+      }
+    }
+
     const item = ruleToCatalogItem(rule)
     if (isRangeRule(rule)) {
       addOverlay(item, item.color)
@@ -466,6 +490,18 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                         >
                           + {range ? 'Overlay' : 'Add'}
                         </button>
+                      )}
+                      {/* Hint: sub-rules auto-add the base layer */}
+                      {!active && isRangeRule(rule) &&
+                        !BASE_RULE_CODES.includes(rule.rule_code) &&
+                        BASE_RULE_MAP[rule.rule_code.split('-')[0]] && (
+                        <p style={{
+                          fontSize: 10, color: 'rgba(99,102,241,0.5)',
+                          margin: '2px 0 0', textAlign: 'center',
+                          fontFamily: 'var(--font-mono, monospace)',
+                        }}>
+                          + adds Panchak base
+                        </p>
                       )}
                     </td>
                   </tr>
