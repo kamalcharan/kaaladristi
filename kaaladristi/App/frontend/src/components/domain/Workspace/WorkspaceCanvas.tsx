@@ -9,6 +9,7 @@ import {
 import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
+import { astroGroupPillLabel } from '@/constants/astroGroupOverlays'
 import WorkspaceBlock from './WorkspaceBlock'
 import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
@@ -461,7 +462,8 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
               if (overlays.length === 1 && !overlays[0].catalog_item_id.startsWith('astro_rule:')) {
                 const o = overlays[0]
                 const catalog = getCatalogItem(o.catalog_item_id)
-                const label = o.label ?? catalog?.display_name ?? o.catalog_item_id
+                // Group overlays (astro_group:*) render a glyph-prefixed label
+                const label = astroGroupPillLabel(o.catalog_item_id) ?? o.label ?? catalog?.display_name ?? o.catalog_item_id
                 const dotColor = effectiveDotColor(o.catalog_item_id, o.type, o.color)
                 const isPickerOpen = picker?.id === o.catalog_item_id
                 return (
