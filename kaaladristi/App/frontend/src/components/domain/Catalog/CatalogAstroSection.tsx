@@ -192,6 +192,9 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
   // Per-group-tag color/opacity — keyed by group tag (e.g. 'Panchak', 'Mercury')
   const [tagColors, setTagColors]       = useState<Record<string, string>>({})
   const [tagOpacities, setTagOpacities] = useState<Record<string, number>>({})
+  // Group-overlay color/opacity — keyed by group id (e.g. 'astro_group:Mercury')
+  const [groupColors, setGroupColors]       = useState<Record<string, string>>({})
+  const [groupOpacities, setGroupOpacities] = useState<Record<string, number>>({})
 
   // Shared query keys with RuleList — no duplicate network calls when both are mounted
   const { data: rules = [], isLoading, isError } = useQuery({
@@ -328,8 +331,32 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       return
     }
     if (isOverlayActive(group.id)) return
-    addOverlay(group, group.color)
+    addOverlay(group, groupColors[group.id] ?? group.color)
     toast('success', `Added ${group.display_name} overlay to framework`)
+  }
+
+  /** Effective color for a group pill: live overlay → local pick → default. */
+  function groupEffectiveColor(group: AstroGroupOverlay): string {
+    const stored = framework?.chart_overlays.find(o => o.catalog_item_id === group.id)
+    return stored?.color ?? groupColors[group.id] ?? group.color ?? '#6366f1'
+  }
+
+  /** Effective opacity for a group pill: live overlay → local pick → 0.10. */
+  function groupEffectiveOpacity(group: AstroGroupOverlay): number {
+    const stored = framework?.chart_overlays.find(o => o.catalog_item_id === group.id)
+    return stored?.opacity ?? groupOpacities[group.id] ?? 0.10
+  }
+
+  /** Change a group overlay's color — updates the live overlay if already added. */
+  function handleGroupColorChange(group: AstroGroupOverlay, color: string) {
+    setGroupColors(prev => ({ ...prev, [group.id]: color }))
+    if (isOverlayActive(group.id)) updateOverlayColor(group.id, color)
+  }
+
+  /** Change a group overlay's opacity — updates the live overlay if already added. */
+  function handleGroupOpacityChange(group: AstroGroupOverlay, opacity: number) {
+    setGroupOpacities(prev => ({ ...prev, [group.id]: opacity }))
+    if (isOverlayActive(group.id)) updateOverlayOpacity(group.id, opacity)
   }
 
   const ruleTypes = useMemo(
@@ -469,33 +496,42 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           {ASTRO_GROUP_OVERLAYS.map(group => {
             const added = isOverlayActive(group.id)
             return (
-              <button
+              <div
                 key={group.id}
-                onClick={e => handleAddGroupOverlay(group, e)}
-                disabled={added}
                 title={group.description}
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-                  fontFamily: 'inherit', whiteSpace: 'nowrap',
-                  cursor: added ? 'default' : 'pointer',
-                  border: `1px solid ${added ? 'rgba(255,255,255,0.08)' : 'var(--border)'}`,
-                  background: added ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.05)',
-                  color: added ? 'var(--text-muted)' : 'var(--text-secondary)',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '4px 10px 4px 8px', borderRadius: 8,
+                  border: `1px solid ${added ? 'rgba(124,106,247,0.4)' : 'var(--border)'}`,
+                  background: added ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.05)',
                   transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => { if (!added) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.5)' }}
-                onMouseLeave={e => { if (!added) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
               >
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                  background: group.color,
-                }} />
-                {group.display_name}
-                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                  {added ? '✓' : '+'}
-                </span>
-              </button>
+                {/* Color/opacity control — click the dot to recolour the group overlay */}
+                <TagColorControl
+                  tag={group.display_name}
+                  color={groupEffectiveColor(group)}
+                  opacity={groupEffectiveOpacity(group)}
+                  onColorChange={c => handleGroupColorChange(group, c)}
+                  onOpacityChange={o => handleGroupOpacityChange(group, o)}
+                />
+                <button
+                  onClick={e => handleAddGroupOverlay(group, e)}
+                  disabled={added}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    border: 'none', background: 'transparent', padding: '2px 2px 2px 4px',
+                    fontSize: 12, fontWeight: 500, fontFamily: 'inherit', whiteSpace: 'nowrap',
+                    cursor: added ? 'default' : 'pointer',
+                    color: added ? '#8b7af8' : 'var(--text-secondary)',
+                  }}
+                >
+                  {group.display_name}
+                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                    {added ? '✓' : '+'}
+                  </span>
+                </button>
+              </div>
             )
           })}
         </div>

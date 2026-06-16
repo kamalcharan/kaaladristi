@@ -239,14 +239,18 @@ export default function TradingChart({ data, height = 900, compact = false, work
     // Legacy multi-pane mode is left untouched (sub-panes have no whitespace, so
     // padding the main pane would desync their shared logical ranges).
     let leadOffset = 0;
+    let padFrom: string | null = null;
+    let padTo: string | null = null;
     if (workspaceMode) {
       const firstDate = data[0].trade_date;
       const lastDate  = data[data.length - 1].trade_date;
       const todayStr  = new Date().toISOString().slice(0, 10);
       const padEndAnchor = lastDate > todayStr ? lastDate : todayStr;
-      const leadWs: WhitespaceData<Time>[] = dayRange(addDays(firstDate, -AXIS_PAD_DAYS), firstDate)
+      padFrom = addDays(firstDate, -AXIS_PAD_DAYS);
+      padTo   = addDays(padEndAnchor, AXIS_PAD_DAYS);
+      const leadWs: WhitespaceData<Time>[] = dayRange(padFrom, firstDate)
         .map((t) => ({ time: toTime(t) }));
-      const trailWs: WhitespaceData<Time>[] = dayRange(addDays(lastDate, 1), addDays(padEndAnchor, AXIS_PAD_DAYS + 1))
+      const trailWs: WhitespaceData<Time>[] = dayRange(addDays(lastDate, 1), addDays(padTo, 1))
         .map((t) => ({ time: toTime(t) }));
       leadOffset = leadWs.length;
       candleSeries.setData([...leadWs, ...candleData, ...trailWs]);
@@ -499,7 +503,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
       });
     }
 
-    mainChart.timeScale().fitContent();
+    // Workspace mode: pin the view to the full padded window (±3mo) so future
+    // and pre-data overlay zones are visible. Otherwise fit to data.
+    if (workspaceMode && padFrom && padTo) {
+      mainChart.timeScale().setVisibleRange({ from: padFrom as Time, to: padTo as Time });
+    } else {
+      mainChart.timeScale().fitContent();
+    }
 
     // Store ref so the bands canvas effect can reach the time scale
     mainChartRef.current = mainChart;
