@@ -21,6 +21,7 @@ import {
   type CandlestickData,
   type HistogramData,
   type LineData,
+  type WhitespaceData,
   type SeriesMarker,
   type Time,
   type LineWidth,
@@ -85,6 +86,24 @@ function toTime(dateStr: string): Time {
   return dateStr as Time;
 }
 
+// Days of empty time-axis padding added on each side of the price data so astro
+// overlay zones can paint before the first bar and into the future (past today).
+const AXIS_PAD_DAYS = 90;
+
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Calendar dates in [fromStr, toStr) as YYYY-MM-DD whitespace anchors. */
+function dayRange(fromStr: string, toStr: string): string[] {
+  const out: string[] = [];
+  let cur = fromStr;
+  while (cur < toStr) { out.push(cur); cur = addDays(cur, 1); }
+  return out;
+}
+
 // ── Chart colors — read from CSS custom properties at render time ──
 function getThemeColors() {
   const s = getComputedStyle(document.documentElement);
@@ -145,6 +164,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const bandCanvasRef = useRef<HTMLCanvasElement>(null);
   const mainChartRef  = useRef<IChartApi | null>(null);
   const drawBandsRef  = useRef<(() => void) | null>(null);
+  // # of leading whitespace points prepended to the candle series (workspace
+  // mode only). Logical indices are offset by this vs. the `data` array.
+  const leadOffsetRef = useRef(0);
 
   const chartsRef = useRef<IChartApi[]>([]);
 
@@ -209,7 +231,29 @@ export default function TradingChart({ data, height = 900, compact = false, work
       low: d.low,
       close: d.close,
     }));
-    candleSeries.setData(candleData);
+
+    // Workspace mode only: extend the time axis ±AXIS_PAD_DAYS with whitespace so
+    // overlay zones can paint 3 months before the first bar and 3 months past
+    // today (the future). Whitespace points render nothing but make those dates
+    // addressable on the time scale (timeToCoordinate returns null off-scale).
+    // Legacy multi-pane mode is left untouched (sub-panes have no whitespace, so
+    // padding the main pane would desync their shared logical ranges).
+    let leadOffset = 0;
+    if (workspaceMode) {
+      const firstDate = data[0].trade_date;
+      const lastDate  = data[data.length - 1].trade_date;
+      const todayStr  = new Date().toISOString().slice(0, 10);
+      const padEndAnchor = lastDate > todayStr ? lastDate : todayStr;
+      const leadWs: WhitespaceData<Time>[] = dayRange(addDays(firstDate, -AXIS_PAD_DAYS), firstDate)
+        .map((t) => ({ time: toTime(t) }));
+      const trailWs: WhitespaceData<Time>[] = dayRange(addDays(lastDate, 1), addDays(padEndAnchor, AXIS_PAD_DAYS + 1))
+        .map((t) => ({ time: toTime(t) }));
+      leadOffset = leadWs.length;
+      candleSeries.setData([...leadWs, ...candleData, ...trailWs]);
+    } else {
+      candleSeries.setData(candleData);
+    }
+    leadOffsetRef.current = leadOffset;
 
     // Volume histogram (overlay, pinned to bottom)
     const volumeSeries = mainChart.addSeries(HistogramSeries, {
@@ -437,8 +481,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
     if (onVisibleRangeChange) {
       mainChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (!range) return;
-        const from = data[Math.max(0, Math.round(range.from))]?.trade_date;
-        const to   = data[Math.min(data.length - 1, Math.round(range.to))]?.trade_date;
+        // range is logical over the (whitespace-padded) time scale — shift back
+        // into `data` index space and clamp to the real bars.
+        const clamp = (i: number) => Math.max(0, Math.min(data.length - 1, i));
+        const from = data[clamp(Math.round(range.from) - leadOffset)]?.trade_date;
+        const to   = data[clamp(Math.round(range.to) - leadOffset)]?.trade_date;
         if (from && to) onVisibleRangeChange(from, to);
       });
     }
@@ -470,12 +517,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
     const idx = data.findIndex((d) => d.trade_date === highlightDate);
     if (idx < 0) return;
 
-    // Center the highlighted bar in view with some padding
+    // Center the highlighted bar in view with some padding. idx is a `data`
+    // index — shift into the padded logical space via the lead offset.
+    const offset = leadOffsetRef.current;
     const barsToShow = 60;
     const from = Math.max(0, idx - barsToShow / 2);
     const to = Math.min(data.length - 1, from + barsToShow);
     chartsRef.current.forEach((chart) => {
-      chart.timeScale().setVisibleLogicalRange({ from, to });
+      chart.timeScale().setVisibleLogicalRange({ from: from + offset, to: to + offset });
     });
   }, [highlightDate, data]);
 

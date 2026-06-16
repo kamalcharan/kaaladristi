@@ -60,8 +60,10 @@ export function useAstroOverlayBands(overlays: ChartOverlay[]): AstroBand[] {
   const queryKey = useMemo(
     () => [
       'astro-bands',
-      Array.from(overlayColors.keys()).sort().join(','),
-      Array.from(overlayOpacities.entries()).map(([k, v]) => `${k}:${v}`).join(','),
+      // Include color VALUES (not just keys) so a color change invalidates the
+      // cache — bands bake in the color, so stale cache = stale color.
+      Array.from(overlayColors.entries()).map(([k, v]) => `${k}:${v}`).sort().join(','),
+      Array.from(overlayOpacities.entries()).map(([k, v]) => `${k}:${v}`).sort().join(','),
       since,
     ],
     [overlayColors, overlayOpacities, since],
