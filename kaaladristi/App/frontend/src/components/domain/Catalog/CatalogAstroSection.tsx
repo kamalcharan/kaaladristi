@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { RANGE_RULE_TYPES, PAID_TIERS } from '@/constants/frameworkConstants'
 import { cn } from '@/lib/utils'
 import InlineGate from '@/components/workspace/InlineGate'
+import { useToast, ToastContainer } from '@/components/ui'
 import type { CatalogItem } from '@/constants/catalogItems'
 import type { DeepDiveItem } from './DeepDivePanel'
 import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
@@ -186,6 +187,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
   const { addBlock, addOverlay, isBlockActive, isOverlayActive, updateOverlayColor, updateOverlayOpacity } = useFrameworkStore()
   const [gateOpen, setGateOpen] = useState(false)
+  const { toasts, toast, dismiss } = useToast()
   // Per-group-tag color/opacity — keyed by group tag (e.g. 'Panchak', 'Mercury')
   const [tagColors, setTagColors]       = useState<Record<string, string>>({})
   const [tagOpacities, setTagOpacities] = useState<Record<string, number>>({})
@@ -312,24 +314,34 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     }
   }
 
-  /** Add all inactive rules belonging to a group tag — range → overlay, point → panel_block. */
-  function handleAddGroup(groupTag: string, e: React.MouseEvent) {
+  /**
+   * Add every range rule in the current filtered view as a chart overlay.
+   * Point/panel-block rules are skipped — the user adds those individually.
+   * Already-active overlays are skipped silently.
+   */
+  function handleAddTagOverlays(tag: string, e: React.MouseEvent) {
     e.stopPropagation()
     const tier = useAuthStore.getState().profile?.tier ?? 'free'
     if (!PAID_TIERS.includes(tier as typeof PAID_TIERS[number])) {
       setGateOpen(true)
       return
     }
-    const color = tagColors[groupTag] ?? getGroupDefaultColor(groupTag)
-    for (const r of rules) {
-      if (getGroupTag(r) !== groupTag) continue
+    const rangeRules = filtered.filter(isRangeRule)
+    if (rangeRules.length === 0) return
+    let added = 0
+    for (const r of rangeRules) {
       const id = `astro_rule:${r.rule_code}`
-      if (isRangeRule(r)) {
-        if (!isOverlayActive(id)) addOverlay(ruleToCatalogItem(r), color)
-      } else {
-        if (!isBlockActive(id)) addBlock(ruleToCatalogItem(r))
-      }
+      if (isOverlayActive(id)) continue
+      const group = getGroupTag(r)
+      addOverlay(ruleToCatalogItem(r), tagColors[group] ?? getGroupDefaultColor(group))
+      added++
     }
+    toast(
+      'success',
+      added > 0
+        ? `Added ${added} ${tag} overlay${added !== 1 ? 's' : ''} to framework`
+        : `All ${tag} overlays already in framework`,
+    )
   }
 
   const ruleTypes = useMemo(
@@ -341,6 +353,15 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     () => Array.from(new Set(rules.flatMap(r => r.tags ?? []))).sort(),
     [rules],
   )
+
+  // Total rule count per tag — drives the consistent count badge on every chip
+  const tagCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const rule of rules) {
+      for (const tag of rule.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1
+    }
+    return counts
+  }, [rules])
 
   function toggleTag(tag: string) {
     setActiveTags(prev =>
@@ -469,23 +490,24 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           {allTags.map(tag => {
             const active = activeTags.includes(tag)
             const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
-            // Count ALL rules in this group not yet active (range or point)
-            const unadded = rules.filter(r => {
-              if (getGroupTag(r) !== tag) return false
-              const id = `astro_rule:${r.rule_code}`
-              return isRangeRule(r) ? !isOverlayActive(id) : !isBlockActive(id)
-            }).length
+            const count = tagCounts[tag] ?? 0
             return (
               <div key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <button
                   onClick={() => toggleTag(tag)}
                   className={cn(
-                    'px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
+                    'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
                     active ? colorCls : 'bg-transparent text-muted border-kd-border hover:border-kd-border-active',
                   )}
                   style={{ fontFamily: 'inherit' }}
                 >
                   {tag}
+                  <span className={cn(
+                    'text-[10px] leading-none px-1 py-0.5 rounded-full',
+                    active ? 'bg-white/20 text-white' : 'bg-white/10 text-[var(--text-muted)]',
+                  )}>
+                    {count}
+                  </span>
                 </button>
                 <TagColorControl
                   tag={tag}
@@ -494,28 +516,50 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                   onColorChange={c => handleTagColorChange(tag, c)}
                   onOpacityChange={o => handleTagOpacityChange(tag, o)}
                 />
-                {/* Add all overlays in this group at once */}
-                {unadded > 0 && (
-                  <button
-                    title={`Add all ${tag} overlays (${unadded})`}
-                    onClick={e => handleAddGroup(tag, e)}
-                    style={{
-                      fontSize: 9, padding: '2px 6px', borderRadius: 4,
-                      border: '1px solid rgba(124,106,247,0.3)',
-                      background: 'rgba(124,106,247,0.08)',
-                      color: '#8b7af8', cursor: 'pointer',
-                      fontFamily: 'var(--font-mono, monospace)',
-                      whiteSpace: 'nowrap', lineHeight: 1.4,
-                    }}
-                  >
-                    +{unadded}
-                  </button>
-                )}
               </div>
             )
           })}
         </div>
       )}
+
+      {/* Group add — one-click add every overlay rule in the single active tag */}
+      {activeTags.length === 1 && !isLoading && !isError && filtered.length > 0 && (() => {
+        const tag = activeTags[0]
+        const overlayCount = filtered.filter(isRangeRule).length
+        const panelCount   = filtered.length - overlayCount
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: 12, padding: '0 2px',
+          }}>
+            <span style={{
+              fontSize: 11, color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono, monospace)',
+            }}>
+              {overlayCount} overlay rule{overlayCount !== 1 ? 's' : ''}
+              {' + '}
+              {panelCount} panel rule{panelCount !== 1 ? 's' : ''} in {tag}
+            </span>
+            {overlayCount > 0 && (
+              <button
+                onClick={e => handleAddTagOverlays(tag, e)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 500,
+                  cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  border: '1px solid rgba(99,102,241,0.3)',
+                  background: 'rgba(99,102,241,0.18)', color: '#a5b4fc',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.34)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.18)' }}
+              >
+                <span>+</span> Add All {tag} Overlays
+              </button>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Table */}
       {isLoading ? (
@@ -755,6 +799,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       isOpen={gateOpen}
       onDismiss={() => setGateOpen(false)}
     />
+    <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </>
   )
 }
