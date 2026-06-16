@@ -90,6 +90,21 @@ export async function fetchAstroBands(
 
   const codeToMeta = await fetchRuleMetaByCode(ruleCodes)
   const ruleIds    = Array.from(codeToMeta.values()).map(m => m.id)
+
+  if (import.meta.env.DEV) {
+    const unresolved = ruleCodes.filter(c => !codeToMeta.has(c))
+    console.groupCollapsed(`[astroBands] resolving ${ruleCodes.length} overlay rule(s)`)
+    console.log('requested rule_codes:', ruleCodes)
+    console.log('resolved code → rule_id:', Object.fromEntries(
+      Array.from(codeToMeta.entries()).map(([c, m]) => [c, m.id]),
+    ))
+    if (unresolved.length > 0) {
+      console.warn('UNRESOLVED rule_codes (not in km_astro_rule_master, or not catalog_visible):', unresolved)
+    }
+    console.log('km_rule_transits filter: end_date >=', since)
+    console.groupEnd()
+  }
+
   if (ruleIds.length === 0) return []
 
   // Invert map: id → meta
@@ -103,7 +118,27 @@ export async function fetchAstroBands(
     .order('start_date', { ascending: true })
     .execute()
 
-  if (error || !data) return []
+  if (error || !data) {
+    if (import.meta.env.DEV) console.warn('[astroBands] km_rule_transits query failed:', error)
+    return []
+  }
+
+  if (import.meta.env.DEV) {
+    const rows = data as { rule_id: number }[]
+    const perRule: Record<number, number> = {}
+    for (const r of rows) perRule[r.rule_id] = (perRule[r.rule_id] ?? 0) + 1
+    console.log(
+      `[astroBands] km_rule_transits → ${rows.length} row(s) for ${ruleIds.length} rule(s); per rule_id:`,
+      perRule,
+    )
+    const empty = ruleIds.filter(id => !(id in perRule))
+    if (empty.length > 0) {
+      console.warn(
+        '[astroBands] rule_ids with ZERO transit rows in window (run generate_*_windows.py, ' +
+        'or no window falls after end_date filter):', empty,
+      )
+    }
+  }
 
   const bands: AstroBand[] = []
   for (const row of data as {
