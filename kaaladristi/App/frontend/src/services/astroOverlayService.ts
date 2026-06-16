@@ -7,6 +7,8 @@
 // This pattern applies to all future rule groups (Mercury, Venus etc.)
 
 import { from } from './postgrest'
+import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
+import { ASTRO_GROUP_PREFIX } from '@/constants/astroGroupOverlays'
 
 // Panchak tier classification by rule_id
 const PANCHAK_BASE_IDS  = [66, 67]
@@ -50,6 +52,56 @@ interface RuleMeta {
   display_name: string
   base_bias:    string | null
   tags:         string[] | null
+  rule_type?:   string | null
+}
+
+interface TransitRow {
+  rule_id:    number
+  start_date: string
+  end_date:   string
+  matched:    boolean | null
+}
+
+/** Mirrors CatalogAstroSection.isRangeRule — only range rules become chart overlays. */
+function isRangeRuleRow(r: { rule_type?: string | null; rule_code: string }): boolean {
+  const t = r.rule_type ?? ''
+  if ((RANGE_RULE_TYPES as readonly string[]).includes(t)) return true
+  // Only PNK compound rules are date-range windows; other compounds are panel blocks
+  if (t === 'compound' && r.rule_code.startsWith('PNK')) return true
+  return false
+}
+
+/** Build one AstroBand from a transit row + its rule meta + resolved color/opacity. */
+function buildBand(
+  row: TransitRow,
+  meta: RuleMeta,
+  resolvedColor?: string,
+  resolvedOpacity?: number,
+  groupTagOverride?: string,
+): AstroBand {
+  const isPanchak = (meta.tags ?? []).includes('Panchak')
+  const tier      = isPanchak ? getPanchakTier(row.rule_id) : undefined
+  const color     = resolvedColor ?? (isPanchak ? '#6366f1' : '#c9a84c')
+  const opacity   = resolvedOpacity ?? (tier != null ? PANCHAK_DEFAULT_OPACITY[tier] : 0.10)
+  const displayName = isPanchak
+    ? 'Panchak'
+    : meta.display_name.replace(/\s+(Bullish|Bearish|Volatile)$/i, '').trim()
+  // Group overlays force every band under one tag so they merge into one visual layer
+  const groupTag = groupTagOverride ?? (meta.tags ?? [])[0] ?? meta.rule_code.split('-')[0]
+  return {
+    ruleCode:    meta.rule_code,
+    ruleId:      row.rule_id,
+    displayName,
+    from:        row.start_date,
+    to:          row.end_date,
+    matched:     row.matched,
+    baseBias:    meta.base_bias ?? null,
+    color,
+    opacity,
+    isPanchak,
+    panchakTier: tier,
+    groupTag,
+  }
 }
 
 /** Resolve rule codes → DB ids + meta in one request. */
@@ -85,9 +137,33 @@ export async function fetchAstroBands(
   overlayOpacities: Map<string, number>,
   since: string,
 ): Promise<AstroBand[]> {
-  const ruleCodes = Array.from(overlayColors.keys())
-  if (ruleCodes.length === 0) return []
+  const allKeys = Array.from(overlayColors.keys())
+  if (allKeys.length === 0) return []
 
+  // Group overlays (astro_group:<Tag>) expand to all range rules carrying the tag.
+  // Individual rule overlays (astro_rule:<CODE> → stored as <CODE>) resolve directly.
+  const groupKeys = allKeys.filter(k => k.startsWith(ASTRO_GROUP_PREFIX))
+  const ruleCodes = allKeys.filter(k => !k.startsWith(ASTRO_GROUP_PREFIX))
+
+  const bands: AstroBand[] = []
+
+  if (ruleCodes.length > 0) {
+    bands.push(...await fetchRuleBands(ruleCodes, overlayColors, overlayOpacities, since))
+  }
+  for (const groupKey of groupKeys) {
+    bands.push(...await fetchGroupBands(groupKey, overlayColors, overlayOpacities, since))
+  }
+
+  return bands
+}
+
+/** Resolve individual rule_code overlays → bands (one band per transit window). */
+async function fetchRuleBands(
+  ruleCodes:        string[],
+  overlayColors:    Map<string, string>,
+  overlayOpacities: Map<string, number>,
+  since: string,
+): Promise<AstroBand[]> {
   const codeToMeta = await fetchRuleMetaByCode(ruleCodes)
   const ruleIds    = Array.from(codeToMeta.values()).map(m => m.id)
 
@@ -107,7 +183,6 @@ export async function fetchAstroBands(
 
   if (ruleIds.length === 0) return []
 
-  // Invert map: id → meta
   const idToMeta = new Map<number, RuleMeta>()
   for (const meta of codeToMeta.values()) idToMeta.set(meta.id, meta)
 
@@ -141,40 +216,84 @@ export async function fetchAstroBands(
   }
 
   const bands: AstroBand[] = []
-  for (const row of data as {
-    rule_id:    number
-    start_date: string
-    end_date:   string
-    matched:    boolean | null
-  }[]) {
+  for (const row of data as TransitRow[]) {
     const meta = idToMeta.get(row.rule_id)
     if (!meta) continue
-    const isPanchak   = (meta.tags ?? []).includes('Panchak')
-    const tier        = isPanchak ? getPanchakTier(row.rule_id) : undefined
-    const color       = overlayColors.get(meta.rule_code)
-      ?? (isPanchak ? '#6366f1' : '#c9a84c')
-    const opacity     = overlayOpacities.get(meta.rule_code)
-      ?? (tier != null ? PANCHAK_DEFAULT_OPACITY[tier] : 0.10)
-    const displayName = isPanchak
-      ? 'Panchak'
-      : meta.display_name.replace(/\s+(Bullish|Bearish|Volatile)$/i, '').trim()
-    // Primary group tag — first tag in the list, or rule_code prefix as fallback
-    const groupTag = (meta.tags ?? [])[0] ?? meta.rule_code.split('-')[0]
-    bands.push({
-      ruleCode:    meta.rule_code,
-      ruleId:      row.rule_id,
-      displayName,
-      from:        row.start_date,
-      to:          row.end_date,
-      matched:     row.matched,
-      baseBias:    meta.base_bias ?? null,
-      color,
-      opacity,
-      isPanchak,
-      panchakTier: tier,
-      groupTag,
-    })
+    bands.push(buildBand(
+      row, meta,
+      overlayColors.get(meta.rule_code),
+      overlayOpacities.get(meta.rule_code),
+    ))
+  }
+  return bands
+}
+
+/**
+ * Expand a single group overlay (astro_group:<Tag>) into bands for EVERY range
+ * rule carrying that tag. All bands share the group's color and merge under the
+ * tag, so the chart shows one cohesive overlay layer.
+ */
+async function fetchGroupBands(
+  groupKey:         string,
+  overlayColors:    Map<string, string>,
+  overlayOpacities: Map<string, number>,
+  since: string,
+): Promise<AstroBand[]> {
+  const tag          = groupKey.slice(ASTRO_GROUP_PREFIX.length)
+  const groupColor   = overlayColors.get(groupKey)
+  const groupOpacity = overlayOpacities.get(groupKey)
+
+  // Step 1 — all catalog-visible rules carrying this tag
+  const { data: ruleRows, error: rErr } = await from('km_astro_rule_master')
+    .select('id,rule_code,display_name,base_bias,rule_type,tags')
+    .contains('tags', [tag])
+    .eq('catalog_visible', 'true')
+    .is('is_deleted', 'false')
+    .execute()
+
+  if (rErr || !ruleRows) {
+    if (import.meta.env.DEV) console.warn(`[astroBands] group "${tag}" rule query failed:`, rErr)
+    return []
   }
 
+  // Keep only range rules — point/panel-block rules are not overlays
+  const rangeRules = (ruleRows as RuleMeta[]).filter(isRangeRuleRow)
+
+  if (import.meta.env.DEV) {
+    console.log(
+      `[astroBands] group "${tag}": ${(ruleRows as unknown[]).length} tagged rule(s) → ` +
+      `${rangeRules.length} range overlay rule(s)`,
+    )
+  }
+  if (rangeRules.length === 0) return []
+
+  const idToMeta = new Map<number, RuleMeta>()
+  for (const r of rangeRules) idToMeta.set(r.id, r)
+  const ruleIds = rangeRules.map(r => r.id)
+
+  // Step 2 — transit windows for those rules
+  const { data: transits, error: tErr } = await from('km_rule_transits')
+    .select('rule_id,start_date,end_date,matched')
+    .in('rule_id', ruleIds)
+    .gte('end_date', since)
+    .order('start_date', { ascending: true })
+    .execute()
+
+  if (tErr || !transits) {
+    if (import.meta.env.DEV) console.warn(`[astroBands] group "${tag}" transit query failed:`, tErr)
+    return []
+  }
+
+  if (import.meta.env.DEV) {
+    console.log(`[astroBands] group "${tag}": ${(transits as unknown[]).length} transit window(s) since ${since}`)
+  }
+
+  // Step 3 — bands, all sharing the group color + merging under the tag
+  const bands: AstroBand[] = []
+  for (const row of transits as TransitRow[]) {
+    const meta = idToMeta.get(row.rule_id)
+    if (!meta) continue
+    bands.push(buildBand(row, meta, groupColor, groupOpacity, tag))
+  }
   return bands
 }

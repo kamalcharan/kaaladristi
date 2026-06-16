@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import InlineGate from '@/components/workspace/InlineGate'
 import { useToast, ToastContainer } from '@/components/ui'
 import type { CatalogItem } from '@/constants/catalogItems'
+import { ASTRO_GROUP_OVERLAYS, type AstroGroupOverlay } from '@/constants/astroGroupOverlays'
 import type { DeepDiveItem } from './DeepDivePanel'
 import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
 
@@ -315,33 +316,20 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
   }
 
   /**
-   * Add every range rule in the current filtered view as a chart overlay.
-   * Point/panel-block rules are skipped — the user adds those individually.
-   * Already-active overlays are skipped silently.
+   * Add ONE virtual group overlay (astro_group:<Tag>). At render time the
+   * overlay service expands it into every range rule carrying the tag, drawn as
+   * a single merged layer — so the workspace shows one pill, not N.
    */
-  function handleAddTagOverlays(tag: string, e: React.MouseEvent) {
+  function handleAddGroupOverlay(group: AstroGroupOverlay, e: React.MouseEvent) {
     e.stopPropagation()
     const tier = useAuthStore.getState().profile?.tier ?? 'free'
     if (!PAID_TIERS.includes(tier as typeof PAID_TIERS[number])) {
       setGateOpen(true)
       return
     }
-    const rangeRules = filtered.filter(isRangeRule)
-    if (rangeRules.length === 0) return
-    let added = 0
-    for (const r of rangeRules) {
-      const id = `astro_rule:${r.rule_code}`
-      if (isOverlayActive(id)) continue
-      const group = getGroupTag(r)
-      addOverlay(ruleToCatalogItem(r), tagColors[group] ?? getGroupDefaultColor(group))
-      added++
-    }
-    toast(
-      'success',
-      added > 0
-        ? `Added ${added} ${tag} overlay${added !== 1 ? 's' : ''} to framework`
-        : `All ${tag} overlays already in framework`,
-    )
+    if (isOverlayActive(group.id)) return
+    addOverlay(group, group.color)
+    toast('success', `Added ${group.display_name} overlay to framework`)
   }
 
   const ruleTypes = useMemo(
@@ -468,6 +456,51 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
         </span>
       </div>
 
+      {/* Group Overlays — one pill adds an entire tag's range rules as a single overlay layer */}
+      <div style={{ marginBottom: 16 }}>
+        <p style={{
+          fontSize: 9, color: 'var(--text-muted)', marginBottom: 8,
+          fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+        }}>
+          Group Overlays
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {ASTRO_GROUP_OVERLAYS.map(group => {
+            const added = isOverlayActive(group.id)
+            return (
+              <button
+                key={group.id}
+                onClick={e => handleAddGroupOverlay(group, e)}
+                disabled={added}
+                title={group.description}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                  fontFamily: 'inherit', whiteSpace: 'nowrap',
+                  cursor: added ? 'default' : 'pointer',
+                  border: `1px solid ${added ? 'rgba(255,255,255,0.08)' : 'var(--border)'}`,
+                  background: added ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.05)',
+                  color: added ? 'var(--text-muted)' : 'var(--text-secondary)',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { if (!added) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.5)' }}
+                onMouseLeave={e => { if (!added) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
+              >
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: group.color,
+                }} />
+                {group.display_name}
+                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                  {added ? '✓' : '+'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Tag filter chips */}
       {allTags.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
@@ -521,45 +554,6 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           })}
         </div>
       )}
-
-      {/* Group add — one-click add every overlay rule in the single active tag */}
-      {activeTags.length === 1 && !isLoading && !isError && filtered.length > 0 && (() => {
-        const tag = activeTags[0]
-        const overlayCount = filtered.filter(isRangeRule).length
-        const panelCount   = filtered.length - overlayCount
-        return (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 12, padding: '0 2px',
-          }}>
-            <span style={{
-              fontSize: 11, color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono, monospace)',
-            }}>
-              {overlayCount} overlay rule{overlayCount !== 1 ? 's' : ''}
-              {' + '}
-              {panelCount} panel rule{panelCount !== 1 ? 's' : ''} in {tag}
-            </span>
-            {overlayCount > 0 && (
-              <button
-                onClick={e => handleAddTagOverlays(tag, e)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 500,
-                  cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
-                  border: '1px solid rgba(99,102,241,0.3)',
-                  background: 'rgba(99,102,241,0.18)', color: '#a5b4fc',
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.34)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.18)' }}
-              >
-                <span>+</span> Add All {tag} Overlays
-              </button>
-            )}
-          </div>
-        )
-      })()}
 
       {/* Table */}
       {isLoading ? (

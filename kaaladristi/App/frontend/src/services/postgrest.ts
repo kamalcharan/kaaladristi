@@ -130,6 +130,13 @@ class QueryBuilder {
     return this;
   }
 
+  /** Array contains: column @> {val1, val2}. e.g. tags=cs.{Mercury} for a text[] column. */
+  contains(column: string, values: (string | number)[]): this {
+    const formatted = values.map(v => typeof v === 'string' ? `"${v}"` : v);
+    this.state.params.append(column, `cs.{${formatted.join(',')}}`);
+    return this;
+  }
+
   /** Greater than */
   gt(column: string, value: string | number): this {
     this.state.params.append(column, `gt.${value}`);
