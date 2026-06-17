@@ -31,9 +31,17 @@ export default function OverlayExplainPopover({
     function handle(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
     // Defer so the click that opened the popover doesn't immediately close it.
     const t = setTimeout(() => document.addEventListener('mousedown', handle), 0)
-    return () => { clearTimeout(t); document.removeEventListener('mousedown', handle) }
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('mousedown', handle)
+      document.removeEventListener('keydown', handleKey)
+    }
   }, [onClose])
 
   const active   = data?.active_now?.[0]

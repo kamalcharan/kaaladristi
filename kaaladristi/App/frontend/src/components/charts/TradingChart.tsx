@@ -189,8 +189,6 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const [bandTooltip, setBandTooltip] = useState<{
     x: number; y: number; band: AstroBand
   } | null>(null);
-  // Records pointer-down position so a pan-drag isn't mistaken for a zone click.
-  const clickStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // Astro-zone overlays are drawn by the canvas overlay — exclude them from
   // buildCharts deps so adding/removing an astro rule doesn't trigger a full
@@ -808,12 +806,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
       <div
         style={{ position: 'relative' }}
-        onMouseDown={e => { clickStartRef.current = { x: e.clientX, y: e.clientY }; }}
-        onClick={e => {
+        onContextMenu={e => {
           if (!onZoneClick || astroBands.length === 0 || !mainChartRef.current) return;
-          // Ignore drags (pan/zoom) — only treat near-stationary clicks as zone clicks.
-          const start = clickStartRef.current;
-          if (start && (Math.abs(e.clientX - start.x) > 5 || Math.abs(e.clientY - start.y) > 5)) return;
           const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const mouseX = e.clientX - rect.left;
           const ts     = mainChartRef.current.timeScale();
@@ -828,7 +822,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
             const right = Math.max(x1, x2) + pad;
             if (mouseX >= left && mouseX <= right) { found = band; break; }
           }
-          if (found) onZoneClick(found, e.clientX, e.clientY);
+          // Only suppress the browser menu when the right-click lands on a zone.
+          if (found) { e.preventDefault(); onZoneClick(found, e.clientX, e.clientY); }
         }}
         onMouseMove={e => {
           if (astroBands.length === 0 || !mainChartRef.current) {
