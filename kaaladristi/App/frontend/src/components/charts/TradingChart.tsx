@@ -72,6 +72,8 @@ interface TradingChartProps {
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
+  /** Fired when the user clicks an astro band — gives the band + screen coords. */
+  onZoneClick?: (band: AstroBand, clientX: number, clientY: number) => void;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -169,7 +171,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], onVisibleRangeChange, onCrosshairMove }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], onVisibleRangeChange, onCrosshairMove, onZoneClick }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -187,6 +189,8 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const [bandTooltip, setBandTooltip] = useState<{
     x: number; y: number; band: AstroBand
   } | null>(null);
+  // Records pointer-down position so a pan-drag isn't mistaken for a zone click.
+  const clickStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // Astro-zone overlays are drawn by the canvas overlay — exclude them from
   // buildCharts deps so adding/removing an astro rule doesn't trigger a full
@@ -804,6 +808,28 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
       <div
         style={{ position: 'relative' }}
+        onMouseDown={e => { clickStartRef.current = { x: e.clientX, y: e.clientY }; }}
+        onClick={e => {
+          if (!onZoneClick || astroBands.length === 0 || !mainChartRef.current) return;
+          // Ignore drags (pan/zoom) — only treat near-stationary clicks as zone clicks.
+          const start = clickStartRef.current;
+          if (start && (Math.abs(e.clientX - start.x) > 5 || Math.abs(e.clientY - start.y) > 5)) return;
+          const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const ts     = mainChartRef.current.timeScale();
+          let found: AstroBand | null = null;
+          for (const band of astroBands) {
+            const x1 = ts.timeToCoordinate(band.from as Time);
+            const x2 = ts.timeToCoordinate(band.to   as Time);
+            if (x1 == null || x2 == null) continue;
+            // Point markers are 1px lines — give them a small hit tolerance.
+            const pad   = band.isPoint ? 4 : 0;
+            const left  = Math.min(x1, x2) - pad;
+            const right = Math.max(x1, x2) + pad;
+            if (mouseX >= left && mouseX <= right) { found = band; break; }
+          }
+          if (found) onZoneClick(found, e.clientX, e.clientY);
+        }}
         onMouseMove={e => {
           if (astroBands.length === 0 || !mainChartRef.current) {
             if (bandTooltip) setBandTooltip(null);

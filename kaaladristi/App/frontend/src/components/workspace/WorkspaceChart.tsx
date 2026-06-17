@@ -6,9 +6,13 @@ import { fetchEquityEodById } from '@/services/indicatorData'
 import TradingChart from '@/components/charts/TradingChart'
 import { useChartSyncStore } from '@/stores/chartSyncStore'
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands'
+import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
+import type { AstroBand } from '@/services/astroOverlayService'
 import type { InstrumentRef } from '@/types/framework'
 
 const HEADER_H = 36
+
+interface ZoneExplain { tag: string; ruleId: number; ruleLabel: string; x: number; y: number }
 
 interface Props {
   instrument: InstrumentRef
@@ -30,6 +34,11 @@ export default function WorkspaceChart({ instrument }: Props) {
 
   const { setTotalBars, setActiveBarIndex, setVisibleRange, playerBarIndex } = useChartSyncStore()
   const astroBands = useAstroOverlayBands(overlays)
+  const [zoneExplain, setZoneExplain] = useState<ZoneExplain | null>(null)
+
+  const handleZoneClick = useCallback((band: AstroBand, clientX: number, clientY: number) => {
+    setZoneExplain({ tag: band.groupTag, ruleId: band.ruleId, ruleLabel: band.displayName, x: clientX, y: clientY })
+  }, [])
 
   // Measure container height via ResizeObserver — drives TradingChart height
   useEffect(() => {
@@ -81,6 +90,17 @@ export default function WorkspaceChart({ instrument }: Props) {
           highlightDate={playerDate}
           onCrosshairMove={handleCrosshairMove}
           onVisibleRangeChange={handleVisibleRangeChange}
+          onZoneClick={handleZoneClick}
+        />
+      )}
+      {zoneExplain && (
+        <OverlayExplainPopover
+          tag={zoneExplain.tag}
+          focusRuleId={zoneExplain.ruleId}
+          focusRuleLabel={zoneExplain.ruleLabel}
+          anchorX={zoneExplain.x}
+          anchorY={zoneExplain.y}
+          onClose={() => setZoneExplain(null)}
         />
       )}
     </div>
