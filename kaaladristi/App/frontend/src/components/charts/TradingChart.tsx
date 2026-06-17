@@ -104,6 +104,19 @@ function dayRange(fromStr: string, toStr: string): string[] {
   return out;
 }
 
+/** Short top-of-line label for a single-day point-event marker. */
+function pointMarkerLabel(ruleCode: string): string {
+  const rc = ruleCode.toUpperCase();
+  if (rc.startsWith('TRN-MER-RIS-W')) return 'Mer↑';
+  if (rc.startsWith('TRN-MER-RIS-E')) return 'Mer↓';
+  if (rc.startsWith('TRN-VEN-RIS-W')) return 'Ven↑';
+  if (rc.startsWith('TRN-VEN-RIS-E')) return 'Ven↓';
+  const bay = rc.match(/^BAY-R0*(\d+)/);
+  if (bay) return `B${bay[1]}`;
+  if (rc.startsWith('DN')) return ruleCode.replace(/^DN[-_]?/i, '').slice(0, 3) || 'DN';
+  return ruleCode.slice(0, 3);
+}
+
 // ── Chart colors — read from CSS custom properties at render time ──
 function getThemeColors() {
   const s = getComputedStyle(document.documentElement);
@@ -597,8 +610,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
         groupTag: string
       }
 
-      const panchakBands = astroBands.filter(b => b.isPanchak)
-      const nonPanchak   = astroBands.filter(b => !b.isPanchak)
+      // Single-day events render as marker lines (handled separately below), never zones.
+      const pointBands   = astroBands.filter(b => b.isPoint)
+      const panchakBands = astroBands.filter(b => b.isPanchak && !b.isPoint)
+      const nonPanchak   = astroBands.filter(b => !b.isPanchak && !b.isPoint)
 
       // Group by groupTag
       const byGroup = new Map<string, typeof nonPanchak>()
@@ -728,6 +743,28 @@ export default function TradingChart({ data, height = 900, compact = false, work
           ctx.stroke()
           ctx.setLineDash([])
         }
+      }
+
+      // ── Point-event markers — single-day events as a thin vertical dashed line ──
+      // (BAY-R06/R27, planet rise/station, single-day DN rules). Zones above are
+      // untouched; these never merge and never fill.
+      for (const pb of pointBands) {
+        const x = ts.timeToCoordinate(pb.from as Time);
+        if (x == null) continue;
+        ctx.save();
+        ctx.strokeStyle = hexToRgba(pb.color, 0.4);
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle  = hexToRgba(pb.color, 0.6);
+        ctx.font       = '8px sans-serif';
+        ctx.textAlign  = 'center';
+        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 9);
+        ctx.restore();
       }
     }
 
