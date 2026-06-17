@@ -321,10 +321,11 @@ function IndexDropdown({
 interface Props {
   framework: UserFramework
   onOpenDrawer?: (pairKey: string | null) => void
+  onMorningBrief?: () => void
   islandOffset?: number
 }
 
-export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset = 0 }: Props) {
+export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrief, islandOffset = 0 }: Props) {
   const confluencePairs = useVisibleOverlayPairs()
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -762,7 +763,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
         />
       )}
 
-      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} bottomOffset={islandOffset} />
+      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} onMorningBrief={onMorningBrief} bottomOffset={islandOffset} />
 
       {/* VaNi confluence monitors — one per visible overlay pair, no render output */}
       {confluencePairs.map(([a, b]) => (
