@@ -77,27 +77,66 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
 }
 
 // ── Group overlay "active today" indicator ────────────────────────────────────
-// Pulsing green dot on a group pill (e.g. ☿ Mercury) when a specific rule in that
-// group is active today. Tooltip names the rule + when it ends. Renders nothing
-// when no rule in the group is currently active.
+// On a group pill (e.g. ☿ Mercury): when the highest-confidence rule in that tag
+// is active today → green dot + short rule-name suffix + rich tooltip. When none
+// active but one is upcoming → gray dot + "next" tooltip. Otherwise renders nothing.
+function shortRuleName(displayName: string): string {
+  return displayName
+    .replace('Mercury', 'Mer').replace('Venus', 'Ven').replace('Jupiter', 'Jup')
+    .replace('Saturn', 'Sat').replace('Conjunction', 'Conj').replace('Retrograde', 'Rx')
+    .replace('Combust', 'Cmb').replace('Manifestation', 'Mfst')
+    .replace(/Same Nakshatra.*/, 'Nak')
+    .replace(/\s+/g, ' ').trim().substring(0, 20)
+}
+
+function fmtMD(iso: string | null | undefined): string {
+  if (!iso) return ''
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+}
+
 function GroupActiveIndicator({ tag }: { tag: string }) {
   const { data } = useActiveRuleToday(tag)
-  const active = data?.active_now?.[0]
-  if (!active) return null
-  const ends = active.end_date
-    ? new Date(active.end_date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
-    : null
-  const tip = `${active.display_name} active${ends ? ` · ends ${ends}` : ''}`
-  return (
-    <span
-      title={tip}
-      style={{
-        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-        marginLeft: 6, background: '#10b981',
-        boxShadow: '0 0 5px rgba(16,185,129,0.8)',
-      }}
-    />
-  )
+  const active   = data?.active_now?.[0]
+  const upcoming = data?.upcoming?.[0]
+
+  if (active) {
+    const hist = active.confidence_score != null
+      ? `\nHistorical: ${Math.round(active.confidence_score)}% ${active.base_bias ?? ''}`
+        + (active.avg_return_matched != null
+            ? `, avg ${active.avg_return_matched >= 0 ? '+' : ''}${active.avg_return_matched.toFixed(1)}%`
+            : '')
+      : ''
+    const tip =
+      `${active.display_name}${active.base_bias ? ` · ${active.base_bias}` : ''}\n`
+      + `Started ${fmtMD(active.start_date)} · ends ${fmtMD(active.end_date)}`
+      + (active.days_remaining != null ? ` (${active.days_remaining} days left)` : '')
+      + hist
+    return (
+      <span title={tip} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 2, flexShrink: 0 }}>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,.55)', fontFamily: 'var(--font-mono,monospace)' }}>
+          · {shortRuleName(active.display_name)}
+        </span>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981',
+          boxShadow: '0 0 5px rgba(16,185,129,0.8)', flexShrink: 0 }} />
+      </span>
+    )
+  }
+
+  if (upcoming) {
+    const tip =
+      `Next: ${upcoming.display_name}\n`
+      + `Starts ${fmtMD(upcoming.start_date)}`
+      + (upcoming.days_until != null ? ` · in ${upcoming.days_until} days` : '')
+      + (upcoming.confidence_score != null
+          ? `\nHistorical: ${Math.round(upcoming.confidence_score)}% ${upcoming.base_bias ?? ''}`
+          : '')
+    return (
+      <span title={tip} style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,.35)',
+        marginLeft: 6, flexShrink: 0, display: 'inline-block' }} />
+    )
+  }
+
+  return null
 }
 
 // ── Color picker popover ──────────────────────────────────────────────────────
@@ -509,15 +548,15 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                         border: isPickerOpen ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.2)',
                         borderRadius: '50%', cursor: 'pointer', background: dotColor, flexShrink: 0, transition: 'border-color .15s' }}
                     />
-                    {o.catalog_item_id.startsWith('astro_group:') && (
-                      <GroupActiveIndicator tag={o.catalog_item_id.slice('astro_group:'.length)} />
-                    )}
                     <button onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
                       style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
                         border: 'none', background: 'transparent', cursor: 'pointer',
                         fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                         color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)' }}
                     >{label}</button>
+                    {o.catalog_item_id.startsWith('astro_group:') && (
+                      <GroupActiveIndicator tag={o.catalog_item_id.slice('astro_group:'.length)} />
+                    )}
                     {o.catalog_item_id.startsWith('astro_group:') && (
                       <button
                         title={`What is ${label} active today?`}

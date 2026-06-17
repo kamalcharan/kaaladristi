@@ -44,6 +44,7 @@ export interface AstroBand {
   isPanchak:    boolean
   panchakTier?: PanchakTier   // only set when isPanchak = true
   groupTag:     string         // primary tag group — used to merge co-group bands visually
+  isPoint:      boolean        // single-day event (start === end) → render as a marker line, not a zone
 }
 
 interface RuleMeta {
@@ -101,6 +102,7 @@ function buildBand(
     isPanchak,
     panchakTier: tier,
     groupTag,
+    isPoint:     row.start_date === row.end_date,
   }
 }
 

@@ -2346,19 +2346,22 @@ def rule_insight(rule_id: int):
 
 
 def _query_active_rules_for_tag(conn, tag: str, date_str: str, limit: int = 5) -> list[dict]:
-    """Rules in a tag group whose transit window contains date_str (active now)."""
+    """Rules in a tag group whose transit window contains date_str (active now),
+    ordered by historical confidence, with confidence stats joined."""
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT r.id, r.rule_code, r.display_name, r.base_bias, r.probability_label,
-                   t.start_date, t.end_date, (t.end_date - %s::date) AS days_remaining
+                   t.start_date, t.end_date, (t.end_date - %s::date) AS days_remaining,
+                   c.confidence_score, c.avg_return_matched, c.total_occurrences
             FROM km_rule_transits t
             JOIN km_astro_rule_master r ON r.id = t.rule_id
+            LEFT JOIN km_rule_confidence c ON c.rule_id = r.id
             WHERE %s = ANY(r.tags)
               AND r.catalog_visible = TRUE
               AND r.is_deleted = FALSE
               AND %s::date BETWEEN t.start_date AND t.end_date
-            ORDER BY t.start_date DESC
+            ORDER BY c.confidence_score DESC NULLS LAST, t.start_date DESC
             LIMIT %s
             """,
             (date_str, tag, date_str, limit),
@@ -2370,26 +2373,32 @@ def _query_active_rules_for_tag(conn, tag: str, date_str: str, limit: int = 5) -
         'start_date': r[5].isoformat() if r[5] else None,
         'end_date':   r[6].isoformat() if r[6] else None,
         'days_remaining': int(r[7]) if r[7] is not None else None,
+        'confidence_score':   float(r[8]) if r[8] is not None else None,
+        'avg_return_matched': float(r[9]) if r[9] is not None else None,
+        'total_occurrences':  r[10],
     } for r in rows]
 
 
 def _query_upcoming_rules_for_tag(conn, tag: str, date_str: str, limit: int = 3) -> list[dict]:
-    """Rules in a tag group whose transit window starts after date_str (upcoming)."""
+    """Rules in a tag group whose transit window starts within 90 days after date_str."""
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT r.id, r.rule_code, r.display_name, r.base_bias, r.probability_label,
-                   t.start_date, t.end_date, (t.start_date - %s::date) AS days_until
+                   t.start_date, t.end_date, (t.start_date - %s::date) AS days_until,
+                   c.confidence_score, c.avg_return_matched, c.total_occurrences
             FROM km_rule_transits t
             JOIN km_astro_rule_master r ON r.id = t.rule_id
+            LEFT JOIN km_rule_confidence c ON c.rule_id = r.id
             WHERE %s = ANY(r.tags)
               AND r.catalog_visible = TRUE
               AND r.is_deleted = FALSE
               AND t.start_date > %s::date
+              AND t.start_date <= %s::date + INTERVAL '90 days'
             ORDER BY t.start_date ASC
             LIMIT %s
             """,
-            (date_str, tag, date_str, limit),
+            (date_str, tag, date_str, date_str, limit),
         )
         rows = cur.fetchall()
     return [{
@@ -2398,6 +2407,9 @@ def _query_upcoming_rules_for_tag(conn, tag: str, date_str: str, limit: int = 3)
         'start_date': r[5].isoformat() if r[5] else None,
         'end_date':   r[6].isoformat() if r[6] else None,
         'days_until': int(r[7]) if r[7] is not None else None,
+        'confidence_score':   float(r[8]) if r[8] is not None else None,
+        'avg_return_matched': float(r[9]) if r[9] is not None else None,
+        'total_occurrences':  r[10],
     } for r in rows]
 
 

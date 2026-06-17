@@ -35,6 +35,9 @@ export interface ActiveRule {
   end_date:           string | null
   days_remaining?:    number | null
   days_until?:        number | null
+  confidence_score?:   number | null
+  avg_return_matched?: number | null
+  total_occurrences?:  number | null
 }
 
 export interface ActiveRuleToday {
