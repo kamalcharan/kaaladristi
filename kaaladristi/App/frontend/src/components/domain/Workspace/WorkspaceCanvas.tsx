@@ -539,6 +539,11 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                       border: '1px solid rgba(255,255,255,.1)',
                       background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
                       opacity: o.visible ? 1 : 0.4, transition: 'all .15s' }}
+                    onContextMenu={e => {
+                      if (!o.catalog_item_id.startsWith('astro_group:')) return
+                      e.preventDefault()
+                      setExplain({ tag: o.catalog_item_id.slice('astro_group:'.length), x: e.clientX, y: e.clientY })
+                    }}
                   >
                     <button onClick={e => { e.stopPropagation(); if (isPickerOpen) { setPicker(null); return }
                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -598,6 +603,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                     border: '1px solid rgba(255,255,255,.1)',
                     background: anyVisible ? 'rgba(255,255,255,.05)' : 'transparent',
                     opacity: anyVisible ? 1 : 0.4, transition: 'all .15s' }}
+                  onContextMenu={e => { e.preventDefault(); setExplain({ tag: pillLabel, x: e.clientX, y: e.clientY }) }}
                 >
                   {/* Group color dot */}
                   <span style={{ width: 10, height: 10, marginLeft: 8, borderRadius: '50%', flexShrink: 0,
