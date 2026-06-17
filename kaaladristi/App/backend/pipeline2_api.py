@@ -2242,6 +2242,114 @@ def panchang_insight(date: str):
     return {"date": date, "insight": insight, "ai": insight is not None, "log_id": log_id}
 
 
+# Permanent in-memory cache — rule definitions don't change, so insights don't either.
+_rule_insight_cache: dict[str, dict] = {}
+
+
+@app.get('/api/ai/rule-insight')
+def rule_insight(rule_id: int):
+    """VaNi plain-language explanation of an astro rule.
+
+    Falls back to the rule's own remarks when the LLM is unavailable so the
+    DeepDive panel always has something to show.
+    """
+    cache_key = f"rule_insight:{rule_id}"
+    if cache_key in _rule_insight_cache:
+        return {**_rule_insight_cache[cache_key], "cached": True}
+
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rule_code, display_name, rule_type, base_bias,
+                       probability_label, remarks, tags, planet_1, planet_2
+                FROM km_astro_rule_master
+                WHERE id = %s AND is_deleted = FALSE
+                """,
+                (rule_id,),
+            )
+            rule = cur.fetchone()
+            if not rule:
+                raise HTTPException(status_code=404, detail="Rule not found")
+
+            cur.execute(
+                """
+                SELECT total_occurrences, confidence_score,
+                       avg_return_matched, avg_duration_days
+                FROM km_rule_confidence
+                WHERE rule_id = %s
+                LIMIT 1
+                """,
+                (rule_id,),
+            )
+            conf = cur.fetchone()
+    finally:
+        conn.close()
+
+    (rule_code, display_name, rule_type, base_bias,
+     prob_label, remarks, tags, planet_1, planet_2) = rule
+    tags = tags or []
+
+    conf_text = ""
+    if conf:
+        total_occ, conf_score, avg_ret, avg_dur = conf
+        conf_text = (
+            "\nConfidence stats:\n"
+            f"- Total signals: {total_occ if total_occ is not None else 'N/A'}\n"
+            f"- Win rate: {f'{float(conf_score):.0f}%' if conf_score is not None else 'N/A'}\n"
+            f"- Avg return: {f'{float(avg_ret):.2f}%' if avg_ret is not None else 'N/A'}\n"
+            f"- Avg duration: {f'{float(avg_dur):.1f} days' if avg_dur is not None else 'N/A'}"
+        )
+
+    user_msg = (
+        f"Rule: {display_name} ({rule_code})\n"
+        f"Type: {rule_type}\n"
+        f"Bias: {base_bias or 'neutral'} — {prob_label or 'unrated'} probability\n"
+        f"Planets: {(planet_1 or '')} {(planet_2 or '')}".rstrip() + "\n"
+        f"Tags: {', '.join(tags)}\n"
+        f"Remarks: {remarks or 'Not provided'}\n"
+        f"{conf_text}\n\n"
+        f"Explain this rule to a practitioner."
+    )
+
+    skill = _AI_SKILLS.get("rule_insight")
+    insight = None
+    if skill:
+        _t0 = time.monotonic()
+        insight = _ai_complete(
+            system=skill.system, user=user_msg,
+            max_tokens=skill.max_tokens, temperature=0.3, no_think=True,
+        )
+        _latency = int((time.monotonic() - _t0) * 1000)
+        if insight:
+            _log_interaction(
+                product="dristiq",
+                endpoint="/api/ai/rule-insight",
+                user_input=user_msg,
+                llm_response=insight,
+                system_prompt=skill.system,
+                context_payload={"rule_id": rule_id, "rule_code": rule_code},
+                model_version=_AI_MODEL,
+                latency_ms=_latency,
+            )
+
+    if insight:
+        payload = {"rule_id": rule_id, "rule_code": rule_code, "insight": insight}
+        _rule_insight_cache[cache_key] = payload          # cache only successful LLM output
+        return {**payload, "cached": False}
+
+    # Fallback — LLM disabled / unavailable: serve the rule's own remarks (not cached,
+    # so a later request retries the LLM once it comes online).
+    return {
+        "rule_id": rule_id,
+        "rule_code": rule_code,
+        "insight": remarks or f"{display_name} — {base_bias or 'neutral'} bias rule.",
+        "cached": False,
+        "fallback": True,
+    }
+
+
 @app.get('/api/ai/breadth-insight')
 def breadth_insight(date: str = None):
     if not _AI_ENABLED:
@@ -3717,20 +3825,27 @@ def vani_daily(req: VaNiDailyRequest):
         for o in active_astro_overlays:
             cid  = o.get('catalog_item_id', '')
             name = o.get('name') or _resolve_display_name(cid, active_overlays)
-            n    = _get_rule_confidence_for_cid(cid, conn)
-            # Resolve DB rule_id for action_target
-            rule_code = cid.replace('astro_rule:', '').upper()
+            is_group = cid.startswith('astro_group:')
             rule_db_id: int | None = None
-            try:
-                with conn.cursor() as _cur:
-                    _cur.execute(
-                        "SELECT id FROM km_astro_rule_master WHERE UPPER(rule_code) IN (%s, %s) LIMIT 1",
-                        (rule_code, rule_code.replace('-', '_')),
-                    )
-                    _row = _cur.fetchone()
-                    rule_db_id = int(_row[0]) if _row else None
-            except Exception:
-                pass
+            if is_group:
+                # Group overlay (astro_group:Mercury) — a whole tag, not a single rule.
+                # No per-rule confidence or /rules/:id target; label it as a group.
+                name = f"{name} (group)"
+                n = 0
+            else:
+                n = _get_rule_confidence_for_cid(cid, conn)
+                # Resolve DB rule_id for action_target
+                rule_code = cid.replace('astro_rule:', '').upper()
+                try:
+                    with conn.cursor() as _cur:
+                        _cur.execute(
+                            "SELECT id FROM km_astro_rule_master WHERE UPPER(rule_code) IN (%s, %s) LIMIT 1",
+                            (rule_code, rule_code.replace('-', '_')),
+                        )
+                        _row = _cur.fetchone()
+                        rule_db_id = int(_row[0]) if _row else None
+                except Exception:
+                    pass
             astro_items.append({
                 'key': f"rule:{cid}:{date_str}",
                 'type': 'astro',

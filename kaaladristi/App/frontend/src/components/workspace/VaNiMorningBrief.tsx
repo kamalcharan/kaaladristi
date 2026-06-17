@@ -7,6 +7,7 @@ import type { UserFramework } from '@/types/framework'
 import { useAuthStore } from '@/stores/authStore'
 import type { KmProfile } from '@/types'
 import { getCatalogItem } from '@/constants/catalogItems'
+import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
 import { fetchCatalogRules } from '@/pages/RuleEngine/ruleService'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 
@@ -320,8 +321,15 @@ function MorningModal({ items, profile, onClose }: {
   }, [astroRules])
 
   // Resolve display name — no fallbacks. If unresolved, item is dropped entirely.
-  const resolveName = (cid: string): string | null =>
-    getCatalogItem(cid)?.display_name ?? astroRuleNames[cid] ?? null
+  // Group overlays (astro_group:Mercury) aren't catalog items or rules, so resolve
+  // them from the group registry — otherwise they'd be dropped before the backend.
+  const resolveName = (cid: string): string | null => {
+    if (cid.startsWith('astro_group:')) {
+      return ASTRO_GROUP_OVERLAYS.find(g => g.id === cid)?.display_name
+        ?? cid.slice('astro_group:'.length)
+    }
+    return getCatalogItem(cid)?.display_name ?? astroRuleNames[cid] ?? null
+  }
 
   const activeOverlays = useMemo(() => {
     if (!astroRulesReady) return []
