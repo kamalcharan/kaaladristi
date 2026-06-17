@@ -5,14 +5,20 @@ import { useRuleInsight } from '@/hooks/useRuleInsight'
  * Renders nothing (clean absence) when there is no insight — never a placeholder.
  * Shared by the Catalog DeepDivePanel and the Workspace astro-rule panel block.
  */
-export default function RuleInsightCard({ ruleId }: { ruleId: number | null }) {
+export default function RuleInsightCard({
+  ruleId,
+  className = 'mt-4',
+}: {
+  ruleId: number | null
+  className?: string
+}) {
   const { data, isLoading } = useRuleInsight(ruleId)
 
   // No insight and not loading → render nothing at all.
   if (!isLoading && !data?.insight) return null
 
   return (
-    <div className="mt-4 rounded-lg border border-indigo-500/20 bg-indigo-950/20 p-4">
+    <div className={`${className} rounded-lg border border-indigo-500/20 bg-indigo-950/20 p-4`}>
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <span className="text-indigo-400 text-sm">✦</span>

@@ -174,6 +174,9 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
 
   return (
     <>
+      {/* VaNi interpretation — lead with it, right under the heading (hidden when none) */}
+      <RuleInsightCard ruleId={item.id ?? null} className="mt-0 mb-5" />
+
       {/* Remarks */}
       {item.remarks && (
         <div style={{ marginBottom: 18 }}>
@@ -357,9 +360,6 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
       >
         Full Analysis →
       </button>
-
-      {/* VaNi interpretation — live from GET /api/ai/rule-insight (hidden when none) */}
-      <RuleInsightCard ruleId={item.id ?? null} />
     </>
   )
 }
