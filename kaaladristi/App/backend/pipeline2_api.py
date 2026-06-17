@@ -2339,15 +2339,79 @@ def rule_insight(rule_id: int):
         _rule_insight_cache[cache_key] = payload          # cache only successful LLM output
         return {**payload, "cached": False}
 
-    # Fallback — LLM disabled / unavailable: serve the rule's own remarks (not cached,
-    # so a later request retries the LLM once it comes online).
-    return {
-        "rule_id": rule_id,
-        "rule_code": rule_code,
-        "insight": remarks or f"{display_name} — {base_bias or 'neutral'} bias rule.",
-        "cached": False,
-        "fallback": True,
-    }
+    # No fallback text — when the LLM is unavailable, return a null insight and let
+    # the frontend render nothing (clean absence over a placeholder).
+    return {"rule_id": rule_id, "rule_code": rule_code, "insight": None, "ai": False}
+
+
+def _query_active_rules_for_tag(conn, tag: str, date_str: str, limit: int = 5) -> list[dict]:
+    """Rules in a tag group whose transit window contains date_str (active now)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT r.id, r.rule_code, r.display_name, r.base_bias, r.probability_label,
+                   t.start_date, t.end_date, (t.end_date - %s::date) AS days_remaining
+            FROM km_rule_transits t
+            JOIN km_astro_rule_master r ON r.id = t.rule_id
+            WHERE %s = ANY(r.tags)
+              AND r.catalog_visible = TRUE
+              AND r.is_deleted = FALSE
+              AND %s::date BETWEEN t.start_date AND t.end_date
+            ORDER BY t.start_date DESC
+            LIMIT %s
+            """,
+            (date_str, tag, date_str, limit),
+        )
+        rows = cur.fetchall()
+    return [{
+        'id': r[0], 'rule_code': r[1], 'display_name': r[2],
+        'base_bias': r[3], 'probability_label': r[4],
+        'start_date': r[5].isoformat() if r[5] else None,
+        'end_date':   r[6].isoformat() if r[6] else None,
+        'days_remaining': int(r[7]) if r[7] is not None else None,
+    } for r in rows]
+
+
+def _query_upcoming_rules_for_tag(conn, tag: str, date_str: str, limit: int = 3) -> list[dict]:
+    """Rules in a tag group whose transit window starts after date_str (upcoming)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT r.id, r.rule_code, r.display_name, r.base_bias, r.probability_label,
+                   t.start_date, t.end_date, (t.start_date - %s::date) AS days_until
+            FROM km_rule_transits t
+            JOIN km_astro_rule_master r ON r.id = t.rule_id
+            WHERE %s = ANY(r.tags)
+              AND r.catalog_visible = TRUE
+              AND r.is_deleted = FALSE
+              AND t.start_date > %s::date
+            ORDER BY t.start_date ASC
+            LIMIT %s
+            """,
+            (date_str, tag, date_str, limit),
+        )
+        rows = cur.fetchall()
+    return [{
+        'id': r[0], 'rule_code': r[1], 'display_name': r[2],
+        'base_bias': r[3], 'probability_label': r[4],
+        'start_date': r[5].isoformat() if r[5] else None,
+        'end_date':   r[6].isoformat() if r[6] else None,
+        'days_until': int(r[7]) if r[7] is not None else None,
+    } for r in rows]
+
+
+@app.get('/api/ai/active-rule-today')
+def active_rule_today(tag: str, date: str | None = None):
+    """Which specific rules within a tag group are active on `date`, plus upcoming ones."""
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    date_str = date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
+    conn = _conn()
+    try:
+        active_now = _query_active_rules_for_tag(conn, tag, date_str, limit=5)
+        upcoming   = _query_upcoming_rules_for_tag(conn, tag, date_str, limit=3)
+    finally:
+        conn.close()
+    return {'tag': tag, 'date': date_str, 'active_now': active_now, 'upcoming': upcoming}
 
 
 @app.get('/api/ai/breadth-insight')
@@ -3828,10 +3892,18 @@ def vani_daily(req: VaNiDailyRequest):
             is_group = cid.startswith('astro_group:')
             rule_db_id: int | None = None
             if is_group:
-                # Group overlay (astro_group:Mercury) — a whole tag, not a single rule.
-                # No per-rule confidence or /rules/:id target; label it as a group.
-                name = f"{name} (group)"
-                n = 0
+                # Group overlay (astro_group:Mercury) — surface the specific rule in
+                # that group that is active TODAY, so the brief is concrete.
+                group_tag = cid.split(':', 1)[1] if ':' in cid else cid
+                _active = _query_active_rules_for_tag(conn, group_tag, date_str, limit=1)
+                if _active:
+                    ar = _active[0]
+                    name = f"{ar['display_name']} · {group_tag}"
+                    n = _get_rule_confidence_for_cid(f"astro_rule:{ar['rule_code']}", conn)
+                    rule_db_id = ar['id']
+                else:
+                    name = f"{group_tag} (group)"
+                    n = 0
             else:
                 n = _get_rule_confidence_for_cid(cid, conn)
                 # Resolve DB rule_id for action_target

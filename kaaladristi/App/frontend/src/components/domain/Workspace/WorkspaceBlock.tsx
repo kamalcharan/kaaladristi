@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useQuery } from '@tanstack/react-query'
 import type { FrameworkBlock, GridPosition, InstrumentRef } from '@/types/framework'
 import { getCatalogItem } from '@/constants/catalogItems'
+import RuleInsightCard from '@/components/domain/VaNi/RuleInsightCard'
 import MagicRsWidget from '@/components/domain/Catalog/widgets/MagicRsWidget'
 import OrderFlowWidget from '@/components/domain/Catalog/widgets/OrderFlowWidget'
 import SmartMoneyWidget from '@/components/domain/Catalog/widgets/SmartMoneyWidget'
@@ -223,6 +224,8 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
               fontFamily: 'var(--font-mono,monospace)' }}>none found</span>
         }
       </div>
+      {/* VaNi interpretation — hidden entirely when no insight */}
+      <RuleInsightCard ruleId={ruleId ?? null} />
     </div>
   )
 }
