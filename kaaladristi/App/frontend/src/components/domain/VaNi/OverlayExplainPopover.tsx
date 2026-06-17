@@ -14,12 +14,15 @@ function fmtDate(iso: string | null | undefined): string {
  * LLM is offline (RuleInsightCard self-hides).
  */
 export default function OverlayExplainPopover({
-  tag, anchorX, anchorY, onClose,
+  tag, anchorX, anchorY, onClose, focusRuleId, focusRuleLabel,
 }: {
   tag: string
   anchorX: number
   anchorY: number
   onClose: () => void
+  /** When set (e.g. a chart zone click), lead with THIS specific rule's insight. */
+  focusRuleId?: number | null
+  focusRuleLabel?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const { data, isLoading } = useActiveRuleToday(tag)
@@ -35,7 +38,9 @@ export default function OverlayExplainPopover({
 
   const active   = data?.active_now?.[0]
   const upcoming = data?.upcoming?.[0]
-  const insightRuleId = active?.id ?? upcoming?.id ?? null
+  // Chart-zone click → that rule's insight; pill click → the tag's active/next rule.
+  const insightRuleId = focusRuleId ?? active?.id ?? upcoming?.id ?? null
+  const headerLabel   = focusRuleLabel ?? tag
 
   const left = Math.max(8, Math.min(anchorX, window.innerWidth - 348))
 
@@ -53,9 +58,9 @@ export default function OverlayExplainPopover({
     >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{tag}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{headerLabel}</span>
         <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)' }}>
-          overlay
+          {focusRuleId ? tag : 'overlay'}
         </span>
         <button
           onClick={onClose}
@@ -64,8 +69,8 @@ export default function OverlayExplainPopover({
         >✕</button>
       </div>
 
-      {/* Active today */}
-      {isLoading ? (
+      {/* Active / upcoming context — tag mode only (pill click) */}
+      {!focusRuleId && (isLoading ? (
         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Checking what's active…</div>
       ) : active ? (
         <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8,
@@ -87,10 +92,10 @@ export default function OverlayExplainPopover({
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
           No {tag} rule active today.
         </div>
-      )}
+      ))}
 
-      {/* Upcoming */}
-      {upcoming && (
+      {/* Upcoming — tag mode only */}
+      {!focusRuleId && upcoming && (
         <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)' }}>
           Next: {upcoming.display_name}
           {upcoming.start_date ? ` · ${fmtDate(upcoming.start_date)}` : ''}
@@ -98,7 +103,7 @@ export default function OverlayExplainPopover({
         </div>
       )}
 
-      {/* VaNi interpretation of the active (or next) rule — self-hides when none */}
+      {/* VaNi interpretation of the focused / active / next rule — self-hides when none */}
       <RuleInsightCard ruleId={insightRuleId} className="mt-3" />
     </div>
   )
