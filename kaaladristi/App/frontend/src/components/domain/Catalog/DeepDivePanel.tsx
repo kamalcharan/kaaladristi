@@ -7,7 +7,7 @@ import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
 import { TagChip } from '@/constants/ruleTagColors'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
-import { useRuleInsight } from '@/hooks/useRuleInsight'
+import RuleInsightCard from '@/components/domain/VaNi/RuleInsightCard'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import InlineGate from '@/components/workspace/InlineGate'
@@ -169,8 +169,6 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
     queryFn: () => fetchYearly(item.id),
     staleTime: 5 * 60 * 1000,
   })
-
-  const { data: insightData, isLoading: insightLoading } = useRuleInsight(item.id ?? null)
 
   const isRange = (RANGE_RULE_TYPES as readonly string[]).includes(item.rule_type)
 
@@ -360,43 +358,8 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
         Full Analysis →
       </button>
 
-      {/* VaNi interpretation — live from GET /api/ai/rule-insight */}
-      <div className="mt-4 rounded-lg border border-indigo-500/20 bg-indigo-950/20 p-4">
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-indigo-400 text-sm">✦</span>
-          <span className="text-xs font-medium text-indigo-300 uppercase tracking-wider">
-            VaNi Interpretation
-          </span>
-          {insightData?.cached && (
-            <span className="ml-auto text-[10px] text-gray-500">⚡ cached</span>
-          )}
-          {insightData?.fallback && (
-            <span className="ml-auto text-[10px] text-gray-500">AI offline</span>
-          )}
-        </div>
-
-        {/* Content */}
-        {insightLoading ? (
-          <div className="space-y-2">
-            <div className="h-3 bg-gray-700/50 rounded animate-pulse w-full" />
-            <div className="h-3 bg-gray-700/50 rounded animate-pulse w-4/5" />
-            <div className="h-3 bg-gray-700/50 rounded animate-pulse w-3/5" />
-          </div>
-        ) : insightData?.insight ? (
-          <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-            {insightData.insight
-              .replace(/<\/?explanation>/g, '')
-              .replace(/<\/?how_to_use>/g, '\n')
-              .replace(/<\/?caveat>/g, '\n⚠ ')
-              .trim()}
-          </p>
-        ) : (
-          <p className="text-xs text-gray-500 italic">
-            VaNi interpretation not available for this rule.
-          </p>
-        )}
-      </div>
+      {/* VaNi interpretation — live from GET /api/ai/rule-insight (hidden when none) */}
+      <RuleInsightCard ruleId={item.id ?? null} />
     </>
   )
 }

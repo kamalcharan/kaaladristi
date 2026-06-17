@@ -10,6 +10,7 @@ import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
 import { astroGroupPillLabel } from '@/constants/astroGroupOverlays'
+import { useActiveRuleToday } from '@/hooks/useRuleInsight'
 import WorkspaceBlock from './WorkspaceBlock'
 import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
@@ -71,6 +72,30 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
       <span style={{ fontSize: 11, color: 'rgba(255,255,255,.18)',
         fontFamily: 'var(--font-mono, monospace)' }}>+ block</span>
     </div>
+  )
+}
+
+// ── Group overlay "active today" indicator ────────────────────────────────────
+// Pulsing green dot on a group pill (e.g. ☿ Mercury) when a specific rule in that
+// group is active today. Tooltip names the rule + when it ends. Renders nothing
+// when no rule in the group is currently active.
+function GroupActiveIndicator({ tag }: { tag: string }) {
+  const { data } = useActiveRuleToday(tag)
+  const active = data?.active_now?.[0]
+  if (!active) return null
+  const ends = active.end_date
+    ? new Date(active.end_date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+    : null
+  const tip = `${active.display_name} active${ends ? ` · ends ${ends}` : ''}`
+  return (
+    <span
+      title={tip}
+      style={{
+        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+        marginLeft: 6, background: '#10b981',
+        boxShadow: '0 0 5px rgba(16,185,129,0.8)',
+      }}
+    />
   )
 }
 
@@ -481,6 +506,9 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
                         border: isPickerOpen ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.2)',
                         borderRadius: '50%', cursor: 'pointer', background: dotColor, flexShrink: 0, transition: 'border-color .15s' }}
                     />
+                    {o.catalog_item_id.startsWith('astro_group:') && (
+                      <GroupActiveIndicator tag={o.catalog_item_id.slice('astro_group:'.length)} />
+                    )}
                     <button onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
                       style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
                         border: 'none', background: 'transparent', cursor: 'pointer',
