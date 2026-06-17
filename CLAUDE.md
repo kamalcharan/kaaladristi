@@ -1087,3 +1087,22 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
 - Rules 4B, 5, 7, 8, 10-13, 15-20, 23-26, 28-30, 31-48
 - Require original Bayer 1940 handbook for accurate definition
 - Do NOT guess or approximate — wait for verified source material
+
+---
+
+## Parked — Pending Review
+
+### BAY-R14-VEN-LON (Venus Longitude Unit Cycle — Bayer Rule 14)
+- Status: catalog_visible = false (hidden from users)
+- Transit rows: 12,963 (fires every 1-2 days — too frequent)
+- Confidence scoring: NOT RUN — nifty_return_pct = NULL
+- Body rendering: uses standard AstroRuleBlockContent (no code change needed)
+- Action required before publishing:
+  1. Run confidence_scoring.py for BAY-R14 rule_id
+  2. Review scored data — does the correlation hold?
+  3. If valid: flip catalog_visible = true
+  4. If too noisy: consider aggregating to weekly signal
+     instead of daily unit completions
+- Reference: Bayer Rule 14, Venus geocentric longitude
+  unit = 1°9'13" (1.1536°), key reversal signal for
+  banking stocks per Bayer 1940 handbook
