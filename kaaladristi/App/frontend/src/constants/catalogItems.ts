@@ -186,6 +186,26 @@ const INDICATORS: CatalogItem[] = [
       { text: 'Not directional', type: 'limit' },
     ],
   },
+  {
+    id: 'gann_sq9',
+    display_name: 'Gann Square of 9',
+    description: 'W.D. Gann price vibration levels — natural support and resistance from Square of 9 geometry. Draws horizontal bands on the price chart.',
+    block_type: 'indicator',
+    placement: 'chart_overlay',
+    data_source: 'computed_ts',
+    overlay_type: 'indicator_band',
+    db_table: ['km_equity_eod', 'km_index_eod'],
+    db_column: 'close',
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+    vani_explanation: 'Gann Square of 9 calculates natural price vibration levels using square root geometry. Price tends to pause or reverse at these mathematical harmonics. Cardinal levels (90°, 180°, 270°, 360°) are strongest. Used by Gann practitioners alongside planetary timing for confluence.',
+    vani_tags: [
+      { text: 'Gann geometry', type: 'works' },
+      { text: 'Computed from last close', type: 'works' },
+      { text: 'Cardinal levels strongest', type: 'works' },
+      { text: 'Reference only — not predictive', type: 'limit' },
+    ],
+  },
 ]
 
 // ── Widgets ───────────────────────────────────────────────────────────────────
@@ -372,23 +392,6 @@ const WIDGETS: CatalogItem[] = [
       { text: 'Death cross confirmed', type: 'works' },
       { text: 'Bottom 25 only', type: 'works' },
       { text: 'Not a sell recommendation', type: 'limit' },
-    ],
-  },
-  {
-    id: 'gann_sq9',
-    display_name: 'Gann Square of 9',
-    description: 'W.D. Gann price vibration levels — natural support and resistance from Square of 9 geometry',
-    block_type: 'widget',
-    placement: 'panel_block',
-    data_source: 'computed_ts',
-    applicable_to: ['equity', 'index'],
-    tier_required: 'free',
-    vani_explanation: 'Gann Square of 9 calculates natural price vibration levels using square root geometry. Price tends to pause or reverse at these mathematical harmonics. Cardinal levels (90°, 180°, 270°, 360°) are strongest. Used by Gann practitioners alongside planetary timing for confluence.',
-    vani_tags: [
-      { text: 'Gann geometry', type: 'works' },
-      { text: 'No DB needed', type: 'works' },
-      { text: 'Cardinal levels strongest', type: 'works' },
-      { text: 'Reference only — not predictive', type: 'limit' },
     ],
   },
   {
