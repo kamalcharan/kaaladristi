@@ -10,6 +10,7 @@ import OrderFlowWidget from '@/components/domain/Catalog/widgets/OrderFlowWidget
 import SmartMoneyWidget from '@/components/domain/Catalog/widgets/SmartMoneyWidget'
 import RsiWidget from '@/components/domain/Catalog/widgets/RsiWidget'
 import WorkspaceTimelineWidget from '@/components/domain/Catalog/widgets/WorkspaceTimelineWidget'
+import GannSq9Widget from '@/components/domain/Catalog/widgets/GannSq9Widget'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
 import WorkspaceChart from '@/components/workspace/WorkspaceChart'
@@ -63,6 +64,7 @@ const WIDGET_COMPONENT_MAP: Record<string, () => React.ReactElement> = {
   chart_player:    () => <WorkspaceTimelineWidget />,
   breadth_roc:     () => <BreadthRocChart />,
   six_day_outlook: () => <SixDayOutlookCompact date={TODAY} />,
+  gann_sq9:        () => <GannSq9Widget />,
 }
 
 // ── Scanner block content ─────────────────────────────────────

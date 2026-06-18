@@ -375,6 +375,23 @@ const WIDGETS: CatalogItem[] = [
     ],
   },
   {
+    id: 'gann_sq9',
+    display_name: 'Gann Square of 9',
+    description: 'W.D. Gann price vibration levels — natural support and resistance from Square of 9 geometry',
+    block_type: 'widget',
+    placement: 'panel_block',
+    data_source: 'computed_ts',
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+    vani_explanation: 'Gann Square of 9 calculates natural price vibration levels using square root geometry. Price tends to pause or reverse at these mathematical harmonics. Cardinal levels (90°, 180°, 270°, 360°) are strongest. Used by Gann practitioners alongside planetary timing for confluence.',
+    vani_tags: [
+      { text: 'Gann geometry', type: 'works' },
+      { text: 'No DB needed', type: 'works' },
+      { text: 'Cardinal levels strongest', type: 'works' },
+      { text: 'Reference only — not predictive', type: 'limit' },
+    ],
+  },
+  {
     id: 'chart_player',
     display_name: 'Historical Player',
     description: 'Timeline scrubber — play through history bar by bar. Syncs all workspace panels and the main chart.',
