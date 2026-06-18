@@ -96,6 +96,64 @@ export async function fetchConfidence(): Promise<RuleConfidence[]> {
   return (data as RuleConfidence[]) ?? [];
 }
 
+export interface TransitDateInfo {
+  rule_id: number;
+  last_end: string | null;   // most recent end_date on or before today
+  next_start: string | null; // earliest start_date on or after today
+}
+
+/**
+ * Fetch last + next transit dates for all rules from km_rule_transits.
+ * Uses two queries (past/future) with a 3-year window each, then reduces
+ * per rule_id in JS. Suitable for the admin rules table — stale 5 min.
+ */
+export async function fetchTransitDates(): Promise<TransitDateInfo[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const past3y = new Date(Date.now() - 3 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const future3y = new Date(Date.now() + 3 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const [pastRes, futureRes] = await Promise.all([
+    from('km_rule_transits')
+      .select('rule_id,end_date')
+      .gte('end_date', past3y)
+      .lte('end_date', today)
+      .order('end_date', { ascending: false })
+      .limit(5000)
+      .execute(),
+    from('km_rule_transits')
+      .select('rule_id,start_date')
+      .gte('start_date', today)
+      .lte('start_date', future3y)
+      .order('start_date')
+      .limit(5000)
+      .execute(),
+  ]);
+
+  if (pastRes.error) throw new Error(pastRes.error.message);
+  if (futureRes.error) throw new Error(futureRes.error.message);
+
+  const map = new Map<number, TransitDateInfo>();
+
+  for (const row of (pastRes.data as { rule_id: number; end_date: string }[]) ?? []) {
+    if (!map.has(row.rule_id)) {
+      map.set(row.rule_id, { rule_id: row.rule_id, last_end: row.end_date, next_start: null });
+    }
+    // rows ordered DESC — first seen is already the most recent
+  }
+
+  for (const row of (futureRes.data as { rule_id: number; start_date: string }[]) ?? []) {
+    if (!map.has(row.rule_id)) {
+      map.set(row.rule_id, { rule_id: row.rule_id, last_end: null, next_start: row.start_date });
+    } else {
+      const entry = map.get(row.rule_id)!;
+      if (!entry.next_start) entry.next_start = row.start_date;
+      // rows ordered ASC — first seen is already the earliest upcoming
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 // ── CRUD functions ────────────────────────────────────────────────────────────
 
 export async function createRule(input: RuleInput): Promise<AstroRuleFull> {
