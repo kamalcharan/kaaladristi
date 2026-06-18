@@ -768,10 +768,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
           const glyph = BAND_GLYPHS[band.groupTag]
           if (glyph && bw > 8) {
             ctx.save()
-            ctx.font      = '12px serif'
-            ctx.fillStyle = 'rgba(255,255,255,0.65)'
+            ctx.font      = '16px serif'
+            ctx.fillStyle = 'rgba(255,255,255,0.80)'
             ctx.textAlign = 'left'
-            ctx.fillText(glyph, left + 4, 15)
+            ctx.fillText(glyph, left + 4, 20)
             ctx.restore()
           }
         }
@@ -792,10 +792,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.lineTo(x, h);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle  = hexToRgba(pb.color, 0.75);
-        ctx.font       = '11px serif';
+        ctx.fillStyle  = hexToRgba(pb.color, 0.9);
+        ctx.font       = '14px serif';
         ctx.textAlign  = 'center';
-        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 11);
+        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 16);
         ctx.restore();
       }
 
