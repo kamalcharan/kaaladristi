@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { format, parseISO } from 'date-fns';
 import type { ChartDataPoint, TimeRange } from '@/types';
+import { fmtDate } from '@/lib/dateUtils';
 import { cn } from '@/lib/utils';
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
@@ -33,7 +34,7 @@ function CustomTooltip({ active, payload, label }: any) {
   return (
     <div className="glass-card rounded-xl px-4 py-3 shadow-2xl text-xs space-y-1.5">
       <p className="font-semibold text-[var(--text-primary)]">
-        {format(parseISO(d.date), 'dd MMM yyyy')}
+        {fmtDate(d.date)}
       </p>
       <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-[var(--text-secondary)]">
         <span>Open</span>  <span className="text-right mono">{d.open.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
@@ -79,8 +80,8 @@ export default function IndexPriceChart({
   // Format X-axis based on range
   const xTickFormat = useMemo(() => {
     switch (range) {
-      case '1M':  return 'dd MMM';
-      case '3M':  return 'dd MMM';
+      case '1M':  return 'dd-MMM';
+      case '3M':  return 'dd-MMM';
       case '6M':  return 'MMM yy';
       case '1Y':  return 'MMM yy';
       case '5Y':  return 'MMM yyyy';

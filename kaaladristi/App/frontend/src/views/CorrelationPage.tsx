@@ -72,8 +72,14 @@ function fmtPct(n: number | null, digits = 2): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}%`
 }
 
+const _CORR_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtDate(s: string): string {
-  return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })
+  const [y, m, d] = s.slice(0, 10).split('-');
+  return `${d}-${_CORR_MONTHS[+m - 1]}-${y}`;
+}
+function fmtDateShort(s: string): string {
+  const [, m, d] = s.slice(0, 10).split('-');
+  return `${d}-${_CORR_MONTHS[+m - 1]}`;
 }
 
 function resolveDisplayName(id: string): string {
@@ -294,7 +300,7 @@ function GanttTimeline({ instances }: { instances: CorrelationInstance[] }) {
                 fontFamily="monospace"
                 fill="rgba(255,255,255,0.3)"
               >
-                {new Date(inst.start_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })}
+                {fmtDateShort(inst.start_date)}
               </text>
               <rect
                 x={x1} y={y}

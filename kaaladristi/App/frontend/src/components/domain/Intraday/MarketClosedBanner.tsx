@@ -10,12 +10,12 @@ interface MarketClosedBannerProps {
   fallbackDate: string;
 }
 
+const _BANNER_DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const _BANNER_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function formatLong(iso: string): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  return d.toLocaleDateString('en-IN', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    timeZone: 'UTC',
-  });
+  const [y, m, d] = iso.split('-').map(Number);
+  const weekday = _BANNER_DAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${weekday} · ${String(d).padStart(2, '0')}-${_BANNER_MON[m - 1]}-${y}`;
 }
 
 export default function MarketClosedBanner({ fallbackDate }: MarketClosedBannerProps) {

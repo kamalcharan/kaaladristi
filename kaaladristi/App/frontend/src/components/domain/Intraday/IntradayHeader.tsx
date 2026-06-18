@@ -16,12 +16,12 @@ interface IntradayHeaderProps {
   inAbhijit: boolean;
 }
 
+const _DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const _MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function formatDateLabel(iso: string): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  return d.toLocaleDateString('en-IN', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-    timeZone: 'UTC',
-  });
+  const [y, m, d] = iso.split('-').map(Number);
+  const weekday = _DAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${weekday} · ${String(d).padStart(2, '0')}-${_MON[m - 1]}-${y}`;
 }
 
 function formatIstClockSeconds(): string {
