@@ -529,6 +529,14 @@ export interface ScanStock {
   // Breakout Surge computed fields (null for all other scans)
   breakout_level?: number | null;
   pct_from_breakout?: number | null;
+  // Stage 2 Watch / VaNi Opportunity fields
+  rs_percentile?: number | null;
+  stage?: string | null;
+  sma200_rising?: boolean | null;
+  chartink_score?: number | null;
+  is_vani_s2?: boolean | null;
+  is_vani_strength?: boolean | null;
+  is_vani_rs?: boolean | null;
 }
 
 export interface ScanDefinition {
