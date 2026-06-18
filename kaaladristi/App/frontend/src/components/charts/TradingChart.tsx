@@ -127,6 +127,12 @@ function pointMarkerLabel(ruleCode: string): string {
   const bay = rc.match(/^BAY-R0*(\d+)/);
   if (bay) return `B${bay[1]}`;
   if (rc.startsWith('DN')) return ruleCode.replace(/^DN[-_]?/i, '').slice(0, 3) || 'DN';
+  // Planet glyphs for named-planet rules
+  if (rc.startsWith('NEP-'))     return '♆';
+  if (rc.startsWith('MAR-GAN-')) return '♂';
+  if (rc.startsWith('PLU-'))     return '♇';
+  if (rc.startsWith('JUP-'))     return '♃';
+  if (rc.startsWith('SAT-'))     return '♄';
   return ruleCode.slice(0, 3);
 }
 
@@ -760,12 +766,12 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
           // Glyph at top-left of band — shows which planet/rule this zone is
           const glyph = BAND_GLYPHS[band.groupTag]
-          if (glyph && bw > 18) {
+          if (glyph && bw > 8) {
             ctx.save()
-            ctx.font      = '11px serif'
-            ctx.fillStyle = hexToRgba(band.color, Math.min(op * 5, 0.55))
+            ctx.font      = '12px serif'
+            ctx.fillStyle = 'rgba(255,255,255,0.65)'
             ctx.textAlign = 'left'
-            ctx.fillText(glyph, left + 4, 14)
+            ctx.fillText(glyph, left + 4, 15)
             ctx.restore()
           }
         }
