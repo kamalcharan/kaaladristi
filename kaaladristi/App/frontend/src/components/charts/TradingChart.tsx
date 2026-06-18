@@ -61,6 +61,17 @@ const OVERLAY_DEFAULT_COLOR: Record<string, string> = {
   'supertrend': 'var(--bull)',
 };
 
+// Planet/group glyphs rendered on astro zone overlay bands
+const BAND_GLYPHS: Record<string, string> = {
+  Mercury:      '☿',
+  Venus:        '♀',
+  Bayer:        '⬡',
+  MajorTransit: '⟳',
+  Panchak:      '◈',
+  Gandanta:     '♂',
+  Neptune:      '♆',
+}
+
 interface TradingChartProps {
   data: IndicatorRow[];
   height?: number;
@@ -116,6 +127,12 @@ function pointMarkerLabel(ruleCode: string): string {
   const bay = rc.match(/^BAY-R0*(\d+)/);
   if (bay) return `B${bay[1]}`;
   if (rc.startsWith('DN')) return ruleCode.replace(/^DN[-_]?/i, '').slice(0, 3) || 'DN';
+  // Planet glyphs for named-planet rules
+  if (rc.startsWith('NEP-'))     return '♆';
+  if (rc.startsWith('MAR-GAN-')) return '♂';
+  if (rc.startsWith('PLU-'))     return '♇';
+  if (rc.startsWith('JUP-'))     return '♃';
+  if (rc.startsWith('SAT-'))     return '♄';
   return ruleCode.slice(0, 3);
 }
 
@@ -239,13 +256,15 @@ export default function TradingChart({ data, height = 900, compact = false, work
       wickDownColor: C.riskRed + '80',
     });
 
-    const candleData: CandlestickData<Time>[] = data.map((d) => ({
-      time: toTime(d.trade_date),
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
+    const candleData: CandlestickData<Time>[] = data
+      .filter((d) => d.open != null && d.high != null && d.low != null && d.close != null)
+      .map((d) => ({
+        time: toTime(d.trade_date),
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      }));
 
     // Workspace mode only: extend the time axis ±AXIS_PAD_DAYS with whitespace so
     // overlay zones can paint 3 months before the first bar and 3 months past
@@ -744,6 +763,17 @@ export default function TradingChart({ data, height = 900, compact = false, work
           ctx.lineTo(left + 1, h)
           ctx.stroke()
           ctx.setLineDash([])
+
+          // Glyph at top-left of band — shows which planet/rule this zone is
+          const glyph = BAND_GLYPHS[band.groupTag]
+          if (glyph && bw > 8) {
+            ctx.save()
+            ctx.font      = '12px serif'
+            ctx.fillStyle = 'rgba(255,255,255,0.65)'
+            ctx.textAlign = 'left'
+            ctx.fillText(glyph, left + 4, 15)
+            ctx.restore()
+          }
         }
       }
 
@@ -762,11 +792,37 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.lineTo(x, h);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle  = hexToRgba(pb.color, 0.6);
-        ctx.font       = '8px sans-serif';
+        ctx.fillStyle  = hexToRgba(pb.color, 0.75);
+        ctx.font       = '11px serif';
         ctx.textAlign  = 'center';
-        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 9);
+        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 11);
         ctx.restore();
+      }
+
+      // ── Future-event pins — band starts within the next 15 days ─────────
+      // Shows a small glyph+countdown pill pinned at the zone's start date.
+      const in15Days = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      for (const band of mergedBands) {
+        if (band.from <= today || band.from > in15Days) continue
+        const x = ts.timeToCoordinate(band.from as Time)
+        if (x == null) continue
+        const daysUntil = Math.round((new Date(band.from).getTime() - Date.now()) / 86400000)
+        const glyph = BAND_GLYPHS[band.groupTag] ?? '◉'
+        const pillW = 30, pillH = 15, pillR = 3
+        const px = x - pillW / 2
+        const py = 4
+        ctx.save()
+        ctx.fillStyle = hexToRgba(band.color, 0.88)
+        ctx.beginPath()
+        ctx.roundRect(px, py, pillW, pillH, pillR)
+        ctx.fill()
+        ctx.fillStyle = '#fff'
+        ctx.textAlign = 'center'
+        ctx.font = '10px serif'
+        ctx.fillText(glyph, x - 6, py + 11)
+        ctx.font = 'bold 7px sans-serif'
+        ctx.fillText(`${daysUntil}d`, x + 8, py + 11)
+        ctx.restore()
       }
     }
 
