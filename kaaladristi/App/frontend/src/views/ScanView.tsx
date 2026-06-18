@@ -637,7 +637,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
   const [supertrendFilter, setSupertrendFilter] = useState('');
   const { show: showToast, Toast } = useToast();
 
-  const { data: rawStocks = [], isLoading, error, refetch } = useScan('stage_2_leaders', exchangeFilter, timeframe);
+  const { data: rawStocks = [], isLoading, error, refetch } = useScan(preset.id, exchangeFilter, timeframe);
 
   const vaniStocks = useMemo(() => rawStocks.filter((s) => s.vaniOpportunity), [rawStocks]);
   const vaniCount = vaniStocks.length;
@@ -1121,8 +1121,8 @@ function ScannerResults({ presetId }: { presetId: string }) {
     </div>
   );
 
-  // Stage 2 Leaders — v2 card layout with S2 badge + % ATH
-  if (presetId === 'stage_2_leaders') {
+  // Stage 2 family — v2 card layout with S2 badge + % ATH
+  if (presetId === 'stage_2_leaders' || presetId === 'stage_2_watch' || presetId === 'vani_opportunity') {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
