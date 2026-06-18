@@ -32,6 +32,7 @@ import {
 import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
+import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -976,9 +977,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
               {bandTooltip.band.ruleCode}
             </div>
             <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', display: 'flex', gap: 4, alignItems: 'center' }}>
-              <span>{bandTooltip.band.from}</span>
+              <span>{fmtDate(bandTooltip.band.from)}</span>
               <span style={{ opacity: 0.35 }}>→</span>
-              <span>{bandTooltip.band.to}</span>
+              <span>{fmtDate(bandTooltip.band.to)}</span>
             </div>
             <div style={{ marginTop: 5, fontSize: 10 }}>
               {bandTooltip.band.matched === true  && <span style={{ color: bandTooltip.band.color }}>✓ Confirmed</span>}
