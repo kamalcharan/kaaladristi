@@ -30,17 +30,17 @@ const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 // universe, category, category_label, category_color, category_sort, timeframe
 // are NOT included here — they come from DB only via fetchScanPresets().
 export const SCAN_PRESETS: ScanDefinition[] = [
-  { id: 'power_buy',           name: 'Strength Confluence',   description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries', limit: 25, universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'power_sell',          name: 'Weakness Confluence',   description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries', limit: 25, universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'smart_money',         name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'fresh_breakout',      name: 'Fresh Breakouts',       description: 'Stocks breaking above recent highs with strong volume in leading industries',              limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'quiet_accumulation',  name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'distribution_warning',name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25, universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'conviction_flow',     name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'breakout_surge',      name: 'Breakout Surge',        description: 'NSE stocks breaking above 20-day highs with RVOL > 2×',                                   limit: 50, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'stage_2_leaders',     name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',         limit: 500, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'stage_2_watch',      name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
-  { id: 'vani_opportunity',   name: 'VaNi Opportunity',      description: 'Highest conviction setups — Stage 2 confirmed with top RS momentum. Alpha Edge formula + VaNi RS filter.', limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily' },
+  { id: 'power_buy',            name: 'Strength Confluence',   description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries', limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'power_sell',           name: 'Weakness Confluence',   description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries', limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
+  { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: null },
+  { id: 'fresh_breakout',       name: 'Fresh Breakouts',       description: 'Stocks breaking above recent highs with strong volume in leading industries',              limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'quiet_accumulation',   name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'distribution_warning', name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
+  { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks breaking above 20-day highs with RVOL > 2×',                                   limit: 50,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'vani_opportunity',     name: 'VaNi Opportunity',      description: 'Highest conviction setups — Stage 2 confirmed with top RS momentum. Alpha Edge formula + VaNi RS filter.', limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'always_true' },
 ];
 
 // ── Data Loading ───────────────────────────────────────────────
@@ -643,6 +643,65 @@ function buildScanStock(
   return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
 }
 
+// ── VaNi Opportunity Rule — data-driven ────────────────────────
+/*
+ * VANI OPPORTUNITY RULE — DATA DRIVEN
+ *
+ * vaniOpportunity is computed per scanner using the vani_rule column
+ * from kd_scan_presets (mirrored in the SCAN_PRESETS static array).
+ *
+ * To add VaNi qualification to a new scanner:
+ *   1. Set vani_rule in kd_scan_presets DB row (migration or UPDATE)
+ *   2. Mirror the value in SCAN_PRESETS static entry above
+ *   3. If a new rule type is needed, add a case to computeVaniOpportunity()
+ *   4. No other code changes needed
+ *
+ * Current rule types:
+ *   always_true                  → DB pre-filtered (VaNi Opportunity scan)
+ *   is_vani_s2                   → Stage 2 quality overlay (magic_rs>40, rvol>1.5, rsi 50–80)
+ *   rvol_surge_and_52wh          → Breakout confirmation (future use)
+ *   is_vani_surge_or_breakout    → Momentum confirmation (conviction_flow / breakout_surge)
+ *   is_vani_distrib_and_weakness → Breakdown confirmation (power_sell / distribution_warning)
+ *   null                         → No VaNi chip shown for this scanner
+ *
+ * NOTE: bundle-based scan functions (scanPowerBuy etc.) currently derive
+ * vaniOpportunity through buildScanStock → evaluateOpportunity (ATR/EMA band
+ * config). Migrating those to computeVaniOpportunity requires adding is_vani_*
+ * columns to the bundle EOD SELECT — deferred to a future sprint.
+ * Direct-query fetch functions (fetchStage2Leaders etc.) use computeVaniOpportunity.
+ */
+
+// row shape accepted by computeVaniOpportunity — DB row or computed stock fields
+interface VaniRow {
+  is_vani_s2?: boolean | null;
+  is_vani_surge?: boolean | null;
+  is_vani_breakout?: boolean | null;
+  is_vani_distrib?: boolean | null;
+  is_vani_weakness?: boolean | null;
+  rvol?: number | null;
+  close?: number | null;
+  w52_high?: number | null;
+}
+
+function computeVaniOpportunity(row: VaniRow, vaniRule: string | null | undefined): boolean {
+  if (!vaniRule) return false;
+  switch (vaniRule) {
+    case 'always_true':
+      return true;
+    case 'is_vani_s2':
+      return !!row.is_vani_s2;
+    case 'rvol_surge_and_52wh':
+      return (row.rvol ?? 0) > 2
+        && (row.close ?? 0) >= (row.w52_high ?? 0) * 0.98;
+    case 'is_vani_surge_or_breakout':
+      return !!row.is_vani_surge || !!row.is_vani_breakout;
+    case 'is_vani_distrib_and_weakness':
+      return !!row.is_vani_distrib && !!row.is_vani_weakness;
+    default:
+      return false;
+  }
+}
+
 // ── Scan Implementations ───────────────────────────────────────
 
 // FILTER LOGIC NOTE:
@@ -1134,7 +1193,7 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       xAmt:                 null,
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
-      vaniOpportunity:      !!row.is_vani_s2,
+      vaniOpportunity:      computeVaniOpportunity(row, SCAN_PRESETS.find((p) => p.id === 'stage_2_leaders')?.vani_rule),
       rs_percentile:        row.rs_percentile ?? null,
       stage:                row.stage ?? null,
       is_vani_s2:           row.is_vani_s2 ?? null,
@@ -1218,7 +1277,7 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
       magicRsTrend: [], reward: null, rewardPct: null, pctBelow52wHigh,
-      vaniOpportunity: !!row.is_vani_s2,
+      vaniOpportunity: computeVaniOpportunity(row, SCAN_PRESETS.find((p) => p.id === 'stage_2_watch')?.vani_rule),
       rs_percentile: row.rs_percentile ?? null,
       stage: row.stage ?? null,
       sma200_rising: row.sma200_rising ?? null,
@@ -1303,7 +1362,7 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
       magicRsTrend: [], reward: null, rewardPct: null, pctBelow52wHigh,
-      vaniOpportunity: !!row.is_vani_s2,
+      vaniOpportunity: computeVaniOpportunity(row, SCAN_PRESETS.find((p) => p.id === 'vani_opportunity')?.vani_rule),
       rs_percentile: row.rs_percentile ?? null,
       stage: row.stage ?? null,
       chartink_score: row.chartink_score ?? null,
@@ -1422,6 +1481,7 @@ export async function fetchScanPresets(): Promise<ScanDefinition[]> {
     category_color: string;
     category_sort: number;
     timeframe: string;
+    vani_rule: string | null;
   }>;
   return rows.map((r) => ({
     id: r.id,
@@ -1435,6 +1495,7 @@ export async function fetchScanPresets(): Promise<ScanDefinition[]> {
     category_color: r.category_color ?? '#3b82f6',
     category_sort: r.category_sort ?? 99,
     timeframe: (r.timeframe === 'weekly' || r.timeframe === 'monthly') ? r.timeframe : 'daily',
+    vani_rule: r.vani_rule ?? null,
   }));
 }
 

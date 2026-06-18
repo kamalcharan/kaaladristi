@@ -551,6 +551,7 @@ export interface ScanDefinition {
   category_color: string;
   category_sort: number;
   timeframe: 'daily' | 'weekly' | 'monthly';
+  vani_rule?: string | null;
 }
 
 export interface VaniOpportunityConfig {
