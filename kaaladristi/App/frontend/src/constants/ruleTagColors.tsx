@@ -17,6 +17,7 @@ export const RULE_TAG_COLORS: Record<string, string> = {
   MajorTransit:  'bg-rose-900/60 text-rose-300 border-rose-700',
   Bayer:         'bg-amber-800/60 text-amber-200 border-amber-600',
   Gandanta:      'bg-red-950/60 text-red-200 border-red-800',
+  Neptune:       'bg-blue-950/60 text-blue-200 border-blue-900',
 }
 
 export const DEFAULT_TAG_COLOR = 'bg-gray-800 text-gray-400 border-gray-600'

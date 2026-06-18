@@ -97,6 +97,19 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     applicable_to: ['equity', 'index'],
     tier_required: 'free',
   },
+  {
+    id: 'astro_group:Neptune',
+    display_name: 'Neptune',
+    tag: 'Neptune',
+    color: '#1E3A5F',          // deep navy
+    description: 'Neptune station and retrograde windows',
+    block_type: 'astro_rule',
+    placement: 'chart_overlay',
+    overlay_type: 'astro_zone',
+    data_source: 'rule_engine',
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+  },
 ]
 
 export type AstroGroupId = `astro_group:${string}`
@@ -109,6 +122,7 @@ const ASTRO_GROUP_GLYPHS: Record<string, string> = {
   'astro_group:MajorTransit': '⟳',
   'astro_group:Panchak': '◈',
   'astro_group:Gandanta': '♂',
+  'astro_group:Neptune': '♆',
 }
 
 /** Pill label for a group overlay id (glyph + name), or null if not a group id. */
