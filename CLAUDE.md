@@ -1092,6 +1092,21 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
 
 ## Parked — Pending Review
 
+### scanConvictionFlow + scanBreakoutSurge — VaNi rule migration deferred
+- Status: still using inline `is_vani` local variable as fallback
+- Blocked on: `is_vani_surge` and `is_vani_breakout` columns not yet in ScanDataBundle EOD SELECT
+- What's needed:
+  1. Add `is_vani_surge` and `is_vani_breakout` to the `km_equity_eod` SELECT in `loadDailyBundle()`
+  2. Add both fields to `EquityEodSnapshot` type in `types/index.ts`
+  3. Replace inline `is_vani` block in `scanConvictionFlow` and `scanBreakoutSurge`
+     with `computeVaniOpportunity(eod, SCAN_PRESETS.find(p => p.id === '...').vani_rule)`
+- File: `App/frontend/src/services/scanEngine.ts`
+  - `scanConvictionFlow` lines ~915–919 (inline `is_vani` flag)
+  - `scanBreakoutSurge` lines ~990–994 (inline `is_vani` flag)
+  - `loadDailyBundle()` EOD SELECT ~line 163 (add the two columns)
+- Until then: VaNi chip counts for conviction_flow and breakout_surge
+  continue to use the existing inline logic (no regression)
+
 ### BAY-R14-VEN-LON (Venus Longitude Unit Cycle — Bayer Rule 14)
 - Status: catalog_visible = false (hidden from users)
 - Transit rows: 12,963 (fires every 1-2 days — too frequent)
