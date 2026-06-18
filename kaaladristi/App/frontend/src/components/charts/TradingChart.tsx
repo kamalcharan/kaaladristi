@@ -250,13 +250,15 @@ export default function TradingChart({ data, height = 900, compact = false, work
       wickDownColor: C.riskRed + '80',
     });
 
-    const candleData: CandlestickData<Time>[] = data.map((d) => ({
-      time: toTime(d.trade_date),
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
+    const candleData: CandlestickData<Time>[] = data
+      .filter((d) => d.open != null && d.high != null && d.low != null && d.close != null)
+      .map((d) => ({
+        time: toTime(d.trade_date),
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      }));
 
     // Workspace mode only: extend the time axis ±AXIS_PAD_DAYS with whitespace so
     // overlay zones can paint 3 months before the first bar and 3 months past
