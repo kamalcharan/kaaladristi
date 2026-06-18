@@ -537,6 +537,7 @@ export interface ScanStock {
   is_vani_s2?: boolean | null;
   is_vani_strength?: boolean | null;
   is_vani_rs?: boolean | null;
+  is_vani_weakness?: boolean | null;
 }
 
 export interface ScanDefinition {

@@ -41,6 +41,9 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'vani_opportunity',     name: 'VaNi Opportunity',      description: 'Highest conviction setups — Stage 2 confirmed with top RS momentum. Alpha Edge formula + VaNi RS filter.', limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'always_true' },
+  { id: 'stage_4_leaders',     name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs', limit: 200, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  { id: 'stage_3_watch',       name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200', limit: 100, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
+  { id: 'vani_exit_watch',     name: 'VaNi Exit Watch',       description: 'Highest conviction weakness — lowest RS, death cross confirmed', limit: 25, universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'always_true' },
 ];
 
 // ── Data Loading ───────────────────────────────────────────────
@@ -697,6 +700,8 @@ function computeVaniOpportunity(row: VaniRow, vaniRule: string | null | undefine
       return !!row.is_vani_surge || !!row.is_vani_breakout;
     case 'is_vani_distrib_and_weakness':
       return !!row.is_vani_distrib && !!row.is_vani_weakness;
+    case 'is_vani_weakness':
+      return !!row.is_vani_weakness;
     default:
       return false;
   }
@@ -1373,6 +1378,351 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
   });
 }
 
+/** Scan: Stage 4 Leaders — death cross confirmed, sorted weakest RS first. */
+async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  const { data: dateRows } = await from('km_equity_eod')
+    .select('trade_date')
+    .order('trade_date', { ascending: false })
+    .limit(1)
+    .execute();
+  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  if (!latestDate) return [];
+
+  const { data: rows } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'stage',
+      'open', 'high', 'low', 'pct_chng',
+      'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
+      'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'rsi_14', 'rvol',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'flow_type', 'volume_divergence_flag', 'delivery_pct',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'supertrend_dir', 'ema_20', 'atr_14',
+      'is_vani_weakness',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('stage', 'S4')
+    .eq('trade_date', latestDate)
+    .gt('close', 30)
+    .order('rs_percentile', { ascending: true })
+    .limit(500)
+    .execute();
+
+  const eodRows = (rows ?? []) as any[];
+
+  // Client-side death cross filter: close < sma_50 AND sma_50 < sma_200
+  // stage='S4' only guarantees close < sma_200; the full death cross is stricter
+  const filtered = eodRows.filter((row: any) =>
+    row.sma_50 != null && row.sma_200 != null &&
+    row.close < row.sma_50 && row.sma_50 < row.sma_200
+  );
+
+  // ISIN dedup: prefer NSE
+  const isinMap = new Map<string, any>();
+  for (const row of filtered) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
+  }
+
+  return Array.from(isinMap.values()).slice(0, 200).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const pctBelow52wHigh = row.w52_high && row.w52_high > 0
+      ? ((row.w52_high - row.close) / row.w52_high) * 100 : null;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    const reward = ema20 && atr14 ? (ema20 + atr14) - row.close : null;
+    const rewardPct = ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null;
+    return {
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 row.open ?? null,
+      high:                 row.high ?? null,
+      low:                  row.low ?? null,
+      pct_chng:             row.pct_chng ?? null,
+      magic_rs:             row.magic_rs ?? null,
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            null,
+      rss_spread:           null,
+      rsi_14:               row.rsi_14 ?? null,
+      rvol:                 row.rvol ?? null,
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       row.supertrend_dir ?? null,
+      sma_50:               row.sma_50 ?? null,
+      sma_150:              row.sma_150 ?? null,
+      sma_200:              row.sma_200 ?? null,
+      sma200_rising:        row.sma200_rising ?? null,
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             row.w52_high ?? null,
+      w52_low:              row.w52_low ?? null,
+      lifetime_high:        row.lifetime_high ?? null,
+      avg_amt_5d:           row.avg_amt_5d ?? null,
+      avg_amt_22d:          row.avg_amt_22d ?? null,
+      delivery_surge_x:     row.delivery_surge_x ?? null,
+      sniper_inst:          row.sniper_inst ?? null,
+      sniper_hot:           row.sniper_hot ?? null,
+      accum_distrib:        row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct:         row.delivery_pct ?? null,
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh,
+      reward,
+      rewardPct,
+      magicRsTrend:         [],
+      avg_amt_66d:          null,
+      xAmt:                 null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      computeVaniOpportunity(row, SCAN_PRESETS.find((p) => p.id === 'stage_4_leaders')?.vani_rule),
+      rs_percentile:        row.rs_percentile ?? null,
+      stage:                row.stage ?? null,
+      is_vani_weakness:     row.is_vani_weakness ?? null,
+    };
+  });
+}
+
+/** Scan: Stage 3 Watch — above SMA200, SMA50 converging. Sorted by closeness to death cross. */
+async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  const { data: dateRows } = await from('km_equity_eod')
+    .select('trade_date')
+    .order('trade_date', { ascending: false })
+    .limit(1)
+    .execute();
+  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  if (!latestDate) return [];
+
+  const { data: rows } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'stage',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
+      'rsi_14', 'rvol',
+      'w52_high', 'w52_low',
+      'flow_type', 'volume_divergence_flag', 'delivery_pct',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'supertrend_dir', 'ema_20', 'atr_14',
+      'is_vani_weakness',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('stage', 'S3')
+    .eq('trade_date', latestDate)
+    .gt('close', 30)
+    .order('rs_percentile', { ascending: true })
+    .limit(300)
+    .execute();
+
+  const eodRows = (rows ?? []) as any[];
+
+  // Client-side: keep only rows with SMA50 within 15% of SMA200 (explicit S3 condition)
+  // Sort by convergence gap ascending (closest to death cross first)
+  const filtered = eodRows
+    .filter((row) => {
+      const sma50 = row.sma_50;
+      const sma200 = row.sma_200;
+      if (!sma50 || !sma200 || sma200 <= 0) return false;
+      return Math.abs(sma50 - sma200) / sma200 < 0.15;
+    })
+    .sort((a: any, b: any) => {
+      const gapA = a.sma_200 > 0 ? Math.abs(a.sma_50 - a.sma_200) / a.sma_200 : 1;
+      const gapB = b.sma_200 > 0 ? Math.abs(b.sma_50 - b.sma_200) / b.sma_200 : 1;
+      return gapA - gapB;
+    });
+
+  // ISIN dedup: prefer NSE
+  const isinMap = new Map<string, any>();
+  for (const row of filtered) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
+  }
+
+  return Array.from(isinMap.values()).slice(0, 100).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const pctBelow52wHigh = row.w52_high && row.w52_high > 0
+      ? ((row.w52_high - row.close) / row.w52_high) * 100 : null;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    return {
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 null, high: null, low: null,
+      pct_chng:             row.pct_chng ?? null,
+      magic_rs:             row.magic_rs ?? null,
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            null, rss_spread: null,
+      rsi_14:               row.rsi_14 ?? null,
+      rvol:                 row.rvol ?? null,
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       row.supertrend_dir ?? null,
+      sma_50:               row.sma_50 ?? null,
+      sma_150:              row.sma_150 ?? null,
+      sma_200:              row.sma_200 ?? null,
+      sma200_rising:        row.sma200_rising ?? null,
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             row.w52_high ?? null,
+      w52_low:              row.w52_low ?? null,
+      lifetime_high:        null,
+      avg_amt_5d:           null, avg_amt_22d: null, delivery_surge_x: null,
+      sniper_inst:          row.sniper_inst ?? null,
+      sniper_hot:           row.sniper_hot ?? null,
+      accum_distrib:        row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
+      delivery_pct:         row.delivery_pct ?? null,
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh,
+      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      magicRsTrend:         [],
+      avg_amt_66d:          null, xAmt: null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      computeVaniOpportunity(row, SCAN_PRESETS.find((p) => p.id === 'stage_3_watch')?.vani_rule),
+      rs_percentile:        row.rs_percentile ?? null,
+      stage:                row.stage ?? null,
+      is_vani_weakness:     row.is_vani_weakness ?? null,
+    };
+  });
+}
+
+/** Scan: VaNi Exit Watch — Stage 4 + RS percentile < 20. Bottom 25 weakest. */
+async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  const { data: dateRows } = await from('km_equity_eod')
+    .select('trade_date')
+    .order('trade_date', { ascending: false })
+    .limit(1)
+    .execute();
+  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  if (!latestDate) return [];
+
+  const { data: rows } = await from('km_equity_eod')
+    .select([
+      'equity_id', 'trade_date', 'close', 'stage',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'sma_50', 'sma_150', 'sma_200',
+      'rsi_14', 'rvol', 'flow_type',
+      'w52_high', 'w52_low',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'sniper_inst', 'sniper_hot',
+      'ema_20', 'atr_14',
+      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
+    ].join(','))
+    .eq('stage', 'S4')
+    .eq('trade_date', latestDate)
+    .gt('close', 30)
+    .lt('rs_percentile', 20)
+    .order('rs_percentile', { ascending: true })
+    .limit(100)
+    .execute();
+
+  const eodRows = (rows ?? []) as any[];
+
+  // Client-side death cross filter: close < sma_50 AND sma_50 < sma_200
+  const deathCross = eodRows.filter((row: any) =>
+    row.sma_50 != null && row.sma_200 != null &&
+    row.close < row.sma_50 && row.sma_50 < row.sma_200
+  );
+
+  // ISIN dedup: prefer NSE
+  const isinMap = new Map<string, any>();
+  for (const row of deathCross) {
+    const sym = row.km_equity_symbols;
+    if (!sym) continue;
+    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
+    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
+    const isin = sym.isin;
+    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
+    const existing = isinMap.get(isin);
+    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
+  }
+
+  return Array.from(isinMap.values()).slice(0, 25).map((row): ScanStock => {
+    const sym = row.km_equity_symbols;
+    const pctBelow52wHigh = row.w52_high && row.w52_high > 0
+      ? ((row.w52_high - row.close) / row.w52_high) * 100 : null;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
+    return {
+      equity_id:            row.equity_id,
+      symbol:               sym?.symbol ?? String(row.equity_id),
+      company_name:         sym?.company_name ?? null,
+      industry:             sym?.industry ?? null,
+      exchange:             sym?.exchange ?? null,
+      mcap_cr:              sym?.mcap_cr ?? null,
+      trade_date:           row.trade_date,
+      close:                row.close,
+      open:                 null, high: null, low: null,
+      pct_chng:             row.pct_chng ?? null,
+      magic_rs:             row.magic_rs ?? null,
+      magic_rs_zone:        row.magic_rs_zone ?? null,
+      rss_value:            null, rss_spread: null,
+      rsi_14:               row.rsi_14 ?? null,
+      rvol:                 row.rvol ?? null,
+      flow_type:            row.flow_type ?? null,
+      supertrend_dir:       null,
+      sma_50:               row.sma_50 ?? null,
+      sma_150:              row.sma_150 ?? null,
+      sma_200:              row.sma_200 ?? null,
+      sma200_rising:        null,
+      ema_20:               ema20,
+      atr_14:               atr14,
+      w52_high:             row.w52_high ?? null,
+      w52_low:              row.w52_low ?? null,
+      lifetime_high:        null,
+      avg_amt_5d:           null, avg_amt_22d: null, delivery_surge_x: null,
+      sniper_inst:          row.sniper_inst ?? null,
+      sniper_hot:           row.sniper_hot ?? null,
+      accum_distrib:        null,
+      volume_divergence_flag: null,
+      delivery_pct:         null,
+      has_recent_svd:       !!row.dot_svd,
+      has_recent_sbd:       !!row.dot_sbd,
+      has_recent_syd:       !!row.dot_syd,
+      pctBelow52wHigh,
+      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      magicRsTrend:         [],
+      avg_amt_66d:          null, xAmt: null,
+      rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
+      rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity:      true, // always_true — all results in this scan qualify
+      rs_percentile:        row.rs_percentile ?? null,
+      stage:                row.stage ?? null,
+    };
+  });
+}
+
 // ── Public API ─────────────────────────────────────────────────
 
 const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
@@ -1438,9 +1788,12 @@ export async function executeScan(
   timeframe: ScanTimeframe = 'daily',
 ): Promise<ScanStock[]> {
   // Direct DB query scans — skip bundle entirely
-  if (scanId === 'stage_2_leaders') return fetchStage2Leaders(exchangeFilter);
-  if (scanId === 'stage_2_watch')   return fetchStage2Watch(exchangeFilter);
+  if (scanId === 'stage_2_leaders')  return fetchStage2Leaders(exchangeFilter);
+  if (scanId === 'stage_2_watch')    return fetchStage2Watch(exchangeFilter);
   if (scanId === 'vani_opportunity') return fetchVaNiOpportunity(exchangeFilter);
+  if (scanId === 'stage_4_leaders')  return fetchStage4Leaders(exchangeFilter);
+  if (scanId === 'stage_3_watch')    return fetchStage3Watch(exchangeFilter);
+  if (scanId === 'vani_exit_watch')  return fetchVaNiExitWatch(exchangeFilter);
 
   const fn = SCAN_FUNCTIONS[scanId];
   if (!fn) throw new Error(`Unknown scan: ${scanId}`);
