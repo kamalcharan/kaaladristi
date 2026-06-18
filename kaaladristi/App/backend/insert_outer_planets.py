@@ -151,8 +151,11 @@ def main():
 
     # ── Filter to outer planets only ──
     rows = [r for r in all_rows if r['planet'] in OUTER_PLANETS]
-    print(f'  Outer-planet rows: {len(rows):,}  '
-          f'({", ".join(f"{p}={sum(1 for r in rows if r[\"planet\"]==p)}" for p in sorted(OUTER_PLANETS))})')
+    planet_counts = ', '.join(
+        f"{p}={sum(1 for r in rows if r['planet'] == p)}"
+        for p in sorted(OUTER_PLANETS)
+    )
+    print(f'  Outer-planet rows: {len(rows):,}  ({planet_counts})')
 
     if not rows:
         print('\nNothing to insert — no outer planet rows found in JSON.')
