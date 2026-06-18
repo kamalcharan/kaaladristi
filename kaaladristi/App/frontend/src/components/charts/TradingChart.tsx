@@ -771,7 +771,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
             ctx.font      = '16px serif'
             ctx.fillStyle = 'rgba(255,255,255,0.80)'
             ctx.textAlign = 'left'
-            ctx.fillText(glyph, left + 4, 20)
+            ctx.fillText(glyph, left + 4, 28)
             ctx.restore()
           }
         }
@@ -795,44 +795,69 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.fillStyle  = hexToRgba(pb.color, 0.9);
         ctx.font       = '14px serif';
         ctx.textAlign  = 'center';
-        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 16);
+        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 26);
         ctx.restore();
       }
 
       // ── Future-event pins — band starts within the next 15 days ─────────
-      // Shows a small glyph+countdown pill pinned at the zone's start date.
+      // Animated pill: glyph + Nd countdown. Pulses via sine wave on opacity
+      // and a gentle vertical bob so it catches the eye without being garish.
       const in15Days = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      const animPhase = (Date.now() % 2400) / 2400        // 0→1 every 2.4 s
+      const pulse     = 0.5 + 0.5 * Math.sin(animPhase * Math.PI * 2)  // 0→1→0
+      const bob       = Math.round(pulse * 3)              // 0‒3 px vertical bob
+
       for (const band of mergedBands) {
         if (band.from <= today || band.from > in15Days) continue
         const x = ts.timeToCoordinate(band.from as Time)
         if (x == null) continue
         const daysUntil = Math.round((new Date(band.from).getTime() - Date.now()) / 86400000)
-        const glyph = BAND_GLYPHS[band.groupTag] ?? '◉'
-        const pillW = 30, pillH = 15, pillR = 3
-        const px = x - pillW / 2
-        const py = 4
+        const glyph  = BAND_GLYPHS[band.groupTag] ?? '◉'
+        const pillW  = 34, pillH = 17, pillR = 4
+        const px     = x - pillW / 2
+        const py     = 30 + bob                           // below filter icon, bobs gently
+        const fillOp = 0.70 + 0.25 * pulse               // 0.70 → 0.95
         ctx.save()
-        ctx.fillStyle = hexToRgba(band.color, 0.88)
+        ctx.fillStyle = hexToRgba(band.color, fillOp)
+        ctx.shadowColor = band.color
+        ctx.shadowBlur  = 4 + pulse * 6                  // glow pulses 4→10
         ctx.beginPath()
         ctx.roundRect(px, py, pillW, pillH, pillR)
         ctx.fill()
-        ctx.fillStyle = '#fff'
-        ctx.textAlign = 'center'
-        ctx.font = '10px serif'
-        ctx.fillText(glyph, x - 6, py + 11)
-        ctx.font = 'bold 7px sans-serif'
-        ctx.fillText(`${daysUntil}d`, x + 8, py + 11)
+        ctx.shadowBlur = 0
+        ctx.fillStyle  = '#fff'
+        ctx.textAlign  = 'center'
+        ctx.font       = '12px serif'
+        ctx.fillText(glyph, x - 7, py + 13)
+        ctx.font       = 'bold 8px sans-serif'
+        ctx.fillText(`${daysUntil}d`, x + 9, py + 13)
         ctx.restore()
       }
     }
 
     drawBandsRef.current = draw;
-    draw();
+
+    // Run a RAF animation loop if any future pins exist within 15 days,
+    // otherwise a single draw is enough.
+    const today0  = new Date().toISOString().slice(0, 10)
+    const in15d   = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const hasFuturePins = astroBands.some(
+      b => !b.isPoint && !b.isPanchak && b.from > today0 && b.from <= in15d,
+    )
+
+    let rafId: number | null = null
+    if (hasFuturePins) {
+      const loop = () => { draw(); rafId = requestAnimationFrame(loop) }
+      rafId = requestAnimationFrame(loop)
+    } else {
+      draw()
+    }
 
     const ro = new ResizeObserver(draw);
     if (mainRef.current) ro.observe(mainRef.current);
 
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       ro.disconnect();
       drawBandsRef.current = null;
       if (canvas) {
