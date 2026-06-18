@@ -18,8 +18,8 @@ os.makedirs(output_path, exist_ok=True)
 swe.set_ephe_path(ephe_path)
 
 # Date range
-START_DATE = datetime(2000, 1, 1)
-END_DATE = datetime(2040, 12, 31)
+START_DATE = datetime(1990, 1, 1)
+END_DATE = datetime(2030, 12, 31)
 
 # Ayanamsa (Lahiri - standard for Jyotish)
 AYANAMSA = swe.SIDM_LAHIRI
@@ -29,15 +29,22 @@ AYANAMSA = swe.SIDM_LAHIRI
 # =============================================================================
 
 PLANETS = {
-    'Sun': swe.SUN,
-    'Moon': swe.MOON,
-    'Mars': swe.MARS,
-    'Mercury': swe.MERCURY,
-    'Jupiter': swe.JUPITER,
-    'Venus': swe.VENUS,
-    'Saturn': swe.SATURN,
-    'Rahu': swe.MEAN_NODE,
+    'Sun':      swe.SUN,
+    'Moon':     swe.MOON,
+    'Mars':     swe.MARS,
+    'Mercury':  swe.MERCURY,
+    'Jupiter':  swe.JUPITER,
+    'Venus':    swe.VENUS,
+    'Saturn':   swe.SATURN,
+    'Rahu':     swe.MEAN_NODE,
+    # Outer planets — DristiQ naming: Uranus → Herschel
+    'Neptune':  swe.NEPTUNE,
+    'Herschel': swe.URANUS,
+    'Pluto':    swe.PLUTO,
 }
+
+# Outer planets are never combust in Jyotish — hardcode False
+OUTER_PLANETS = {'Neptune', 'Herschel', 'Pluto'}
 
 NAKSHATRAS = [
     'Ashwini', 'Bharani', 'Krittika', 'Rohini', 'Mrigashira', 'Ardra',
@@ -222,11 +229,12 @@ def generate_daily_positions(start_date, end_date):
         })
         
         # Add combustion flag
+        # Sun, Rahu, Ketu, and outer planets (Neptune/Herschel/Pluto) are never combust
         for pos in day_positions:
-            if pos['planet'] not in ['Sun', 'Rahu', 'Ketu']:
-                pos['combust'] = is_combust(sun_longitude, pos['longitude'], pos['planet'])
-            else:
+            if pos['planet'] in ('Sun', 'Rahu', 'Ketu') or pos['planet'] in OUTER_PLANETS:
                 pos['combust'] = False
+            else:
+                pos['combust'] = is_combust(sun_longitude, pos['longitude'], pos['planet'])
         
         all_positions.extend(day_positions)
         
