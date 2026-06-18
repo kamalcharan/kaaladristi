@@ -648,29 +648,27 @@ function buildScanStock(
 
 // ── VaNi Opportunity Rule — data-driven ────────────────────────
 /*
- * VANI OPPORTUNITY RULE — DATA DRIVEN
+ * VANI OPPORTUNITY RULE TYPES (data-driven via kd_scan_presets.vani_rule)
  *
- * vaniOpportunity is computed per scanner using the vani_rule column
- * from kd_scan_presets (mirrored in the SCAN_PRESETS static array).
+ * always_true                  → DB pre-filtered (VaNi Opportunity, Exit Watch)
+ * is_vani_s2                   → Stage 2 quality overlay (strength + position)
+ * is_vani_weakness             → Bear zone + short flow + volume + RS<-10
+ * is_vani_distrib_and_weakness → Distribution OR weakness (bearish scanners)
+ * is_vani_surge_or_breakout    → Volume surge OR breakout (momentum scanners)
+ * is_vani_smart                → Institutional accumulation signal
+ * is_vani_oversold             → Oversold bounce candidates
+ * null                         → No VaNi chip shown for this scanner
  *
- * To add VaNi qualification to a new scanner:
- *   1. Set vani_rule in kd_scan_presets DB row (migration or UPDATE)
- *   2. Mirror the value in SCAN_PRESETS static entry above
- *   3. If a new rule type is needed, add a case to computeVaniOpportunity()
- *   4. No other code changes needed
+ * To add new rule: add case here + set vani_rule in kd_scan_presets DB.
+ * No other code changes needed.
  *
- * Current rule types:
- *   always_true                  → DB pre-filtered (VaNi Opportunity scan)
- *   is_vani_s2                   → Stage 2 quality overlay (magic_rs>40, rvol>1.5, rsi 50–80)
- *   rvol_surge_and_52wh          → Breakout confirmation (future use)
- *   is_vani_surge_or_breakout    → Momentum confirmation (conviction_flow / breakout_surge)
- *   is_vani_distrib_and_weakness → Breakdown confirmation (power_sell / distribution_warning)
- *   null                         → No VaNi chip shown for this scanner
+ * Flags computed by: backfill_vani_flags.py (step 6j, daily)
+ * Exception: is_vani_s2 computed by backfill_stage_classification.py (step 6h)
  *
- * NOTE: bundle-based scan functions (scanPowerBuy etc.) currently derive
- * vaniOpportunity through buildScanStock → evaluateOpportunity (ATR/EMA band
- * config). Migrating those to computeVaniOpportunity requires adding is_vani_*
- * columns to the bundle EOD SELECT — deferred to a future sprint.
+ * NOTE: bundle-based scan functions (scanPowerBuy etc.) derive vaniOpportunity
+ * through buildScanStock → evaluateOpportunity (ATR/EMA band config).
+ * Migrating those to computeVaniOpportunity requires adding is_vani_* columns
+ * to the bundle EOD SELECT — deferred to a future sprint.
  * Direct-query fetch functions (fetchStage2Leaders etc.) use computeVaniOpportunity.
  */
 
@@ -681,6 +679,8 @@ interface VaniRow {
   is_vani_breakout?: boolean | null;
   is_vani_distrib?: boolean | null;
   is_vani_weakness?: boolean | null;
+  is_vani_smart?: boolean | null;
+  is_vani_oversold?: boolean | null;
   rvol?: number | null;
   close?: number | null;
   w52_high?: number | null;
@@ -699,9 +699,15 @@ function computeVaniOpportunity(row: VaniRow, vaniRule: string | null | undefine
     case 'is_vani_surge_or_breakout':
       return !!row.is_vani_surge || !!row.is_vani_breakout;
     case 'is_vani_distrib_and_weakness':
-      return !!row.is_vani_distrib && !!row.is_vani_weakness;
+      // OR logic — is_vani_distrib is sparse (typically 1–5 stocks/day)
+      // so OR ensures the bearish scanners still surface weakness signals
+      return !!row.is_vani_distrib || !!row.is_vani_weakness;
     case 'is_vani_weakness':
       return !!row.is_vani_weakness;
+    case 'is_vani_smart':
+      return !!row.is_vani_smart;
+    case 'is_vani_oversold':
+      return !!row.is_vani_oversold;
     default:
       return false;
   }
@@ -1401,7 +1407,8 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       'flow_type', 'volume_divergence_flag', 'delivery_pct',
       'dot_svd', 'dot_sbd', 'dot_syd',
       'supertrend_dir', 'ema_20', 'atr_14',
-      'is_vani_weakness',
+      'is_vani_weakness', 'is_vani_distrib', 'is_vani_surge',
+      'is_vani_breakout', 'is_vani_smart', 'is_vani_oversold',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S4')
@@ -1494,6 +1501,11 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       rs_percentile:        row.rs_percentile ?? null,
       stage:                row.stage ?? null,
       is_vani_weakness:     row.is_vani_weakness ?? null,
+      is_vani_distrib:      row.is_vani_distrib ?? null,
+      is_vani_surge:        row.is_vani_surge ?? null,
+      is_vani_breakout:     row.is_vani_breakout ?? null,
+      is_vani_smart:        row.is_vani_smart ?? null,
+      is_vani_oversold:     row.is_vani_oversold ?? null,
     };
   });
 }
@@ -1636,6 +1648,7 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
       'dot_svd', 'dot_sbd', 'dot_syd',
       'sniper_inst', 'sniper_hot',
       'ema_20', 'atr_14',
+      'is_vani_weakness', 'is_vani_distrib',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S4')
