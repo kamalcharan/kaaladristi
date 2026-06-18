@@ -84,7 +84,7 @@ export const PROB_STYLES: Record<string, string> = {
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-function fmtTransitDate(iso: string | null | undefined): string {
+export function fmtTransitDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const [y, m, d] = iso.split('-');
   return `${Number(d)} ${MONTHS[Number(m) - 1]} '${y.slice(2)}`;
