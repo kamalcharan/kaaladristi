@@ -792,10 +792,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.lineTo(x, h);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle  = hexToRgba(pb.color, 0.6);
-        ctx.font       = '8px sans-serif';
+        ctx.fillStyle  = hexToRgba(pb.color, 0.75);
+        ctx.font       = '11px serif';
         ctx.textAlign  = 'center';
-        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 9);
+        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 11);
         ctx.restore();
       }
 
