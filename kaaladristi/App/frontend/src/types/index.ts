@@ -538,6 +538,11 @@ export interface ScanStock {
   is_vani_strength?: boolean | null;
   is_vani_rs?: boolean | null;
   is_vani_weakness?: boolean | null;
+  is_vani_distrib?: boolean | null;
+  is_vani_smart?: boolean | null;
+  is_vani_oversold?: boolean | null;
+  is_vani_surge?: boolean | null;
+  is_vani_breakout?: boolean | null;
 }
 
 export interface ScanDefinition {
