@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { PulseBar, CorrelationState } from '@/services/visualPulseEngine';
+import { fmtDate } from '@/lib/dateUtils';
 
 /**
  * TimelineSlider — play/pause/scrub with chapter marks.
@@ -82,7 +83,7 @@ export default function TimelineSlider({ total, activeIndex, bars, corrHistory, 
 
   // Date display
   const activeBar = bars[activeIndex];
-  const dateStr = activeBar?.trade_date ?? '—';
+  const dateStr = fmtDate(activeBar?.trade_date);
   const isNow = activeIndex === max;
 
   const btnStyle: React.CSSProperties = {

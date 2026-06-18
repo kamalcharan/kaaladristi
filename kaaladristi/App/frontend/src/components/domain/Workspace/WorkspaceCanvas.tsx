@@ -89,9 +89,11 @@ function shortRuleName(displayName: string): string {
     .replace(/\s+/g, ' ').trim().substring(0, 20)
 }
 
+const _MD_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function fmtMD(iso: string | null | undefined): string {
   if (!iso) return ''
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+  const [, m, d] = iso.slice(0, 10).split('-')
+  return `${d}-${_MD_MON[+m - 1]}`
 }
 
 function GroupActiveIndicator({ tag }: { tag: string }) {
