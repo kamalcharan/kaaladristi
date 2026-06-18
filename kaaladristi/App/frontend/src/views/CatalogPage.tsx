@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import IndicatorsSection from '@/components/domain/Catalog/IndicatorsSection'
 import WidgetsSection from '@/components/domain/Catalog/WidgetsSection'
+import ScannersSection from '@/components/domain/Catalog/ScannersSection'
 import CatalogAstroSection from '@/components/domain/Catalog/CatalogAstroSection'
 import DeepDivePanel from '@/components/domain/Catalog/DeepDivePanel'
 import CatalogActionIsland from '@/components/domain/Catalog/CatalogActionIsland'
@@ -12,7 +13,7 @@ const CATALOG_SECTIONS = [
   { id: 'astro_rules',       label: 'Astro Rules',       comingSoon: false },
   { id: 'indicators',        label: 'Chart Indicators',  comingSoon: false },
   { id: 'widgets',           label: 'Intelligence Widgets', comingSoon: false },
-  { id: 'scanners',          label: 'Scanners',          comingSoon: true },
+  { id: 'scanners',          label: 'Scanners',          comingSoon: false },
 ] as const
 
 type CatalogSection = typeof CATALOG_SECTIONS[number]['id']
@@ -189,12 +190,7 @@ export default function CatalogPage() {
         {active === 'astro_rules'    && <CatalogAstroSection onSelect={setSelected} />}
         {active === 'indicators'     && <IndicatorsSection   onSelect={setSelected} />}
         {active === 'widgets'        && <WidgetsSection      onSelect={setSelected} />}
-        {active === 'scanners'       && (
-          <ComingSoonPlaceholder
-            title="Scanners"
-            description="Screener and scanner session coming soon."
-          />
-        )}
+        {active === 'scanners'       && <ScannersSection />}
       </div>
 
       {/* Deep dive panel — fixed slide-in, rendered at page level */}

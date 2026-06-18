@@ -497,7 +497,37 @@ export default function TradingChart({ data, height = 900, compact = false, work
       } else if (overlay.type === 'astro_marker') {
         // Deferred — requires km_astro_events wiring
       } else if (overlay.type === 'indicator_band') {
-        // Deferred — pivot levels require separate multi-series rendering
+        if (overlay.catalog_item_id === 'gann_sq9' && data.length > 0) {
+          const lastClose = data[data.length - 1].close
+          if (lastClose != null && lastClose > 0) {
+            const ANGLES = [45, 90, 135, 180, 225, 270, 315, 360]
+            const CARDINALS = new Set([90, 180, 270, 360])
+            const sqrt = Math.sqrt(lastClose)
+            for (const angle of ANGLES) {
+              const factor = (angle / 360) * 2
+              const resistance = Math.round(Math.pow(sqrt + factor, 2) * 100) / 100
+              const support    = Math.round(Math.pow(sqrt - factor, 2) * 100) / 100
+              const isCardinal = CARDINALS.has(angle)
+              const lStyle  = isCardinal ? LineStyle.Solid : LineStyle.Dashed
+              const lColor  = isCardinal ? 'rgba(201,168,76,0.80)' : 'rgba(201,168,76,0.32)'
+              const lWidth  = 1 as LineWidth
+              const rSeries = mainChart.addSeries(LineSeries, {
+                color: lColor, lineWidth: lWidth, lineStyle: lStyle,
+                priceLineVisible: false, lastValueVisible: isCardinal,
+                crosshairMarkerVisible: false, title: `S9 ${angle}° R`,
+              })
+              rSeries.setData(data.map(d => ({ time: toTime(d.trade_date), value: resistance })))
+              if (support > 0) {
+                const sSeries = mainChart.addSeries(LineSeries, {
+                  color: lColor, lineWidth: lWidth, lineStyle: lStyle,
+                  priceLineVisible: false, lastValueVisible: isCardinal,
+                  crosshairMarkerVisible: false, title: `S9 ${angle}° S`,
+                })
+                sSeries.setData(data.map(d => ({ time: toTime(d.trade_date), value: support })))
+              }
+            }
+          }
+        }
       }
     }
 

@@ -12,6 +12,11 @@ const ICONS: Record<string, string> = {
   conviction_flow:      '⊙',
   breakout_surge:       '⇑',
   stage_2_leaders:      '②',
+  stage_2_watch:        '◎',
+  vani_opportunity:     '✦',
+  stage_4_leaders:      '④',
+  stage_3_watch:        '③',
+  vani_exit_watch:      '✦',
 }
 
 // Color per preset
@@ -25,6 +30,11 @@ const ACCENT: Record<string, string> = {
   conviction_flow:      '#7c6af7',
   breakout_surge:       '#4ade80',
   stage_2_leaders:      '#f59e0b',
+  stage_2_watch:        '#f59e0b',
+  vani_opportunity:     '#7c6af7',
+  stage_4_leaders:      '#f87171',
+  stage_3_watch:        '#f97316',
+  vani_exit_watch:      '#f87171',
 }
 
 const ACCENT_BG: Record<string, string> = {
@@ -37,6 +47,11 @@ const ACCENT_BG: Record<string, string> = {
   conviction_flow:      'rgba(124,106,247,0.06)',
   breakout_surge:       'rgba(74,222,128,0.06)',
   stage_2_leaders:      'rgba(245,158,11,0.06)',
+  stage_2_watch:        'rgba(245,158,11,0.06)',
+  vani_opportunity:     'rgba(124,106,247,0.06)',
+  stage_4_leaders:      'rgba(248,113,113,0.06)',
+  stage_3_watch:        'rgba(249,115,22,0.06)',
+  vani_exit_watch:      'rgba(248,113,113,0.06)',
 }
 
 // Tags per preset
@@ -50,6 +65,11 @@ const TAGS: Record<string, string[]> = {
   conviction_flow:      ['delivery', 'institutional'],
   breakout_surge:       ['momentum', 'high-rvol'],
   stage_2_leaders:      ['trend-following', 'stage2', 'golden-cross'],
+  stage_2_watch:        ['stage2', 'pre-breakout'],
+  vani_opportunity:     ['vani', 'alpha-edge', 'rs-top20pct'],
+  stage_4_leaders:      ['stage4', 'death-cross', 'risk-watch'],
+  stage_3_watch:        ['stage3', 'topping', 'early-warning'],
+  vani_exit_watch:      ['vani', 'stage4', 'rs-bottom20pct'],
 }
 
 const TAG_COLOR: Record<string, { color: string; border: string }> = {
@@ -68,6 +88,17 @@ const TAG_COLOR: Record<string, { color: string; border: string }> = {
   'trend-following':   { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
   'stage2':            { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
   'golden-cross':      { color: '#fbbf24', border: 'rgba(251,191,36,0.3)' },
+  'pre-breakout':      { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+  'vani':              { color: '#7c6af7', border: 'rgba(124,106,247,0.3)' },
+  'alpha-edge':        { color: '#7c6af7', border: 'rgba(124,106,247,0.3)' },
+  'rs-top20pct':       { color: '#2dd4bf', border: 'rgba(45,212,191,0.3)' },
+  'stage4':            { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
+  'death-cross':       { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
+  'risk-watch':        { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
+  'stage3':            { color: '#f97316', border: 'rgba(249,115,22,0.3)' },
+  'topping':           { color: '#f97316', border: 'rgba(249,115,22,0.3)' },
+  'early-warning':     { color: '#f97316', border: 'rgba(249,115,22,0.3)' },
+  'rs-bottom20pct':    { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
 }
 
 export default function ScannersSection() {
