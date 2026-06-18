@@ -802,13 +802,25 @@ export default function TradingChart({ data, height = 900, compact = false, work
       // ── Future-event pins — band starts within the next 15 days ─────────
       // Animated pill: glyph + Nd countdown. Pulses via sine wave on opacity
       // and a gentle vertical bob so it catches the eye without being garish.
+      //
+      // Uses raw nonPanchak bands (pre-merge) rather than mergedBands because
+      // merging can absorb a future start date into a larger band whose `from`
+      // is already in the past — making the skip condition `from <= today` fire
+      // incorrectly. One pill per group (nearest upcoming start) is shown.
       const in15Days = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
       const animPhase = (Date.now() % 2400) / 2400        // 0→1 every 2.4 s
       const pulse     = 0.5 + 0.5 * Math.sin(animPhase * Math.PI * 2)  // 0→1→0
       const bob       = Math.round(pulse * 3)              // 0‒3 px vertical bob
 
-      for (const band of mergedBands) {
-        if (band.from <= today || band.from > in15Days) continue
+      // Collect nearest future start per group from the raw (pre-merge) bands
+      const nearestFuture = new Map<string, typeof nonPanchak[0]>()
+      for (const b of nonPanchak) {
+        if (b.from <= today || b.from > in15Days) continue
+        const cur = nearestFuture.get(b.groupTag)
+        if (!cur || b.from < cur.from) nearestFuture.set(b.groupTag, b)
+      }
+
+      for (const band of nearestFuture.values()) {
         const x = ts.timeToCoordinate(band.from as Time)
         if (x == null) continue
         const daysUntil = Math.round((new Date(band.from).getTime() - Date.now()) / 86400000)
