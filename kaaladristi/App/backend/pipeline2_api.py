@@ -2003,7 +2003,8 @@ _intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
 
 _VANI_FORBIDDEN_WORDS = frozenset({
     'buy', 'sell', 'recommend', 'predict', 'forecast',
-    'monitor', 'watch', 'assess', 'develop', 'potential',
+    # 'watch' intentionally allowed — the morning-brief prompt uses "watch for reversal"
+    'monitor', 'assess', 'develop', 'potential',
     'could indicate', 'may impact', 'heightened', 'significant',
     'dynamics', 'interplay', 'intellectual', 'recalibration',
 })
@@ -2240,6 +2241,313 @@ def panchang_insight(date: str):
             latency_ms=_latency,
         )
     return {"date": date, "insight": insight, "ai": insight is not None, "log_id": log_id}
+
+
+# Permanent in-memory cache — rule definitions don't change, so insights don't either.
+_rule_insight_cache: dict[str, dict] = {}
+
+
+@app.get('/api/ai/rule-insight')
+def rule_insight(rule_id: int):
+    """VaNi plain-language explanation of an astro rule.
+
+    Falls back to the rule's own remarks when the LLM is unavailable so the
+    DeepDive panel always has something to show.
+    """
+    cache_key = f"rule_insight:{rule_id}"
+    if cache_key in _rule_insight_cache:
+        return {**_rule_insight_cache[cache_key], "cached": True}
+
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rule_code, display_name, rule_type, base_bias,
+                       probability_label, remarks, tags, planet_1, planet_2
+                FROM km_astro_rule_master
+                WHERE id = %s AND is_deleted = FALSE
+                """,
+                (rule_id,),
+            )
+            rule = cur.fetchone()
+            if not rule:
+                raise HTTPException(status_code=404, detail="Rule not found")
+
+            cur.execute(
+                """
+                SELECT total_occurrences, confidence_score,
+                       avg_return_matched, avg_duration_days
+                FROM km_rule_confidence
+                WHERE rule_id = %s
+                LIMIT 1
+                """,
+                (rule_id,),
+            )
+            conf = cur.fetchone()
+    finally:
+        conn.close()
+
+    (rule_code, display_name, rule_type, base_bias,
+     prob_label, remarks, tags, planet_1, planet_2) = rule
+    tags = tags or []
+
+    conf_text = ""
+    if conf:
+        total_occ, conf_score, avg_ret, avg_dur = conf
+        conf_text = (
+            "\nConfidence stats:\n"
+            f"- Total signals: {total_occ if total_occ is not None else 'N/A'}\n"
+            f"- Win rate: {f'{float(conf_score):.0f}%' if conf_score is not None else 'N/A'}\n"
+            f"- Avg return: {f'{float(avg_ret):.2f}%' if avg_ret is not None else 'N/A'}\n"
+            f"- Avg duration: {f'{float(avg_dur):.1f} days' if avg_dur is not None else 'N/A'}"
+        )
+
+    user_msg = (
+        f"Rule: {display_name} ({rule_code})\n"
+        f"Type: {rule_type}\n"
+        f"Bias: {base_bias or 'neutral'} — {prob_label or 'unrated'} probability\n"
+        f"Planets: {(planet_1 or '')} {(planet_2 or '')}".rstrip() + "\n"
+        f"Tags: {', '.join(tags)}\n"
+        f"Remarks: {remarks or 'Not provided'}\n"
+        f"{conf_text}\n\n"
+        f"Explain this rule to a practitioner."
+    )
+
+    skill = _AI_SKILLS.get("rule_insight")
+    insight = None
+    if skill:
+        _t0 = time.monotonic()
+        insight = _ai_complete(
+            system=skill.system, user=user_msg,
+            max_tokens=skill.max_tokens, temperature=0.3, no_think=True,
+        )
+        _latency = int((time.monotonic() - _t0) * 1000)
+        if insight:
+            _log_interaction(
+                product="dristiq",
+                endpoint="/api/ai/rule-insight",
+                user_input=user_msg,
+                llm_response=insight,
+                system_prompt=skill.system,
+                context_payload={"rule_id": rule_id, "rule_code": rule_code},
+                model_version=_AI_MODEL,
+                latency_ms=_latency,
+            )
+
+    if insight:
+        payload = {"rule_id": rule_id, "rule_code": rule_code, "insight": insight}
+        _rule_insight_cache[cache_key] = payload          # cache only successful LLM output
+        return {**payload, "cached": False}
+
+    # No fallback text — when the LLM is unavailable, return a null insight and let
+    # the frontend render nothing (clean absence over a placeholder).
+    return {"rule_id": rule_id, "rule_code": rule_code, "insight": None, "ai": False}
+
+
+def _query_active_rules_for_tag(conn, tag: str, date_str: str, limit: int = 5) -> list[dict]:
+    """Rules in a tag group whose transit window contains date_str (active now),
+    ordered by historical confidence, with confidence stats joined."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT r.id, r.rule_code, r.display_name, r.base_bias, r.probability_label,
+                   t.start_date, t.end_date, (t.end_date - %s::date) AS days_remaining,
+                   c.confidence_score, c.avg_return_matched, c.total_occurrences
+            FROM km_rule_transits t
+            JOIN km_astro_rule_master r ON r.id = t.rule_id
+            LEFT JOIN km_rule_confidence c ON c.rule_id = r.id
+            WHERE %s = ANY(r.tags)
+              AND r.catalog_visible = TRUE
+              AND r.is_deleted = FALSE
+              AND %s::date BETWEEN t.start_date AND t.end_date
+            ORDER BY c.confidence_score DESC NULLS LAST, t.start_date DESC
+            LIMIT %s
+            """,
+            (date_str, tag, date_str, limit),
+        )
+        rows = cur.fetchall()
+    return [{
+        'id': r[0], 'rule_code': r[1], 'display_name': r[2],
+        'base_bias': r[3], 'probability_label': r[4],
+        'start_date': r[5].isoformat() if r[5] else None,
+        'end_date':   r[6].isoformat() if r[6] else None,
+        'days_remaining': int(r[7]) if r[7] is not None else None,
+        'confidence_score':   float(r[8]) if r[8] is not None else None,
+        'avg_return_matched': float(r[9]) if r[9] is not None else None,
+        'total_occurrences':  r[10],
+    } for r in rows]
+
+
+def _query_upcoming_rules_for_tag(conn, tag: str, date_str: str, limit: int = 3) -> list[dict]:
+    """Rules in a tag group whose transit window starts within 90 days after date_str."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT r.id, r.rule_code, r.display_name, r.base_bias, r.probability_label,
+                   t.start_date, t.end_date, (t.start_date - %s::date) AS days_until,
+                   c.confidence_score, c.avg_return_matched, c.total_occurrences
+            FROM km_rule_transits t
+            JOIN km_astro_rule_master r ON r.id = t.rule_id
+            LEFT JOIN km_rule_confidence c ON c.rule_id = r.id
+            WHERE %s = ANY(r.tags)
+              AND r.catalog_visible = TRUE
+              AND r.is_deleted = FALSE
+              AND t.start_date > %s::date
+              AND t.start_date <= %s::date + INTERVAL '90 days'
+            ORDER BY t.start_date ASC
+            LIMIT %s
+            """,
+            (date_str, tag, date_str, date_str, limit),
+        )
+        rows = cur.fetchall()
+    return [{
+        'id': r[0], 'rule_code': r[1], 'display_name': r[2],
+        'base_bias': r[3], 'probability_label': r[4],
+        'start_date': r[5].isoformat() if r[5] else None,
+        'end_date':   r[6].isoformat() if r[6] else None,
+        'days_until': int(r[7]) if r[7] is not None else None,
+        'confidence_score':   float(r[8]) if r[8] is not None else None,
+        'avg_return_matched': float(r[9]) if r[9] is not None else None,
+        'total_occurrences':  r[10],
+    } for r in rows]
+
+
+def _fmt_brief_date(iso: str | None) -> str:
+    """'2026-06-22' -> 'Jun 22' (platform-safe, no %-d)."""
+    if not iso:
+        return ''
+    try:
+        dt = datetime.strptime(iso, '%Y-%m-%d')
+        return f"{dt.strftime('%b')} {dt.day}"
+    except Exception:
+        return iso
+
+
+def _rule_brief_context(conn, rule_id: int, date_str: str) -> dict | None:
+    """Full morning-brief context for one rule: meta + confidence + current/next window."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT rule_code, display_name, base_bias, probability_label, tags "
+            "FROM km_astro_rule_master WHERE id = %s",
+            (rule_id,),
+        )
+        meta = cur.fetchone()
+        if not meta:
+            return None
+        ctx = {
+            'rule_id': rule_id,
+            'rule_code': meta[0], 'display_name': meta[1],
+            'base_bias': meta[2], 'probability_label': meta[3], 'tags': meta[4] or [],
+            'total_occurrences': None, 'confidence_score': None, 'avg_return_matched': None,
+            'status': 'inactive', 'start_date': None, 'end_date': None,
+            'days_remaining': None, 'days_until': None,
+        }
+        cur.execute(
+            "SELECT total_occurrences, confidence_score, avg_return_matched "
+            "FROM km_rule_confidence WHERE rule_id = %s LIMIT 1",
+            (rule_id,),
+        )
+        c = cur.fetchone()
+        if c:
+            ctx['total_occurrences']  = c[0]
+            ctx['confidence_score']   = float(c[1]) if c[1] is not None else None
+            ctx['avg_return_matched'] = float(c[2]) if c[2] is not None else None
+        cur.execute(
+            "SELECT start_date, end_date, (end_date - %s::date) FROM km_rule_transits "
+            "WHERE rule_id = %s AND %s::date BETWEEN start_date AND end_date "
+            "ORDER BY start_date DESC LIMIT 1",
+            (date_str, rule_id, date_str),
+        )
+        w = cur.fetchone()
+        if w:
+            ctx['status'] = 'active'
+            ctx['start_date'] = w[0].isoformat() if w[0] else None
+            ctx['end_date']   = w[1].isoformat() if w[1] else None
+            ctx['days_remaining'] = int(w[2]) if w[2] is not None else None
+        else:
+            cur.execute(
+                "SELECT start_date, end_date, (start_date - %s::date) FROM km_rule_transits "
+                "WHERE rule_id = %s AND start_date > %s::date "
+                "ORDER BY start_date ASC LIMIT 1",
+                (date_str, rule_id, date_str),
+            )
+            u = cur.fetchone()
+            if u:
+                ctx['status'] = 'upcoming'
+                ctx['start_date'] = u[0].isoformat() if u[0] else None
+                ctx['end_date']   = u[1].isoformat() if u[1] else None
+                ctx['days_until'] = int(u[2]) if u[2] is not None else None
+    return ctx
+
+
+def _build_astro_brief_message(ctx: dict, name: str, group_tag: str | None) -> str:
+    """Structured morning-brief user_message for an astro / group overlay rule —
+    feeds the LLM status, confidence %, avg return, and time-remaining context."""
+    bias  = ctx.get('base_bias') or 'neutral'
+    conf  = ctx.get('confidence_score')
+    avg   = ctx.get('avg_return_matched')
+    total = ctx.get('total_occurrences')
+
+    if ctx['status'] == 'active':
+        dr = ctx.get('days_remaining')
+        status_line = (
+            f"ACTIVE — started {_fmt_brief_date(ctx['start_date'])}, "
+            f"ends {_fmt_brief_date(ctx['end_date'])}"
+            + (f" ({dr} days left)" if dr is not None else "")
+        )
+    elif ctx['status'] == 'upcoming':
+        du = ctx.get('days_until')
+        status_line = (
+            f"UPCOMING — starts {_fmt_brief_date(ctx['start_date'])}"
+            + (f" (in {du} days)" if du is not None else "")
+        )
+    else:
+        status_line = "Not currently in a transit window"
+
+    if conf is not None and total:
+        hist_line = (
+            f"{conf:.0f}% {bias}, "
+            + (f"avg {avg:+.2f}%, " if avg is not None else "")
+            + f"over {total} occurrences"
+        )
+    else:
+        hist_line = "Insufficient history to correlate"
+
+    # Badge: prefer the historical correlation %, else the time context
+    if conf is not None:
+        badge = f"{conf:.0f}%"
+    elif ctx['status'] == 'active' and ctx.get('days_remaining') is not None:
+        badge = f"Active · {ctx['days_remaining']}d"
+    elif ctx['status'] == 'upcoming' and ctx.get('days_until') is not None:
+        badge = f"In {ctx['days_until']}d"
+    else:
+        badge = "Overlay"
+
+    tag_ctx = f" ({group_tag})" if group_tag else ""
+    return (
+        f"Rule: {ctx['display_name']} ({ctx['rule_code']})\n"
+        f"Status: {status_line}\n"
+        f"Historical: {hist_line}\n"
+        f"Current bias: {bias}{tag_ctx}\n\n"
+        f"Generate one observation card for this astro rule.\n"
+        f"Item name: {name}\n"
+        f"Badge must be: {badge}"
+    )
+
+
+@app.get('/api/ai/active-rule-today')
+def active_rule_today(tag: str, date: str | None = None):
+    """Which specific rules within a tag group are active on `date`, plus upcoming ones."""
+    tz_ist = __import__('zoneinfo').ZoneInfo('Asia/Kolkata')
+    date_str = date or datetime.now(tz=tz_ist).strftime('%Y-%m-%d')
+    conn = _conn()
+    try:
+        active_now = _query_active_rules_for_tag(conn, tag, date_str, limit=5)
+        upcoming   = _query_upcoming_rules_for_tag(conn, tag, date_str, limit=3)
+    finally:
+        conn.close()
+    return {'tag': tag, 'date': date_str, 'active_now': active_now, 'upcoming': upcoming}
 
 
 @app.get('/api/ai/breadth-insight')
@@ -3685,7 +3993,9 @@ def vani_daily(req: VaNiDailyRequest):
                 f"Badge must be: {total_signals} signals\n"
                 f'Explain: First sentence — state today\'s conditions directly using this exact format:\n'
                 f'"Today is {vara} (lord: {vara_lord}), Nakshatra {nak_name} (lord: {nak_lord}), Tithi {tithi} {paksha}, Yoga {yoga}."\n'
-                f'Second sentence must be exactly: "{total_signals} rule signals active today — {positive} positive, {negative} negative."\n'
+                f'Second sentence: state the net signal balance and what it MEANS, using this exact format: '
+                f'"{positive} positive signals vs {negative} negative — net '
+                f'{"bullish" if positive > negative else "bearish" if negative > positive else "balanced"} bias today."\n'
                 f"{transition_note}\n"
                 f"Do not use the word \"associated\". Do not interpret. Just state the facts."
             ),
@@ -3716,37 +4026,48 @@ def vani_daily(req: VaNiDailyRequest):
         astro_items: list[dict] = []
         for o in active_astro_overlays:
             cid  = o.get('catalog_item_id', '')
-            name = o.get('name') or _resolve_display_name(cid, active_overlays)
-            n    = _get_rule_confidence_for_cid(cid, conn)
-            # Resolve DB rule_id for action_target
-            rule_code = cid.replace('astro_rule:', '').upper()
-            rule_db_id: int | None = None
-            try:
-                with conn.cursor() as _cur:
-                    _cur.execute(
-                        "SELECT id FROM km_astro_rule_master WHERE UPPER(rule_code) IN (%s, %s) LIMIT 1",
-                        (rule_code, rule_code.replace('-', '_')),
-                    )
-                    _row = _cur.fetchone()
-                    rule_db_id = int(_row[0]) if _row else None
-            except Exception:
-                pass
+            fallback_name = o.get('name') or _resolve_display_name(cid, active_overlays)
+            is_group = cid.startswith('astro_group:')
+
+            # Resolve the SPECIFIC rule to describe (group → active/next rule for the
+            # tag; individual → the rule itself) plus its tag context.
+            rule_id: int | None = None
+            group_tag: str | None = None
+            if is_group:
+                group_tag = cid.split(':', 1)[1] if ':' in cid else cid
+                _next = (_query_active_rules_for_tag(conn, group_tag, date_str, limit=1)
+                         or _query_upcoming_rules_for_tag(conn, group_tag, date_str, limit=1))
+                if _next:
+                    rule_id = _next[0]['id']
+            else:
+                rc = cid.replace('astro_rule:', '').upper()
+                try:
+                    with conn.cursor() as _cur:
+                        _cur.execute(
+                            "SELECT id FROM km_astro_rule_master WHERE UPPER(rule_code) IN (%s, %s) LIMIT 1",
+                            (rc, rc.replace('-', '_')),
+                        )
+                        _row = _cur.fetchone()
+                        rule_id = int(_row[0]) if _row else None
+                except Exception:
+                    pass
+
+            # No resolvable rule with data → omit entirely (never emit a "No data yet" card)
+            if rule_id is None:
+                continue
+            ctx = _rule_brief_context(conn, rule_id, date_str)
+            if ctx is None:
+                continue
+            if not is_group:
+                group_tag = ctx['tags'][0] if ctx['tags'] else None
+            item_name = ctx['display_name'] if is_group else fallback_name
+
             astro_items.append({
                 'key': f"rule:{cid}:{date_str}",
                 'type': 'astro',
                 'action': 'view_rule',
-                'action_target': f"/rules/{rule_db_id}" if rule_db_id else None,
-                'user_message': (
-                    f"Generate one observation card for this astro rule.\n"
-                    f"Item name: {name}\n"
-                    f"Historical instances on Nifty: {n}\n"
-                    f"Status: Active today as chart overlay\n"
-                    f"Badge must be: {f'{n} instances' if n > 0 else 'No data yet'}\n"
-                    f"Explain: First sentence — what {name} is in plain language.\n"
-                    f"Second sentence — describe what kind of period or condition this rule marks historically.\n"
-                    f"Do not use the words: potential, may, could, might, suggest, indicate, volatility, shift, strategy.\n"
-                    f"Instead use: historically marks, has been associated with, on record, instances show."
-                ),
+                'action_target': f"/rules/{rule_id}",
+                'user_message': _build_astro_brief_message(ctx, item_name, group_tag),
             })
 
         # Fix 3 — priority order: panchang → confluences → astro (fill remaining)

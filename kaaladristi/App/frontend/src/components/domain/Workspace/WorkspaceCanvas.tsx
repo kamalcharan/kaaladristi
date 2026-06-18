@@ -9,6 +9,9 @@ import {
 import type { UserFramework, GridPosition } from '@/types/framework'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { getCatalogItem } from '@/constants/catalogItems'
+import { astroGroupPillLabel } from '@/constants/astroGroupOverlays'
+import { useActiveRuleToday } from '@/hooks/useRuleInsight'
+import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
 import WorkspaceBlock from './WorkspaceBlock'
 import WorkspaceActionIsland from './WorkspaceActionIsland'
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer'
@@ -71,6 +74,69 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
         fontFamily: 'var(--font-mono, monospace)' }}>+ block</span>
     </div>
   )
+}
+
+// ── Group overlay "active today" indicator ────────────────────────────────────
+// On a group pill (e.g. ☿ Mercury): when the highest-confidence rule in that tag
+// is active today → green dot + short rule-name suffix + rich tooltip. When none
+// active but one is upcoming → gray dot + "next" tooltip. Otherwise renders nothing.
+function shortRuleName(displayName: string): string {
+  return displayName
+    .replace('Mercury', 'Mer').replace('Venus', 'Ven').replace('Jupiter', 'Jup')
+    .replace('Saturn', 'Sat').replace('Conjunction', 'Conj').replace('Retrograde', 'Rx')
+    .replace('Combust', 'Cmb').replace('Manifestation', 'Mfst')
+    .replace(/Same Nakshatra.*/, 'Nak')
+    .replace(/\s+/g, ' ').trim().substring(0, 20)
+}
+
+function fmtMD(iso: string | null | undefined): string {
+  if (!iso) return ''
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+}
+
+function GroupActiveIndicator({ tag }: { tag: string }) {
+  const { data } = useActiveRuleToday(tag)
+  const active   = data?.active_now?.[0]
+  const upcoming = data?.upcoming?.[0]
+
+  if (active) {
+    const hist = active.confidence_score != null
+      ? `\nHistorical: ${Math.round(active.confidence_score)}% ${active.base_bias ?? ''}`
+        + (active.avg_return_matched != null
+            ? `, avg ${active.avg_return_matched >= 0 ? '+' : ''}${active.avg_return_matched.toFixed(1)}%`
+            : '')
+      : ''
+    const tip =
+      `${active.display_name}${active.base_bias ? ` · ${active.base_bias}` : ''}\n`
+      + `Started ${fmtMD(active.start_date)} · ends ${fmtMD(active.end_date)}`
+      + (active.days_remaining != null ? ` (${active.days_remaining} days left)` : '')
+      + hist
+    return (
+      <span title={tip} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 2, flexShrink: 0 }}>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,.55)', fontFamily: 'var(--font-mono,monospace)' }}>
+          · {shortRuleName(active.display_name)}
+        </span>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981',
+          boxShadow: '0 0 5px rgba(16,185,129,0.8)', flexShrink: 0 }} />
+      </span>
+    )
+  }
+
+  if (upcoming) {
+    const tip =
+      `Next: ${upcoming.display_name}\n`
+      + `Starts ${fmtMD(upcoming.start_date)}`
+      + (upcoming.days_until != null ? ` · in ${upcoming.days_until} days` : '')
+      + (upcoming.confidence_score != null
+          ? `\nHistorical: ${Math.round(upcoming.confidence_score)}% ${upcoming.base_bias ?? ''}`
+          : '')
+    return (
+      <span title={tip} style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,.35)',
+        marginLeft: 6, flexShrink: 0, display: 'inline-block' }} />
+    )
+  }
+
+  return null
 }
 
 // ── Color picker popover ──────────────────────────────────────────────────────
@@ -295,15 +361,17 @@ function IndexDropdown({
 interface Props {
   framework: UserFramework
   onOpenDrawer?: (pairKey: string | null) => void
+  onMorningBrief?: () => void
   islandOffset?: number
 }
 
-export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset = 0 }: Props) {
+export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrief, islandOffset = 0 }: Props) {
   const confluencePairs = useVisibleOverlayPairs()
   const [editMode, setEditMode] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerContext, setDrawerContext] = useState<'overlay' | 'block'>('block')
   const [picker, setPicker] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [explain, setExplain] = useState<{ tag: string; x: number; y: number } | null>(null)
   const [indexDropdown, setIndexDropdown] = useState<{ x: number; y: number } | null>(null)
 
   // Block resize state
@@ -461,7 +529,8 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
               if (overlays.length === 1 && !overlays[0].catalog_item_id.startsWith('astro_rule:')) {
                 const o = overlays[0]
                 const catalog = getCatalogItem(o.catalog_item_id)
-                const label = o.label ?? catalog?.display_name ?? o.catalog_item_id
+                // Group overlays (astro_group:*) render a glyph-prefixed label
+                const label = astroGroupPillLabel(o.catalog_item_id) ?? o.label ?? catalog?.display_name ?? o.catalog_item_id
                 const dotColor = effectiveDotColor(o.catalog_item_id, o.type, o.color)
                 const isPickerOpen = picker?.id === o.catalog_item_id
                 return (
@@ -470,6 +539,11 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
                       border: '1px solid rgba(255,255,255,.1)',
                       background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
                       opacity: o.visible ? 1 : 0.4, transition: 'all .15s' }}
+                    onContextMenu={e => {
+                      if (!o.catalog_item_id.startsWith('astro_group:')) return
+                      e.preventDefault()
+                      setExplain({ tag: o.catalog_item_id.slice('astro_group:'.length), x: e.clientX, y: e.clientY })
+                    }}
                   >
                     <button onClick={e => { e.stopPropagation(); if (isPickerOpen) { setPicker(null); return }
                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -485,6 +559,24 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
                         fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                         color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)' }}
                     >{label}</button>
+                    {o.catalog_item_id.startsWith('astro_group:') && (
+                      <GroupActiveIndicator tag={o.catalog_item_id.slice('astro_group:'.length)} />
+                    )}
+                    {o.catalog_item_id.startsWith('astro_group:') && (
+                      <button
+                        title={`What is ${label} active today?`}
+                        onClick={e => {
+                          e.stopPropagation()
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                          setExplain({ tag: o.catalog_item_id.slice('astro_group:'.length), x: rect.left, y: rect.bottom })
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 18, height: 18, border: 'none', background: 'transparent', cursor: 'pointer',
+                          fontSize: 11, color: 'rgba(157,143,249,.7)', transition: 'color .15s' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#9d8ff9' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(157,143,249,.7)' }}
+                      >ⓘ</button>
+                    )}
                     <button onClick={() => removeOverlay(o.catalog_item_id)}
                       style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 20, height: 20, borderRadius: '0 100px 100px 0',
@@ -511,6 +603,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
                     border: '1px solid rgba(255,255,255,.1)',
                     background: anyVisible ? 'rgba(255,255,255,.05)' : 'transparent',
                     opacity: anyVisible ? 1 : 0.4, transition: 'all .15s' }}
+                  onContextMenu={e => { e.preventDefault(); setExplain({ tag: pillLabel, x: e.clientX, y: e.clientY }) }}
                 >
                   {/* Group color dot */}
                   <span style={{ width: 10, height: 10, marginLeft: 8, borderRadius: '50%', flexShrink: 0,
@@ -530,6 +623,21 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
                       <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>{countBadge}</span>
                     )}
                   </button>
+
+                  {/* Explain — active rule today + VaNi interpretation */}
+                  <button
+                    title={`What is ${pillLabel} active today?`}
+                    onClick={e => {
+                      e.stopPropagation()
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                      setExplain({ tag: pillLabel, x: rect.left, y: rect.bottom })
+                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 18, height: 18, border: 'none', background: 'transparent', cursor: 'pointer',
+                      fontSize: 11, color: 'rgba(157,143,249,.7)', transition: 'color .15s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#9d8ff9' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(157,143,249,.7)' }}
+                  >ⓘ</button>
 
                   {/* Remove all in group */}
                   <button
@@ -722,6 +830,16 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
         )
       })()}
 
+      {/* Overlay explain popover — active rule today + VaNi interpretation */}
+      {explain && (
+        <OverlayExplainPopover
+          tag={explain.tag}
+          anchorX={explain.x}
+          anchorY={explain.y}
+          onClose={() => setExplain(null)}
+        />
+      )}
+
       {/* Index dropdown */}
       {indexDropdown && (
         <IndexDropdown
@@ -732,7 +850,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, islandOffset 
         />
       )}
 
-      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} bottomOffset={islandOffset} />
+      <WorkspaceActionIsland onOpen={onOpenDrawer ?? (() => {})} onMorningBrief={onMorningBrief} bottomOffset={islandOffset} />
 
       {/* VaNi confluence monitors — one per visible overlay pair, no render output */}
       {confluencePairs.map(([a, b]) => (

@@ -7,6 +7,7 @@ import { RANGE_RULE_TYPES } from '@/constants/frameworkConstants'
 import { TagChip } from '@/constants/ruleTagColors'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAddToFramework } from '@/hooks/useAddToFramework'
+import RuleInsightCard from '@/components/domain/VaNi/RuleInsightCard'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import InlineGate from '@/components/workspace/InlineGate'
@@ -173,6 +174,9 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
 
   return (
     <>
+      {/* VaNi interpretation — lead with it, right under the heading (hidden when none) */}
+      <RuleInsightCard ruleId={item.id ?? null} className="mt-0 mb-5" />
+
       {/* Remarks */}
       {item.remarks && (
         <div style={{ marginBottom: 18 }}>
@@ -356,31 +360,6 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
       >
         Full Analysis →
       </button>
-
-      {/* VaNi placeholder */}
-      <div style={{
-        background: 'var(--accent-glow)',
-        border: '1px solid var(--accent-glow)',
-        borderRadius: 8,
-        padding: '12px 14px',
-        display: 'flex',
-        gap: 10,
-        alignItems: 'flex-start',
-      }}>
-        <div style={{
-          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-          background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, fontWeight: 700, color: '#fff',
-          fontFamily: 'var(--font-mono, monospace)',
-        }}>
-          Vᴺ
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-          VaNi interpretation for this rule will appear here once the
-          {' '}<em style={{ color: 'var(--gold)', fontStyle: 'normal' }}>rule insight</em> skill is wired.
-        </p>
-      </div>
     </>
   )
 }

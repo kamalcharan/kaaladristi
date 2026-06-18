@@ -21,6 +21,7 @@ import {
   type CandlestickData,
   type HistogramData,
   type LineData,
+  type WhitespaceData,
   type SeriesMarker,
   type Time,
   type LineWidth,
@@ -71,6 +72,8 @@ interface TradingChartProps {
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
+  /** Fired when the user clicks an astro band — gives the band + screen coords. */
+  onZoneClick?: (band: AstroBand, clientX: number, clientY: number) => void;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -83,6 +86,37 @@ function hexToRgba(hex: string, alpha: number): string {
 
 function toTime(dateStr: string): Time {
   return dateStr as Time;
+}
+
+// Days of empty time-axis padding added on each side of the price data so astro
+// overlay zones can paint before the first bar and into the future (past today).
+const AXIS_PAD_DAYS = 90;
+
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Calendar dates in [fromStr, toStr) as YYYY-MM-DD whitespace anchors. */
+function dayRange(fromStr: string, toStr: string): string[] {
+  const out: string[] = [];
+  let cur = fromStr;
+  while (cur < toStr) { out.push(cur); cur = addDays(cur, 1); }
+  return out;
+}
+
+/** Short top-of-line label for a single-day point-event marker. */
+function pointMarkerLabel(ruleCode: string): string {
+  const rc = ruleCode.toUpperCase();
+  if (rc.startsWith('TRN-MER-RIS-W')) return 'Mer↑';
+  if (rc.startsWith('TRN-MER-RIS-E')) return 'Mer↓';
+  if (rc.startsWith('TRN-VEN-RIS-W')) return 'Ven↑';
+  if (rc.startsWith('TRN-VEN-RIS-E')) return 'Ven↓';
+  const bay = rc.match(/^BAY-R0*(\d+)/);
+  if (bay) return `B${bay[1]}`;
+  if (rc.startsWith('DN')) return ruleCode.replace(/^DN[-_]?/i, '').slice(0, 3) || 'DN';
+  return ruleCode.slice(0, 3);
 }
 
 // ── Chart colors — read from CSS custom properties at render time ──
@@ -137,7 +171,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], onVisibleRangeChange, onCrosshairMove }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], onVisibleRangeChange, onCrosshairMove, onZoneClick }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -145,6 +179,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const bandCanvasRef = useRef<HTMLCanvasElement>(null);
   const mainChartRef  = useRef<IChartApi | null>(null);
   const drawBandsRef  = useRef<(() => void) | null>(null);
+  // # of leading whitespace points prepended to the candle series (workspace
+  // mode only). Logical indices are offset by this vs. the `data` array.
+  const leadOffsetRef = useRef(0);
 
   const chartsRef = useRef<IChartApi[]>([]);
 
@@ -209,7 +246,33 @@ export default function TradingChart({ data, height = 900, compact = false, work
       low: d.low,
       close: d.close,
     }));
-    candleSeries.setData(candleData);
+
+    // Workspace mode only: extend the time axis ±AXIS_PAD_DAYS with whitespace so
+    // overlay zones can paint 3 months before the first bar and 3 months past
+    // today (the future). Whitespace points render nothing but make those dates
+    // addressable on the time scale (timeToCoordinate returns null off-scale).
+    // Legacy multi-pane mode is left untouched (sub-panes have no whitespace, so
+    // padding the main pane would desync their shared logical ranges).
+    let leadOffset = 0;
+    let padFrom: string | null = null;
+    let padTo: string | null = null;
+    if (workspaceMode) {
+      const firstDate = data[0].trade_date;
+      const lastDate  = data[data.length - 1].trade_date;
+      const todayStr  = new Date().toISOString().slice(0, 10);
+      const padEndAnchor = lastDate > todayStr ? lastDate : todayStr;
+      padFrom = addDays(firstDate, -AXIS_PAD_DAYS);
+      padTo   = addDays(padEndAnchor, AXIS_PAD_DAYS);
+      const leadWs: WhitespaceData<Time>[] = dayRange(padFrom, firstDate)
+        .map((t) => ({ time: toTime(t) }));
+      const trailWs: WhitespaceData<Time>[] = dayRange(addDays(lastDate, 1), addDays(padTo, 1))
+        .map((t) => ({ time: toTime(t) }));
+      leadOffset = leadWs.length;
+      candleSeries.setData([...leadWs, ...candleData, ...trailWs]);
+    } else {
+      candleSeries.setData(candleData);
+    }
+    leadOffsetRef.current = leadOffset;
 
     // Volume histogram (overlay, pinned to bottom)
     const volumeSeries = mainChart.addSeries(HistogramSeries, {
@@ -437,8 +500,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
     if (onVisibleRangeChange) {
       mainChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (!range) return;
-        const from = data[Math.max(0, Math.round(range.from))]?.trade_date;
-        const to   = data[Math.min(data.length - 1, Math.round(range.to))]?.trade_date;
+        // range is logical over the (whitespace-padded) time scale — shift back
+        // into `data` index space and clamp to the real bars.
+        const clamp = (i: number) => Math.max(0, Math.min(data.length - 1, i));
+        const from = data[clamp(Math.round(range.from) - leadOffset)]?.trade_date;
+        const to   = data[clamp(Math.round(range.to) - leadOffset)]?.trade_date;
         if (from && to) onVisibleRangeChange(from, to);
       });
     }
@@ -452,7 +518,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
       });
     }
 
-    mainChart.timeScale().fitContent();
+    // Workspace mode: pin the view to the full padded window (±3mo) so future
+    // and pre-data overlay zones are visible. Otherwise fit to data.
+    if (workspaceMode && padFrom && padTo) {
+      mainChart.timeScale().setVisibleRange({ from: padFrom as Time, to: padTo as Time });
+    } else {
+      mainChart.timeScale().fitContent();
+    }
 
     // Store ref so the bands canvas effect can reach the time scale
     mainChartRef.current = mainChart;
@@ -470,12 +542,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
     const idx = data.findIndex((d) => d.trade_date === highlightDate);
     if (idx < 0) return;
 
-    // Center the highlighted bar in view with some padding
+    // Center the highlighted bar in view with some padding. idx is a `data`
+    // index — shift into the padded logical space via the lead offset.
+    const offset = leadOffsetRef.current;
     const barsToShow = 60;
     const from = Math.max(0, idx - barsToShow / 2);
     const to = Math.min(data.length - 1, from + barsToShow);
     chartsRef.current.forEach((chart) => {
-      chart.timeScale().setVisibleLogicalRange({ from, to });
+      chart.timeScale().setVisibleLogicalRange({ from: from + offset, to: to + offset });
     });
   }, [highlightDate, data]);
 
@@ -538,8 +612,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
         groupTag: string
       }
 
-      const panchakBands = astroBands.filter(b => b.isPanchak)
-      const nonPanchak   = astroBands.filter(b => !b.isPanchak)
+      // Single-day events render as marker lines (handled separately below), never zones.
+      const pointBands   = astroBands.filter(b => b.isPoint)
+      const panchakBands = astroBands.filter(b => b.isPanchak && !b.isPoint)
+      const nonPanchak   = astroBands.filter(b => !b.isPanchak && !b.isPoint)
 
       // Group by groupTag
       const byGroup = new Map<string, typeof nonPanchak>()
@@ -670,6 +746,28 @@ export default function TradingChart({ data, height = 900, compact = false, work
           ctx.setLineDash([])
         }
       }
+
+      // ── Point-event markers — single-day events as a thin vertical dashed line ──
+      // (BAY-R06/R27, planet rise/station, single-day DN rules). Zones above are
+      // untouched; these never merge and never fill.
+      for (const pb of pointBands) {
+        const x = ts.timeToCoordinate(pb.from as Time);
+        if (x == null) continue;
+        ctx.save();
+        ctx.strokeStyle = hexToRgba(pb.color, 0.4);
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle  = hexToRgba(pb.color, 0.6);
+        ctx.font       = '8px sans-serif';
+        ctx.textAlign  = 'center';
+        ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 9);
+        ctx.restore();
+      }
     }
 
     drawBandsRef.current = draw;
@@ -708,6 +806,25 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
       <div
         style={{ position: 'relative' }}
+        onContextMenu={e => {
+          if (!onZoneClick || astroBands.length === 0 || !mainChartRef.current) return;
+          const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const ts     = mainChartRef.current.timeScale();
+          let found: AstroBand | null = null;
+          for (const band of astroBands) {
+            const x1 = ts.timeToCoordinate(band.from as Time);
+            const x2 = ts.timeToCoordinate(band.to   as Time);
+            if (x1 == null || x2 == null) continue;
+            // Point markers are 1px lines — give them a small hit tolerance.
+            const pad   = band.isPoint ? 4 : 0;
+            const left  = Math.min(x1, x2) - pad;
+            const right = Math.max(x1, x2) + pad;
+            if (mouseX >= left && mouseX <= right) { found = band; break; }
+          }
+          // Only suppress the browser menu when the right-click lands on a zone.
+          if (found) { e.preventDefault(); onZoneClick(found, e.clientX, e.clientY); }
+        }}
         onMouseMove={e => {
           if (astroBands.length === 0 || !mainChartRef.current) {
             if (bandTooltip) setBandTooltip(null);

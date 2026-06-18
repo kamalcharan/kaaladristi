@@ -7,6 +7,7 @@ import type { UserFramework } from '@/types/framework'
 import { useAuthStore } from '@/stores/authStore'
 import type { KmProfile } from '@/types'
 import { getCatalogItem } from '@/constants/catalogItems'
+import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
 import { fetchCatalogRules } from '@/pages/RuleEngine/ruleService'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 
@@ -91,6 +92,7 @@ interface VaniBriefObs {
   action?:       string
   action_target?: string
   item_key?:     string
+  log_id?:       string
 }
 
 interface VaniBriefResult {
@@ -162,11 +164,15 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose 
 
   const items = useComputeBriefItems({ navigate, framework, vaniCorrelations })
 
-  if (items.length === 0) return null
+  // Render nothing only when there's no inline teaser AND the modal isn't requested.
+  // The modal builds its own data from the framework, so it can open on demand
+  // (e.g. the Action Island button) even with an empty inline teaser.
+  if (items.length === 0 && !modalOpen) return null
 
   return (
     <>
-      {/* Inline card */}
+      {/* Inline card — shown only when there are items to tease */}
+      {items.length > 0 && (
       <div
         onClick={onModalOpen}
         style={{
@@ -276,6 +282,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose 
           </div>
         ))}
       </div>
+      )}
 
       {/* Modal */}
       {modalOpen && (
@@ -298,6 +305,7 @@ function MorningModal({ items, profile, onClose }: {
   const dateStr = `${dd}-${mmm}-${yyyy}`
   const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) + ' IST'
 
+  const navigate = useNavigate()
   const { framework, vaniCorrelations } = useFrameworkStore()
   const { isAdmin } = useAuthStore()
   const queryClient = useQueryClient()
@@ -320,8 +328,15 @@ function MorningModal({ items, profile, onClose }: {
   }, [astroRules])
 
   // Resolve display name — no fallbacks. If unresolved, item is dropped entirely.
-  const resolveName = (cid: string): string | null =>
-    getCatalogItem(cid)?.display_name ?? astroRuleNames[cid] ?? null
+  // Group overlays (astro_group:Mercury) aren't catalog items or rules, so resolve
+  // them from the group registry — otherwise they'd be dropped before the backend.
+  const resolveName = (cid: string): string | null => {
+    if (cid.startsWith('astro_group:')) {
+      return ASTRO_GROUP_OVERLAYS.find(g => g.id === cid)?.display_name
+        ?? cid.slice('astro_group:'.length)
+    }
+    return getCatalogItem(cid)?.display_name ?? astroRuleNames[cid] ?? null
+  }
 
   const activeOverlays = useMemo(() => {
     if (!astroRulesReady) return []
@@ -609,15 +624,21 @@ function useComputeBriefItems({
 }): BriefItem[] {
   const items: BriefItem[] = []
 
-  // 1. Active astro overlays from chart_overlays
+  // 1. Active astro overlays from chart_overlays — individual rules AND group overlays
   const astroOverlays = (framework?.chart_overlays ?? [])
-    .filter((o: UserFramework['chart_overlays'][number]) => o.catalog_item_id.startsWith('astro_rule:') && o.visible)
+    .filter((o: UserFramework['chart_overlays'][number]) =>
+      (o.catalog_item_id.startsWith('astro_rule:') || o.catalog_item_id.startsWith('astro_group:')) && o.visible)
 
   for (const overlay of astroOverlays.slice(0, 1)) {
+    const isGroup = overlay.catalog_item_id.startsWith('astro_group:')
     items.push({
       type:        'astro',
-      title:       fmtId(overlay.catalog_item_id),
-      description: 'Astro rule active as chart overlay in your framework.',
+      title:       isGroup
+        ? `${overlay.catalog_item_id.slice('astro_group:'.length)} (group)`
+        : fmtId(overlay.catalog_item_id),
+      description: isGroup
+        ? 'Astro rule group active as chart overlay in your framework.'
+        : 'Astro rule active as chart overlay in your framework.',
       badge:       'Active overlay',
       dot:         'var(--gold, #f59e0b)',
       action:      () => navigate('/workspace'),

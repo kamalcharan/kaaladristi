@@ -144,7 +144,7 @@ export default function WorkspacePage() {
       </div>
 
       {/* Canvas */}
-      <WorkspaceCanvas framework={framework!} onOpenDrawer={openDrawer} islandOffset={isBeta && !betaBarDismissed ? 36 : 0} />
+      <WorkspaceCanvas framework={framework!} onOpenDrawer={openDrawer} onMorningBrief={() => setMorningModalOpen(true)} islandOffset={isBeta && !betaBarDismissed ? 36 : 0} />
 
       {/* Correlation Drawer */}
       <CorrelationDrawer

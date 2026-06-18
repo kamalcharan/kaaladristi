@@ -8,7 +8,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { RANGE_RULE_TYPES, PAID_TIERS } from '@/constants/frameworkConstants'
 import { cn } from '@/lib/utils'
 import InlineGate from '@/components/workspace/InlineGate'
+import { useToast, ToastContainer } from '@/components/ui'
 import type { CatalogItem } from '@/constants/catalogItems'
+import { ASTRO_GROUP_OVERLAYS, type AstroGroupOverlay } from '@/constants/astroGroupOverlays'
 import type { DeepDiveItem } from './DeepDivePanel'
 import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
 
@@ -186,9 +188,13 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
 
   const { addBlock, addOverlay, isBlockActive, isOverlayActive, updateOverlayColor, updateOverlayOpacity } = useFrameworkStore()
   const [gateOpen, setGateOpen] = useState(false)
+  const { toasts, toast, dismiss } = useToast()
   // Per-group-tag color/opacity — keyed by group tag (e.g. 'Panchak', 'Mercury')
   const [tagColors, setTagColors]       = useState<Record<string, string>>({})
   const [tagOpacities, setTagOpacities] = useState<Record<string, number>>({})
+  // Group-overlay color/opacity — keyed by group id (e.g. 'astro_group:Mercury')
+  const [groupColors, setGroupColors]       = useState<Record<string, string>>({})
+  const [groupOpacities, setGroupOpacities] = useState<Record<string, number>>({})
 
   // Shared query keys with RuleList — no duplicate network calls when both are mounted
   const { data: rules = [], isLoading, isError } = useQuery({
@@ -312,24 +318,45 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     }
   }
 
-  /** Add all inactive rules belonging to a group tag — range → overlay, point → panel_block. */
-  function handleAddGroup(groupTag: string, e: React.MouseEvent) {
+  /**
+   * Add ONE virtual group overlay (astro_group:<Tag>). At render time the
+   * overlay service expands it into every range rule carrying the tag, drawn as
+   * a single merged layer — so the workspace shows one pill, not N.
+   */
+  function handleAddGroupOverlay(group: AstroGroupOverlay, e: React.MouseEvent) {
     e.stopPropagation()
     const tier = useAuthStore.getState().profile?.tier ?? 'free'
     if (!PAID_TIERS.includes(tier as typeof PAID_TIERS[number])) {
       setGateOpen(true)
       return
     }
-    const color = tagColors[groupTag] ?? getGroupDefaultColor(groupTag)
-    for (const r of rules) {
-      if (getGroupTag(r) !== groupTag) continue
-      const id = `astro_rule:${r.rule_code}`
-      if (isRangeRule(r)) {
-        if (!isOverlayActive(id)) addOverlay(ruleToCatalogItem(r), color)
-      } else {
-        if (!isBlockActive(id)) addBlock(ruleToCatalogItem(r))
-      }
-    }
+    if (isOverlayActive(group.id)) return
+    addOverlay(group, groupColors[group.id] ?? group.color)
+    toast('success', `Added ${group.display_name} overlay to framework`)
+  }
+
+  /** Effective color for a group pill: live overlay → local pick → default. */
+  function groupEffectiveColor(group: AstroGroupOverlay): string {
+    const stored = framework?.chart_overlays.find(o => o.catalog_item_id === group.id)
+    return stored?.color ?? groupColors[group.id] ?? group.color ?? '#6366f1'
+  }
+
+  /** Effective opacity for a group pill: live overlay → local pick → 0.10. */
+  function groupEffectiveOpacity(group: AstroGroupOverlay): number {
+    const stored = framework?.chart_overlays.find(o => o.catalog_item_id === group.id)
+    return stored?.opacity ?? groupOpacities[group.id] ?? 0.10
+  }
+
+  /** Change a group overlay's color — updates the live overlay if already added. */
+  function handleGroupColorChange(group: AstroGroupOverlay, color: string) {
+    setGroupColors(prev => ({ ...prev, [group.id]: color }))
+    if (isOverlayActive(group.id)) updateOverlayColor(group.id, color)
+  }
+
+  /** Change a group overlay's opacity — updates the live overlay if already added. */
+  function handleGroupOpacityChange(group: AstroGroupOverlay, opacity: number) {
+    setGroupOpacities(prev => ({ ...prev, [group.id]: opacity }))
+    if (isOverlayActive(group.id)) updateOverlayOpacity(group.id, opacity)
   }
 
   const ruleTypes = useMemo(
@@ -341,6 +368,15 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     () => Array.from(new Set(rules.flatMap(r => r.tags ?? []))).sort(),
     [rules],
   )
+
+  // Total rule count per tag — drives the consistent count badge on every chip
+  const tagCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const rule of rules) {
+      for (const tag of rule.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1
+    }
+    return counts
+  }, [rules])
 
   function toggleTag(tag: string) {
     setActiveTags(prev =>
@@ -447,6 +483,60 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
         </span>
       </div>
 
+      {/* Group Overlays — one pill adds an entire tag's range rules as a single overlay layer */}
+      <div style={{ marginBottom: 16 }}>
+        <p style={{
+          fontSize: 9, color: 'var(--text-muted)', marginBottom: 8,
+          fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+        }}>
+          Group Overlays
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {ASTRO_GROUP_OVERLAYS.map(group => {
+            const added = isOverlayActive(group.id)
+            return (
+              <div
+                key={group.id}
+                title={group.description}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '4px 10px 4px 8px', borderRadius: 8,
+                  border: `1px solid ${added ? 'rgba(124,106,247,0.4)' : 'var(--border)'}`,
+                  background: added ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.05)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {/* Color/opacity control — click the dot to recolour the group overlay */}
+                <TagColorControl
+                  tag={group.display_name}
+                  color={groupEffectiveColor(group)}
+                  opacity={groupEffectiveOpacity(group)}
+                  onColorChange={c => handleGroupColorChange(group, c)}
+                  onOpacityChange={o => handleGroupOpacityChange(group, o)}
+                />
+                <button
+                  onClick={e => handleAddGroupOverlay(group, e)}
+                  disabled={added}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    border: 'none', background: 'transparent', padding: '2px 2px 2px 4px',
+                    fontSize: 12, fontWeight: 500, fontFamily: 'inherit', whiteSpace: 'nowrap',
+                    cursor: added ? 'default' : 'pointer',
+                    color: added ? '#8b7af8' : 'var(--text-secondary)',
+                  }}
+                >
+                  {group.display_name}
+                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                    {added ? '✓' : '+'}
+                  </span>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Tag filter chips */}
       {allTags.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
@@ -469,23 +559,24 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           {allTags.map(tag => {
             const active = activeTags.includes(tag)
             const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
-            // Count ALL rules in this group not yet active (range or point)
-            const unadded = rules.filter(r => {
-              if (getGroupTag(r) !== tag) return false
-              const id = `astro_rule:${r.rule_code}`
-              return isRangeRule(r) ? !isOverlayActive(id) : !isBlockActive(id)
-            }).length
+            const count = tagCounts[tag] ?? 0
             return (
               <div key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <button
                   onClick={() => toggleTag(tag)}
                   className={cn(
-                    'px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
+                    'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
                     active ? colorCls : 'bg-transparent text-muted border-kd-border hover:border-kd-border-active',
                   )}
                   style={{ fontFamily: 'inherit' }}
                 >
                   {tag}
+                  <span className={cn(
+                    'text-[10px] leading-none px-1 py-0.5 rounded-full',
+                    active ? 'bg-white/20 text-white' : 'bg-white/10 text-[var(--text-muted)]',
+                  )}>
+                    {count}
+                  </span>
                 </button>
                 <TagColorControl
                   tag={tag}
@@ -494,23 +585,6 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                   onColorChange={c => handleTagColorChange(tag, c)}
                   onOpacityChange={o => handleTagOpacityChange(tag, o)}
                 />
-                {/* Add all overlays in this group at once */}
-                {unadded > 0 && (
-                  <button
-                    title={`Add all ${tag} overlays (${unadded})`}
-                    onClick={e => handleAddGroup(tag, e)}
-                    style={{
-                      fontSize: 9, padding: '2px 6px', borderRadius: 4,
-                      border: '1px solid rgba(124,106,247,0.3)',
-                      background: 'rgba(124,106,247,0.08)',
-                      color: '#8b7af8', cursor: 'pointer',
-                      fontFamily: 'var(--font-mono, monospace)',
-                      whiteSpace: 'nowrap', lineHeight: 1.4,
-                    }}
-                  >
-                    +{unadded}
-                  </button>
-                )}
               </div>
             )
           })}
@@ -755,6 +829,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
       isOpen={gateOpen}
       onDismiss={() => setGateOpen(false)}
     />
+    <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </>
   )
 }
