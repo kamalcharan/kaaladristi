@@ -63,6 +63,7 @@ from scripts.backfill_supertrend import compute_supertrend_for_date
 from scripts.backfill_d365 import compute_d365_for_date
 from scripts.backfill_rolling_metrics import compute_rolling_metrics_for_date
 from scripts.backfill_stage_classification import compute_stage_for_date
+from scripts.backfill_rs_percentile import compute_rs_percentile_for_date
 from scripts.backfill_vani_flags import compute_vani_flags_for_date
 from scripts.sync_nse_isin_master import sync_nse_isin_master
 
@@ -423,6 +424,17 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
             tracker.complete('stage_classification', rows=sc_count)
         except Exception as e:
             tracker.fail('stage_classification', str(e))
+
+    # ── Step 6k: RS Percentile ──
+    # Ranks each equity by magic_rs within the day's universe (PERCENT_RANK).
+    # Depends on magic_rs from step 6a — must run after.
+    if not skip_indicators:
+        tracker.start('rs_percentile')
+        try:
+            rsp_count = compute_rs_percentile_for_date(db, trade_date, verbose=True)
+            tracker.complete('rs_percentile', rows=rsp_count)
+        except Exception as e:
+            tracker.fail('rs_percentile', str(e))
 
     # ── Step 6j: VaNi screener flags (all is_vani_* columns except is_vani_s2) ──
     # Depends on magic_rs/flow_type/rsi/rvol/w52/ema_20/supertrend from all prior steps.
