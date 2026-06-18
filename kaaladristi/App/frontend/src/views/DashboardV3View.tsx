@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { fmtDate } from '@/lib/dateUtils';
 import { useAppStore } from '@/stores/appStore';
 import { dashboardDate } from '@/stores/appStore';
 import { useDashboardPings } from '@/hooks/useDashboardPings';
@@ -43,9 +44,7 @@ export default function DashboardV3View() {
             textTransform: 'uppercase',
             marginBottom: 4,
           }}>
-            {new Date(displayDate + 'T00:00:00Z').toLocaleDateString('en-IN', {
-              weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
-            })}{' '}· End of Day
+            {fmtDate(displayDate)} · End of Day
           </div>
           <h1 style={{
             fontFamily: 'var(--font-display)',

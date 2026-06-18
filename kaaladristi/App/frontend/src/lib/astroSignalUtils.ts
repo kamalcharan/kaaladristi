@@ -21,12 +21,12 @@ export function formatScore(score: number): string {
   return score > 0 ? `+${score}` : `${score}`;
 }
 
+const _ASTRO_DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const _ASTRO_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 export function formatTradeDate(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  const day  = dt.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-  const date = dt.toLocaleDateString('en-US', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  return `${day} ${date}`;
+  const weekday = _ASTRO_DAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${weekday} · ${String(d).padStart(2, '0')}-${_ASTRO_MON[m - 1]}-${y}`;
 }
 
 export function signalColor(netSignal: string): { bg: string; text: string } {

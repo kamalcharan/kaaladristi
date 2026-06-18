@@ -131,9 +131,11 @@ export default function TopStrip({
   // Cell 8 — time
   const clockLabel = formatHHMM(nowMin);
   const dateLabel = panchang?.date
-    ? new Date(panchang.date + 'T00:00:00Z').toLocaleDateString('en-IN', {
-        day: '2-digit', month: 'short', timeZone: 'UTC',
-      })
+    ? (() => {
+        const [, m, d] = panchang.date.split('-');
+        const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return `${d}-${M[+m - 1]}`;
+      })()
     : '—';
   const dayLabel = panchang?.vara ?? '—';
 

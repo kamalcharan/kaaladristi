@@ -67,13 +67,13 @@ const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 function fmtShort(dateStr: string): string {
   const [, m, d] = dateStr.split('-');
-  return `${+d} ${MONTHS[+m - 1]}`;
+  return `${d}-${MONTHS[+m - 1]}`;
 }
 
 function fmtFull(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  return `${DAYS[dt.getDay()]}, ${d} ${MONTHS[m - 1]} ${y}`;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return `${DAYS[dt.getUTCDay()]} · ${String(d).padStart(2, '0')}-${MONTHS[m - 1]}-${y}`;
 }
 
 function getMonth(dateStr: string): string {

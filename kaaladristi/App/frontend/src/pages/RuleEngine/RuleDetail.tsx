@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play, WifiOff, X, Eraser } from 'lucide-react';
 import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
+import { fmtDate } from '@/lib/dateUtils';
 import { useToast, ToastContainer } from '@/components/ui';
 import { useBackendStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
@@ -929,7 +930,7 @@ function BacktestTabs({
                     <p className={cn('font-mono text-[10px] uppercase tracking-wider mb-1', isNext ? 'text-accent-gold' : 'text-muted')}>
                       {isNext ? `Next · in ${inDays}d` : `T+${inDays}d`}
                     </p>
-                    <p className="font-mono text-lg font-medium text-white">{s.date}</p>
+                    <p className="font-mono text-lg font-medium text-white">{fmtDate(s.date)}</p>
                     <p className="font-mono text-[10px] text-muted mt-1 uppercase">
                       {dt.toLocaleDateString('en-US', { weekday: 'long' })}
                     </p>

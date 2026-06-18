@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { C, SERIF, MONO, SANS, formatPaksha, todayIST } from './tokens';
+import { fmtDate } from '@/lib/dateUtils';
 import { fetchPanchang } from '@/services/panchang';
 import type { DailyPanchang } from '@/types';
 
@@ -47,7 +48,7 @@ export function useTodayAtmo(): { atmo: Atmo | null; loading: boolean } {
 // ── Card component ────────────────────────────────────────────────────────
 export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading: boolean }) {
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', timeZone:'Asia/Kolkata' }).toLowerCase();
+  const dateStr = fmtDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   const timeStr = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Asia/Kolkata' }) + ' IST';
   const color = atmo?.color ?? C.ink4;
 

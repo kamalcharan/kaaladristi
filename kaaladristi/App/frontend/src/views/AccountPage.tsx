@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { User, Lock, CreditCard } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile, changePassword } from '@/services/auth'
+import { fmtDate } from '@/lib/dateUtils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,8 +58,7 @@ const TIER_FEATURES: Record<string, string[]> = {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+  return fmtDate(iso.slice(0, 10))
 }
 
 function daysUntil(iso: string): number {

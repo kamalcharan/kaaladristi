@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { fmtDate } from '@/lib/dateUtils';
 import { Play, AlertTriangle, CheckCircle2, Activity, XCircle, Trash2, BarChart2, Stethoscope } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -404,10 +405,12 @@ export default function DiscoveryPanel() {
               ) : status?.confidence_computed_at ? (
                 <span className="text-secondary">
                   Last computed:{' '}
-                  {new Date(status.confidence_computed_at).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                    hour: 'numeric', minute: '2-digit',
-                  })}
+                  {(() => {
+                    const ts = new Date(status.confidence_computed_at);
+                    const h = String(ts.getHours()).padStart(2, '0');
+                    const min = String(ts.getMinutes()).padStart(2, '0');
+                    return `${fmtDate(status.confidence_computed_at.slice(0, 10))}, ${h}:${min}`;
+                  })()}
                 </span>
               ) : (
                 <span>Confidence not yet computed</span>
