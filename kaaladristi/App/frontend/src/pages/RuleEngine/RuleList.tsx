@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui';
 import { ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { emptyForm, type FormMode } from './RuleFormModal';
-import { createRule, toggleRuleActive, toggleCatalogVisible, fetchRules, fetchConfidence, type AstroRuleFull, type AstroRule, type RuleConfidence } from './ruleService';
+import { createRule, toggleRuleActive, toggleCatalogVisible, fetchRules, fetchConfidence, fetchTransitDates, type AstroRuleFull, type AstroRule, type RuleConfidence, type TransitDateInfo } from './ruleService';
 import DiscoveryPanel from './DiscoveryPanel';
 import { fetchSignalCounts } from './discoveryService';
 import { IMPACT_OPTIONS, SIGNAL_LABELS } from '@/constants/signalScale';
@@ -81,6 +81,14 @@ export const PROB_STYLES: Record<string, string> = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+export function fmtTransitDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${Number(d)} ${MONTHS[Number(m) - 1]} '${y.slice(2)}`;
+}
 
 function effectiveOutcome(rule: AstroRule): string {
   return rule.outcome || rule.base_bias || 'neutral';
@@ -343,6 +351,12 @@ export default function RuleList() {
     staleTime: 60 * 1000,
   });
 
+  const { data: transitDates = [] } = useQuery({
+    queryKey: ['rule-engine', 'transit-dates'],
+    queryFn: fetchTransitDates,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const confMap = useMemo(() => {
     const m = new Map<number, RuleConfidence>();
     for (const c of confidence) m.set(c.rule_id, c);
@@ -354,6 +368,12 @@ export default function RuleList() {
     for (const sc of signalCounts) m.set(sc.rule_id, sc.count);
     return m;
   }, [signalCounts]);
+
+  const transitMap = useMemo(() => {
+    const m = new Map<number, TransitDateInfo>();
+    for (const t of transitDates) m.set(t.rule_id, t);
+    return m;
+  }, [transitDates]);
 
   // ── Create mutation ──
   const createMutation = useMutation({
@@ -524,7 +544,7 @@ export default function RuleList() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-kd-border bg-kd-elevated/60">
-                      {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Signals', 'Source', 'Tags', 'Catalog'].map(h => (
+                      {['Active', 'Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Last', 'Next', 'Signals', 'Source', 'Tags', 'Catalog'].map(h => (
                         <th key={h} className="text-left text-[11px] font-mono text-muted px-3 py-2.5 uppercase tracking-wider whitespace-nowrap">
                           {h}
                         </th>
@@ -597,6 +617,31 @@ export default function RuleList() {
                           {/* Confidence */}
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <ConfidenceCell score={conf?.confidence_score} />
+                          </td>
+
+                          {/* Last transit */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className="text-xs font-mono text-muted tabular-nums">
+                              {fmtTransitDate(transitMap.get(rule.id)?.last_end)}
+                            </span>
+                          </td>
+
+                          {/* Next transit */}
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {(() => {
+                              const next = transitMap.get(rule.id)?.next_start;
+                              if (!next) return <span className="text-xs font-mono text-muted">—</span>;
+                              const daysAway = Math.round((new Date(next).getTime() - Date.now()) / 86400000);
+                              const urgent = daysAway <= 14;
+                              return (
+                                <span className={cn('text-xs font-mono tabular-nums', urgent ? 'text-risk-amber' : 'text-secondary')}>
+                                  {fmtTransitDate(next)}
+                                  {urgent && (
+                                    <span className="ml-1 text-[10px] opacity-70">({daysAway}d)</span>
+                                  )}
+                                </span>
+                              );
+                            })()}
                           </td>
 
                           {/* Signals */}

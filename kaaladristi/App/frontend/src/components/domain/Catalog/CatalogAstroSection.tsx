@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Loader2, AlertCircle, Database } from 'lucide-react'
-import { fetchCatalogRules, fetchConfidence, type AstroRule } from '@/pages/RuleEngine/ruleService'
-import { OutcomeBadge, TypeChip, ConfidenceCell, RULE_TYPE_LABELS, PROB_STYLES } from '@/pages/RuleEngine/RuleList'
+import { fetchCatalogRules, fetchConfidence, fetchTransitDates, type AstroRule, type TransitDateInfo } from '@/pages/RuleEngine/ruleService'
+import { OutcomeBadge, TypeChip, ConfidenceCell, RULE_TYPE_LABELS, PROB_STYLES, fmtTransitDate } from '@/pages/RuleEngine/RuleList'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAuthStore } from '@/stores/authStore'
 import { RANGE_RULE_TYPES, PAID_TIERS } from '@/constants/frameworkConstants'
@@ -209,11 +209,23 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
     staleTime: 10 * 60 * 1000,
   })
 
+  const { data: transitDates = [] } = useQuery({
+    queryKey: ['rule-engine', 'transit-dates'],
+    queryFn: fetchTransitDates,
+    staleTime: 5 * 60 * 1000,
+  })
+
   const confMap = useMemo(() => {
     const m = new Map<number, number | null>()
     for (const c of confidence) m.set(c.rule_id, c.confidence_score)
     return m
   }, [confidence])
+
+  const transitMap = useMemo(() => {
+    const m = new Map<number, TransitDateInfo>()
+    for (const t of transitDates) m.set(t.rule_id, t)
+    return m
+  }, [transitDates])
 
   const framework = useFrameworkStore(s => s.framework)
 
@@ -612,7 +624,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
               <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
                 {(compact
                   ? ['Rule', 'Type', 'Tags', '']
-                  : ['Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Tags', '']
+                  : ['Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Last', 'Next', 'Tags', '']
                 ).map(col => (
                   <th
                     key={col}
@@ -736,6 +748,38 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                         <ConfidenceCell score={conf} />
                       </td>
                     )}
+
+                    {/* Last transit — full catalog only */}
+                    {!compact && (
+                      <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
+                          {fmtTransitDate(transitMap.get(rule.id)?.last_end)}
+                        </span>
+                      </td>
+                    )}
+
+                    {/* Next transit — full catalog only */}
+                    {!compact && (() => {
+                      const next = transitMap.get(rule.id)?.next_start
+                      const daysAway = next
+                        ? Math.round((new Date(next).getTime() - Date.now()) / 86400000)
+                        : null
+                      const urgent = daysAway !== null && daysAway <= 14
+                      return (
+                        <td style={{ padding: '10px 13px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            fontSize: 11,
+                            fontFamily: 'var(--font-mono, monospace)',
+                            color: urgent ? 'var(--risk-amber, #f59e0b)' : next ? 'var(--text-secondary)' : 'var(--text-muted)',
+                          }}>
+                            {fmtTransitDate(next)}
+                            {urgent && daysAway !== null && (
+                              <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>({daysAway}d)</span>
+                            )}
+                          </span>
+                        </td>
+                      )
+                    })()}
 
                     {/* Tags */}
                     <td style={{ padding: '10px 13px', verticalAlign: 'middle' }}>

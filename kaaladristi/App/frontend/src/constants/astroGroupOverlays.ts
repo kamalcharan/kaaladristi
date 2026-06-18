@@ -84,6 +84,19 @@ export const ASTRO_GROUP_OVERLAYS: AstroGroupOverlay[] = [
     applicable_to: ['equity', 'index'],
     tier_required: 'free',
   },
+  {
+    id: 'astro_group:Gandanta',
+    display_name: 'Mars Gandanta',
+    tag: 'Gandanta',
+    color: '#991B1B',          // red-800
+    description: 'Mars Gandanta zones — water/fire sign junctions',
+    block_type: 'astro_rule',
+    placement: 'chart_overlay',
+    overlay_type: 'astro_zone',
+    data_source: 'rule_engine',
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+  },
 ]
 
 export type AstroGroupId = `astro_group:${string}`
@@ -95,6 +108,7 @@ const ASTRO_GROUP_GLYPHS: Record<string, string> = {
   'astro_group:Bayer': '⬡',
   'astro_group:MajorTransit': '⟳',
   'astro_group:Panchak': '◈',
+  'astro_group:Gandanta': '♂',
 }
 
 /** Pill label for a group overlay id (glyph + name), or null if not a group id. */
