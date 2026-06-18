@@ -10,6 +10,7 @@ import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import MagicRsWidget from './widgets/MagicRsWidget'
 import OrderFlowWidget from './widgets/OrderFlowWidget'
 import SmartMoneyWidget from './widgets/SmartMoneyWidget'
+import GannSq9Widget from './widgets/GannSq9Widget'
 import type { DeepDiveItem } from './DeepDivePanel'
 
 const WIDGETS           = getCatalogItemsByType('widget')
@@ -53,6 +54,7 @@ function LivePreview({ id }: { id: string }) {
   if (id === 'rsi_14')          return <RsiWidget />
   if (id === 'atr_14')          return <AtrWidget />
   if (id === 'chart_player')    return <ChartPlayerMock />
+  if (id === 'gann_sq9')        return <GannSq9Widget previewPrice={1000} />
   return null
 }
 
