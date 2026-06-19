@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { useThemeStore } from '@/stores/themeStore'
 import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition, InstrumentRef } from '@/types/framework'
 import type { CatalogItem } from '@/constants/catalogItems'
-import { getCatalogItem } from '@/constants/catalogItems'
+import { getCatalogItem, INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
 import { useAuthStore } from '@/stores/authStore'
 import { onAuthStateChange } from '@/services/auth'
@@ -325,11 +325,14 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     const defaultConfig: Record<string, unknown> | undefined =
       item.id === 'gann_sq9' ? { show_ordinal: false } : undefined
 
+    // Use passed color, then catalog default — always store a color so the chart never needs a fallback
+    const resolvedColor = color ?? INDICATOR_DEFAULT_COLORS[item.id]
+
     const overlay: ChartOverlay = {
       catalog_item_id: item.id,
       type: overlayType,
       visible: true,
-      ...(color ? { color } : {}),
+      ...(resolvedColor ? { color: resolvedColor } : {}),
       ...(item.display_name ? { label: item.display_name } : {}),
       ...(defaultConfig ? { config: defaultConfig } : {}),
     }
@@ -428,12 +431,19 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       added_by: 'vani' as const,
       added_at: now,
     }))
+    // Seed catalog default colors into overlays that don't have a saved color
+    const chart_overlays: ChartOverlay[] = template.chart_overlays.map(o => ({
+      ...o,
+      ...(o.color == null && INDICATOR_DEFAULT_COLORS[o.catalog_item_id]
+        ? { color: INDICATOR_DEFAULT_COLORS[o.catalog_item_id] }
+        : {}),
+    }))
     set(s => ({
       framework: s.framework
         ? {
             ...s.framework,
             blocks,
-            chart_overlays: template.chart_overlays,
+            chart_overlays,
             template_id: template.id,
             version: s.framework.version + 1,
           }

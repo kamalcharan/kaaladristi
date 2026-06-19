@@ -414,6 +414,23 @@ const WIDGETS: CatalogItem[] = [
   },
 ]
 
+// ── Indicator default colors — single source of truth ────────────────────────
+// All code that needs a per-indicator color must import from here.
+// IndicatorsSection, TradingChart, overlayColors, and frameworkStore all use this.
+
+export const INDICATOR_DEFAULT_COLORS: Record<string, string> = {
+  ema_20:       '#7c6af7',
+  ema_60:       '#4ade80',
+  sma_50:       '#fb923c',
+  sma_150:      '#f59e0b',
+  sma_200:      '#f43f5e',
+  supertrend:   '#2dd4bf',
+  pivot_levels: '#94a3b8',
+  atr_14:       '#c084fc',
+  rsi_14:       '#60a5fa',
+  gann_sq9:     '#F5A623',
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const CATALOG_ITEMS: CatalogItem[] = [...INDICATORS, ...WIDGETS]

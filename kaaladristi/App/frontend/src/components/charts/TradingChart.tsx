@@ -33,6 +33,7 @@ import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
 import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
+import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -53,14 +54,8 @@ const OVERLAY_COL: Partial<Record<string, keyof IndicatorRow>> = {
   'supertrend': 'supertrend',
 };
 
-const OVERLAY_DEFAULT_COLOR: Record<string, string> = {
-  'ema_20':     '#FFD700',
-  'ema_60':     '#FFA500',
-  'sma_50':     '#FF6347',
-  'sma_150':    '#00CED1',
-  'sma_200':    '#DA70D6',
-  'supertrend': 'var(--bull)',
-};
+// Catalog is the single source of truth for indicator colors
+const OVERLAY_DEFAULT_COLOR = INDICATOR_DEFAULT_COLORS;
 
 // Planet/group glyphs rendered on astro zone overlay bands
 const BAND_GLYPHS: Record<string, string> = {
