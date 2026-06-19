@@ -3,9 +3,19 @@ import { Navigate } from 'react-router-dom'
 import { Loader2, X } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
+import type { InstrumentRef } from '@/types/framework'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
 import CorrelationDrawer from '@/components/domain/Workspace/CorrelationDrawer'
 import VaNiMorningBrief, { useMorningBriefAutoShow } from '@/components/workspace/VaNiMorningBrief'
+import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard'
+import MarketBreadthChart from '@/components/domain/MarketBreadthChart'
+import BreadthRocChart from '@/components/domain/BreadthRocChart'
+import IndexDropdown from '@/components/domain/IndexDropdown'
+import WorkspaceChart from '@/components/workspace/WorkspaceChart'
+import CurrentSkyRail from '@/components/domain/DashboardV3/CurrentSkyRail'
+import PanchangamCard from '@/components/domain/PanchangamCard'
+import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
+import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals'
 
 type ActiveTab = 'today' | 'discovery' | 'myspace'
 
@@ -32,7 +42,14 @@ export default function WorkspacePage() {
   const { shouldShow: autoShowMorning, dismiss: dismissMorning } = useMorningBriefAutoShow(profile?.id)
 
   const isBeta = profile?.tier === 'beta'
+  const today        = new Date().toISOString().split('T')[0]
   const todayDisplay = fmtDateChip(new Date())
+
+  const primaryInstrument = framework?.blocks
+    .find(b => b.type === 'chart')?.config.instrument as InstrumentRef | undefined
+  const primarySymbol = (primaryInstrument as { symbol?: string } | undefined)?.symbol ?? 'Index'
+
+  const [todayIndexDropdown, setTodayIndexDropdown] = useState<{ x: number; y: number } | null>(null)
 
   // Auto-show morning modal once per day
   useEffect(() => {
@@ -189,9 +206,90 @@ export default function WorkspacePage() {
       {/* ── Tab panels ── */}
 
       {activeTab === 'today' && (
-        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
-          {/* Step 4.5 will fill this */}
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Today tab — coming in Step 4.5</div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+
+          {/* VaNi Morning Brief — pinned inline strip */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <VaNiMorningBrief pinned />
+          </div>
+
+          {/* Market Weather Card */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <MarketWeatherCard date={today} />
+          </div>
+
+          {/* Index selector + Chart */}
+          <div style={{ padding: '12px 20px 0', borderBottom: '1px solid var(--border)', position: 'relative' }}>
+            <button
+              onClick={e => {
+                if (todayIndexDropdown) { setTodayIndexDropdown(null); return }
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                setTodayIndexDropdown({ x: rect.left, y: rect.bottom })
+              }}
+              style={{
+                marginBottom: 10, padding: '5px 14px', borderRadius: 100,
+                border: '1px dashed rgba(255,255,255,.15)',
+                background: 'transparent', cursor: 'pointer',
+                fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                color: 'rgba(255,255,255,.5)', transition: 'all .15s',
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.borderColor = 'var(--accent)'
+                el.style.color = 'var(--accent)'
+                el.style.background = 'var(--accent-glow)'
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement
+                el.style.borderColor = 'rgba(255,255,255,.15)'
+                el.style.color = 'rgba(255,255,255,.5)'
+                el.style.background = 'transparent'
+              }}
+            >
+              {primarySymbol} ▾
+            </button>
+            {primaryInstrument && (
+              <div style={{ height: 340 }}>
+                <WorkspaceChart instrument={primaryInstrument} />
+              </div>
+            )}
+            {todayIndexDropdown && (
+              <IndexDropdown
+                anchorX={todayIndexDropdown.x}
+                anchorY={todayIndexDropdown.y}
+                framework={framework!}
+                onClose={() => setTodayIndexDropdown(null)}
+              />
+            )}
+          </div>
+
+          {/* Market Breadth Chart */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <MarketBreadthChart />
+          </div>
+
+          {/* Breadth ROC Chart */}
+          <div style={{ padding: '16px 20px', borderBottom: icpMode === 'astro' ? '1px solid var(--border)' : 'none' }}>
+            <BreadthRocChart />
+          </div>
+
+          {/* Astro ICP only */}
+          {icpMode === 'astro' && (
+            <>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                <CurrentSkyRail date={today} />
+              </div>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                <PanchangamCard date={today} />
+              </div>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                <SixDayOutlookCompact date={today} />
+              </div>
+              <div style={{ padding: '16px 20px' }}>
+                <NakVaraSignals date={today} />
+              </div>
+            </>
+          )}
         </div>
       )}
 
