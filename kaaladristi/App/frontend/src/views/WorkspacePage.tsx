@@ -7,6 +7,13 @@ import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
 import CorrelationDrawer from '@/components/domain/Workspace/CorrelationDrawer'
 import VaNiMorningBrief, { useMorningBriefAutoShow } from '@/components/workspace/VaNiMorningBrief'
 
+type ActiveTab = 'today' | 'discovery' | 'myspace'
+
+const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function fmtDateChip(d: Date): string {
+  return `${String(d.getDate()).padStart(2,'0')} ${_MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
 function fmtId(id: string): string {
   return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
 }
@@ -15,6 +22,9 @@ export default function WorkspacePage() {
   const { profile } = useAuthStore()
   const { framework, isLoading, error, loadFramework, vaniCorrelations } = useFrameworkStore()
 
+  const icpMode = profile?.icp_mode ?? 'astro'
+  const [activeTab, setActiveTab] = useState<ActiveTab>(icpMode === 'technical' ? 'discovery' : 'today')
+
   const [drawerOpen, setDrawerOpen]             = useState(false)
   const [activePairKey, setActivePairKey]       = useState<string | null>(null)
   const [betaBarDismissed, setBetaBarDismissed] = useState(false)
@@ -22,6 +32,7 @@ export default function WorkspacePage() {
   const { shouldShow: autoShowMorning, dismiss: dismissMorning } = useMorningBriefAutoShow(profile?.id)
 
   const isBeta = profile?.tier === 'beta'
+  const todayDisplay = fmtDateChip(new Date())
 
   // Auto-show morning modal once per day
   useEffect(() => {
@@ -131,20 +142,85 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      {/* VaNi Morning Brief — pinned above canvas, non-block, session-computed */}
-      <div style={{ flexShrink: 0, padding: '0 20px 4px' }}>
-        <VaNiMorningBrief
-          modalOpen={morningModalOpen}
-          onModalOpen={() => setMorningModalOpen(true)}
-          onModalClose={() => {
-            setMorningModalOpen(false)
-            dismissMorning()
-          }}
-        />
-      </div>
+      {/* ── Tab bar ── */}
+      <nav style={{
+        display: 'flex', alignItems: 'stretch', height: 44, flexShrink: 0,
+        background: 'var(--card-soft)', borderBottom: '1px solid var(--border)',
+        padding: '0 20px', position: 'sticky', top: 48, zIndex: 39,
+      }}>
+        {(['today', 'discovery', 'myspace'] as const).map((tab) => {
+          const labels: Record<ActiveTab, string> = { today: 'Today', discovery: 'Discovery', myspace: 'My Space' }
+          const icons:  Record<ActiveTab, string> = { today: '◐', discovery: '⊙', myspace: '⊞' }
+          const active = activeTab === tab
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '0 20px', border: 'none', background: 'transparent',
+                borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontSize: 13, fontWeight: active ? 500 : 400,
+                fontFamily: 'inherit', cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)' }}
+              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)' }}
+            >
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{icons[tab]}</span>
+              {labels[tab]}
+              {tab === 'today' && icpMode === 'astro' && (
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--gold)', flexShrink: 0, display: 'inline-block' }} />
+              )}
+            </button>
+          )
+        })}
 
-      {/* Canvas */}
-      <WorkspaceCanvas framework={framework!} onOpenDrawer={openDrawer} onMorningBrief={() => setMorningModalOpen(true)} islandOffset={isBeta && !betaBarDismissed ? 36 : 0} />
+        {/* Right side */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* AtmosphericBadge — not yet a standalone component; placeholder until Step 4.9 */}
+          <div className="atmospheric-placeholder" />
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            {todayDisplay}
+          </span>
+        </div>
+      </nav>
+
+      {/* ── Tab panels ── */}
+
+      {activeTab === 'today' && (
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+          {/* Step 4.5 will fill this */}
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Today tab — coming in Step 4.5</div>
+        </div>
+      )}
+
+      {activeTab === 'discovery' && (
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+          {/* Step 4.6 will fill this */}
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Discovery tab — coming in Step 4.6</div>
+        </div>
+      )}
+
+      {activeTab === 'myspace' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* VaNi Morning Brief — not moved/changed until Step 4.7 */}
+          <div style={{ flexShrink: 0, padding: '0 20px 4px' }}>
+            <VaNiMorningBrief
+              modalOpen={morningModalOpen}
+              onModalOpen={() => setMorningModalOpen(true)}
+              onModalClose={() => { setMorningModalOpen(false); dismissMorning() }}
+            />
+          </div>
+          {/* WorkspaceCanvas — not modified until Step 4.7 */}
+          <WorkspaceCanvas
+            framework={framework!}
+            onOpenDrawer={openDrawer}
+            onMorningBrief={() => setMorningModalOpen(true)}
+            islandOffset={isBeta && !betaBarDismissed ? 36 : 0}
+          />
+        </div>
+      )}
 
       {/* Correlation Drawer */}
       <CorrelationDrawer
