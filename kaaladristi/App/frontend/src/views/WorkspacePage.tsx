@@ -6,7 +6,7 @@ import { useFrameworkStore } from '@/stores/frameworkStore'
 import type { InstrumentRef } from '@/types/framework'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
 import CorrelationDrawer from '@/components/domain/Workspace/CorrelationDrawer'
-import VaNiMorningBrief, { useMorningBriefAutoShow } from '@/components/workspace/VaNiMorningBrief'
+import VaNiMorningBrief from '@/components/workspace/VaNiMorningBrief'
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard'
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
@@ -40,8 +40,6 @@ export default function WorkspacePage() {
   const [drawerOpen, setDrawerOpen]             = useState(false)
   const [activePairKey, setActivePairKey]       = useState<string | null>(null)
   const [betaBarDismissed, setBetaBarDismissed] = useState(false)
-  const [morningModalOpen, setMorningModalOpen] = useState(false)
-  const { shouldShow: autoShowMorning, dismiss: dismissMorning } = useMorningBriefAutoShow(profile?.id)
 
   const isBeta = profile?.tier === 'beta'
   const today        = new Date().toISOString().split('T')[0]
@@ -53,10 +51,14 @@ export default function WorkspacePage() {
 
   const [todayIndexDropdown, setTodayIndexDropdown] = useState<{ x: number; y: number } | null>(null)
 
-  // Auto-show morning modal once per day
+  // Auto-switch to Today tab once per day
   useEffect(() => {
-    if (autoShowMorning) setMorningModalOpen(true)
-  }, [autoShowMorning])
+    const key = `vani_today_shown:${profile?.id}:${today}`
+    if (!localStorage.getItem(key)) {
+      setActiveTab('today')
+      localStorage.setItem(key, '1')
+    }
+  }, [profile?.id, today])
 
   const openDrawer = useCallback((key: string | null) => {
     setActivePairKey(key)
@@ -319,19 +321,10 @@ export default function WorkspacePage() {
 
       {activeTab === 'myspace' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* VaNi Morning Brief — not moved/changed until Step 4.7 */}
-          <div style={{ flexShrink: 0, padding: '0 20px 4px' }}>
-            <VaNiMorningBrief
-              modalOpen={morningModalOpen}
-              onModalOpen={() => setMorningModalOpen(true)}
-              onModalClose={() => { setMorningModalOpen(false); dismissMorning() }}
-            />
-          </div>
-          {/* WorkspaceCanvas — not modified until Step 4.7 */}
           <WorkspaceCanvas
             framework={framework!}
             onOpenDrawer={openDrawer}
-            onMorningBrief={() => setMorningModalOpen(true)}
+            onMorningBrief={() => setActiveTab('today')}
             islandOffset={isBeta && !betaBarDismissed ? 36 : 0}
           />
         </div>
