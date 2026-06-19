@@ -50,6 +50,19 @@ const COLUMN_DEFS: Record<string, ColDef> = {
 
 // ── Preset groups & column sets ────────────────────────────────────────────────
 
+// Per-preset column overrides for presets whose fetcher has a limited SELECT.
+// Removes default cols that are always null for that preset.
+const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
+  // stage_2_watch: pct_chng/rsi_14/rvol/flow_type/sniper_inst/rss_value not fetched
+  stage_2_watch:    ['symbol','close','magic_rs','rs_percentile','stage','pctBelow52wHigh','mcap_cr','sma_50','sma_200'],
+  // vani_opportunity: rsi_14/rvol/flow_type/sniper_inst/rss_value not fetched
+  vani_opportunity: ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','pctBelow52wHigh','mcap_cr'],
+  // stage_4/3/vani_exit: rss_value not fetched (everything else is)
+  stage_4_leaders:  ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
+  stage_3_watch:    ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
+  vani_exit_watch:  ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
+}
+
 const PRESET_GROUP: Record<string, PresetGroup> = {
   stage_2_leaders:      'stage',
   stage_2_watch:        'stage',
@@ -103,7 +116,7 @@ function formatPrice(n: number): string {
   return `₹${n.toFixed(2)}`
 }
 
-function getCellContent(stock: ScanStock, colKey: string): { text: string; color?: string } {
+function getCellContent(stock: ScanStock, colKey: string): { text: string; color?: string; fontWeight?: number } {
   const raw = (stock as unknown as Record<string, unknown>)[colKey]
   const def = COLUMN_DEFS[colKey]
   if (!def) return { text: '—' }
@@ -117,14 +130,21 @@ function getCellContent(stock: ScanStock, colKey: string): { text: string; color
     case 'pct': {
       const n = Number(raw)
       if (isNaN(n)) return { text: '—' }
-      return {
-        text: `${n > 0 ? '+' : ''}${n.toFixed(2)}%`,
-        color: n > 0 ? 'var(--bull)' : n < 0 ? 'var(--bear)' : undefined,
+      // FIX 3: ret_5d outpacing ret_22d → accent color
+      let color = n > 0 ? 'var(--bull)' : n < 0 ? 'var(--bear)' : undefined
+      if (colKey === 'ret_5d' && stock.ret_5d != null && stock.ret_22d != null && stock.ret_5d > stock.ret_22d) {
+        color = 'var(--accent)'
       }
+      return { text: `${n > 0 ? '+' : ''}${n.toFixed(2)}%`, color }
     }
     case 'number': {
       const n = Number(raw)
-      return { text: isNaN(n) ? '—' : n.toFixed(2) }
+      if (isNaN(n)) return { text: '—' }
+      // FIX 1: RSI overbought → red + bold
+      if (colKey === 'rsi_14' && n > 70) return { text: n.toFixed(2), color: 'var(--bear)', fontWeight: 600 }
+      // FIX 2: RSS strong → green + bold
+      if (colKey === 'rss_value' && n > 75) return { text: n.toFixed(2), color: 'var(--bull)', fontWeight: 600 }
+      return { text: n.toFixed(2) }
     }
     case 'cr': {
       const n = Number(raw)
@@ -209,7 +229,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
   }, [gearOpen])
 
   const optionalCols  = OPTIONAL_COLS[group]
-  const defaultCols   = DEFAULT_COLS[group]
+  const defaultCols   = PRESET_COL_OVERRIDES[presetId] ?? DEFAULT_COLS[group]
 
   // visible = default cols + optional cols not hidden, deduped
   const activeCols = [...defaultCols, ...optionalCols.filter(c => !hiddenCols.has(c))]
@@ -417,7 +437,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                     )
                   }
 
-                  const { text, color } = getCellContent(stock, colKey)
+                  const { text, color, fontWeight } = getCellContent(stock, colKey)
                   return (
                     <td
                       key={colKey}
@@ -425,6 +445,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                         padding: '0 10px', textAlign: 'right',
                         fontSize: 11, fontFamily: 'var(--font-mono)',
                         color: color ?? 'var(--text-secondary)',
+                        fontWeight: fontWeight ?? undefined,
                         whiteSpace: 'nowrap',
                         borderBottom: '1px solid rgba(99,102,241,0.05)',
                       }}
