@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { getCatalogItemsByType, type CatalogItem } from '@/constants/catalogItems'
+import { getCatalogItemsByType, INDICATOR_DEFAULT_COLORS, type CatalogItem } from '@/constants/catalogItems'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useAuthStore } from '@/stores/authStore'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
@@ -9,18 +9,8 @@ import type { DeepDiveItem } from './DeepDivePanel'
 // Only chart overlay indicators belong here — panel_block indicators (RSI 14, ATR 14) live in WidgetsSection
 const INDICATORS = getCatalogItemsByType('indicator').filter(i => i.placement === 'chart_overlay')
 
-// Default colors per indicator
-const INDICATOR_DEFAULTS: Record<string, string> = {
-  ema_20:       '#7c6af7',
-  ema_60:       '#4ade80',
-  sma_50:       '#fb923c',
-  sma_150:      '#f59e0b',
-  sma_200:      '#f43f5e',
-  supertrend:   '#2dd4bf',
-  pivot_levels: '#94a3b8',
-  atr_14:       '#c084fc',
-  rsi_14:       '#60a5fa',
-}
+// Default colors per indicator — imported from catalog (single source of truth)
+const INDICATOR_DEFAULTS = INDICATOR_DEFAULT_COLORS
 
 const SWATCH_PALETTE = [
   '#7c6af7', '#a78bfa', '#c084fc', '#e879f9',

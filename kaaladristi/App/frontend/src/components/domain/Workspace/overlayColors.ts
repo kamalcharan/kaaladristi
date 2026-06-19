@@ -1,12 +1,7 @@
-/** Per-item defaults — must match OVERLAY_DEFAULT_COLOR in TradingChart exactly */
-export const ITEM_DEFAULT_COLOR: Record<string, string> = {
-  'ema_20':     '#FFD700',
-  'ema_60':     '#FFA500',
-  'sma_50':     '#FF6347',
-  'sma_150':    '#00CED1',
-  'sma_200':    '#DA70D6',
-  'supertrend': '#10b981',
-}
+import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems'
+
+/** Per-item defaults — catalog is the single source of truth */
+export const ITEM_DEFAULT_COLOR = INDICATOR_DEFAULT_COLORS
 
 /** Fallback by overlay type (astro rules, unknown indicators) */
 export const TYPE_DEFAULT_COLOR: Record<string, string> = {
