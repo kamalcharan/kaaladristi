@@ -165,7 +165,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -979,14 +979,8 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
     if (d_pct < -8 || d_pct > 8) continue;
 
-    const stock = buildScanStock(id, bundle); // VaNi computed inline below
+    const stock = buildScanStock(id, bundle);
     if (!stock) continue;
-
-    const is_vani =
-      delivery_surge_x > 2 &&
-      d_pct >= -3 && d_pct <= 5 &&
-      eod.close > 100 &&
-      avg_amt_22d > 2;
 
     // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
     const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
@@ -995,7 +989,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 
     results.push({
       ...stock,
-      vaniOpportunity: is_vani,
+      vaniOpportunity: computeVaniOpportunity(eod, SCAN_PRESETS.find((p) => p.id === 'conviction_flow')?.vani_rule),
       avg_amt_5d:       Math.round(avg_amt_5d       * 100) / 100,
       avg_amt_22d:      Math.round(avg_amt_22d      * 100) / 100,
       deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
@@ -1054,18 +1048,12 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
 
-    const stock = buildScanStock(id, bundle); // VaNi computed inline below
+    const stock = buildScanStock(id, bundle);
     if (!stock) continue;
-
-    const is_vani =
-      rvol > 5 &&
-      pct_from_breakout >= 0 && pct_from_breakout <= 5 &&
-      (rsi14 ?? 100) < 75 &&
-      d_pct < 15;
 
     results.push({
       ...stock,
-      vaniOpportunity: is_vani,
+      vaniOpportunity: computeVaniOpportunity(eod, SCAN_PRESETS.find((p) => p.id === 'breakout_surge')?.vani_rule),
       d_pct:             Math.round(d_pct             * 100) / 100,
       breakout_level:    Math.round(breakout_level    * 100) / 100,
       pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
@@ -1224,11 +1212,16 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
 
   const { data: rows } = await from('km_equity_eod')
     .select([
-      'equity_id', 'trade_date', 'close', 'stage',
-      'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
-      'magic_rs', 'rs_percentile',
-      'w52_high', 'w52_low',
-      'chartink_score', 'is_vani_s2',
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_150', 'sma_200', 'sma200_rising', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'stage', 'rs_percentile', 'chartink_score', 'is_vani_s2',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S2_CANDIDATE')
@@ -1268,26 +1261,38 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
     const sym = row.km_equity_symbols;
     const pctBelow52wHigh = row.w52_high && row.w52_high > 0
       ? ((row.w52_high - row.close) / row.w52_high) * 100 : null;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
     return {
       equity_id: row.equity_id, trade_date: row.trade_date,
       symbol: sym?.symbol ?? String(row.equity_id),
       company_name: sym?.company_name ?? null,
       industry: sym?.industry ?? null,
       exchange: sym?.exchange ?? null, mcap_cr: sym?.mcap_cr ?? null,
-      close: row.close, open: null, high: null, low: null, pct_chng: null,
-      magic_rs: row.magic_rs ?? null, magic_rs_zone: null,
-      rss_value: null, rss_spread: null, rsi_14: null, rvol: null,
-      flow_type: null, sniper_inst: null, sniper_hot: null,
-      accum_distrib: null, volume_divergence_flag: null,
+      close: row.close, open: row.open ?? null, high: row.high ?? null, low: row.low ?? null,
+      pct_chng: row.pct_chng ?? null,
+      magic_rs: row.magic_rs ?? null, magic_rs_zone: row.magic_rs_zone ?? null,
+      rss_value: row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
+      rsi_14: row.rsi_14 ?? null, rvol: row.rvol ?? null,
+      flow_type: row.flow_type ?? null, sniper_inst: row.sniper_inst ?? null,
+      sniper_hot: row.sniper_hot ?? null,
+      accum_distrib: row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
       sma_50: row.sma_50 ?? null, sma_150: row.sma_150 ?? null,
-      sma_200: row.sma_200 ?? null, ema_20: null, atr_14: null,
+      sma_200: row.sma_200 ?? null, ema_20: ema20, atr_14: atr14,
       w52_high: row.w52_high ?? null, w52_low: row.w52_low ?? null,
-      lifetime_high: null, delivery_pct: null, supertrend_dir: null,
-      has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
+      lifetime_high: row.lifetime_high ?? null,
+      delivery_pct: row.delivery_pct ?? null, supertrend_dir: row.supertrend_dir ?? null,
+      has_recent_svd: !!row.dot_svd, has_recent_sbd: !!row.dot_sbd, has_recent_syd: !!row.dot_syd,
+      avg_amt_5d: row.avg_amt_5d ?? null, avg_amt_22d: row.avg_amt_22d ?? null,
+      delivery_surge_x: row.delivery_surge_x ?? null,
       avg_amt_66d: null, xAmt: null,
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-      magicRsTrend: [], reward: null, rewardPct: null, pctBelow52wHigh,
+      magicRsTrend: [],
+      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      pctBelow52wHigh,
       vaniOpportunity: computeVaniOpportunity(row, SCAN_PRESETS.find((p) => p.id === 'stage_2_watch')?.vani_rule),
       rs_percentile: row.rs_percentile ?? null,
       stage: row.stage ?? null,
@@ -1310,12 +1315,17 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
 
   const { data: rows } = await from('km_equity_eod')
     .select([
-      'equity_id', 'trade_date', 'close', 'stage',
-      'sma_50', 'sma_150', 'sma_200',
-      'magic_rs', 'rs_percentile',
-      'w52_high', 'w52_low',
-      'chartink_score', 'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
-      'dot_svd', 'dot_sbd',
+      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
+      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
+      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
+      'sma_50', 'sma_150', 'sma_200', 'sma200_rising', 'ema_20', 'atr_14',
+      'w52_high', 'w52_low', 'lifetime_high',
+      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+      'sniper_inst', 'sniper_hot', 'accum_distrib',
+      'volume_divergence_flag', 'delivery_pct',
+      'dot_svd', 'dot_sbd', 'dot_syd',
+      'stage', 'rs_percentile', 'chartink_score',
+      'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S2')
@@ -1353,29 +1363,42 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
     const sym = row.km_equity_symbols;
     const pctBelow52wHigh = row.w52_high && row.w52_high > 0
       ? ((row.w52_high - row.close) / row.w52_high) * 100 : null;
+    const ema20 = row.ema_20 ?? null;
+    const atr14 = row.atr_14 ?? null;
     return {
       equity_id: row.equity_id, trade_date: row.trade_date,
       symbol: sym?.symbol ?? String(row.equity_id),
       company_name: sym?.company_name ?? null,
       industry: sym?.industry ?? null,
       exchange: sym?.exchange ?? null, mcap_cr: sym?.mcap_cr ?? null,
-      close: row.close, open: null, high: null, low: null, pct_chng: null,
-      magic_rs: row.magic_rs ?? null, magic_rs_zone: null,
-      rss_value: null, rss_spread: null, rsi_14: null, rvol: null,
-      flow_type: null, sniper_inst: null, sniper_hot: null,
-      accum_distrib: null, volume_divergence_flag: null,
+      close: row.close, open: row.open ?? null, high: row.high ?? null, low: row.low ?? null,
+      pct_chng: row.pct_chng ?? null,
+      magic_rs: row.magic_rs ?? null, magic_rs_zone: row.magic_rs_zone ?? null,
+      rss_value: row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
+      rsi_14: row.rsi_14 ?? null, rvol: row.rvol ?? null,
+      flow_type: row.flow_type ?? null, sniper_inst: row.sniper_inst ?? null,
+      sniper_hot: row.sniper_hot ?? null,
+      accum_distrib: row.accum_distrib ?? null,
+      volume_divergence_flag: row.volume_divergence_flag ?? null,
       sma_50: row.sma_50 ?? null, sma_150: row.sma_150 ?? null,
-      sma_200: row.sma_200 ?? null, ema_20: null, atr_14: null,
+      sma_200: row.sma_200 ?? null, ema_20: ema20, atr_14: atr14,
       w52_high: row.w52_high ?? null, w52_low: row.w52_low ?? null,
-      lifetime_high: null, delivery_pct: null, supertrend_dir: null,
-      has_recent_svd: !!row.dot_svd, has_recent_sbd: !!row.dot_sbd, has_recent_syd: false,
+      lifetime_high: row.lifetime_high ?? null,
+      delivery_pct: row.delivery_pct ?? null, supertrend_dir: row.supertrend_dir ?? null,
+      has_recent_svd: !!row.dot_svd, has_recent_sbd: !!row.dot_sbd, has_recent_syd: !!row.dot_syd,
+      avg_amt_5d: row.avg_amt_5d ?? null, avg_amt_22d: row.avg_amt_22d ?? null,
+      delivery_surge_x: row.delivery_surge_x ?? null,
       avg_amt_66d: null, xAmt: null,
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-      magicRsTrend: [], reward: null, rewardPct: null, pctBelow52wHigh,
+      magicRsTrend: [],
+      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
+      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
+      pctBelow52wHigh,
       vaniOpportunity: computeVaniOpportunity(row, SCAN_PRESETS.find((p) => p.id === 'vani_opportunity')?.vani_rule),
       rs_percentile: row.rs_percentile ?? null,
       stage: row.stage ?? null,
+      sma200_rising: row.sma200_rising ?? null,
       chartink_score: row.chartink_score ?? null,
       is_vani_s2: row.is_vani_s2 ?? null,
       is_vani_strength: row.is_vani_strength ?? null,
@@ -1400,6 +1423,7 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       'open', 'high', 'low', 'pct_chng',
       'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
       'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'rss_value', 'rss_spread',
       'rsi_14', 'rvol',
       'w52_high', 'w52_low', 'lifetime_high',
       'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
@@ -1463,8 +1487,8 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       pct_chng:             row.pct_chng ?? null,
       magic_rs:             row.magic_rs ?? null,
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            null,
-      rss_spread:           null,
+      rss_value:            row.rss_value ?? null,
+      rss_spread:           row.rss_spread ?? null,
       rsi_14:               row.rsi_14 ?? null,
       rvol:                 row.rvol ?? null,
       flow_type:            row.flow_type ?? null,
@@ -1524,6 +1548,7 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
     .select([
       'equity_id', 'trade_date', 'close', 'stage',
       'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'rss_value', 'rss_spread',
       'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
       'rsi_14', 'rvol',
       'w52_high', 'w52_low',
@@ -1590,7 +1615,7 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       pct_chng:             row.pct_chng ?? null,
       magic_rs:             row.magic_rs ?? null,
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            null, rss_spread: null,
+      rss_value:            row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
       rsi_14:               row.rsi_14 ?? null,
       rvol:                 row.rvol ?? null,
       flow_type:            row.flow_type ?? null,
@@ -1642,6 +1667,7 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
     .select([
       'equity_id', 'trade_date', 'close', 'stage',
       'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'rss_value', 'rss_spread',
       'sma_50', 'sma_150', 'sma_200',
       'rsi_14', 'rvol', 'flow_type',
       'w52_high', 'w52_low',
@@ -1699,7 +1725,7 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
       pct_chng:             row.pct_chng ?? null,
       magic_rs:             row.magic_rs ?? null,
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            null, rss_spread: null,
+      rss_value:            row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
       rsi_14:               row.rsi_14 ?? null,
       rvol:                 row.rvol ?? null,
       flow_type:            row.flow_type ?? null,

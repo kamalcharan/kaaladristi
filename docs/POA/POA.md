@@ -91,9 +91,9 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 
 | # | Item | Type | Dependency | Notes |
 |---|---|---|---|---|
-| B01 | ISIN dedup on all 6 new scanners | Bug Fix | None | BSE+NSE same company appearing. Verify `fetchStage2Leaders()` ISIN dedup works on all 6 |
-| B02 | Table view for all scanners | UX Build | None | Default view; card view becomes toggle. Most needed UX improvement |
-| B03 | `is_vani_surge` + `is_vani_breakout` missing from ScanDataBundle EOD SELECT | Bug Fix | None | Blocks convictionFlow + breakoutSurge VaNi chips |
+| ~~B01~~ | ~~ISIN dedup on all 6 new scanners~~ | ~~Bug Fix~~ | ~~None~~ | → C27 |
+| ~~B02~~ | ~~Table view for all scanners~~ | ~~UX Build~~ | ~~None~~ | → C29 |
+| ~~B03~~ | ~~`is_vani_surge` + `is_vani_breakout` missing from ScanDataBundle EOD SELECT~~ | ~~Bug Fix~~ | ~~None~~ | → C28 |
 
 ### P1 — Important
 
@@ -209,6 +209,19 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | C24 | VaNiMorningBrief pinned mode added | Sprint 4 | — |
 | C25 | ProfileSetup ICP question added | Sprint 4 | — |
 | C26 | ScannerWidget component created | Sprint 4 | — |
+| C27 | ISIN dedup verified on all 6 new scanners — no fixes needed | Sprint 5 | fetchStage2Watch, fetchVaNiOpportunity, fetchStage4Leaders, fetchStage3Watch, fetchVaNiExitWatch all have identical dedup pattern |
+| C28 | B03 fixed — `is_vani_surge` + `is_vani_breakout` added to ScanDataBundle EOD SELECT + EquityEodSnapshot type; convictionFlow + breakoutSurge VaNi now use `computeVaniOpportunity()` | Sprint 5 | `scanEngine.ts` line 168 + `types/index.ts` |
+| C29 | B02 complete — `ScanTable.tsx` built; `[≡ Table] [⊞ Cards]` toggle added to all scanner presets; table is default; localStorage persists mode + per-preset column picks; VaNi dot, sticky symbol col, gear column picker, header-click sort | Sprint 5 | `src/components/domain/ScanTable.tsx` (new) + `ScanView.tsx` (ViewToggle, useViewMode, Stage2Results/ConvictionFlowResults/breakout_surge/generic all updated) |
+| C30 | Table view polish — AUDIT 1: VaNi 0 confirmed as data pipeline issue (is_vani_* DEFAULT false; backfill scripts 6h/6j need to run — no frontend change); AUDIT 2: per-preset empty cols mapped; FIX 1 RSI>70 red+bold; FIX 2 RSS>75 green+bold; FIX 3 ret_5d>ret_22d accent color; FIX 4 PRESET_COL_OVERRIDES removes always-null default cols per preset | Sprint 5 | `ScanTable.tsx` — getCellContent return type adds fontWeight; PRESET_COL_OVERRIDES for stage_2_watch/vani_opportunity/stage_4_leaders/stage_3_watch/vani_exit_watch |
+
+---
+
+## 11. Known Risks (not bugs)
+> Observed edge cases that don't cause incorrect behavior today but could surface under specific conditions. Monitor over time.
+
+| # | Risk | Location | Detail |
+|---|---|---|---|
+| KR01 | `fetchVaNiOpportunity` applies `.limit(25)` server-side before client-side ISIN dedup | `scanEngine.ts` — `fetchVaNiOpportunity()` | If the top 25 server-side rows contain dual-listed pairs, dedup reduces final count below 25. Other scanners fetch larger limits (100–500) then dedup to target. Low priority — monitor. |
 
 ---
 

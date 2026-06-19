@@ -4,10 +4,18 @@ import { useScan } from '@/hooks/useScan'
 import type { ScanStock } from '@/types'
 import { displaySymbol } from '@/lib/symbolUtils'
 
+type ColumnVariant = 'default' | 'stage'
+
 interface ScannerWidgetProps {
   presetId: string
   title: string
   maxRows?: number
+  variant?: ColumnVariant
+}
+
+const GRID_COLS: Record<ColumnVariant, string> = {
+  default: '16px 1fr 44px 44px',
+  stage:   '16px 1fr 54px 40px 30px 44px',
 }
 
 function ZoneDot({ zone }: { zone: string | null }) {
@@ -26,7 +34,21 @@ function ZoneDot({ zone }: { zone: string | null }) {
   )
 }
 
-function StockRow({ stock, onClick }: { stock: ScanStock; onClick: () => void }) {
+function formatClose(c: number | null): string {
+  if (c == null) return '—'
+  return c >= 1000 ? c.toFixed(0) : c.toFixed(1)
+}
+
+function formatStage(s: string | null | undefined): string {
+  if (!s) return '—'
+  return s === 'S2_CANDIDATE' ? 'S2C' : s
+}
+
+function StockRow({ stock, onClick, variant = 'default' }: {
+  stock: ScanStock
+  onClick: () => void
+  variant?: ColumnVariant
+}) {
   const sym = displaySymbol(stock)
   const chgColor =
     stock.pct_chng != null && stock.pct_chng > 0 ? 'var(--bull)' :
@@ -38,7 +60,7 @@ function StockRow({ stock, onClick }: { stock: ScanStock; onClick: () => void })
       onClick={onClick}
       style={{
         display: 'grid',
-        gridTemplateColumns: '16px 1fr 44px 44px',
+        gridTemplateColumns: GRID_COLS[variant],
         gap: 6, alignItems: 'center',
         padding: '4px 0',
         borderBottom: '1px solid var(--border)',
@@ -50,25 +72,77 @@ function StockRow({ stock, onClick }: { stock: ScanStock; onClick: () => void })
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
     >
       <ZoneDot zone={stock.magic_rs_zone} />
-      <span style={{
-        color: 'var(--text-primary)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
+      <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {sym}
       </span>
-      <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
-        {stock.magic_rs != null ? stock.magic_rs.toFixed(1) : '—'}
-      </span>
-      <span style={{ color: chgColor, textAlign: 'right' }}>
-        {stock.pct_chng != null
-          ? `${stock.pct_chng > 0 ? '+' : ''}${stock.pct_chng.toFixed(1)}%`
-          : '—'}
-      </span>
+
+      {variant === 'default' ? (
+        <>
+          <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+            {stock.magic_rs != null ? stock.magic_rs.toFixed(1) : '—'}
+          </span>
+          <span style={{ color: chgColor, textAlign: 'right' }}>
+            {stock.pct_chng != null
+              ? `${stock.pct_chng > 0 ? '+' : ''}${stock.pct_chng.toFixed(1)}%`
+              : '—'}
+          </span>
+        </>
+      ) : (
+        <>
+          <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+            {formatClose(stock.close)}
+          </span>
+          <span style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
+            {stock.magic_rs != null ? stock.magic_rs.toFixed(1) : '—'}
+          </span>
+          <span style={{ color: 'var(--text-faint)', textAlign: 'right', fontSize: 9, letterSpacing: '.02em' }}>
+            {formatStage(stock.stage)}
+          </span>
+          <span style={{ color: chgColor, textAlign: 'right' }}>
+            {stock.pct_chng != null
+              ? `${stock.pct_chng > 0 ? '+' : ''}${stock.pct_chng.toFixed(1)}%`
+              : '—'}
+          </span>
+        </>
+      )}
     </div>
   )
 }
 
-export default function ScannerWidget({ presetId, title, maxRows = 4 }: ScannerWidgetProps) {
+function ColumnHeaders({ variant = 'default' }: { variant?: ColumnVariant }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: GRID_COLS[variant],
+      gap: 6,
+      fontFamily: 'var(--font-mono, monospace)',
+      fontSize: 9,
+      color: 'var(--text-faint)',
+      letterSpacing: '.08em',
+      textTransform: 'uppercase',
+      paddingBottom: 4,
+      borderBottom: '1px solid var(--border)',
+    }}>
+      <span />
+      <span>Symbol</span>
+      {variant === 'default' ? (
+        <>
+          <span style={{ textAlign: 'right' }}>RS</span>
+          <span style={{ textAlign: 'right' }}>Chg</span>
+        </>
+      ) : (
+        <>
+          <span style={{ textAlign: 'right' }}>Close</span>
+          <span style={{ textAlign: 'right' }}>MRS</span>
+          <span style={{ textAlign: 'right' }}>Stg</span>
+          <span style={{ textAlign: 'right' }}>D%</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+export default function ScannerWidget({ presetId, title, maxRows = 4, variant = 'default' }: ScannerWidgetProps) {
   const { data, isLoading, isError } = useScan(presetId)
   const navigate = useNavigate()
 
@@ -86,10 +160,7 @@ export default function ScannerWidget({ presetId, title, maxRows = 4 }: ScannerW
           {title}
         </span>
         {!isLoading && !isError && data && (
-          <span style={{
-            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-            color: 'var(--text-faint)',
-          }}>
+          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-faint)' }}>
             {data.length}
           </span>
         )}
@@ -97,23 +168,7 @@ export default function ScannerWidget({ presetId, title, maxRows = 4 }: ScannerW
 
       {/* Column headers */}
       {!isLoading && !isError && data && data.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '16px 1fr 44px 44px',
-          gap: 6,
-          fontFamily: 'var(--font-mono, monospace)',
-          fontSize: 9,
-          color: 'var(--text-faint)',
-          letterSpacing: '.08em',
-          textTransform: 'uppercase',
-          paddingBottom: 4,
-          borderBottom: '1px solid var(--border)',
-        }}>
-          <span />
-          <span>Symbol</span>
-          <span style={{ textAlign: 'right' }}>RS</span>
-          <span style={{ textAlign: 'right' }}>Chg</span>
-        </div>
+        <ColumnHeaders variant={variant} />
       )}
 
       {/* Body */}
@@ -137,6 +192,7 @@ export default function ScannerWidget({ presetId, title, maxRows = 4 }: ScannerW
             key={stock.equity_id}
             stock={stock}
             onClick={() => navigate(`/pulse/equity/${stock.equity_id}`)}
+            variant={variant}
           />
         ))
       )}
