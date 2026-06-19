@@ -18,6 +18,7 @@ import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookC
 import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals'
 import SectorRotationFlow from '@/components/domain/DashboardV3/SectorRotationFlow'
 import ScannerWidget from '@/components/domain/ScannerWidget'
+import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 
 type ActiveTab = 'today' | 'discovery' | 'myspace'
 
@@ -199,8 +200,7 @@ export default function WorkspacePage() {
 
         {/* Right side */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* AtmosphericBadge — not yet a standalone component; placeholder until Step 4.9 */}
-          <div className="atmospheric-placeholder" />
+          <AtmosphericBadge />
           <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
             {todayDisplay}
           </span>

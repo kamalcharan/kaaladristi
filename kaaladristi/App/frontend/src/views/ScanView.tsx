@@ -9,9 +9,8 @@ import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
 import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
-import { useAstroSignal } from '@/hooks/useDashboardExtras';
-import { useLastTradingDate } from '@/hooks/useLastTradingDate';
 import type { ScanDefinition, ScanStock } from '@/types';
+import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 
 // ── Sort ──────────────────────────────────────────────────────
 
@@ -318,14 +317,6 @@ function TradingViewExportButton({
   );
 }
 
-// ── Atmospheric line (VaNi section header) ────────────────────
-
-function atmosphericConfig(netScore: number): { color: string; label: string } {
-  if (netScore > 2)  return { color: 'var(--teal, #00c9a0)', label: 'Favorable' };
-  if (netScore >= -1) return { color: 'var(--caution)',       label: 'Neutral'   };
-  return               { color: 'var(--bear)',                label: 'Unfavorable' };
-}
-
 // ── VaNi Section header (used by all screener detail views) ───
 
 function VaniSectionHeader({
@@ -337,11 +328,6 @@ function VaniSectionHeader({
   onAddWidget: () => void;
   scanName: string;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const { lastTradingDate } = useLastTradingDate(today);
-  const { data: astro } = useAstroSignal(lastTradingDate);
-  const atm = atmosphericConfig(astro?.net_score ?? 0);
-
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -364,16 +350,7 @@ function VaniSectionHeader({
             {vaniCount} stock{vaniCount !== 1 ? 's' : ''}
           </span>
         </span>
-        {astro && (
-          <span style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            fontSize: '11px', color: atm.color,
-            fontFamily: 'var(--font-mono)',
-          }}>
-            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: atm.color, flexShrink: 0 }} />
-            Atmospheric · {atm.label}
-          </span>
-        )}
+        <AtmosphericBadge />
       </div>
       {/* Right: Add Widget */}
       <button
