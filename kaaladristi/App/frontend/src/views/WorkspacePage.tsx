@@ -16,6 +16,8 @@ import CurrentSkyRail from '@/components/domain/DashboardV3/CurrentSkyRail'
 import PanchangamCard from '@/components/domain/PanchangamCard'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
 import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals'
+import SectorRotationFlow from '@/components/domain/DashboardV3/SectorRotationFlow'
+import ScannerWidget from '@/components/domain/ScannerWidget'
 
 type ActiveTab = 'today' | 'discovery' | 'myspace'
 
@@ -294,9 +296,24 @@ export default function WorkspacePage() {
       )}
 
       {activeTab === 'discovery' && (
-        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
-          {/* Step 4.6 will fill this */}
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Discovery tab — coming in Step 4.6</div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {/* Sector Rotation Flow */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <SectorRotationFlow />
+          </div>
+
+          {/* Scanner widgets */}
+          <div style={{ padding: '16px 20px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)', letterSpacing: '.06em',
+              textTransform: 'uppercase', marginBottom: 12, fontFamily: 'var(--font-mono, monospace)' }}>
+              Scan Highlights
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+              <ScannerWidget presetId="stage_2_leaders" title="Stage 2 Leaders" maxRows={4} />
+              <ScannerWidget presetId="conviction_flow" title="Conviction Flow" maxRows={4} />
+              <ScannerWidget presetId="power_buy" title="Strength Confluence" maxRows={4} />
+            </div>
+          </div>
         </div>
       )}
 
