@@ -250,10 +250,11 @@ interface S2Props {
   typed: boolean; icp: ICP | null
   onSelect: (val: ICP) => void
   blend: number; setBlend: (v: number) => void
+  icpMode: 'astro' | 'technical'; setIcpMode: (v: 'astro' | 'technical') => void
   onContinue: () => void
 }
 
-function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props) {
+function Screen2({ typed, icp, onSelect, blend, setBlend, icpMode, setIcpMode, onContinue }: S2Props) {
   const tiles: { val: ICP; icon: string; label: string; sub: string }[] = [
     { val:'investor', icon:'🌱', label:'Investor',  sub:'Weeks to months' },
     { val:'trader',   icon:'⚡', label:'Trader',    sub:'Swing & short-term' },
@@ -335,6 +336,43 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, onContinue }: S2Props)
               color:'var(--text-muted)', marginTop:8,
               fontFamily:'var(--font-mono, monospace)' }}>
               <span>← Investor</span><span>Trader →</span>
+            </div>
+          </div>
+        )}
+
+        {/* Analysis style toggle */}
+        {typed && icp && (
+          <div style={{ maxWidth:520, width:'100%', marginTop:10,
+            animation:'bubble-in .3s ease .1s both' }}>
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10,
+              fontFamily:'var(--font-mono, monospace)', letterSpacing:'.04em' }}>
+              Your analysis style:
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              {([
+                { val: 'astro' as const,      icon: '☽', label: 'Astro-aware'   },
+                { val: 'technical' as const,  icon: '⊙', label: 'Technical only' },
+              ]).map(({ val, icon, label }) => {
+                const active = icpMode === val
+                return (
+                  <button
+                    key={val}
+                    onClick={() => setIcpMode(val)}
+                    style={{
+                      flex: 1, padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+                      fontSize: 13, fontFamily: 'inherit', fontWeight: active ? 500 : 400,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      transition: 'all .2s ease',
+                      background: active ? 'var(--accent-dim)' : 'transparent',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                      color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    }}
+                  >
+                    <span style={{ fontSize: 15 }}>{icon}</span>
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -714,6 +752,7 @@ export default function ProfileSetup() {
   const [step,        setStep]        = useState<Step>(1)
   const [icp,         setIcp]         = useState<ICP | null>(null)
   const [blend,       setBlend]       = useState(50)
+  const [icpMode,     setIcpMode]     = useState<'astro' | 'technical'>('astro')
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '')
   const [phone,       setPhone]       = useState(profile?.phone ?? '')
   const [s2Typed,     setS2Typed]     = useState(false)
@@ -758,9 +797,9 @@ export default function ProfileSetup() {
       const template = getTemplateForICP(icp, blend)
       applyTemplate(template)
       await saveFramework()
-      await updateProfile({ onboarded: true })
+      await updateProfile({ onboarded: true, icp_mode: icpMode })
       try { await refreshProfile() } catch {
-        if (profile) setProfile({ ...profile, onboarded: true })
+        if (profile) setProfile({ ...profile, onboarded: true, icp_mode: icpMode })
       }
       setStep(4)
     } catch {
@@ -791,9 +830,9 @@ export default function ProfileSetup() {
       const template = getTemplateForICP(icp, blend)
       applyTemplate(template)
       await saveFramework()
-      await updateProfile({ onboarded: true })
+      await updateProfile({ onboarded: true, icp_mode: icpMode })
       try { await refreshProfile() } catch {
-        if (profile) setProfile({ ...profile, onboarded: true })
+        if (profile) setProfile({ ...profile, onboarded: true, icp_mode: icpMode })
       }
       navigate('/catalog', { replace: true })
     } catch {
@@ -818,6 +857,7 @@ export default function ProfileSetup() {
           typed={s2Typed} icp={icp}
           onSelect={handleSelectICP}
           blend={blend} setBlend={setBlend}
+          icpMode={icpMode} setIcpMode={setIcpMode}
           onContinue={() => setStep(3)}
         />
       )}
