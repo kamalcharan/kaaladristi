@@ -102,6 +102,7 @@ interface FrameworkStore {
   toggleOverlayVisibility: (catalogItemId: string) => void
   updateOverlayColor: (catalogItemId: string, color: string) => void
   updateOverlayOpacity: (catalogItemId: string, opacity: number) => void
+  updateOverlayConfig: (catalogItemId: string, config: Record<string, unknown>) => void
   addChartBlock: (instrument: InstrumentRef) => void
   switchPrimaryIndex: (instrument: InstrumentRef) => void
   addInstrument: (symbol: string) => void
@@ -321,12 +322,16 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
     const overlayType = item.overlay_type
     if (!overlayType) return
 
+    const defaultConfig: Record<string, unknown> | undefined =
+      item.id === 'gann_sq9' ? { show_ordinal: false } : undefined
+
     const overlay: ChartOverlay = {
       catalog_item_id: item.id,
       type: overlayType,
       visible: true,
       ...(color ? { color } : {}),
       ...(item.display_name ? { label: item.display_name } : {}),
+      ...(defaultConfig ? { config: defaultConfig } : {}),
     }
 
     set(s => ({
@@ -387,6 +392,22 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
             ...s.framework,
             chart_overlays: s.framework.chart_overlays.map(o =>
               o.catalog_item_id === catalogItemId ? { ...o, opacity } : o
+            ),
+            version: s.framework.version + 1,
+          }
+        : null,
+    }))
+    scheduleSave(saveFramework)
+  },
+
+  updateOverlayConfig: (catalogItemId: string, config: Record<string, unknown>) => {
+    const { saveFramework } = get()
+    set(s => ({
+      framework: s.framework
+        ? {
+            ...s.framework,
+            chart_overlays: s.framework.chart_overlays.map(o =>
+              o.catalog_item_id === catalogItemId ? { ...o, config: { ...o.config, ...config } } : o
             ),
             version: s.framework.version + 1,
           }
