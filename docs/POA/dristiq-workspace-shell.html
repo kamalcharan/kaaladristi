@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DristiQ — Workspace Shell</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg:               #0b1120;
+    --card:             #111827;
+    --card-soft:        #0f1929;
+    --border:           rgba(99,102,241,0.12);
+    --border-strong:    rgba(99,102,241,0.22);
+    --accent:           #818cf8;
+    --accent-dim:       rgba(129,140,248,0.15);
+    --accent-glow:      rgba(129,140,248,0.08);
+    --gold:             #f59e0b;
+    --gold-soft:        rgba(245,158,11,0.12);
+    --bull:             #10b981;
+    --bear:             #ef4444;
+    --text-primary:     #f1f5f9;
+    --text-secondary:   #94a3b8;
+    --text-muted:       #475569;
+    --font-display:     'Fraunces', serif;
+    --font-body:        'Inter', sans-serif;
+    --font-mono:        'JetBrains Mono', monospace;
+    --sidebar-w:        220px;
+    --topbar-h:         48px;
+    --tabbar-h:         44px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+  }
+
+  /* ── SIDEBAR ─────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-height: 100vh;
+    background: var(--card-soft);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 50;
+  }
+
+  .sidebar-brand {
+    height: var(--topbar-h);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+
+  .brand-glyph {
+    width: 24px; height: 24px;
+    background: var(--accent);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: #0b1120;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .brand-name {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 300;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+  }
+
+  .brand-name span { color: var(--accent); }
+
+  .sidebar-section {
+    padding: 16px 0 8px;
+  }
+
+  .sidebar-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    padding: 0 16px 8px;
+    text-transform: uppercase;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 400;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+    text-decoration: none;
+  }
+
+  .nav-item:hover { color: var(--text-primary); background: var(--accent-glow); }
+
+  .nav-item.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: var(--accent-dim);
+    font-weight: 500;
+  }
+
+  .nav-icon { width: 14px; text-align: center; font-size: 13px; opacity: 0.7; }
+  .nav-item.active .nav-icon { opacity: 1; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .footer-info { flex: 1; min-width: 0; }
+  .footer-name { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+  .footer-plan { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+
+  .theme-dots {
+    display: flex; gap: 4px; padding: 8px 16px;
+  }
+
+  .theme-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: transform 0.15s;
+  }
+
+  .theme-dot:hover { transform: scale(1.3); }
+  .theme-dot.active { border-color: var(--text-primary); }
+
+  /* ── MAIN AREA ────────────────────────────────────── */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── TOPBAR ───────────────────────────────────────── */
+  .topbar {
+    height: var(--topbar-h);
+    background: var(--card-soft);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .search-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 14px;
+    width: 260px;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: text;
+  }
+
+  .search-pill:hover { border-color: var(--border-strong); }
+
+  .topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .freshness-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--bull);
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-family: var(--font-mono);
+  }
+
+  .freshness-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--bull);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .vani-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-dim);
+    border: 1px solid var(--border-strong);
+    border-radius: 20px;
+    padding: 5px 14px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .vani-btn:hover { background: rgba(129,140,248,0.2); }
+  .vani-star { font-size: 11px; }
+
+  /* ── TAB BAR ──────────────────────────────────────── */
+  .tabbar {
+    height: var(--tabbar-h);
+    background: var(--card-soft);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: stretch;
+    padding: 0 20px;
+    gap: 0;
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 39;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 20px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+    white-space: nowrap;
+  }
+
+  .tab:hover { color: var(--text-secondary); }
+
+  .tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+    font-weight: 500;
+  }
+
+  .tab-icon { font-size: 13px; opacity: 0.8; }
+  .tab.active .tab-icon { opacity: 1; }
+
+  .tab-badge {
+    font-size: 9px;
+    font-weight: 600;
+    background: var(--accent);
+    color: #0b1120;
+    border-radius: 8px;
+    padding: 1px 5px;
+    letter-spacing: 0.04em;
+  }
+
+  .tab-icp-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--gold);
+    flex-shrink: 0;
+  }
+
+  .tabbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .atmospheric-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--bull);
+    background: rgba(16,185,129,0.07);
+    border: 1px solid rgba(16,185,129,0.18);
+    border-radius: 12px;
+    padding: 3px 10px;
+  }
+
+  .atm-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--bull); }
+
+  .date-chip {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  /* ── PAGE CONTENT ─────────────────────────────────── */
+  .page-content {
+    flex: 1;
+    padding: 24px 24px;
+    display: none;
+  }
+
+  .page-content.active { display: block; }
+
+  /* ── TODAY TAB ────────────────────────────────────── */
+  .today-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .today-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 300;
+    color: var(--text-primary);
+    font-style: italic;
+  }
+
+  .today-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .section-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Morning Brief strip */
+  .morning-brief-strip {
+    background: linear-gradient(135deg, rgba(129,140,248,0.06) 0%, rgba(245,158,11,0.04) 100%);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .brief-orb {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, rgba(129,140,248,0.6), rgba(129,140,248,0.1));
+    border: 1px solid rgba(129,140,248,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    animation: orb-breathe 4s ease-in-out infinite;
+  }
+
+  @keyframes orb-breathe {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(129,140,248,0.2); }
+    50% { box-shadow: 0 0 12px 4px rgba(129,140,248,0.15); }
+  }
+
+  .brief-content { flex: 1; }
+
+  .brief-vani-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+
+  .brief-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .brief-text strong { color: var(--text-primary); font-weight: 500; }
+
+  .brief-pills {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .brief-pill {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+
+  .brief-pill:hover { opacity: 0.8; }
+  .brief-pill.green { color: var(--bull); border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.07); }
+  .brief-pill.gold { color: var(--gold); border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.07); }
+  .brief-pill.indigo { color: var(--accent); border-color: rgba(129,140,248,0.3); background: rgba(129,140,248,0.07); }
+
+  /* Market pulse row */
+  .pulse-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .pulse-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .pulse-card:hover { border-color: var(--border-strong); }
+
+  .pulse-card-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .pulse-card-value {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .pulse-card-change {
+    font-size: 12px;
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .up { color: var(--bull); }
+  .down { color: var(--bear); }
+
+  .pulse-card-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Index chart placeholder */
+  .chart-placeholder {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    height: 200px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chart-placeholder-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    z-index: 1;
+  }
+
+  .chart-bg-lines {
+    position: absolute;
+    inset: 0;
+    opacity: 0.15;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Astro band */
+  .astro-band {
+    background: linear-gradient(90deg, rgba(245,158,11,0.06), rgba(129,140,248,0.06));
+    border: 1px solid rgba(245,158,11,0.15);
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    font-size: 12px;
+  }
+
+  .astro-band-icon { font-size: 14px; }
+  .astro-band-text { color: var(--text-secondary); }
+  .astro-band-text strong { color: var(--gold); font-weight: 500; }
+  .astro-band-right { margin-left: auto; display: flex; gap: 8px; }
+
+  .astro-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.2);
+    color: var(--gold);
+    font-weight: 500;
+  }
+
+  /* ── DISCOVERY TAB ────────────────────────────────── */
+  .discovery-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .discovery-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .discovery-card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .discovery-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-count {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1px 7px;
+  }
+
+  .card-link {
+    font-size: 10px;
+    color: var(--accent);
+    cursor: pointer;
+    opacity: 0.8;
+  }
+
+  .card-link:hover { opacity: 1; }
+
+  /* Rotation rows */
+  .rotation-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    border-bottom: 1px solid rgba(99,102,241,0.06);
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .rotation-row:hover { background: var(--accent-glow); }
+  .rotation-row:last-child { border-bottom: none; }
+
+  .rotation-rank {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 16px;
+    flex-shrink: 0;
+  }
+
+  .rotation-name { flex: 1; font-size: 12px; color: var(--text-primary); font-weight: 500; }
+  .rotation-sub { font-size: 10px; color: var(--text-muted); }
+
+  .rotation-arrow {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+  }
+
+  .rotating-in { color: var(--bull); }
+  .rotating-out { color: var(--bear); }
+
+  .rotation-pct {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    width: 52px;
+    text-align: right;
+  }
+
+  /* Scanner widget */
+  .scanner-widget {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .scanner-widget:hover { border-color: var(--border-strong); }
+
+  .scanner-widget-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .scanner-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .vani-chip {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(129,140,248,0.25);
+    border-radius: 8px;
+    padding: 2px 6px;
+  }
+
+  .scanner-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Mini table */
+  .mini-table { width: 100%; }
+
+  .mini-table-row {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr 0.7fr 0.7fr 0.7fr;
+    padding: 7px 16px;
+    border-bottom: 1px solid rgba(99,102,241,0.05);
+    align-items: center;
+    transition: background 0.1s;
+  }
+
+  .mini-table-row:hover { background: var(--accent-glow); }
+  .mini-table-row:last-child { border-bottom: none; }
+
+  .mini-table-row.header {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    background: var(--bg);
+    padding: 6px 16px;
+  }
+
+  .mini-table-row.header:hover { background: var(--bg); }
+
+  .col-symbol { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+  .col-close { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+  .col-num { font-family: var(--font-mono); font-size: 11px; text-align: right; }
+  .col-rs { font-family: var(--font-mono); font-size: 11px; text-align: right; }
+
+  /* ── MY SPACE TAB ─────────────────────────────────── */
+  .myspace-notice {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .notice-icon { font-size: 24px; }
+
+  .notice-text h3 {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .notice-text p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+  .canvas-mock {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-height: 400px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 180px);
+    gap: 1px;
+    overflow: hidden;
+  }
+
+  .canvas-block {
+    background: var(--card-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: grab;
+    transition: border-color 0.15s;
+  }
+
+  .canvas-block:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+  .canvas-block-icon { font-size: 20px; opacity: 0.4; }
+  .canvas-block.span2 { grid-column: span 2; }
+
+  /* ── ICP SWITCHER (demo) ──────────────────────────── */
+  .icp-demo-bar {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--card);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 100;
+    font-size: 11px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .icp-label { color: var(--text-muted); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .icp-btn {
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    background: transparent;
+    transition: all 0.15s;
+  }
+
+  .icp-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+  .icp-btn.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(129,140,248,0.3); }
+
+  .astro-band-hidden { display: none; }
+
+  /* scroll */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-glyph">D</div>
+    <div class="brand-name">dristi<span>Q</span></div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-label">View</div>
+    <div class="nav-item active">
+      <span class="nav-icon">⊞</span> Workspace
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">⊟</span> Catalog
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">◉</span> Dashboard
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">⊙</span> Scanner
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">⊞</span> Market Structure
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">☽</span> Planetary Intel
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">◯</span> Account
+    </div>
+  </div>
+
+  <div class="theme-dots">
+    <div class="theme-dot active" style="background:#818cf8"></div>
+    <div class="theme-dot" style="background:#06d5cd"></div>
+    <div class="theme-dot" style="background:#3aad7e"></div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="avatar">CH</div>
+    <div class="footer-info">
+      <div class="footer-name">Charan</div>
+      <div class="footer-plan">Beta · Vikuna</div>
+    </div>
+    <span style="color:var(--text-muted);font-size:11px;cursor:pointer;">↩</span>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="search-pill">
+      <span>🔍</span>
+      <span>Search stocks, sectors, rules…</span>
+    </div>
+    <div class="topbar-right">
+      <div class="freshness-chip">
+        <div class="freshness-dot"></div>
+        EOD · 18 Jun
+      </div>
+      <div class="vani-btn">
+        <span class="vani-star">✦</span> Ask VaNi
+      </div>
+    </div>
+  </header>
+
+  <!-- TAB BAR -->
+  <nav class="tabbar">
+    <div class="tab active" onclick="switchTab('today', this)">
+      <span class="tab-icon">◐</span>
+      Today
+      <div class="tab-icp-dot" id="icpDot" title="Astro mode active"></div>
+    </div>
+    <div class="tab" onclick="switchTab('discovery', this)">
+      <span class="tab-icon">⊙</span>
+      Discovery
+    </div>
+    <div class="tab" onclick="switchTab('myspace', this)">
+      <span class="tab-icon">⊞</span>
+      My Space
+    </div>
+
+    <div class="tabbar-right">
+      <div class="atmospheric-pill">
+        <div class="atm-dot"></div>
+        Atmospheric · Favorable
+      </div>
+      <div class="date-chip">Thu 19 Jun 2026</div>
+    </div>
+  </nav>
+
+  <!-- TODAY TAB -->
+  <div class="page-content active" id="tab-today">
+
+    <div class="today-header">
+      <div class="today-title">Good morning, Charan</div>
+      <div class="today-subtitle">Here is your market pulse for today</div>
+    </div>
+
+    <!-- VaNi Morning Brief — pinned, not modal -->
+    <div class="section-label">VaNi Morning Brief</div>
+    <div class="morning-brief-strip">
+      <div class="brief-orb">✦</div>
+      <div class="brief-content">
+        <div class="brief-vani-label">VaNi · 06:30 IST</div>
+        <div class="brief-text">
+          Today's panchang carries <strong>Shukla Tritiya</strong> energy — historically favorable for momentum continuation.
+          Breadth ROC is positive at <strong>+2.3</strong>. Shipbuilding and Consumer Durables are rotating in strongly.
+          Watch for delivery surges in midcap industrials post 11 AM.
+        </div>
+        <div class="brief-pills">
+          <div class="brief-pill green">↑ Breadth ROC +2.3</div>
+          <div class="brief-pill gold">☽ Shukla Tritiya</div>
+          <div class="brief-pill indigo">⊙ Stage 2 Leaders · 367 stocks</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Astro band (Astro ICP only) -->
+    <div class="astro-band" id="astroBand">
+      <span class="astro-band-icon">☿</span>
+      <div class="astro-band-text">
+        <strong>Venus–Jupiter trine</strong> active today · Nakshatra: Rohini · Vara: Guruvara
+      </div>
+      <div class="astro-band-right">
+        <div class="astro-tag">Bullish bias</div>
+        <div class="astro-tag">High conviction</div>
+      </div>
+    </div>
+
+    <!-- Market Pulse Cards -->
+    <div class="section-label">Market Pulse</div>
+    <div class="pulse-row">
+      <div class="pulse-card">
+        <div class="pulse-card-label">Nifty 50</div>
+        <div class="pulse-card-value">24,718</div>
+        <div class="pulse-card-change up">▲ +186 &nbsp; +0.76%</div>
+        <div class="pulse-card-sub">Above EMA 20 · Stage 2 structure</div>
+      </div>
+      <div class="pulse-card">
+        <div class="pulse-card-label">Nifty 500</div>
+        <div class="pulse-card-value">21,340</div>
+        <div class="pulse-card-change up">▲ +143 &nbsp; +0.67%</div>
+        <div class="pulse-card-sub">Breadth expanding · Advances 62%</div>
+      </div>
+      <div class="pulse-card">
+        <div class="pulse-card-label">Market Breadth</div>
+        <div class="pulse-card-value" style="color:var(--bull)">62 / 38</div>
+        <div class="pulse-card-change up">Adv / Dec ratio</div>
+        <div class="pulse-card-sub">ROC · +2.3 &nbsp;·&nbsp; Expanding</div>
+      </div>
+    </div>
+
+    <!-- Index Chart Placeholder -->
+    <div class="section-label">Index Chart</div>
+    <div class="chart-placeholder">
+      <div class="chart-bg-lines"></div>
+      <div class="chart-placeholder-label">TradingChart renders here · Nifty 50 · Daily · With overlays</div>
+    </div>
+
+  </div>
+
+  <!-- DISCOVERY TAB -->
+  <div class="page-content" id="tab-discovery">
+
+    <div class="today-header">
+      <div class="today-title">Discovery</div>
+      <div class="today-subtitle">Where is money flowing today</div>
+    </div>
+
+    <div class="section-label">Sector & Industry Rotation</div>
+    <div class="discovery-grid">
+
+      <!-- Rotating In -->
+      <div class="discovery-card">
+        <div class="discovery-card-header">
+          <div class="discovery-card-title">
+            <span style="color:var(--bull)">↑</span> Rotating In
+            <span class="card-count">5 sectors</span>
+          </div>
+          <div class="card-link">Full view →</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">1</div>
+          <div>
+            <div class="rotation-name">Ship Building</div>
+            <div class="rotation-sub">3 stocks · MRS avg 42.3</div>
+          </div>
+          <div class="rotation-arrow rotating-in">↑</div>
+          <div class="rotation-pct up">+5.00%</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">2</div>
+          <div>
+            <div class="rotation-name">Consumer Durables</div>
+            <div class="rotation-sub">9 stocks · MRS avg 31.2</div>
+          </div>
+          <div class="rotation-arrow rotating-in">↑</div>
+          <div class="rotation-pct up">+8.19%</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">3</div>
+          <div>
+            <div class="rotation-name">Hospitality</div>
+            <div class="rotation-sub">9 stocks · MRS avg 35.3</div>
+          </div>
+          <div class="rotation-arrow rotating-in">↑</div>
+          <div class="rotation-pct up">+5.24%</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">4</div>
+          <div>
+            <div class="rotation-name">Realty</div>
+            <div class="rotation-sub">12 stocks · MRS avg 29.9</div>
+          </div>
+          <div class="rotation-arrow rotating-in">↑</div>
+          <div class="rotation-pct up">+5.61%</div>
+        </div>
+      </div>
+
+      <!-- Rotating Out -->
+      <div class="discovery-card">
+        <div class="discovery-card-header">
+          <div class="discovery-card-title">
+            <span style="color:var(--bear)">↓</span> Rotating Out
+            <span class="card-count">5 sectors</span>
+          </div>
+          <div class="card-link">Full view →</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">1</div>
+          <div>
+            <div class="rotation-name">IT Services</div>
+            <div class="rotation-sub">22 stocks · MRS avg 12.1</div>
+          </div>
+          <div class="rotation-arrow rotating-out">↓</div>
+          <div class="rotation-pct down">-2.30%</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">2</div>
+          <div>
+            <div class="rotation-name">Pharma</div>
+            <div class="rotation-sub">18 stocks · MRS avg 9.4</div>
+          </div>
+          <div class="rotation-arrow rotating-out">↓</div>
+          <div class="rotation-pct down">-1.85%</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">3</div>
+          <div>
+            <div class="rotation-name">FMCG</div>
+            <div class="rotation-sub">11 stocks · MRS avg 7.2</div>
+          </div>
+          <div class="rotation-arrow rotating-out">↓</div>
+          <div class="rotation-pct down">-1.20%</div>
+        </div>
+        <div class="rotation-row">
+          <div class="rotation-rank">4</div>
+          <div>
+            <div class="rotation-name">Chemicals</div>
+            <div class="rotation-sub">14 stocks · MRS avg 5.8</div>
+          </div>
+          <div class="rotation-arrow rotating-out">↓</div>
+          <div class="rotation-pct down">-0.92%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scanner Widgets -->
+    <div class="section-label">Scanner Widgets · VaNi Opportunity</div>
+
+    <div class="scanner-widget" onclick="window.location='/scanner/stage_2_leaders'">
+      <div class="scanner-widget-header">
+        <div class="scanner-name">
+          Stage 2 Leaders
+          <span class="vani-chip">✦ VANI</span>
+        </div>
+        <div class="scanner-meta">
+          <span>367 stocks</span>
+          <span>·</span>
+          <span>NSE · Daily</span>
+          <span style="color:var(--accent)">View all →</span>
+        </div>
+      </div>
+      <div class="mini-table">
+        <div class="mini-table-row header">
+          <span>Symbol</span><span>Close</span><span class="col-num">MRS</span><span class="col-num">RS%</span><span class="col-num">D%</span>
+        </div>
+        <div class="mini-table-row">
+          <span class="col-symbol">DOMS</span>
+          <span class="col-close">₹2,337</span>
+          <span class="col-num" style="color:var(--bull)">77.9</span>
+          <span class="col-num up">92</span>
+          <span class="col-num up">+4.71%</span>
+        </div>
+        <div class="mini-table-row">
+          <span class="col-symbol">KIRLFER</span>
+          <span class="col-close">₹473</span>
+          <span class="col-num" style="color:var(--bull)">155.2</span>
+          <span class="col-num up">88</span>
+          <span class="col-num up">+6.62%</span>
+        </div>
+        <div class="mini-table-row">
+          <span class="col-symbol">FIVESTAR</span>
+          <span class="col-close">₹518</span>
+          <span class="col-num" style="color:var(--bull)">146.5</span>
+          <span class="col-num up">85</span>
+          <span class="col-num up">+6.86%</span>
+        </div>
+        <div class="mini-table-row">
+          <span class="col-symbol">CAMPUS</span>
+          <span class="col-close">₹240</span>
+          <span class="col-num" style="color:var(--gold)">104.8</span>
+          <span class="col-num up">79</span>
+          <span class="col-num up">+3.57%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="scanner-widget">
+      <div class="scanner-widget-header">
+        <div class="scanner-name">
+          Conviction Flow
+          <span class="vani-chip">✦ VANI</span>
+        </div>
+        <div class="scanner-meta">
+          <span>50 stocks</span>
+          <span>·</span>
+          <span>NSE · Daily</span>
+          <span style="color:var(--accent)">View all →</span>
+        </div>
+      </div>
+      <div class="mini-table">
+        <div class="mini-table-row header">
+          <span>Symbol</span><span>Close</span><span class="col-num">Surge×</span><span class="col-num">5D Avg</span><span class="col-num">D%</span>
+        </div>
+        <div class="mini-table-row">
+          <span class="col-symbol">DOMS</span>
+          <span class="col-close">₹2,337</span>
+          <span class="col-num up">4.12×</span>
+          <span class="col-num">221 Cr</span>
+          <span class="col-num up">+4.71%</span>
+        </div>
+        <div class="mini-table-row">
+          <span class="col-symbol">CAPILLARY</span>
+          <span class="col-close">₹496</span>
+          <span class="col-num up">3.91×</span>
+          <span class="col-num">15 Cr</span>
+          <span class="col-num down">-2.47%</span>
+        </div>
+        <div class="mini-table-row">
+          <span class="col-symbol">BOSCH-HCIL</span>
+          <span class="col-close">₹1,407</span>
+          <span class="col-num up">2.96×</span>
+          <span class="col-num">7 Cr</span>
+          <span class="col-num up">+3.22%</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MY SPACE TAB -->
+  <div class="page-content" id="tab-myspace">
+    <div class="today-header">
+      <div class="today-title">My Space</div>
+      <div class="today-subtitle">Your personal framework canvas</div>
+    </div>
+
+    <div class="myspace-notice">
+      <div class="notice-icon">⊞</div>
+      <div class="notice-text">
+        <h3>Your framework canvas</h3>
+        <p>Drag blocks, add overlays, build your own analytical setup. Add blocks from the Catalog to get started. Customization features coming in the next release.</p>
+      </div>
+    </div>
+
+    <div class="canvas-mock">
+      <div class="canvas-block span2">
+        <div class="canvas-block-icon">📈</div>
+        <span>Index Chart · Nifty 50</span>
+      </div>
+      <div class="canvas-block">
+        <div class="canvas-block-icon">🌙</div>
+        <span>Panchang</span>
+      </div>
+      <div class="canvas-block">
+        <div class="canvas-block-icon">⊙</div>
+        <span>MagicRS Widget</span>
+      </div>
+      <div class="canvas-block">
+        <div class="canvas-block-icon">📊</div>
+        <span>Breadth ROC</span>
+      </div>
+      <div class="canvas-block">
+        <div class="canvas-block-icon">✦</div>
+        <span>VaNi Correlations</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ICP DEMO SWITCHER -->
+<div class="icp-demo-bar">
+  <span class="icp-label">ICP Mode</span>
+  <button class="icp-btn active" id="btnAstro" onclick="setICP('astro')">☽ Astro</button>
+  <button class="icp-btn" id="btnTech" onclick="setICP('tech')">⊙ Technical</button>
+</div>
+
+<script>
+  function switchTab(id, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-' + id).classList.add('active');
+  }
+
+  function setICP(mode) {
+    document.getElementById('btnAstro').classList.toggle('active', mode === 'astro');
+    document.getElementById('btnTech').classList.toggle('active', mode === 'tech');
+    const astroBand = document.getElementById('astroBand');
+    const icpDot = document.getElementById('icpDot');
+    if (mode === 'astro') {
+      astroBand.style.display = 'flex';
+      icpDot.style.display = 'block';
+    } else {
+      astroBand.style.display = 'none';
+      icpDot.style.display = 'none';
+    }
+  }
+</script>
+
+</body>
+</html>
