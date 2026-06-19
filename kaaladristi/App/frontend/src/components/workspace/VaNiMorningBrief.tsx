@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { X, Trash2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -153,9 +153,11 @@ interface VaNiMorningBriefProps {
   modalOpen?:    boolean
   onModalOpen?:  () => void
   onModalClose?: () => void
+  /** If true, renders as an always-visible inline strip (no click-to-open behavior). */
+  pinned?:       boolean
 }
 
-export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose }: VaNiMorningBriefProps) {
+export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose, pinned }: VaNiMorningBriefProps) {
   const navigate       = useNavigate()
   const { profile, isAdmin } = useAuthStore()
   const queryClient    = useQueryClient()
@@ -163,6 +165,86 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose 
   const { framework, vaniCorrelations } = useFrameworkStore()
 
   const items = useComputeBriefItems({ navigate, framework, vaniCorrelations })
+
+  // ── Pinned strip (Today tab) ───────────────────────────────────────────────
+  if (pinned) {
+    const orbStyle: React.CSSProperties = {
+      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+      background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 9, fontWeight: 700, color: '#fff',
+      fontFamily: 'var(--font-mono, monospace)',
+    }
+    if (items.length === 0) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+          <div style={orbStyle}>Vᴺ</div>
+          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'rgba(157,143,249,0.5)', fontFamily: 'var(--font-display)' }}>
+            VaNi · No active signals in framework
+          </span>
+        </div>
+      )
+    }
+    return (
+      <div style={{
+        border: '1px solid rgba(157,143,249,0.22)', borderRadius: 10,
+        background: 'linear-gradient(135deg, rgba(157,143,249,0.06) 0%, rgba(91,79,212,0.04) 100%)',
+        padding: '12px 16px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <div style={orbStyle}>Vᴺ</div>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontStyle: 'italic', color: 'rgba(157,143,249,0.9)' }}>
+            VaNi · Today
+          </span>
+        </div>
+        {items.map((item, i) => (
+          <div key={i} style={{
+            position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 8,
+            marginBottom: i < items.length - 1 ? 8 : 0,
+          }}>
+            {isAdmin && item.item_key && (
+              <button
+                title="Clear this observation's cache"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  await fetch(
+                    `${PIPELINEURL}/api/vani/observation-cache/${encodeURIComponent(item.item_key!)}/${today}`,
+                    { method: 'DELETE' },
+                  ).catch(() => {})
+                  queryClient.removeQueries({ queryKey: ['vani-morning-brief'] })
+                }}
+                style={{
+                  position: 'absolute', top: 0, right: 0,
+                  display: 'flex', alignItems: 'center', gap: 3,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
+                  color: 'rgba(239,68,68,0.35)', padding: 0,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
+              >
+                <Trash2 style={{ width: 10, height: 10 }} />
+                <span>clear cache</span>
+              </button>
+            )}
+            <div style={{ width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: item.dot }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 1 }}>{item.title}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>{item.description}</div>
+            </div>
+            <span style={{
+              fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
+              color: item.dot, background: `${item.dot}18`,
+              border: `1px solid ${item.dot}30`,
+              padding: '1px 5px', borderRadius: 3, flexShrink: 0,
+            }}>{item.badge}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // ── Default (modal trigger) mode ───────────────────────────────────────────
 
   // Render nothing only when there's no inline teaser AND the modal isn't requested.
   // The modal builds its own data from the framework, so it can open on demand
