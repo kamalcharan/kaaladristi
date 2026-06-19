@@ -640,6 +640,9 @@ export interface EquityEodSnapshot {
   w52_low: number | null;
   supertrend_dir: number | null;
   lifetime_high: number | null;
+  // VaNi flag columns (migration 099)
+  is_vani_surge?: boolean | null;
+  is_vani_breakout?: boolean | null;
 }
 
 // ── Astro Daily Signal (from km_astro_daily_signal) ──

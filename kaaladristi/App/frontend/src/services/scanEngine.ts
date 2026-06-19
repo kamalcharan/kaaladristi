@@ -165,7 +165,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -979,14 +979,8 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
     if (d_pct < -8 || d_pct > 8) continue;
 
-    const stock = buildScanStock(id, bundle); // VaNi computed inline below
+    const stock = buildScanStock(id, bundle);
     if (!stock) continue;
-
-    const is_vani =
-      delivery_surge_x > 2 &&
-      d_pct >= -3 && d_pct <= 5 &&
-      eod.close > 100 &&
-      avg_amt_22d > 2;
 
     // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
     const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
@@ -995,7 +989,7 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
 
     results.push({
       ...stock,
-      vaniOpportunity: is_vani,
+      vaniOpportunity: computeVaniOpportunity(eod, SCAN_PRESETS.find((p) => p.id === 'conviction_flow')?.vani_rule),
       avg_amt_5d:       Math.round(avg_amt_5d       * 100) / 100,
       avg_amt_22d:      Math.round(avg_amt_22d      * 100) / 100,
       deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
@@ -1054,18 +1048,12 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
 
-    const stock = buildScanStock(id, bundle); // VaNi computed inline below
+    const stock = buildScanStock(id, bundle);
     if (!stock) continue;
-
-    const is_vani =
-      rvol > 5 &&
-      pct_from_breakout >= 0 && pct_from_breakout <= 5 &&
-      (rsi14 ?? 100) < 75 &&
-      d_pct < 15;
 
     results.push({
       ...stock,
-      vaniOpportunity: is_vani,
+      vaniOpportunity: computeVaniOpportunity(eod, SCAN_PRESETS.find((p) => p.id === 'breakout_surge')?.vani_rule),
       d_pct:             Math.round(d_pct             * 100) / 100,
       breakout_level:    Math.round(breakout_level    * 100) / 100,
       pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
