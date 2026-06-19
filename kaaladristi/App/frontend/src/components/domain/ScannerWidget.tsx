@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useScan } from '@/hooks/useScan'
 import type { ScanStock } from '@/types'
@@ -25,7 +26,7 @@ function ZoneDot({ zone }: { zone: string | null }) {
   )
 }
 
-function StockRow({ stock }: { stock: ScanStock }) {
+function StockRow({ stock, onClick }: { stock: ScanStock; onClick: () => void }) {
   const sym = displaySymbol(stock)
   const chgColor =
     stock.pct_chng != null && stock.pct_chng > 0 ? 'var(--bull)' :
@@ -33,15 +34,21 @@ function StockRow({ stock }: { stock: ScanStock }) {
     'var(--text-faint)'
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '16px 1fr 44px 44px',
-      gap: 6, alignItems: 'center',
-      padding: '4px 0',
-      borderBottom: '1px solid var(--border)',
-      fontFamily: 'var(--font-mono, monospace)',
-      fontSize: 11,
-    }}>
+    <div
+      onClick={onClick}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '16px 1fr 44px 44px',
+        gap: 6, alignItems: 'center',
+        padding: '4px 0',
+        borderBottom: '1px solid var(--border)',
+        fontFamily: 'var(--font-mono, monospace)',
+        fontSize: 11,
+        cursor: 'pointer',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+    >
       <ZoneDot zone={stock.magic_rs_zone} />
       <span style={{
         color: 'var(--text-primary)',
@@ -63,6 +70,7 @@ function StockRow({ stock }: { stock: ScanStock }) {
 
 export default function ScannerWidget({ presetId, title, maxRows = 4 }: ScannerWidgetProps) {
   const { data, isLoading, isError } = useScan(presetId)
+  const navigate = useNavigate()
 
   return (
     <div style={{
@@ -125,8 +133,29 @@ export default function ScannerWidget({ presetId, title, maxRows = 4 }: ScannerW
         </div>
       ) : (
         data.slice(0, maxRows).map(stock => (
-          <StockRow key={stock.equity_id} stock={stock} />
+          <StockRow
+            key={stock.equity_id}
+            stock={stock}
+            onClick={() => navigate(`/pulse/equity/${stock.equity_id}`)}
+          />
         ))
+      )}
+
+      {/* View all footer */}
+      {!isLoading && !isError && data && data.length > 0 && (
+        <button
+          onClick={() => navigate(`/scanner/${presetId}`)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+            color: 'var(--accent)', textAlign: 'right',
+            padding: '4px 0 0', letterSpacing: '.04em',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '.7' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1' }}
+        >
+          View all {data.length} →
+        </button>
       )}
     </div>
   )
