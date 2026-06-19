@@ -1121,3 +1121,61 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
 - Reference: Bayer Rule 14, Venus geocentric longitude
   unit = 1°9'13" (1.1536°), key reversal signal for
   banking stocks per Bayer 1940 handbook
+
+---
+
+## Scanner Data Gaps — Future Work
+
+### ret_5d, ret_22d, ret_66d
+- Populated: scanConvictionFlow ✓, scanBreakoutSurge
+  (ret_5d, ret_22d only — ret_66d missing) ✓
+- NOT populated: all direct-query stage scanners
+  (stage_2_leaders, stage_2_watch, vani_opportunity,
+  stage_4_leaders, stage_3_watch, vani_exit_watch)
+- Reason: requires eodHistory[] multi-bar lookback
+  which direct-query scanners don't fetch
+- Fix: add history fetch to direct-query scanners
+  OR use materialized views (Option C post-beta)
+
+### rel_5d/22d/66d_n50, rel_5d/22d/66d_n500
+- Populated: all bundle-based scans ✓
+- NOT populated: all direct-query stage scanners
+  (hardcoded null at every call site)
+- Reason: same as ret_* — requires eodHistory[]
+  for index comparison
+- Fix: same as above
+
+### avg_amt_5d, avg_amt_22d
+- Populated: scanConvictionFlow ✓,
+  fetchStage2Leaders ✓, fetchStage4Leaders ✓
+- NOT populated: fetchStage3Watch, fetchVaNiExitWatch,
+  fetchStage2Watch, fetchVaNiOpportunity,
+  all other bundle scans
+- Fix: add avg_amt columns to DB fetch for missing
+  direct-query scanners (migration 095 already added
+  the DB columns)
+
+### ret_66d missing from breakout_surge
+- scanBreakoutSurge computes ret_5d and ret_22d
+  from eodHistory but stops at 22 bars
+- ret_66d not computed — extend history walk to 66 bars
+
+### Column picker
+- No column picker exists anywhere in codebase
+- Must be built from scratch for B02
+- Recommended: useState<Set<string>> for hidden column
+  keys, rendered as gear popover in table toolbar
+
+### Materialized Views / Scanner Cache
+- Current approach: PostgREST direct queries,
+  client-side computation (Option A)
+- Post-beta: move to kd_scan_results table with
+  nightly pipeline writes (Option C)
+- Trigger: when user count grows beyond beta
+
+### Breakout Event Detection
+- breakout_level and pct_from_breakout are computed
+  client-side only (20-bar rolling high)
+- breakout_price, breakout_date, ageing do not exist
+- Backlog B55: build breakout event detection pipeline
+  to store true breakout price, date, and ageing in DB
