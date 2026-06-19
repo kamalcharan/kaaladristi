@@ -211,89 +211,95 @@ export default function WorkspacePage() {
 
       {activeTab === 'today' && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-          {/* VaNi Morning Brief — pinned inline strip */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <VaNiMorningBrief pinned />
-          </div>
+            {/* VaNi Morning Brief — pinned inline strip */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+              <VaNiMorningBrief pinned />
+            </div>
 
-          {/* Market Weather Card */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <MarketWeatherCard date={today} />
-          </div>
+            {/* Market Weather Card */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+              <MarketWeatherCard date={today} />
+            </div>
 
-          {/* Index selector + Chart */}
-          <div style={{ padding: '12px 20px 0', borderBottom: '1px solid var(--border)', position: 'relative' }}>
-            <button
-              onClick={e => {
-                if (todayIndexDropdown) { setTodayIndexDropdown(null); return }
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                setTodayIndexDropdown({ x: rect.left, y: rect.bottom })
-              }}
-              style={{
-                marginBottom: 10, padding: '5px 14px', borderRadius: 100,
-                border: '1px dashed rgba(255,255,255,.15)',
-                background: 'transparent', cursor: 'pointer',
-                fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                color: 'rgba(255,255,255,.5)', transition: 'all .15s',
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLElement
-                el.style.borderColor = 'var(--accent)'
-                el.style.color = 'var(--accent)'
-                el.style.background = 'var(--accent-glow)'
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLElement
-                el.style.borderColor = 'rgba(255,255,255,.15)'
-                el.style.color = 'rgba(255,255,255,.5)'
-                el.style.background = 'transparent'
-              }}
-            >
-              {primarySymbol} ▾
-            </button>
-            {primaryInstrument && (
-              <div style={{ height: 340 }}>
-                <WorkspaceChart instrument={primaryInstrument} />
-              </div>
+            {/* Index selector + Chart */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', position: 'relative' }}>
+              <button
+                onClick={e => {
+                  if (todayIndexDropdown) { setTodayIndexDropdown(null); return }
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                  setTodayIndexDropdown({ x: rect.left, y: rect.bottom })
+                }}
+                style={{
+                  marginBottom: 10, padding: '5px 14px', borderRadius: 100,
+                  border: '1px dashed rgba(255,255,255,.15)',
+                  background: 'transparent', cursor: 'pointer',
+                  fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
+                  color: 'rgba(255,255,255,.5)', transition: 'all .15s',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.borderColor = 'var(--accent)'
+                  el.style.color = 'var(--accent)'
+                  el.style.background = 'var(--accent-glow)'
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLElement
+                  el.style.borderColor = 'rgba(255,255,255,.15)'
+                  el.style.color = 'rgba(255,255,255,.5)'
+                  el.style.background = 'transparent'
+                }}
+              >
+                {primarySymbol} ▾
+              </button>
+              {primaryInstrument && (
+                <div style={{ height: 340 }}>
+                  <WorkspaceChart instrument={primaryInstrument} />
+                </div>
+              )}
+              {todayIndexDropdown && (
+                <IndexDropdown
+                  anchorX={todayIndexDropdown.x}
+                  anchorY={todayIndexDropdown.y}
+                  framework={framework!}
+                  onClose={() => setTodayIndexDropdown(null)}
+                />
+              )}
+            </div>
+
+            {/* Market Breadth Chart */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+              <MarketBreadthChart />
+            </div>
+
+            {/* Breadth ROC Chart */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+              <BreadthRocChart />
+            </div>
+
+            {/* Astro ICP only */}
+            {icpMode === 'astro' && (
+              <>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-faint)', letterSpacing: '.06em',
+                    textTransform: 'uppercase', marginBottom: 12, fontFamily: 'var(--font-mono, monospace)' }}>
+                    Astro Context
+                  </div>
+                  <CurrentSkyRail date={today} />
+                </div>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                  <PanchangamCard date={today} />
+                </div>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                  <SixDayOutlookCompact date={today} />
+                </div>
+                <div style={{ padding: '16px 20px' }}>
+                  <NakVaraSignals date={today} />
+                </div>
+              </>
             )}
-            {todayIndexDropdown && (
-              <IndexDropdown
-                anchorX={todayIndexDropdown.x}
-                anchorY={todayIndexDropdown.y}
-                framework={framework!}
-                onClose={() => setTodayIndexDropdown(null)}
-              />
-            )}
           </div>
-
-          {/* Market Breadth Chart */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <MarketBreadthChart />
-          </div>
-
-          {/* Breadth ROC Chart */}
-          <div style={{ padding: '16px 20px', borderBottom: icpMode === 'astro' ? '1px solid var(--border)' : 'none' }}>
-            <BreadthRocChart />
-          </div>
-
-          {/* Astro ICP only */}
-          {icpMode === 'astro' && (
-            <>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                <CurrentSkyRail date={today} />
-              </div>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                <PanchangamCard date={today} />
-              </div>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                <SixDayOutlookCompact date={today} />
-              </div>
-              <div style={{ padding: '16px 20px' }}>
-                <NakVaraSignals date={today} />
-              </div>
-            </>
-          )}
         </div>
       )}
 
@@ -313,7 +319,7 @@ export default function WorkspacePage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
               <ScannerWidget presetId="stage_2_leaders" title="Stage 2 Leaders" maxRows={4} />
               <ScannerWidget presetId="conviction_flow" title="Conviction Flow" maxRows={4} />
-              <ScannerWidget presetId="power_buy" title="Strength Confluence" maxRows={4} />
+              <ScannerWidget presetId="vani_opportunity" title="VaNi Opportunity" maxRows={4} variant="stage" />
             </div>
           </div>
         </div>

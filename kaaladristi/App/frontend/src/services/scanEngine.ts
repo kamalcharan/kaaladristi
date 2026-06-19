@@ -1298,7 +1298,7 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
 
   const { data: rows } = await from('km_equity_eod')
     .select([
-      'equity_id', 'trade_date', 'close', 'stage',
+      'equity_id', 'trade_date', 'close', 'pct_chng', 'stage',
       'sma_50', 'sma_150', 'sma_200',
       'magic_rs', 'rs_percentile',
       'w52_high', 'w52_low',
@@ -1347,7 +1347,7 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       company_name: sym?.company_name ?? null,
       industry: sym?.industry ?? null,
       exchange: sym?.exchange ?? null, mcap_cr: sym?.mcap_cr ?? null,
-      close: row.close, open: null, high: null, low: null, pct_chng: null,
+      close: row.close, open: null, high: null, low: null, pct_chng: row.pct_chng ?? null,
       magic_rs: row.magic_rs ?? null, magic_rs_zone: null,
       rss_value: null, rss_spread: null, rsi_14: null, rvol: null,
       flow_type: null, sniper_inst: null, sniper_hot: null,
