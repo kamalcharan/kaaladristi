@@ -33,6 +33,7 @@ import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
 import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
+import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -53,14 +54,8 @@ const OVERLAY_COL: Partial<Record<string, keyof IndicatorRow>> = {
   'supertrend': 'supertrend',
 };
 
-const OVERLAY_DEFAULT_COLOR: Record<string, string> = {
-  'ema_20':     '#FFD700',
-  'ema_60':     '#FFA500',
-  'sma_50':     '#FF6347',
-  'sma_150':    '#00CED1',
-  'sma_200':    '#DA70D6',
-  'supertrend': 'var(--bull)',
-};
+// Catalog is the single source of truth for indicator colors
+const OVERLAY_DEFAULT_COLOR = INDICATOR_DEFAULT_COLORS;
 
 // Planet/group glyphs rendered on astro zone overlay bands
 const BAND_GLYPHS: Record<string, string> = {
@@ -497,7 +492,43 @@ export default function TradingChart({ data, height = 900, compact = false, work
       } else if (overlay.type === 'astro_marker') {
         // Deferred — requires km_astro_events wiring
       } else if (overlay.type === 'indicator_band') {
-        // Deferred — pivot levels require separate multi-series rendering
+        if (overlay.catalog_item_id === 'gann_sq9' && data.length > 0) {
+          const lastClose = data[data.length - 1].close
+          if (lastClose != null && lastClose > 0) {
+            const showOrdinal = !!(overlay.config?.show_ordinal)
+            const ANGLES = [45, 90, 135, 180, 225, 270, 315, 360]
+            const CARDINALS = new Set([90, 180, 270, 360])
+            const baseColor = overlay.color ?? '#F5A623'
+            const sqrt = Math.sqrt(lastClose)
+            for (const angle of ANGLES) {
+              const isCardinal = CARDINALS.has(angle)
+              if (!isCardinal && !showOrdinal) continue
+              const factor = (angle / 360) * 2
+              const resistance = Math.round(Math.pow(sqrt + factor, 2) * 100) / 100
+              const support    = Math.round(Math.pow(sqrt - factor, 2) * 100) / 100
+              const lStyle  = isCardinal ? LineStyle.Solid : LineStyle.LargeDashed
+              const lColor  = isCardinal ? baseColor : hexToRgba(baseColor, 0.45)
+              const lWidth  = (isCardinal ? 1.5 : 1) as LineWidth
+              const times   = data.map(d => ({ time: toTime(d.trade_date) }))
+              const rSeries = mainChart.addSeries(LineSeries, {
+                color: lColor, lineWidth: lWidth, lineStyle: lStyle,
+                priceLineVisible: false, lastValueVisible: isCardinal,
+                crosshairMarkerVisible: false,
+                title: isCardinal ? `S9·${angle}R` : '',
+              })
+              rSeries.setData(times.map(({ time }) => ({ time, value: resistance })))
+              if (support > 0) {
+                const sSeries = mainChart.addSeries(LineSeries, {
+                  color: lColor, lineWidth: lWidth, lineStyle: lStyle,
+                  priceLineVisible: false, lastValueVisible: isCardinal,
+                  crosshairMarkerVisible: false,
+                  title: isCardinal ? `S9·${angle}S` : '',
+                })
+                sSeries.setData(times.map(({ time }) => ({ time, value: support })))
+              }
+            }
+          }
+        }
       }
     }
 

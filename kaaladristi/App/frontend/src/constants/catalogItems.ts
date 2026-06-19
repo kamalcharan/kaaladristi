@@ -186,6 +186,26 @@ const INDICATORS: CatalogItem[] = [
       { text: 'Not directional', type: 'limit' },
     ],
   },
+  {
+    id: 'gann_sq9',
+    display_name: 'Gann Square of 9',
+    description: 'W.D. Gann price vibration levels — natural support and resistance from Square of 9 geometry. Draws horizontal bands on the price chart.',
+    block_type: 'indicator',
+    placement: 'chart_overlay',
+    data_source: 'computed_ts',
+    overlay_type: 'indicator_band',
+    db_table: ['km_equity_eod', 'km_index_eod'],
+    db_column: 'close',
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+    vani_explanation: 'Gann Square of 9 calculates natural price vibration levels using square root geometry. Price tends to pause or reverse at these mathematical harmonics. Cardinal levels (90°, 180°, 270°, 360°) are strongest. Used by Gann practitioners alongside planetary timing for confluence.',
+    vani_tags: [
+      { text: 'Gann geometry', type: 'works' },
+      { text: 'Computed from last close', type: 'works' },
+      { text: 'Cardinal levels strongest', type: 'works' },
+      { text: 'Reference only — not predictive', type: 'limit' },
+    ],
+  },
 ]
 
 // ── Widgets ───────────────────────────────────────────────────────────────────
@@ -326,6 +346,55 @@ const WIDGETS: CatalogItem[] = [
     ],
   },
   {
+    id: 'stage_4_leaders',
+    display_name: 'Stage 4 Leaders',
+    description: 'Stocks in confirmed downtrend — below SMA50 and SMA200, death cross confirmed',
+    block_type: 'scanner',
+    placement: 'output_panel',
+    data_source: 'api_endpoint',
+    applicable_to: ['equity'],
+    tier_required: 'paid',
+    vani_explanation: 'Stage 4 Leaders are confirmed downtrend candidates: close < SMA50 < SMA200. Sorted by RS percentile ascending — weakest relative strength first. Not a sell recommendation; use for risk awareness and identifying stocks to avoid or hedge.',
+    vani_tags: [
+      { text: 'Death cross confirmed', type: 'works' },
+      { text: 'Weakest RS first', type: 'works' },
+      { text: 'Not a sell signal', type: 'limit' },
+    ],
+  },
+  {
+    id: 'stage_3_watch',
+    display_name: 'Stage 3 Watch',
+    description: 'Stocks entering weakness — above SMA200 but SMA50 converging toward death cross',
+    block_type: 'scanner',
+    placement: 'output_panel',
+    data_source: 'api_endpoint',
+    applicable_to: ['equity'],
+    tier_required: 'paid',
+    vani_explanation: 'Stage 3 Watch identifies stocks where SMA50 is converging toward SMA200 (gap < 15%). These are early-warning candidates — not yet in Stage 4 but showing structural deterioration. Sorted by convergence closeness to death cross.',
+    vani_tags: [
+      { text: 'Early warning', type: 'works' },
+      { text: 'MA convergence signal', type: 'works' },
+      { text: 'Confirm with price action', type: 'limit' },
+    ],
+  },
+  {
+    id: 'vani_exit_watch',
+    display_name: 'VaNi Exit Watch',
+    description: 'Highest conviction weakness — death cross confirmed with RS percentile below 20',
+    block_type: 'scanner',
+    placement: 'output_panel',
+    data_source: 'api_endpoint',
+    applicable_to: ['equity'],
+    tier_required: 'paid',
+    vani_explanation: 'VaNi Exit Watch is the short-side equivalent of VaNi Opportunity — Stage 4 confirmed, death cross active, RS percentile below 20. Bottom 25 weakest stocks by relative strength. Use for exit timing or hedge candidates; not a blanket sell recommendation.',
+    vani_tags: [
+      { text: 'RS percentile <20', type: 'works' },
+      { text: 'Death cross confirmed', type: 'works' },
+      { text: 'Bottom 25 only', type: 'works' },
+      { text: 'Not a sell recommendation', type: 'limit' },
+    ],
+  },
+  {
     id: 'chart_player',
     display_name: 'Historical Player',
     description: 'Timeline scrubber — play through history bar by bar. Syncs all workspace panels and the main chart.',
@@ -344,6 +413,23 @@ const WIDGETS: CatalogItem[] = [
     ],
   },
 ]
+
+// ── Indicator default colors — single source of truth ────────────────────────
+// All code that needs a per-indicator color must import from here.
+// IndicatorsSection, TradingChart, overlayColors, and frameworkStore all use this.
+
+export const INDICATOR_DEFAULT_COLORS: Record<string, string> = {
+  ema_20:       '#7c6af7',
+  ema_60:       '#4ade80',
+  sma_50:       '#fb923c',
+  sma_150:      '#f59e0b',
+  sma_200:      '#f43f5e',
+  supertrend:   '#2dd4bf',
+  pivot_levels: '#94a3b8',
+  atr_14:       '#c084fc',
+  rsi_14:       '#60a5fa',
+  gann_sq9:     '#F5A623',
+}
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 

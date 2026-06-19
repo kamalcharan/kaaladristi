@@ -13,16 +13,14 @@ import SmartMoneyWidget from './widgets/SmartMoneyWidget'
 import type { DeepDiveItem } from './DeepDivePanel'
 
 const WIDGETS           = getCatalogItemsByType('widget')
-const SCANNERS          = getCatalogItemsByType('scanner')
 const PANEL_INDICATORS  = getCatalogItemsByType('indicator').filter(i => i.placement === 'panel_block')
-const ALL_WIDGETS       = [...WIDGETS, ...SCANNERS, ...PANEL_INDICATORS]
+const ALL_WIDGETS       = [...WIDGETS, ...PANEL_INDICATORS]
 
 // Tight locked-card copy — max 2 sentences, ~20 words each
 const LOCKED_DESCRIPTIONS: Record<string, string> = {
   smart_money:     'Classifies volume into institutional vs retail flow. Shows when large participants are systematically accumulating.',
   order_flow:      'Classifies each session into buyer-initiated or seller-initiated flow. Shows whether urgency to buy or sell is driving the tape.',
   six_day_outlook: 'Forward-looking astro calendar for the next 6 trading days. See which rules are firing before they happen.',
-  conviction_flow: 'Detects quiet institutional accumulation via delivery surge vs baseline. Surfaces stocks being loaded before price moves.',
   rsi_14:          'Momentum oscillator tracking overbought and oversold conditions. Fires when price moves fast relative to its recent range.',
 }
 

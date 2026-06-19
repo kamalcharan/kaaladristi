@@ -386,7 +386,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
 
   const {
     removeBlock, updateBlockPosition, saveFramework,
-    toggleOverlayVisibility, removeOverlay, updateOverlayColor, updateOverlayOpacity,
+    toggleOverlayVisibility, removeOverlay, updateOverlayColor, updateOverlayOpacity, updateOverlayConfig,
   } = useFrameworkStore()
 
   const primarySymbol = framework.blocks.find(b => b.type === 'chart')
@@ -561,6 +561,27 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                         fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
                         color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)' }}
                     >{label}</button>
+                    {o.catalog_item_id === 'gann_sq9' && (() => {
+                      const showOrdinal = !!(o.config?.show_ordinal)
+                      return (
+                        <button
+                          title={showOrdinal ? 'Showing all 8 angles — click to show cardinals only' : 'Showing cardinal angles only — click to show all 8'}
+                          onClick={e => { e.stopPropagation(); updateOverlayConfig('gann_sq9', { show_ordinal: !showOrdinal }) }}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center',
+                            padding: '2px 6px', marginRight: 2, borderRadius: 4,
+                            border: `1px solid ${showOrdinal ? 'rgba(245,166,35,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                            background: showOrdinal ? 'rgba(245,166,35,0.12)' : 'transparent',
+                            cursor: 'pointer', fontSize: 9,
+                            fontFamily: 'var(--font-mono, monospace)',
+                            color: showOrdinal ? '#F5A623' : 'rgba(255,255,255,0.3)',
+                            transition: 'all .15s',
+                          }}
+                        >
+                          45°
+                        </button>
+                      )
+                    })()}
                     {o.catalog_item_id.startsWith('astro_group:') && (
                       <GroupActiveIndicator tag={o.catalog_item_id.slice('astro_group:'.length)} />
                     )}

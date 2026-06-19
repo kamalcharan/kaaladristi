@@ -33,6 +33,7 @@ export interface ChartOverlay {
   color?: string
   opacity?: number  // 0–1, applied to astro zone fills; default tier-specific
   label?: string    // clean display label; set at add-time for astro rules
+  config?: Record<string, unknown>  // overlay-specific settings (e.g. show_ordinal for gann_sq9)
 }
 
 export interface UserFramework {
