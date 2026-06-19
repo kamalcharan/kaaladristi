@@ -6,6 +6,7 @@ import { useScan, useAllScanCounts, useScanPresets } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe } from '@/services/scanEngine';
 import { StockCard, StageBadge } from '@/components/domain/StockCard';
 import { ScanSectionLabel } from '@/components/domain/ScanCardShell';
+import ScanTable from '@/components/domain/ScanTable';
 import ConvictionFlowCards from '@/components/domain/ConvictionFlowTable';
 import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
 import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
@@ -138,6 +139,47 @@ function VaniFilterButton({ active, count, onToggle }: { active: boolean; count:
       </span>
     </button>
   );
+}
+
+// ── View toggle (Table / Cards) ───────────────────────────────
+
+type ViewMode = 'table' | 'cards';
+
+function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMode) => void }) {
+  return (
+    <div style={{
+      display: 'flex', gap: '2px', padding: '4px',
+      background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '100px',
+    }}>
+      {(['table', 'cards'] as ViewMode[]).map(mode => (
+        <button
+          key={mode}
+          onClick={() => onChange(mode)}
+          style={{
+            padding: '5px 14px', borderRadius: '100px', border: 'none',
+            background: value === mode ? 'rgba(255,255,255,0.06)' : 'transparent',
+            color: value === mode ? 'var(--text-primary)' : 'var(--text-muted)',
+            fontSize: '12px', fontWeight: 500,
+            fontFamily: 'var(--font-body)', transition: 'all 0.15s', cursor: 'pointer',
+          }}
+        >
+          {mode === 'table' ? '≡ Table' : '⊞ Cards'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function useViewMode(): [ViewMode, (v: ViewMode) => void] {
+  const [mode, setMode] = React.useState<ViewMode>(() => {
+    try { return (localStorage.getItem('scan_view_mode') as ViewMode) ?? 'table'; }
+    catch { return 'table'; }
+  });
+  function set(v: ViewMode) {
+    setMode(v);
+    try { localStorage.setItem('scan_view_mode', v); } catch { /* ignore */ }
+  }
+  return [mode, set];
 }
 
 // ── Action Island (shared shell) ──────────────────────────────
@@ -603,7 +645,13 @@ function sortStage2(arr: ScanStock[], key: S2SortKey, dir: SortDir): ScanStock[]
 }
 
 
-function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timeframe: ScanTimeframe }) {
+function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
+  preset: ScanDefinition;
+  timeframe: ScanTimeframe;
+  viewMode: ViewMode;
+  onViewModeChange: (v: ViewMode) => void;
+}) {
+  const navigate = useNavigate();
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const disabledExchangeOptions: ExchangeFilter[] = preset.universe === 'NSE_ONLY' ? ['BSE'] : [];
   const [s2Sort, setS2Sort] = useState<S2SortKey>('magic_rs');
@@ -730,11 +778,21 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
           })}
           <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
           <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
+          <ViewToggle value={viewMode} onChange={onViewModeChange} />
         </div>
       </div>
 
-      {/* VaNi Section */}
-      {!vaniOnly && vaniSorted.length > 0 && (
+      {/* Table view */}
+      {viewMode === 'table' && !isLoading && !error && (
+        <ScanTable
+          stocks={displayStocks}
+          presetId={preset.id}
+          onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+        />
+      )}
+
+      {/* VaNi Section (cards mode only) */}
+      {viewMode === 'cards' && !vaniOnly && vaniSorted.length > 0 && (
         <div style={{
           marginBottom: '20px',
           border: '1px solid rgba(240,165,0,0.2)', borderRadius: '10px',
@@ -751,8 +809,8 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
         </div>
       )}
 
-      {/* All Results */}
-      {isLoading ? (
+      {/* All Results (cards mode only) */}
+      {viewMode === 'cards' && (isLoading ? (
         <DristiQLoader message="Preparing Data For You…" />
       ) : error ? (
         <div style={{
@@ -793,7 +851,7 @@ function Stage2Results({ preset, timeframe }: { preset: ScanDefinition; timefram
             No Stage 2 setups today. Stage 2 requires SMA_200 data — stocks need 200+ days of history.
           </p>
         </div>
-      ) : null}
+      ) : null)}
 
       {/* More Filters panel */}
       {mfOpen && (
@@ -969,7 +1027,13 @@ function sortCFStocks(stocks: ScanStock[], key: CFSortKey, dir: SortDir): ScanSt
 
 // ── Conviction Flow results (server-side RPC, different columns) ───────────
 
-function ConvictionFlowResults({ preset, timeframe }: { preset: ScanDefinition; timeframe: ScanTimeframe }) {
+function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }: {
+  preset: ScanDefinition;
+  timeframe: ScanTimeframe;
+  viewMode: ViewMode;
+  onViewModeChange: (v: ViewMode) => void;
+}) {
+  const navigate = useNavigate();
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const { data: stocks = [], isLoading, error } = useScan('conviction_flow', exchangeFilter, timeframe);
   const { show: showToast, Toast } = useToast();
@@ -983,25 +1047,41 @@ function ConvictionFlowResults({ preset, timeframe }: { preset: ScanDefinition; 
         padding: '10px 0', flexWrap: 'wrap', marginBottom: '4px',
       }}>
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={[]} />
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <TradingViewExportButton stocks={stocks} scanName={preset.name} />
+          <ViewToggle value={viewMode} onChange={onViewModeChange} />
         </div>
       </div>
 
-      <VaniSectionHeader
-        vaniCount={vaniCount}
-        scanName={preset.name}
-        onAddWidget={() => showToast(`✦ ${preset.name} widget added to Workspace`)}
-      />
-
-      {isLoading ? (
-        <DristiQLoader />
-      ) : error ? (
-        <Card rounded="xxl" className="py-12 text-center">
-          <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
-        </Card>
+      {viewMode === 'table' ? (
+        isLoading ? <DristiQLoader /> : error ? (
+          <Card rounded="xxl" className="py-12 text-center">
+            <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
+          </Card>
+        ) : (
+          <ScanTable
+            stocks={stocks}
+            presetId="conviction_flow"
+            onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+          />
+        )
       ) : (
-        <ConvictionFlowCards stocks={stocks} />
+        <>
+          <VaniSectionHeader
+            vaniCount={vaniCount}
+            scanName={preset.name}
+            onAddWidget={() => showToast(`✦ ${preset.name} widget added to Workspace`)}
+          />
+          {isLoading ? (
+            <DristiQLoader />
+          ) : error ? (
+            <Card rounded="xxl" className="py-12 text-center">
+              <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
+            </Card>
+          ) : (
+            <ConvictionFlowCards stocks={stocks} />
+          )}
+        </>
       )}
     </>
   );
@@ -1018,6 +1098,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [sortKey, setSortKey] = useState<SortKey>('magic_rs');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [oppFilter, setOppFilter] = useState(false);
+  const [viewMode, setViewMode] = useViewMode();
 
   const { data: presets = SCAN_PRESETS } = useScanPresets();
   const preset = presets.find((p) => p.id === presetId);
@@ -1103,7 +1184,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <Stage2Results preset={preset} timeframe={timeframe} />
+        <Stage2Results preset={preset} timeframe={timeframe} viewMode={viewMode} onViewModeChange={setViewMode} />
       </div>
     );
   }
@@ -1113,22 +1194,31 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <ConvictionFlowResults preset={preset} timeframe={timeframe} />
+        <ConvictionFlowResults preset={preset} timeframe={timeframe} viewMode={viewMode} onViewModeChange={setViewMode} />
       </div>
     );
   }
 
-  // Breakout Surge — custom card layout
+  // Breakout Surge — table or custom card layout
   if (presetId === 'breakout_surge') {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+          <ViewToggle value={viewMode} onChange={setViewMode} />
+        </div>
         {isLoading ? (
           <DristiQLoader />
         ) : error ? (
           <Card rounded="xxl" className="py-12 text-center">
             <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
           </Card>
+        ) : viewMode === 'table' ? (
+          <ScanTable
+            stocks={stocks ?? []}
+            presetId="breakout_surge"
+            onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+          />
         ) : (
           <BreakoutSurgeCards stocks={stocks ?? []} />
         )}
@@ -1211,6 +1301,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
           })}
           <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
           <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
+          <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
@@ -1221,6 +1312,23 @@ function ScannerResults({ presetId }: { presetId: string }) {
         <Card rounded="xxl" className="py-12 text-center">
           <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan. Check data connection.</p>
         </Card>
+      ) : viewMode === 'table' ? (
+        sorted.length > 0 ? (
+          <ScanTable
+            stocks={sorted}
+            presetId={presetId}
+            onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+          />
+        ) : (
+          <div style={{
+            padding: '64px 24px', textAlign: 'center',
+            background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
+          }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+              {oppFilter ? 'No VaNi Opportunity setups in this scan today.' : 'No stocks match this scan criteria today.'}
+            </p>
+          </div>
+        )
       ) : sorted.length > 0 ? (
         <>
           {(() => {

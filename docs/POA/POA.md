@@ -92,7 +92,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | # | Item | Type | Dependency | Notes |
 |---|---|---|---|---|
 | ~~B01~~ | ~~ISIN dedup on all 6 new scanners~~ | ~~Bug Fix~~ | ~~None~~ | → C27 |
-| B02 | Table view for all scanners | UX Build | None | Default view; card view becomes toggle. Most needed UX improvement |
+| ~~B02~~ | ~~Table view for all scanners~~ | ~~UX Build~~ | ~~None~~ | → C29 |
 | ~~B03~~ | ~~`is_vani_surge` + `is_vani_breakout` missing from ScanDataBundle EOD SELECT~~ | ~~Bug Fix~~ | ~~None~~ | → C28 |
 
 ### P1 — Important
@@ -211,6 +211,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | C26 | ScannerWidget component created | Sprint 4 | — |
 | C27 | ISIN dedup verified on all 6 new scanners — no fixes needed | Sprint 5 | fetchStage2Watch, fetchVaNiOpportunity, fetchStage4Leaders, fetchStage3Watch, fetchVaNiExitWatch all have identical dedup pattern |
 | C28 | B03 fixed — `is_vani_surge` + `is_vani_breakout` added to ScanDataBundle EOD SELECT + EquityEodSnapshot type; convictionFlow + breakoutSurge VaNi now use `computeVaniOpportunity()` | Sprint 5 | `scanEngine.ts` line 168 + `types/index.ts` |
+| C29 | B02 complete — `ScanTable.tsx` built; `[≡ Table] [⊞ Cards]` toggle added to all scanner presets; table is default; localStorage persists mode + per-preset column picks; VaNi dot, sticky symbol col, gear column picker, header-click sort | Sprint 5 | `src/components/domain/ScanTable.tsx` (new) + `ScanView.tsx` (ViewToggle, useViewMode, Stage2Results/ConvictionFlowResults/breakout_surge/generic all updated) |
 
 ---
 
