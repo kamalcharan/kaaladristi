@@ -42,23 +42,23 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 ## 3. Active Sprint
 > Current focus. One sprint at a time.
 
-### Sprint 4 — Workspace Shell Redesign
+### Sprint 4 — Workspace Shell Redesign ✅ COMPLETE
 **Goal:** Replace the current single-canvas workspace with a 3-tab shell (Today / Discovery / My Space). Wire existing components. No new backend work except `icp_mode` migration.
 
-**Status: 🔵 PLANNING**
+**Status: ✅ COMPLETE**
 
 | Step | Task | Status | Notes |
 |---|---|---|---|
-| 4.1 | Migration: add `icp_mode` to `km_profiles` | ⬜ Not started | `DEFAULT 'astro'`, CHECK constraint |
-| 4.2 | Update profile type + authStore to include `icp_mode` | ⬜ Not started | Follows after 4.1 |
-| 4.3 | Extract `IndexDropdown` from `WorkspaceCanvas.tsx` | ⬜ Not started | Lines 254–361, pure extraction, no logic change |
-| 4.4 | WorkspacePage shell: add 3-tab state + tab bar UI | ⬜ Not started | `activeTab: 'today' \| 'discovery' \| 'myspace'` |
-| 4.5 | Tab 1 (Today): assemble existing components, ICP-aware | ⬜ Not started | See component matrix below |
-| 4.6 | Tab 2 (Discovery): SectorRotationFlow + scanner widgets | ⬜ Not started | Fix zone color bug during this step |
-| 4.7 | Tab 3 (My Space): drop WorkspaceCanvas in, remove Morning Brief | ⬜ Not started | Zero logic changes |
-| 4.8 | ProfileSetup wizard: add Astro/Technical ICP question | ⬜ Not started | Screen 2, save to `icp_mode` |
-| 4.9 | Atmospheric badge: move to tab bar (visible all tabs) | ⬜ Not started | Currently only on Stage 2 Leaders |
-| 4.10 | QA + review | ⬜ Not started | Charan reviews each tab before sign-off |
+| 4.1 | Migration: add `icp_mode` to `km_profiles` | ✅ | `DEFAULT 'astro'`, CHECK constraint |
+| 4.2 | Update profile type + authStore to include `icp_mode` | ✅ | Follows after 4.1 |
+| 4.3 | Extract `IndexDropdown` from `WorkspaceCanvas.tsx` | ✅ | Lines 254–361, pure extraction, no logic change |
+| 4.4 | WorkspacePage shell: add 3-tab state + tab bar UI | ✅ | `activeTab: 'today' \| 'discovery' \| 'myspace'` |
+| 4.5 | Tab 1 (Today): assemble existing components, ICP-aware | ✅ | See component matrix below |
+| 4.6 | Tab 2 (Discovery): SectorRotationFlow + scanner widgets | ✅ | Fix zone color bug during this step |
+| 4.7 | Tab 3 (My Space): drop WorkspaceCanvas in, remove Morning Brief | ✅ | Zero logic changes |
+| 4.8 | ProfileSetup wizard: add Astro/Technical ICP question | ✅ | Screen 2, save to `icp_mode` |
+| 4.9 | Atmospheric badge: move to tab bar (visible all tabs) | ✅ | Currently only on Stage 2 Leaders |
+| 4.10 | QA + review | ✅ | Charan reviews each tab before sign-off |
 
 **Tab 1 (Today) — Component Matrix:**
 | Component | File | Astro ICP | Tech ICP | Notes |
@@ -105,7 +105,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | B07 | User saved filters per scanner | Feature | B04 | Named filter sets per scanner per user |
 | B08 | VaNi midnight batch + on-demand fallback | Feature | None | Midnight generates inference; on-demand if no cache |
 | B09 | Smart cache invalidation (metric-change trigger) | Architecture | B08 | Regenerate only when key metric changes, not daily |
-| B10 | Atmospheric badge on all scanners | Bug Fix | None | Currently only on Stage 2 Leaders |
+| ~~B10~~ | ~~Atmospheric badge on all scanners~~ | ~~Bug Fix~~ | ~~None~~ | → C19 |
 | B11 | Render fetched fields in industry drill-down | Quick Win | None | RSI, flow_type, rvol, sniper already fetched but not shown |
 | B12 | Click-through from drill-down stock → Visual Pulse page | Quick Win | None | Dead end currently |
 | B13 | Lookback filter 5D/22D/66D on sector rotation | Feature | None | Currently hardcoded at 5D |
@@ -201,6 +201,14 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | C16 | Weekly/monthly bar aggregation pipeline | Previous | 94.4% weekly, 76.7% monthly coverage |
 | C17 | Alpha Edge formula validated | Sprint 3 | rs>50, NSE, any stage |
 | C18 | magic_rs benchmark confirmed: NIFTY 500 | This session | Hardcoded by name lookup at runtime |
+| C19 | Atmospheric badge extracted + added to all scanners and workspace tab bar | Sprint 4 | — |
+| C20 | BUG-01 fixed — SectorRotationFlow zone color mismatch (Title Case vs snake_case) | Sprint 4 | — |
+| C21 | Workspace 3-tab shell (Today / Discovery / My Space) | Sprint 4 | — |
+| C22 | icp_mode column added to km_profiles | Sprint 4 | — |
+| C23 | IndexDropdown extracted to standalone component | Sprint 4 | — |
+| C24 | VaNiMorningBrief pinned mode added | Sprint 4 | — |
+| C25 | ProfileSetup ICP question added | Sprint 4 | — |
+| C26 | ScannerWidget component created | Sprint 4 | — |
 
 ---
 
@@ -252,10 +260,30 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 
 ```
 SESSION START
-POA: /docs/poa/POA.md
-Architecture: /docs/poa/ARCHITECTURE.md
+POA: /docs/POA/POA.md
+Architecture: /docs/POA/ARCHITECTURE.md
 Active Sprint: Sprint 4 — Workspace Shell Redesign
 Last completed step: [FILL IN]
 Next step: [FILL IN]
 Open questions: [FILL IN]
+```
+
+---
+
+## 10. Session Handover
+
+```
+SESSION HANDOVER
+================
+Date: 2026-06-19
+Active Sprint: Sprint 4 — COMPLETE
+Last completed: Step 4.10 — Sprint 4 QA
+Next sprint: Sprint 5 — Scanner Table View + P0 fixes
+Next step: B01 (ISIN dedup), B02 (Table view), B03 (ScanDataBundle missing columns)
+Open questions:
+  - Third scanner widget uses 'Strength Confluence' preset instead of 'vani_opportunity' — fix in Sprint 5
+  - Alignment/placement polish on Today tab components needed — Sprint 5 UX pass
+New bugs found: None
+POA: /docs/POA/POA.md
+Architecture: /docs/POA/ARCHITECTURE.md
 ```
