@@ -52,12 +52,8 @@ const COLUMN_DEFS: Record<string, ColDef> = {
 
 // Per-preset column overrides for presets whose fetcher has a limited SELECT.
 // Removes default cols that are always null for that preset.
-const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
-  // stage_4/3/vani_exit: rss_value not fetched (everything else is)
-  stage_4_leaders:  ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
-  stage_3_watch:    ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
-  vani_exit_watch:  ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
-}
+// All stage presets now fetch the full column set — no per-preset overrides needed.
+const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {}
 
 const PRESET_GROUP: Record<string, PresetGroup> = {
   stage_2_leaders:      'stage',
