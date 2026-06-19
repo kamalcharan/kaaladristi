@@ -45,9 +45,10 @@ function StockDrawer({ industry, tradeDate }: { industry: string; tradeDate: str
       </div>
 
       {data.slice(0, 5).map(stock => {
+        const normalizedZone = stock.magic_rs_zone?.toLowerCase().replace(/ /g, '_')
         const rsColor =
-          stock.magic_rs_zone === 'strong_bull' ? 'var(--bull)' :
-          stock.magic_rs_zone === 'strong_bear' ? 'var(--bear)' :
+          normalizedZone === 'strong_bull' ? 'var(--bull)' :
+          normalizedZone === 'strong_bear' ? 'var(--bear)' :
           'var(--text-secondary)';
         const chgColor =
           stock.pct_chng != null && stock.pct_chng > 0 ? 'var(--bull)' :
