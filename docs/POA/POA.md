@@ -42,6 +42,17 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 ## 3. Active Sprint
 > Current focus. One sprint at a time.
 
+### Sprint 7 — Field Config + StockCard
+
+**Goal:** Centralise all field display logic into `src/config/fieldConfig.ts` so ScanTable and StockCard (Step 7.2) share one source of truth for labels, tooltips, formatters, and color rules.
+
+| Step | Task | Status | Notes |
+|---|---|---|---|
+| 7.1 | Create `fieldConfig.ts` — labels, tooltips, formatFn, colorFn, thresholds for all 30 fields. Refactor ScanTable to import from it. | ✅ | ScanTable: 516 → 393 lines. fieldConfig: 520 lines. Zero new TS errors. |
+| 7.2 | Wire StockCard to fieldConfig | ⬜ | Use same ALL_FIELDS registry |
+
+---
+
 ### Sprint 4 — Workspace Shell Redesign ✅ COMPLETE
 **Goal:** Replace the current single-canvas workspace with a 3-tab shell (Today / Discovery / My Space). Wire existing components. No new backend work except `icp_mode` migration.
 

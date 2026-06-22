@@ -305,6 +305,40 @@ Services: `frontend` (port 3001), `backend` (port 8101), `nginx` (port 80 revers
 
 ---
 
+## Field Formulas
+
+Source of truth for proprietary indicator math. Implemented in pipeline; displayed via `src/config/fieldConfig.ts`.
+
+### RSS (`rss_value`)
+Source: LuckyPop RSSI Pine Script
+```
+E1     = SMA(close, 10)
+E2     = SMA(close, 40)
+Spread = E1 - E2
+RS     = RSI(Spread, 5)
+RSS    = SMA(RS, 3)   ← stored as rss_value
+```
+Range 0–100. Overbought > 80, Oversold < 20.
+Signal: RSS new high before price new high = early momentum (not yet in pipeline).
+
+### Institution (`sniper_inst`)
+Source: Sniper Dragon Pine Script
+`1.5 × (RSI(9) − 61)`, clamped 0–50.
+Above 35 = strong institutional presence.
+
+### Hot Money (`sniper_hot`)
+Source: Sniper Dragon Pine Script
+`1.0 × (RSI(4) − 15)`, clamped 0–50.
+Frequently hits cap of 50 in trending markets — not a bug, working as designed.
+
+### MagicRS (`magic_rs`)
+Source: LuckyPop SuperMagic Pine Script
+144-bar RS of stock vs CNX500, normalized as % above/below SMA(60).
+Zones stored in `magic_rs_zone` (Title Case): Strong Bull · Mild Bull · Neutral · Mild Bear · Strong Bear.
+Base threshold: 6% with ATR adaptive factor.
+
+---
+
 ## Current Plan
 
 Active sprint: **Rules Engine**.
