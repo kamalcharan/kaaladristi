@@ -52,12 +52,8 @@ const COLUMN_DEFS: Record<string, ColDef> = {
 
 // Per-preset column overrides for presets whose fetcher has a limited SELECT.
 // Removes default cols that are always null for that preset.
-const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
-  // stage_4/3/vani_exit: rss_value not fetched (everything else is)
-  stage_4_leaders:  ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
-  stage_3_watch:    ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
-  vani_exit_watch:  ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst'],
-}
+// All stage presets now fetch the full column set — no per-preset overrides needed.
+const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {}
 
 const PRESET_GROUP: Record<string, PresetGroup> = {
   stage_2_leaders:      'stage',
@@ -85,9 +81,9 @@ const DEFAULT_COLS: Record<PresetGroup, string[]> = {
 
 const OPTIONAL_COLS: Record<PresetGroup, string[]> = {
   stage:      ['sma_50','sma_200','supertrend_dir','accum_distrib','sniper_hot','w52_high','ema_20'],
-  conviction: ['ret_5d','ret_22d','rel_5d_n50','rel_5d_n500','mcap_cr','rss_value','sniper_inst'],
+  conviction: ['ret_5d','ret_22d','mcap_cr','rss_value','sniper_inst'],
   breakout:   ['sniper_inst','rss_value','ret_5d','ret_22d','mcap_cr'],
-  standard:   ['ret_5d','ret_22d','rel_5d_n50','rel_5d_n500','sniper_hot','ema_20'],
+  standard:   ['ret_5d','ret_22d','sniper_hot','ema_20'],
 }
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
@@ -323,12 +319,16 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       {/* Table */}
       <div style={{
         overflowX: 'auto',
+        overflowY: 'visible',
+        width: '100%',
+        WebkitOverflowScrolling: 'touch',
         border: '1px solid var(--border)',
         borderRadius: 10,
       }}>
         <table style={{
-          width: '100%', borderCollapse: 'collapse',
-          minWidth: tableMinWidth,
+          width: 'max-content',
+          minWidth: '100%',
+          borderCollapse: 'collapse',
         }}>
           <thead>
             <tr style={{ height: 32 }}>
@@ -349,9 +349,9 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       width: def.width, minWidth: def.width,
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',
-                      fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase',
-                      fontFamily: 'var(--font-mono)',
-                      color: isActive ? 'var(--accent)' : 'var(--text-faint)',
+                      fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
+                      fontWeight: 600, fontFamily: 'var(--font-mono)',
+                      color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                       cursor: 'pointer', whiteSpace: 'nowrap',
                       userSelect: 'none',
                       borderBottom: '1px solid var(--border)',
@@ -368,7 +368,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
               <tr
                 key={stock.equity_id}
                 onClick={() => onRowClick(stock)}
-                style={{ cursor: 'pointer', height: 36 }}
+                style={{ cursor: 'pointer', height: 40 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
               >
@@ -401,8 +401,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                           <div style={{ minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span style={{
-                                fontSize: 12, fontFamily: 'var(--font-mono)',
-                                color: 'var(--text-primary)', fontWeight: 500,
+                                fontSize: 13, fontFamily: 'var(--font-mono)',
+                                color: 'var(--text-primary)', fontWeight: 600,
                               }}>
                                 {sym}
                               </span>
@@ -419,7 +419,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                             </div>
                             {company && (
                               <div style={{
-                                fontSize: 9, color: 'var(--text-faint)',
+                                fontSize: 11, color: 'var(--text-muted)',
                                 fontFamily: 'var(--font-body)',
                                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                 maxWidth: 110,
@@ -439,7 +439,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       key={colKey}
                       style={{
                         padding: '0 10px', textAlign: 'right',
-                        fontSize: 11, fontFamily: 'var(--font-mono)',
+                        fontSize: 12, fontFamily: 'var(--font-mono)',
                         color: color ?? 'var(--text-secondary)',
                         fontWeight: fontWeight ?? undefined,
                         whiteSpace: 'nowrap',

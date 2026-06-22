@@ -1328,23 +1328,13 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
-    .eq('stage', 'S2')
     .eq('trade_date', latestDate)
-    .gt('close', 30)
-    .gt('rs_percentile', 80)
+    .is('is_vani_s2', true)
     .order('rs_percentile', { ascending: false })
-    .limit(25)
+    .limit(50)
     .execute();
 
-  const eodRows = (rows ?? []) as any[];
-
-  // Client-side Alpha Edge: close > sma_150, sma_50 > sma_150
-  const filtered = eodRows.filter((row) => {
-    const sma150 = row.sma_150;
-    const sma50 = row.sma_50;
-    if (!sma150 || !sma50) return false;
-    return row.close > sma150 && sma50 > sma150;
-  });
+  const filtered = (rows ?? []) as any[];
 
   // ISIN dedup: prefer NSE
   const isinMap = new Map<string, any>();
@@ -1423,6 +1413,7 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       'open', 'high', 'low', 'pct_chng',
       'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
       'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'rss_value', 'rss_spread',
       'rsi_14', 'rvol',
       'w52_high', 'w52_low', 'lifetime_high',
       'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
@@ -1486,8 +1477,8 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       pct_chng:             row.pct_chng ?? null,
       magic_rs:             row.magic_rs ?? null,
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            null,
-      rss_spread:           null,
+      rss_value:            row.rss_value ?? null,
+      rss_spread:           row.rss_spread ?? null,
       rsi_14:               row.rsi_14 ?? null,
       rvol:                 row.rvol ?? null,
       flow_type:            row.flow_type ?? null,
@@ -1547,6 +1538,7 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
     .select([
       'equity_id', 'trade_date', 'close', 'stage',
       'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'rss_value', 'rss_spread',
       'sma_50', 'sma_150', 'sma_200', 'sma200_rising',
       'rsi_14', 'rvol',
       'w52_high', 'w52_low',
@@ -1613,7 +1605,7 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       pct_chng:             row.pct_chng ?? null,
       magic_rs:             row.magic_rs ?? null,
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            null, rss_spread: null,
+      rss_value:            row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
       rsi_14:               row.rsi_14 ?? null,
       rvol:                 row.rvol ?? null,
       flow_type:            row.flow_type ?? null,
@@ -1665,6 +1657,7 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
     .select([
       'equity_id', 'trade_date', 'close', 'stage',
       'pct_chng', 'magic_rs', 'magic_rs_zone', 'rs_percentile',
+      'rss_value', 'rss_spread',
       'sma_50', 'sma_150', 'sma_200',
       'rsi_14', 'rvol', 'flow_type',
       'w52_high', 'w52_low',
@@ -1722,7 +1715,7 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
       pct_chng:             row.pct_chng ?? null,
       magic_rs:             row.magic_rs ?? null,
       magic_rs_zone:        row.magic_rs_zone ?? null,
-      rss_value:            null, rss_spread: null,
+      rss_value:            row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
       rsi_14:               row.rsi_14 ?? null,
       rvol:                 row.rvol ?? null,
       flow_type:            row.flow_type ?? null,

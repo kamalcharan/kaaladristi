@@ -1138,12 +1138,14 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
   OR use materialized views (Option C post-beta)
 
 ### rel_5d/22d/66d_n50, rel_5d/22d/66d_n500
-- Populated: all bundle-based scans ✓
-- NOT populated: all direct-query stage scanners
-  (hardcoded null at every call site)
-- Reason: same as ret_* — requires eodHistory[]
-  for index comparison
-- Fix: same as above
+- Populated: NONE — hardcoded null at every call site
+  in scanEngine.ts (both bundle and direct-query scanners)
+- Sprint 6 fix: removed rel_5d_n50/rel_5d_n500 from
+  OPTIONAL_COLS in ScanTable.tsx so column picker no
+  longer offers them. They will be re-enabled when
+  the rel_* pipeline is built.
+- Fix: compute from eodHistory[] against index benchmarks
+  OR use a materialized view (Option C post-beta)
 
 ### avg_amt_5d, avg_amt_22d
 - Populated: scanConvictionFlow ✓,
@@ -1161,10 +1163,9 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
 - ret_66d not computed — extend history walk to 66 bars
 
 ### Column picker
-- No column picker exists anywhere in codebase
-- Must be built from scratch for B02
-- Recommended: useState<Set<string>> for hidden column
-  keys, rendered as gear popover in table toolbar
+- Built in Sprint 5 (C29) as gear popover in ScanTable.tsx toolbar
+- Uses useState<Set<string>> for hidden optional columns
+- Per-preset localStorage persistence via `scan_cols:{presetId}` key
 
 ### Materialized Views / Scanner Cache
 - Current approach: PostgREST direct queries,

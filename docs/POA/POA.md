@@ -1,7 +1,7 @@
 # DristiQ — Plan of Action (POA)
 > Living document. Updated every session. Single source of truth for all work items.
 > Location in repo: `/docs/poa/POA.md`
-> Last updated: 2026-06-19
+> Last updated: 2026-06-22
 
 ---
 
@@ -94,12 +94,12 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | ~~B01~~ | ~~ISIN dedup on all 6 new scanners~~ | ~~Bug Fix~~ | ~~None~~ | → C27 |
 | ~~B02~~ | ~~Table view for all scanners~~ | ~~UX Build~~ | ~~None~~ | → C29 |
 | ~~B03~~ | ~~`is_vani_surge` + `is_vani_breakout` missing from ScanDataBundle EOD SELECT~~ | ~~Bug Fix~~ | ~~None~~ | → C28 |
+| ~~B04~~ | ~~Scanner-specific filters~~ | ~~Architecture~~ | ~~B02 (table view)~~ | → C30 |
 
 ### P1 — Important
 
 | # | Item | Type | Dependency | Notes |
 |---|---|---|---|---|
-| B04 | Scanner-specific filters | Architecture | B02 (table view) | Different filter sets per scanner type |
 | B05 | Show "vs N500" label on MagicRS everywhere in UI | Clarity Fix | None | magic_rs is always vs NIFTY 500 — users don't know this |
 | B06 | 3-tier config: Admin → User → Session thresholds | Architecture | None | Thresholds move from code → DB |
 | B07 | User saved filters per scanner | Feature | B04 | Named filter sets per scanner per user |
@@ -160,6 +160,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | B52 | Unified Rule Architecture Phase B | Future | Unified correlation engine. Depends on Phase A |
 | B53 | Master Frameworks catalog section | Future | Deferred post-cashflow |
 | B54 | VaNi fine-tuning dataset | Ongoing | Every VaNi interaction logged to vn_interaction_log in vani_db from day one |
+| B55 | Breakout event detection pipeline | Future | Store true `breakout_price`, `breakout_date`, ageing in DB. Currently all computed client-side as 20-bar rolling high only. |
 
 ---
 
@@ -173,7 +174,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | P03 | Master Frameworks catalog | Deferred post-cashflow | Post-cashflow |
 | P04 | Morning brief screener feed | Deferred to screener session | Screener sprint |
 | P05 | User workspace customization (Tab 3) | Post-MVP simplicity decision | V2 |
-| P06 | scanConvictionFlow + scanBreakoutSurge vani_rule migration | Blocked: is_vani_surge + is_vani_breakout missing from ScanDataBundle | After B03 |
+| ~~P06~~ | ~~scanConvictionFlow + scanBreakoutSurge vani_rule migration~~ | ~~Blocked: is_vani_surge + is_vani_breakout missing from ScanDataBundle~~ | → C28 (B03 complete) |
 | P07 | NSE data gap (876 of 1380 stocks) | Pipeline ingestion issue in bhav copy downloader — investigation ongoing | When pipeline fixed |
 
 ---
@@ -209,10 +210,12 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | C24 | VaNiMorningBrief pinned mode added | Sprint 4 | — |
 | C25 | ProfileSetup ICP question added | Sprint 4 | — |
 | C26 | ScannerWidget component created | Sprint 4 | — |
-| C27 | ISIN dedup verified on all 6 new scanners — no fixes needed | Sprint 5 | fetchStage2Watch, fetchVaNiOpportunity, fetchStage4Leaders, fetchStage3Watch, fetchVaNiExitWatch all have identical dedup pattern |
-| C28 | B03 fixed — `is_vani_surge` + `is_vani_breakout` added to ScanDataBundle EOD SELECT + EquityEodSnapshot type; convictionFlow + breakoutSurge VaNi now use `computeVaniOpportunity()` | Sprint 5 | `scanEngine.ts` line 168 + `types/index.ts` |
-| C29 | B02 complete — `ScanTable.tsx` built; `[≡ Table] [⊞ Cards]` toggle added to all scanner presets; table is default; localStorage persists mode + per-preset column picks; VaNi dot, sticky symbol col, gear column picker, header-click sort | Sprint 5 | `src/components/domain/ScanTable.tsx` (new) + `ScanView.tsx` (ViewToggle, useViewMode, Stage2Results/ConvictionFlowResults/breakout_surge/generic all updated) |
-| C30 | Table view polish — AUDIT 1: VaNi 0 confirmed as data pipeline issue (is_vani_* DEFAULT false; backfill scripts 6h/6j need to run — no frontend change); AUDIT 2: per-preset empty cols mapped; FIX 1 RSI>70 red+bold; FIX 2 RSS>75 green+bold; FIX 3 ret_5d>ret_22d accent color; FIX 4 PRESET_COL_OVERRIDES removes always-null default cols per preset | Sprint 5 | `ScanTable.tsx` — getCellContent return type adds fontWeight; PRESET_COL_OVERRIDES for stage_2_watch/vani_opportunity/stage_4_leaders/stage_3_watch/vani_exit_watch |
+| C27 | B01 — ISIN dedup verified on all 6 scanners, no fixes needed. VaNi Opportunity edge case noted in Known Risks. | Sprint 5 | — |
+| C28 | B03 — `is_vani_surge` + `is_vani_breakout` added to ScanDataBundle EOD SELECT. convictionFlow and breakoutSurge VaNi migrated to `computeVaniOpportunity()`. | Sprint 5 | — |
+| C29 | B02 — `ScanTable.tsx` built with preset-specific column sets, column picker, sortable headers, RSI/RSS/5D-vs-22D highlighting, Table/Cards toggle. | Sprint 5 | — |
+| C30 | B04 — `ScanFilterBar.tsx` built with preset-specific filter groups, client-side filtering, industry multi-select, collapsible UI. | Sprint 5 | — |
+| C31 | `fetchStage2Watch` + `fetchVaNiOpportunity` expanded from 9 to 36 columns — matches `fetchStage2Leaders`. | Sprint 5 | — |
+| C32 | VaNi flags backfill run manually (6h + 6j) for 2026-06-19. `is_vani_*` columns now populated. | Sprint 5 | — |
 
 ---
 
@@ -222,6 +225,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | # | Risk | Location | Detail |
 |---|---|---|---|
 | KR01 | `fetchVaNiOpportunity` applies `.limit(25)` server-side before client-side ISIN dedup | `scanEngine.ts` — `fetchVaNiOpportunity()` | If the top 25 server-side rows contain dual-listed pairs, dedup reduces final count below 25. Other scanners fetch larger limits (100–500) then dedup to target. Low priority — monitor. |
+| KR02 | HOT$ (`sniper_hot`) showing 50.00 uniformly across all stocks | `km_equity_eod.sniper_hot` | May be DB default or pipeline artifact. Needs backend pipeline investigation before next sprint. |
 
 ---
 
@@ -289,14 +293,23 @@ Open questions: [FILL IN]
 SESSION HANDOVER
 ================
 Date: 2026-06-19
-Active Sprint: Sprint 4 — COMPLETE
-Last completed: Step 4.10 — Sprint 4 QA
-Next sprint: Sprint 5 — Scanner Table View + P0 fixes
-Next step: B01 (ISIN dedup), B02 (Table view), B03 (ScanDataBundle missing columns)
+Active Sprint: Sprint 5 — COMPLETE
+Last completed: ScanFilterBar built + POA closeout
+Next sprint: Sprint 6 — Scanner improvements + missing scanners
+Next steps in priority order:
+  - Investigate sniper_hot = 50.00 pipeline issue
+  - B05: Show "vs N500" label on MagicRS in UI
+  - B10: Atmospheric badge verification on all scanner presets
+  - B11: Render fetched fields in industry drill-down
+  - B12: Click-through drill-down → Visual Pulse
+  - B13: Lookback filter 5D/22D/66D on rotation
+  - B16: smart_money vani_rule = null fix
+  - B22-B26: Missing breakout/breakdown scanners
 Open questions:
-  - Third scanner widget uses 'Strength Confluence' preset instead of 'vani_opportunity' — fix in Sprint 5
-  - Alignment/placement polish on Today tab components needed — Sprint 5 UX pass
-New bugs found: None
-POA: /docs/POA/POA.md
-Architecture: /docs/POA/ARCHITECTURE.md
+  - sniper_hot uniform 50.00 — pipeline bug or data issue?
+  - Stage 4/3/vani_exit rss_value still null — confirmed fix applied?
+New bugs found:
+  - sniper_hot = 50.00 uniformly (HOT$ column)
+POA: /docs/poa/POA.md
+Architecture: /docs/poa/ARCHITECTURE.md
 ```
