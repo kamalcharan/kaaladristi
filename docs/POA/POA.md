@@ -49,7 +49,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | Step | Task | Status | Notes |
 |---|---|---|---|
 | 7.1 | Create `fieldConfig.ts` — labels, tooltips, formatFn, colorFn, thresholds for all 30 fields. Refactor ScanTable to import from it. | ✅ | ScanTable: 516 → 393 lines. fieldConfig: 520 lines. Zero new TS errors. |
-| 7.2 | Wire StockCard to fieldConfig | ⬜ | Use same ALL_FIELDS registry |
+| 7.2 | Wire StockCard to fieldConfig | ✅ | colorToBg/colorToBorder helpers; MrsPill, SignalTower, StageBadge, flow_type, RSI, rvol, zone pill all use getColor/formatValue/getLabel. RSI >70 corrected to bear (overbought). sniper_hot label → 'Hot Money'. |
 
 ---
 
