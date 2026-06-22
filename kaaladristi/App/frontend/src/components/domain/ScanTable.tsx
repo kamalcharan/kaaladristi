@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ScanStock } from '@/types'
 import { displaySymbol } from '@/lib/symbolUtils'
+import { Tooltip } from '@/components/ui'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -27,18 +28,18 @@ const COLUMN_DEFS: Record<string, ColDef> = {
   pctBelow52wHigh:   { label: '% Bel 52W', width: 90,  format: 'pct'   },
   mcap_cr:           { label: 'MCap',      width: 80,  format: 'number' },
   flow_type:         { label: 'Flow',      width: 100, format: 'text'   },
-  sniper_inst:       { label: 'Sniper',    width: 70,  format: 'number' },
-  rss_value:         { label: 'RSS',       width: 70,  format: 'number' },
-  delivery_surge_x:  { label: 'Surge×',    width: 70,  format: 'surge'  },
-  avg_amt_5d:        { label: '5D Avg',    width: 80,  format: 'cr'     },
-  avg_amt_22d:       { label: '22D Avg',   width: 80,  format: 'cr'     },
-  delivery_pct:      { label: 'Deliv%',    width: 70,  format: 'pct'    },
-  ema_20:            { label: 'EMA20',     width: 80,  format: 'price'  },
-  breakout_level:    { label: 'Brk Lvl',  width: 80,  format: 'price'  },
-  pct_from_breakout: { label: '% Above',   width: 75,  format: 'pct'    },
-  supertrend_dir:    { label: 'ST',        width: 50,  format: 'trend'  },
-  accum_distrib:     { label: 'A/D',       width: 60,  format: 'text'   },
-  sniper_hot:        { label: 'Hot$',      width: 70,  format: 'number' },
+  sniper_inst:       { label: 'Institution', width: 90,  format: 'number' },
+  rss_value:         { label: 'RSS',         width: 70,  format: 'number' },
+  delivery_surge_x:  { label: 'Surge×',      width: 70,  format: 'surge'  },
+  avg_amt_5d:        { label: '5D Avg',      width: 80,  format: 'cr'     },
+  avg_amt_22d:       { label: '22D Avg',     width: 80,  format: 'cr'     },
+  delivery_pct:      { label: 'Deliv%',      width: 70,  format: 'pct'    },
+  ema_20:            { label: 'EMA20',       width: 80,  format: 'price'  },
+  breakout_level:    { label: 'Brk Lvl',    width: 80,  format: 'price'  },
+  pct_from_breakout: { label: '% Above',     width: 75,  format: 'pct'    },
+  supertrend_dir:    { label: 'ST',          width: 50,  format: 'trend'  },
+  accum_distrib:     { label: 'Accum/Dist',  width: 90,  format: 'text'   },
+  sniper_hot:        { label: 'Hot Money',   width: 85,  format: 'number' },
   sma_50:            { label: 'SMA50',     width: 80,  format: 'price'  },
   sma_200:           { label: 'SMA200',    width: 80,  format: 'price'  },
   w52_high:          { label: '52W High',  width: 80,  format: 'price'  },
@@ -46,6 +47,39 @@ const COLUMN_DEFS: Record<string, ColDef> = {
   ret_22d:           { label: '22D%',      width: 65,  format: 'pct'    },
   rel_5d_n50:        { label: 'Rel N50',   width: 75,  format: 'pct'    },
   rel_5d_n500:       { label: 'Rel N500',  width: 75,  format: 'pct'    },
+}
+
+// ── Column tooltips ────────────────────────────────────────────────────────────
+
+const COLUMN_TOOLTIPS: Record<string, string> = {
+  symbol:           'Stock symbol and company name',
+  close:            'Last traded price',
+  pct_chng:         'Price change today (%)',
+  magic_rs:         'MagicRS — Relative Strength vs NIFTY 500. Proprietary 144-bar momentum oscillator. Higher = stronger relative performance',
+  rs_percentile:    'RS Percentile — Rank among all NSE stocks by relative strength (0–100). Above 80 = market leader',
+  stage:            'Weinstein Stage — S1: Base, S2: Advancing, S3: Topping, S4: Declining',
+  rsi_14:           'RSI 14 — Relative Strength Index. Above 70 = overbought (red), below 30 = oversold',
+  rvol:             "Relative Volume — Today's volume vs 20-day average. Above 2 = elevated activity",
+  pctBelow52wHigh:  '% below 52-week high. Closer to 0 = near highs',
+  mcap_cr:          'Market Capitalisation in Crores (₹)',
+  flow_type:        'Smart money flow classification — Fresh Longs, Long Liquidation, Fresh Shorts, Short Covering etc.',
+  sniper_inst:      'Institutional Activity — Sniper detection score for institutional buying/selling',
+  sniper_hot:       'Hot Money — Sniper detection score for momentum and retail flow',
+  rss_value:        'RSS Value — Composite signal strength score',
+  accum_distrib:    'Accumulation/Distribution — Pipeline classification of buying vs selling pressure',
+  delivery_surge_x: 'Delivery Surge — Ratio of 5-day avg delivery value to 22-day avg. Above 2× = strong institutional commitment',
+  avg_amt_5d:       'Average delivery value over last 5 trading days (₹ Crores)',
+  avg_amt_22d:      'Average delivery value over last 22 trading days (₹ Crores)',
+  delivery_pct:     'Delivery percentage — what portion of volume resulted in actual delivery',
+  ema_20:           'Exponential Moving Average over 20 days',
+  breakout_level:   'Breakout level — highest close over prior 20 bars (resistance broken)',
+  pct_from_breakout:'% above the breakout level. Closer to 0 = fresher breakout',
+  supertrend_dir:   'Supertrend direction — ▲ Bullish bias, ▼ Bearish bias',
+  ret_5d:           '5-day price return (%)',
+  ret_22d:          '22-day price return (%)',
+  sma_50:           '50-day Simple Moving Average',
+  sma_200:          '200-day Simple Moving Average',
+  w52_high:         '52-week high price',
 }
 
 // ── Preset groups & column sets ────────────────────────────────────────────────
@@ -359,7 +393,11 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       borderBottom: '1px solid var(--border)',
                     }}
                   >
-                    {def.label}{isActive && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+                    {COLUMN_TOOLTIPS[colKey]
+                      ? <Tooltip content={COLUMN_TOOLTIPS[colKey]} position="bottom" maxWidth={240}>{def.label}</Tooltip>
+                      : def.label
+                    }
+                    {isActive && (sortDir === 'asc' ? ' ▲' : ' ▼')}
                   </th>
                 )
               })}
