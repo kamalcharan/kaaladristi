@@ -1328,23 +1328,13 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
-    .eq('stage', 'S2')
     .eq('trade_date', latestDate)
-    .gt('close', 30)
-    .gt('rs_percentile', 80)
+    .is('is_vani_s2', true)
     .order('rs_percentile', { ascending: false })
-    .limit(25)
+    .limit(50)
     .execute();
 
-  const eodRows = (rows ?? []) as any[];
-
-  // Client-side Alpha Edge: close > sma_150, sma_50 > sma_150
-  const filtered = eodRows.filter((row) => {
-    const sma150 = row.sma_150;
-    const sma50 = row.sma_50;
-    if (!sma150 || !sma50) return false;
-    return row.close > sma150 && sma50 > sma150;
-  });
+  const filtered = (rows ?? []) as any[];
 
   // ISIN dedup: prefer NSE
   const isinMap = new Map<string, any>();
