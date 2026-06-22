@@ -294,8 +294,8 @@ SESSION HANDOVER
 ================
 Date: 2026-06-19
 Active Sprint: Sprint 5 — COMPLETE
-Last completed: C32 — VaNi flags backfill run manually for 2026-06-19
-Next sprint: Sprint 6 — TBD
+Last completed: ScanFilterBar + POA update
+Next sprint: Sprint 6 — Scanner improvements
 Next step: Investigate KR02 (HOT$ sniper_hot showing 50.00 uniformly)
 Open questions:
   - HOT$ (sniper_hot) = 50.00 across all stocks — DB default or pipeline bug?
