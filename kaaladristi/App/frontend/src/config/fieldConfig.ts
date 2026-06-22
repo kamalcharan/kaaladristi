@@ -30,7 +30,6 @@ export interface FieldConfig {
   type: FieldType
   width: number
   sticky?: boolean
-  scoreFill?: boolean   // true = render background gradient fill proportional to value (score50/score100 types)
   thresholds?: ThresholdColor
   formatFn?: (val: any) => string
   colorFn?: (val: any, row?: any) => string
@@ -179,7 +178,6 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     tooltip: 'RS Percentile — rank among all NSE stocks by relative strength (0–100). Above 80 = market leader. Above 70 = strong.',
     type: 'score100',
     width: 62,
-    scoreFill: true,
     thresholds: {
       low:     'var(--bear)',
       mid:     'var(--gold)',
@@ -261,7 +259,6 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     tooltip: 'Institutional Activity — Sniper detection of institutional flow. Based on RSI(9) above base 61, scaled 0–50. Above 35 = strong institutional presence.',
     type: 'score50',
     width: 90,
-    scoreFill: true,
     thresholds: {
       low:     'var(--text-muted)',
       mid:     'var(--gold)',
@@ -277,11 +274,10 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     tooltip: 'Hot Money — fast momentum/retail flow detection. Based on RSI(4) above base 15, scaled 0–50. Value of 50 = maximum activity (at cap). Often uniformly high in trending markets.',
     type: 'score50',
     width: 90,
-    scoreFill: true,
     thresholds: {
       low:     'var(--text-muted)',
       mid:     'var(--gold)',
-      high:    'var(--bull)',
+      high:    'var(--gold)',
       lowMax:  20,
       highMin: 40,
     },
@@ -293,11 +289,10 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     tooltip: 'RSS — LuckyPop Relative Strength Smoothed. Computed as RSI(5) of the SMA(10)–SMA(40) spread, then smoothed with SMA(3). Range 0–100. Above 80 = overbought / strong momentum. Below 20 = oversold / weak momentum. A new RSS high before price makes a new high is an early momentum signal.',
     type: 'score100',
     width: 65,
-    scoreFill: true,
     thresholds: {
       low:     'var(--bear)',
       mid:     'var(--text-secondary)',
-      high:    'var(--bull)',
+      high:    'var(--accent)',
       lowMax:  20,
       highMin: 80,
     },
