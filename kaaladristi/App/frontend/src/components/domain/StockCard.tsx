@@ -13,6 +13,7 @@ import type { ScanStock } from '@/types';
 import React from 'react';
 import { ZONE_LABELS, FLOW_LABELS } from '@/constants/signalScale';
 import { ScanCardWrapper, VaniBadge, CardExchangeBadge } from './ScanCardShell';
+import { getColor, formatValue, getLabel } from '@/config/fieldConfig';
 
 export { ZONE_LABELS, FLOW_LABELS };
 
@@ -73,26 +74,21 @@ export function MetricPill({ label, value, color }: { label: string; value: stri
 
 // ── Internal helpers ──────────────────────────────────────────
 
-const FLOW_DISPLAY: Record<string, { label: string; bull: boolean }> = {
-  FRESH_LONGS:      { label: 'Fresh Longs',   bull: true },
-  SHORT_COVERING:   { label: 'Short Covering', bull: true },
-  FRESH_SHORTS:     { label: 'Fresh Shorts',   bull: false },
-  LONG_LIQUIDATION: { label: 'Long Liquidation', bull: false },
-  LOW_VOLUME:       { label: 'Low Volume',     bull: false },
-  MIXED:            { label: 'Mixed',          bull: false },
-};
-
-function zoneColor(zone: string | null): string {
-  if (zone === 'Strong Bull') return 'var(--bull)';
-  if (zone === 'Mild Bull')   return 'color-mix(in srgb, var(--bull) 70%, transparent)';
-  if (zone === 'Mild Bear')   return 'color-mix(in srgb, var(--bear) 70%, transparent)';
-  if (zone === 'Strong Bear') return 'var(--bear)';
-  return 'var(--text-muted)';
+function colorToBg(color: string): string {
+  if (color === 'var(--bull)') return 'var(--bull-bg)';
+  if (color === 'var(--bear)') return 'var(--bear-bg)';
+  if (color === 'var(--gold)') return 'rgba(234,179,8,0.08)';
+  return 'rgba(255,255,255,0.04)';
 }
 
-function zonePillStyle(zone: string | null): React.CSSProperties {
-  const isBull = zone === 'Strong Bull' || zone === 'Mild Bull';
-  const isBear = zone === 'Strong Bear' || zone === 'Mild Bear';
+function colorToBorder(color: string): string {
+  if (color === 'var(--bull)') return 'var(--bull-dim, rgba(16,185,129,0.2))';
+  if (color === 'var(--bear)') return 'var(--bear-dim, rgba(239,68,68,0.2))';
+  if (color === 'var(--gold)') return 'rgba(234,179,8,0.2)';
+  return 'var(--border)';
+}
+
+function zonePillStyle(zone: string | null, color: string): React.CSSProperties {
   return {
     fontFamily: 'var(--font-mono)',
     fontSize: '10.5px',
@@ -101,8 +97,8 @@ function zonePillStyle(zone: string | null): React.CSSProperties {
     fontWeight: 600,
     letterSpacing: '0.03em',
     whiteSpace: 'nowrap' as const,
-    background: isBull ? 'var(--bull-bg)' : isBear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
-    color: zoneColor(zone),
+    background: colorToBg(color),
+    color,
   };
 }
 
@@ -132,12 +128,9 @@ function DotTag({ label, color }: { label: string; color: string }) {
 }
 
 // Fix 2/3 — Signal tower for sniper scores (0–50 scale)
-function SignalTower({ score, label, tooltip }: { score: number; label: string; tooltip: string }) {
+function SignalTower({ score, label, tooltip, fieldKey }: { score: number; label: string; tooltip: string; fieldKey: string }) {
   const filled = score > 45 ? 5 : score > 35 ? 4 : score > 25 ? 3 : score > 10 ? 2 : 1;
-  const barColor = filled === 5 ? 'var(--gold)'
-    : filled >= 3 ? 'var(--bull)'
-    : filled === 2 ? 'var(--caution)'
-    : 'var(--text-faint)';
+  const barColor = getColor(fieldKey, score);
   const heights = [3, 5, 7, 9, 11];
 
   return (
@@ -174,8 +167,7 @@ function MrsPill({
   zone: string | null;
   trend: (boolean | null)[];
 }) {
-  const isBull = zone === 'Strong Bull' || zone === 'Mild Bull';
-  const isBear = zone === 'Strong Bear' || zone === 'Mild Bear';
+  const color = getColor('magic_rs', value, { magic_rs_zone: zone });
 
   // Show most-recent on right → reverse so oldest is leftmost
   const bars = [...trend].reverse();
@@ -188,9 +180,9 @@ function MrsPill({
         padding: '3px 8px',
         fontFamily: 'var(--font-mono)', fontSize: '10.5px',
         borderRadius: '5px', fontWeight: 500,
-        background: isBull ? 'var(--bull-bg)' : isBear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
-        color: isBull ? 'var(--bull)' : isBear ? 'var(--bear)' : 'var(--text-muted)',
-        border: `1px solid ${isBull ? 'var(--bull-dim, rgba(16,185,129,0.2))' : isBear ? 'var(--bear-dim, rgba(239,68,68,0.2))' : 'var(--border)'}`,
+        background: colorToBg(color),
+        color,
+        border: `1px solid ${colorToBorder(color)}`,
         cursor: 'default',
       }}
     >
@@ -211,15 +203,14 @@ function MrsPill({
 // ── Stage Badge ───────────────────────────────────────────────
 
 export function StageBadge({ stage }: { stage: string }) {
-  const isS2 = stage === 'S2';
-  const isS1 = stage === 'S1';
+  const color = getColor('stage', stage);
   return (
     <span style={{
       fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '2px 7px',
       borderRadius: '4px', fontWeight: 700,
-      background: isS2 ? 'rgba(34,197,94,0.1)' : isS1 ? 'rgba(59,130,246,0.08)' : 'rgba(249,115,22,0.08)',
-      color: isS2 ? 'var(--bull)' : isS1 ? '#60a5fa' : '#fb923c',
-      border: `1px solid ${isS2 ? 'rgba(34,197,94,0.2)' : isS1 ? 'rgba(59,130,246,0.2)' : 'rgba(249,115,22,0.2)'}`,
+      background: colorToBg(color),
+      color,
+      border: `1px solid ${colorToBorder(color)}`,
     }}>
       {stage}
     </span>
@@ -240,8 +231,8 @@ export function StockCard({
   const navigate = useNavigate();
   const heroName = displaySymbol(stock);
   const subName = displaySubName(stock);
-  const flowCfg = FLOW_DISPLAY[stock.flow_type ?? ''];
-  const isBullFlow = stock.flow_type === 'FRESH_LONGS' || stock.flow_type === 'SHORT_COVERING';
+  const flowLabel = formatValue('flow_type', stock.flow_type);
+  const flowColor = getColor('flow_type', stock.flow_type);
 
   const pct = stock.pct_chng ?? 0;
   const isUp = pct >= 0;
@@ -281,15 +272,15 @@ export function StockCard({
             {heroName}
           </span>
           <CardExchangeBadge exchange={stock.exchange} />
-          {flowCfg && (
+          {stock.flow_type && (
             <span style={{
               fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '2px 7px',
               borderRadius: '5px', fontWeight: 500,
-              background: isBullFlow ? 'var(--bull-bg)' : 'rgba(255,255,255,0.04)',
-              color: isBullFlow ? 'var(--bull)' : 'var(--text-muted)',
-              border: `1px solid ${isBullFlow ? 'var(--bull-dim, rgba(16,185,129,0.2))' : 'var(--border)'}`,
+              background: colorToBg(flowColor),
+              color: flowColor,
+              border: `1px solid ${colorToBorder(flowColor)}`,
             }}>
-              {flowCfg.label}
+              {flowLabel}
             </span>
           )}
           {stageBadge && <StageBadge stage={stageBadge} />}
@@ -318,39 +309,42 @@ export function StockCard({
             />
           )}
 
-          {/* RSI — badge if >70, pill if 61-70, red pill if <40 */}
+          {/* RSI — badge if overbought (>70), pill if 61-70, pill if <40 */}
           {stock.rsi_14 != null && stock.rsi_14 > 70 && (
             <span style={{
               display: 'inline-flex', alignItems: 'center',
               padding: '3px 9px', fontFamily: 'var(--font-mono)', fontSize: '10px',
               borderRadius: '5px', letterSpacing: '0.06em', textTransform: 'uppercase',
-              fontWeight: 700, background: 'var(--bull)', color: '#0a1f16', whiteSpace: 'nowrap',
+              fontWeight: 700, background: colorToBg('var(--bear)'), color: 'var(--bear)', whiteSpace: 'nowrap',
+              border: `1px solid ${colorToBorder('var(--bear)')}`,
             }}>
               RSI {stock.rsi_14.toFixed(0)}
             </span>
           )}
           {stock.rsi_14 != null && stock.rsi_14 > 60 && stock.rsi_14 <= 70 && (
-            <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} bull />
+            <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} />
           )}
           {stock.rsi_14 != null && stock.rsi_14 < 40 && (
-            <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} bear />
+            <SigPill label={`RSI ${stock.rsi_14.toFixed(0)}`} bull={getColor('rsi_14', stock.rsi_14) === 'var(--bull)'} bear={getColor('rsi_14', stock.rsi_14) === 'var(--bear)'} />
           )}
 
           {/* Fix 2 — Smart Money signal tower */}
           {(stock.sniper_inst ?? 0) > 15 && (
             <SignalTower
               score={stock.sniper_inst!}
-              label="Institution"
+              label={getLabel('sniper_inst')}
               tooltip={`Smart Money ${stock.sniper_inst!.toFixed(0)}/50 · Institutional RSI`}
+              fieldKey="sniper_inst"
             />
           )}
 
-          {/* Fix 3 — Momentum signal tower */}
+          {/* Fix 3 — Hot Money signal tower */}
           {(stock.sniper_hot ?? 0) > 15 && (
             <SignalTower
               score={stock.sniper_hot!}
-              label="Momentum"
-              tooltip={`Momentum ${stock.sniper_hot!.toFixed(0)}/50 · Hot Money RSI`}
+              label={getLabel('sniper_hot')}
+              tooltip={`Hot Money ${stock.sniper_hot!.toFixed(0)}/50 · Hot Money RSI`}
+              fieldKey="sniper_hot"
             />
           )}
 
@@ -360,7 +354,7 @@ export function StockCard({
 
           {/* RVOL */}
           {stock.rvol != null && (
-            <SigPill label={`RVOL ${stock.rvol.toFixed(1)}`} bull={stock.rvol >= 1.5} />
+            <SigPill label={`RVOL ${stock.rvol.toFixed(1)}`} bull={getColor('rvol', stock.rvol) === 'var(--bull)'} />
           )}
 
           {/* Delivery */}
@@ -423,14 +417,14 @@ export function StockCard({
       {/* Zone 3: RS zone pill + 52W% + screener-specific extra */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
         {stock.magic_rs_zone && (
-          <span style={zonePillStyle(stock.magic_rs_zone)}>
+          <span style={zonePillStyle(stock.magic_rs_zone, getColor('magic_rs', stock.magic_rs, stock))}>
             {stock.magic_rs_zone}
           </span>
         )}
         {stock.pctBelow52wHigh != null && (
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: '10px',
-            color: stock.pctBelow52wHigh < 5 ? 'var(--bull)' : 'var(--text-faint)',
+            color: 'var(--text-secondary)',
           }}>
             {stock.pctBelow52wHigh.toFixed(1)}% off high
           </span>
