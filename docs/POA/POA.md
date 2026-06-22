@@ -174,7 +174,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | P03 | Master Frameworks catalog | Deferred post-cashflow | Post-cashflow |
 | P04 | Morning brief screener feed | Deferred to screener session | Screener sprint |
 | P05 | User workspace customization (Tab 3) | Post-MVP simplicity decision | V2 |
-| P06 | scanConvictionFlow + scanBreakoutSurge vani_rule migration | Blocked: is_vani_surge + is_vani_breakout missing from ScanDataBundle | After B03 |
+| ~~P06~~ | ~~scanConvictionFlow + scanBreakoutSurge vani_rule migration~~ | ~~Blocked: is_vani_surge + is_vani_breakout missing from ScanDataBundle~~ | → C28 (B03 complete) |
 | P07 | NSE data gap (876 of 1380 stocks) | Pipeline ingestion issue in bhav copy downloader — investigation ongoing | When pipeline fixed |
 
 ---
@@ -225,7 +225,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | # | Risk | Location | Detail |
 |---|---|---|---|
 | KR01 | `fetchVaNiOpportunity` applies `.limit(25)` server-side before client-side ISIN dedup | `scanEngine.ts` — `fetchVaNiOpportunity()` | If the top 25 server-side rows contain dual-listed pairs, dedup reduces final count below 25. Other scanners fetch larger limits (100–500) then dedup to target. Low priority — monitor. |
-| KR02 | HOT$ (`sniper_hot`) showing 50.00 uniformly across all stocks | `km_equity_eod.sniper_hot` | May be DB default or pipeline artifact. Investigate in backend pipeline before next sprint. |
+| KR02 | HOT$ (`sniper_hot`) showing 50.00 uniformly across all stocks | `km_equity_eod.sniper_hot` | May be DB default or pipeline artifact. Needs backend pipeline investigation before next sprint. |
 
 ---
 
@@ -294,12 +294,22 @@ SESSION HANDOVER
 ================
 Date: 2026-06-19
 Active Sprint: Sprint 5 — COMPLETE
-Last completed: ScanFilterBar + POA update
-Next sprint: Sprint 6 — Scanner improvements
-Next step: Investigate KR02 (HOT$ sniper_hot showing 50.00 uniformly)
+Last completed: ScanFilterBar built + POA closeout
+Next sprint: Sprint 6 — Scanner improvements + missing scanners
+Next steps in priority order:
+  - Investigate sniper_hot = 50.00 pipeline issue
+  - B05: Show "vs N500" label on MagicRS in UI
+  - B10: Atmospheric badge verification on all scanner presets
+  - B11: Render fetched fields in industry drill-down
+  - B12: Click-through drill-down → Visual Pulse
+  - B13: Lookback filter 5D/22D/66D on rotation
+  - B16: smart_money vani_rule = null fix
+  - B22-B26: Missing breakout/breakdown scanners
 Open questions:
-  - HOT$ (sniper_hot) = 50.00 across all stocks — DB default or pipeline bug?
-New bugs found: None
-POA: /docs/POA/POA.md
-Architecture: /docs/POA/ARCHITECTURE.md
+  - sniper_hot uniform 50.00 — pipeline bug or data issue?
+  - Stage 4/3/vani_exit rss_value still null — confirmed fix applied?
+New bugs found:
+  - sniper_hot = 50.00 uniformly (HOT$ column)
+POA: /docs/poa/POA.md
+Architecture: /docs/poa/ARCHITECTURE.md
 ```
