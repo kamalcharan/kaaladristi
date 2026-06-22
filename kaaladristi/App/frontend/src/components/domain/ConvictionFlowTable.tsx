@@ -193,6 +193,15 @@ function FlowCard({ stock }: { stock: ScanStock }) {
         }}>
           {fmtSurge(surge)}
         </span>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '8px',
+          color: 'var(--text-faint)',
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.06em',
+        }}>
+          Surge×
+        </span>
         {stock.trade_date && (
           <span style={{
             fontFamily: 'var(--font-mono)',
