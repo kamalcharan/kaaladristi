@@ -1199,6 +1199,16 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
 
 ## Scanner Data Gaps — Future Work
 
+### mcap_cr Coverage
+- NSE equities: ~95% coverage (essentially complete)
+- BSE equities: ~11.6% coverage (structural gap — 5,750 of 6,504 missing)
+- Overall across full universe: ~26.8%
+- Root cause: mcap_cr populated primarily for NSE-listed stocks in km_equity_symbols
+- Bug fixed: buildStockFromEod() now reads sym.mcap_cr ?? null (was hardcoded null)
+- Display: ManipulationWatch (SuspectCard component) never rendered mcap_cr — no display change needed
+- Stage/standard scanners that DO show mcap_cr use NSE-preferred universe (~95% coverage) — acceptable
+- Future: BSE mcap_cr backfill via data provider
+
 ### ret_5d, ret_22d, ret_66d
 - Populated: scanConvictionFlow ✓, scanBreakoutSurge
   (ret_5d, ret_22d only — ret_66d missing) ✓
