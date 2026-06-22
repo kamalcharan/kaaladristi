@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ScanStock } from '@/types'
 import { displaySymbol } from '@/lib/symbolUtils'
+import { Tooltip } from '@/components/ui'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type PresetGroup = 'stage' | 'conviction' | 'breakout' | 'standard'
+type PresetGroup = 'stage' | 'conviction' | 'breakout' | 'breakout_surge' | 'standard'
 
 interface ColDef {
   label: string
@@ -27,18 +28,18 @@ const COLUMN_DEFS: Record<string, ColDef> = {
   pctBelow52wHigh:   { label: '% Bel 52W', width: 90,  format: 'pct'   },
   mcap_cr:           { label: 'MCap',      width: 80,  format: 'number' },
   flow_type:         { label: 'Flow',      width: 100, format: 'text'   },
-  sniper_inst:       { label: 'Sniper',    width: 70,  format: 'number' },
-  rss_value:         { label: 'RSS',       width: 70,  format: 'number' },
-  delivery_surge_x:  { label: 'Surge×',    width: 70,  format: 'surge'  },
-  avg_amt_5d:        { label: '5D Avg',    width: 80,  format: 'cr'     },
-  avg_amt_22d:       { label: '22D Avg',   width: 80,  format: 'cr'     },
-  delivery_pct:      { label: 'Deliv%',    width: 70,  format: 'pct'    },
-  ema_20:            { label: 'EMA20',     width: 80,  format: 'price'  },
-  breakout_level:    { label: 'Brk Lvl',  width: 80,  format: 'price'  },
-  pct_from_breakout: { label: '% Above',   width: 75,  format: 'pct'    },
-  supertrend_dir:    { label: 'ST',        width: 50,  format: 'trend'  },
-  accum_distrib:     { label: 'A/D',       width: 60,  format: 'text'   },
-  sniper_hot:        { label: 'Hot$',      width: 70,  format: 'number' },
+  sniper_inst:       { label: 'Institution', width: 90,  format: 'number' },
+  rss_value:         { label: 'RSS',         width: 70,  format: 'number' },
+  delivery_surge_x:  { label: 'Surge×',      width: 70,  format: 'surge'  },
+  avg_amt_5d:        { label: '5D Avg',      width: 80,  format: 'cr'     },
+  avg_amt_22d:       { label: '22D Avg',     width: 80,  format: 'cr'     },
+  delivery_pct:      { label: 'Deliv%',      width: 70,  format: 'pct'    },
+  ema_20:            { label: 'EMA20',       width: 80,  format: 'price'  },
+  breakout_level:    { label: 'Brk Lvl',    width: 80,  format: 'price'  },
+  pct_from_breakout: { label: '% Above',     width: 75,  format: 'pct'    },
+  supertrend_dir:    { label: 'ST',          width: 50,  format: 'trend'  },
+  accum_distrib:     { label: 'Accum/Dist',  width: 90,  format: 'text'   },
+  sniper_hot:        { label: 'Hot Money',   width: 85,  format: 'number' },
   sma_50:            { label: 'SMA50',     width: 80,  format: 'price'  },
   sma_200:           { label: 'SMA200',    width: 80,  format: 'price'  },
   w52_high:          { label: '52W High',  width: 80,  format: 'price'  },
@@ -46,6 +47,39 @@ const COLUMN_DEFS: Record<string, ColDef> = {
   ret_22d:           { label: '22D%',      width: 65,  format: 'pct'    },
   rel_5d_n50:        { label: 'Rel N50',   width: 75,  format: 'pct'    },
   rel_5d_n500:       { label: 'Rel N500',  width: 75,  format: 'pct'    },
+}
+
+// ── Column tooltips ────────────────────────────────────────────────────────────
+
+const COLUMN_TOOLTIPS: Record<string, string> = {
+  symbol:           'Stock symbol and company name',
+  close:            'Last traded price',
+  pct_chng:         'Price change today (%)',
+  magic_rs:         'MagicRS — Relative Strength vs NIFTY 500. Proprietary 144-bar momentum oscillator. Higher = stronger relative performance',
+  rs_percentile:    'RS Percentile — Rank among all NSE stocks by relative strength (0–100). Above 80 = market leader',
+  stage:            'Weinstein Stage — S1: Base, S2: Advancing, S3: Topping, S4: Declining',
+  rsi_14:           'RSI 14 — Relative Strength Index. Above 70 = overbought (red), below 30 = oversold',
+  rvol:             "Relative Volume — Today's volume vs 20-day average. Above 2 = elevated activity",
+  pctBelow52wHigh:  '% below 52-week high. Closer to 0 = near highs',
+  mcap_cr:          'Market Capitalisation in Crores (₹)',
+  flow_type:        'Smart money flow classification — Fresh Longs, Long Liquidation, Fresh Shorts, Short Covering etc.',
+  sniper_inst:      'Institutional Activity — Sniper detection score for institutional buying/selling',
+  sniper_hot:       'Hot Money — Sniper detection score for momentum and retail flow',
+  rss_value:        'RSS Value — Composite signal strength score',
+  accum_distrib:    'Accumulation/Distribution — Pipeline classification of buying vs selling pressure',
+  delivery_surge_x: 'Delivery Surge — Ratio of 5-day avg delivery value to 22-day avg. Above 2× = strong institutional commitment',
+  avg_amt_5d:       'Average delivery value over last 5 trading days (₹ Crores)',
+  avg_amt_22d:      'Average delivery value over last 22 trading days (₹ Crores)',
+  delivery_pct:     'Delivery percentage — what portion of volume resulted in actual delivery',
+  ema_20:           'Exponential Moving Average over 20 days',
+  breakout_level:   'Breakout level — highest close over prior 20 bars (resistance broken)',
+  pct_from_breakout:'% above the breakout level. Closer to 0 = fresher breakout',
+  supertrend_dir:   'Supertrend direction — ▲ Bullish bias, ▼ Bearish bias',
+  ret_5d:           '5-day price return (%)',
+  ret_22d:          '22-day price return (%)',
+  sma_50:           '50-day Simple Moving Average',
+  sma_200:          '200-day Simple Moving Average',
+  w52_high:         '52-week high price',
 }
 
 // ── Preset groups & column sets ────────────────────────────────────────────────
@@ -63,7 +97,7 @@ const PRESET_GROUP: Record<string, PresetGroup> = {
   stage_4_leaders:      'stage',
   vani_exit_watch:      'stage',
   conviction_flow:      'conviction',
-  breakout_surge:       'breakout',
+  breakout_surge:       'breakout_surge',
   power_buy:            'standard',
   power_sell:           'standard',
   smart_money:          'standard',
@@ -73,17 +107,19 @@ const PRESET_GROUP: Record<string, PresetGroup> = {
 }
 
 const DEFAULT_COLS: Record<PresetGroup, string[]> = {
-  stage:      ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst','rss_value'],
-  conviction: ['symbol','close','pct_chng','delivery_surge_x','avg_amt_5d','avg_amt_22d','delivery_pct','rsi_14','ema_20','magic_rs'],
-  breakout:   ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir'],
-  standard:   ['symbol','close','pct_chng','magic_rs','rvol','rsi_14','flow_type','sniper_inst','rss_value','accum_distrib','supertrend_dir','mcap_cr'],
+  stage:          ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst','rss_value'],
+  conviction:     ['symbol','close','pct_chng','delivery_surge_x','avg_amt_5d','avg_amt_22d','delivery_pct','rsi_14','ema_20','magic_rs'],
+  breakout:       ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir'],
+  breakout_surge: ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir'],
+  standard:       ['symbol','close','pct_chng','magic_rs','rvol','rsi_14','flow_type','sniper_inst','rss_value','accum_distrib','supertrend_dir','mcap_cr'],
 }
 
 const OPTIONAL_COLS: Record<PresetGroup, string[]> = {
-  stage:      ['sma_50','sma_200','supertrend_dir','accum_distrib','sniper_hot','w52_high','ema_20'],
-  conviction: ['ret_5d','ret_22d','rel_5d_n50','rel_5d_n500','mcap_cr','rss_value','sniper_inst'],
-  breakout:   ['sniper_inst','rss_value','ret_5d','ret_22d','mcap_cr'],
-  standard:   ['ret_5d','ret_22d','rel_5d_n50','rel_5d_n500','sniper_hot','ema_20'],
+  stage:          ['sma_50','sma_200','supertrend_dir','accum_distrib','sniper_hot','w52_high','ema_20'],
+  conviction:     ['ret_5d','ret_22d','mcap_cr','rss_value','sniper_inst'],
+  breakout:       ['sniper_inst','rss_value','mcap_cr'],
+  breakout_surge: ['sniper_inst','rss_value','ret_5d','ret_22d','mcap_cr'],
+  standard:       ['sniper_hot','ema_20'],
 }
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
@@ -319,12 +355,16 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       {/* Table */}
       <div style={{
         overflowX: 'auto',
+        overflowY: 'visible',
+        width: '100%',
+        WebkitOverflowScrolling: 'touch',
         border: '1px solid var(--border)',
         borderRadius: 10,
       }}>
         <table style={{
-          width: '100%', borderCollapse: 'collapse',
-          minWidth: tableMinWidth,
+          width: 'max-content',
+          minWidth: '100%',
+          borderCollapse: 'collapse',
         }}>
           <thead>
             <tr style={{ height: 32 }}>
@@ -345,15 +385,19 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       width: def.width, minWidth: def.width,
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',
-                      fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase',
-                      fontFamily: 'var(--font-mono)',
-                      color: isActive ? 'var(--accent)' : 'var(--text-faint)',
+                      fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
+                      fontWeight: 600, fontFamily: 'var(--font-mono)',
+                      color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                       cursor: 'pointer', whiteSpace: 'nowrap',
                       userSelect: 'none',
                       borderBottom: '1px solid var(--border)',
                     }}
                   >
-                    {def.label}{isActive && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+                    {COLUMN_TOOLTIPS[colKey]
+                      ? <Tooltip content={COLUMN_TOOLTIPS[colKey]} position="bottom" maxWidth={240}>{def.label}</Tooltip>
+                      : def.label
+                    }
+                    {isActive && (sortDir === 'asc' ? ' ▲' : ' ▼')}
                   </th>
                 )
               })}
@@ -364,7 +408,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
               <tr
                 key={stock.equity_id}
                 onClick={() => onRowClick(stock)}
-                style={{ cursor: 'pointer', height: 36 }}
+                style={{ cursor: 'pointer', height: 40 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
               >
@@ -397,8 +441,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                           <div style={{ minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span style={{
-                                fontSize: 12, fontFamily: 'var(--font-mono)',
-                                color: 'var(--text-primary)', fontWeight: 500,
+                                fontSize: 13, fontFamily: 'var(--font-mono)',
+                                color: 'var(--text-primary)', fontWeight: 600,
                               }}>
                                 {sym}
                               </span>
@@ -415,7 +459,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                             </div>
                             {company && (
                               <div style={{
-                                fontSize: 9, color: 'var(--text-faint)',
+                                fontSize: 11, color: 'var(--text-muted)',
                                 fontFamily: 'var(--font-body)',
                                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                 maxWidth: 110,
@@ -435,7 +479,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       key={colKey}
                       style={{
                         padding: '0 10px', textAlign: 'right',
-                        fontSize: 11, fontFamily: 'var(--font-mono)',
+                        fontSize: 12, fontFamily: 'var(--font-mono)',
                         color: color ?? 'var(--text-secondary)',
                         fontWeight: fontWeight ?? undefined,
                         whiteSpace: 'nowrap',

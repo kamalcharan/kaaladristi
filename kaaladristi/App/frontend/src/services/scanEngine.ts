@@ -165,7 +165,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -624,6 +624,7 @@ function buildScanStock(
     w52_low: eod.w52_low ?? null,
     supertrend_dir: eod.supertrend_dir ?? null,
     lifetime_high: eod.lifetime_high ?? null,
+    stage: eod.stage ?? null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
@@ -1328,23 +1329,13 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
-    .eq('stage', 'S2')
     .eq('trade_date', latestDate)
-    .gt('close', 30)
-    .gt('rs_percentile', 80)
+    .is('is_vani_s2', true)
     .order('rs_percentile', { ascending: false })
-    .limit(25)
+    .limit(50)
     .execute();
 
-  const eodRows = (rows ?? []) as any[];
-
-  // Client-side Alpha Edge: close > sma_150, sma_50 > sma_150
-  const filtered = eodRows.filter((row) => {
-    const sma150 = row.sma_150;
-    const sma50 = row.sma_50;
-    if (!sma150 || !sma50) return false;
-    return row.close > sma150 && sma50 > sma150;
-  });
+  const filtered = (rows ?? []) as any[];
 
   // ISIN dedup: prefer NSE
   const isinMap = new Map<string, any>();
