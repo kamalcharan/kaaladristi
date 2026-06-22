@@ -2,91 +2,17 @@ import { useState, useRef, useEffect } from 'react'
 import type { ScanStock } from '@/types'
 import { displaySymbol } from '@/lib/symbolUtils'
 import { Tooltip } from '@/components/ui'
+import { ALL_FIELDS, formatValue, getColor, getFieldConfig, getLabel, getTooltip } from '@/config/fieldConfig'
+import { MiniTower } from '@/components/ui'
+import type React from 'react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type PresetGroup = 'stage' | 'conviction' | 'breakout' | 'breakout_surge' | 'standard'
 
-interface ColDef {
-  label: string
-  width: number
-  format: 'price' | 'pct' | 'number' | 'cr' | 'surge' | 'trend' | 'text'
-  sticky?: boolean
-}
-
-// ── Column definitions ─────────────────────────────────────────────────────────
-
-const COLUMN_DEFS: Record<string, ColDef> = {
-  symbol:            { label: 'Symbol',    width: 130, format: 'text',   sticky: true },
-  close:             { label: 'Close',     width: 80,  format: 'price'  },
-  pct_chng:          { label: 'D%',        width: 70,  format: 'pct'    },
-  magic_rs:          { label: 'MRS',       width: 70,  format: 'number' },
-  rs_percentile:     { label: 'RS%',       width: 60,  format: 'number' },
-  stage:             { label: 'Stage',     width: 80,  format: 'text'   },
-  rsi_14:            { label: 'RSI',       width: 60,  format: 'number' },
-  rvol:              { label: 'RVOL',      width: 60,  format: 'number' },
-  pctBelow52wHigh:   { label: '% Bel 52W', width: 90,  format: 'pct'   },
-  mcap_cr:           { label: 'MCap',      width: 80,  format: 'number' },
-  flow_type:         { label: 'Flow',      width: 100, format: 'text'   },
-  sniper_inst:       { label: 'Institution', width: 90,  format: 'number' },
-  rss_value:         { label: 'RSS',         width: 70,  format: 'number' },
-  delivery_surge_x:  { label: 'Surge×',      width: 70,  format: 'surge'  },
-  avg_amt_5d:        { label: '5D Avg',      width: 80,  format: 'cr'     },
-  avg_amt_22d:       { label: '22D Avg',     width: 80,  format: 'cr'     },
-  delivery_pct:      { label: 'Deliv%',      width: 70,  format: 'pct'    },
-  ema_20:            { label: 'EMA20',       width: 80,  format: 'price'  },
-  breakout_level:    { label: 'Brk Lvl',    width: 80,  format: 'price'  },
-  pct_from_breakout: { label: '% Above',     width: 75,  format: 'pct'    },
-  supertrend_dir:    { label: 'ST',          width: 50,  format: 'trend'  },
-  accum_distrib:     { label: 'Accum/Dist',  width: 90,  format: 'text'   },
-  sniper_hot:        { label: 'Hot Money',   width: 85,  format: 'number' },
-  sma_50:            { label: 'SMA50',     width: 80,  format: 'price'  },
-  sma_200:           { label: 'SMA200',    width: 80,  format: 'price'  },
-  w52_high:          { label: '52W High',  width: 80,  format: 'price'  },
-  ret_5d:            { label: '5D%',       width: 65,  format: 'pct'    },
-  ret_22d:           { label: '22D%',      width: 65,  format: 'pct'    },
-  rel_5d_n50:        { label: 'Rel N50',   width: 75,  format: 'pct'    },
-  rel_5d_n500:       { label: 'Rel N500',  width: 75,  format: 'pct'    },
-}
-
-// ── Column tooltips ────────────────────────────────────────────────────────────
-
-const COLUMN_TOOLTIPS: Record<string, string> = {
-  symbol:           'Stock symbol and company name',
-  close:            'Last traded price',
-  pct_chng:         'Price change today (%)',
-  magic_rs:         'MagicRS — Relative Strength vs NIFTY 500. Proprietary 144-bar momentum oscillator. Higher = stronger relative performance',
-  rs_percentile:    'RS Percentile — Rank among all NSE stocks by relative strength (0–100). Above 80 = market leader',
-  stage:            'Weinstein Stage — S1: Base, S2: Advancing, S3: Topping, S4: Declining',
-  rsi_14:           'RSI 14 — Relative Strength Index. Above 70 = overbought (red), below 30 = oversold',
-  rvol:             "Relative Volume — Today's volume vs 20-day average. Above 2 = elevated activity",
-  pctBelow52wHigh:  '% below 52-week high. Closer to 0 = near highs',
-  mcap_cr:          'Market Capitalisation in Crores (₹)',
-  flow_type:        'Smart money flow classification — Fresh Longs, Long Liquidation, Fresh Shorts, Short Covering etc.',
-  sniper_inst:      'Institutional Activity — Sniper detection score for institutional buying/selling',
-  sniper_hot:       'Hot Money — Sniper detection score for momentum and retail flow',
-  rss_value:        'RSS Value — Composite signal strength score',
-  accum_distrib:    'Accumulation/Distribution — Pipeline classification of buying vs selling pressure',
-  delivery_surge_x: 'Delivery Surge — Ratio of 5-day avg delivery value to 22-day avg. Above 2× = strong institutional commitment',
-  avg_amt_5d:       'Average delivery value over last 5 trading days (₹ Crores)',
-  avg_amt_22d:      'Average delivery value over last 22 trading days (₹ Crores)',
-  delivery_pct:     'Delivery percentage — what portion of volume resulted in actual delivery',
-  ema_20:           'Exponential Moving Average over 20 days',
-  breakout_level:   'Breakout level — highest close over prior 20 bars (resistance broken)',
-  pct_from_breakout:'% above the breakout level. Closer to 0 = fresher breakout',
-  supertrend_dir:   'Supertrend direction — ▲ Bullish bias, ▼ Bearish bias',
-  ret_5d:           '5-day price return (%)',
-  ret_22d:          '22-day price return (%)',
-  sma_50:           '50-day Simple Moving Average',
-  sma_200:          '200-day Simple Moving Average',
-  w52_high:         '52-week high price',
-}
-
 // ── Preset groups & column sets ────────────────────────────────────────────────
 
 // Per-preset column overrides for presets whose fetcher has a limited SELECT.
-// Removes default cols that are always null for that preset.
-// All stage presets now fetch the full column set — no per-preset overrides needed.
 const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {}
 
 const PRESET_GROUP: Record<string, PresetGroup> = {
@@ -135,66 +61,6 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
 
 function getDefaultSort(presetId: string) {
   return DEFAULT_SORT[presetId] ?? { key: 'magic_rs', dir: 'desc' as const }
-}
-
-// ── Formatters ─────────────────────────────────────────────────────────────────
-
-function formatPrice(n: number): string {
-  if (n >= 1000) return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-  return `₹${n.toFixed(2)}`
-}
-
-function getCellContent(stock: ScanStock, colKey: string): { text: string; color?: string; fontWeight?: number } {
-  const raw = (stock as unknown as Record<string, unknown>)[colKey]
-  const def = COLUMN_DEFS[colKey]
-  if (!def) return { text: '—' }
-  if (raw == null) return { text: '—' }
-
-  switch (def.format) {
-    case 'price': {
-      const n = Number(raw)
-      return { text: isNaN(n) ? '—' : formatPrice(n) }
-    }
-    case 'pct': {
-      const n = Number(raw)
-      if (isNaN(n)) return { text: '—' }
-      // FIX 3: ret_5d outpacing ret_22d → accent color
-      let color = n > 0 ? 'var(--bull)' : n < 0 ? 'var(--bear)' : undefined
-      if (colKey === 'ret_5d' && stock.ret_5d != null && stock.ret_22d != null && stock.ret_5d > stock.ret_22d) {
-        color = 'var(--accent)'
-      }
-      return { text: `${n > 0 ? '+' : ''}${n.toFixed(2)}%`, color }
-    }
-    case 'number': {
-      const n = Number(raw)
-      if (isNaN(n)) return { text: '—' }
-      // FIX 1: RSI overbought → red + bold
-      if (colKey === 'rsi_14' && n > 70) return { text: n.toFixed(2), color: 'var(--bear)', fontWeight: 600 }
-      // FIX 2: RSS strong → green + bold
-      if (colKey === 'rss_value' && n > 75) return { text: n.toFixed(2), color: 'var(--bull)', fontWeight: 600 }
-      return { text: n.toFixed(2) }
-    }
-    case 'cr': {
-      const n = Number(raw)
-      return { text: isNaN(n) ? '—' : `${n.toFixed(2)} Cr` }
-    }
-    case 'surge': {
-      const n = Number(raw)
-      if (isNaN(n)) return { text: '—' }
-      return {
-        text: `${n.toFixed(2)}×`,
-        color: n >= 2 ? 'var(--bull)' : n >= 1.5 ? 'var(--caution)' : undefined,
-      }
-    }
-    case 'trend': {
-      const n = Number(raw)
-      if (isNaN(n)) return { text: '—' }
-      return { text: n > 0 ? '▲' : '▼', color: n > 0 ? 'var(--bull)' : 'var(--bear)' }
-    }
-    case 'text':
-    default:
-      return { text: String(raw) }
-  }
 }
 
 // ── Sort ───────────────────────────────────────────────────────────────────────
@@ -279,7 +145,6 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
     })
   }
 
-  const tableMinWidth = activeCols.reduce((sum, c) => sum + (COLUMN_DEFS[c]?.width ?? 80), 0)
 
   return (
     <div style={{ position: 'relative' }}>
@@ -317,8 +182,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                 Optional Columns
               </div>
               {optionalCols.map(colKey => {
-                const def = COLUMN_DEFS[colKey]
-                if (!def) return null
+                const cfg = ALL_FIELDS[colKey]
+                if (!cfg) return null
                 const enabled = !hiddenCols.has(colKey)
                 return (
                   <button
@@ -343,7 +208,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                     }}>
                       {enabled ? '✓' : ''}
                     </span>
-                    {def.label}
+                    {cfg.label}
                   </button>
                 )
               })}
@@ -369,10 +234,11 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
           <thead>
             <tr style={{ height: 32 }}>
               {activeCols.map(colKey => {
-                const def = COLUMN_DEFS[colKey]
-                if (!def) return null
+                const cfg = ALL_FIELDS[colKey]
+                if (!cfg) return null
                 const isActive  = sortKey === colKey
-                const isSticky  = !!def.sticky
+                const isSticky  = !!cfg.sticky
+                const tooltip   = getTooltip(colKey)
                 return (
                   <th
                     key={colKey}
@@ -382,7 +248,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       left: isSticky ? 0 : undefined,
                       zIndex: isSticky ? 3 : 1,
                       background: 'var(--bg)',
-                      width: def.width, minWidth: def.width,
+                      width: cfg.width, minWidth: cfg.width,
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',
                       fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -393,9 +259,9 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       borderBottom: '1px solid var(--border)',
                     }}
                   >
-                    {COLUMN_TOOLTIPS[colKey]
-                      ? <Tooltip content={COLUMN_TOOLTIPS[colKey]} position="bottom" maxWidth={240}>{def.label}</Tooltip>
-                      : def.label
+                    {tooltip
+                      ? <Tooltip content={tooltip} position="bottom" maxWidth={240}>{getLabel(colKey)}</Tooltip>
+                      : getLabel(colKey)
                     }
                     {isActive && (sortDir === 'asc' ? ' ▲' : ' ▼')}
                   </th>
@@ -473,20 +339,50 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                     )
                   }
 
-                  const { text, color, fontWeight } = getCellContent(stock, colKey)
+                  const rawVal = (stock as unknown as Record<string, unknown>)[colKey]
+                  const text   = formatValue(colKey, rawVal, stock)
+                  const color  = getColor(colKey, rawVal, stock)
+
+                  // fontWeight emphasis for signal extremes — not expressible via FieldConfig thresholds
+                  let fontWeight: number | undefined
+                  if (rawVal != null) {
+                    const n = Number(rawVal)
+                    if (!isNaN(n)) {
+                      if (colKey === 'rsi_14'   && (n > 70 || n < 30)) fontWeight = 600
+                      if (colKey === 'rss_value' && (n > 80 || n < 20)) fontWeight = 600
+                    }
+                  }
+
+                  const cfg = getFieldConfig(colKey)
+                  const isScore = cfg?.type === 'score50' || cfg?.type === 'score100'
+                  const scoreMax = cfg?.type === 'score50' ? 50 : 100
+
                   return (
                     <td
                       key={colKey}
                       style={{
                         padding: '0 10px', textAlign: 'right',
                         fontSize: 12, fontFamily: 'var(--font-mono)',
-                        color: color ?? 'var(--text-secondary)',
+                        color,
                         fontWeight: fontWeight ?? undefined,
                         whiteSpace: 'nowrap',
                         borderBottom: '1px solid rgba(99,102,241,0.05)',
                       }}
                     >
-                      {text}
+                      {isScore ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                          <MiniTower value={rawVal != null ? Number(rawVal) : null} max={scoreMax} color={color} />
+                          <span>{text}</span>
+                        </span>
+                      ) : colKey === 'magic_rs' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <span style={{
+                            display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+                            background: color, marginRight: 5, flexShrink: 0,
+                          }} />
+                          {text}
+                        </span>
+                      ) : text}
                     </td>
                   )
                 })}

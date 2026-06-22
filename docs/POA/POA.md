@@ -42,6 +42,24 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 ## 3. Active Sprint
 > Current focus. One sprint at a time.
 
+### Sprint 7 — Field Config + StockCard ✅ COMPLETE
+
+**Goal:** Centralise all field display logic into `src/config/fieldConfig.ts` so ScanTable and StockCard share one source of truth for labels, tooltips, formatters, and color rules.
+
+**Status: ✅ COMPLETE**
+
+| Step | Task | Status | Notes |
+|---|---|---|---|
+| 7.1 | Create `fieldConfig.ts` — labels, tooltips, formatFn, colorFn, thresholds for all 30 fields. Refactor ScanTable to import from it. | ✅ | ScanTable: 516 → 393 lines. fieldConfig: 520 lines. Zero new TS errors. |
+| 7.2 | Wire StockCard to fieldConfig | ✅ | colorToBg/colorToBorder helpers; MrsPill, SignalTower, StageBadge, flow_type, RSI, rvol, zone pill all use getColor/formatValue/getLabel. RSI >70 corrected to bear (overbought). sniper_hot label → 'Hot Money'. |
+| 7.3 | Wire ConvictionFlowCards + BreakoutSurgeCards to fieldConfig | ✅ | delivery_surge_x 3-level color; avg_amt labels → 'Score 5D'/'Score 22D'; rsi/rss/pct_from_breakout/rvol all use getColor. |
+| 7.4 | MiniTower bars for score fields in ScanTable + MRS zone dot | ✅ | MiniTower.tsx created; score50/score100 cells show 5-bar tower + number; sniper_hot → gold; rss_value → accent; MRS dot 7px. |
+| C43 | **Bug fix**: `mcap_cr: null` → `sym.mcap_cr ?? null` in `buildStockFromEod()` | ✅ | ManipulationWatch now shows correct MCap. Only that path was affected — all other scanners already read sym.mcap_cr correctly. Sprint 7. |
+| 7.5 | Auto-generate tooltips from fieldConfig — remove hardcoded strings in StockCard | ✅ | SignalTower tooltip prop → `getTooltip('sniper_inst'/'sniper_hot') ?? ''`. MrsPill title → `<Tooltip>` component wrapping. Added `getTooltip` + `Tooltip` imports to StockCard. |
+| 7.6 | Final audit + add missing fields to fieldConfig (d_pct, deliv_value_cr, ret_66d) | ✅ | w52_high already present. Exceptions confirmed: pctColor/distColor in card tables for return fields are intentional simple +/- coloring, not field-config violations. |
+
+---
+
 ### Sprint 4 — Workspace Shell Redesign ✅ COMPLETE
 **Goal:** Replace the current single-canvas workspace with a 3-tab shell (Today / Discovery / My Space). Wire existing components. No new backend work except `icp_mode` migration.
 
@@ -226,6 +244,16 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | C40 | Terminology standard locked and applied — Institution, Hot Money, Accum/Dist across ScanTable. Surge× label added to ConvictionFlowCards hero. | Sprint 6 | — |
 | C41 | Tooltip component built (`src/components/ui/Tooltip.tsx`) — reusable, themed, arrow-positioned, 300ms delay. | Sprint 6 | — |
 | C42 | Tooltips added to all ScanTable column headers with full explanations. | Sprint 6 | — |
+| C43 | Bug fix: `mcap_cr: null` hardcoded in `buildStockFromEod()` → `sym.mcap_cr ?? null`. ManipulationWatch MCap now correct. | Sprint 7 | — |
+| C44 | `fieldConfig.ts` created — single source of truth for all field labels, tooltips, types, thresholds, colors. 33 fields defined. | Sprint 7 | — |
+| C45 | `ScanTable.tsx` refactored to use fieldConfig — 123 lines removed. | Sprint 7 | — |
+| C46 | `StockCard.tsx` wired to fieldConfig — colors, labels, tooltips standardized. | Sprint 7 | — |
+| C47 | `ConvictionFlowTable` + `BreakoutSurgeTable` wired to fieldConfig — 45 lines removed. | Sprint 7 | — |
+| C48 | `MiniTower` component built — vertical bar chart for score fields in table view. Same visual language as card SignalTower. | Sprint 7 | — |
+| C49 | All StockCard tooltips auto-generated from fieldConfig — no hardcoded strings remain for shared fields. | Sprint 7 | — |
+| C50 | Visual language standardized across Table and Card views — same color thresholds, same labels, same tower bars. | Sprint 7 | — |
+| C51 | Institution=green, Hot Money=gold, RSS=indigo — distinct color language per signal type locked in fieldConfig. | Sprint 7 | — |
+| C52 | MRS zone dot added to ScanTable — colored 7px dot before number matches card zone color. | Sprint 7 | — |
 
 ---
 
@@ -238,6 +266,7 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | KR02 | HOT$ (`sniper_hot`) showing 50.00 uniformly across all stocks | `km_equity_eod.sniper_hot` | May be DB default or pipeline artifact. Needs backend pipeline investigation before next sprint. |
 | BUG-08 | `compute_all_flow_intelligence()` covers only ~64 of 5,346 stocks (1.2%) on 2026-06-19. A/D column shows — for 98.8% of stocks. Backend pipeline investigation needed. Frontend rendering is correct. | `km_equity_eod.accum_distrib`, pipeline step 6d | Confirmed via DB query: 5,282 NULL vs 64 non-null on 2026-06-19. Values that exist are correct (ACCUMULATION/DISTRIBUTION). |
 | BUG-09 | `sniper_hot` = 50.00 uniformly across all stocks. Pipeline compute artifact. Backend investigation needed. | `km_equity_eod.sniper_hot` | Same class of issue as BUG-08. Pipeline step not covering full equity universe. |
+| ~~BUG-10~~ | ~~RSS showing high values in Stage 2 Leaders~~ | withdrawn | **Not a bug** — strong momentum stocks have high RSS by design. RSS is a momentum oscillator; Stage 2 leaders are the strongest stocks in the market. High RSS is correct behavior. |
 
 ---
 
@@ -305,25 +334,30 @@ Open questions: [FILL IN]
 SESSION HANDOVER
 ================
 Date: 2026-06-22
-Active Sprint: Sprint 6 — COMPLETE
-Last completed: Tooltip component + terminology standard
-Next sprint: Sprint 7 — Pipeline fixes + Missing scanners
+Active Sprint: Sprint 7 — COMPLETE
+Last completed: fieldConfig + visual language standardization
+                across all views. 7.6 audit + 3 fields added.
+Next sprint: Sprint 8 — Backend pipeline fixes + Missing scanners
 Next steps in priority order:
-  - BUG-08: investigate compute_all_flow_intelligence()
-            coverage (backend session needed)
-  - BUG-09: investigate sniper_hot pipeline
-            (backend session needed)
+  BACKEND (needs VPS session):
+  - BUG-08: compute_all_flow_intelligence() covers only 1.2%
+            of stocks — A/D unusable
+  - BUG-09: sniper_hot = 50 uniformly — pipeline cap
+            investigation
+  FRONTEND:
   - B05: Show vs N500 label on MagicRS in UI
   - B11: Render fetched fields in industry drill-down
   - B12: Click-through drill-down → Visual Pulse
   - B13: Lookback filter 5D/22D/66D on rotation
   - B16: smart_money vani_rule = null fix
   - B22-B26: Missing breakout/breakdown scanners
+  - BUG-04: Dead sidebar links (/transmission, /history)
 Open questions:
-  - When will next market data ingest run?
-    Pipeline needs to run for 2026-06-22
-    (Monday) before next scanner session
-New bugs found:
+  - When will pipeline run for 2026-06-22 market data?
+    Manual backfill needed (6h → 6j → 6k) for Monday's data
+New bugs found: None this sprint
+POA: /docs/POA/POA.md
+Architecture: /docs/POA/ARCHITECTURE.md
   - BUG-08: A/D pipeline under-population
   - BUG-09: sniper_hot uniform value
 POA: /docs/poa/POA.md

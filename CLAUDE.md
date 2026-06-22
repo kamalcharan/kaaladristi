@@ -8,13 +8,55 @@ Market analysis and forecasting platform combining NSE/BSE market data with plan
 
 ---
 
+## Commands
+
+### Frontend (`App/frontend/`)
+```bash
+npm install          # install dependencies
+npm run dev          # dev server on port 5173 (0.0.0.0)
+npm run build        # production Vite bundle → dist/
+npm run typecheck    # tsc --noEmit (no build artifacts)
+npm run lint         # ESLint
+```
+
+### Backend (`App/backend/`)
+```bash
+pip install -r requirements.txt
+uvicorn pipeline2_api:app --host 0.0.0.0 --port 8101   # active API server
+```
+
+### Docker (from repo root)
+```bash
+docker-compose up --build    # frontend (3001) + backend (8101) + nginx (80)
+```
+
+### Backend tests (standalone — no pytest config)
+```bash
+cd App/backend
+python test_ephemeris.py        # Swiss Ephemeris / pyswisseph
+python test_nse_industry.py     # NSE industry data
+python test_bse.py              # BSE data
+python scripts/rule_discovery_test.py   # quick rule discovery (2026 only)
+```
+
+### One-shot backfill scripts
+```bash
+cd App/backend/scripts
+KD_DB_PASSWORD=... python rule_discovery.py             # all history
+KD_DB_PASSWORD=... python rule_discovery.py 2026        # single year
+KD_DB_PASSWORD=... python backfill_d365.py              # d365_pct_chng
+KD_DB_PASSWORD=... python backfill_supertrend.py        # supertrend_dir
+```
+
+---
+
 ## Architecture
 
 ```
 kaaladristi/
 ├── App/
 │   ├── backend/           # Python — data pipeline + FastAPI sidecar
-│   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger, ai_client
+│   │   ├── lib/           # Shared: db_client, breeze_client, config, sync_logger, ai_client, ai_prompts, auth, pg_client, data_assemblers, vani_assemblers, vani_intents, vani_cache, health_checks
 │   │   ├── pipeline/      # Downloaders (NSE/BSE bhav, FII/DII), processors, utils
 │   │   ├── pipeline2/     # Pipeline2 orchestrator (handlers, scheduler, worker, health)
 │   │   ├── engine/        # Risk engine (risk_engine.py) + correlations
@@ -158,9 +200,10 @@ VITE_RAZORPAY_KEY_ID=...       # frontend public key
 
 ## Frontend
 
-- **Stack**: React 18, TypeScript, Vite, Tailwind CSS, React Query, Recharts, lightweight-charts
+- **Stack**: React 19, TypeScript 5.8, Vite 6, Tailwind CSS, React Query, Recharts, lightweight-charts
 - **Theme**: Driven by `VITE_THEME` env var — 3 themes in `src/config/theme/themes/`
 - **Routes/Views**: **Workspace (`/workspace`)**, Dashboard, Markets, Chart, DC Calendar, Inference, Rule Eval, Scanner, Settings, Visual Pulse (Index), Visual Pulse (Equity), **Intraday (`/intraday/:indexId`)**, Manipulation Watch, Industry Transition
+- **Gemini**: `src/services/geminiService.ts` — secondary AI integration (alongside VaNi/Anthropic), currently limited use
 - **Settings sub-pages**: Index Catalog, Equity Catalog, Commodity Catalog, Market Data Hub, Pipeline Dashboard
 
 ### Equity Visual Pulse (`/pulse/equity/:equityId`)
@@ -235,22 +278,12 @@ Steps run sequentially for a trade date:
 
 ### One-Shot Backfill Scripts
 
-```bash
-cd App/backend/scripts
-KD_DB_PASSWORD=... python backfill_d365.py          # backfill d365_pct_chng (calendar-date bisect)
-KD_DB_PASSWORD=... python backfill_d365.py --date 2026-06-03  # single date
-KD_DB_PASSWORD=... python backfill_supertrend.py    # backfill supertrend_dir
-KD_DB_PASSWORD=... python rule_discovery.py         # populate km_rule_signals from all active rules
-KD_DB_PASSWORD=... python rule_discovery.py 2026    # single year test mode
-python rule_discovery_test.py                        # quick test (2026 only)
-```
+All scripts live in `App/backend/scripts/`. Run with `KD_DB_PASSWORD=...` env var (uses hardcoded VPS host `187.127.136.65`). Key scripts: `backfill_d365.py` (supports `--date YYYY-MM-DD`), `backfill_supertrend.py`, `backfill_rolling_metrics.py`, `backfill_vani_flags.py`, `rule_discovery.py` (accepts optional year arg), and transit generators: `generate_bayer_windows.py`, `generate_gandanta_windows.py`, `generate_mercury_windows.py`, `generate_panchak_windows.py`, `generate_venus_windows.py`.
 
 ### Running locally
 ```bash
-cd App/backend
-pip install -r requirements.txt
 # Set DB_PRIMARY + BREEZE_* in App/.env
-uvicorn pipeline2_api:app --port 8101
+cd App/backend && uvicorn pipeline2_api:app --port 8101
 ```
 
 ---
@@ -263,6 +296,46 @@ docker-compose up --build
 ```
 
 Services: `frontend` (port 3001), `backend` (port 8101), `nginx` (port 80 reverse proxy).
+
+**Two nginx configs**:
+- `App/frontend/nginx.conf` — SPA routing + proxies `/api/` → `kd-pipeline-api2:8101`, `/db/` → `vikuna-postgrest:3000`
+- `nginx/nginx.conf` — VPS-level config with gzip, explicit route matching for `/api/pipeline2/`, `/api/astro/`, `/api/panchang/`, `/api/ai/`, `/api/vani/`
+
+**Docker compose** runs both pipeline-api (v1, legacy, port 8100) and pipeline-api2 (v2, active, port 8101) as separate containers. Only `pipeline-api2` is wired into nginx routing.
+
+---
+
+## Field Formulas
+
+Source of truth for proprietary indicator math. Implemented in pipeline; displayed via `src/config/fieldConfig.ts`.
+
+### RSS (`rss_value`)
+Source: LuckyPop RSSI Pine Script
+```
+E1     = SMA(close, 10)
+E2     = SMA(close, 40)
+Spread = E1 - E2
+RS     = RSI(Spread, 5)
+RSS    = SMA(RS, 3)   ← stored as rss_value
+```
+Range 0–100. Overbought > 80, Oversold < 20.
+Signal: RSS new high before price new high = early momentum (not yet in pipeline).
+
+### Institution (`sniper_inst`)
+Source: Sniper Dragon Pine Script
+`1.5 × (RSI(9) − 61)`, clamped 0–50.
+Above 35 = strong institutional presence.
+
+### Hot Money (`sniper_hot`)
+Source: Sniper Dragon Pine Script
+`1.0 × (RSI(4) − 15)`, clamped 0–50.
+Frequently hits cap of 50 in trending markets — not a bug, working as designed.
+
+### MagicRS (`magic_rs`)
+Source: LuckyPop SuperMagic Pine Script
+144-bar RS of stock vs CNX500, normalized as % above/below SMA(60).
+Zones stored in `magic_rs_zone` (Title Case): Strong Bull · Mild Bull · Neutral · Mild Bear · Strong Bear.
+Base threshold: 6% with ATR adaptive factor.
 
 ---
 
@@ -1125,6 +1198,16 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
 ---
 
 ## Scanner Data Gaps — Future Work
+
+### mcap_cr Coverage
+- NSE equities: ~95% coverage (essentially complete)
+- BSE equities: ~11.6% coverage (structural gap — 5,750 of 6,504 missing)
+- Overall across full universe: ~26.8%
+- Root cause: mcap_cr populated primarily for NSE-listed stocks in km_equity_symbols
+- Bug fixed: buildStockFromEod() now reads sym.mcap_cr ?? null (was hardcoded null)
+- Display: ManipulationWatch (SuspectCard component) never rendered mcap_cr — no display change needed
+- Stage/standard scanners that DO show mcap_cr use NSE-preferred universe (~95% coverage) — acceptable
+- Future: BSE mcap_cr backfill via data provider
 
 ### ret_5d, ret_22d, ret_66d
 - Populated: scanConvictionFlow ✓, scanBreakoutSurge

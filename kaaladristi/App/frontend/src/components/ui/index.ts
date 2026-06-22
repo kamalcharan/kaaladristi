@@ -10,3 +10,4 @@ export { default as BetaWelcomeModal } from './BetaWelcomeModal';
 export { ToastContainer, useToast } from './Toast';
 export type { ToastItem, ToastType } from './Toast';
 export { Tooltip } from './Tooltip';
+export { MiniTower } from './MiniTower';
