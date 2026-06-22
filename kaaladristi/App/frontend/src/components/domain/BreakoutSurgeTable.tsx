@@ -2,6 +2,7 @@ import React from 'react';
 import type { ScanStock } from '@/types';
 import { ScanCardWrapper, VaniBadge, ScanSectionLabel, CardExchangeBadge } from './ScanCardShell';
 import { displaySymbol } from '@/lib/symbolUtils';
+import { getColor } from '@/config/fieldConfig';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -33,28 +34,6 @@ function pctColor(n: number | null | undefined, threshold = 2): string {
   if (n > threshold) return 'var(--bull)';
   if (n < -threshold) return 'var(--bear)';
   return 'var(--text-secondary)';
-}
-
-function rsiColor(n: number | null | undefined): string {
-  if (n == null) return 'var(--text-secondary)';
-  if (n > 70) return 'var(--caution)';
-  if (n > 55) return 'var(--bull)';
-  if (n < 45) return 'var(--bear)';
-  return 'var(--text-secondary)';
-}
-
-function rvolColor(n: number | null | undefined): string {
-  if (n == null) return 'var(--text-primary)';
-  if (n >= 5) return 'var(--gold)';
-  if (n >= 3) return 'var(--bull)';
-  return 'var(--text-primary)';
-}
-
-function brkPctColor(n: number | null | undefined): string {
-  if (n == null) return 'var(--text-secondary)';
-  if (n <= 3) return 'var(--bull)';
-  if (n <= 8) return 'var(--text-secondary)';
-  return 'var(--caution)';
 }
 
 // ── Inline data row ───────────────────────────────────────────────────────────
@@ -146,13 +125,13 @@ function BurstCard({ stock }: { stock: ScanStock }) {
           { label: 'Close',  value: fmt2(stock.close) },
           { label: 'D%',     value: fmtPct(stock.d_pct),     color: pctColor(stock.d_pct, 1.5) },
           { label: 'EMA20',  value: fmt2(stock.ema_20) },
-          { label: 'RSI',    value: fmt2(stock.rsi_14),       color: rsiColor(stock.rsi_14) },
+          { label: 'RSI',    value: fmt2(stock.rsi_14),       color: getColor('rsi_14', stock.rsi_14) },
         ]} />
 
         {/* Row 3 — Breakout levels + returns */}
         <DataRow items={[
           { label: 'Brk Lvl',   value: fmt2(stock.breakout_level) },
-          { label: 'Brk%',      value: fmtBrkPct(stock.pct_from_breakout), color: brkPctColor(stock.pct_from_breakout) },
+          { label: 'Brk%',      value: fmtBrkPct(stock.pct_from_breakout), color: getColor('pct_from_breakout', stock.pct_from_breakout) },
           { label: '5D%',       value: fmtPct(stock.ret_5d),               color: pctColor(stock.ret_5d) },
           { label: '22D%',      value: fmtPct(stock.ret_22d),              color: pctColor(stock.ret_22d) },
         ]} />
@@ -172,7 +151,7 @@ function BurstCard({ stock }: { stock: ScanStock }) {
           fontFamily: 'var(--font-mono)',
           fontSize: '20px',
           fontWeight: 700,
-          color: rvolColor(rvol),
+          color: getColor('rvol', rvol),
           lineHeight: 1,
         }}>
           {fmtRvol(rvol)}
