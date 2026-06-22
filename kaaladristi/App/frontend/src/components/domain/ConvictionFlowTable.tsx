@@ -2,6 +2,7 @@ import React from 'react';
 import type { ScanStock } from '@/types';
 import { ScanCardWrapper, VaniBadge, ScanSectionLabel, CardExchangeBadge } from './ScanCardShell';
 import { displaySymbol } from '@/lib/symbolUtils';
+import { getColor, getLabel } from '@/config/fieldConfig';
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -38,27 +39,6 @@ function pctColor(n: number | null | undefined, threshold = 2): string {
   if (n > threshold) return 'var(--bull)';
   if (n < -threshold) return 'var(--bear)';
   return 'var(--text-secondary)';
-}
-
-function rsiColor(n: number | null | undefined): string {
-  if (n == null) return 'var(--text-secondary)';
-  if (n > 70) return 'var(--caution)';
-  if (n > 55) return 'var(--bull)';
-  if (n < 45) return 'var(--bear)';
-  return 'var(--text-secondary)';
-}
-
-function rssColor(n: number | null | undefined): string {
-  if (n == null) return 'var(--text-secondary)';
-  if (n > 70) return 'var(--caution)';
-  if (n > 50) return 'var(--bull)';
-  if (n < 30) return 'var(--bear)';
-  return 'var(--text-secondary)';
-}
-
-function surgeColor(n: number | null | undefined): string {
-  if (n == null) return 'var(--text-primary)';
-  return n >= 2 ? 'var(--gold)' : 'var(--text-primary)';
 }
 
 function distColor(n: number | null | undefined): string {
@@ -157,10 +137,10 @@ function FlowCard({ stock }: { stock: ScanStock }) {
           { label: 'Close',      value: fmt2(stock.close) },
           { label: 'D%',         value: fmtPct(stock.d_pct),        color: pctColor(stock.d_pct, 1.5) },
           { label: 'EMA20',      value: fmt2(stock.ema_20) },
-          { label: 'RSI',        value: fmt2(stock.rsi_14),          color: rsiColor(stock.rsi_14) },
-          { label: 'RSS',        value: fmt2(stock.rss_value),       color: rssColor(stock.rss_value) },
-          { label: '5D Avg',     value: fmtCr(stock.avg_amt_5d) },
-          { label: '22D Avg',    value: fmtCr(stock.avg_amt_22d) },
+          { label: 'RSI',        value: fmt2(stock.rsi_14),          color: getColor('rsi_14', stock.rsi_14) },
+          { label: 'RSS',        value: fmt2(stock.rss_value),       color: getColor('rss_value', stock.rss_value) },
+          { label: getLabel('avg_amt_5d'),  value: fmtCr(stock.avg_amt_5d) },
+          { label: getLabel('avg_amt_22d'), value: fmtCr(stock.avg_amt_22d) },
           { label: 'Today Deliv', value: fmtCr(stock.deliv_value_cr) },
         ]} />
 
@@ -188,19 +168,17 @@ function FlowCard({ stock }: { stock: ScanStock }) {
           fontFamily: 'var(--font-mono)',
           fontSize: '20px',
           fontWeight: 700,
-          color: surgeColor(surge),
+          color: getColor('delivery_surge_x', surge),
           lineHeight: 1,
         }}>
           {fmtSurge(surge)}
         </span>
         <span style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: '8px',
-          color: 'var(--text-faint)',
-          textTransform: 'uppercase' as const,
-          letterSpacing: '0.06em',
+          fontSize: '10px',
+          color: 'var(--text-muted)',
         }}>
-          Surge×
+          Delivery Surge
         </span>
         {stock.trade_date && (
           <span style={{

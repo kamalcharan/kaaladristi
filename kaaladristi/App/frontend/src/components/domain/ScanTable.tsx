@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import type { ScanStock } from '@/types'
 import { displaySymbol } from '@/lib/symbolUtils'
 import { Tooltip } from '@/components/ui'
-import { ALL_FIELDS, formatValue, getColor, getLabel, getTooltip } from '@/config/fieldConfig'
+import { ALL_FIELDS, formatValue, getColor, getFieldConfig, getLabel, getTooltip } from '@/config/fieldConfig'
+import type React from 'react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,29 @@ function sortStocks(stocks: ScanStock[], key: string, dir: 'asc' | 'desc'): Scan
     return dir === 'asc' ? an - bn : bn - an
   })
   return arr
+}
+
+// ── Score fill ─────────────────────────────────────────────────────────────────
+
+const SCORE_RGBA: Record<string, string> = {
+  'var(--bull)':       'rgba(16, 185, 129, 0.08)',
+  'var(--gold)':       'rgba(245, 158, 11, 0.08)',
+  'var(--bear)':       'rgba(239, 68, 68, 0.08)',
+  'var(--text-muted)': 'rgba(71, 85, 105, 0.05)',
+}
+
+function getScoreFill(fieldKey: string, value: unknown): React.CSSProperties {
+  const cfg = getFieldConfig(fieldKey)
+  if (!cfg?.scoreFill || value == null) return {}
+  const n = Number(value)
+  if (isNaN(n)) return {}
+  const max = cfg.type === 'score50' ? 50 : 100
+  const fillPct = Math.min(100, (n / max) * 100)
+  const color = getColor(fieldKey, value)
+  const fill = SCORE_RGBA[color] ?? 'rgba(71, 85, 105, 0.05)'
+  return {
+    backgroundImage: `linear-gradient(to right, ${fill} ${fillPct}%, transparent ${fillPct}%)`,
+  }
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -361,9 +385,18 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                         fontWeight: fontWeight ?? undefined,
                         whiteSpace: 'nowrap',
                         borderBottom: '1px solid rgba(99,102,241,0.05)',
+                        ...getScoreFill(colKey, rawVal),
                       }}
                     >
-                      {text}
+                      {colKey === 'magic_rs' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          <span style={{
+                            display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                            background: color, marginRight: 5, flexShrink: 0,
+                          }} />
+                          {text}
+                        </span>
+                      ) : text}
                     </td>
                   )
                 })}
