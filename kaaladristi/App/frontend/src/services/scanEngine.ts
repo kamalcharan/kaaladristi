@@ -165,7 +165,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -624,6 +624,7 @@ function buildScanStock(
     w52_low: eod.w52_low ?? null,
     supertrend_dir: eod.supertrend_dir ?? null,
     lifetime_high: eod.lifetime_high ?? null,
+    stage: eod.stage ?? null,
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
