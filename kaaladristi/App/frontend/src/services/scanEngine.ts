@@ -2094,7 +2094,7 @@ function buildStockFromEod(
     open: eod.open ?? null,
     high: eod.high ?? null,
     low: eod.low ?? null,
-    mcap_cr: null,
+    mcap_cr: sym.mcap_cr ?? null,
     avg_amt_66d: null,
     xAmt: null,
     rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
