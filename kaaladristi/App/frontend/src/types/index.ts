@@ -643,6 +643,8 @@ export interface EquityEodSnapshot {
   // VaNi flag columns (migration 099)
   is_vani_surge?: boolean | null;
   is_vani_breakout?: boolean | null;
+  // Weinstein stage classification
+  stage?: string | null;
 }
 
 // ── Astro Daily Signal (from km_astro_daily_signal) ──
