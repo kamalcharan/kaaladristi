@@ -428,6 +428,38 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 65,
   },
 
+<<<<<<< HEAD
+=======
+  ret_66d: {
+    key: 'ret_66d',
+    label: '66D%',
+    tooltip: '66-day price return (%). Only available for Conviction Flow scanner.',
+    type: 'pct',
+    width: 65,
+  },
+
+  d_pct: {
+    key: 'd_pct',
+    label: 'Day%',
+    tooltip: 'Intraday price change % for today',
+    type: 'pct',
+    width: 70,
+    colorFn: (val: any) => {
+      const n = Number(val)
+      if (isNaN(n)) return 'var(--text-secondary)'
+      return n > 0 ? 'var(--bull)' : n < 0 ? 'var(--bear)' : 'var(--text-secondary)'
+    },
+  },
+
+  deliv_value_cr: {
+    key: 'deliv_value_cr',
+    label: 'Deliv Val',
+    tooltip: 'Today delivery value in ₹ Crores — actual money that changed hands with delivery',
+    type: 'cr',
+    width: 85,
+  },
+
+>>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
   sma_50: {
     key: 'sma_50',
     label: 'SMA50',

@@ -13,7 +13,12 @@ import type { ScanStock } from '@/types';
 import React from 'react';
 import { ZONE_LABELS, FLOW_LABELS } from '@/constants/signalScale';
 import { ScanCardWrapper, VaniBadge, CardExchangeBadge } from './ScanCardShell';
+<<<<<<< HEAD
 import { getColor, formatValue, getLabel } from '@/config/fieldConfig';
+=======
+import { getColor, formatValue, getLabel, getTooltip } from '@/config/fieldConfig';
+import { Tooltip } from '@/components/ui';
+>>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
 
 export { ZONE_LABELS, FLOW_LABELS };
 
@@ -173,8 +178,8 @@ function MrsPill({
   const bars = [...trend].reverse();
 
   return (
+    <Tooltip content={getTooltip('magic_rs') ?? ''} position="top" maxWidth={280}>
     <span
-      title="Magic RS vs Nifty 500 · 144-period"
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '5px',
         padding: '3px 8px',
@@ -197,6 +202,7 @@ function MrsPill({
         ))}
       </span>
     </span>
+    </Tooltip>
   );
 }
 
@@ -333,7 +339,11 @@ export function StockCard({
             <SignalTower
               score={stock.sniper_inst!}
               label={getLabel('sniper_inst')}
+<<<<<<< HEAD
               tooltip={`Smart Money ${stock.sniper_inst!.toFixed(0)}/50 · Institutional RSI`}
+=======
+              tooltip={getTooltip('sniper_inst') ?? ''}
+>>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
               fieldKey="sniper_inst"
             />
           )}
@@ -343,7 +353,11 @@ export function StockCard({
             <SignalTower
               score={stock.sniper_hot!}
               label={getLabel('sniper_hot')}
+<<<<<<< HEAD
               tooltip={`Hot Money ${stock.sniper_hot!.toFixed(0)}/50 · Hot Money RSI`}
+=======
+              tooltip={getTooltip('sniper_hot') ?? ''}
+>>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
               fieldKey="sniper_hot"
             />
           )}
