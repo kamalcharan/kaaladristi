@@ -25,7 +25,7 @@ export default function Layout() {
 
       <main
         className="flex-1 relative transition-[margin-left] duration-300"
-        style={{ marginLeft: collapsed ? '52px' : '220px' }}
+        style={{ marginLeft: collapsed ? '52px' : '220px', minWidth: 0 }}
       >
         {/* ── Topbar — matches dashboard-LOCKED.html .topbar ── */}
         <header
