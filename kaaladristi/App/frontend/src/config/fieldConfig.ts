@@ -329,8 +329,8 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
 
   delivery_surge_x: {
     key: 'delivery_surge_x',
-    label: 'Surge×',
-    tooltip: 'Delivery Surge — ratio of 5-day avg delivery value to 22-day avg. Above 2× = strong institutional commitment. Above 1.5× = elevated.',
+    label: 'Delivery Surge',
+    tooltip: 'Ratio of Avg Amt 5D ÷ Avg Amt 22D — rising delivery interest vs recent average',
     type: 'surge',
     width: 72,
     thresholds: {
@@ -344,24 +344,24 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
 
   avg_amt_5d: {
     key: 'avg_amt_5d',
-    label: 'Score 5D',
-    tooltip: 'Average delivery value over last 5 trading days (₹ Crores). Higher = more institutional money flowing in recently.',
+    label: 'Avg Amt 5D',
+    tooltip: 'Average invested amount (delivery value) over 5 trading days (Cr)',
     type: 'cr',
     width: 85,
   },
 
   avg_amt_22d: {
     key: 'avg_amt_22d',
-    label: 'Score 22D',
-    tooltip: 'Average delivery value over last 22 trading days (₹ Crores). The baseline — compare against Score 5D to detect surges.',
+    label: 'Avg Amt 22D',
+    tooltip: 'Average invested amount (delivery value) over 22 trading days (Cr)',
     type: 'cr',
     width: 85,
   },
 
   avg_amt_66d: {
     key: 'avg_amt_66d',
-    label: 'Score 66D',
-    tooltip: 'Average delivery value over last 66 trading days (₹ Crores). Long-term baseline — compare against Score 22D to detect sustained accumulation shifts.',
+    label: 'Avg Amt 66D',
+    tooltip: 'Average invested amount (delivery value) over 66 trading days (Cr)',
     type: 'cr',
     width: 85,
   },
