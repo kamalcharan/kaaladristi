@@ -439,7 +439,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   ret_66d: {
     key: 'ret_66d',
     label: '66D%',
-    tooltip: '66-day price return (%). Only available for Conviction Flow scanner.',
+    tooltip: '66-day price return (%). Available for Conviction Flow and Breakout Surge scanners.',
     type: 'pct',
     width: 65,
   },
