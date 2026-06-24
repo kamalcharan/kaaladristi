@@ -557,6 +557,7 @@ export interface ScanDefinition {
   category_label: string;
   category_color: string;
   category_sort: number;
+  is_default_tab: boolean;
   timeframe: 'daily' | 'weekly' | 'monthly';
   vani_rule?: string | null;
 }
