@@ -145,7 +145,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   // Scanner always uses the latest available km_equity_eod data regardless
   // of whether km_trading_calendar has been backfilled.
   // 100 calendar days ≈ 70 trading days (enough for 66D return + buffer).
-  const eodCutoff = new Date(Date.now() - 160 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const eodCutoff = new Date(Date.now() - 115 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   // 20 calendar days ≈ 14 trading days for industry rotation detection.
   const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const last10days = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -168,7 +168,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
-      .limit(120000)
+      .limit(175000)
       .execute(),
 
     from('km_index_symbols').select('id,name').execute(),
