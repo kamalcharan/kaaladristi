@@ -363,3 +363,82 @@ Architecture: /docs/POA/ARCHITECTURE.md
 POA: /docs/poa/POA.md
 Architecture: /docs/poa/ARCHITECTURE.md
 ```
+
+```
+SESSION HANDOVER
+================
+Date: 2026-06-24
+Active Sprint: Sprint 8 — Bug Fixes + Scanner Columns
+Last completed: avg_amt columns wired to DB — values
+  showing but formula/display needs review
+
+Completed this session:
+  - BUG-08: A/D RVOL gate removed from PostgreSQL SP
+            + compute_engine.py. Full history backfilled.
+            93.3% A/D coverage (was 34.1%). NEUTRAL label
+            added via migration 109.
+  - BUG-09: Closed as designed — sniper_hot formula cap
+            at 50 is correct behaviour per Pine Script source
+  - BUG-04: Dead sidebar links (/transmission, /history)
+            already removed from Sidebar.tsx. ARCHITECTURE.md
+            updated.
+  - B16: smart_money vani_rule = 'is_vani_smart' fixed
+         in DB + scanEngine.ts SCAN_PRESETS
+  - Smart Money scanner: root cause fixed (pipeline) +
+    scanner redesigned — sniper gate removed, delivery_pct
+    > 60 gate added, NSE-only regex filter added
+  - BUG-10: Horizontal scroll fixed — minWidth: 0 on
+            <main> in Layout.tsx
+  - Sticky header: ScanTable thead position:sticky + top:0
+    with correct z-index and scroll container
+  - B05: MagicRS vs N500 label applied across
+         fieldConfig.ts, WorkspaceBlock.tsx, MarketsView.tsx,
+         StockCard.tsx (MrsPill shows MRS/N500)
+  - avg_amt_5d / avg_amt_22d: moved from client-side
+    delivery_qty computation to DB pre-computed columns
+    (migration 094/095). Added to EOD SELECT + EquityEodSnapshot
+    type. buildScanStock() reads from eod directly.
+  - avg_amt_66d: client-side using value_cr * delivery_pct/100
+    (delivery_qty was sparse/null for most stocks)
+  - delivery_surge_x: added to EOD SELECT, read from eod
+    in buildScanStock(). scanConvictionFlow() filter gates
+    now use DB values directly.
+  - avg_amt_5d / avg_amt_22d / avg_amt_66d added to DEFAULT_COLS
+    for all scan presets. avg_amt_66d + ret_66d added to
+    OPTIONAL_COLS.
+  - fieldConfig.ts: avg_amt_66d entry added (Score 66D).
+  Values showing but formula/display alignment needs
+  full review next session.
+
+Next sprint — Sprint 9: Scanner columns + formula review
+  - Review and align all scanner column formulas to
+    Charan's expectations
+  - avg_amt_5d / 22d / 66d display format review
+  - Investigate avg_amt fields still blank (console.log
+    diagnostic removed; root cause: PostgREST response
+    needs verification on VPS — check if avg_amt_5d is
+    in the raw network response for the latest trade date)
+  - Fix Vite HMR errors (StockCard, fieldConfig, ScanTable
+    — confirmed no syntax errors, transient HMR collisions)
+  - B11: Render fetched fields in industry drill-down
+  - B12: Click-through drill-down → Visual Pulse
+  - B13: Lookback filter 5D/22D/66D on sector rotation
+  - B22-B26: Missing breakout/breakdown scanners
+
+Open items to monitor:
+  - Smart Money pct_accumulation > 60 — review after
+    3-5 trading days of clean A/D data
+  - delivery_surge_x only 1,327 of 5,367 rows populated
+    — investigate pipeline step 6g coverage
+  - avg_amt_5d / avg_amt_22d blank in scanner UI —
+    DB has data (5,367 rows confirmed for 2026-06-23).
+    Console.log diagnostic was added then removed.
+    Next step: open DevTools → Network → find
+    km_equity_eod?select=... request → verify avg_amt_5d
+    is a number (not null) in the raw JSON response.
+    If null in response: pipeline step 6g not running for
+    latest date. If number: trace further in buildScanStock.
+
+POA: /docs/POA/POA.md
+Architecture: /docs/POA/ARCHITECTURE.md
+```
