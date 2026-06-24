@@ -301,7 +301,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   accum_distrib: {
     key: 'accum_distrib',
     label: 'Accum/Dist',
-    tooltip: 'Accumulation/Distribution — pipeline classification of buying vs selling pressure. ACCUMULATION = smart money buying. DISTRIBUTION = smart money selling. Currently sparse (pipeline coverage ~1%).',
+    tooltip: 'Accumulation/Distribution regime. ACCUMULATION = price below GreenLine with bullish momentum (smart money buying). DISTRIBUTION = price above GreenLine with bearish momentum (smart money selling). NEUTRAL = no contested A/D regime. NULL = SMA 150 not yet computed.',
     type: 'category',
     width: 95,
     colorFn: (val: any) => {

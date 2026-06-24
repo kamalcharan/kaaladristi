@@ -151,6 +151,8 @@ def compute_flow_intelligence(df: pd.DataFrame) -> dict:
                 accum.iloc[i] = 'ACCUMULATION'
             elif close[i] > cur_sma150 and (mom_bearish or rs_bearish):
                 accum.iloc[i] = 'DISTRIBUTION'
+            else:
+                accum.iloc[i] = 'NEUTRAL'
 
     return {
         'flow_type': flow,
