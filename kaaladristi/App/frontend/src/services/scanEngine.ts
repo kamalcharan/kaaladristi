@@ -186,6 +186,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   // Derive latestDate from actual loaded equity rows.
   // This is always the true latest date regardless of km_trading_calendar state.
   const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
+  console.log('[scan] first eod row:', JSON.stringify(allEodRows[0]));
   const latestDate: string | null = allEodRows.length > 0 ? allEodRows[0].trade_date : null;
 
   if (!latestDate) {
