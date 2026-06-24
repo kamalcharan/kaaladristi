@@ -191,7 +191,7 @@ function MrsPill({
         cursor: 'default',
       }}
     >
-      MRS {value.toFixed(1)}
+      MRS/N500 {value.toFixed(1)}
       <span style={{ display: 'flex', alignItems: 'center', gap: '1.5px', marginLeft: '2px' }}>
         {bars.map((up, i) => (
           <span key={i} style={{

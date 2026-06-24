@@ -35,8 +35,6 @@ const navSections: NavSection[] = [
       { to: '/intraday/1',          glyph: '◐', label: 'Intraday',             adminOnly: true },
       { to: '/inference',           glyph: '✎', label: 'Inference DB',        adminOnly: true },
       { to: '/rule-eval',           glyph: '⊛', label: 'Rule Eval',           adminOnly: true },
-      { to: '/transmission',        glyph: '⇝', label: 'Risk Transmission',   adminOnly: true },
-      { to: '/history',             glyph: '↺', label: 'Backtest',            adminOnly: true },
       { to: '/settings',            glyph: '◈', label: 'Settings',            adminOnly: true },
       { to: '/data-pipeline',       glyph: '▦', label: 'Data Pipeline',       adminOnly: true },
       { to: '/admin/panchang',      glyph: '⊟', label: 'Panchang Admin',      adminOnly: true },

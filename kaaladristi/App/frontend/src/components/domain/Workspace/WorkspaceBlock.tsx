@@ -241,7 +241,7 @@ const OVERLAY_DISPLAY: Record<string, string> = {
   ema_20: 'EMA 20', ema_60: 'EMA 60',
   sma_50: 'SMA 50', sma_150: 'SMA 150', sma_200: 'SMA 200',
   rsi_14: 'RSI 14', supertrend: 'SuperTrend',
-  magic_rs: 'MagicRS', order_flow: 'Order Flow', smart_money: 'Smart Money',
+  magic_rs: 'MagicRS vs N500', order_flow: 'Order Flow', smart_money: 'Smart Money',
   breadth_roc: 'Breadth ROC',
 }
 

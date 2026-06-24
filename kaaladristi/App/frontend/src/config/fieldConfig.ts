@@ -153,9 +153,9 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
 
   magic_rs: {
     key: 'magic_rs',
-    label: 'MRS',
+    label: 'MagicRS vs N500',
     shortLabel: 'MRS',
-    tooltip: 'MagicRS — Relative Strength vs NIFTY 500. Proprietary 144-bar momentum oscillator benchmarked against CNX500. Color reflects zone: Strong Bull (green) → Strong Bear (red).',
+    tooltip: 'MagicRS — Relative Strength benchmarked against NIFTY 500 (CNX500). Proprietary 144-bar momentum oscillator: positive = outperforming NIFTY 500, negative = underperforming. Color reflects zone: Strong Bull (green) → Strong Bear (red).',
     type: 'zone',
     width: 72,
     colorFn: (_val: any, row?: any) => {
@@ -301,7 +301,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   accum_distrib: {
     key: 'accum_distrib',
     label: 'Accum/Dist',
-    tooltip: 'Accumulation/Distribution — pipeline classification of buying vs selling pressure. ACCUMULATION = smart money buying. DISTRIBUTION = smart money selling. Currently sparse (pipeline coverage ~1%).',
+    tooltip: 'Accumulation/Distribution regime. ACCUMULATION = price below GreenLine with bullish momentum (smart money buying). DISTRIBUTION = price above GreenLine with bearish momentum (smart money selling). NEUTRAL = no contested A/D regime. NULL = SMA 150 not yet computed.',
     type: 'category',
     width: 95,
     colorFn: (val: any) => {
@@ -354,6 +354,14 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     key: 'avg_amt_22d',
     label: 'Score 22D',
     tooltip: 'Average delivery value over last 22 trading days (₹ Crores). The baseline — compare against Score 5D to detect surges.',
+    type: 'cr',
+    width: 85,
+  },
+
+  avg_amt_66d: {
+    key: 'avg_amt_66d',
+    label: 'Score 66D',
+    tooltip: 'Average delivery value over last 66 trading days (₹ Crores). Long-term baseline — compare against Score 22D to detect sustained accumulation shifts.',
     type: 'cr',
     width: 85,
   },

@@ -33,19 +33,19 @@ const PRESET_GROUP: Record<string, PresetGroup> = {
 }
 
 const DEFAULT_COLS: Record<PresetGroup, string[]> = {
-  stage:          ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst','rss_value'],
+  stage:          ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst','rss_value','avg_amt_5d','avg_amt_22d'],
   conviction:     ['symbol','close','pct_chng','delivery_surge_x','avg_amt_5d','avg_amt_22d','delivery_pct','rsi_14','ema_20','magic_rs'],
-  breakout:       ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir'],
-  breakout_surge: ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir'],
-  standard:       ['symbol','close','pct_chng','magic_rs','rvol','rsi_14','flow_type','sniper_inst','rss_value','accum_distrib','supertrend_dir','mcap_cr'],
+  breakout:       ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir','avg_amt_5d','avg_amt_22d'],
+  breakout_surge: ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir','avg_amt_5d','avg_amt_22d'],
+  standard:       ['symbol','close','pct_chng','magic_rs','rvol','rsi_14','flow_type','sniper_inst','rss_value','accum_distrib','supertrend_dir','mcap_cr','avg_amt_5d','avg_amt_22d'],
 }
 
 const OPTIONAL_COLS: Record<PresetGroup, string[]> = {
-  stage:          ['sma_50','sma_200','supertrend_dir','accum_distrib','sniper_hot','w52_high','ema_20'],
-  conviction:     ['ret_5d','ret_22d','mcap_cr','rss_value','sniper_inst'],
-  breakout:       ['sniper_inst','rss_value','mcap_cr'],
-  breakout_surge: ['sniper_inst','rss_value','ret_5d','ret_22d','mcap_cr'],
-  standard:       ['sniper_hot','ema_20'],
+  stage:          ['sma_50','sma_200','supertrend_dir','accum_distrib','sniper_hot','w52_high','ema_20','avg_amt_66d'],
+  conviction:     ['ret_5d','ret_22d','ret_66d','mcap_cr','rss_value','sniper_inst','avg_amt_66d'],
+  breakout:       ['sniper_inst','rss_value','mcap_cr','avg_amt_66d'],
+  breakout_surge: ['sniper_inst','rss_value','ret_5d','ret_22d','ret_66d','mcap_cr','avg_amt_66d'],
+  standard:       ['sniper_hot','ema_20','avg_amt_66d'],
 }
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
@@ -220,7 +220,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       {/* Table */}
       <div style={{
         overflowX: 'auto',
-        overflowY: 'visible',
+        overflowY: 'auto',
+        maxHeight: 'calc(100vh - 180px)',
         width: '100%',
         WebkitOverflowScrolling: 'touch',
         border: '1px solid var(--border)',
@@ -244,10 +245,11 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                     key={colKey}
                     onClick={() => toggleSort(colKey)}
                     style={{
-                      position: isSticky ? 'sticky' : undefined,
+                      position: 'sticky',
+                      top: 0,
                       left: isSticky ? 0 : undefined,
-                      zIndex: isSticky ? 3 : 1,
-                      background: 'var(--bg)',
+                      zIndex: isSticky ? 13 : 10,
+                      background: 'var(--card)',
                       width: cfg.width, minWidth: cfg.width,
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',

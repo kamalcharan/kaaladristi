@@ -32,7 +32,7 @@ const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'power_buy',            name: 'Strength Confluence',   description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries', limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'power_sell',           name: 'Weakness Confluence',   description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries', limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
-  { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: null },
+  { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_smart' },
   { id: 'fresh_breakout',       name: 'Fresh Breakouts',       description: 'Stocks breaking above recent highs with strong volume in leading industries',              limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'quiet_accumulation',   name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'distribution_warning', name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
@@ -165,7 +165,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -562,11 +562,20 @@ function buildScanStock(
       : null,
   );
 
-  // avg_amt_66d: mean(delivery_qty × close / 10_000_000) over last 66 bars
-  const w66 = history.slice(0, Math.min(history.length, 66));
-  const validDelivW66 = w66.filter((h) => h.delivery_qty != null);
-  const avg_amt_66d = validDelivW66.length > 0
-    ? validDelivW66.reduce((s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / validDelivW66.length
+  // avg_amt_5d/22d/66d — computed from history using value_cr × delivery_pct/100.
+  // DB pre-computed columns (avg_amt_5d, avg_amt_22d) use COALESCE(delivery_qty,0)*close/10M
+  // which returns 0 for stocks without Breeze delivery data (~most of universe).
+  // value_cr and delivery_pct are reliably populated for all NSE equities.
+  const delivBars = history.map((h) => (h.value_cr != null ? h.value_cr * ((h.delivery_pct ?? 0) / 100) : null));
+  const delivAvg = (n: number) => {
+    const slice = delivBars.slice(0, Math.min(delivBars.length, n)).filter((v): v is number => v != null);
+    return slice.length > 0 ? slice.reduce((s, v) => s + v, 0) / slice.length : null;
+  };
+  const avg_amt_5d  = delivAvg(5);
+  const avg_amt_22d = delivAvg(22);
+  const avg_amt_66d = delivAvg(66);
+  const delivery_surge_x = avg_amt_5d != null && avg_amt_22d != null && avg_amt_22d > 0
+    ? avg_amt_5d / avg_amt_22d
     : null;
 
   // xAmt: avg(value_cr, 5D) / avg(value_cr, 22D)
@@ -629,7 +638,10 @@ function buildScanStock(
     high: eod.high ?? null,
     low: eod.low ?? null,
     mcap_cr: sym.mcap_cr ?? null,
-    avg_amt_66d: avg_amt_66d != null ? Math.round(avg_amt_66d * 100) / 100 : null,
+    avg_amt_5d:       avg_amt_5d       != null ? Math.round(avg_amt_5d       * 100) / 100 : null,
+    avg_amt_22d:      avg_amt_22d      != null ? Math.round(avg_amt_22d      * 100) / 100 : null,
+    avg_amt_66d:      avg_amt_66d      != null ? Math.round(avg_amt_66d      * 100) / 100 : null,
+    delivery_surge_x: delivery_surge_x != null ? Math.round(delivery_surge_x * 10000) / 10000 : null,
     xAmt: xAmt != null ? Math.round(xAmt * 1000) / 1000 : null,
     rel_5d_n50:   rel_5d_n50   != null ? Math.round(rel_5d_n50   * 100) / 100 : null,
     rel_22d_n50:  rel_22d_n50  != null ? Math.round(rel_22d_n50  * 100) / 100 : null,
@@ -810,32 +822,19 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
   for (const [id] of bundle.latestEod) {
     const stock = buildScanStock(id, bundle, 'smart_money');
     if (!stock || !stock.industry) continue;
+    if (!stock.symbol || !/^[A-Z]/.test(stock.symbol)) continue;
     if (!accumulatingIndustries.has(stock.industry)) continue;
 
-    // THRESHOLD CALIBRATION NOTE:
-    // sniper_inst ranges 0-40 in km_equity_eod (avg ~5.4 as of Apr 2026).
-    // Threshold 20 = top ~8% of the universe. The previous threshold of 50
-    // was theoretical (assumed 0-100 RSI scale) and never triggered with
-    // actual data.
-    if ((stock.sniper_inst ?? 0) <= 20) continue;
+    if ((stock.delivery_pct ?? 0) <= 60) continue;
 
-    // sniper_inst rising over last 5 bars
-    const history = bundle.eodHistory.get(id) ?? [];
-    const sniperNow = history[0]?.sniper_inst ?? 0;
-    const sniper5 = history.length > 4 ? (history[4]?.sniper_inst ?? 0) : 0;
-    const sniperSlope = sniperNow - sniper5;
-    if (sniperSlope <= 0) continue;
+    // rss_value must be positive
+    if ((stock.rss_value ?? 0) <= 0) continue;
 
-    // rss_value must be positive and rising (not requiring prior dip below 30)
-    const rssNow = stock.rss_value ?? 0;
-    if (rssNow <= 0) continue;
-
-    const score = sniperSlope * (rssNow + 1);
-    results.push({ ...stock, _sortScore: score } as ScanStock & { _sortScore: number });
+    results.push(stock);
   }
 
   return results
-    .sort((a, b) => ((b as any)._sortScore ?? 0) - ((a as any)._sortScore ?? 0))
+    .sort((a, b) => (b.delivery_pct ?? 0) - (a.delivery_pct ?? 0))
     .slice(0, 25);
 }
 
@@ -959,29 +958,17 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     if (!eod || eod.ema_20 == null || eod.ema_20 <= 0) continue;
 
     const history = bundle.eodHistory.get(id) ?? [];
-    if (history.length < 5) continue; // need at least 5 bars for 5D average
-
-    // Use available window up to 22/5 bars — matches SQL AVG behaviour
-    const w22 = history.slice(0, Math.min(history.length, 22));
-    const w5  = history.slice(0, Math.min(history.length, 5));
-
-    // deliv_value_cr per bar = delivery_qty × close / 10,000,000
-    const delivW22 = w22.map((h) => (h.delivery_qty ?? 0) * h.close / 10_000_000);
-    const delivW5  = w5.map((h)  => (h.delivery_qty ?? 0) * h.close / 10_000_000);
-
-    const avg_amt_5d  = delivW5.reduce((s, v) => s + v, 0) / w5.length;
-    const avg_amt_22d = delivW22.reduce((s, v) => s + v, 0) / w22.length;
-
-    if (avg_amt_22d <= 1.5) continue;
-
-    const delivery_surge_x = avg_amt_22d > 0 ? avg_amt_5d / avg_amt_22d : 0;
-    if (delivery_surge_x <= 1.5) continue;
+    if (history.length < 5) continue;
 
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
     if (d_pct < -8 || d_pct > 8) continue;
 
     const stock = buildScanStock(id, bundle);
     if (!stock) continue;
+
+    // Filter gates use client-side computed delivery scores (value_cr × delivery_pct/100)
+    if ((stock.avg_amt_22d ?? 0) <= 1.5) continue;
+    if ((stock.delivery_surge_x ?? 0) <= 1.5) continue;
 
     // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
     const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
@@ -991,11 +978,8 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     results.push({
       ...stock,
       vaniOpportunity: computeVaniOpportunity(eod, SCAN_PRESETS.find((p) => p.id === 'conviction_flow')?.vani_rule),
-      avg_amt_5d:       Math.round(avg_amt_5d       * 100) / 100,
-      avg_amt_22d:      Math.round(avg_amt_22d      * 100) / 100,
-      deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
-      delivery_surge_x: Math.round(delivery_surge_x * 10000) / 10000,
-      d_pct:            Math.round(d_pct            * 100) / 100,
+      deliv_value_cr: Math.round((eod.value_cr ?? 0) * ((eod.delivery_pct ?? 0) / 100) * 100) / 100,
+      d_pct:          Math.round(d_pct * 100) / 100,
       ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
       ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,

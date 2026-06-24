@@ -75,7 +75,7 @@ def compute_flow_intelligence(df: pd.DataFrame) -> dict:
       Price moved > 1% over 5 days but avg RVOL < 0.5 → VACUUM_UP / VACUUM_DOWN
 
     Accumulation / Distribution:
-      Below/above Golden Line (SMA 150) + RVOL >= 3.0 + momentum/RS aligned
+      Below/above Golden Line (SMA 150) + momentum/RS aligned (no volume gate — A/D is structural)
     """
     n = len(df)
     flow = pd.Series([None] * n, index=df.index, dtype=object)
@@ -146,11 +146,13 @@ def compute_flow_intelligence(df: pd.DataFrame) -> dict:
         mom_bullish = cur_rsi > 50 and cur_mfi > 50
         mom_bearish = cur_rsi < 50 and cur_mfi < 50
 
-        if cur_sma150 is not None and cur_rvol >= 3.0:
+        if cur_sma150 is not None:
             if close[i] < cur_sma150 and (mom_bullish or rs_bullish):
                 accum.iloc[i] = 'ACCUMULATION'
             elif close[i] > cur_sma150 and (mom_bearish or rs_bearish):
                 accum.iloc[i] = 'DISTRIBUTION'
+            else:
+                accum.iloc[i] = 'NEUTRAL'
 
     return {
         'flow_type': flow,

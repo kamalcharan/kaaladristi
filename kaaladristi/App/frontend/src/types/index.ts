@@ -640,6 +640,10 @@ export interface EquityEodSnapshot {
   w52_low: number | null;
   supertrend_dir: number | null;
   lifetime_high: number | null;
+  // Pipeline step-6g pre-computed delivery scores (migration 094/095)
+  avg_amt_5d?: number | null;
+  avg_amt_22d?: number | null;
+  delivery_surge_x?: number | null;
   // VaNi flag columns (migration 099)
   is_vani_surge?: boolean | null;
   is_vani_breakout?: boolean | null;

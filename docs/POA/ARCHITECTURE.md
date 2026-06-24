@@ -56,7 +56,6 @@ ADMIN ONLY
   /markets, /inference, /rule-eval, /astro-calendar
   /manipulation-watch, /industry-transition
   /settings, /data-pipeline, /admin/panchang
-  ⚠️  /transmission, /history — in sidebar but NO route defined (dead links)
 ```
 
 ---
@@ -270,7 +269,7 @@ Lookback: INDUSTRY_ROTATION_LOOKBACK_DAYS = 5 (hardcoded — see backlog B13)
 | BUG-01 | Zone color never matches in SectorRotationFlow StockDrawer | `SectorRotationFlow.tsx` | DB stores `'Strong Bull'` (Title Case) but code checks `'strong_bull'` (snake_case). Normalize to match DB |
 | BUG-02 | `is_vani_surge` + `is_vani_breakout` not in ScanDataBundle | `scanEngine.ts` line 168 | Add to EOD SELECT |
 | BUG-03 | `smart_money` scanner `vani_rule = null` | `kd_scan_presets` DB row | Set `vani_rule = 'is_vani_smart'` |
-| BUG-04 | `/transmission` and `/history` in sidebar but no route | `Layout.tsx` + router | Add routes or remove from sidebar |
+| BUG-04 | `/transmission` and `/history` in sidebar but no route | `Sidebar.tsx` | ✅ Resolved — removed from sidebar nav (no routes exist; re-add when features are built) |
 | BUG-05 | ISIN dedup not verified on all 6 new scanners | `scanEngine.ts` | Verify `fetchStage2Leaders()` ISIN dedup pattern applied to all 6 |
 | BUG-06 | Industry drill-down fetches RSI/flow/rvol/sniper but doesn't render them | `IndustryRotationPanel.tsx` | Render the already-fetched fields |
 | BUG-07 | No click-through from drill-down stock to Visual Pulse | `IndustryRotationPanel.tsx` | Add navigation to `/pulse/equity/:equityId` |
