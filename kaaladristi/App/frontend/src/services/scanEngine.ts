@@ -165,7 +165,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .execute(),
 
     from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
+      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
       .gte('trade_date', eodCutoff)
       .order('trade_date', { ascending: false })
       .limit(120000)
@@ -562,13 +562,13 @@ function buildScanStock(
       : null,
   );
 
-  // avg_amt_5d / avg_amt_22d / avg_amt_66d: rolling delivery value in Cr over 5/22/66 bars
-  const w5_d  = history.slice(0, Math.min(history.length,  5)).filter((h) => h.delivery_qty != null);
-  const w22_d = history.slice(0, Math.min(history.length, 22)).filter((h) => h.delivery_qty != null);
-  const w66_d = history.slice(0, Math.min(history.length, 66)).filter((h) => h.delivery_qty != null);
-  const avg_amt_5d  = w5_d.length  > 0 ? w5_d.reduce( (s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / w5_d.length  : null;
-  const avg_amt_22d = w22_d.length > 0 ? w22_d.reduce((s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / w22_d.length : null;
-  const avg_amt_66d = w66_d.length > 0 ? w66_d.reduce((s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / w66_d.length : null;
+  // avg_amt_5d / avg_amt_22d / delivery_surge_x — read from DB pre-computed columns (pipeline step 6g)
+  // avg_amt_66d — no pre-computed DB column; computed from history using value_cr × delivery_pct/100
+  //               (both fields reliably populated; delivery_qty is sparse and not suitable)
+  const w66_d = history.slice(0, Math.min(history.length, 66)).filter((h) => h.value_cr != null);
+  const avg_amt_66d = w66_d.length > 0
+    ? w66_d.reduce((s, h) => s + (h.value_cr! * ((h.delivery_pct ?? 0) / 100)), 0) / w66_d.length
+    : null;
 
   // xAmt: avg(value_cr, 5D) / avg(value_cr, 22D)
   const valW5  = history.slice(0, Math.min(history.length, 5)).filter((h) => h.value_cr != null);
@@ -630,9 +630,10 @@ function buildScanStock(
     high: eod.high ?? null,
     low: eod.low ?? null,
     mcap_cr: sym.mcap_cr ?? null,
-    avg_amt_5d:  avg_amt_5d  != null ? Math.round(avg_amt_5d  * 100) / 100 : null,
-    avg_amt_22d: avg_amt_22d != null ? Math.round(avg_amt_22d * 100) / 100 : null,
-    avg_amt_66d: avg_amt_66d != null ? Math.round(avg_amt_66d * 100) / 100 : null,
+    avg_amt_5d:       eod.avg_amt_5d       != null ? Math.round(eod.avg_amt_5d       * 100) / 100 : null,
+    avg_amt_22d:      eod.avg_amt_22d      != null ? Math.round(eod.avg_amt_22d      * 100) / 100 : null,
+    avg_amt_66d:      avg_amt_66d          != null ? Math.round(avg_amt_66d          * 100) / 100 : null,
+    delivery_surge_x: eod.delivery_surge_x != null ? Math.round(eod.delivery_surge_x * 10000) / 10000 : null,
     xAmt: xAmt != null ? Math.round(xAmt * 1000) / 1000 : null,
     rel_5d_n50:   rel_5d_n50   != null ? Math.round(rel_5d_n50   * 100) / 100 : null,
     rel_22d_n50:  rel_22d_n50  != null ? Math.round(rel_22d_n50  * 100) / 100 : null,
@@ -949,23 +950,11 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     if (!eod || eod.ema_20 == null || eod.ema_20 <= 0) continue;
 
     const history = bundle.eodHistory.get(id) ?? [];
-    if (history.length < 5) continue; // need at least 5 bars for 5D average
+    if (history.length < 5) continue;
 
-    // Use available window up to 22/5 bars — matches SQL AVG behaviour
-    const w22 = history.slice(0, Math.min(history.length, 22));
-    const w5  = history.slice(0, Math.min(history.length, 5));
-
-    // deliv_value_cr per bar = delivery_qty × close / 10,000,000
-    const delivW22 = w22.map((h) => (h.delivery_qty ?? 0) * h.close / 10_000_000);
-    const delivW5  = w5.map((h)  => (h.delivery_qty ?? 0) * h.close / 10_000_000);
-
-    const avg_amt_5d  = delivW5.reduce((s, v) => s + v, 0) / w5.length;
-    const avg_amt_22d = delivW22.reduce((s, v) => s + v, 0) / w22.length;
-
-    if (avg_amt_22d <= 1.5) continue;
-
-    const delivery_surge_x = avg_amt_22d > 0 ? avg_amt_5d / avg_amt_22d : 0;
-    if (delivery_surge_x <= 1.5) continue;
+    // Filter gates use DB pre-computed delivery scores (pipeline step 6g)
+    if ((eod.avg_amt_22d ?? 0) <= 1.5) continue;
+    if ((eod.delivery_surge_x ?? 0) <= 1.5) continue;
 
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
     if (d_pct < -8 || d_pct > 8) continue;
@@ -981,9 +970,8 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     results.push({
       ...stock,
       vaniOpportunity: computeVaniOpportunity(eod, SCAN_PRESETS.find((p) => p.id === 'conviction_flow')?.vani_rule),
-      deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
-      delivery_surge_x: Math.round(delivery_surge_x * 10000) / 10000,
-      d_pct:            Math.round(d_pct            * 100) / 100,
+      deliv_value_cr: Math.round((eod.value_cr ?? 0) * ((eod.delivery_pct ?? 0) / 100) * 100) / 100,
+      d_pct:          Math.round(d_pct * 100) / 100,
       ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
       ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
