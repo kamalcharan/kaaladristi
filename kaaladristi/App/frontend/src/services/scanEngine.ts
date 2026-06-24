@@ -1032,6 +1032,7 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
     const d_pct  = ((close - ema20) / ema20) * 100;
     const ret_5d  = history.length >  5 ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
+    const ret_66d = history.length > 66 ? ((close - Number(history[66].close)) / Number(history[66].close)) * 100 : null;
 
     const stock = buildScanStock(id, bundle);
     if (!stock) continue;
@@ -1044,6 +1045,7 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
       pct_from_breakout: Math.round(pct_from_breakout * 100) / 100,
       ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
+      ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
     });
   }
 

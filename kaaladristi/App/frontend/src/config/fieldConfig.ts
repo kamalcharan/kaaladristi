@@ -436,8 +436,6 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 65,
   },
 
-<<<<<<< HEAD
-=======
   ret_66d: {
     key: 'ret_66d',
     label: '66D%',
@@ -467,7 +465,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 85,
   },
 
->>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
+
   sma_50: {
     key: 'sma_50',
     label: 'SMA50',
