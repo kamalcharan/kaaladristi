@@ -141,16 +141,29 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   const cached = _bundleCache.get('daily');
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
 
-  // Use calendar-day cutoffs instead of km_trading_calendar.
-  // Scanner always uses the latest available km_equity_eod data regardless
-  // of whether km_trading_calendar has been backfilled.
-  // 100 calendar days ≈ 70 trading days (enough for 66D return + buffer).
   const eodCutoff = new Date(Date.now() - 115 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  // 20 calendar days ≈ 14 trading days for industry rotation detection.
   const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const last10days = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [industryRes, symbolRes, eodRes, idxSymbolRes, idxEodRes, oppConfigMap] = await Promise.all([
+  // Phase 1: fetch active symbols first — needed to filter EOD to active stocks only.
+  // km_equity_eod contains ~8,000 NSE+BSE stocks; without the filter the 175k LIMIT
+  // yields only ~22 rows per stock, making history.length > 66 always fail.
+  const symbolRes = await from('km_equity_symbols')
+    .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
+    .is('is_active', 'true')
+    .limit(8000)
+    .execute();
+
+  const activeIds = (symbolRes.data ?? []).map((s: any) => s.id as number);
+
+  // Phase 2: fetch everything else in parallel.
+  // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
+  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage';
+  const CHUNK = 400;
+  const idChunks: number[][] = [];
+  for (let i = 0; i < activeIds.length; i += CHUNK) idChunks.push(activeIds.slice(i, i + CHUNK));
+
+  const [industryRes, ...rest] = await Promise.all([
     from('km_industry_eod')
       .select('*')
       .gte('trade_date', industryCutoff)
@@ -158,18 +171,15 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .limit(1000)
       .execute(),
 
-    from('km_equity_symbols')
-      .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
-      .is('is_active', 'true')
-      .limit(8000)
-      .execute(),
-
-    from('km_equity_eod')
-      .select('equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage')
-      .gte('trade_date', eodCutoff)
-      .order('trade_date', { ascending: false })
-      .limit(175000)
-      .execute(),
+    ...idChunks.map((chunk) =>
+      from('km_equity_eod')
+        .select(EOD_COLS)
+        .in('equity_id', chunk)
+        .gte('trade_date', eodCutoff)
+        .order('trade_date', { ascending: false })
+        .limit(50000)
+        .execute(),
+    ),
 
     from('km_index_symbols').select('id,name').execute(),
 
@@ -183,10 +193,20 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
     fetchOpportunityConfig(),
   ]);
 
+  // Unpack: last 3 items are idxSymbolRes, idxEodRes, oppConfigMap
+  const idxSymbolRes   = rest[rest.length - 3] as { data: any };
+  const idxEodRes      = rest[rest.length - 2] as { data: any };
+  const oppConfigMap   = rest[rest.length - 1] as Awaited<ReturnType<typeof fetchOpportunityConfig>>;
+  const eodChunkRes    = rest.slice(0, rest.length - 3) as Array<{ data: any }>;
+  const eodRes         = { data: eodChunkRes.flatMap((r) => r.data ?? []) };
+
   // Derive latestDate from actual loaded equity rows.
-  // This is always the true latest date regardless of km_trading_calendar state.
+  // Each chunk is sorted DESC independently, so we take the max across chunk heads.
   const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
-  const latestDate: string | null = allEodRows.length > 0 ? allEodRows[0].trade_date : null;
+  const latestDate: string | null = eodChunkRes.reduce((max: string | null, chunk: any) => {
+    const d: string | undefined = chunk.data?.[0]?.trade_date;
+    return d && (!max || d > max) ? d : max;
+  }, null);
 
   if (!latestDate) {
     return {
