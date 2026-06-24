@@ -530,6 +530,9 @@ export interface ScanStock {
   // Breakout Surge computed fields (null for all other scans)
   breakout_level?: number | null;
   pct_from_breakout?: number | null;
+  // Breakout Surge Daily — DB score/pct columns
+  score_5d?: number | null;
+  score_22d?: number | null;
   // Stage 2 Watch / VaNi Opportunity fields
   rs_percentile?: number | null;
   stage?: string | null;

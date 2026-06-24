@@ -37,7 +37,7 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'quiet_accumulation',   name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'distribution_warning', name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
   { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
-  { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks breaking above 20-day highs with RVOL > 2×',                                   limit: 50,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_s2' },
+  { id: 'breakout_surge_daily', name: 'Breakout Surge Daily',  description: 'NSE large-cap stocks breaking above 20-day highs on a green day, sorted by score_5d',    limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: null },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'vani_opportunity',     name: 'VaNi Opportunity',      description: 'Highest conviction setups — Stage 2 confirmed with top RS momentum. Alpha Edge formula + VaNi RS filter.', limit: 25, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
@@ -1759,6 +1759,189 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
   });
 }
 
+/** Breakout Surge Daily — direct PostgREST query for a specific trade date.
+ *  NSE-only, mcap ≥ 10k (or null), pct_chng > 0, close ≥ 50,
+ *  close > MAX(close) over prior 20 bars.
+ *  Uses DB-precomputed score_5d, pct_5d/22d/66d.
+ *  Sorted by score_5d DESC NULLS LAST.
+ */
+export async function scanBreakoutSurgeDaily(
+  _supabase: unknown,
+  date: string,
+): Promise<ScanStock[]> {
+  // Resolve trade date
+  let tradeDate = date;
+  if (!tradeDate) {
+    const { data: dateRows } = await from('km_equity_eod')
+      .select('trade_date')
+      .order('trade_date', { ascending: false })
+      .limit(1)
+      .execute();
+    tradeDate = (dateRows as any[])?.[0]?.trade_date ?? null;
+    if (!tradeDate) return [];
+  }
+
+  // 1. Fetch NSE active symbols — mcap_cr >= 10000 or null
+  const { data: symData } = await from('km_equity_symbols')
+    .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
+    .eq('exchange', 'NSE')
+    .is('is_active', 'true')
+    .limit(5000)
+    .execute();
+
+  const symbols = new Map<number, any>();
+  for (const s of (symData ?? []) as any[]) {
+    if (s.mcap_cr != null && Number(s.mcap_cr) < 10000) continue;
+    symbols.set(Number(s.id), s);
+  }
+
+  const equityIds = [...symbols.keys()];
+  if (equityIds.length === 0) return [];
+
+  // 2. Fetch 21+ bars per stock: tradeDate – 40 calendar days → tradeDate
+  const cutoff = new Date(tradeDate);
+  cutoff.setDate(cutoff.getDate() - 40);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  const EOD_COLS = [
+    'equity_id', 'trade_date', 'close', 'pct_chng',
+    'rsi_14', 'ema_20', 'magic_rs', 'magic_rs_zone',
+    'rvol', 'flow_type', 'sniper_inst', 'sniper_hot',
+    'rss_value', 'accum_distrib', 'supertrend_dir',
+    'w52_high', 'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d',
+    'score_5d', 'score_22d',
+    'pct_5d', 'pct_22d', 'pct_66d',
+    'delivery_surge_x', 'delivery_pct',
+    'stage', 'sma_50', 'sma_150', 'sma_200',
+  ].join(',');
+
+  const CHUNK = 400;
+  const allRows: any[] = [];
+  for (let i = 0; i < equityIds.length; i += CHUNK) {
+    const chunk = equityIds.slice(i, i + CHUNK);
+    const { data } = await from('km_equity_eod')
+      .select(EOD_COLS)
+      .in('equity_id', chunk)
+      .lte('trade_date', tradeDate)
+      .gte('trade_date', cutoffStr)
+      .order('trade_date', { ascending: false })
+      .execute();
+    allRows.push(...((data ?? []) as any[]));
+  }
+
+  // 3. Group by equity_id, latest-first (already ordered desc from DB)
+  const historyMap = new Map<number, any[]>();
+  for (const row of allRows) {
+    const id = Number(row.equity_id);
+    if (!historyMap.has(id)) historyMap.set(id, []);
+    historyMap.get(id)!.push(row);
+  }
+
+  // 4. Filter and build results
+  const results: ScanStock[] = [];
+
+  for (const [id, history] of historyMap) {
+    const sym = symbols.get(id);
+    if (!sym) continue;
+
+    // history[0] must be exactly tradeDate
+    const eod = history[0];
+    if (!eod || eod.trade_date !== tradeDate) continue;
+
+    // Need 20 prior bars (history[1..20])
+    if (history.length < 21) continue;
+
+    const close = Number(eod.close);
+
+    // Entry conditions
+    if (!(Number(eod.pct_chng) > 0)) continue;  // green day
+    if (close < 50) continue;                    // penny filter
+
+    // breakout_level = MAX(close) over prior 20 bars
+    let breakoutLevel = 0;
+    for (let i = 1; i <= 20; i++) {
+      const c = Number(history[i].close);
+      if (c > breakoutLevel) breakoutLevel = c;
+    }
+    if (close <= breakoutLevel) continue;
+
+    const pctFromBreakout = ((close - breakoutLevel) / breakoutLevel) * 100;
+    const w52h = eod.w52_high != null ? Number(eod.w52_high) : null;
+    const pctBelow52wHigh = w52h && w52h > 0
+      ? ((w52h - close) / w52h) * 100
+      : null;
+
+    results.push({
+      equity_id: id,
+      symbol:       sym.symbol,
+      company_name: sym.company_name ?? null,
+      industry:     sym.industry ?? null,
+      exchange:     sym.exchange ?? null,
+      mcap_cr:      sym.mcap_cr ?? null,
+      close,
+      pct_chng:       eod.pct_chng ?? null,
+      rsi_14:         eod.rsi_14 ?? null,
+      magic_rs:       eod.magic_rs ?? null,
+      magic_rs_zone:  eod.magic_rs_zone ?? null,
+      rvol:           eod.rvol ?? null,
+      flow_type:      eod.flow_type ?? null,
+      sniper_inst:    eod.sniper_inst ?? null,
+      sniper_hot:     eod.sniper_hot ?? null,
+      rss_value:      eod.rss_value ?? null,
+      rss_spread:     null,
+      accum_distrib:  eod.accum_distrib ?? null,
+      supertrend_dir: eod.supertrend_dir ?? null,
+      sma_150:        eod.sma_150 ?? null,
+      volume_divergence_flag: null,
+      has_recent_svd: false,
+      has_recent_sbd: false,
+      has_recent_syd: false,
+      ema_20:         eod.ema_20 ?? null,
+      atr_14:         null,
+      delivery_pct:   eod.delivery_pct ?? null,
+      w52_high:       eod.w52_high ?? null,
+      sma_50:         eod.sma_50 ?? null,
+      sma_200:        eod.sma_200 ?? null,
+      w52_low:        null,
+      lifetime_high:  null,
+      stage:          eod.stage ?? null,
+      open: null, high: null, low: null,
+      magicRsTrend: [],
+      reward: null, rewardPct: null,
+      pctBelow52wHigh,
+      xAmt: null,
+      rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
+      rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+      vaniOpportunity: false,
+      // Score / pct columns from migration 111
+      score_5d:        eod.score_5d ?? null,
+      score_22d:       eod.score_22d ?? null,
+      avg_amt_5d:      eod.avg_amt_5d ?? null,
+      avg_amt_22d:     eod.avg_amt_22d ?? null,
+      avg_amt_66d:     eod.avg_amt_66d ?? null,
+      ret_5d:          eod.pct_5d ?? null,
+      ret_22d:         eod.pct_22d ?? null,
+      ret_66d:         eod.pct_66d ?? null,
+      delivery_surge_x: eod.delivery_surge_x ?? null,
+      breakout_level:    Math.round(breakoutLevel  * 100) / 100,
+      pct_from_breakout: Math.round(pctFromBreakout * 100) / 100,
+    });
+  }
+
+  // Sort score_5d DESC NULLS LAST
+  results.sort((a, b) => {
+    const as5 = a.score_5d ?? null;
+    const bs5 = b.score_5d ?? null;
+    if (as5 == null && bs5 == null) return 0;
+    if (as5 == null) return 1;
+    if (bs5 == null) return -1;
+    return bs5 - as5;
+  });
+
+  console.log('[breakout_surge_daily] date:', tradeDate, '| passed:', results.length);
+  return results;
+}
+
 // ── Public API ─────────────────────────────────────────────────
 
 const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = {
@@ -1824,12 +2007,13 @@ export async function executeScan(
   timeframe: ScanTimeframe = 'daily',
 ): Promise<ScanStock[]> {
   // Direct DB query scans — skip bundle entirely
-  if (scanId === 'stage_2_leaders')  return fetchStage2Leaders(exchangeFilter);
-  if (scanId === 'stage_2_watch')    return fetchStage2Watch(exchangeFilter);
-  if (scanId === 'vani_opportunity') return fetchVaNiOpportunity(exchangeFilter);
-  if (scanId === 'stage_4_leaders')  return fetchStage4Leaders(exchangeFilter);
-  if (scanId === 'stage_3_watch')    return fetchStage3Watch(exchangeFilter);
-  if (scanId === 'vani_exit_watch')  return fetchVaNiExitWatch(exchangeFilter);
+  if (scanId === 'stage_2_leaders')      return fetchStage2Leaders(exchangeFilter);
+  if (scanId === 'stage_2_watch')        return fetchStage2Watch(exchangeFilter);
+  if (scanId === 'vani_opportunity')     return fetchVaNiOpportunity(exchangeFilter);
+  if (scanId === 'stage_4_leaders')      return fetchStage4Leaders(exchangeFilter);
+  if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
+  if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
+  if (scanId === 'breakout_surge_daily') return scanBreakoutSurgeDaily(null, '');
 
   const fn = SCAN_FUNCTIONS[scanId];
   if (!fn) throw new Error(`Unknown scan: ${scanId}`);
