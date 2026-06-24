@@ -32,7 +32,7 @@ const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) || '';
 export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'power_buy',            name: 'Strength Confluence',   description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries', limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'power_sell',           name: 'Weakness Confluence',   description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries', limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
-  { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: null },
+  { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_smart' },
   { id: 'fresh_breakout',       name: 'Fresh Breakouts',       description: 'Stocks breaking above recent highs with strong volume in leading industries',              limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'quiet_accumulation',   name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'distribution_warning', name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: '', category_label: '', category_color: '', category_sort: 0, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
@@ -810,32 +810,19 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
   for (const [id] of bundle.latestEod) {
     const stock = buildScanStock(id, bundle, 'smart_money');
     if (!stock || !stock.industry) continue;
+    if (!stock.symbol || !/^[A-Z]/.test(stock.symbol)) continue;
     if (!accumulatingIndustries.has(stock.industry)) continue;
 
-    // THRESHOLD CALIBRATION NOTE:
-    // sniper_inst ranges 0-40 in km_equity_eod (avg ~5.4 as of Apr 2026).
-    // Threshold 20 = top ~8% of the universe. The previous threshold of 50
-    // was theoretical (assumed 0-100 RSI scale) and never triggered with
-    // actual data.
-    if ((stock.sniper_inst ?? 0) <= 20) continue;
+    if ((stock.delivery_pct ?? 0) <= 60) continue;
 
-    // sniper_inst rising over last 5 bars
-    const history = bundle.eodHistory.get(id) ?? [];
-    const sniperNow = history[0]?.sniper_inst ?? 0;
-    const sniper5 = history.length > 4 ? (history[4]?.sniper_inst ?? 0) : 0;
-    const sniperSlope = sniperNow - sniper5;
-    if (sniperSlope <= 0) continue;
+    // rss_value must be positive
+    if ((stock.rss_value ?? 0) <= 0) continue;
 
-    // rss_value must be positive and rising (not requiring prior dip below 30)
-    const rssNow = stock.rss_value ?? 0;
-    if (rssNow <= 0) continue;
-
-    const score = sniperSlope * (rssNow + 1);
-    results.push({ ...stock, _sortScore: score } as ScanStock & { _sortScore: number });
+    results.push(stock);
   }
 
   return results
-    .sort((a, b) => ((b as any)._sortScore ?? 0) - ((a as any)._sortScore ?? 0))
+    .sort((a, b) => (b.delivery_pct ?? 0) - (a.delivery_pct ?? 0))
     .slice(0, 25);
 }
 
