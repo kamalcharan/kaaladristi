@@ -562,12 +562,13 @@ function buildScanStock(
       : null,
   );
 
-  // avg_amt_66d: mean(delivery_qty × close / 10_000_000) over last 66 bars
-  const w66 = history.slice(0, Math.min(history.length, 66));
-  const validDelivW66 = w66.filter((h) => h.delivery_qty != null);
-  const avg_amt_66d = validDelivW66.length > 0
-    ? validDelivW66.reduce((s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / validDelivW66.length
-    : null;
+  // avg_amt_5d / avg_amt_22d / avg_amt_66d: rolling delivery value in Cr over 5/22/66 bars
+  const w5_d  = history.slice(0, Math.min(history.length,  5)).filter((h) => h.delivery_qty != null);
+  const w22_d = history.slice(0, Math.min(history.length, 22)).filter((h) => h.delivery_qty != null);
+  const w66_d = history.slice(0, Math.min(history.length, 66)).filter((h) => h.delivery_qty != null);
+  const avg_amt_5d  = w5_d.length  > 0 ? w5_d.reduce( (s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / w5_d.length  : null;
+  const avg_amt_22d = w22_d.length > 0 ? w22_d.reduce((s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / w22_d.length : null;
+  const avg_amt_66d = w66_d.length > 0 ? w66_d.reduce((s, h) => s + (h.delivery_qty! * h.close / 10_000_000), 0) / w66_d.length : null;
 
   // xAmt: avg(value_cr, 5D) / avg(value_cr, 22D)
   const valW5  = history.slice(0, Math.min(history.length, 5)).filter((h) => h.value_cr != null);
@@ -629,6 +630,8 @@ function buildScanStock(
     high: eod.high ?? null,
     low: eod.low ?? null,
     mcap_cr: sym.mcap_cr ?? null,
+    avg_amt_5d:  avg_amt_5d  != null ? Math.round(avg_amt_5d  * 100) / 100 : null,
+    avg_amt_22d: avg_amt_22d != null ? Math.round(avg_amt_22d * 100) / 100 : null,
     avg_amt_66d: avg_amt_66d != null ? Math.round(avg_amt_66d * 100) / 100 : null,
     xAmt: xAmt != null ? Math.round(xAmt * 1000) / 1000 : null,
     rel_5d_n50:   rel_5d_n50   != null ? Math.round(rel_5d_n50   * 100) / 100 : null,
@@ -978,8 +981,6 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     results.push({
       ...stock,
       vaniOpportunity: computeVaniOpportunity(eod, SCAN_PRESETS.find((p) => p.id === 'conviction_flow')?.vani_rule),
-      avg_amt_5d:       Math.round(avg_amt_5d       * 100) / 100,
-      avg_amt_22d:      Math.round(avg_amt_22d      * 100) / 100,
       deliv_value_cr:   Math.round(delivW22[0]      * 100) / 100,
       delivery_surge_x: Math.round(delivery_surge_x * 10000) / 10000,
       d_pct:            Math.round(d_pct            * 100) / 100,

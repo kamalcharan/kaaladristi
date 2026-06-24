@@ -358,6 +358,14 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 85,
   },
 
+  avg_amt_66d: {
+    key: 'avg_amt_66d',
+    label: 'Score 66D',
+    tooltip: 'Average delivery value over last 66 trading days (₹ Crores). Long-term baseline — compare against Score 22D to detect sustained accumulation shifts.',
+    type: 'cr',
+    width: 85,
+  },
+
   delivery_pct: {
     key: 'delivery_pct',
     label: 'Deliv%',
