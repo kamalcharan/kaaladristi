@@ -153,9 +153,9 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
 
   magic_rs: {
     key: 'magic_rs',
-    label: 'MRS',
+    label: 'MagicRS vs N500',
     shortLabel: 'MRS',
-    tooltip: 'MagicRS — Relative Strength vs NIFTY 500. Proprietary 144-bar momentum oscillator benchmarked against CNX500. Color reflects zone: Strong Bull (green) → Strong Bear (red).',
+    tooltip: 'MagicRS — Relative Strength benchmarked against NIFTY 500 (CNX500). Proprietary 144-bar momentum oscillator: positive = outperforming NIFTY 500, negative = underperforming. Color reflects zone: Strong Bull (green) → Strong Bear (red).',
     type: 'zone',
     width: 72,
     colorFn: (_val: any, row?: any) => {

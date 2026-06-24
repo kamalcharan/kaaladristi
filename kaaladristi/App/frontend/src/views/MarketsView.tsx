@@ -91,7 +91,7 @@ export default function MarketsView() {
                     value={latest.supertrend_dir === 1 ? 'Bullish' : 'Bearish'}
                   />
                 )}
-                {latest.magic_rs_zone && <StatPill label="MagicRS" value={latest.magic_rs_zone} />}
+                {latest.magic_rs_zone && <StatPill label="MagicRS vs N500" value={latest.magic_rs_zone} />}
                 {latest.chartink_score != null && <StatPill label="Chartink" value={`${latest.chartink_score}/3`} />}
               </div>
             </div>
