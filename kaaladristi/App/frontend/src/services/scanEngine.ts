@@ -186,7 +186,6 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   // Derive latestDate from actual loaded equity rows.
   // This is always the true latest date regardless of km_trading_calendar state.
   const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
-  console.log('[scan] first eod row:', JSON.stringify(allEodRows[0]));
   const latestDate: string | null = allEodRows.length > 0 ? allEodRows[0].trade_date : null;
 
   if (!latestDate) {
@@ -563,12 +562,20 @@ function buildScanStock(
       : null,
   );
 
-  // avg_amt_5d / avg_amt_22d / delivery_surge_x — read from DB pre-computed columns (pipeline step 6g)
-  // avg_amt_66d — no pre-computed DB column; computed from history using value_cr × delivery_pct/100
-  //               (both fields reliably populated; delivery_qty is sparse and not suitable)
-  const w66_d = history.slice(0, Math.min(history.length, 66)).filter((h) => h.value_cr != null);
-  const avg_amt_66d = w66_d.length > 0
-    ? w66_d.reduce((s, h) => s + (h.value_cr! * ((h.delivery_pct ?? 0) / 100)), 0) / w66_d.length
+  // avg_amt_5d/22d/66d — computed from history using value_cr × delivery_pct/100.
+  // DB pre-computed columns (avg_amt_5d, avg_amt_22d) use COALESCE(delivery_qty,0)*close/10M
+  // which returns 0 for stocks without Breeze delivery data (~most of universe).
+  // value_cr and delivery_pct are reliably populated for all NSE equities.
+  const delivBars = history.map((h) => (h.value_cr != null ? h.value_cr * ((h.delivery_pct ?? 0) / 100) : null));
+  const delivAvg = (n: number) => {
+    const slice = delivBars.slice(0, Math.min(delivBars.length, n)).filter((v): v is number => v != null);
+    return slice.length > 0 ? slice.reduce((s, v) => s + v, 0) / slice.length : null;
+  };
+  const avg_amt_5d  = delivAvg(5);
+  const avg_amt_22d = delivAvg(22);
+  const avg_amt_66d = delivAvg(66);
+  const delivery_surge_x = avg_amt_5d != null && avg_amt_22d != null && avg_amt_22d > 0
+    ? avg_amt_5d / avg_amt_22d
     : null;
 
   // xAmt: avg(value_cr, 5D) / avg(value_cr, 22D)
@@ -631,10 +638,10 @@ function buildScanStock(
     high: eod.high ?? null,
     low: eod.low ?? null,
     mcap_cr: sym.mcap_cr ?? null,
-    avg_amt_5d:       eod.avg_amt_5d       != null ? Math.round(eod.avg_amt_5d       * 100) / 100 : null,
-    avg_amt_22d:      eod.avg_amt_22d      != null ? Math.round(eod.avg_amt_22d      * 100) / 100 : null,
-    avg_amt_66d:      avg_amt_66d          != null ? Math.round(avg_amt_66d          * 100) / 100 : null,
-    delivery_surge_x: eod.delivery_surge_x != null ? Math.round(eod.delivery_surge_x * 10000) / 10000 : null,
+    avg_amt_5d:       avg_amt_5d       != null ? Math.round(avg_amt_5d       * 100) / 100 : null,
+    avg_amt_22d:      avg_amt_22d      != null ? Math.round(avg_amt_22d      * 100) / 100 : null,
+    avg_amt_66d:      avg_amt_66d      != null ? Math.round(avg_amt_66d      * 100) / 100 : null,
+    delivery_surge_x: delivery_surge_x != null ? Math.round(delivery_surge_x * 10000) / 10000 : null,
     xAmt: xAmt != null ? Math.round(xAmt * 1000) / 1000 : null,
     rel_5d_n50:   rel_5d_n50   != null ? Math.round(rel_5d_n50   * 100) / 100 : null,
     rel_22d_n50:  rel_22d_n50  != null ? Math.round(rel_22d_n50  * 100) / 100 : null,
@@ -953,15 +960,15 @@ function scanConvictionFlow(bundle: ScanDataBundle): ScanStock[] {
     const history = bundle.eodHistory.get(id) ?? [];
     if (history.length < 5) continue;
 
-    // Filter gates use DB pre-computed delivery scores (pipeline step 6g)
-    if ((eod.avg_amt_22d ?? 0) <= 1.5) continue;
-    if ((eod.delivery_surge_x ?? 0) <= 1.5) continue;
-
     const d_pct = ((eod.close - eod.ema_20) / eod.ema_20) * 100;
     if (d_pct < -8 || d_pct > 8) continue;
 
     const stock = buildScanStock(id, bundle);
     if (!stock) continue;
+
+    // Filter gates use client-side computed delivery scores (value_cr × delivery_pct/100)
+    if ((stock.avg_amt_22d ?? 0) <= 1.5) continue;
+    if ((stock.delivery_surge_x ?? 0) <= 1.5) continue;
 
     // Price returns over N trading days (history sorted desc: [0]=today, [N]=N days ago)
     const ret_5d  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
