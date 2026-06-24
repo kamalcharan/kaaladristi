@@ -220,7 +220,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       {/* Table */}
       <div style={{
         overflowX: 'auto',
-        overflowY: 'visible',
+        overflowY: 'auto',
+        maxHeight: 'calc(100vh - 180px)',
         width: '100%',
         WebkitOverflowScrolling: 'touch',
         border: '1px solid var(--border)',
@@ -244,10 +245,11 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                     key={colKey}
                     onClick={() => toggleSort(colKey)}
                     style={{
-                      position: isSticky ? 'sticky' : undefined,
+                      position: 'sticky',
+                      top: 0,
                       left: isSticky ? 0 : undefined,
-                      zIndex: isSticky ? 3 : 1,
-                      background: 'var(--bg)',
+                      zIndex: isSticky ? 13 : 10,
+                      background: 'var(--card)',
                       width: cfg.width, minWidth: cfg.width,
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',
