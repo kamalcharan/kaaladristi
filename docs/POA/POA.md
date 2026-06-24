@@ -451,3 +451,98 @@ Open items to monitor:
 POA: /docs/POA/POA.md
 Architecture: /docs/POA/ARCHITECTURE.md
 ```
+
+## Sprint 9 Decisions (2026-06-24)
+
+### Scanner Group Restructure
+
+**Price Action group** (tabs, default = Breakout Surge Daily):
+- Breakout Surge Daily (merged scanFreshBreakout + 
+  scanBreakoutSurge + Daily Breakouts Excel spec)
+- Daily Breakdown (to be defined)
+- Weekly Breakout (on hold — tab visible, disabled)
+- Monthly Breakout (on hold — tab visible, disabled)
+- Weekly Breakdown (on hold — tab visible, disabled)
+- Monthly Breakdown (on hold — tab visible, disabled)
+
+**Stage 2 group** (new group, tabs):
+- Stage 2 Watch
+- Stage 2 Leaders
+- VaNi Opportunity (rename pending)
+
+**Strength Confluence** — PARKED
+- Not a breakout scanner
+- Not pure Stage 2
+- Revisit after Price Action + Stage 2 complete
+
+**Market Activity, Bear Signals, Weakness** — unchanged
+
+### Scanner Group UI Behaviour
+- Clicking a group opens directly into default tab
+- No intermediate card/overview screen
+- Tab strip across top — each tab = one scanner
+- Weekly/Monthly tabs visible but disabled (greyed out)
+- Count badge on sidebar = active/default tab count only
+- No group-level count aggregation
+
+### Breakout Surge Daily — Merged Scanner Spec
+Replaces: scanFreshBreakout + scanBreakoutSurge
+New function: scanBreakoutSurgeDaily()
+
+Universe:
+- NSE only
+- MCap >= 10,000 Cr OR mcap_cr IS NULL
+
+Entry conditions:
+- close > MAX(prior 20 bars) — price breakout
+- pct_chng > 0 — green day
+- close >= 50 — penny stock filter
+
+Computations (all DB-side, no client-side):
+- avg_amt_5d  = AVG(delivery_qty * close / 1e7) 5 bars
+- avg_amt_22d = AVG(delivery_qty * close / 1e7) 22 bars
+- avg_amt_66d = AVG(delivery_qty * close / 1e7) 66 bars
+- surge_5d    = avg_amt_5d / avg_amt_22d
+- surge_22d   = avg_amt_22d / avg_amt_66d
+- score_5d    = surge_5d >= 1 ? surge_5d² × 25 : pct_5d
+- score_22d   = surge_22d >= 1 ? surge_22d² × 25 : pct_22d
+- pct_5d      = (close - close[T-4]) / close[T-4] * 100
+- pct_22d     = (close - close[T-21]) / close[T-21] * 100
+- pct_66d     = (close - close[T-65]) / close[T-65] * 100
+
+Sort: score_5d DESC
+
+### Column / Field Management
+- fieldConfig.ts = single source of truth (32 fields)
+- fieldAvailability.ts = NEW FILE to be created
+  Maps each field to which scanner groups can show it
+  Replaces hardcoded OPTIONAL_COLS in each scanner preset
+- score_5d, score_22d, score_66d = separate fields 
+  from avg_amt_5d, avg_amt_22d, avg_amt_66d
+- Column reorder: drag-to-reorder in ScanTable
+  Persisted per scanner in localStorage
+
+### Renamed Fields (already done in Sprint 9)
+- Score 5D  → Avg Amt 5D  (avg_amt_5d)
+- Score 22D → Avg Amt 22D (avg_amt_22d)
+- Score 66D → Avg Amt 66D (avg_amt_66d)
+- Surge×    → Delivery Surge (delivery_surge_x)
+
+### PE Columns — PARKED
+- PE 5D avg, PE 22D avg, PE 66D avg
+- Formula unknown — reverse engineering pending
+- Do not implement until formula confirmed
+
+### SEBI Compliance
+- Remove "Strong Bull" label from all card/table views
+- Replace with neutral descriptive term (TBD)
+- No directional recommendations in UI
+
+### Known Open Items
+- VaNi Opportunity rename — pending decision
+- Strength Confluence group placement — parked
+- Daily Breakdown scanner — logic to be defined
+- avg_amt_66d not stored in DB — add to EOD pipeline
+- delivery_surge_x in direct-query scanners = NULL 
+  for non-Breeze stocks — fix pending
+- SEBI label replacement text — TBD
