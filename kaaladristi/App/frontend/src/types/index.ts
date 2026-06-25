@@ -665,6 +665,14 @@ export interface EquityEodSnapshot {
   is_vani_breakout?: boolean | null;
   // Weinstein stage classification
   stage?: string | null;
+  // Migration 112 — computed scanner fields
+  ret_5d?: number | null;
+  ret_22d?: number | null;
+  ret_66d?: number | null;
+  breakout_level?: number | null;
+  pct_from_breakout?: number | null;
+  pct_below_52w_high?: number | null;
+  deliv_value_cr?: number | null;
 }
 
 // ── Astro Daily Signal (from km_astro_daily_signal) ──
