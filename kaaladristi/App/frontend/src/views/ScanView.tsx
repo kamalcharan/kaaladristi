@@ -798,7 +798,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [viewMode, setViewMode] = useViewMode();
 
   const { data: presets = SCAN_PRESETS } = useScanPresets();
-  const preset = presets.find((p) => p.id === presetId);
+  const preset = presets.find((p) => p.id === presetId) ?? SCAN_PRESETS.find((p) => p.id === presetId);
   const { data: allCountsData } = useAllScanCounts('combined');
   const allCounts = allCountsData?.counts;
   const isNseOnly = preset?.universe === 'NSE_ONLY' && timeframe !== 'daily';
@@ -955,7 +955,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   }
 
   // Breakout Surge — table or custom card layout
-  if (presetId === 'breakout_surge') {
+  if (presetId === 'breakout_surge' || presetId === 'breakout_surge_daily') {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
@@ -965,7 +965,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
         }}>
           <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
           <ScanFilterBar
-            presetId="breakout_surge"
+            presetId={presetId}
             stocks={rawStocks ?? []}
             filters={filters}
             onFiltersChange={setFilters}
@@ -983,7 +983,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
         ) : viewMode === 'table' ? (
           <ScanTable
             stocks={stocks}
-            presetId="breakout_surge"
+            presetId={presetId}
             onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
           />
         ) : (
@@ -995,22 +995,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
 
   return (
     <div style={{ paddingBottom: '100px' }}>
-      {/* Heading */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
-          letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px',
-          color: 'var(--text-primary)',
-        }}>
-          {preset.name}{' '}
-          <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
-            · {timeframe === 'weekly' ? 'Weekly' : timeframe === 'monthly' ? 'Monthly' : 'Daily'}
-          </em>
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          {preset.description}
-        </p>
-      </div>
+      {header}
 
       {/* Sub-bar: exchange tabs + opp filter + sort */}
       <div style={{
@@ -1185,20 +1170,22 @@ export default function ScanView() {
     const map = new Map<string, {
       label: string; color: string; sort: number;
       presets: ScanDefinition[];
-      defaultPreset: ScanDefinition | undefined;
     }>();
     for (const p of presets) {
       if (!p.category) continue;
       if (!map.has(p.category)) {
-        map.set(p.category, { label: p.category_label, color: p.category_color, sort: p.category_sort, presets: [], defaultPreset: undefined });
+        map.set(p.category, { label: p.category_label, color: p.category_color, sort: p.category_sort, presets: [] });
       }
-      const entry = map.get(p.category)!;
-      entry.presets.push(p);
-      if (p.is_default_tab) entry.defaultPreset = p;
+      map.get(p.category)!.presets.push(p);
     }
     return [...map.entries()]
       .sort(([, a], [, b]) => a.sort - b.sort)
-      .map(([id, val]) => ({ id, ...val }));
+      .map(([id, val]) => ({
+        id,
+        ...val,
+        // Explicit find — never relies on iteration order or mutable accumulation
+        defaultPreset: val.presets.find(p => p.is_default_tab) ?? val.presets[0],
+      }));
   }, [presets]);
 
   // Auto-navigate to first category default tab when URL has no presetId

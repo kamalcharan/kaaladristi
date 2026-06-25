@@ -530,9 +530,13 @@ export interface ScanStock {
   // Breakout Surge computed fields (null for all other scans)
   breakout_level?: number | null;
   pct_from_breakout?: number | null;
-  // Breakout Surge Daily — DB score/pct columns
+  // Breakout Surge Daily — DB score/pct columns (migration 111)
   score_5d?: number | null;
   score_22d?: number | null;
+  pct_5d?: number | null;
+  pct_22d?: number | null;
+  pct_66d?: number | null;
+  surge_22d?: number | null;
   // Stage 2 Watch / VaNi Opportunity fields
   rs_percentile?: number | null;
   stage?: string | null;
@@ -648,6 +652,14 @@ export interface EquityEodSnapshot {
   avg_amt_5d?: number | null;
   avg_amt_22d?: number | null;
   delivery_surge_x?: number | null;
+  // Migration 111 — server-computed score/pct/66d columns
+  score_5d?: number | null;
+  score_22d?: number | null;
+  pct_5d?: number | null;
+  pct_22d?: number | null;
+  pct_66d?: number | null;
+  avg_amt_66d?: number | null;
+  surge_22d?: number | null;
   // VaNi flag columns (migration 099)
   is_vani_surge?: boolean | null;
   is_vani_breakout?: boolean | null;

@@ -87,6 +87,7 @@ interface ScanDataBundle {
 
 const _bundleCache = new Map<ScanTimeframe, { data: ScanDataBundle; fetchedAt: number }>();
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
+let _buildScanStockDebugCount = 0;
 
 // Session-level config cache — presetId → OppConfig, fetched once per page load.
 let _oppConfigCache: Map<string, OppConfig> | null = null;
@@ -158,7 +159,8 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
 
   // Phase 2: fetch everything else in parallel.
   // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
-  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage';
+  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage,score_5d,score_22d,pct_5d,pct_22d,pct_66d,avg_amt_66d,surge_22d';
+  console.log('[loadDailyBundle] EOD_COLS select:', EOD_COLS);
   const CHUNK = 400;
   const idChunks: number[][] = [];
   for (let i = 0; i < activeIds.length; i += CHUNK) idChunks.push(activeIds.slice(i, i + CHUNK));
@@ -560,6 +562,17 @@ function buildScanStock(
   // ema_20 = 0 does not occur in the DB — the SQL formula never writes 0.
   if (eod.ema_20 == null) return null;
 
+  if ((_buildScanStockDebugCount as number) < 3) {
+    console.log('[buildScanStock debug]', {
+      symbol: sym.symbol,
+      score_5d: eod.score_5d,
+      pct_5d: eod.pct_5d,
+      pct_66d: eod.pct_66d,
+      avg_amt_66d: eod.avg_amt_66d,
+    });
+    (_buildScanStockDebugCount as any)++;
+  }
+
   // Guard: treat unrecognised zone values as null
   if (eod.magic_rs_zone && !VALID_ZONES.has(eod.magic_rs_zone)) {
     (eod as any).magic_rs_zone = null;
@@ -582,11 +595,10 @@ function buildScanStock(
       : null,
   );
 
-  // avg_amt_5d/22d/66d — computed from history using value_cr × delivery_pct/100.
-  // DB pre-computed columns (avg_amt_5d, avg_amt_22d) use COALESCE(delivery_qty,0)*close/10M
-  // which returns 0 for stocks without Breeze delivery data (~most of universe).
-  // value_cr and delivery_pct are reliably populated for all NSE equities.
-  const delivBars = history.map((h) => (h.value_cr != null ? h.value_cr * ((h.delivery_pct ?? 0) / 100) : null));
+  // avg_amt_5d/22d/66d — delivery value in Crores.
+  // value_cr is stored in Rupees in km_equity_eod; divide by 1e7 to convert to Crores.
+  // delivery_pct is a whole-number percentage (e.g. 45 = 45%).
+  const delivBars = history.map((h) => (h.value_cr != null ? (h.value_cr / 1e7) * ((h.delivery_pct ?? 0) / 100) : null));
   const delivAvg = (n: number) => {
     const slice = delivBars.slice(0, Math.min(delivBars.length, n)).filter((v): v is number => v != null);
     return slice.length > 0 ? slice.reduce((s, v) => s + v, 0) / slice.length : null;
@@ -660,8 +672,13 @@ function buildScanStock(
     mcap_cr: sym.mcap_cr ?? null,
     avg_amt_5d:       avg_amt_5d       != null ? Math.round(avg_amt_5d       * 100) / 100 : null,
     avg_amt_22d:      avg_amt_22d      != null ? Math.round(avg_amt_22d      * 100) / 100 : null,
-    avg_amt_66d:      avg_amt_66d      != null ? Math.round(avg_amt_66d      * 100) / 100 : null,
+    avg_amt_66d:      eod.avg_amt_66d  != null ? Number(eod.avg_amt_66d)                  : null,
     delivery_surge_x: delivery_surge_x != null ? Math.round(delivery_surge_x * 10000) / 10000 : null,
+    score_5d:    eod.score_5d    != null ? Number(eod.score_5d)    : null,
+    score_22d:   eod.score_22d   != null ? Number(eod.score_22d)   : null,
+    pct_5d:      eod.pct_5d      != null ? Number(eod.pct_5d)      : null,
+    pct_22d:     eod.pct_22d     != null ? Number(eod.pct_22d)     : null,
+    pct_66d:     eod.pct_66d     != null ? Number(eod.pct_66d)     : null,
     xAmt: xAmt != null ? Math.round(xAmt * 1000) / 1000 : null,
     rel_5d_n50:   rel_5d_n50   != null ? Math.round(rel_5d_n50   * 100) / 100 : null,
     rel_22d_n50:  rel_22d_n50  != null ? Math.round(rel_22d_n50  * 100) / 100 : null,
@@ -1799,12 +1816,11 @@ export async function scanBreakoutSurgeDaily(
   const equityIds = [...symbols.keys()];
   if (equityIds.length === 0) return [];
 
-  // 2. Fetch 70+ bars per stock — 100 calendar days covers 66+ trading days,
-  //    which is needed to compute avg_amt_66d and score_22d client-side.
-  //    score_5d/22d are not written by the daily pipeline (migration 111 was
-  //    a one-time backfill), so we always compute them here from history.
+  // 2. Fetch 25+ bars per stock — needs 20 prior bars for breakout level and
+  //    22 bars for client-side avg_amt fallback. score_5d/22d/pct_*/avg_amt_66d
+  //    now come from DB (migration 111). 100 calendar days retained for safety.
   const cutoff = new Date(tradeDate);
-  cutoff.setDate(cutoff.getDate() - 100);
+  cutoff.setDate(cutoff.getDate() - 115);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
   const EOD_COLS = [
@@ -1813,8 +1829,10 @@ export async function scanBreakoutSurgeDaily(
     'rvol', 'flow_type', 'sniper_inst', 'sniper_hot',
     'rss_value', 'accum_distrib', 'supertrend_dir',
     'w52_high', 'delivery_surge_x', 'delivery_pct',
-    'value_cr',
+    'value_cr', 'avg_amt_5d', 'avg_amt_22d',
     'stage', 'sma_50', 'sma_150', 'sma_200',
+    // migration 111 — server-computed, read directly from DB
+    'score_5d', 'score_22d', 'pct_5d', 'pct_22d', 'pct_66d', 'avg_amt_66d', 'surge_22d',
   ].join(',');
 
   const CHUNK = 400;
@@ -1841,6 +1859,7 @@ export async function scanBreakoutSurgeDaily(
 
   // 4. Filter and build results
   const results: ScanStock[] = [];
+  let _debugCount = 0;
 
   for (const [id, history] of historyMap) {
     const sym = symbols.get(id);
@@ -1867,15 +1886,26 @@ export async function scanBreakoutSurgeDaily(
     }
     if (close <= breakoutLevel) continue;
 
+    if (_debugCount < 3) {
+      console.log('[BSD debug]', {
+        symbol: sym.symbol,
+        score_5d: eod.score_5d,
+        score_22d: eod.score_22d,
+        pct_66d: eod.pct_66d,
+        avg_amt_66d: eod.avg_amt_66d,
+        avg_amt_5d: eod.avg_amt_5d,
+        avg_amt_22d: eod.avg_amt_22d,
+      });
+      _debugCount++;
+    }
+
     const pctFromBreakout = ((close - breakoutLevel) / breakoutLevel) * 100;
     const w52h = eod.w52_high != null ? Number(eod.w52_high) : null;
     const pctBelow52wHigh = w52h && w52h > 0
       ? ((w52h - close) / w52h) * 100
       : null;
 
-    // Compute delivery amounts from history (value_cr × delivery_pct/100).
-    // This matches buildScanStock() and is reliable for all NSE equities,
-    // unlike the DB columns which depend on Breeze delivery_qty.
+    // Client-side delivery amounts — fallback for avg_amt_5d/22d when DB columns are null.
     // history is ordered DESC so history[0] = today, history[1] = yesterday, etc.
     const delivBars = history.map((h: any) =>
       h.value_cr != null ? h.value_cr * ((h.delivery_pct ?? 0) / 100) : null
@@ -1886,32 +1916,11 @@ export async function scanBreakoutSurgeDaily(
     };
     const avg_amt_5d  = delivAvg(5);
     const avg_amt_22d = delivAvg(22);
-    const avg_amt_66d = delivAvg(66);
 
-    // Compute pct returns from close prices in history
+    // Compute pct returns from close prices in history (ret_* stay client-side)
     const ret_5d  = history.length > 5  ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
-    const ret_66d = history.length > 66 ? ((close - Number(history[66].close)) / Number(history[66].close)) * 100 : null;
-
-    // Compute score_5d: momentum × delivery surge (same formula as migration 111)
-    const score_5d = (() => {
-      if (avg_amt_5d == null || avg_amt_22d == null || avg_amt_22d === 0) return null;
-      if (ret_5d == null || ret_5d <= 0) return 0;
-      const surge = avg_amt_5d / avg_amt_22d;
-      return surge < 1.0
-        ? Math.round(ret_5d * 100) / 100
-        : Math.round(surge * surge * 25 * 100) / 100;
-    })();
-
-    // Compute score_22d: momentum × delivery surge vs 66d baseline
-    const score_22d = (() => {
-      if (avg_amt_22d == null || avg_amt_66d == null || avg_amt_66d === 0) return null;
-      if (ret_22d == null || ret_22d <= 0) return 0;
-      const surge = avg_amt_22d / avg_amt_66d;
-      return surge < 1.0
-        ? Math.round(ret_22d * 100) / 100
-        : Math.round(surge * surge * 25 * 100) / 100;
-    })();
+    const ret_66d = history.length >= 67 ? ((close - Number(history[66].close)) / Number(history[66].close)) * 100 : null;
 
     const delivery_surge_x = avg_amt_5d != null && avg_amt_22d != null && avg_amt_22d > 0
       ? Math.round((avg_amt_5d / avg_amt_22d) * 10000) / 10000
@@ -1959,20 +1968,23 @@ export async function scanBreakoutSurgeDaily(
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity: false,
-      score_5d,
-      score_22d,
-      avg_amt_5d:  avg_amt_5d  != null ? Math.round(avg_amt_5d  * 100) / 100 : null,
-      avg_amt_22d: avg_amt_22d != null ? Math.round(avg_amt_22d * 100) / 100 : null,
-      avg_amt_66d: avg_amt_66d != null ? Math.round(avg_amt_66d * 100) / 100 : null,
+      // migration 111 columns — read from DB, not client-computed
+      score_5d:    eod.score_5d    != null ? Number(eod.score_5d)    : null,
+      score_22d:   eod.score_22d   != null ? Number(eod.score_22d)   : null,
+      pct_5d:      eod.pct_5d      != null ? Number(eod.pct_5d)      : null,
+      pct_22d:     eod.pct_22d     != null ? Number(eod.pct_22d)     : null,
+      pct_66d:     eod.pct_66d     != null ? Number(eod.pct_66d)     : null,
+      avg_amt_66d: eod.avg_amt_66d != null ? Number(eod.avg_amt_66d) : null,
+      surge_22d:   eod.surge_22d   != null ? Number(eod.surge_22d)   : null,
+      // avg_amt_5d/22d: DB value preferred, client-computed as fallback
+      avg_amt_5d:  eod.avg_amt_5d  != null ? Number(eod.avg_amt_5d)  : (avg_amt_5d  != null ? Math.round(avg_amt_5d  * 100) / 100 : null),
+      avg_amt_22d: eod.avg_amt_22d != null ? Number(eod.avg_amt_22d) : (avg_amt_22d != null ? Math.round(avg_amt_22d * 100) / 100 : null),
       ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
       ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
       delivery_surge_x,
-<<<<<<< HEAD
-=======
       deliv_value_cr: Math.round((eod.value_cr ?? 0) * ((eod.delivery_pct ?? 0) / 100) * 100) / 100,
       d_pct:          eod.pct_chng != null ? Math.round(Number(eod.pct_chng) * 100) / 100 : null,
->>>>>>> efd1c27f94d39d7aafbc34f468ac04d988e2a69a
       breakout_level:    Math.round(breakoutLevel  * 100) / 100,
       pct_from_breakout: Math.round(pctFromBreakout * 100) / 100,
     });
