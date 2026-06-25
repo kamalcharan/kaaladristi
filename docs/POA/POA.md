@@ -42,17 +42,11 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 ## 3. Active Sprint
 > Current focus. One sprint at a time.
 
-<<<<<<< HEAD
-### Sprint 7 — Field Config + StockCard
-
-**Goal:** Centralise all field display logic into `src/config/fieldConfig.ts` so ScanTable and StockCard (Step 7.2) share one source of truth for labels, tooltips, formatters, and color rules.
-=======
 ### Sprint 7 — Field Config + StockCard ✅ COMPLETE
 
 **Goal:** Centralise all field display logic into `src/config/fieldConfig.ts` so ScanTable and StockCard share one source of truth for labels, tooltips, formatters, and color rules.
 
 **Status: ✅ COMPLETE**
->>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
 
 | Step | Task | Status | Notes |
 |---|---|---|---|
@@ -61,11 +55,30 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | 7.3 | Wire ConvictionFlowCards + BreakoutSurgeCards to fieldConfig | ✅ | delivery_surge_x 3-level color; avg_amt labels → 'Score 5D'/'Score 22D'; rsi/rss/pct_from_breakout/rvol all use getColor. |
 | 7.4 | MiniTower bars for score fields in ScanTable + MRS zone dot | ✅ | MiniTower.tsx created; score50/score100 cells show 5-bar tower + number; sniper_hot → gold; rss_value → accent; MRS dot 7px. |
 | C43 | **Bug fix**: `mcap_cr: null` → `sym.mcap_cr ?? null` in `buildStockFromEod()` | ✅ | ManipulationWatch now shows correct MCap. Only that path was affected — all other scanners already read sym.mcap_cr correctly. Sprint 7. |
-<<<<<<< HEAD
-=======
 | 7.5 | Auto-generate tooltips from fieldConfig — remove hardcoded strings in StockCard | ✅ | SignalTower tooltip prop → `getTooltip('sniper_inst'/'sniper_hot') ?? ''`. MrsPill title → `<Tooltip>` component wrapping. Added `getTooltip` + `Tooltip` imports to StockCard. |
 | 7.6 | Final audit + add missing fields to fieldConfig (d_pct, deliv_value_cr, ret_66d) | ✅ | w52_high already present. Exceptions confirmed: pctColor/distColor in card tables for return fields are intentional simple +/- coloring, not field-config violations. |
->>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
+
+---
+
+### Sprint 9 — Scanner Columns + Formula Review ✅ COMPLETE
+
+**Goal:** Align all scanner column formulas to DB-computed values, fix mid-pipeline latestDate safety, resolve merge conflicts, wire new migration columns.
+
+**Status: ✅ COMPLETE**
+
+| Step | Task | Status | Notes |
+|---|---|---|---|
+| 9.1 | Merge conflicts resolved — POA.md and scanEngine.ts | ✅ | deliv_value_cr, d_pct restored |
+| 9.2 | Migration 110 + 111 confirmed live on VPS | ✅ | Handover was wrong on 110 |
+| 9.3 | breakout_surge_daily inserted into kd_scan_presets | ✅ | price_action category, is_default_tab=true |
+| 9.4 | power_sell assigned to market category in DB | ✅ | — |
+| 9.5 | Default tab bug fixed in ScanView.tsx | ✅ | Groups open on is_default_tab=true preset |
+| 9.6 | Unit bug fixed — value_cr is Rupees not Crores | ✅ | buildScanStock reads avg_amt_5d/22d from DB directly |
+| 9.7 | Migration 112 — ret_5d/22d/66d, breakout_level, pct_from_breakout, pct_below_52w_high, deliv_value_cr | ✅ | — |
+| 9.8 | compute_engine.py extended — all migration 111+112 columns computed nightly | ✅ | — |
+| 9.9 | backfill_rolling_metrics.py rewritten — full history, all 20 columns | ✅ | Running on VPS for 641 dates |
+| 9.10 | loadDailyBundle() latestDate fixed — HAVING COUNT >= 4000 | ✅ | Avoids mid-pipeline incomplete dates |
+| 9.11 | buildScanStock() standardised — all fields from DB, no client compute | ✅ | — |
 
 ---
 
@@ -263,6 +276,17 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | C50 | Visual language standardized across Table and Card views — same color thresholds, same labels, same tower bars. | Sprint 7 | — |
 | C51 | Institution=green, Hot Money=gold, RSS=indigo — distinct color language per signal type locked in fieldConfig. | Sprint 7 | — |
 | C52 | MRS zone dot added to ScanTable — colored 7px dot before number matches card zone color. | Sprint 7 | — |
+| C53 | Merge conflicts resolved — POA.md and scanEngine.ts (deliv_value_cr, d_pct restored) | Sprint 9 | — |
+| C54 | Migration 110 + 111 confirmed live on VPS — handover was wrong on 110 | Sprint 9 | — |
+| C55 | breakout_surge_daily inserted into kd_scan_presets as price_action default tab | Sprint 9 | — |
+| C56 | power_sell assigned to market category in DB | Sprint 9 | — |
+| C57 | Default tab bug fixed in ScanView.tsx — groups now open on is_default_tab=true preset | Sprint 9 | — |
+| C58 | Unit bug fixed — value_cr is in Rupees not Crores, buildScanStock now reads avg_amt_5d/22d from DB directly | Sprint 9 | — |
+| C59 | Migration 112 — ret_5d/22d/66d, breakout_level, pct_from_breakout, pct_below_52w_high, deliv_value_cr added to km_equity_eod | Sprint 9 | — |
+| C60 | compute_engine.py extended — all migration 111+112 columns now computed nightly for all stocks | Sprint 9 | — |
+| C61 | backfill_rolling_metrics.py rewritten — window function CTE covers full history, all 20 columns | Sprint 9 | — |
+| C62 | loadDailyBundle() latestDate query fixed — uses HAVING COUNT >= 4000 to avoid mid-pipeline incomplete dates | Sprint 9 | — |
+| C63 | buildScanStock() standardised — all fields read from DB, no client-side recomputation | Sprint 9 | — |
 
 ---
 
@@ -546,3 +570,35 @@ Sort: score_5d DESC
 - delivery_surge_x in direct-query scanners = NULL 
   for non-Breeze stocks — fix pending
 - SEBI label replacement text — TBD
+
+---
+
+## Sprint 10 Handover
+
+Date: 2026-06-25
+Sprint 9 Status: COMPLETE
+
+Completed this session:
+- All merge conflicts resolved
+- Migration 112 applied and backfill running (641 dates)
+- compute_engine.py writes all 20 columns nightly
+- buildScanStock() reads all fields from DB — no client compute
+- Default tab routing fixed
+- latestDate query fixed for mid-pipeline safety
+
+Backfill status:
+- backfill_rolling_metrics.py running on VPS for all 641 dates
+- Must complete before all historical scanner data is correct
+- Check tomorrow: verify ret_5d/breakout_level populated for 2026-06-24
+
+Open items for Sprint 10:
+- B05: vs N500 label on MagicRS (backlog)
+- B11: Render fetched fields in industry drill-down
+- B12: Click-through drill-down to Visual Pulse
+- B13: Lookback filter 5D/22D/66D on sector rotation
+- Sticky first column in ScanTable (UX fix from this session — verify working)
+- Horizontal scroll fix (verify working)
+- SEBI label replacement for Strong Bull (TBD text)
+- score_22d formula review vs Excel (parked from Sprint 9)
+- VaNi Opportunity rename (parked)
+- BSE stocks missing score_5d/avg_amt columns — pipeline fix needed
