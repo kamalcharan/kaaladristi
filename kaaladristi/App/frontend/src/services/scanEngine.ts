@@ -87,6 +87,7 @@ interface ScanDataBundle {
 
 const _bundleCache = new Map<ScanTimeframe, { data: ScanDataBundle; fetchedAt: number }>();
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
+let _buildScanStockDebugCount = 0;
 
 // Session-level config cache — presetId → OppConfig, fetched once per page load.
 let _oppConfigCache: Map<string, OppConfig> | null = null;
@@ -159,6 +160,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   // Phase 2: fetch everything else in parallel.
   // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
   const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage,score_5d,score_22d,pct_5d,pct_22d,pct_66d,avg_amt_66d,surge_22d';
+  console.log('[loadDailyBundle] EOD_COLS select:', EOD_COLS);
   const CHUNK = 400;
   const idChunks: number[][] = [];
   for (let i = 0; i < activeIds.length; i += CHUNK) idChunks.push(activeIds.slice(i, i + CHUNK));
@@ -559,6 +561,17 @@ function buildScanStock(
   // Stocks without a computed EMA20 have insufficient history (< 20 bars).
   // ema_20 = 0 does not occur in the DB — the SQL formula never writes 0.
   if (eod.ema_20 == null) return null;
+
+  if ((_buildScanStockDebugCount as number) < 3) {
+    console.log('[buildScanStock debug]', {
+      symbol: sym.symbol,
+      score_5d: eod.score_5d,
+      pct_5d: eod.pct_5d,
+      pct_66d: eod.pct_66d,
+      avg_amt_66d: eod.avg_amt_66d,
+    });
+    (_buildScanStockDebugCount as any)++;
+  }
 
   // Guard: treat unrecognised zone values as null
   if (eod.magic_rs_zone && !VALID_ZONES.has(eod.magic_rs_zone)) {
