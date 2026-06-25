@@ -595,21 +595,6 @@ function buildScanStock(
       : null,
   );
 
-  // avg_amt_5d/22d/66d — delivery value in Crores.
-  // value_cr is stored in Rupees in km_equity_eod; divide by 1e7 to convert to Crores.
-  // delivery_pct is a whole-number percentage (e.g. 45 = 45%).
-  const delivBars = history.map((h) => (h.value_cr != null ? (h.value_cr / 1e7) * ((h.delivery_pct ?? 0) / 100) : null));
-  const delivAvg = (n: number) => {
-    const slice = delivBars.slice(0, Math.min(delivBars.length, n)).filter((v): v is number => v != null);
-    return slice.length > 0 ? slice.reduce((s, v) => s + v, 0) / slice.length : null;
-  };
-  const avg_amt_5d  = delivAvg(5);
-  const avg_amt_22d = delivAvg(22);
-  const avg_amt_66d = delivAvg(66);
-  const delivery_surge_x = avg_amt_5d != null && avg_amt_22d != null && avg_amt_22d > 0
-    ? avg_amt_5d / avg_amt_22d
-    : null;
-
   // xAmt: avg(value_cr, 5D) / avg(value_cr, 22D)
   const valW5  = history.slice(0, Math.min(history.length, 5)).filter((h) => h.value_cr != null);
   const valW22 = history.slice(0, Math.min(history.length, 22)).filter((h) => h.value_cr != null);
@@ -670,10 +655,11 @@ function buildScanStock(
     high: eod.high ?? null,
     low: eod.low ?? null,
     mcap_cr: sym.mcap_cr ?? null,
-    avg_amt_5d:       avg_amt_5d       != null ? Math.round(avg_amt_5d       * 100) / 100 : null,
-    avg_amt_22d:      avg_amt_22d      != null ? Math.round(avg_amt_22d      * 100) / 100 : null,
-    avg_amt_66d:      eod.avg_amt_66d  != null ? Number(eod.avg_amt_66d)                  : null,
-    delivery_surge_x: delivery_surge_x != null ? Math.round(delivery_surge_x * 10000) / 10000 : null,
+    avg_amt_5d:       eod.avg_amt_5d       != null ? Number(eod.avg_amt_5d)       : null,
+    avg_amt_22d:      eod.avg_amt_22d      != null ? Number(eod.avg_amt_22d)      : null,
+    avg_amt_66d:      eod.avg_amt_66d      != null ? Number(eod.avg_amt_66d)      : null,
+    delivery_surge_x: eod.delivery_surge_x != null ? Number(eod.delivery_surge_x) : null,
+    surge_22d:        eod.surge_22d        != null ? Number(eod.surge_22d)        : null,
     score_5d:    eod.score_5d    != null ? Number(eod.score_5d)    : null,
     score_22d:   eod.score_22d   != null ? Number(eod.score_22d)   : null,
     pct_5d:      eod.pct_5d      != null ? Number(eod.pct_5d)      : null,
