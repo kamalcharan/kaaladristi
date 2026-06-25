@@ -444,187 +444,7 @@ function useToast() {
   return { show, Toast };
 }
 
-// ── Scanner Hub — left-nav + pills landing ────────────────────
-
-function ScannerHub() {
-  const navigate = useNavigate();
-  const { data: allCountsData } = useAllScanCounts('combined');
-  const { data: presets = SCAN_PRESETS } = useScanPresets();
-  const allCounts = allCountsData?.counts;
-
-  // Group presets by category, ordered by category_sort then sort_order
-  const categories = useMemo(() => {
-    const map = new Map<string, { label: string; color: string; sort: number; presets: ScanDefinition[] }>();
-    for (const p of presets) {
-      if (!p.category) continue;
-      if (!map.has(p.category)) {
-        map.set(p.category, { label: p.category_label, color: p.category_color, sort: p.category_sort, presets: [] });
-      }
-      map.get(p.category)!.presets.push(p);
-    }
-    return [...map.entries()]
-      .sort(([, a], [, b]) => a.sort - b.sort)
-      .map(([id, val]) => ({ id, ...val }));
-  }, [presets]);
-
-  const [activeCatId, setActiveCatId] = useState<string>('');
-
-  // Set first category once presets load
-  useEffect(() => {
-    if (!activeCatId && categories.length > 0) {
-      setActiveCatId(categories[0].id);
-    }
-  }, [categories, activeCatId]);
-
-  const activeCat = categories.find((c) => c.id === activeCatId) ?? categories[0];
-  const pillPresets = activeCat?.presets ?? [];
-
-  return (
-    <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', margin: '-24px', height: 'calc(100vh - 46px)' }}>
-      {/* Left nav */}
-      <div style={{
-        width: '220px', minWidth: '220px',
-        background: 'var(--sidebar-bg, var(--card))',
-        borderRight: '1px solid var(--border)',
-        overflowY: 'auto', padding: '14px 0', flexShrink: 0,
-      }}>
-        <div style={{
-          fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '10px',
-          letterSpacing: '1.5px', textTransform: 'uppercase',
-          color: 'var(--text-faint)', padding: '0 14px 10px',
-        }}>
-          Scanner
-        </div>
-        {categories.map((cat) => {
-          const isActive = cat.id === activeCatId;
-          const catCount = cat.presets.reduce((s, p) => s + (allCounts?.[p.id] ?? 0), 0);
-          return (
-            <div
-              key={cat.id}
-              onClick={() => setActiveCatId(cat.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '8px 14px', cursor: 'pointer',
-                background: isActive ? 'rgba(240,165,0,0.06)' : 'transparent',
-                transition: 'background 0.15s',
-              }}
-            >
-              <span style={{
-                width: '7px', height: '7px', borderRadius: '50%',
-                background: cat.color, flexShrink: 0,
-              }} />
-              <span style={{
-                fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '11px',
-                letterSpacing: '0.8px', textTransform: 'uppercase', flex: 1,
-                color: isActive ? 'var(--gold)' : 'var(--text-muted)',
-              }}>
-                {cat.label}
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: '10px',
-                color: isActive ? 'var(--gold)' : 'var(--text-faint)',
-                background: isActive ? 'rgba(240,165,0,0.1)' : 'var(--bg3, rgba(255,255,255,0.04))',
-                padding: '1px 6px', borderRadius: '3px',
-              }}>
-                {catCount > 0 ? catCount : cat.presets.length}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Right: pills + grid */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Pills strip */}
-        <div style={{
-          background: 'var(--card)', borderBottom: '1px solid var(--border)',
-          padding: '0 20px', flexShrink: 0,
-        }}>
-          <div style={{
-            display: 'flex', gap: '4px', padding: '10px 0',
-            overflowX: 'auto', scrollbarWidth: 'none',
-          }}>
-            {pillPresets.map((p) => {
-              const count = allCounts?.[p.id] ?? null;
-              const vaniCount = 0; // VaNi count not available from allCounts — shown as 0 until detail view
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => navigate(`/scanner/${p.id}`)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '7px',
-                    padding: '6px 13px', borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    background: 'transparent', cursor: 'pointer',
-                    flexShrink: 0, transition: 'all 0.15s',
-                  }}
-                >
-                  <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    {p.name}
-                  </span>
-                  <span style={{
-                    fontFamily: 'var(--font-mono)', fontSize: '10px',
-                    color: 'var(--text-faint)', background: 'rgba(255,255,255,0.04)',
-                    padding: '1px 5px', borderRadius: '3px',
-                  }}>
-                    {count ?? '…'}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Preset grid */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
-            {pillPresets.map((preset) => {
-              const count = allCounts?.[preset.id] ?? null;
-              const isHighRelevance = (count ?? 0) >= 20;
-              const isZero = count === 0;
-              return (
-                <div
-                  key={preset.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/scanner/${preset.id}`)}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/scanner/${preset.id}`)}
-                  title={preset.tooltip}
-                  style={{
-                    background: isHighRelevance ? 'linear-gradient(180deg, var(--gold-bg) 0%, var(--card) 80%)' : 'var(--card)',
-                    border: `1px solid ${isHighRelevance ? 'var(--border-gold)' : 'var(--border)'}`,
-                    borderLeft: `3px solid ${preset.category_color || 'var(--border)'}`,
-                    borderRadius: '12px', padding: '18px 16px',
-                    cursor: 'pointer', opacity: isZero ? 0.55 : 1,
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <div style={{
-                    fontFamily: 'var(--font-display)', fontSize: '16px', fontWeight: 500,
-                    color: 'var(--text-primary)', marginBottom: '6px', lineHeight: 1.2,
-                  }}>
-                    {preset.name}
-                  </div>
-                  <div style={{
-                    fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '12px',
-                  }}>
-                    {preset.description}
-                  </div>
-                  <div style={{
-                    fontFamily: 'var(--font-mono)', fontSize: '12px',
-                    color: (count ?? 0) > 0 ? 'var(--text-secondary)' : 'var(--text-faint)',
-                  }}>
-                    {count != null ? `${count} setup${count !== 1 ? 's' : ''} today` : '…'}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ── Scanner Hub removed — sidebar lives in ScanView directly ──
 
 // ── Stage 2 Leaders results ───────────────────────────────────
 
@@ -979,6 +799,8 @@ function ScannerResults({ presetId }: { presetId: string }) {
 
   const { data: presets = SCAN_PRESETS } = useScanPresets();
   const preset = presets.find((p) => p.id === presetId);
+  const { data: allCountsData } = useAllScanCounts('combined');
+  const allCounts = allCountsData?.counts;
   const isNseOnly = preset?.universe === 'NSE_ONLY' && timeframe !== 'daily';
   const disabledExchangeOptions: ExchangeFilter[] = isNseOnly ? ['combined', 'BSE'] : [];
 
@@ -1017,41 +839,92 @@ function ScannerResults({ presetId }: { presetId: string }) {
     }
   };
 
-  // Redirect to landing if presetId is not recognized
-  useEffect(() => {
-    if (!preset) navigate('/scanner', { replace: true });
-  }, [preset, navigate]);
-
   if (!preset) return null;
 
-  // Shared header block reused for all presets including conviction_flow
+  // Category siblings for tab strip
+  const categoryPresets = preset.category
+    ? presets.filter((p) => p.category === preset.category)
+    : [];
+
+  // Shared header block reused for all presets
   const header = (
     <div style={{ paddingBottom: '0' }}>
-      {/* Breadcrumb */}
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => navigate('/scanner')}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '4px',
-            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            color: 'var(--text-muted)', fontSize: '13px',
-            fontFamily: 'var(--font-body)', transition: 'color 0.15s',
-          }}
-        >
-          <ChevronLeft style={{ width: '14px', height: '14px' }} />
-          Scanner
-        </button>
-      </div>
+
+      {/* Category tab strip */}
+      {categoryPresets.length > 1 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          marginBottom: '20px', flexWrap: 'wrap',
+        }}>
+          {categoryPresets.map((p) => {
+            const isActive = p.id === presetId;
+            const count = allCounts?.[p.id] ?? null;
+            return (
+              <button
+                key={p.id}
+                onClick={() => navigate(`/scanner/${p.id}`)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '5px 12px', borderRadius: '8px',
+                  border: `1px solid ${isActive ? preset.category_color : 'var(--border)'}`,
+                  background: isActive ? `${preset.category_color}18` : 'transparent',
+                  color: isActive ? preset.category_color : 'var(--text-muted)',
+                  fontSize: '12px', fontWeight: isActive ? 600 : 400,
+                  cursor: 'pointer', fontFamily: 'var(--font-body)',
+                  transition: 'all 0.15s', whiteSpace: 'nowrap',
+                }}
+              >
+                {p.name}
+                {count != null && (
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '10px',
+                    color: isActive ? preset.category_color : 'var(--text-faint)',
+                    opacity: 0.8,
+                  }}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Timeframe tabs — weekly/monthly on hold */}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '2px', padding: '3px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+            {(['daily', 'weekly', 'monthly'] as const).map((tf) => {
+              const isActiveTf = timeframe === tf;
+              const isDisabled = tf !== 'daily';
+              return (
+                <button
+                  key={tf}
+                  disabled={isDisabled}
+                  onClick={() => !isDisabled && navigate(`/scanner/${presetId}?timeframe=${tf}`)}
+                  style={{
+                    padding: '4px 10px', borderRadius: '6px', border: 'none',
+                    background: isActiveTf ? 'rgba(255,255,255,0.06)' : 'transparent',
+                    color: isActiveTf ? 'var(--text-primary)' : 'var(--text-faint)',
+                    fontSize: '11px', fontWeight: 500,
+                    fontFamily: 'var(--font-body)',
+                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                    opacity: isDisabled ? 0.4 : 1,
+                    transition: 'all 0.15s',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {tf}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{
           fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
           letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px',
           color: 'var(--text-primary)',
         }}>
-          {preset.name}{' '}
-          <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
-            · {timeframe === 'weekly' ? 'Weekly' : timeframe === 'monthly' ? 'Monthly' : 'Daily'}
-          </em>
+          {preset.name}
         </h1>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
           {preset.description}
@@ -1121,22 +994,6 @@ function ScannerResults({ presetId }: { presetId: string }) {
 
   return (
     <div style={{ paddingBottom: '100px' }}>
-      {/* Breadcrumb */}
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => navigate('/scanner')}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '4px',
-            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            color: 'var(--text-muted)', fontSize: '13px',
-            fontFamily: 'var(--font-body)', transition: 'color 0.15s',
-          }}
-        >
-          <ChevronLeft style={{ width: '14px', height: '14px' }} />
-          Scanner
-        </button>
-      </div>
-
       {/* Heading */}
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{
@@ -1214,6 +1071,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
       ) : viewMode === 'table' ? (
         sorted.length > 0 ? (
           <ScanTable
+            key={presetId}
             stocks={sorted}
             presetId={presetId}
             onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
@@ -1310,12 +1168,120 @@ function ScannerResults({ presetId }: { presetId: string }) {
   );
 }
 
-// ── Router dispatch ───────────────────────────────────────────
+// ── Router dispatch — sidebar always visible ──────────────────
 
 import React from 'react';
 
 export default function ScanView() {
   const { presetId } = useParams<{ presetId?: string }>();
-  if (!presetId) return <ScannerHub />;
-  return <ScannerResults presetId={presetId} />;
+  const navigate = useNavigate();
+  const { data: presets = SCAN_PRESETS } = useScanPresets();
+  const { data: allCountsData } = useAllScanCounts('combined');
+  const allCounts = allCountsData?.counts;
+
+  // Build category groups
+  const categories = useMemo(() => {
+    const map = new Map<string, {
+      label: string; color: string; sort: number;
+      presets: ScanDefinition[];
+      defaultPreset: ScanDefinition | undefined;
+    }>();
+    for (const p of presets) {
+      if (!p.category) continue;
+      if (!map.has(p.category)) {
+        map.set(p.category, { label: p.category_label, color: p.category_color, sort: p.category_sort, presets: [], defaultPreset: undefined });
+      }
+      const entry = map.get(p.category)!;
+      entry.presets.push(p);
+      if (p.is_default_tab) entry.defaultPreset = p;
+    }
+    return [...map.entries()]
+      .sort(([, a], [, b]) => a.sort - b.sort)
+      .map(([id, val]) => ({ id, ...val }));
+  }, [presets]);
+
+  // Auto-navigate to first category default tab when URL has no presetId
+  useEffect(() => {
+    if (!presetId && categories.length > 0) {
+      const first = categories[0];
+      const target = first.defaultPreset ?? first.presets[0];
+      if (target) navigate(`/scanner/${target.id}`, { replace: true });
+    }
+  }, [presetId, categories, navigate]);
+
+  // Active category = derived from current URL presetId
+  const activePreset = presets.find((p) => p.id === presetId);
+  const activeCategoryId = activePreset?.category ?? '';
+
+  return (
+    <div style={{
+      display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden',
+      margin: '-24px', height: 'calc(100vh - 46px)',
+    }}>
+      {/* Left sidebar — always visible */}
+      <div style={{
+        width: '220px', minWidth: '220px',
+        background: 'var(--sidebar-bg, var(--card))',
+        borderRight: '1px solid var(--border)',
+        overflowY: 'auto', padding: '14px 0', flexShrink: 0,
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '10px',
+          letterSpacing: '1.5px', textTransform: 'uppercase',
+          color: 'var(--text-faint)', padding: '0 14px 10px',
+        }}>
+          Scanner
+        </div>
+        {categories.map((cat) => {
+          const defaultPreset = cat.defaultPreset ?? cat.presets[0];
+          const isActive = cat.id === activeCategoryId;
+          // count = default tab count only (4a)
+          const catCount = defaultPreset ? (allCounts?.[defaultPreset.id] ?? 0) : 0;
+          return (
+            <div
+              key={cat.id}
+              onClick={() => defaultPreset && navigate(`/scanner/${defaultPreset.id}`)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 14px', cursor: 'pointer',
+                background: isActive ? 'rgba(240,165,0,0.06)' : 'transparent',
+                transition: 'background 0.15s',
+              }}
+            >
+              <span style={{
+                width: '7px', height: '7px', borderRadius: '50%',
+                background: cat.color, flexShrink: 0,
+              }} />
+              <span style={{
+                fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '11px',
+                letterSpacing: '0.8px', textTransform: 'uppercase', flex: 1,
+                color: isActive ? 'var(--gold)' : 'var(--text-muted)',
+              }}>
+                {cat.label}
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: '10px',
+                color: isActive ? 'var(--gold)' : 'var(--text-faint)',
+                background: isActive ? 'rgba(240,165,0,0.1)' : 'var(--bg3, rgba(255,255,255,0.04))',
+                padding: '1px 6px', borderRadius: '3px',
+              }}>
+                {catCount > 0 ? catCount : '—'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Right panel — scrollable content area */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+        {presetId ? (
+          <ScannerResults presetId={presetId} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <Loader2 style={{ width: '20px', height: '20px', color: 'var(--text-faint)', animation: 'spin 1s linear infinite' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

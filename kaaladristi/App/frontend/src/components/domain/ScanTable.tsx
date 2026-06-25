@@ -5,48 +5,13 @@ import { Tooltip } from '@/components/ui'
 import { ALL_FIELDS, formatValue, getColor, getFieldConfig, getLabel, getTooltip } from '@/config/fieldConfig'
 import { MiniTower } from '@/components/ui'
 import type React from 'react'
+import { SCAN_PRESETS } from '@/services/scanEngine'
+import { getFieldsForGroup } from '@/fieldAvailability'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-type PresetGroup = 'stage' | 'conviction' | 'breakout' | 'breakout_surge' | 'standard'
-
-// ── Preset groups & column sets ────────────────────────────────────────────────
+// ── Preset column overrides ─────────────────────────────────────────────────────
 
 // Per-preset column overrides for presets whose fetcher has a limited SELECT.
 const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {}
-
-const PRESET_GROUP: Record<string, PresetGroup> = {
-  stage_2_leaders:      'stage',
-  stage_2_watch:        'stage',
-  vani_opportunity:     'stage',
-  stage_3_watch:        'stage',
-  stage_4_leaders:      'stage',
-  vani_exit_watch:      'stage',
-  conviction_flow:      'conviction',
-  breakout_surge:       'breakout_surge',
-  power_buy:            'standard',
-  power_sell:           'standard',
-  smart_money:          'standard',
-  fresh_breakout:       'standard',
-  quiet_accumulation:   'standard',
-  distribution_warning: 'standard',
-}
-
-const DEFAULT_COLS: Record<PresetGroup, string[]> = {
-  stage:          ['symbol','close','pct_chng','magic_rs','rs_percentile','stage','rsi_14','rvol','pctBelow52wHigh','mcap_cr','flow_type','sniper_inst','rss_value','avg_amt_5d','avg_amt_22d'],
-  conviction:     ['symbol','close','pct_chng','delivery_surge_x','avg_amt_5d','avg_amt_22d','delivery_pct','rsi_14','ema_20','magic_rs'],
-  breakout:       ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir','avg_amt_5d','avg_amt_22d'],
-  breakout_surge: ['symbol','close','pct_chng','breakout_level','pct_from_breakout','rvol','rsi_14','magic_rs','stage','supertrend_dir','avg_amt_5d','avg_amt_22d'],
-  standard:       ['symbol','close','pct_chng','magic_rs','rvol','rsi_14','flow_type','sniper_inst','rss_value','accum_distrib','supertrend_dir','mcap_cr','avg_amt_5d','avg_amt_22d'],
-}
-
-const OPTIONAL_COLS: Record<PresetGroup, string[]> = {
-  stage:          ['sma_50','sma_200','supertrend_dir','accum_distrib','sniper_hot','w52_high','ema_20','avg_amt_66d'],
-  conviction:     ['ret_5d','ret_22d','ret_66d','mcap_cr','rss_value','sniper_inst','avg_amt_66d'],
-  breakout:       ['sniper_inst','rss_value','mcap_cr','avg_amt_66d'],
-  breakout_surge: ['sniper_inst','rss_value','ret_5d','ret_22d','ret_66d','mcap_cr','avg_amt_66d'],
-  standard:       ['sniper_hot','ema_20','avg_amt_66d'],
-}
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   stage_2_leaders:  { key: 'magic_rs',         dir: 'desc' },
@@ -91,7 +56,8 @@ interface ScanTableProps {
 }
 
 export default function ScanTable({ stocks, presetId, onRowClick }: ScanTableProps) {
-  const group: PresetGroup = PRESET_GROUP[presetId] ?? 'standard'
+  const preset = SCAN_PRESETS.find(p => p.id === presetId)
+  const { defaultCols: groupDefaultCols, optionalCols: groupOptionalCols } = getFieldsForGroup(preset?.category ?? '')
   const ds = getDefaultSort(presetId)
 
   const [sortKey, setSortKey]   = useState(ds.key)
@@ -99,13 +65,13 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
   const [gearOpen, setGearOpen] = useState(false)
   const gearRef = useRef<HTMLDivElement>(null)
 
-  const storageKey = `scan_cols:${presetId}`
+  const storageKey = `dristiq_cols_${presetId}`
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(storageKey)
       if (saved) return new Set<string>(JSON.parse(saved) as string[])
     } catch { /* ignore */ }
-    return new Set<string>()
+    return new Set<string>(groupOptionalCols)  // hide all optional cols by default
   })
 
   useEffect(() => {
@@ -122,8 +88,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
     return () => document.removeEventListener('mousedown', handle)
   }, [gearOpen])
 
-  const optionalCols  = OPTIONAL_COLS[group]
-  const defaultCols   = PRESET_COL_OVERRIDES[presetId] ?? DEFAULT_COLS[group]
+  const optionalCols  = groupOptionalCols
+  const defaultCols   = PRESET_COL_OVERRIDES[presetId] ?? groupDefaultCols
 
   // visible = default cols + optional cols not hidden, deduped
   const activeCols = [...defaultCols, ...optionalCols.filter(c => !hiddenCols.has(c))]
