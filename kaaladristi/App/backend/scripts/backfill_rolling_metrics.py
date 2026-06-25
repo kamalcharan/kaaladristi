@@ -314,21 +314,70 @@ def compute_rolling_metrics_for_date(db_conn, trade_date, verbose=False) -> int:
     return n
 
 
+def fetch_all_trade_dates(from_date: str | None = None, to_date: str | None = None) -> list[str]:
+    """Return all distinct trade_dates in km_equity_eod, ascending."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            filters = []
+            params = []
+            if from_date:
+                filters.append('trade_date >= %s')
+                params.append(from_date)
+            if to_date:
+                filters.append('trade_date <= %s')
+                params.append(to_date)
+            where = ('WHERE ' + ' AND '.join(filters)) if filters else ''
+            cur.execute(
+                f'SELECT DISTINCT trade_date FROM km_equity_eod {where} ORDER BY trade_date',
+                params,
+            )
+            return [str(r[0]) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--date', default=str(date.today()), help='Trade date YYYY-MM-DD (default: today)')
+    parser = argparse.ArgumentParser(
+        description='Backfill rolling metrics for km_equity_eod.',
+    )
+    parser.add_argument('--date', help='Single trade date YYYY-MM-DD (default: today)')
+    parser.add_argument('--all', action='store_true', dest='all_dates',
+                        help='Backfill every distinct trade_date in km_equity_eod')
+    parser.add_argument('--from', dest='from_date', metavar='YYYY-MM-DD',
+                        help='Start of date range (use with --all or alone)')
+    parser.add_argument('--to', dest='to_date', metavar='YYYY-MM-DD',
+                        help='End of date range (use with --all or alone)')
     parser.add_argument('--verify', action='store_true', help='Only verify, no update')
     args = parser.parse_args()
 
-    target_date = args.date
-
-    if args.verify:
-        verify(target_date)
-        return
-
-    verify(target_date)   # before
-    run_update(target_date)
-    verify(target_date)   # after
+    # Decide mode: single date vs. range/all
+    if args.all_dates or args.from_date or args.to_date:
+        dates = fetch_all_trade_dates(args.from_date, args.to_date)
+        if not dates:
+            print('No trade dates found in km_equity_eod for the given range.')
+            return
+        print(f'\n[backfill] {len(dates)} trade dates to process '
+              f'({dates[0]} → {dates[-1]})')
+        total_updated = 0
+        for i, d in enumerate(dates, 1):
+            print(f'\n[{i}/{len(dates)}] {d}')
+            if args.verify:
+                verify(d)
+            else:
+                n = run_update(d)
+                total_updated += n
+                print(f'  cumulative rows updated: {total_updated}')
+        if not args.verify:
+            print(f'\n✓ Done. {total_updated} total rows updated across {len(dates)} dates.')
+    else:
+        target_date = args.date or str(date.today())
+        if args.verify:
+            verify(target_date)
+            return
+        verify(target_date)   # before
+        run_update(target_date)
+        verify(target_date)   # after
 
 
 if __name__ == '__main__':

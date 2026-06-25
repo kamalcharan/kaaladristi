@@ -157,8 +157,16 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
 
   const activeIds = (symbolRes.data ?? []).map((s: any) => s.id as number);
 
+  // Phase 1b: resolve the latest fully-complete trading date from km_trading_calendar.
+  // status = 'completed' is set only after the pipeline finishes writing all rows,
+  // so this is immune to mid-pipeline partial ingestion that would otherwise cause
+  // latestDate to point at an incomplete date with ~4000 rows instead of ~5345.
+  const completedDates = await fetchRecentDates(1);
+  const confirmedLatestDate: string | null = completedDates[0] ?? null;
+
   // Phase 2: fetch everything else in parallel.
   // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
+  // Upper-bound each chunk with confirmedLatestDate to exclude any partially-ingested rows.
   const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage,score_5d,score_22d,pct_5d,pct_22d,pct_66d,avg_amt_66d,surge_22d,ret_5d,ret_22d,ret_66d,breakout_level,pct_from_breakout,pct_below_52w_high,deliv_value_cr';
   console.log('[loadDailyBundle] EOD_COLS select:', EOD_COLS);
   const CHUNK = 400;
@@ -173,15 +181,16 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
       .limit(1000)
       .execute(),
 
-    ...idChunks.map((chunk) =>
-      from('km_equity_eod')
+    ...idChunks.map((chunk) => {
+      let q = from('km_equity_eod')
         .select(EOD_COLS)
         .in('equity_id', chunk)
         .gte('trade_date', eodCutoff)
         .order('trade_date', { ascending: false })
-        .limit(50000)
-        .execute(),
-    ),
+        .limit(50000);
+      if (confirmedLatestDate) q = (q as any).lte('trade_date', confirmedLatestDate);
+      return (q as any).execute();
+    }),
 
     from('km_index_symbols').select('id,name').execute(),
 
@@ -202,10 +211,10 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   const eodChunkRes    = rest.slice(0, rest.length - 3) as Array<{ data: any }>;
   const eodRes         = { data: eodChunkRes.flatMap((r) => r.data ?? []) };
 
-  // Derive latestDate from actual loaded equity rows.
-  // Each chunk is sorted DESC independently, so we take the max across chunk heads.
+  // Use the confirmed latest complete date from km_trading_calendar.
+  // Falls back to max of loaded chunk heads only if km_trading_calendar returned no rows.
   const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
-  const latestDate: string | null = eodChunkRes.reduce((max: string | null, chunk: any) => {
+  const latestDate: string | null = confirmedLatestDate ?? eodChunkRes.reduce((max: string | null, chunk: any) => {
     const d: string | undefined = chunk.data?.[0]?.trade_date;
     return d && (!max || d > max) ? d : max;
   }, null);
@@ -1107,13 +1116,9 @@ function scanBreakoutSurge(bundle: ScanDataBundle): ScanStock[] {
  *  VaNi = is_vani_s2 from DB. ISIN-deduped (NSE preferred).
  */
 async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  // 1. Get latest trade date
-  const { data: dateRows } = await from('km_equity_eod')
-    .select('trade_date')
-    .order('trade_date', { ascending: false })
-    .limit(1)
-    .execute();
-  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  // Use km_trading_calendar completed dates — immune to mid-pipeline partial ingestion.
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
   if (!latestDate) return [];
 
   // 2. Fetch all S2 stocks with embedded symbol data
@@ -1227,12 +1232,8 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
 
 /** Scan: Stage 2 Watch — S2_CANDIDATE stocks with MA stacking, not yet extended. */
 async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const { data: dateRows } = await from('km_equity_eod')
-    .select('trade_date')
-    .order('trade_date', { ascending: false })
-    .limit(1)
-    .execute();
-  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
   if (!latestDate) return [];
 
   const { data: rows } = await from('km_equity_eod')
@@ -1330,12 +1331,8 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
 
 /** Scan: VaNi Opportunity — S2 confirmed + RS percentile > 80 + Alpha Edge. Top 25. */
 async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const { data: dateRows } = await from('km_equity_eod')
-    .select('trade_date')
-    .order('trade_date', { ascending: false })
-    .limit(1)
-    .execute();
-  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
   if (!latestDate) return [];
 
   const { data: rows } = await from('km_equity_eod')
@@ -1424,12 +1421,8 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
 
 /** Scan: Stage 4 Leaders — death cross confirmed, sorted weakest RS first. */
 async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const { data: dateRows } = await from('km_equity_eod')
-    .select('trade_date')
-    .order('trade_date', { ascending: false })
-    .limit(1)
-    .execute();
-  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
   if (!latestDate) return [];
 
   const { data: rows } = await from('km_equity_eod')
@@ -1551,12 +1544,8 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
 
 /** Scan: Stage 3 Watch — above SMA200, SMA50 converging. Sorted by closeness to death cross. */
 async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const { data: dateRows } = await from('km_equity_eod')
-    .select('trade_date')
-    .order('trade_date', { ascending: false })
-    .limit(1)
-    .execute();
-  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
   if (!latestDate) return [];
 
   const { data: rows } = await from('km_equity_eod')
@@ -1670,12 +1659,8 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
 
 /** Scan: VaNi Exit Watch — Stage 4 + RS percentile < 20. Bottom 25 weakest. */
 async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const { data: dateRows } = await from('km_equity_eod')
-    .select('trade_date')
-    .order('trade_date', { ascending: false })
-    .limit(1)
-    .execute();
-  const latestDate: string | null = (dateRows as any[])?.[0]?.trade_date ?? null;
+  const completedDates = await fetchRecentDates(1);
+  const latestDate: string | null = completedDates[0] ?? null;
   if (!latestDate) return [];
 
   const { data: rows } = await from('km_equity_eod')
