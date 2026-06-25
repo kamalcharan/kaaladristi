@@ -97,8 +97,8 @@ async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
   try {
     const res = await fetch(`${PIPELINE_URL}/api/vani-opportunity/config`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const configs = (await res.json()) as VaniOpportunityConfig[];
-    console.log('[scanEngine] raw API configs:', configs.map(c => ({ name: c.config_name, presets: c.applies_to_presets })));
+    const raw = await res.json();
+    const configs = Array.isArray(raw) ? raw as VaniOpportunityConfig[] : [];
     for (const cfg of configs) {
       const p = cfg.parameters;
       const opp: OppConfig = {
@@ -112,7 +112,6 @@ async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
         map.set(presetId, opp);
       }
     }
-    console.log('[scanEngine] oppConfig map keys:', [...map.keys()]);
   } catch (e) {
     console.warn('[scanEngine] config fetch failed, using defaults:', e);
     for (const preset of SCAN_PRESETS) {
