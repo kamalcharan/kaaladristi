@@ -7,7 +7,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronUp, ChevronDown } from 'lucide-react';
 import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS } from '@/constants/signalScale';
@@ -16,7 +16,7 @@ import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol } from '@/lib/symbolUtils';
 import type { SectorIndexRow } from '@/services/sectorRotation';
 
-// ── Signal (mirrors SectorRotationTable) ──────────────────────────────────────
+// ── Signal ────────────────────────────────────────────────────────────────────
 
 type SignalType = 'flow_entering' | 'flow_exiting' | 'sustained_flow' | null;
 
@@ -47,11 +47,17 @@ const SIGNAL_STYLE: Record<NonNullable<SignalType>, { color: string; bg: string;
   sustained_flow: { color: 'var(--gold)',  bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' },
 };
 
+const SIGNAL_CONDITIONS: Record<NonNullable<SignalType>, string[]> = {
+  flow_entering:  ['5D return positive', 'Score 5D above Score 22D', 'Delivery amount up >15% vs 22D avg'],
+  flow_exiting:   ['5D return negative', 'Score 5D below Score 22D', 'Delivery amount down >15% vs 22D avg'],
+  sustained_flow: ['22D return above 5%', 'RSI 14 above 55'],
+};
+
 const CATEGORY_LABELS: Record<string, string> = {
-  'index':                'Index',
-  'broad market index':   'Broad Market',
-  'sectoral index':       'Sectoral',
-  'thematic market index':'Thematic',
+  'index':                 'Index',
+  'broad market index':    'Broad Market',
+  'sectoral index':        'Sectoral',
+  'thematic market index': 'Thematic',
 };
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
@@ -104,29 +110,116 @@ function MetricCell({ label, value, color }: { label: string; value: string; col
   );
 }
 
+// ── Signal explanation card ───────────────────────────────────────────────────
+
+function SignalCard({ row }: { row: SectorIndexRow }) {
+  const signal = computeSignal(row);
+  const signalStyle = signal ? SIGNAL_STYLE[signal] : null;
+  const signalLabel = signal ? (FLOW_LABELS[signal]?.label ?? signal) : null;
+  const conditions = signal ? SIGNAL_CONDITIONS[signal] : null;
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${signal && signalStyle ? signalStyle.border : 'var(--border)'}`,
+        borderRadius: 8,
+        background: signal && signalStyle ? signalStyle.bg : 'var(--card)',
+        padding: '14px 16px',
+        marginBottom: 20,
+      }}
+    >
+      {signal && signalStyle ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span
+              style={{
+                ...MONO,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.07em',
+                textTransform: 'uppercase',
+                color: signalStyle.color,
+              }}
+            >
+              {signalLabel}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {conditions!.map((c) => (
+              <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: signalStyle.color, flexShrink: 0, opacity: 0.8 }} />
+                <span style={{ ...MONO, fontSize: 11, color: 'var(--text-secondary)' }}>{c}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>
+          No confluence signal today
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Constituent table ─────────────────────────────────────────────────────────
 
+type SortKey = 'weight_pct' | 'score_5d' | 'pct_chng' | 'rsi_14' | 'magic_rs';
+type SortDir = 'asc' | 'desc';
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (col !== sortKey) return <ChevronDown size={10} style={{ opacity: 0.25, marginLeft: 2 }} />;
+  return sortDir === 'desc'
+    ? <ChevronDown size={10} style={{ opacity: 0.8, marginLeft: 2, color: 'var(--gold-soft)' }} />
+    : <ChevronUp size={10} style={{ opacity: 0.8, marginLeft: 2, color: 'var(--gold-soft)' }} />;
+}
+
 function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: string }) {
+  const [sortKey, setSortKey] = useState<SortKey>('score_5d');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+
   const { data: constituents, isLoading: consLoading } = useIndexConstituents(indexId);
 
-  const sortedIds = useMemo(() => {
-    if (!constituents) return [];
-    return [...constituents]
-      .sort((a, b) => (b.weight_pct ?? 0) - (a.weight_pct ?? 0))
-      .map((c) => c.equity_id);
+  const weightMap = useMemo(() => {
+    if (!constituents) return new Map<number, number | null>();
+    return new Map(constituents.map((c) => [c.equity_id, c.weight_pct ?? null]));
   }, [constituents]);
 
-  const { data: details, isLoading: detailLoading } = useConstituentDetails(sortedIds, tradeDate);
+  const equityIds = useMemo(() => {
+    if (!constituents) return [];
+    return constituents.map((c) => c.equity_id);
+  }, [constituents]);
+
+  const { data: details, isLoading: detailLoading } = useConstituentDetails(equityIds, tradeDate);
 
   const isLoading = consLoading || detailLoading;
 
   const rows = useMemo(() => {
-    if (!details || sortedIds.length === 0) return [];
-    const map = new Map(details.map((d) => [d.equity_id, d]));
-    return sortedIds.map((id) => map.get(id)).filter(Boolean) as typeof details;
-  }, [details, sortedIds]);
+    if (!details || equityIds.length === 0) return [];
+    return details.map((d) => ({
+      ...d,
+      weight_pct: weightMap.get(d.equity_id) ?? null,
+    }));
+  }, [details, equityIds, weightMap]);
 
-  const thStyle: React.CSSProperties = {
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const av = a[sortKey] ?? -Infinity;
+      const bv = b[sortKey] ?? -Infinity;
+      return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number);
+    });
+  }, [rows, sortKey, sortDir]);
+
+  function handleSort(col: SortKey) {
+    if (col === sortKey) {
+      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSortKey(col);
+      setSortDir('desc');
+    }
+  }
+
+  const thBase: React.CSSProperties = {
     ...MONO,
     fontSize: 10,
     fontWeight: 600,
@@ -137,13 +230,19 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
     background: 'var(--card)',
     borderBottom: '1px solid var(--border)',
     whiteSpace: 'nowrap',
+    userSelect: 'none',
+  };
+
+  const thSortable: React.CSSProperties = {
+    ...thBase,
+    cursor: 'pointer',
   };
 
   if (isLoading) {
     return <DristiQLoader message="Loading constituents…" />;
   }
 
-  if (rows.length === 0) {
+  if (sortedRows.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center' }}>
         <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>No constituent data</span>
@@ -153,27 +252,58 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table
-        style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-        }}
-      >
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
         <thead>
           <tr>
-            <th style={{ ...thStyle, textAlign: 'left' }}>#</th>
-            <th style={{ ...thStyle, textAlign: 'left', width: 110 }}>Symbol</th>
-            <th style={{ ...thStyle, textAlign: 'left' }}>Company</th>
-            <th style={{ ...thStyle, textAlign: 'left', width: 130 }}>Flow</th>
-            <th style={{ ...thStyle, textAlign: 'right', width: 64 }}>RSI</th>
-            <th style={{ ...thStyle, textAlign: 'right', width: 72 }}>Score 5D</th>
-            <th style={{ ...thStyle, textAlign: 'right', width: 80 }}>Magic RS</th>
+            <th style={{ ...thBase, textAlign: 'left', width: 36 }}>#</th>
+            <th style={{ ...thBase, textAlign: 'left', width: 110 }}>Symbol</th>
+            <th style={{ ...thBase, textAlign: 'left' }}>Company</th>
+            <th
+              style={{ ...thSortable, textAlign: 'right', width: 60 }}
+              onClick={() => handleSort('weight_pct')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                Wt %<SortIcon col="weight_pct" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
+            <th
+              style={{ ...thSortable, textAlign: 'right', width: 72 }}
+              onClick={() => handleSort('pct_chng')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                % Chg<SortIcon col="pct_chng" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thBase, textAlign: 'left', width: 130 }}>Flow</th>
+            <th
+              style={{ ...thSortable, textAlign: 'right', width: 60 }}
+              onClick={() => handleSort('rsi_14')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                RSI<SortIcon col="rsi_14" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th
+              style={{ ...thSortable, textAlign: 'right', width: 76 }}
+              onClick={() => handleSort('score_5d')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                Score 5D<SortIcon col="score_5d" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th
+              style={{ ...thSortable, textAlign: 'right', width: 80 }}
+              onClick={() => handleSort('magic_rs')}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                Magic RS<SortIcon col="magic_rs" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => {
+          {sortedRows.map((row, i) => {
             const isEven = i % 2 === 0;
             const flowInfo = row.flow_type ? (FLOW_LABELS[row.flow_type] ?? { label: row.flow_type, color: 'text-muted' }) : null;
             const flowColorVar = flowInfo?.color.replace('text-', '').replace('risk-', '--');
@@ -185,14 +315,21 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                   borderBottom: '1px solid rgba(255,255,255,0.04)',
                 }}
               >
-                <td style={{ padding: '9px 12px', color: 'var(--text-faint)', width: 36 }}>
-                  {i + 1}
-                </td>
+                <td style={{ padding: '9px 12px', color: 'var(--text-faint)' }}>{i + 1}</td>
                 <td style={{ padding: '9px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                   {displaySymbol({ symbol: row.symbol, company_name: row.company_name })}
                 </td>
-                <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>
+                <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
                   {row.company_name}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-faint)' }}>
+                  {row.weight_pct != null ? row.weight_pct.toFixed(2) + '%' : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                  {row.close != null ? '₹' + row.close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
+                  {fmtPct(row.pct_chng)}
                 </td>
                 <td style={{ padding: '9px 12px' }}>
                   {flowInfo ? (
@@ -202,7 +339,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                         fontWeight: 500,
                         padding: '2px 6px',
                         borderRadius: 3,
-                        background: 'var(--card-alt, rgba(255,255,255,0.05))',
+                        background: 'rgba(255,255,255,0.05)',
                         color: `var(${flowColorVar}, var(--text-secondary))`,
                         whiteSpace: 'nowrap',
                       }}
@@ -220,7 +357,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                   {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                  {row.magic_rs != null ? row.magic_rs.toFixed(1) : '—'}
+                  {row.magic_rs != null ? fmt(row.magic_rs, 1) : '—'}
                 </td>
               </tr>
             );
@@ -241,48 +378,26 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
       ? ((row.avg_amt_5d - row.avg_amt_22d) / row.avg_amt_22d) * 100
       : null;
 
-  const signal = computeSignal(row);
-  const signalStyle = signal ? SIGNAL_STYLE[signal] : null;
-  const signalLabel = signal ? (FLOW_LABELS[signal]?.label ?? signal) : null;
-
   const metrics: Array<{ label: string; value: string; color?: string }> = [
-    { label: 'Close',      value: '₹' + (row.close ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }), color: 'var(--text-primary)' },
-    { label: '% Chg',      value: fmtPct(row.pct_chng),    color: pctColor(row.pct_chng) },
-    { label: 'RSI 14',     value: fmt(row.rsi_14, 1),       color: rsiColor(row.rsi_14) },
-    { label: '5D Return',  value: fmtPct(row.ret_5d),       color: pctColor(row.ret_5d) },
-    { label: '22D Return', value: fmtPct(row.ret_22d),      color: pctColor(row.ret_22d) },
-    { label: '66D Return', value: fmtPct(row.ret_66d),      color: pctColor(row.ret_66d) },
-    { label: 'Score 5D',   value: fmt(row.score_5d, 1),     color: scoreColor(row.score_5d) },
-    { label: 'Score 22D',  value: fmt(row.score_22d, 1),    color: scoreColor(row.score_22d) },
-    { label: 'Avg Amt 5D', value: row.avg_amt_5d != null ? `${row.avg_amt_5d.toFixed(1)} Cr` : '—' },
-    { label: 'Avg Amt 22D',value: row.avg_amt_22d != null ? `${row.avg_amt_22d.toFixed(1)} Cr` : '—' },
-    { label: '% Amt Chg',  value: fmtPct(pctAmtChg),       color: pctColor(pctAmtChg) },
-    { label: 'Magic RS',   value: fmt(row.magic_rs, 1) },
+    { label: 'Close',       value: '₹' + (row.close ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }), color: 'var(--text-primary)' },
+    { label: '% Chg',       value: fmtPct(row.pct_chng),    color: pctColor(row.pct_chng) },
+    { label: 'RSI 14',      value: fmt(row.rsi_14, 1),       color: rsiColor(row.rsi_14) },
+    { label: '5D Return',   value: fmtPct(row.ret_5d),       color: pctColor(row.ret_5d) },
+    { label: '22D Return',  value: fmtPct(row.ret_22d),      color: pctColor(row.ret_22d) },
+    { label: '66D Return',  value: fmtPct(row.ret_66d),      color: pctColor(row.ret_66d) },
+    { label: 'Score 5D',    value: fmt(row.score_5d, 1),     color: scoreColor(row.score_5d) },
+    { label: 'Score 22D',   value: fmt(row.score_22d, 1),    color: scoreColor(row.score_22d) },
+    { label: 'Avg Amt 5D',  value: row.avg_amt_5d != null ? `${row.avg_amt_5d.toFixed(1)} Cr` : '—' },
+    { label: 'Avg Amt 22D', value: row.avg_amt_22d != null ? `${row.avg_amt_22d.toFixed(1)} Cr` : '—' },
+    { label: '% Amt Chg',   value: fmtPct(pctAmtChg),       color: pctColor(pctAmtChg) },
+    { label: 'Magic RS',    value: fmt(row.magic_rs, 1) },
   ];
 
   return (
-    <div style={{ padding: '24px', maxWidth: 860 }}>
-      {/* Signal badge */}
-      {signal && signalStyle && (
-        <div style={{ marginBottom: 18 }}>
-          <span
-            style={{
-              ...MONO,
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: signalStyle.color,
-              background: signalStyle.bg,
-              border: `1px solid ${signalStyle.border}`,
-              borderRadius: 4,
-              padding: '4px 12px',
-            }}
-          >
-            {signalLabel}
-          </span>
-        </div>
-      )}
+    <div style={{ padding: '24px', maxWidth: 900 }}>
+
+      {/* Signal explanation */}
+      <SignalCard row={row} />
 
       {/* Metrics grid */}
       <div
@@ -349,13 +464,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
       </div>
 
       {/* Constituents */}
-      <div
-        style={{
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          overflow: 'hidden',
-        }}
-      >
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
         <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
           <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
             Constituents
@@ -439,16 +548,7 @@ export default function IndexDetailPage() {
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <h1
-            style={{
-              ...MONO,
-              margin: 0,
-              fontSize: 18,
-              fontWeight: 700,
-              color: 'var(--text-primary)',
-              letterSpacing: '-0.01em',
-            }}
-          >
+          <h1 style={{ ...MONO, margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
             {row.name}
           </h1>
           {catLabel && (
@@ -467,7 +567,22 @@ export default function IndexDetailPage() {
               {catLabel}
             </span>
           )}
-          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', marginLeft: 'auto' }}>
+          {row.stock_count != null && row.stock_count > 0 && (
+            <span
+              style={{
+                ...MONO,
+                fontSize: 9,
+                letterSpacing: '0.06em',
+                color: 'var(--text-faint)',
+                background: 'rgba(255,255,255,0.05)',
+                borderRadius: 3,
+                padding: '1px 6px',
+              }}
+            >
+              {row.stock_count} stocks
+            </span>
+          )}
+          <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
             {row.trade_date}
           </span>
         </div>
@@ -516,7 +631,7 @@ export default function IndexDetailPage() {
         {activeTab === 'overview' && <OverviewTab row={row} indexId={indexId!} />}
         {activeTab === 'chart' && (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-            <span style={{ ...MONO, fontSize: 13, color: 'var(--text-faint)' }}>Coming soon</span>
+            <span style={{ ...MONO, fontSize: 13, color: 'var(--text-faint)' }}>Chart view coming in SR-F9</span>
           </div>
         )}
       </div>
