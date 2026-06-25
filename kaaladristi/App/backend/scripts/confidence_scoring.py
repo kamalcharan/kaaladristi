@@ -1,12 +1,18 @@
-import os, psycopg2, psycopg2.extras, json
+import os
+import sys
+import psycopg2
+import psycopg2.extras
+import json
 from datetime import date
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from lib.config import DATABASE_URL
+
+
 def get_conn():
-    return psycopg2.connect(
-        host="187.127.136.65", port=5432,
-        dbname="kaala_dristi_db", user="postgres",
-        password=os.environ["KD_DB_PASSWORD"]
-    )
+    if not DATABASE_URL:
+        raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
+    return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 NIFTY_SYMBOL = "NIFTY 50"
 

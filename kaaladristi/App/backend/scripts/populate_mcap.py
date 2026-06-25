@@ -56,6 +56,9 @@ def _load_env():
 
 _load_env()
 
+sys.path.insert(0, _BACKEND_DIR)
+from lib.config import DATABASE_URL
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 NSE_QUOTE_BASE  = 'https://www.nseindia.com/api/quote-equity'
@@ -75,22 +78,11 @@ BSE_COOLDOWN    = 15
 # ── DB connection ─────────────────────────────────────────────────────────────
 
 def get_conn():
-    dsn = (
-        os.getenv('DB_PRIMARY', '').strip() or
-        os.getenv('DATABASE_URL', '').strip()
-    )
-    if dsn:
-        return psycopg2.connect(dsn)
-    password = os.getenv('KD_DB_PASSWORD', '').strip()
-    if not password:
+    if not DATABASE_URL:
         print('ERROR: No DB connection found.')
         print('  Set DB_PRIMARY in App/.env')
         sys.exit(1)
-    return psycopg2.connect(
-        host='187.127.136.65', port=5432,
-        dbname='kaala_dristi_db', user='postgres',
-        password=password,
-    )
+    return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
