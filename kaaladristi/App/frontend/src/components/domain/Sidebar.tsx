@@ -14,9 +14,10 @@ const navSections: NavSection[] = [
   {
     heading: 'View',
     items: [
-      { to: '/workspace',      glyph: '⊞', label: 'Workspace' },
-      { to: '/catalog',        glyph: '⊟', label: 'Catalog' },
-      { to: '/dashboard',      glyph: '◉', label: 'Dashboard' },
+      { to: '/workspace',        glyph: '⊞', label: 'Workspace' },
+      { to: '/catalog',          glyph: '⊟', label: 'Catalog' },
+      { to: '/sector-rotation',  glyph: '⇌', label: 'Sector Rotation' },
+      { to: '/dashboard',        glyph: '◉', label: 'Dashboard' },
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
       { to: '/planetary-intel', glyph: '☽', label: 'Planetary Intel' },
