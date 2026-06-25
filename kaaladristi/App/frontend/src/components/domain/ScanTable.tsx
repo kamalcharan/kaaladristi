@@ -187,7 +187,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       <div style={{
         overflowX: 'auto',
         overflowY: 'auto',
-        maxHeight: 'calc(100vh - 180px)',
+        maxHeight: 'calc(100vh - 310px)',
         width: '100%',
         WebkitOverflowScrolling: 'touch',
         border: '1px solid var(--border)',
@@ -243,8 +243,18 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                 key={stock.equity_id}
                 onClick={() => onRowClick(stock)}
                 style={{ cursor: 'pointer', height: 40 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                onMouseEnter={e => {
+                  const row = e.currentTarget as HTMLElement
+                  row.style.background = 'var(--accent-glow)'
+                  const sticky = row.querySelector<HTMLElement>('[data-sticky]')
+                  if (sticky) sticky.style.background = 'var(--accent-glow)'
+                }}
+                onMouseLeave={e => {
+                  const row = e.currentTarget as HTMLElement
+                  row.style.background = 'transparent'
+                  const sticky = row.querySelector<HTMLElement>('[data-sticky]')
+                  if (sticky) sticky.style.background = 'var(--card)'
+                }}
               >
                 {activeCols.map(colKey => {
                   if (colKey === 'symbol') {
@@ -257,12 +267,14 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                     return (
                       <td
                         key="symbol"
+                        data-sticky
                         style={{
                           position: 'sticky', left: 0, zIndex: 2,
-                          background: 'inherit',
+                          background: 'var(--card)',
                           padding: '0 10px',
                           width: 130, minWidth: 130,
                           borderBottom: '1px solid rgba(99,102,241,0.05)',
+                          borderRight: '1px solid var(--border)',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
