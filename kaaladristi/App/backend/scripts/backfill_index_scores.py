@@ -5,8 +5,8 @@ Calls compute_all_index_scores() for all historical dates.
 Run AFTER km_migration_113 has been applied.
 
 Usage:
-    KD_DB_PASSWORD=<password> python3 backfill_index_scores.py
-    KD_DB_PASSWORD=<password> python3 backfill_index_scores.py --verify
+    python3 backfill_index_scores.py
+    python3 backfill_index_scores.py --verify
 """
 
 import os
@@ -14,21 +14,14 @@ import sys
 import psycopg2
 import psycopg2.extras
 
-DB_HOST = "187.127.136.65"
-DB_PORT = 5432
-DB_NAME = "kaala_dristi_db"
-DB_USER = "kd_app"
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from lib.config import DATABASE_URL
 
 
 def get_conn():
-    password = os.environ.get("KD_DB_PASSWORD")
-    if not password:
-        print("ERROR: KD_DB_PASSWORD env var not set")
-        sys.exit(1)
-    return psycopg2.connect(
-        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
-        user=DB_USER, password=password
-    )
+    if not DATABASE_URL:
+        raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
+    return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
 def run_backfill(conn):

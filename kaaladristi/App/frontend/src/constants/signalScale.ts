@@ -75,12 +75,17 @@ export const ZONE_LABELS: Record<string, { label: string; color: string }> = {
 // ── 3. Flow Types (UPPER_SNAKE — as stored in DB) ─────────────────────────────
 
 export const FLOW_LABELS: Record<string, { label: string; color: string }> = {
+  // DB-computed flow_type values (UPPER_SNAKE)
   FRESH_LONGS:      { label: 'Fresh Longs',      color: 'text-risk-green' },
   FRESH_SHORTS:     { label: 'Fresh Shorts',     color: 'text-risk-red' },
   SHORT_COVERING:   { label: 'Short Covering',   color: 'text-risk-amber' },
   LONG_LIQUIDATION: { label: 'Long Liquidation', color: 'text-risk-red/80' },
   LOW_VOLUME:       { label: 'Low Volume',        color: 'text-muted' },
   MIXED:            { label: 'Mixed',             color: 'text-muted' },
+  // Sector rotation signals (frontend-computed)
+  flow_entering:    { label: 'Flow Entering',    color: 'text-risk-green' },
+  flow_exiting:     { label: 'Flow Exiting',     color: 'text-risk-red' },
+  sustained_flow:   { label: 'Sustained Flow',   color: 'text-risk-amber' },
 };
 
 export function flowLabel(flowType: string | null | undefined): { label: string; color: string } {

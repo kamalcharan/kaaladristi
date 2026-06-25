@@ -13,9 +13,10 @@
  * Uses fieldConfig for all shared field labels, formatters, and colors.
  */
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { formatValue, getColor } from '@/config/fieldConfig';
+import { FLOW_LABELS } from '@/constants/signalScale';
 import type { SectorIndexRow } from '@/services/sectorRotation';
 
 // ── Signal logic (spec Section 5) ────────────────────────────────────────────
@@ -47,11 +48,9 @@ function computeSignal(row: SectorIndexRow): SignalType {
   return null;
 }
 
-const SIGNAL_LABEL: Record<NonNullable<SignalType>, string> = {
-  flow_entering:  'Flow Entering',
-  flow_exiting:   'Flow Exiting',
-  sustained_flow: 'Sustained Flow',
-};
+// Labels sourced from canonical FLOW_LABELS in signalScale.ts
+const signalLabel = (sig: NonNullable<SignalType>): string =>
+  FLOW_LABELS[sig]?.label ?? sig;
 
 const SIGNAL_STYLE: Record<NonNullable<SignalType>, { color: string; bg: string; border: string }> = {
   flow_entering:  { color: 'var(--bull)',  bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.3)' },
@@ -185,6 +184,52 @@ const COLS: ColDef[] = [
   },
 ];
 
+// ── Optional columns ──────────────────────────────────────────────────────────
+
+type OptKey = 'open' | 'high' | 'low' | 'volume' | 'value_cr' | 'magic_rs' | 'avg_amt_66d';
+
+interface OptColDef {
+  key: OptKey;
+  label: string;
+  tooltip: string;
+  width: number;
+  align: 'left' | 'right';
+  render: (row: SectorIndexRow) => string;
+  color?: (row: SectorIndexRow) => string;
+}
+
+const OPT_COLS: OptColDef[] = [
+  {
+    key: 'open', label: 'Open', tooltip: 'Open price (₹)', width: 90, align: 'right',
+    render: (r) => r.open != null ? '₹' + r.open.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
+  },
+  {
+    key: 'high', label: 'High', tooltip: 'Day high (₹)', width: 90, align: 'right',
+    render: (r) => r.high != null ? '₹' + r.high.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
+  },
+  {
+    key: 'low', label: 'Low', tooltip: 'Day low (₹)', width: 90, align: 'right',
+    render: (r) => r.low != null ? '₹' + r.low.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
+  },
+  {
+    key: 'volume', label: 'Volume', tooltip: 'Volume (contracts)', width: 100, align: 'right',
+    render: (r) => r.volume != null ? r.volume.toLocaleString('en-IN') : '—',
+  },
+  {
+    key: 'value_cr', label: 'Turnover', tooltip: 'Turnover (₹ Cr)', width: 95, align: 'right',
+    render: (r) => r.value_cr != null ? `₹${r.value_cr.toFixed(1)} Cr` : '—',
+  },
+  {
+    key: 'magic_rs', label: 'Magic RS', tooltip: 'Magic RS — relative strength vs CNX500', width: 90, align: 'right',
+    render: (r) => r.magic_rs != null ? formatValue('magic_rs', r.magic_rs) : '—',
+    color: (r) => r.magic_rs != null ? getColor('magic_rs', r.magic_rs) : 'var(--text-secondary)',
+  },
+  {
+    key: 'avg_amt_66d', label: '66D Avg Amt', tooltip: 'Average turnover over 66 trading days (₹ Cr)', width: 105, align: 'right',
+    render: (r) => r.avg_amt_66d != null ? `${r.avg_amt_66d.toFixed(1)} Cr` : '—',
+  },
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtPct(val: number | null): string {
@@ -247,6 +292,32 @@ export default function SectorRotationTable({ rows }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
+  // Optional column picker
+  const [visibleOpt, setVisibleOpt] = useState<Set<OptKey>>(new Set());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onMouseDown(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [pickerOpen]);
+
+  function toggleOpt(key: OptKey) {
+    setVisibleOpt((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  const activeOptCols = OPT_COLS.filter((c) => visibleOpt.has(c.key));
+
   // Enrich rows with computed fields
   const enriched = useMemo(() =>
     rows.map((row) => {
@@ -298,183 +369,357 @@ export default function SectorRotationTable({ rows }: Props) {
     );
   }
 
+  const thBase: React.CSSProperties = {
+    padding: '8px 10px',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    userSelect: 'none',
+    whiteSpace: 'nowrap',
+    background: 'var(--card)',
+  };
+
   return (
-    <div
-      style={{
-        width: '100%',
-        overflowX: 'auto',
-        overflowY: 'visible',
-        /* Horizontal scroll without showing scrollbar on non-hover */
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'var(--border) transparent',
-      }}
-    >
-      <table
+    <div style={{ width: '100%' }}>
+      {/* ── Toolbar: column picker ── */}
+      <div
         style={{
-          width: 'max-content',
-          minWidth: '100%',
-          borderCollapse: 'collapse',
-          fontSize: 13,
-          fontFamily: 'var(--font-mono)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          padding: '8px 12px 4px',
         }}
       >
-        {/* ── Header ── */}
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            {COLS.map((col) => (
-              <th
-                key={col.key}
-                title={col.tooltip}
-                onClick={() => handleSort(col.key)}
+        <div ref={pickerRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setPickerOpen((o) => !o)}
+            title="Choose columns"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '5px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--border)',
+              background: pickerOpen ? 'var(--accent-glow)' : 'transparent',
+              color: pickerOpen ? 'var(--gold-soft)' : 'var(--text-muted)',
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            ⊞ Columns {visibleOpt.size > 0 && `· ${visibleOpt.size}`}
+          </button>
+
+          {pickerOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: '100%',
+                marginTop: 4,
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: '8px 0',
+                zIndex: 100,
+                minWidth: 180,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+              }}
+            >
+              <div
                 style={{
-                  width: col.width,
-                  minWidth: col.width,
-                  padding: '8px 10px',
-                  textAlign: col.align ?? 'right',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: sortKey === col.key ? 'var(--text-primary)' : 'var(--text-faint)',
-                  letterSpacing: '0.06em',
+                  padding: '4px 12px 6px',
+                  fontSize: 9,
+                  color: 'var(--text-faint)',
+                  letterSpacing: '0.08em',
                   textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  whiteSpace: 'nowrap',
-                  background: 'var(--card)',
-                  position: col.key === 'name' ? 'sticky' : undefined,
-                  left: col.key === 'name' ? 0 : undefined,
-                  zIndex: col.key === 'name' ? 2 : undefined,
+                  fontFamily: 'var(--font-mono)',
                 }}
               >
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                  {col.label}
-                  <SortIcon colKey={col.key} />
-                </span>
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        {/* ── Body ── */}
-        <tbody>
-          {sorted.map((row, i) => {
-            const isEven = i % 2 === 0;
-            const rowBg = isEven ? 'transparent' : 'rgba(255,255,255,0.025)';
-
-            return (
-              <tr
-                key={row.index_id}
-                style={{ background: rowBg, borderBottom: '1px solid rgba(255,255,255,0.04)' }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = rowBg;
-                }}
-              >
-                {/* Index name — sticky left */}
-                <td
-                  style={{
-                    padding: '9px 10px',
-                    color: 'var(--text-primary)',
-                    fontWeight: 500,
-                    whiteSpace: 'nowrap',
-                    maxWidth: 200,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    position: 'sticky',
-                    left: 0,
-                    background: isEven ? 'var(--kd-bg, #0e1117)' : 'rgba(255,255,255,0.025)',
-                    zIndex: 1,
-                  }}
-                  title={row.name}
-                >
-                  {row.name.length > 28 ? row.name.slice(0, 27) + '…' : row.name}
-                </td>
-
-                {/* Close */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-primary)' }}>
-                  {fmtClose(row.close)}
-                </td>
-
-                {/* %Chg */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
-                  {fmtPct(row.pct_chng)}
-                </td>
-
-                {/* 5D% */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_5d) }}>
-                  {fmtPct(row.ret_5d)}
-                </td>
-
-                {/* 22D% */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_22d) }}>
-                  {fmtPct(row.ret_22d)}
-                </td>
-
-                {/* 66D% */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_66d) }}>
-                  {fmtPct(row.ret_66d)}
-                </td>
-
-                {/* RSI */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
-                  {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
-                </td>
-
-                {/* Score 5D */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: scoreColor(row.score_5d) }}>
-                  {fmtScore(row.score_5d)}
-                </td>
-
-                {/* Score 22D */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: scoreColor(row.score_22d) }}>
-                  {fmtScore(row.score_22d)}
-                </td>
-
-                {/* Avg Amt 5D */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                  {fmtCr(row.avg_amt_5d)}
-                </td>
-
-                {/* Avg Amt 22D */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                  {fmtCr(row.avg_amt_22d)}
-                </td>
-
-                {/* % Amt Chg — frontend computed */}
-                <td style={{ padding: '9px 10px', textAlign: 'right', color: pctAmtChgColor(row.pct_amt_chg) }}>
-                  {fmtPct(row.pct_amt_chg)}
-                </td>
-
-                {/* Signal badge placeholder */}
-                <td style={{ padding: '9px 10px' }}>
-                  {row.signal ? (
+                Optional Columns
+              </div>
+              {OPT_COLS.map((col) => {
+                const enabled = visibleOpt.has(col.key);
+                return (
+                  <button
+                    key={col.key}
+                    onClick={() => toggleOpt(col.key)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      padding: '7px 12px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      color: enabled ? 'var(--text-primary)' : 'var(--text-muted)',
+                      textAlign: 'left',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = 'var(--accent-glow)';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.background = 'transparent';
+                    }}
+                  >
                     <span
                       style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: 3,
+                        flexShrink: 0,
+                        border: `1px solid ${enabled ? 'var(--gold-soft)' : 'var(--border)'}`,
+                        background: enabled ? 'var(--gold-soft)' : 'transparent',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        letterSpacing: '0.04em',
-                        whiteSpace: 'nowrap',
-                        color:       SIGNAL_STYLE[row.signal].color,
-                        background:  SIGNAL_STYLE[row.signal].bg,
-                        border:      `1px solid ${SIGNAL_STYLE[row.signal].border}`,
+                        justifyContent: 'center',
+                        fontSize: 9,
+                        color: 'var(--kd-bg, #0e1117)',
+                        lineHeight: 1,
                       }}
                     >
-                      {SIGNAL_LABEL[row.signal]}
+                      {enabled ? '✓' : ''}
                     </span>
-                  ) : (
-                    <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>—</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    {col.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Table ── */}
+      <div
+        style={{
+          width: '100%',
+          overflowX: 'auto',
+          overflowY: 'visible',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'var(--border) transparent',
+        }}
+      >
+        <table
+          style={{
+            width: 'max-content',
+            minWidth: '100%',
+            borderCollapse: 'collapse',
+            fontSize: 13,
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {/* ── Header ── */}
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              {/* Mandatory cols (all except Signal) */}
+              {COLS.filter((c) => c.key !== 'signal').map((col) => (
+                <th
+                  key={col.key}
+                  title={col.tooltip}
+                  onClick={() => handleSort(col.key)}
+                  style={{
+                    ...thBase,
+                    width: col.width,
+                    minWidth: col.width,
+                    textAlign: col.align ?? 'right',
+                    color: sortKey === col.key ? 'var(--text-primary)' : 'var(--text-faint)',
+                    position: col.key === 'name' ? 'sticky' : undefined,
+                    left: col.key === 'name' ? 0 : undefined,
+                    zIndex: col.key === 'name' ? 2 : undefined,
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    {col.label}
+                    <SortIcon colKey={col.key} />
+                  </span>
+                </th>
+              ))}
+
+              {/* Optional cols */}
+              {activeOptCols.map((col) => (
+                <th
+                  key={col.key}
+                  title={col.tooltip}
+                  style={{
+                    ...thBase,
+                    width: col.width,
+                    minWidth: col.width,
+                    textAlign: col.align,
+                    color: 'var(--text-faint)',
+                    cursor: 'default',
+                  }}
+                >
+                  {col.label}
+                </th>
+              ))}
+
+              {/* Signal col — always last */}
+              {(() => {
+                const col = COLS.find((c) => c.key === 'signal')!;
+                return (
+                  <th
+                    key="signal"
+                    title={col.tooltip}
+                    onClick={() => handleSort('signal')}
+                    style={{
+                      ...thBase,
+                      width: col.width,
+                      minWidth: col.width,
+                      textAlign: col.align ?? 'left',
+                      color: sortKey === 'signal' ? 'var(--text-primary)' : 'var(--text-faint)',
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      {col.label}
+                      <SortIcon colKey="signal" />
+                    </span>
+                  </th>
+                );
+              })()}
+            </tr>
+          </thead>
+
+          {/* ── Body ── */}
+          <tbody>
+            {sorted.map((row, i) => {
+              const isEven = i % 2 === 0;
+              const rowBg = isEven ? 'transparent' : 'rgba(255,255,255,0.025)';
+              const stickyBg = isEven ? 'var(--kd-bg, #0e1117)' : 'rgba(255,255,255,0.025)';
+
+              return (
+                <tr
+                  key={row.index_id}
+                  style={{ background: rowBg, borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = rowBg;
+                  }}
+                >
+                  {/* Index name — sticky left */}
+                  <td
+                    style={{
+                      padding: '9px 10px',
+                      color: 'var(--text-primary)',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                      maxWidth: 200,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      position: 'sticky',
+                      left: 0,
+                      background: stickyBg,
+                      zIndex: 1,
+                    }}
+                    title={row.name}
+                  >
+                    {row.name.length > 28 ? row.name.slice(0, 27) + '…' : row.name}
+                  </td>
+
+                  {/* Close */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-primary)' }}>
+                    {fmtClose(row.close)}
+                  </td>
+
+                  {/* %Chg */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
+                    {fmtPct(row.pct_chng)}
+                  </td>
+
+                  {/* 5D% */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_5d) }}>
+                    {fmtPct(row.ret_5d)}
+                  </td>
+
+                  {/* 22D% */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_22d) }}>
+                    {fmtPct(row.ret_22d)}
+                  </td>
+
+                  {/* 66D% */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_66d) }}>
+                    {fmtPct(row.ret_66d)}
+                  </td>
+
+                  {/* RSI */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
+                    {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
+                  </td>
+
+                  {/* Score 5D */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: scoreColor(row.score_5d) }}>
+                    {fmtScore(row.score_5d)}
+                  </td>
+
+                  {/* Score 22D */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: scoreColor(row.score_22d) }}>
+                    {fmtScore(row.score_22d)}
+                  </td>
+
+                  {/* Avg Amt 5D */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                    {fmtCr(row.avg_amt_5d)}
+                  </td>
+
+                  {/* Avg Amt 22D */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                    {fmtCr(row.avg_amt_22d)}
+                  </td>
+
+                  {/* % Amt Chg — frontend computed */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctAmtChgColor(row.pct_amt_chg) }}>
+                    {fmtPct(row.pct_amt_chg)}
+                  </td>
+
+                  {/* Optional cols — inserted before Signal */}
+                  {activeOptCols.map((col) => (
+                    <td
+                      key={col.key}
+                      style={{
+                        padding: '9px 10px',
+                        textAlign: col.align,
+                        color: col.color ? col.color(row) : 'var(--text-secondary)',
+                      }}
+                    >
+                      {col.render(row)}
+                    </td>
+                  ))}
+
+                  {/* Signal badge — always last */}
+                  <td style={{ padding: '9px 10px' }}>
+                    {row.signal && (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          letterSpacing: '0.04em',
+                          whiteSpace: 'nowrap',
+                          color:      SIGNAL_STYLE[row.signal].color,
+                          background: SIGNAL_STYLE[row.signal].bg,
+                          border:     `1px solid ${SIGNAL_STYLE[row.signal].border}`,
+                        }}
+                      >
+                        {signalLabel(row.signal)}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

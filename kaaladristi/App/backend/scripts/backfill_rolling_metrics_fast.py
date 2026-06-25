@@ -42,10 +42,8 @@ import time
 import psycopg2
 import psycopg2.extras
 
-DB_HOST = "187.127.136.65"
-DB_PORT = 5432
-DB_NAME = "kaala_dristi_db"
-DB_USER = "kd_app"
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from lib.config import DATABASE_URL
 
 # PostgreSQL statement timeout — single UPDATE can take ~20 min for full history.
 # Set to 60 minutes. Adjust down for small ranges.
@@ -53,13 +51,10 @@ STATEMENT_TIMEOUT_MS = 60 * 60 * 1000
 
 
 def get_conn():
-    password = os.environ.get("KD_DB_PASSWORD")
-    if not password:
-        print("ERROR: KD_DB_PASSWORD env var not set")
-        sys.exit(1)
+    if not DATABASE_URL:
+        raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
     return psycopg2.connect(
-        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
-        user=DB_USER, password=password,
+        DATABASE_URL,
         connect_timeout=30,
         options=f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
     )
