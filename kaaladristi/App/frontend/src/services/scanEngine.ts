@@ -889,9 +889,20 @@ function scanFreshBreakout(bundle: ScanDataBundle): ScanStock[] {
     results.push(stock);
   }
 
-  return results
+  const sorted = results
     .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
     .slice(0, 25);
+
+  console.log('[freshBreakout] results count:', sorted.length,
+    'sample:', sorted[0] ? {
+      symbol: sorted[0].symbol,
+      ret_5d: sorted[0].ret_5d,
+      breakout_level: sorted[0].breakout_level,
+      score_5d: sorted[0].score_5d,
+      avg_amt_5d: sorted[0].avg_amt_5d,
+    } : 'no results');
+
+  return sorted;
 }
 
 /** Scan 5: Quiet Accumulation (contrarian) */
