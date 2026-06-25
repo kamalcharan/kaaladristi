@@ -164,7 +164,7 @@ function SignalCard({ row }: { row: SectorIndexRow }) {
 
 // ── Constituent table ─────────────────────────────────────────────────────────
 
-type SortKey = 'weight_pct' | 'score_5d' | 'pct_chng' | 'rsi_14' | 'magic_rs';
+type SortKey = 'score_5d' | 'pct_chng' | 'ret_5d' | 'ret_22d' | 'ret_66d' | 'rsi_14' | 'magic_rs';
 type SortDir = 'asc' | 'desc';
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
@@ -180,11 +180,6 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
 
   const { data: constituents, isLoading: consLoading } = useIndexConstituents(indexId);
 
-  const weightMap = useMemo(() => {
-    if (!constituents) return new Map<number, number | null>();
-    return new Map(constituents.map((c) => [c.equity_id, c.weight_pct ?? null]));
-  }, [constituents]);
-
   const equityIds = useMemo(() => {
     if (!constituents) return [];
     return constituents.map((c) => c.equity_id);
@@ -196,11 +191,8 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
 
   const rows = useMemo(() => {
     if (!details || equityIds.length === 0) return [];
-    return details.map((d) => ({
-      ...d,
-      weight_pct: weightMap.get(d.equity_id) ?? null,
-    }));
-  }, [details, equityIds, weightMap]);
+    return details;
+  }, [details, equityIds]);
 
   const sortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -231,6 +223,9 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
     borderBottom: '1px solid var(--border)',
     whiteSpace: 'nowrap',
     userSelect: 'none',
+    position: 'sticky',
+    top: 0,
+    zIndex: 2,
   };
 
   const thSortable: React.CSSProperties = {
@@ -258,44 +253,39 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
             <th style={{ ...thBase, textAlign: 'left', width: 36 }}>#</th>
             <th style={{ ...thBase, textAlign: 'left', width: 110 }}>Symbol</th>
             <th style={{ ...thBase, textAlign: 'left' }}>Company</th>
-            <th
-              style={{ ...thSortable, textAlign: 'right', width: 60 }}
-              onClick={() => handleSort('weight_pct')}
-            >
+            <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('pct_chng')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                Wt %<SortIcon col="weight_pct" sortKey={sortKey} sortDir={sortDir} />
+                1D %<SortIcon col="pct_chng" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
-            <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
-            <th
-              style={{ ...thSortable, textAlign: 'right', width: 72 }}
-              onClick={() => handleSort('pct_chng')}
-            >
+            <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('ret_5d')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                % Chg<SortIcon col="pct_chng" sortKey={sortKey} sortDir={sortDir} />
+                5D %<SortIcon col="ret_5d" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('ret_22d')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                22D %<SortIcon col="ret_22d" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('ret_66d')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                66D %<SortIcon col="ret_66d" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th style={{ ...thBase, textAlign: 'left', width: 130 }}>Flow</th>
-            <th
-              style={{ ...thSortable, textAlign: 'right', width: 60 }}
-              onClick={() => handleSort('rsi_14')}
-            >
+            <th style={{ ...thSortable, textAlign: 'right', width: 60 }} onClick={() => handleSort('rsi_14')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 RSI<SortIcon col="rsi_14" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
-            <th
-              style={{ ...thSortable, textAlign: 'right', width: 76 }}
-              onClick={() => handleSort('score_5d')}
-            >
+            <th style={{ ...thSortable, textAlign: 'right', width: 76 }} onClick={() => handleSort('score_5d')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 Score 5D<SortIcon col="score_5d" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
-            <th
-              style={{ ...thSortable, textAlign: 'right', width: 80 }}
-              onClick={() => handleSort('magic_rs')}
-            >
+            <th style={{ ...thSortable, textAlign: 'right', width: 80 }} onClick={() => handleSort('magic_rs')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 Magic RS<SortIcon col="magic_rs" sortKey={sortKey} sortDir={sortDir} />
               </span>
@@ -322,14 +312,20 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                 <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {row.company_name}
                 </td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-faint)' }}>
-                  {row.weight_pct != null ? row.weight_pct.toFixed(2) + '%' : '—'}
-                </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                   {row.close != null ? '₹' + row.close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
                   {fmtPct(row.pct_chng)}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.ret_5d) }}>
+                  {fmtPct(row.ret_5d)}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.ret_22d) }}>
+                  {fmtPct(row.ret_22d)}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.ret_66d) }}>
+                  {fmtPct(row.ret_66d)}
                 </td>
                 <td style={{ padding: '9px 12px' }}>
                   {flowInfo ? (
