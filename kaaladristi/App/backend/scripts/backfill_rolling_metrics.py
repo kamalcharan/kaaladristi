@@ -178,7 +178,7 @@ WITH base AS (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 65 PRECEDING AND CURRENT ROW
         ), 4) AS amt66,
-        -- d30_pct_chng: % change vs 22 trading days ago
+        -- d30_pct_chng: pct change vs 22 trading days ago
         ROUND(
             (close - LAG(close, 22) OVER (PARTITION BY equity_id ORDER BY trade_date))
             / NULLIF(LAG(close, 22) OVER (PARTITION BY equity_id ORDER BY trade_date), 0)
