@@ -7,6 +7,7 @@ import {
   fetchSectorIndices,
   fetchVix,
   fetchIndexSparkline,
+  fetchIndexSparklines,
   fetchConstituentDetails,
   fetchIndexDetail,
   SECTOR_TAB_CATEGORIES,
@@ -39,6 +40,17 @@ export function useIndexSparkline(indexId: number | null) {
     queryKey: ['index-sparkline', indexId],
     queryFn: () => fetchIndexSparkline(indexId!),
     enabled: indexId != null,
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Batch sparklines for multiple indices — only fetched when chart view is active. */
+export function useIndexSparklines(indexIds: number[], enabled = true) {
+  return useQuery<Map<number, SparklinePoint[]>, Error>({
+    queryKey: ['index-sparklines', indexIds.join(',')],
+    queryFn: () => fetchIndexSparklines(indexIds),
+    enabled: enabled && indexIds.length > 0,
     staleTime: STALE,
     retry: 1,
   });

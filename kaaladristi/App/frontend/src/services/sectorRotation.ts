@@ -196,6 +196,44 @@ export async function fetchIndexSparkline(indexId: number): Promise<SparklinePoi
 }
 
 /**
+ * Batch fetch sparklines for multiple indices.
+ * Returns a Map<index_id, SparklinePoint[]> with the last `days` rows per index.
+ */
+export async function fetchIndexSparklines(
+  indexIds: number[],
+  days = 22,
+): Promise<Map<number, SparklinePoint[]>> {
+  if (indexIds.length === 0) return new Map();
+
+  const latestDate = await fetchLatestIndexDate();
+  if (!latestDate) return new Map();
+
+  const cutoff = new Date(latestDate);
+  cutoff.setDate(cutoff.getDate() - days * 2);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  const { data, error } = await from('km_index_eod')
+    .select('index_id,trade_date,close')
+    .in('index_id', indexIds)
+    .gte('trade_date', cutoffStr)
+    .order('trade_date', { ascending: true })
+    .execute();
+
+  if (error) throw new Error(`[sparklines] ${error.message}`);
+
+  const rows = (data ?? []) as Array<{ index_id: number; trade_date: string; close: number }>;
+  const grouped = new Map<number, SparklinePoint[]>();
+  for (const row of rows) {
+    if (!grouped.has(row.index_id)) grouped.set(row.index_id, []);
+    grouped.get(row.index_id)!.push({ trade_date: row.trade_date, close: row.close });
+  }
+  for (const [id, pts] of grouped) {
+    grouped.set(id, pts.slice(-days));
+  }
+  return grouped;
+}
+
+/**
  * For a set of equity IDs, fetch symbol + company_name from km_equity_symbols
  * and the latest signals (flow_type, rsi_14, score_5d) from km_equity_eod
  * on a given trade date.
