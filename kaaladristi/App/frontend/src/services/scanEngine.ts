@@ -582,11 +582,10 @@ function buildScanStock(
       : null,
   );
 
-  // avg_amt_5d/22d/66d — computed from history using value_cr × delivery_pct/100.
-  // DB pre-computed columns (avg_amt_5d, avg_amt_22d) use COALESCE(delivery_qty,0)*close/10M
-  // which returns 0 for stocks without Breeze delivery data (~most of universe).
-  // value_cr and delivery_pct are reliably populated for all NSE equities.
-  const delivBars = history.map((h) => (h.value_cr != null ? h.value_cr * ((h.delivery_pct ?? 0) / 100) : null));
+  // avg_amt_5d/22d/66d — delivery value in Crores.
+  // value_cr is stored in Rupees in km_equity_eod; divide by 1e7 to convert to Crores.
+  // delivery_pct is a whole-number percentage (e.g. 45 = 45%).
+  const delivBars = history.map((h) => (h.value_cr != null ? (h.value_cr / 1e7) * ((h.delivery_pct ?? 0) / 100) : null));
   const delivAvg = (n: number) => {
     const slice = delivBars.slice(0, Math.min(delivBars.length, n)).filter((v): v is number => v != null);
     return slice.length > 0 ? slice.reduce((s, v) => s + v, 0) / slice.length : null;
