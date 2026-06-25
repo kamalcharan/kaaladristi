@@ -49,6 +49,8 @@ export interface SectorIndexRow {
   avg_amt_66d: number | null;
   score_5d: number | null;
   score_22d: number | null;
+  // Constituent count
+  stock_count: number | null;
 }
 
 // Broad Market needs two category values — others are single strings.
@@ -113,25 +115,37 @@ export async function fetchSectorIndices(
   const tradeDate = forDate ?? (await fetchLatestIndexDate());
   if (!tradeDate) return [];
 
-  // Step 3: Fetch EOD rows for those index IDs on that date
-  const { data: eodData, error: eodErr } = await from('km_index_eod')
-    .select(
-      'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
-      'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
-      'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d',
-    )
-    .eq('trade_date', tradeDate)
-    .in('index_id', indexIds)
-    .execute();
+  // Step 3: Fetch EOD rows + constituent counts in parallel
+  const [eodRes, constRes] = await Promise.all([
+    from('km_index_eod')
+      .select(
+        'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
+        'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
+        'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d',
+      )
+      .eq('trade_date', tradeDate)
+      .in('index_id', indexIds)
+      .execute(),
+    from('km_index_constituents')
+      .select('index_id')
+      .in('index_id', indexIds)
+      .execute(),
+  ]);
 
-  if (eodErr) throw new Error(`[sectorRotation] EOD fetch failed: ${eodErr.message}`);
+  if (eodRes.error) throw new Error(`[sectorRotation] EOD fetch failed: ${eodRes.error.message}`);
 
-  return ((eodData ?? []) as Omit<SectorIndexRow, 'name' | 'category'>[]).map((row) => {
+  const countMap = new Map<number, number>();
+  for (const c of (constRes.data ?? []) as { index_id: number }[]) {
+    countMap.set(c.index_id, (countMap.get(c.index_id) ?? 0) + 1);
+  }
+
+  return ((eodRes.data ?? []) as Omit<SectorIndexRow, 'name' | 'category' | 'stock_count'>[]).map((row) => {
     const sym = symbolMap.get(row.index_id);
     return {
       ...row,
       name: sym?.name ?? `Index ${row.index_id}`,
       category: sym?.category ?? '',
+      stock_count: countMap.get(row.index_id) ?? null,
     };
   });
 }

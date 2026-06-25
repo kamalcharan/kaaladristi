@@ -518,29 +518,48 @@ export default function SectorRotationTable({ rows, onRowClick }: Props) {
           {/* ── Header ── */}
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              {/* Mandatory cols (all except Signal) */}
-              {COLS.filter((c) => c.key !== 'signal').map((col) => (
-                <th
-                  key={col.key}
-                  title={col.tooltip}
-                  onClick={() => handleSort(col.key)}
-                  style={{
-                    ...thBase,
-                    width: col.width,
-                    minWidth: col.width,
-                    textAlign: col.align ?? 'right',
-                    color: sortKey === col.key ? 'var(--text-primary)' : 'var(--text-faint)',
-                    position: col.key === 'name' ? 'sticky' : undefined,
-                    left: col.key === 'name' ? 0 : undefined,
-                    zIndex: col.key === 'name' ? 2 : undefined,
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                    {col.label}
-                    <SortIcon colKey={col.key} />
-                  </span>
-                </th>
-              ))}
+              {/* Mandatory cols (all except Signal) — STOCKS injected after name */}
+              {COLS.filter((c) => c.key !== 'signal').flatMap((col) => {
+                const th = (
+                  <th
+                    key={col.key}
+                    title={col.tooltip}
+                    onClick={() => handleSort(col.key)}
+                    style={{
+                      ...thBase,
+                      width: col.width,
+                      minWidth: col.width,
+                      textAlign: col.align ?? 'right',
+                      color: sortKey === col.key ? 'var(--text-primary)' : 'var(--text-faint)',
+                      position: col.key === 'name' ? 'sticky' : undefined,
+                      left: col.key === 'name' ? 0 : undefined,
+                      zIndex: col.key === 'name' ? 2 : undefined,
+                    }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      {col.label}
+                      <SortIcon colKey={col.key} />
+                    </span>
+                  </th>
+                );
+                if (col.key !== 'name') return [th];
+                return [
+                  th,
+                  <th
+                    key="stock_count"
+                    style={{
+                      ...thBase,
+                      width: 60,
+                      minWidth: 60,
+                      textAlign: 'center',
+                      color: 'var(--text-faint)',
+                      cursor: 'default',
+                    }}
+                  >
+                    Stocks
+                  </th>,
+                ];
+              })}
 
               {/* Optional cols */}
               {activeOptCols.map((col) => (
@@ -627,6 +646,11 @@ export default function SectorRotationTable({ rows, onRowClick }: Props) {
                     title={row.name}
                   >
                     {row.name.length > 28 ? row.name.slice(0, 27) + '…' : row.name}
+                  </td>
+
+                  {/* Stocks */}
+                  <td style={{ padding: '9px 10px', textAlign: 'center', color: 'var(--text-faint)', width: 60, minWidth: 60 }}>
+                    {row.stock_count ?? '—'}
                   </td>
 
                   {/* Close */}
