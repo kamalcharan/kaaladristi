@@ -798,7 +798,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [viewMode, setViewMode] = useViewMode();
 
   const { data: presets = SCAN_PRESETS } = useScanPresets();
-  const preset = presets.find((p) => p.id === presetId);
+  const preset = presets.find((p) => p.id === presetId) ?? SCAN_PRESETS.find((p) => p.id === presetId);
   const { data: allCountsData } = useAllScanCounts('combined');
   const allCounts = allCountsData?.counts;
   const isNseOnly = preset?.universe === 'NSE_ONLY' && timeframe !== 'daily';
