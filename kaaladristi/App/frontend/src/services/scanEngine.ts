@@ -1803,7 +1803,7 @@ export async function scanBreakoutSurgeDaily(
   //    22 bars for client-side avg_amt fallback. score_5d/22d/pct_*/avg_amt_66d
   //    now come from DB (migration 111). 100 calendar days retained for safety.
   const cutoff = new Date(tradeDate);
-  cutoff.setDate(cutoff.getDate() - 100);
+  cutoff.setDate(cutoff.getDate() - 115);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
   const EOD_COLS = [
@@ -1903,7 +1903,7 @@ export async function scanBreakoutSurgeDaily(
     // Compute pct returns from close prices in history (ret_* stay client-side)
     const ret_5d  = history.length > 5  ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
     const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
-    const ret_66d = history.length > 66 ? ((close - Number(history[66].close)) / Number(history[66].close)) * 100 : null;
+    const ret_66d = history.length >= 67 ? ((close - Number(history[66].close)) / Number(history[66].close)) * 100 : null;
 
     const delivery_surge_x = avg_amt_5d != null && avg_amt_22d != null && avg_amt_22d > 0
       ? Math.round((avg_amt_5d / avg_amt_22d) * 10000) / 10000
