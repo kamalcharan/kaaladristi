@@ -444,6 +444,30 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     width: 65,
   },
 
+  pct_5d: {
+    key: 'pct_5d',
+    label: 'Pct 5D',
+    tooltip: '5-day price return % — DB-computed via LAG(close,4) (migration 111). Breakout Surge Daily only.',
+    type: 'pct',
+    width: 65,
+  },
+
+  pct_22d: {
+    key: 'pct_22d',
+    label: 'Pct 22D',
+    tooltip: '22-day price return % — DB-computed via LAG(close,21) (migration 111). Breakout Surge Daily only.',
+    type: 'pct',
+    width: 65,
+  },
+
+  pct_66d: {
+    key: 'pct_66d',
+    label: 'Pct 66D',
+    tooltip: '66-day price return % — DB-computed via LAG(close,65) (migration 111). Breakout Surge Daily only.',
+    type: 'pct',
+    width: 65,
+  },
+
   d_pct: {
     key: 'd_pct',
     label: 'Day%',
