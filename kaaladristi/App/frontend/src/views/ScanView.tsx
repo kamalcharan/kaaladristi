@@ -811,6 +811,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   );
 
   useEffect(() => { setFilters(EMPTY_FILTERS); }, [presetId]);
+  useEffect(() => { if (typeof window !== 'undefined') (window as any).__scanResults = rawStocks; }, [rawStocks]);
 
   const stocks = useMemo(() => applyFilters(rawStocks ?? [], filters), [rawStocks, filters]);
 
