@@ -7,11 +7,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import { useIndexDetail, useIndexSparkline, useConstituentDetails } from '@/hooks/useSectorRotation';
+import WorkspaceChart from '@/components/workspace/WorkspaceChart';
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol } from '@/lib/symbolUtils';
 import type { SectorIndexRow } from '@/services/sectorRotation';
@@ -472,6 +473,135 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   );
 }
 
+// ── Momentum card (Chart tab) ─────────────────────────────────────────────────
+
+function MomentumCard({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
+  const { data: sparkline = [], isLoading: sparkLoading } = useIndexSparkline(indexId);
+  const signal = computeSignal(row);
+  const signalStyle = signal ? SIGNAL_STYLE[signal] : null;
+  const signalLabel = signal ? (FLOW_LABELS[signal]?.label ?? signal) : null;
+
+  const pctAmtChg =
+    row.avg_amt_5d != null && row.avg_amt_22d != null && row.avg_amt_22d !== 0
+      ? ((row.avg_amt_5d - row.avg_amt_22d) / row.avg_amt_22d) * 100
+      : null;
+
+  const score5dHigher = (row.score_5d ?? 0) > (row.score_22d ?? 0);
+
+  return (
+    <div
+      style={{
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '14px 18px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 24,
+        flexWrap: 'wrap',
+        minHeight: 88,
+      }}
+    >
+      {/* Mini sparkline */}
+      <div style={{ width: 160, flexShrink: 0 }}>
+        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 4 }}>
+          22D Close
+        </span>
+        {sparkLoading ? (
+          <div style={{ height: 48, display: 'flex', alignItems: 'center' }}>
+            <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>…</span>
+          </div>
+        ) : sparkline.length > 1 ? (
+          <ResponsiveContainer width="100%" height={48}>
+            <LineChart data={sparkline} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+              <Line type="monotone" dataKey="close" stroke="var(--gold-soft)" strokeWidth={1.5} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div style={{ height: 48 }} />
+        )}
+      </div>
+
+      {/* Score 5D vs 22D */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+          Score Momentum
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ ...MONO, fontSize: 14, fontWeight: 600, color: scoreColor(row.score_5d) }}>
+            {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
+          </span>
+          {score5dHigher
+            ? <ArrowUp size={12} color="var(--bull)" />
+            : <ArrowDown size={12} color="var(--bear)" />}
+          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>
+            vs {row.score_22d != null ? row.score_22d.toFixed(1) : '—'}
+          </span>
+        </div>
+        <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D vs 22D</span>
+      </div>
+
+      {/* % Amt Change */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+          % Amt Chg
+        </span>
+        <span style={{ ...MONO, fontSize: 14, fontWeight: 600, color: pctColor(pctAmtChg) }}>
+          {fmtPct(pctAmtChg)}
+        </span>
+        <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D vs 22D avg</span>
+      </div>
+
+      {/* Signal badge */}
+      {signal && signalStyle && (
+        <div style={{ marginLeft: 'auto' }}>
+          <span
+            style={{
+              ...MONO,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              color: signalStyle.color,
+              background: signalStyle.bg,
+              border: `1px solid ${signalStyle.border}`,
+              borderRadius: 4,
+              padding: '4px 10px',
+            }}
+          >
+            {signalLabel}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Chart ────────────────────────────────────────────────────────────────
+
+function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
+  return (
+    <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <MomentumCard row={row} indexId={indexId} />
+      <div
+        style={{
+          height: 400,
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}
+      >
+        <WorkspaceChart
+          instrument={{ id: indexId, symbol: row.name, type: 'index' }}
+          overlays={[]}
+          standalone
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type DetailTab = 'overview' | 'chart';
@@ -625,11 +755,7 @@ export default function IndexDetailPage() {
       {/* ── Tab content ── */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
         {activeTab === 'overview' && <OverviewTab row={row} indexId={indexId!} />}
-        {activeTab === 'chart' && (
-          <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-            <span style={{ ...MONO, fontSize: 13, color: 'var(--text-faint)' }}>Chart view coming in SR-F9</span>
-          </div>
-        )}
+        {activeTab === 'chart' && <ChartTab row={row} indexId={indexId!} />}
       </div>
     </div>
   );

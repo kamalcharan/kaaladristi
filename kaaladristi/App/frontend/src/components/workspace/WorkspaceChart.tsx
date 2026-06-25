@@ -8,7 +8,7 @@ import { useChartSyncStore } from '@/stores/chartSyncStore'
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands'
 import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover'
 import type { AstroBand } from '@/services/astroOverlayService'
-import type { InstrumentRef } from '@/types/framework'
+import type { InstrumentRef, ChartOverlay } from '@/types/framework'
 
 const HEADER_H = 36
 
@@ -16,10 +16,13 @@ interface ZoneExplain { tag: string; ruleId: number; ruleLabel: string; x: numbe
 
 interface Props {
   instrument: InstrumentRef
+  overlays?: ChartOverlay[]
+  standalone?: boolean
 }
 
-export default function WorkspaceChart({ instrument }: Props) {
-  const overlays = useFrameworkStore(s => s.framework?.chart_overlays ?? [])
+export default function WorkspaceChart({ instrument, overlays: overlaysProp, standalone = false }: Props) {
+  const frameworkOverlays = useFrameworkStore(s => s.framework?.chart_overlays ?? [])
+  const effectiveOverlays = overlaysProp !== undefined ? overlaysProp : frameworkOverlays
   const containerRef = useRef<HTMLDivElement>(null)
   const [chartHeight, setChartHeight] = useState(400)
 
@@ -33,7 +36,7 @@ export default function WorkspaceChart({ instrument }: Props) {
   })
 
   const { setTotalBars, setActiveBarIndex, setVisibleRange, playerBarIndex } = useChartSyncStore()
-  const astroBands = useAstroOverlayBands(overlays)
+  const astroBands = useAstroOverlayBands(effectiveOverlays)
   const [zoneExplain, setZoneExplain] = useState<ZoneExplain | null>(null)
 
   const handleZoneClick = useCallback((band: AstroBand, clientX: number, clientY: number) => {
@@ -53,19 +56,19 @@ export default function WorkspaceChart({ instrument }: Props) {
   }, [])
 
   useEffect(() => {
-    if (data.length > 0) setTotalBars(data.length)
-  }, [data.length, setTotalBars])
+    if (data.length > 0 && !standalone) setTotalBars(data.length)
+  }, [data.length, setTotalBars, standalone])
 
   const playerDate = playerBarIndex != null ? (data[playerBarIndex]?.trade_date ?? null) : null
 
   const handleCrosshairMove = useCallback(
-    (idx: number) => setActiveBarIndex(idx),
-    [setActiveBarIndex],
+    (idx: number) => { if (!standalone) setActiveBarIndex(idx) },
+    [setActiveBarIndex, standalone],
   )
 
   const handleVisibleRangeChange = useCallback(
-    (from: string, to: string) => setVisibleRange(from, to),
-    [setVisibleRange],
+    (from: string, to: string) => { if (!standalone) setVisibleRange(from, to) },
+    [setVisibleRange, standalone],
   )
 
   return (
@@ -85,7 +88,7 @@ export default function WorkspaceChart({ instrument }: Props) {
           data={data}
           height={chartHeight}
           workspaceMode
-          overlays={overlays}
+          overlays={effectiveOverlays}
           astroBands={astroBands}
           highlightDate={playerDate}
           onCrosshairMove={handleCrosshairMove}
