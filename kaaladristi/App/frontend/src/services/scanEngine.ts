@@ -1968,6 +1968,8 @@ export async function scanBreakoutSurgeDaily(
       ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
       ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
       delivery_surge_x,
+      deliv_value_cr: Math.round((eod.value_cr ?? 0) * ((eod.delivery_pct ?? 0) / 100) * 100) / 100,
+      d_pct:          eod.pct_chng != null ? Math.round(Number(eod.pct_chng) * 100) / 100 : null,
       breakout_level:    Math.round(breakoutLevel  * 100) / 100,
       pct_from_breakout: Math.round(pctFromBreakout * 100) / 100,
     });
