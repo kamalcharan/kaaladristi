@@ -572,6 +572,14 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             print(f'  [flow-intel] Skipped ({e})')
 
+    # ── Step 5c: Rolling metrics (w52_high/low, avg_amt, score, pct) ──
+    if not skip_indicators:
+        try:
+            rm_count = compute_rolling_metrics_for_date(db, trade_date, verbose=True)
+            print(f'  [rolling-metrics] Updated {rm_count} rows')
+        except Exception as e:
+            print(f'  [rolling-metrics] Skipped ({e})')
+
     # ── Mark complete ──
     mark_day_status(db, trade_date, 'BSE', 'completed')
     print(f'\n  ✓ BSE pipeline completed for {trade_date}')
