@@ -49,6 +49,8 @@ export interface SectorIndexRow {
   avg_amt_66d: number | null;
   score_5d: number | null;
   score_22d: number | null;
+  // Constituent count
+  stock_count: number | null;
 }
 
 // Broad Market needs two category values — others are single strings.
@@ -113,25 +115,37 @@ export async function fetchSectorIndices(
   const tradeDate = forDate ?? (await fetchLatestIndexDate());
   if (!tradeDate) return [];
 
-  // Step 3: Fetch EOD rows for those index IDs on that date
-  const { data: eodData, error: eodErr } = await from('km_index_eod')
-    .select(
-      'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
-      'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
-      'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d',
-    )
-    .eq('trade_date', tradeDate)
-    .in('index_id', indexIds)
-    .execute();
+  // Step 3: Fetch EOD rows + constituent counts in parallel
+  const [eodRes, constRes] = await Promise.all([
+    from('km_index_eod')
+      .select(
+        'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
+        'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
+        'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d',
+      )
+      .eq('trade_date', tradeDate)
+      .in('index_id', indexIds)
+      .execute(),
+    from('km_index_constituents')
+      .select('index_id')
+      .in('index_id', indexIds)
+      .execute(),
+  ]);
 
-  if (eodErr) throw new Error(`[sectorRotation] EOD fetch failed: ${eodErr.message}`);
+  if (eodRes.error) throw new Error(`[sectorRotation] EOD fetch failed: ${eodRes.error.message}`);
 
-  return ((eodData ?? []) as Omit<SectorIndexRow, 'name' | 'category'>[]).map((row) => {
+  const countMap = new Map<number, number>();
+  for (const c of (constRes.data ?? []) as { index_id: number }[]) {
+    countMap.set(c.index_id, (countMap.get(c.index_id) ?? 0) + 1);
+  }
+
+  return ((eodRes.data ?? []) as Omit<SectorIndexRow, 'name' | 'category' | 'stock_count'>[]).map((row) => {
     const sym = symbolMap.get(row.index_id);
     return {
       ...row,
       name: sym?.name ?? `Index ${row.index_id}`,
       category: sym?.category ?? '',
+      stock_count: countMap.get(row.index_id) ?? null,
     };
   });
 }
@@ -146,6 +160,81 @@ export interface VixRow {
   ret_5d: number | null;
   ret_22d: number | null;
   ret_66d: number | null;
+}
+
+// ── IndexDrawer supporting types + fetches ────────────────────────────────────
+
+export interface SparklinePoint {
+  trade_date: string;
+  close: number;
+}
+
+export interface ConstituentDetail {
+  equity_id: number;
+  symbol: string;
+  company_name: string;
+  flow_type: string | null;
+  rsi_14: number | null;
+  score_5d: number | null;
+}
+
+/** Last 22 trading days of close prices for a single index (newest first). */
+export async function fetchIndexSparkline(indexId: number): Promise<SparklinePoint[]> {
+  const { data, error } = await from('km_index_eod')
+    .select('trade_date,close')
+    .eq('index_id', indexId)
+    .order('trade_date', { ascending: false })
+    .limit(22)
+    .execute();
+
+  if (error) throw new Error(`[sparkline] ${error.message}`);
+  return ((data ?? []) as SparklinePoint[]).reverse();
+}
+
+/**
+ * For a set of equity IDs, fetch symbol + company_name from km_equity_symbols
+ * and the latest signals (flow_type, rsi_14, score_5d) from km_equity_eod
+ * on a given trade date.
+ */
+export async function fetchConstituentDetails(
+  equityIds: number[],
+  tradeDate: string,
+): Promise<ConstituentDetail[]> {
+  if (equityIds.length === 0) return [];
+
+  const [symRes, eodRes] = await Promise.all([
+    from('km_equity_symbols')
+      .select('id,symbol,company_name')
+      .in('id', equityIds)
+      .execute(),
+    from('km_equity_eod')
+      .select('equity_id,flow_type,rsi_14,score_5d')
+      .in('equity_id', equityIds)
+      .eq('trade_date', tradeDate)
+      .execute(),
+  ]);
+
+  if (symRes.error) throw new Error(`[constituentDetails] ${symRes.error.message}`);
+  if (eodRes.error) throw new Error(`[constituentDetails] ${eodRes.error.message}`);
+
+  type SymRow = { id: number; symbol: string; company_name: string };
+  type EodRow = { equity_id: number; flow_type: string | null; rsi_14: number | null; score_5d: number | null };
+
+  const syms = (symRes.data ?? []) as SymRow[];
+  const eods = (eodRes.data ?? []) as EodRow[];
+  const eodMap = new Map(eods.map((e) => [e.equity_id, e]));
+
+  return syms.map((s) => {
+    const eod = eodMap.get(s.id);
+    return {
+      equity_id: s.id,
+      symbol: s.symbol,
+      company_name: s.company_name,
+      flow_type: eod?.flow_type ?? null,
+      rsi_14: eod?.rsi_14 ?? null,
+      score_5d: eod?.score_5d ?? null,
+    };
+  });
 }
 
 /**

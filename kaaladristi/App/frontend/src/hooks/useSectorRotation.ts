@@ -6,10 +6,14 @@ import { useQuery } from '@tanstack/react-query';
 import {
   fetchSectorIndices,
   fetchVix,
+  fetchIndexSparkline,
+  fetchConstituentDetails,
   SECTOR_TAB_CATEGORIES,
   type SectorTab,
   type SectorIndexRow,
   type VixRow,
+  type SparklinePoint,
+  type ConstituentDetail,
 } from '@/services/sectorRotation';
 
 const STALE = 5 * 60 * 1000; // 5 minutes
@@ -23,6 +27,28 @@ export function useSectorIndices(tab: SectorTab, forDate?: string) {
   return useQuery<SectorIndexRow[], Error>({
     queryKey: ['sector-indices', tab, forDate ?? 'latest'],
     queryFn: () => fetchSectorIndices(categories, forDate),
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Last 22 trading days of close prices for a single index. */
+export function useIndexSparkline(indexId: number | null) {
+  return useQuery<SparklinePoint[], Error>({
+    queryKey: ['index-sparkline', indexId],
+    queryFn: () => fetchIndexSparkline(indexId!),
+    enabled: indexId != null,
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Symbol + EOD signals for a set of constituent equity IDs. */
+export function useConstituentDetails(equityIds: number[], tradeDate: string) {
+  return useQuery<ConstituentDetail[], Error>({
+    queryKey: ['constituent-details', equityIds.join(','), tradeDate],
+    queryFn: () => fetchConstituentDetails(equityIds, tradeDate),
+    enabled: equityIds.length > 0 && !!tradeDate,
     staleTime: STALE,
     retry: 1,
   });

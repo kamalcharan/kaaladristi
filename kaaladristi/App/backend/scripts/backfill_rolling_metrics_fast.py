@@ -170,18 +170,18 @@ WITH base AS (
         deliv_cr_bar,
         CASE WHEN amt22 > 0 THEN ROUND(amt5  / amt22, 4) ELSE NULL END AS surge_x,
         CASE WHEN amt66 > 0 THEN ROUND(amt22 / amt66, 4) ELSE NULL END AS s22d,
-        -- score_5d
+        -- score_5d: surge²×25 when surge≥1, else 0 (never NULL)
         CASE
-            WHEN amt5  IS NULL OR amt22 IS NULL OR amt22 = 0 THEN NULL
+            WHEN amt5  IS NULL OR amt22 IS NULL OR amt22 = 0 THEN 0
             WHEN p5d   IS NULL OR p5d  <= 0                  THEN 0
-            WHEN amt5 / amt22 < 1.0                          THEN ROUND(p5d, 2)
+            WHEN amt5 / amt22 < 1.0                          THEN 0
             ELSE ROUND(POWER(amt5 / amt22, 2) * 25, 2)
         END AS sc5d,
-        -- score_22d
+        -- score_22d: surge²×25 when surge≥1, else 0 (never NULL)
         CASE
-            WHEN amt22 IS NULL OR amt66 IS NULL OR amt66 = 0 THEN NULL
+            WHEN amt22 IS NULL OR amt66 IS NULL OR amt66 = 0 THEN 0
             WHEN p22d  IS NULL OR p22d <= 0                  THEN 0
-            WHEN amt22 / amt66 < 1.0                         THEN ROUND(p22d, 2)
+            WHEN amt22 / amt66 < 1.0                         THEN 0
             ELSE ROUND(POWER(amt22 / amt66, 2) * 25, 2)
         END AS sc22d,
         CASE WHEN bklevel > 0 THEN ROUND((close - bklevel) / bklevel * 100.0, 2) ELSE NULL END AS pct_from_bk,
