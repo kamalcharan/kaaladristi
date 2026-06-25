@@ -41,60 +41,88 @@ def verify(target_date: str):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    COUNT(*)                    AS total_rows,
-                    COUNT(w52_high)             AS w52_high_count,
-                    COUNT(avg_amt_5d)           AS avg_amt_5d_count,
-                    COUNT(avg_amt_22d)          AS avg_amt_22d_count,
-                    COUNT(avg_amt_66d)          AS avg_amt_66d_count,
-                    COUNT(d30_pct_chng)         AS d30_count,
-                    COUNT(delivery_surge_x)     AS surge_x_count,
-                    COUNT(pct_5d)               AS pct_5d_count,
-                    COUNT(pct_22d)              AS pct_22d_count,
-                    COUNT(pct_66d)              AS pct_66d_count,
-                    COUNT(surge_22d)            AS surge_22d_count,
-                    COUNT(score_5d)             AS score_5d_count,
-                    COUNT(score_22d)            AS score_22d_count,
-                    COUNT(ret_5d)               AS ret_5d_count,
-                    COUNT(ret_22d)              AS ret_22d_count,
-                    COUNT(ret_66d)              AS ret_66d_count,
-                    COUNT(breakout_level)       AS breakout_level_count,
-                    COUNT(pct_from_breakout)    AS pct_from_breakout_count,
-                    COUNT(pct_below_52w_high)   AS pct_below_52w_high_count,
-                    COUNT(deliv_value_cr)       AS deliv_value_cr_count
-                FROM km_equity_eod
-                WHERE trade_date = %s
-            """, [target_date])
-            row = cur.fetchone()
-            (total, w52h, amt5, amt22, amt66, d30, surge_x,
-             p5d, p22d, p66d, s22d, sc5d, sc22d,
-             r5d, r22d, r66d, bklvl, pct_bk, pct_b52, deliv_cr) = row
-            print(f"\n[verify] trade_date = {target_date}")
-            print(f"  total_rows          = {total}")
-            print(f"  w52_high            = {w52h}")
-            print(f"  avg_amt_5d          = {amt5}")
-            print(f"  avg_amt_22d         = {amt22}")
-            print(f"  avg_amt_66d         = {amt66}")
-            print(f"  d30_pct_chng        = {d30}")
-            print(f"  delivery_surge_x    = {surge_x}")
-            print(f"  pct_5d              = {p5d}")
-            print(f"  pct_22d             = {p22d}")
-            print(f"  pct_66d             = {p66d}")
-            print(f"  surge_22d           = {s22d}")
-            print(f"  score_5d            = {sc5d}")
-            print(f"  score_22d           = {sc22d}")
-            print(f"  ret_5d              = {r5d}")
-            print(f"  ret_22d             = {r22d}")
-            print(f"  ret_66d             = {r66d}")
-            print(f"  breakout_level      = {bklvl}")
-            print(f"  pct_from_breakout   = {pct_bk}")
-            print(f"  pct_below_52w_high  = {pct_b52}")
-            print(f"  deliv_value_cr      = {deliv_cr}")
-            if total and w52h and total == w52h:
-                print(f"\n✓ All {total} rows populated correctly.")
-            else:
-                print(f"\n⚠ {(total or 0) - (w52h or 0)} rows still have NULL w52_high.")
+            try:
+                cur.execute("""
+                    SELECT
+                        COUNT(*)                    AS total_rows,
+                        COUNT(w52_high)             AS w52_high_count,
+                        COUNT(avg_amt_5d)           AS avg_amt_5d_count,
+                        COUNT(avg_amt_22d)          AS avg_amt_22d_count,
+                        COUNT(avg_amt_66d)          AS avg_amt_66d_count,
+                        COUNT(d30_pct_chng)         AS d30_count,
+                        COUNT(delivery_surge_x)     AS surge_x_count,
+                        COUNT(pct_5d)               AS pct_5d_count,
+                        COUNT(pct_22d)              AS pct_22d_count,
+                        COUNT(pct_66d)              AS pct_66d_count,
+                        COUNT(surge_22d)            AS surge_22d_count,
+                        COUNT(score_5d)             AS score_5d_count,
+                        COUNT(score_22d)            AS score_22d_count,
+                        COUNT(ret_5d)               AS ret_5d_count,
+                        COUNT(ret_22d)              AS ret_22d_count,
+                        COUNT(ret_66d)              AS ret_66d_count,
+                        COUNT(breakout_level)       AS breakout_level_count,
+                        COUNT(pct_from_breakout)    AS pct_from_breakout_count,
+                        COUNT(pct_below_52w_high)   AS pct_below_52w_high_count,
+                        COUNT(deliv_value_cr)       AS deliv_value_cr_count
+                    FROM km_equity_eod
+                    WHERE trade_date = %s
+                """, [target_date])
+                row = cur.fetchone()
+                (total, w52h, amt5, amt22, amt66, d30, surge_x,
+                 p5d, p22d, p66d, s22d, sc5d, sc22d,
+                 r5d, r22d, r66d, bklvl, pct_bk, pct_b52, deliv_cr) = row
+                print(f"\n[verify] trade_date = {target_date}")
+                print(f"  total_rows          = {total}")
+                print(f"  w52_high            = {w52h}")
+                print(f"  avg_amt_5d          = {amt5}")
+                print(f"  avg_amt_22d         = {amt22}")
+                print(f"  avg_amt_66d         = {amt66}")
+                print(f"  d30_pct_chng        = {d30}")
+                print(f"  delivery_surge_x    = {surge_x}")
+                print(f"  pct_5d              = {p5d}")
+                print(f"  pct_22d             = {p22d}")
+                print(f"  pct_66d             = {p66d}")
+                print(f"  surge_22d           = {s22d}")
+                print(f"  score_5d            = {sc5d}")
+                print(f"  score_22d           = {sc22d}")
+                print(f"  ret_5d              = {r5d}")
+                print(f"  ret_22d             = {r22d}")
+                print(f"  ret_66d             = {r66d}")
+                print(f"  breakout_level      = {bklvl}")
+                print(f"  pct_from_breakout   = {pct_bk}")
+                print(f"  pct_below_52w_high  = {pct_b52}")
+                print(f"  deliv_value_cr      = {deliv_cr}")
+                if total and w52h and total == w52h:
+                    print(f"\n✓ All {total} rows populated correctly.")
+                else:
+                    print(f"\n⚠ {(total or 0) - (w52h or 0)} rows still have NULL w52_high.")
+            except Exception as e:
+                # New columns (migration 112) not yet applied — fall back to core columns only.
+                conn.rollback()
+                cur.execute("""
+                    SELECT
+                        COUNT(*)                AS total_rows,
+                        COUNT(w52_high)         AS w52_high_count,
+                        COUNT(avg_amt_5d)       AS avg_amt_5d_count,
+                        COUNT(avg_amt_22d)      AS avg_amt_22d_count,
+                        COUNT(score_5d)         AS score_5d_count,
+                        COUNT(score_22d)        AS score_22d_count
+                    FROM km_equity_eod
+                    WHERE trade_date = %s
+                """, [target_date])
+                row = cur.fetchone()
+                total, w52h, amt5, amt22, sc5d, sc22d = row
+                print(f"\n[verify] trade_date = {target_date}  (migration 112 columns unavailable: {e})")
+                print(f"  total_rows   = {total}")
+                print(f"  w52_high     = {w52h}")
+                print(f"  avg_amt_5d   = {amt5}")
+                print(f"  avg_amt_22d  = {amt22}")
+                print(f"  score_5d     = {sc5d}")
+                print(f"  score_22d    = {sc22d}")
+                if total and w52h and total == w52h:
+                    print(f"\n✓ Core columns: all {total} rows populated.")
+                else:
+                    print(f"\n⚠ {(total or 0) - (w52h or 0)} rows still have NULL w52_high.")
     finally:
         conn.close()
 
