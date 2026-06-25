@@ -42,17 +42,14 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 ## 3. Active Sprint
 > Current focus. One sprint at a time.
 
-<<<<<<< HEAD
 ### Sprint 7 — Field Config + StockCard
 
 **Goal:** Centralise all field display logic into `src/config/fieldConfig.ts` so ScanTable and StockCard (Step 7.2) share one source of truth for labels, tooltips, formatters, and color rules.
-=======
 ### Sprint 7 — Field Config + StockCard ✅ COMPLETE
 
 **Goal:** Centralise all field display logic into `src/config/fieldConfig.ts` so ScanTable and StockCard share one source of truth for labels, tooltips, formatters, and color rules.
 
 **Status: ✅ COMPLETE**
->>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
 
 | Step | Task | Status | Notes |
 |---|---|---|---|
@@ -61,11 +58,8 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | 7.3 | Wire ConvictionFlowCards + BreakoutSurgeCards to fieldConfig | ✅ | delivery_surge_x 3-level color; avg_amt labels → 'Score 5D'/'Score 22D'; rsi/rss/pct_from_breakout/rvol all use getColor. |
 | 7.4 | MiniTower bars for score fields in ScanTable + MRS zone dot | ✅ | MiniTower.tsx created; score50/score100 cells show 5-bar tower + number; sniper_hot → gold; rss_value → accent; MRS dot 7px. |
 | C43 | **Bug fix**: `mcap_cr: null` → `sym.mcap_cr ?? null` in `buildStockFromEod()` | ✅ | ManipulationWatch now shows correct MCap. Only that path was affected — all other scanners already read sym.mcap_cr correctly. Sprint 7. |
-<<<<<<< HEAD
-=======
 | 7.5 | Auto-generate tooltips from fieldConfig — remove hardcoded strings in StockCard | ✅ | SignalTower tooltip prop → `getTooltip('sniper_inst'/'sniper_hot') ?? ''`. MrsPill title → `<Tooltip>` component wrapping. Added `getTooltip` + `Tooltip` imports to StockCard. |
 | 7.6 | Final audit + add missing fields to fieldConfig (d_pct, deliv_value_cr, ret_66d) | ✅ | w52_high already present. Exceptions confirmed: pctColor/distColor in card tables for return fields are intentional simple +/- coloring, not field-config violations. |
->>>>>>> ec5639740bc6abb97ca7c3817303dd483869fb40
 
 ---
 
