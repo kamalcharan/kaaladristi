@@ -1799,9 +1799,12 @@ export async function scanBreakoutSurgeDaily(
   const equityIds = [...symbols.keys()];
   if (equityIds.length === 0) return [];
 
-  // 2. Fetch 21+ bars per stock: tradeDate – 40 calendar days → tradeDate
+  // 2. Fetch 70+ bars per stock — 100 calendar days covers 66+ trading days,
+  //    which is needed to compute avg_amt_66d and score_22d client-side.
+  //    score_5d/22d are not written by the daily pipeline (migration 111 was
+  //    a one-time backfill), so we always compute them here from history.
   const cutoff = new Date(tradeDate);
-  cutoff.setDate(cutoff.getDate() - 40);
+  cutoff.setDate(cutoff.getDate() - 100);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
   const EOD_COLS = [
@@ -1809,10 +1812,8 @@ export async function scanBreakoutSurgeDaily(
     'rsi_14', 'ema_20', 'magic_rs', 'magic_rs_zone',
     'rvol', 'flow_type', 'sniper_inst', 'sniper_hot',
     'rss_value', 'accum_distrib', 'supertrend_dir',
-    'w52_high', 'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d',
-    'score_5d', 'score_22d',
-    'pct_5d', 'pct_22d', 'pct_66d',
-    'delivery_surge_x', 'delivery_pct',
+    'w52_high', 'delivery_surge_x', 'delivery_pct',
+    'value_cr',
     'stage', 'sma_50', 'sma_150', 'sma_200',
   ].join(',');
 
@@ -1872,6 +1873,50 @@ export async function scanBreakoutSurgeDaily(
       ? ((w52h - close) / w52h) * 100
       : null;
 
+    // Compute delivery amounts from history (value_cr × delivery_pct/100).
+    // This matches buildScanStock() and is reliable for all NSE equities,
+    // unlike the DB columns which depend on Breeze delivery_qty.
+    // history is ordered DESC so history[0] = today, history[1] = yesterday, etc.
+    const delivBars = history.map((h: any) =>
+      h.value_cr != null ? h.value_cr * ((h.delivery_pct ?? 0) / 100) : null
+    );
+    const delivAvg = (n: number): number | null => {
+      const slice = delivBars.slice(0, Math.min(delivBars.length, n)).filter((v: number | null): v is number => v != null);
+      return slice.length > 0 ? slice.reduce((s: number, v: number) => s + v, 0) / slice.length : null;
+    };
+    const avg_amt_5d  = delivAvg(5);
+    const avg_amt_22d = delivAvg(22);
+    const avg_amt_66d = delivAvg(66);
+
+    // Compute pct returns from close prices in history
+    const ret_5d  = history.length > 5  ? ((close - Number(history[5].close))  / Number(history[5].close))  * 100 : null;
+    const ret_22d = history.length > 22 ? ((close - Number(history[22].close)) / Number(history[22].close)) * 100 : null;
+    const ret_66d = history.length > 66 ? ((close - Number(history[66].close)) / Number(history[66].close)) * 100 : null;
+
+    // Compute score_5d: momentum × delivery surge (same formula as migration 111)
+    const score_5d = (() => {
+      if (avg_amt_5d == null || avg_amt_22d == null || avg_amt_22d === 0) return null;
+      if (ret_5d == null || ret_5d <= 0) return 0;
+      const surge = avg_amt_5d / avg_amt_22d;
+      return surge < 1.0
+        ? Math.round(ret_5d * 100) / 100
+        : Math.round(surge * surge * 25 * 100) / 100;
+    })();
+
+    // Compute score_22d: momentum × delivery surge vs 66d baseline
+    const score_22d = (() => {
+      if (avg_amt_22d == null || avg_amt_66d == null || avg_amt_66d === 0) return null;
+      if (ret_22d == null || ret_22d <= 0) return 0;
+      const surge = avg_amt_22d / avg_amt_66d;
+      return surge < 1.0
+        ? Math.round(ret_22d * 100) / 100
+        : Math.round(surge * surge * 25 * 100) / 100;
+    })();
+
+    const delivery_surge_x = avg_amt_5d != null && avg_amt_22d != null && avg_amt_22d > 0
+      ? Math.round((avg_amt_5d / avg_amt_22d) * 10000) / 10000
+      : (eod.delivery_surge_x ?? null);
+
     results.push({
       equity_id: id,
       symbol:       sym.symbol,
@@ -1914,16 +1959,15 @@ export async function scanBreakoutSurgeDaily(
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
       vaniOpportunity: false,
-      // Score / pct columns from migration 111
-      score_5d:        eod.score_5d ?? null,
-      score_22d:       eod.score_22d ?? null,
-      avg_amt_5d:      eod.avg_amt_5d ?? null,
-      avg_amt_22d:     eod.avg_amt_22d ?? null,
-      avg_amt_66d:     eod.avg_amt_66d ?? null,
-      ret_5d:          eod.pct_5d ?? null,
-      ret_22d:         eod.pct_22d ?? null,
-      ret_66d:         eod.pct_66d ?? null,
-      delivery_surge_x: eod.delivery_surge_x ?? null,
+      score_5d,
+      score_22d,
+      avg_amt_5d:  avg_amt_5d  != null ? Math.round(avg_amt_5d  * 100) / 100 : null,
+      avg_amt_22d: avg_amt_22d != null ? Math.round(avg_amt_22d * 100) / 100 : null,
+      avg_amt_66d: avg_amt_66d != null ? Math.round(avg_amt_66d * 100) / 100 : null,
+      ret_5d:  ret_5d  != null ? Math.round(ret_5d  * 100) / 100 : null,
+      ret_22d: ret_22d != null ? Math.round(ret_22d * 100) / 100 : null,
+      ret_66d: ret_66d != null ? Math.round(ret_66d * 100) / 100 : null,
+      delivery_surge_x,
       breakout_level:    Math.round(breakoutLevel  * 100) / 100,
       pct_from_breakout: Math.round(pctFromBreakout * 100) / 100,
     });
