@@ -251,7 +251,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
   }
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
         <thead>
           <tr>
@@ -319,7 +319,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                 <td style={{ padding: '9px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                   {displaySymbol({ symbol: row.symbol, company_name: row.company_name })}
                 </td>
-                <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {row.company_name}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-faint)' }}>
@@ -394,7 +394,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   ];
 
   return (
-    <div style={{ padding: '24px', maxWidth: 900 }}>
+    <div style={{ padding: '24px' }}>
 
       {/* Signal explanation */}
       <SignalCard row={row} />
