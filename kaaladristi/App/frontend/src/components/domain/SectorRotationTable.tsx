@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { formatValue, getColor } from '@/config/fieldConfig';
 import { FLOW_LABELS } from '@/constants/signalScale';
@@ -284,12 +285,12 @@ function scoreColor(val: number | null): string {
 
 interface Props {
   rows: SectorIndexRow[];
-  onRowClick?: (row: SectorIndexRow) => void;
 }
 
 type SortDir = 'asc' | 'desc';
 
-export default function SectorRotationTable({ rows, onRowClick }: Props) {
+export default function SectorRotationTable({ rows }: Props) {
+  const navigate = useNavigate();
   const [sortKey, setSortKey] = useState<SortKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -618,9 +619,9 @@ export default function SectorRotationTable({ rows, onRowClick }: Props) {
                   style={{
                     background: rowBg,
                     borderBottom: '1px solid rgba(255,255,255,0.04)',
-                    cursor: onRowClick ? 'pointer' : undefined,
+                    cursor: 'pointer',
                   }}
-                  onClick={() => onRowClick?.(row)}
+                  onClick={() => navigate(`/sector-rotation/${row.index_id}`)}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)';
                   }}

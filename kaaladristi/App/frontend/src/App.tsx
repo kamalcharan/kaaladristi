@@ -35,6 +35,7 @@ import PricingPage from '@/views/PricingPage'
 import AccountPage from '@/views/AccountPage';
 import CorrelationPage from '@/views/CorrelationPage';
 import SectorRotationPage from '@/views/SectorRotationPage';
+import IndexDetailPage from '@/views/IndexDetailPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +108,7 @@ function AppRoutes() {
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/sector-rotation" element={<SectorRotationPage />} />
+          <Route path="/sector-rotation/:indexId" element={<IndexDetailPage />} />
           <Route path="/correlation/:itemA/:itemB" element={<CorrelationPage />} />
           <Route path="/dashboard" element={<DashboardV3Page />} />
           <Route path="/markets" element={<MarketsView />} />

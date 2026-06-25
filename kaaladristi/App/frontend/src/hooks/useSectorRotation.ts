@@ -8,6 +8,7 @@ import {
   fetchVix,
   fetchIndexSparkline,
   fetchConstituentDetails,
+  fetchIndexDetail,
   SECTOR_TAB_CATEGORIES,
   type SectorTab,
   type SectorIndexRow,
@@ -49,6 +50,17 @@ export function useConstituentDetails(equityIds: number[], tradeDate: string) {
     queryKey: ['constituent-details', equityIds.join(','), tradeDate],
     queryFn: () => fetchConstituentDetails(equityIds, tradeDate),
     enabled: equityIds.length > 0 && !!tradeDate,
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Latest EOD row + symbol metadata for a single index. */
+export function useIndexDetail(indexId: number | undefined) {
+  return useQuery<SectorIndexRow | null, Error>({
+    queryKey: ['index-detail', indexId],
+    queryFn: () => fetchIndexDetail(indexId!),
+    enabled: indexId != null,
     staleTime: STALE,
     retry: 1,
   });
