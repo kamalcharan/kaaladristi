@@ -158,7 +158,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
 
   // Phase 2: fetch everything else in parallel.
   // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
-  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage';
+  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage,score_5d,score_22d,pct_5d,pct_22d,pct_66d,avg_amt_66d,surge_22d';
   const CHUNK = 400;
   const idChunks: number[][] = [];
   for (let i = 0; i < activeIds.length; i += CHUNK) idChunks.push(activeIds.slice(i, i + CHUNK));
@@ -659,8 +659,13 @@ function buildScanStock(
     mcap_cr: sym.mcap_cr ?? null,
     avg_amt_5d:       avg_amt_5d       != null ? Math.round(avg_amt_5d       * 100) / 100 : null,
     avg_amt_22d:      avg_amt_22d      != null ? Math.round(avg_amt_22d      * 100) / 100 : null,
-    avg_amt_66d:      avg_amt_66d      != null ? Math.round(avg_amt_66d      * 100) / 100 : null,
+    avg_amt_66d:      eod.avg_amt_66d  != null ? Number(eod.avg_amt_66d)                  : null,
     delivery_surge_x: delivery_surge_x != null ? Math.round(delivery_surge_x * 10000) / 10000 : null,
+    score_5d:    eod.score_5d    != null ? Number(eod.score_5d)    : null,
+    score_22d:   eod.score_22d   != null ? Number(eod.score_22d)   : null,
+    pct_5d:      eod.pct_5d      != null ? Number(eod.pct_5d)      : null,
+    pct_22d:     eod.pct_22d     != null ? Number(eod.pct_22d)     : null,
+    pct_66d:     eod.pct_66d     != null ? Number(eod.pct_66d)     : null,
     xAmt: xAmt != null ? Math.round(xAmt * 1000) / 1000 : null,
     rel_5d_n50:   rel_5d_n50   != null ? Math.round(rel_5d_n50   * 100) / 100 : null,
     rel_22d_n50:  rel_22d_n50  != null ? Math.round(rel_22d_n50  * 100) / 100 : null,
