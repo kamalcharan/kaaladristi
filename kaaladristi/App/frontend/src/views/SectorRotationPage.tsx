@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useSectorIndices, useVix } from '@/hooks/useSectorRotation';
-import { SECTOR_TAB_LABELS, type SectorTab, type SectorIndexRow } from '@/services/sectorRotation';
+import { SECTOR_TAB_LABELS, type SectorTab } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
-import IndexDrawer from '@/components/domain/IndexDrawer';
 
 const TABS: SectorTab[] = ['broad', 'sectoral', 'thematic'];
 
@@ -128,13 +127,7 @@ function VixBand() {
   );
 }
 
-function TabContent({
-  tab,
-  onRowClick,
-}: {
-  tab: SectorTab;
-  onRowClick: (row: SectorIndexRow) => void;
-}) {
+function TabContent({ tab }: { tab: SectorTab }) {
   const { data: rows = [], isLoading, error } = useSectorIndices(tab);
 
   if (isLoading) {
@@ -167,12 +160,11 @@ function TabContent({
     );
   }
 
-  return <SectorRotationTable rows={rows} onRowClick={onRowClick} />;
+  return <SectorRotationTable rows={rows} />;
 }
 
 export default function SectorRotationPage() {
   const [activeTab, setActiveTab] = useState<SectorTab>('broad');
-  const [selectedRow, setSelectedRow] = useState<SectorIndexRow | null>(null);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -259,15 +251,8 @@ export default function SectorRotationPage() {
 
       {/* Tab content */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-        <TabContent tab={activeTab} onRowClick={setSelectedRow} />
+        <TabContent tab={activeTab} />
       </div>
-
-      {/* Row detail drawer */}
-      <IndexDrawer
-        indexId={selectedRow?.index_id ?? null}
-        row={selectedRow}
-        onClose={() => setSelectedRow(null)}
-      />
     </div>
   );
 }

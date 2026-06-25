@@ -176,6 +176,7 @@ export interface ConstituentDetail {
   flow_type: string | null;
   rsi_14: number | null;
   score_5d: number | null;
+  magic_rs: number | null;
 }
 
 /** Last 22 trading days of close prices for a single index (newest first). */
@@ -208,7 +209,7 @@ export async function fetchConstituentDetails(
       .in('id', equityIds)
       .execute(),
     from('km_equity_eod')
-      .select('equity_id,flow_type,rsi_14,score_5d')
+      .select('equity_id,flow_type,rsi_14,score_5d,magic_rs')
       .in('equity_id', equityIds)
       .eq('trade_date', tradeDate)
       .execute(),
@@ -218,7 +219,7 @@ export async function fetchConstituentDetails(
   if (eodRes.error) throw new Error(`[constituentDetails] ${eodRes.error.message}`);
 
   type SymRow = { id: number; symbol: string; company_name: string };
-  type EodRow = { equity_id: number; flow_type: string | null; rsi_14: number | null; score_5d: number | null };
+  type EodRow = { equity_id: number; flow_type: string | null; rsi_14: number | null; score_5d: number | null; magic_rs: number | null };
 
   const syms = (symRes.data ?? []) as SymRow[];
   const eods = (eodRes.data ?? []) as EodRow[];
@@ -233,8 +234,40 @@ export async function fetchConstituentDetails(
       flow_type: eod?.flow_type ?? null,
       rsi_14: eod?.rsi_14 ?? null,
       score_5d: eod?.score_5d ?? null,
+      magic_rs: eod?.magic_rs ?? null,
     };
   });
+}
+
+/**
+ * Fetch a single index's latest EOD row plus its symbol metadata.
+ * Returns null if no data found.
+ */
+export async function fetchIndexDetail(indexId: number): Promise<SectorIndexRow | null> {
+  const [symRes, eodRes] = await Promise.all([
+    from('km_index_symbols')
+      .select('id,name,category')
+      .eq('id', indexId)
+      .limit(1)
+      .execute(),
+    from('km_index_eod')
+      .select(
+        'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
+        'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
+        'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d',
+      )
+      .eq('index_id', indexId)
+      .order('trade_date', { ascending: false })
+      .limit(1)
+      .execute(),
+  ]);
+
+  if (symRes.error || eodRes.error) return null;
+  const sym = ((symRes.data ?? []) as SectorIndexSymbol[])[0];
+  const eod = ((eodRes.data ?? []) as Omit<SectorIndexRow, 'name' | 'category' | 'stock_count'>[])[0];
+  if (!sym || !eod) return null;
+
+  return { ...eod, name: sym.name, category: sym.category, stock_count: null };
 }
 
 /**
