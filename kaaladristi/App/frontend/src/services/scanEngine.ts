@@ -1842,6 +1842,7 @@ export async function scanBreakoutSurgeDaily(
 
   // 4. Filter and build results
   const results: ScanStock[] = [];
+  let _debugCount = 0;
 
   for (const [id, history] of historyMap) {
     const sym = symbols.get(id);
@@ -1867,6 +1868,19 @@ export async function scanBreakoutSurgeDaily(
       if (c > breakoutLevel) breakoutLevel = c;
     }
     if (close <= breakoutLevel) continue;
+
+    if (_debugCount < 3) {
+      console.log('[BSD debug]', {
+        symbol: sym.symbol,
+        score_5d: eod.score_5d,
+        score_22d: eod.score_22d,
+        pct_66d: eod.pct_66d,
+        avg_amt_66d: eod.avg_amt_66d,
+        avg_amt_5d: eod.avg_amt_5d,
+        avg_amt_22d: eod.avg_amt_22d,
+      });
+      _debugCount++;
+    }
 
     const pctFromBreakout = ((close - breakoutLevel) / breakoutLevel) * 100;
     const w52h = eod.w52_high != null ? Number(eod.w52_high) : null;
