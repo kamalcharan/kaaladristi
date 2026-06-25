@@ -1071,6 +1071,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
       ) : viewMode === 'table' ? (
         sorted.length > 0 ? (
           <ScanTable
+            key={presetId}
             stocks={sorted}
             presetId={presetId}
             onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}

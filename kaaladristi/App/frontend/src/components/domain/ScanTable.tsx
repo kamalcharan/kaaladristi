@@ -65,13 +65,13 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
   const [gearOpen, setGearOpen] = useState(false)
   const gearRef = useRef<HTMLDivElement>(null)
 
-  const storageKey = `scan_cols:${presetId}`
+  const storageKey = `dristiq_cols_${presetId}`
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(storageKey)
       if (saved) return new Set<string>(JSON.parse(saved) as string[])
     } catch { /* ignore */ }
-    return new Set<string>()
+    return new Set<string>(groupOptionalCols)  // hide all optional cols by default
   })
 
   useEffect(() => {
