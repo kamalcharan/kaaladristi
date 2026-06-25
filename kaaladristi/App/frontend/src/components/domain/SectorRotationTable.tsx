@@ -16,6 +16,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { formatValue, getColor } from '@/config/fieldConfig';
+import { FLOW_LABELS } from '@/constants/signalScale';
 import type { SectorIndexRow } from '@/services/sectorRotation';
 
 // ── Signal logic (spec Section 5) ────────────────────────────────────────────
@@ -47,11 +48,9 @@ function computeSignal(row: SectorIndexRow): SignalType {
   return null;
 }
 
-const SIGNAL_LABEL: Record<NonNullable<SignalType>, string> = {
-  flow_entering:  'Flow Entering',
-  flow_exiting:   'Flow Exiting',
-  sustained_flow: 'Sustained Flow',
-};
+// Labels sourced from canonical FLOW_LABELS in signalScale.ts
+const signalLabel = (sig: NonNullable<SignalType>): string =>
+  FLOW_LABELS[sig]?.label ?? sig;
 
 const SIGNAL_STYLE: Record<NonNullable<SignalType>, { color: string; bg: string; border: string }> = {
   flow_entering:  { color: 'var(--bull)',  bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.3)' },
@@ -446,9 +445,9 @@ export default function SectorRotationTable({ rows }: Props) {
                   {fmtPct(row.pct_amt_chg)}
                 </td>
 
-                {/* Signal badge placeholder */}
+                {/* Signal badge */}
                 <td style={{ padding: '9px 10px' }}>
-                  {row.signal ? (
+                  {row.signal && (
                     <span
                       style={{
                         display: 'inline-flex',
@@ -459,15 +458,13 @@ export default function SectorRotationTable({ rows }: Props) {
                         fontWeight: 600,
                         letterSpacing: '0.04em',
                         whiteSpace: 'nowrap',
-                        color:       SIGNAL_STYLE[row.signal].color,
-                        background:  SIGNAL_STYLE[row.signal].bg,
-                        border:      `1px solid ${SIGNAL_STYLE[row.signal].border}`,
+                        color:      SIGNAL_STYLE[row.signal].color,
+                        background: SIGNAL_STYLE[row.signal].bg,
+                        border:     `1px solid ${SIGNAL_STYLE[row.signal].border}`,
                       }}
                     >
-                      {SIGNAL_LABEL[row.signal]}
+                      {signalLabel(row.signal)}
                     </span>
-                  ) : (
-                    <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>—</span>
                   )}
                 </td>
               </tr>
