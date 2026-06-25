@@ -294,24 +294,46 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
         dtype=float,
     ).where(surge_22d_ratio.notna() & pct_22d.notna())
 
+    # ── ret_5d / ret_22d / ret_66d ────────────────────────────────────────
+    ret_5d  = close.pct_change(5).mul(100).round(2)
+    ret_22d = close.pct_change(22).mul(100).round(2)
+    ret_66d = close.pct_change(66).mul(100).round(2)
+
+    # ── breakout_level = rolling 20-bar high of the prior close ──────────
+    breakout_level    = close.shift(1).rolling(20, min_periods=1).max().round(2)
+    pct_from_breakout = ((close - breakout_level) / breakout_level * 100).round(2)
+
+    # ── pct_below_52w_high ────────────────────────────────────────────────
+    pct_below_52w_high = ((w52_high - close) / w52_high * 100).where(w52_high > 0).round(2)
+
+    # ── deliv_value_cr = delivery value in Crores per bar ────────────────
+    deliv_value_cr = deliv_cr.round(4)
+
     return {
-        'w52_high':           w52_high,
-        'w52_low':            w52_low,
-        'lifetime_high':      lifetime_high,
-        'supertrend':         pd.Series(st_value, index=df.index),
-        'supertrend_dir':     pd.Series(st_dir, index=df.index),
-        'd30_pct_chng':       d30_pct_chng,
-        'd365_pct_chng':      d365_pct_chng,
-        'avg_amt_5d':         avg_amt_5d,
-        'avg_amt_22d':        avg_amt_22d,
-        'avg_amt_66d':        avg_amt_66d,
-        'delivery_surge_x':   delivery_surge_x,
-        'pct_5d':             pct_5d,
-        'pct_22d':            pct_22d,
-        'pct_66d':            pct_66d,
-        'surge_22d':          surge_22d,
-        'score_5d':           score_5d,
-        'score_22d':          score_22d,
+        'w52_high':            w52_high,
+        'w52_low':             w52_low,
+        'lifetime_high':       lifetime_high,
+        'supertrend':          pd.Series(st_value, index=df.index),
+        'supertrend_dir':      pd.Series(st_dir, index=df.index),
+        'd30_pct_chng':        d30_pct_chng,
+        'd365_pct_chng':       d365_pct_chng,
+        'avg_amt_5d':          avg_amt_5d,
+        'avg_amt_22d':         avg_amt_22d,
+        'avg_amt_66d':         avg_amt_66d,
+        'delivery_surge_x':    delivery_surge_x,
+        'pct_5d':              pct_5d,
+        'pct_22d':             pct_22d,
+        'pct_66d':             pct_66d,
+        'surge_22d':           surge_22d,
+        'score_5d':            score_5d,
+        'score_22d':           score_22d,
+        'ret_5d':              ret_5d,
+        'ret_22d':             ret_22d,
+        'ret_66d':             ret_66d,
+        'breakout_level':      breakout_level,
+        'pct_from_breakout':   pct_from_breakout,
+        'pct_below_52w_high':  pct_below_52w_high,
+        'deliv_value_cr':      deliv_value_cr,
     }
 
 
@@ -716,6 +738,9 @@ ROLLING_COLUMNS = [
     'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
     'pct_5d', 'pct_22d', 'pct_66d',
     'surge_22d', 'score_5d', 'score_22d',
+    'ret_5d', 'ret_22d', 'ret_66d',
+    'breakout_level', 'pct_from_breakout', 'pct_below_52w_high',
+    'deliv_value_cr',
 ]
 
 
@@ -849,27 +874,37 @@ def _flush_rolling_batch(conn, batch: list):
     sql = """
         UPDATE km_equity_eod AS e
         SET
-          w52_high         = v.w52_high,
-          w52_low          = v.w52_low,
-          lifetime_high    = v.lifetime_high,
-          d30_pct_chng     = v.d30_pct_chng,
-          d365_pct_chng    = v.d365_pct_chng,
-          avg_amt_5d       = v.avg_amt_5d,
-          avg_amt_22d      = v.avg_amt_22d,
-          avg_amt_66d      = v.avg_amt_66d,
-          delivery_surge_x = v.delivery_surge_x,
-          pct_5d           = v.pct_5d,
-          pct_22d          = v.pct_22d,
-          pct_66d          = v.pct_66d,
-          surge_22d        = v.surge_22d,
-          score_5d         = v.score_5d,
-          score_22d        = v.score_22d
+          w52_high            = v.w52_high,
+          w52_low             = v.w52_low,
+          lifetime_high       = v.lifetime_high,
+          d30_pct_chng        = v.d30_pct_chng,
+          d365_pct_chng       = v.d365_pct_chng,
+          avg_amt_5d          = v.avg_amt_5d,
+          avg_amt_22d         = v.avg_amt_22d,
+          avg_amt_66d         = v.avg_amt_66d,
+          delivery_surge_x    = v.delivery_surge_x,
+          pct_5d              = v.pct_5d,
+          pct_22d             = v.pct_22d,
+          pct_66d             = v.pct_66d,
+          surge_22d           = v.surge_22d,
+          score_5d            = v.score_5d,
+          score_22d           = v.score_22d,
+          ret_5d              = v.ret_5d,
+          ret_22d             = v.ret_22d,
+          ret_66d             = v.ret_66d,
+          breakout_level      = v.breakout_level,
+          pct_from_breakout   = v.pct_from_breakout,
+          pct_below_52w_high  = v.pct_below_52w_high,
+          deliv_value_cr      = v.deliv_value_cr
         FROM (VALUES %s) AS v(
           id, w52_high, w52_low, lifetime_high,
           d30_pct_chng, d365_pct_chng,
           avg_amt_5d, avg_amt_22d, avg_amt_66d, delivery_surge_x,
           pct_5d, pct_22d, pct_66d,
-          surge_22d, score_5d, score_22d
+          surge_22d, score_5d, score_22d,
+          ret_5d, ret_22d, ret_66d,
+          breakout_level, pct_from_breakout, pct_below_52w_high,
+          deliv_value_cr
         )
         WHERE e.id = v.id::int
     """
@@ -880,6 +915,9 @@ def _flush_rolling_batch(conn, batch: list):
             r['avg_amt_5d'], r['avg_amt_22d'], r['avg_amt_66d'], r['delivery_surge_x'],
             r['pct_5d'], r['pct_22d'], r['pct_66d'],
             r['surge_22d'], r['score_5d'], r['score_22d'],
+            r['ret_5d'], r['ret_22d'], r['ret_66d'],
+            r['breakout_level'], r['pct_from_breakout'], r['pct_below_52w_high'],
+            r['deliv_value_cr'],
         )
         for r in batch
     ]
