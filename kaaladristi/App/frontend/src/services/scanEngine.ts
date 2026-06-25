@@ -1985,7 +1985,7 @@ export async function scanBreakoutSurgeDaily(
     return bs5 - as5;
   });
 
-  console.log('[breakout_surge_daily] date:', tradeDate, '| passed:', results.length);
+  console.log('[BSD] total passed:', results.length, 'date:', tradeDate);
   return results;
   } catch (err) {
     console.error('scanBreakoutSurgeDaily error:', err);
