@@ -284,11 +284,12 @@ function scoreColor(val: number | null): string {
 
 interface Props {
   rows: SectorIndexRow[];
+  onRowClick?: (row: SectorIndexRow) => void;
 }
 
 type SortDir = 'asc' | 'desc';
 
-export default function SectorRotationTable({ rows }: Props) {
+export default function SectorRotationTable({ rows, onRowClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -595,7 +596,12 @@ export default function SectorRotationTable({ rows }: Props) {
               return (
                 <tr
                   key={row.index_id}
-                  style={{ background: rowBg, borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                  style={{
+                    background: rowBg,
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    cursor: onRowClick ? 'pointer' : undefined,
+                  }}
+                  onClick={() => onRowClick?.(row)}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)';
                   }}

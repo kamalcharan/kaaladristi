@@ -148,6 +148,81 @@ export interface VixRow {
   ret_66d: number | null;
 }
 
+// ── IndexDrawer supporting types + fetches ────────────────────────────────────
+
+export interface SparklinePoint {
+  trade_date: string;
+  close: number;
+}
+
+export interface ConstituentDetail {
+  equity_id: number;
+  symbol: string;
+  company_name: string;
+  flow_type: string | null;
+  rsi_14: number | null;
+  score_5d: number | null;
+}
+
+/** Last 22 trading days of close prices for a single index (newest first). */
+export async function fetchIndexSparkline(indexId: number): Promise<SparklinePoint[]> {
+  const { data, error } = await from('km_index_eod')
+    .select('trade_date,close')
+    .eq('index_id', indexId)
+    .order('trade_date', { ascending: false })
+    .limit(22)
+    .execute();
+
+  if (error) throw new Error(`[sparkline] ${error.message}`);
+  return ((data ?? []) as SparklinePoint[]).reverse();
+}
+
+/**
+ * For a set of equity IDs, fetch symbol + company_name from km_equity_symbols
+ * and the latest signals (flow_type, rsi_14, score_5d) from km_equity_eod
+ * on a given trade date.
+ */
+export async function fetchConstituentDetails(
+  equityIds: number[],
+  tradeDate: string,
+): Promise<ConstituentDetail[]> {
+  if (equityIds.length === 0) return [];
+
+  const [symRes, eodRes] = await Promise.all([
+    from('km_equity_symbols')
+      .select('id,symbol,company_name')
+      .in('id', equityIds)
+      .execute(),
+    from('km_equity_eod')
+      .select('equity_id,flow_type,rsi_14,score_5d')
+      .in('equity_id', equityIds)
+      .eq('trade_date', tradeDate)
+      .execute(),
+  ]);
+
+  if (symRes.error) throw new Error(`[constituentDetails] ${symRes.error.message}`);
+  if (eodRes.error) throw new Error(`[constituentDetails] ${eodRes.error.message}`);
+
+  type SymRow = { id: number; symbol: string; company_name: string };
+  type EodRow = { equity_id: number; flow_type: string | null; rsi_14: number | null; score_5d: number | null };
+
+  const syms = (symRes.data ?? []) as SymRow[];
+  const eods = (eodRes.data ?? []) as EodRow[];
+  const eodMap = new Map(eods.map((e) => [e.equity_id, e]));
+
+  return syms.map((s) => {
+    const eod = eodMap.get(s.id);
+    return {
+      equity_id: s.id,
+      symbol: s.symbol,
+      company_name: s.company_name,
+      flow_type: eod?.flow_type ?? null,
+      rsi_14: eod?.rsi_14 ?? null,
+      score_5d: eod?.score_5d ?? null,
+    };
+  });
+}
+
 /**
  * Fetch latest India VIX OHLC + returns (index_id = 94).
  * Returns null if no data is available.
