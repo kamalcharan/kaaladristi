@@ -190,6 +190,18 @@ class QueryBuilder {
     return this;
   }
 
+  /** GROUP BY clause — PostgREST v12+ aggregate queries */
+  group(column: string): this {
+    this.state.params.set('group', column);
+    return this;
+  }
+
+  /** HAVING clause — PostgREST v12+ aggregate queries, e.g. 'count().gte.4000' */
+  having(expr: string): this {
+    this.state.params.set('having', expr);
+    return this;
+  }
+
   range(from: number, to: number): this {
     this.state.headers = {
       ...this.state.headers,

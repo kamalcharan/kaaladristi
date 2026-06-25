@@ -157,12 +157,23 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
 
   const activeIds = (symbolRes.data ?? []).map((s: any) => s.id as number);
 
-  // Phase 1b: resolve the latest fully-complete trading date from km_trading_calendar.
-  // status = 'completed' is set only after the pipeline finishes writing all rows,
-  // so this is immune to mid-pipeline partial ingestion that would otherwise cause
-  // latestDate to point at an incomplete date with ~4000 rows instead of ~5345.
-  const completedDates = await fetchRecentDates(1);
-  const confirmedLatestDate: string | null = completedDates[0] ?? null;
+  // Phase 1b: resolve the latest fully-complete trading date.
+  // Uses GROUP BY + HAVING COUNT >= 4000 on km_equity_eod directly — immune to
+  // mid-pipeline partial ingestion where a partial date would have fewer rows.
+  const confirmedLatestDate: string | null = await (async () => {
+    try {
+      const { data } = await (from('km_equity_eod') as any)
+        .select('trade_date,count()')
+        .group('trade_date')
+        .having('count().gte.4000')
+        .order('trade_date', { ascending: false })
+        .limit(1)
+        .execute();
+      return (data as any)?.[0]?.trade_date ?? null;
+    } catch {
+      return null;
+    }
+  })();
 
   // Phase 2: fetch everything else in parallel.
   // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
@@ -571,17 +582,6 @@ function buildScanStock(
   // ema_20 = 0 does not occur in the DB — the SQL formula never writes 0.
   if (eod.ema_20 == null) return null;
 
-  if ((_buildScanStockDebugCount as number) < 3) {
-    console.log('[buildScanStock debug]', {
-      symbol: sym.symbol,
-      score_5d: eod.score_5d,
-      pct_5d: eod.pct_5d,
-      pct_66d: eod.pct_66d,
-      avg_amt_66d: eod.avg_amt_66d,
-    });
-    (_buildScanStockDebugCount as any)++;
-  }
-
   // Guard: treat unrecognised zone values as null
   if (eod.magic_rs_zone && !VALID_ZONES.has(eod.magic_rs_zone)) {
     (eod as any).magic_rs_zone = null;
@@ -901,15 +901,6 @@ function scanFreshBreakout(bundle: ScanDataBundle): ScanStock[] {
   const sorted = results
     .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
     .slice(0, 25);
-
-  console.log('[freshBreakout] results count:', sorted.length,
-    'sample:', sorted[0] ? {
-      symbol: sorted[0].symbol,
-      ret_5d: sorted[0].ret_5d,
-      breakout_level: sorted[0].breakout_level,
-      score_5d: sorted[0].score_5d,
-      avg_amt_5d: sorted[0].avg_amt_5d,
-    } : 'no results');
 
   return sorted;
 }
@@ -1871,19 +1862,6 @@ export async function scanBreakoutSurgeDaily(
       if (c > breakoutLevel) breakoutLevel = c;
     }
     if (close <= breakoutLevel) continue;
-
-    if (_debugCount < 3) {
-      console.log('[BSD debug]', {
-        symbol: sym.symbol,
-        score_5d: eod.score_5d,
-        score_22d: eod.score_22d,
-        pct_66d: eod.pct_66d,
-        avg_amt_66d: eod.avg_amt_66d,
-        avg_amt_5d: eod.avg_amt_5d,
-        avg_amt_22d: eod.avg_amt_22d,
-      });
-      _debugCount++;
-    }
 
     const pctFromBreakout = ((close - breakoutLevel) / breakoutLevel) * 100;
     const w52h = eod.w52_high != null ? Number(eod.w52_high) : null;
