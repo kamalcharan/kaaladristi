@@ -1769,6 +1769,7 @@ export async function scanBreakoutSurgeDaily(
   _supabase: unknown,
   date: string,
 ): Promise<ScanStock[]> {
+  try {
   // Resolve trade date
   let tradeDate = date;
   if (!tradeDate) {
@@ -1844,9 +1845,9 @@ export async function scanBreakoutSurgeDaily(
     const sym = symbols.get(id);
     if (!sym) continue;
 
-    // history[0] must be exactly tradeDate
+    // history[0] is the latest available bar for this stock (ordered DESC)
     const eod = history[0];
-    if (!eod || eod.trade_date !== tradeDate) continue;
+    if (!eod) continue;
 
     // Need 20 prior bars (history[1..20])
     if (history.length < 21) continue;
@@ -1940,6 +1941,10 @@ export async function scanBreakoutSurgeDaily(
 
   console.log('[breakout_surge_daily] date:', tradeDate, '| passed:', results.length);
   return results;
+  } catch (err) {
+    console.error('scanBreakoutSurgeDaily error:', err);
+    return [];
+  }
 }
 
 // ── Public API ─────────────────────────────────────────────────
