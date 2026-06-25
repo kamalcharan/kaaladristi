@@ -1,9 +1,15 @@
 """
 Rolling Metrics Backfill — pure SQL, no Python import chain
 =============================================================
-Computes w52_high, w52_low, lifetime_high, avg_amt_5d, avg_amt_22d,
-d30_pct_chng, and delivery_surge_x directly via PostgreSQL window functions.
-No dependency on compute_engine.py or indicators package.
+Computes all rolling/score columns for km_equity_eod via PostgreSQL
+window functions. No dependency on compute_engine.py or indicators package.
+
+Columns written:
+  w52_high, w52_low, lifetime_high
+  avg_amt_5d, avg_amt_22d, avg_amt_66d  (delivery value in Crores)
+  d30_pct_chng, delivery_surge_x
+  pct_5d, pct_22d, pct_66d
+  surge_22d, score_5d, score_22d
 
 Usage:
     cd App/backend
@@ -36,26 +42,37 @@ def verify(target_date: str):
                 SELECT
                     COUNT(*)                AS total_rows,
                     COUNT(w52_high)         AS w52_high_count,
-                    COUNT(w52_low)          AS w52_low_count,
-                    COUNT(lifetime_high)    AS lifetime_high_count,
                     COUNT(avg_amt_5d)       AS avg_amt_5d_count,
                     COUNT(avg_amt_22d)      AS avg_amt_22d_count,
+                    COUNT(avg_amt_66d)      AS avg_amt_66d_count,
                     COUNT(d30_pct_chng)     AS d30_count,
-                    COUNT(delivery_surge_x) AS surge_x_count
+                    COUNT(delivery_surge_x) AS surge_x_count,
+                    COUNT(pct_5d)           AS pct_5d_count,
+                    COUNT(pct_22d)          AS pct_22d_count,
+                    COUNT(pct_66d)          AS pct_66d_count,
+                    COUNT(surge_22d)        AS surge_22d_count,
+                    COUNT(score_5d)         AS score_5d_count,
+                    COUNT(score_22d)        AS score_22d_count
                 FROM km_equity_eod
                 WHERE trade_date = %s
             """, [target_date])
             row = cur.fetchone()
-            total, w52h, w52l, lth, amt5, amt22, d30, surge = row
+            (total, w52h, amt5, amt22, amt66, d30, surge_x,
+             p5d, p22d, p66d, s22d, sc5d, sc22d) = row
             print(f"\n[verify] trade_date = {target_date}")
             print(f"  total_rows       = {total}")
             print(f"  w52_high         = {w52h}")
-            print(f"  w52_low          = {w52l}")
-            print(f"  lifetime_high    = {lth}")
             print(f"  avg_amt_5d       = {amt5}")
             print(f"  avg_amt_22d      = {amt22}")
+            print(f"  avg_amt_66d      = {amt66}")
             print(f"  d30_pct_chng     = {d30}")
-            print(f"  delivery_surge_x = {surge}")
+            print(f"  delivery_surge_x = {surge_x}")
+            print(f"  pct_5d           = {p5d}")
+            print(f"  pct_22d          = {p22d}")
+            print(f"  pct_66d          = {p66d}")
+            print(f"  surge_22d        = {s22d}")
+            print(f"  score_5d         = {sc5d}")
+            print(f"  score_22d        = {sc22d}")
             if total and w52h and total == w52h:
                 print(f"\n✓ All {total} rows populated correctly.")
             else:
@@ -66,87 +83,124 @@ def verify(target_date: str):
 
 def run_update(target_date: str):
     """
-    UPDATE km_equity_eod for target_date using window functions over full
-    history. Computes:
-      - w52_high, w52_low    : 52-week (252-bar) rolling high/low
-      - lifetime_high        : expanding max from first record
-      - avg_amt_5d/22d       : AVG(delivery_qty * close / 10M) over 5/22 bars
-                               matches migration 054 definition (delivery value in Cr)
-      - d30_pct_chng         : % change vs 22 trading days ago (LAG 22)
-      - delivery_surge_x     : avg_amt_5d / avg_amt_22d
-    No dependency on compute_engine.py.
+    UPDATE km_equity_eod for target_date using window functions over full history.
+
+    avg_amt formula: delivery value in Crores = value_cr (Rs) / 1e7 * delivery_pct / 100
+    Matches the nightly pipeline in compute_engine.py (compute_rolling_range).
+
+    score_5d/22d logic mirrors migration 111 SQL exactly.
     """
     sql = """
-UPDATE km_equity_eod e
-SET
-    w52_high          = sub.w52h,
-    w52_low           = sub.w52l,
-    lifetime_high     = sub.lth,
-    avg_amt_5d        = sub.amt5,
-    avg_amt_22d       = sub.amt22,
-    d30_pct_chng      = sub.d30,
-    delivery_surge_x  = sub.surge_x
-FROM (
+WITH base AS (
     SELECT
         id,
+        equity_id,
         trade_date,
+        close,
+        high,
+        low,
+        -- 52-week rolling high/low (252 bars) and lifetime high
         MAX(high) OVER (
-            PARTITION BY equity_id
-            ORDER BY trade_date
+            PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 251 PRECEDING AND CURRENT ROW
         ) AS w52h,
         MIN(low) OVER (
-            PARTITION BY equity_id
-            ORDER BY trade_date
+            PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 251 PRECEDING AND CURRENT ROW
         ) AS w52l,
         MAX(high) OVER (
-            PARTITION BY equity_id
-            ORDER BY trade_date
+            PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         ) AS lth,
-        ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
-            PARTITION BY equity_id
-            ORDER BY trade_date
+        -- delivery value rolling averages in Crores
+        -- value_cr (Rs) / 1e7 * delivery_pct / 100 = delivery Cr per bar
+        ROUND(AVG(ROUND(
+            (COALESCE(value_cr, 0) / 10000000.0 * COALESCE(delivery_pct, 0) / 100.0)::numeric
+        , 4)) OVER (
+            PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
         ), 4) AS amt5,
-        ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
-            PARTITION BY equity_id
-            ORDER BY trade_date
+        ROUND(AVG(ROUND(
+            (COALESCE(value_cr, 0) / 10000000.0 * COALESCE(delivery_pct, 0) / 100.0)::numeric
+        , 4)) OVER (
+            PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
         ), 4) AS amt22,
+        ROUND(AVG(ROUND(
+            (COALESCE(value_cr, 0) / 10000000.0 * COALESCE(delivery_pct, 0) / 100.0)::numeric
+        , 4)) OVER (
+            PARTITION BY equity_id ORDER BY trade_date
+            ROWS BETWEEN 65 PRECEDING AND CURRENT ROW
+        ), 4) AS amt66,
+        -- d30_pct_chng: % change vs 22 trading days ago
         ROUND(
-            (close - LAG(close, 22) OVER (
-                PARTITION BY equity_id ORDER BY trade_date
-            )) / NULLIF(LAG(close, 22) OVER (
-                PARTITION BY equity_id ORDER BY trade_date
-            ), 0) * 100.0
+            (close - LAG(close, 22) OVER (PARTITION BY equity_id ORDER BY trade_date))
+            / NULLIF(LAG(close, 22) OVER (PARTITION BY equity_id ORDER BY trade_date), 0)
+            * 100.0
         , 2) AS d30,
-        CASE
-            WHEN ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
-                PARTITION BY equity_id
-                ORDER BY trade_date
-                ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-            ), 4) > 0
-            THEN ROUND(
-                ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
-                    PARTITION BY equity_id
-                    ORDER BY trade_date
-                    ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-                ), 4)
-                /
-                ROUND(AVG(ROUND((COALESCE(delivery_qty, 0) * close / 10000000.0)::numeric, 4)) OVER (
-                    PARTITION BY equity_id
-                    ORDER BY trade_date
-                    ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
-                ), 4)
-            , 4)
-            ELSE NULL
-        END AS surge_x
+        -- price returns (pct_change(N) = change from N bars ago)
+        ROUND(
+            (close - LAG(close, 5) OVER (PARTITION BY equity_id ORDER BY trade_date))
+            / NULLIF(LAG(close, 5) OVER (PARTITION BY equity_id ORDER BY trade_date), 0)
+            * 100.0
+        , 2) AS p5d,
+        ROUND(
+            (close - LAG(close, 22) OVER (PARTITION BY equity_id ORDER BY trade_date))
+            / NULLIF(LAG(close, 22) OVER (PARTITION BY equity_id ORDER BY trade_date), 0)
+            * 100.0
+        , 2) AS p22d,
+        ROUND(
+            (close - LAG(close, 66) OVER (PARTITION BY equity_id ORDER BY trade_date))
+            / NULLIF(LAG(close, 66) OVER (PARTITION BY equity_id ORDER BY trade_date), 0)
+            * 100.0
+        , 2) AS p66d
     FROM km_equity_eod
-) sub
-WHERE e.id = sub.id
-  AND sub.trade_date = %s
+), scored AS (
+    SELECT
+        id,
+        trade_date,
+        w52h, w52l, lth,
+        amt5, amt22, amt66,
+        d30, p5d, p22d, p66d,
+        -- delivery_surge_x = avg_amt_5d / avg_amt_22d
+        CASE WHEN amt22 > 0 THEN ROUND(amt5 / amt22, 4) ELSE NULL END AS surge_x,
+        -- surge_22d = avg_amt_22d / avg_amt_66d
+        CASE WHEN amt66 > 0 THEN ROUND(amt22 / amt66, 4) ELSE NULL END AS s22d,
+        -- score_5d
+        CASE
+            WHEN amt5  IS NULL OR amt22 IS NULL OR amt22 = 0 THEN NULL
+            WHEN p5d   IS NULL OR p5d  <= 0                  THEN 0
+            WHEN amt5 / amt22 < 1.0                          THEN ROUND(p5d, 2)
+            ELSE ROUND(POWER(amt5 / amt22, 2) * 25, 2)
+        END AS sc5d,
+        -- score_22d
+        CASE
+            WHEN amt22 IS NULL OR amt66 IS NULL OR amt66 = 0 THEN NULL
+            WHEN p22d  IS NULL OR p22d <= 0                  THEN 0
+            WHEN amt22 / amt66 < 1.0                         THEN ROUND(p22d, 2)
+            ELSE ROUND(POWER(amt22 / amt66, 2) * 25, 2)
+        END AS sc22d
+    FROM base
+)
+UPDATE km_equity_eod e
+SET
+    w52_high         = s.w52h,
+    w52_low          = s.w52l,
+    lifetime_high    = s.lth,
+    avg_amt_5d       = s.amt5,
+    avg_amt_22d      = s.amt22,
+    avg_amt_66d      = s.amt66,
+    d30_pct_chng     = s.d30,
+    delivery_surge_x = s.surge_x,
+    pct_5d           = s.p5d,
+    pct_22d          = s.p22d,
+    pct_66d          = s.p66d,
+    surge_22d        = s.s22d,
+    score_5d         = s.sc5d,
+    score_22d        = s.sc22d
+FROM scored s
+WHERE e.id = s.id
+  AND s.trade_date = %s
 """
     print(f"\n[update] Running window-function UPDATE for {target_date}...")
     print("  (scans full history — may take 30-90 seconds)")

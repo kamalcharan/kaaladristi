@@ -246,14 +246,53 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
     d30_pct_chng  = close.pct_change(periods=22).mul(100).round(2)   # ~1 month (22 trading days)
     d365_pct_chng = close.pct_change(periods=252).mul(100).round(2)  # ~1 year  (252 trading days)
 
-    # ── Delivery value rolling averages ───────────────────────────────────
-    # value_cr = traded value in crores; use 0 where missing so window stays valid
-    value_cr = df.get('value_cr', pd.Series(dtype=float))
-    if value_cr is None or value_cr.empty:
-        value_cr = pd.Series(np.nan, index=df.index)
-    avg_amt_5d  = value_cr.rolling(window=5,  min_periods=1).mean().round(4)
-    avg_amt_22d = value_cr.rolling(window=22, min_periods=1).mean().round(4)
+    # ── Delivery value rolling averages (in Crores) ───────────────────────
+    # value_cr is stored in Rupees; divide by 1e7 to get Crores.
+    # delivery_pct is a whole-number percentage (e.g. 45 = 45%).
+    value_cr_col  = df.get('value_cr', None)
+    delivery_pct  = df.get('delivery_pct', None)
+    if value_cr_col is None or (hasattr(value_cr_col, 'empty') and value_cr_col.empty):
+        value_cr_col = pd.Series(np.nan, index=df.index)
+    if delivery_pct is None or (hasattr(delivery_pct, 'empty') and delivery_pct.empty):
+        delivery_pct = pd.Series(np.nan, index=df.index)
+
+    deliv_cr    = (pd.to_numeric(value_cr_col, errors='coerce') / 1e7) * (pd.to_numeric(delivery_pct, errors='coerce') / 100.0)
+    avg_amt_5d  = deliv_cr.rolling(window=5,  min_periods=1).mean().round(4)
+    avg_amt_22d = deliv_cr.rolling(window=22, min_periods=1).mean().round(4)
+    avg_amt_66d = deliv_cr.rolling(window=66, min_periods=3).mean().round(4)
     delivery_surge_x = avg_amt_5d.div(avg_amt_22d.replace(0, np.nan)).round(4)
+
+    # ── pct returns ───────────────────────────────────────────────────────
+    pct_5d  = close.pct_change(periods=5).mul(100).round(2)
+    pct_22d = close.pct_change(periods=22).mul(100).round(2)
+    pct_66d = close.pct_change(periods=66).mul(100).round(2)
+
+    # ── surge_22d = avg_amt_22d / avg_amt_66d ────────────────────────────
+    surge_22d = avg_amt_22d.div(avg_amt_66d.replace(0, np.nan)).round(4)
+
+    # ── score_5d ──────────────────────────────────────────────────────────
+    surge_5d = avg_amt_5d.div(avg_amt_22d.replace(0, np.nan))
+    score_5d = pd.Series(
+        np.where(
+            surge_5d >= 1.0,
+            (surge_5d ** 2 * 25).round(2),
+            pct_5d.where(pct_5d > 0, 0.0).round(2),
+        ),
+        index=df.index,
+        dtype=float,
+    ).where(surge_5d.notna() & pct_5d.notna())
+
+    # ── score_22d ─────────────────────────────────────────────────────────
+    surge_22d_ratio = avg_amt_22d.div(avg_amt_66d.replace(0, np.nan))
+    score_22d = pd.Series(
+        np.where(
+            surge_22d_ratio >= 1.0,
+            (surge_22d_ratio ** 2 * 25).round(2),
+            pct_22d.where(pct_22d > 0, 0.0).round(2),
+        ),
+        index=df.index,
+        dtype=float,
+    ).where(surge_22d_ratio.notna() & pct_22d.notna())
 
     return {
         'w52_high':           w52_high,
@@ -265,7 +304,14 @@ def compute_rolling_range(df: pd.DataFrame) -> dict:
         'd365_pct_chng':      d365_pct_chng,
         'avg_amt_5d':         avg_amt_5d,
         'avg_amt_22d':        avg_amt_22d,
+        'avg_amt_66d':        avg_amt_66d,
         'delivery_surge_x':   delivery_surge_x,
+        'pct_5d':             pct_5d,
+        'pct_22d':            pct_22d,
+        'pct_66d':            pct_66d,
+        'surge_22d':          surge_22d,
+        'score_5d':           score_5d,
+        'score_22d':          score_22d,
     }
 
 
@@ -667,7 +713,9 @@ class IndicatorEngine:
 ROLLING_COLUMNS = [
     'w52_high', 'w52_low', 'lifetime_high',
     'd30_pct_chng', 'd365_pct_chng',
-    'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
+    'avg_amt_5d', 'avg_amt_22d', 'avg_amt_66d', 'delivery_surge_x',
+    'pct_5d', 'pct_22d', 'pct_66d',
+    'surge_22d', 'score_5d', 'score_22d',
 ]
 
 
@@ -715,7 +763,7 @@ def compute_rolling_metrics_for_date(db, trade_date, verbose: bool = False) -> i
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     """
-                    SELECT id, trade_date, high, low, close, atr_10, value_cr
+                    SELECT id, trade_date, high, low, close, atr_10, value_cr, delivery_pct
                     FROM km_equity_eod
                     WHERE equity_id = %s
                     ORDER BY trade_date ASC
@@ -729,7 +777,7 @@ def compute_rolling_metrics_for_date(db, trade_date, verbose: bool = False) -> i
 
             df = pd.DataFrame([dict(r) for r in rows])
             df['trade_date'] = pd.to_datetime(df['trade_date'])
-            for col in ['high', 'low', 'close', 'atr_10', 'value_cr']:
+            for col in ['high', 'low', 'close', 'atr_10', 'value_cr', 'delivery_pct']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
 
@@ -808,11 +856,20 @@ def _flush_rolling_batch(conn, batch: list):
           d365_pct_chng    = v.d365_pct_chng,
           avg_amt_5d       = v.avg_amt_5d,
           avg_amt_22d      = v.avg_amt_22d,
-          delivery_surge_x = v.delivery_surge_x
+          avg_amt_66d      = v.avg_amt_66d,
+          delivery_surge_x = v.delivery_surge_x,
+          pct_5d           = v.pct_5d,
+          pct_22d          = v.pct_22d,
+          pct_66d          = v.pct_66d,
+          surge_22d        = v.surge_22d,
+          score_5d         = v.score_5d,
+          score_22d        = v.score_22d
         FROM (VALUES %s) AS v(
           id, w52_high, w52_low, lifetime_high,
           d30_pct_chng, d365_pct_chng,
-          avg_amt_5d, avg_amt_22d, delivery_surge_x
+          avg_amt_5d, avg_amt_22d, avg_amt_66d, delivery_surge_x,
+          pct_5d, pct_22d, pct_66d,
+          surge_22d, score_5d, score_22d
         )
         WHERE e.id = v.id::int
     """
@@ -820,7 +877,9 @@ def _flush_rolling_batch(conn, batch: list):
         (
             r['id'], r['w52_high'], r['w52_low'], r['lifetime_high'],
             r['d30_pct_chng'], r['d365_pct_chng'],
-            r['avg_amt_5d'], r['avg_amt_22d'], r['delivery_surge_x'],
+            r['avg_amt_5d'], r['avg_amt_22d'], r['avg_amt_66d'], r['delivery_surge_x'],
+            r['pct_5d'], r['pct_22d'], r['pct_66d'],
+            r['surge_22d'], r['score_5d'], r['score_22d'],
         )
         for r in batch
     ]
