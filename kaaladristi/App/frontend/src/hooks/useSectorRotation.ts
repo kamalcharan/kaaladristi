@@ -9,6 +9,7 @@ import {
   SECTOR_TAB_CATEGORIES,
   type SectorTab,
   type SectorIndexRow,
+  type VixRow,
 } from '@/services/sectorRotation';
 
 const STALE = 5 * 60 * 1000; // 5 minutes
@@ -28,10 +29,10 @@ export function useSectorIndices(tab: SectorTab, forDate?: string) {
 }
 
 /**
- * Fetches the latest India VIX close (km_index_eod index_id = 94).
+ * Fetches the latest India VIX OHLC + returns (km_index_eod index_id = 94).
  */
 export function useVix() {
-  return useQuery<{ close: number; trade_date: string } | null, Error>({
+  return useQuery<VixRow | null, Error>({
     queryKey: ['vix'],
     queryFn: fetchVix,
     staleTime: STALE,

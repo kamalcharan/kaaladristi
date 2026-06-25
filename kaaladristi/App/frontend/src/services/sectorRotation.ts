@@ -136,19 +136,30 @@ export async function fetchSectorIndices(
   });
 }
 
+export interface VixRow {
+  trade_date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number;
+  pct_chng: number | null;
+  ret_5d: number | null;
+  ret_22d: number | null;
+  ret_66d: number | null;
+}
+
 /**
- * Fetch current India VIX close (index_id = 94).
+ * Fetch latest India VIX OHLC + returns (index_id = 94).
  * Returns null if no data is available.
  */
-export async function fetchVix(): Promise<{ close: number; trade_date: string } | null> {
+export async function fetchVix(): Promise<VixRow | null> {
   const { data, error } = await from('km_index_eod')
-    .select('close,trade_date')
+    .select('trade_date,open,high,low,close,pct_chng,ret_5d,ret_22d,ret_66d')
     .eq('index_id', 94)
     .order('trade_date', { ascending: false })
     .limit(1)
     .execute();
 
   if (error || !data || data.length === 0) return null;
-  const row = data[0] as { close: number; trade_date: string };
-  return { close: row.close, trade_date: row.trade_date };
+  return data[0] as VixRow;
 }

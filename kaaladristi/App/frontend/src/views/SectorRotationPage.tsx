@@ -1,27 +1,60 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useSectorIndices, useVix } from '@/hooks/useSectorRotation';
 import { SECTOR_TAB_LABELS, type SectorTab } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
 
 const TABS: SectorTab[] = ['broad', 'sectoral', 'thematic'];
 
+const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
+
+function fmt(v: number | null | undefined, decimals = 2): string {
+  if (v == null) return '—';
+  return v.toFixed(decimals);
+}
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null) return '—';
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+
+function pctColor(v: number | null | undefined): string {
+  if (v == null) return 'var(--text-faint)';
+  if (v > 0) return 'var(--risk-green)';
+  if (v < 0) return 'var(--risk-red)';
+  return 'var(--text-faint)';
+}
+
+function VixStat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '1px', minWidth: '52px' }}>
+      <span style={{ ...MONO, fontSize: '9px', color: 'var(--text-faint)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+        {label}
+      </span>
+      <span style={{ ...MONO, fontSize: '12px', fontWeight: 500, color: color ?? 'var(--text-secondary)' }}>
+        {value}
+      </span>
+    </span>
+  );
+}
+
 function VixBand() {
   const { data: vix, isLoading } = useVix();
 
+  const bandStyle: React.CSSProperties = {
+    background: 'var(--card)',
+    borderBottom: '1px solid var(--border)',
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '0 20px',
+    padding: '6px 24px',
+    minHeight: '44px',
+  };
+
   if (isLoading) {
     return (
-      <div
-        style={{
-          height: '36px',
-          background: 'var(--card)',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 24px',
-          gap: '10px',
-        }}
-      >
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>
+      <div style={bandStyle}>
+        <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)' }}>
           India VIX · loading…
         </span>
       </div>
@@ -30,56 +63,65 @@ function VixBand() {
 
   if (!vix) return null;
 
-  const close = vix.close;
-  const color =
-    close < 15 ? 'var(--risk-green)' :
-    close <= 20 ? 'var(--risk-amber)' :
+  const closeColor =
+    vix.close < 15 ? 'var(--risk-green)' :
+    vix.close <= 20 ? 'var(--risk-amber)' :
     'var(--risk-red)';
 
-  const label =
-    close < 15 ? 'Low Volatility' :
-    close <= 20 ? 'Elevated Volatility' :
-    'High Volatility';
+  const regime =
+    vix.close < 15 ? 'Low Vol' :
+    vix.close <= 20 ? 'Elevated' :
+    'High Vol';
 
   return (
-    <div
-      style={{
-        height: '36px',
-        background: 'var(--card)',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 24px',
-        gap: '10px',
-      }}
-    >
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-faint)' }}>
-        India VIX
+    <div style={bandStyle}>
+      {/* Label + regime badge */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          India VIX
+        </span>
+        <span
+          style={{
+            ...MONO,
+            fontSize: '9px',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: closeColor,
+            border: `1px solid ${closeColor}`,
+            borderRadius: '3px',
+            padding: '1px 5px',
+            opacity: 0.85,
+          }}
+        >
+          {regime}
+        </span>
       </span>
-      <span
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '13px',
-          fontWeight: 600,
-          color,
-        }}
-      >
-        {close.toFixed(2)}
+
+      {/* Divider */}
+      <span style={{ width: '1px', height: '24px', background: 'var(--border)', flexShrink: 0 }} />
+
+      {/* OHLC */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <VixStat label="Open"  value={fmt(vix.open)} />
+        <VixStat label="High"  value={fmt(vix.high)} color="var(--risk-green)" />
+        <VixStat label="Low"   value={fmt(vix.low)}  color="var(--risk-red)" />
+        <VixStat label="Close" value={fmt(vix.close)} color={closeColor} />
+        <VixStat label="Chng%" value={fmtPct(vix.pct_chng)} color={pctColor(vix.pct_chng)} />
       </span>
-      <span
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '10px',
-          color,
-          opacity: 0.8,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-        }}
-      >
-        {label}
+
+      {/* Divider */}
+      <span style={{ width: '1px', height: '24px', background: 'var(--border)', flexShrink: 0 }} />
+
+      {/* Returns */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <VixStat label="5D"  value={fmtPct(vix.ret_5d)}  color={pctColor(vix.ret_5d)} />
+        <VixStat label="1M"  value={fmtPct(vix.ret_22d)} color={pctColor(vix.ret_22d)} />
+        <VixStat label="3M"  value={fmtPct(vix.ret_66d)} color={pctColor(vix.ret_66d)} />
       </span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-faint)', marginLeft: 'auto' }}>
-        as of {vix.trade_date}
+
+      {/* Trade date — pushed right */}
+      <span style={{ ...MONO, fontSize: '10px', color: 'var(--text-faint)', marginLeft: 'auto' }}>
+        {vix.trade_date}
       </span>
     </div>
   );
