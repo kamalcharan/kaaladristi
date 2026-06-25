@@ -995,22 +995,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
 
   return (
     <div style={{ paddingBottom: '100px' }}>
-      {/* Heading */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 500,
-          letterSpacing: '-0.02em', lineHeight: 1, marginBottom: '6px',
-          color: 'var(--text-primary)',
-        }}>
-          {preset.name}{' '}
-          <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>
-            · {timeframe === 'weekly' ? 'Weekly' : timeframe === 'monthly' ? 'Monthly' : 'Daily'}
-          </em>
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          {preset.description}
-        </p>
-      </div>
+      {header}
 
       {/* Sub-bar: exchange tabs + opp filter + sort */}
       <div style={{
