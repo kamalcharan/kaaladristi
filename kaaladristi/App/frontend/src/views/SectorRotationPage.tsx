@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSectorIndices, useVix } from '@/hooks/useSectorRotation';
 import { SECTOR_TAB_LABELS, type SectorTab } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
+import { DristiQLoader } from '@/components/ui';
 
 const TABS: SectorTab[] = ['broad', 'sectoral', 'thematic'];
 
@@ -131,13 +132,7 @@ function TabContent({ tab }: { tab: SectorTab }) {
   const { data: rows = [], isLoading, error } = useSectorIndices(tab);
 
   if (isLoading) {
-    return (
-      <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-faint)' }}>
-          Loading {SECTOR_TAB_LABELS[tab]} indices…
-        </span>
-      </div>
-    );
+    return <DristiQLoader message={`Loading ${SECTOR_TAB_LABELS[tab]} indices…`} />;
   }
 
   if (error) {

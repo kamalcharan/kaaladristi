@@ -8,6 +8,7 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import { useIndexDetail, useIndexSparkline, useConstituentDetails } from '@/hooks/useSectorRotation';
@@ -139,11 +140,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
   };
 
   if (isLoading) {
-    return (
-      <div style={{ padding: '24px', textAlign: 'center' }}>
-        <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>Loading constituents…</span>
-      </div>
-    );
+    return <DristiQLoader message="Loading constituents…" />;
   }
 
   if (rows.length === 0) {
@@ -392,7 +389,7 @@ export default function IndexDetailPage() {
   if (isLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>Loading…</span>
+        <DristiQLoader message="Loading index…" />
       </div>
     );
   }
