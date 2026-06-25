@@ -2005,6 +2005,7 @@ export async function executeScan(
   scanId: string,
   exchangeFilter: ExchangeFilter = 'combined',
   timeframe: ScanTimeframe = 'daily',
+  date: string = '',
 ): Promise<ScanStock[]> {
   // Direct DB query scans — skip bundle entirely
   if (scanId === 'stage_2_leaders')      return fetchStage2Leaders(exchangeFilter);
@@ -2013,7 +2014,7 @@ export async function executeScan(
   if (scanId === 'stage_4_leaders')      return fetchStage4Leaders(exchangeFilter);
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
-  if (scanId === 'breakout_surge_daily') return scanBreakoutSurgeDaily(null, '');
+  if (scanId === 'breakout_surge_daily') return scanBreakoutSurgeDaily(null, date);
 
   const fn = SCAN_FUNCTIONS[scanId];
   if (!fn) throw new Error(`Unknown scan: ${scanId}`);
