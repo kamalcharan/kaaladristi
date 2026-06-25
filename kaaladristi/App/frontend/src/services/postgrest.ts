@@ -5,10 +5,12 @@
  * PostgREST query syntax: https://postgrest.org/en/stable/references/api.html
  */
 
-const postgrestUrl = (
-  import.meta.env.VITE_POSTGREST_URL?.trim() ||
-  import.meta.env.VITE_SUPABASE_URL?.trim()   // legacy fallback
-);
+// In dev, use the Vite proxy path (/db → PostgREST) to avoid CORS.
+// In prod (Docker/nginx), VITE_POSTGREST_URL is a full URL on the same origin.
+const postgrestUrl = import.meta.env.DEV
+  ? '/db'
+  : (import.meta.env.VITE_POSTGREST_URL?.trim() ||
+     import.meta.env.VITE_SUPABASE_URL?.trim());
 
 const anonKey = (
   import.meta.env.VITE_ANON_KEY?.trim() ||
