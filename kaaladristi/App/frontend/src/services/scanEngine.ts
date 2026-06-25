@@ -836,6 +836,7 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
       .filter((i) => (i.pct_accumulation ?? 0) > 60)
       .map((i) => i.industry)
   );
+  console.log('[smartMoney] industries total:', bundle.industries.length, '| pct_accum>60:', accumulatingIndustries.size, '| sample:', bundle.industries.slice(0, 3).map(i => ({ ind: i.industry, pct_accum: i.pct_accumulation })));
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
