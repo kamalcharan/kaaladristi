@@ -1,4 +1,8 @@
+import { useNavigate } from 'react-router-dom';
+
 export default function CustomIndexPage() {
+  const navigate = useNavigate();
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
@@ -41,7 +45,7 @@ export default function CustomIndexPage() {
 
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
-            disabled
+            onClick={() => navigate('/custom-index/create')}
             style={{
               padding: '6px 14px',
               fontSize: '13px',
@@ -49,14 +53,13 @@ export default function CustomIndexPage() {
               border: '1px solid var(--border)',
               background: 'transparent',
               color: 'var(--text-secondary)',
-              cursor: 'not-allowed',
-              opacity: 0.5,
+              cursor: 'pointer',
             }}
           >
             + Create Manually
           </button>
           <button
-            disabled
+            onClick={() => navigate('/custom-index/discover')}
             style={{
               padding: '6px 14px',
               fontSize: '13px',
@@ -64,8 +67,7 @@ export default function CustomIndexPage() {
               border: '1px solid var(--accent-indigo)',
               background: 'rgba(99,102,241,0.08)',
               color: 'var(--accent-indigo)',
-              cursor: 'not-allowed',
-              opacity: 0.5,
+              cursor: 'pointer',
             }}
           >
             ✨ Discover with AI
