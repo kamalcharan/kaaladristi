@@ -24,11 +24,11 @@ SELECT DISTINCT ON (COALESCE(s.isin, s.symbol || '_' || s.exchange), e.trade_dat
   e.rsi_14, e.mfi_14,
   e.rss_value, e.rss_spread,
   e.sma_150,
-  e.ema_20, e.sma_50,
   e.sniper_inst, e.sniper_hot,
   e.flow_type, e.vacuum_flag, e.volume_divergence_flag,
   e.accum_distrib,
-  e.magic_rs, e.magic_ma, e.magic_rs_zone
+  e.magic_rs, e.magic_ma, e.magic_rs_zone,
+  e.ema_20, e.sma_50
 FROM km_equity_eod e
 JOIN km_equity_symbols s ON s.id = e.equity_id
 WHERE s.is_active = true
