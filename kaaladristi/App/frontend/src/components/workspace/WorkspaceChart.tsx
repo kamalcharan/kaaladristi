@@ -11,6 +11,7 @@ import type { AstroBand } from '@/services/astroOverlayService'
 import type { InstrumentRef, ChartOverlay } from '@/types/framework'
 
 const HEADER_H = 36
+const NO_OVERLAYS: ChartOverlay[] = []
 
 interface ZoneExplain { tag: string; ruleId: number; ruleLabel: string; x: number; y: number }
 
@@ -21,7 +22,7 @@ interface Props {
 }
 
 export default function WorkspaceChart({ instrument, overlays: overlaysProp, standalone = false }: Props) {
-  const frameworkOverlays = useFrameworkStore(s => s.framework?.chart_overlays ?? [])
+  const frameworkOverlays = useFrameworkStore(s => s.framework?.chart_overlays ?? NO_OVERLAYS)
   const effectiveOverlays = useMemo(
     () => overlaysProp !== undefined ? overlaysProp : frameworkOverlays,
     // eslint-disable-next-line react-hooks/exhaustive-deps
