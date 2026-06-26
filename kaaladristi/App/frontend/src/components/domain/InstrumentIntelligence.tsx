@@ -188,9 +188,9 @@ export default function InstrumentIntelligence({ id, type, date }: InstrumentInt
 
   // Special alerts
   const alerts: string[] = [];
-  if (ctx.dots.svd_recent) alerts.push('Institutional accumulation detected (SVD)');
-  if (ctx.dots.sbd_recent) alerts.push('Strong accumulation detected (SBD)');
-  if (ctx.dots.syd_recent) alerts.push('Distribution activity detected (SYD)');
+  if (ctx.dots.svd_recent) alerts.push('Institutional flow detected (SVD)');
+  if (ctx.dots.sbd_recent) alerts.push('Rising flow detected (SBD)');
+  if (ctx.dots.syd_recent) alerts.push('Falling flow detected (SYD)');
   if (ctx.flow.vacuum) alerts.push(
     ctx.flow.vacuum === 'VACUUM_UP'
       ? 'Vacuum move up — price rising on declining volume'

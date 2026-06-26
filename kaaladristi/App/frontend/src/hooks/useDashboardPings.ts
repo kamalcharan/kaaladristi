@@ -122,7 +122,7 @@ export function useDashboardPings(date: string): {
           `RS · ${top.avg_magic_rs?.toFixed(1) ?? '—'}`,
           `${top.stock_count} stocks`,
           `Rank +${top.rank_change}`,
-          top.pct_strong_bull != null ? `${Math.round(top.pct_strong_bull)}% strong bull` : '',
+          top.pct_strong_bull != null ? `${Math.round(top.pct_strong_bull)}% strong uptrend` : '',
         ].filter(Boolean),
         sparkValues:  sparks[top.industry] ?? [],
         score:        `+${top.rank_change}`,

@@ -214,7 +214,7 @@ const WIDGETS: CatalogItem[] = [
   {
     id: 'magic_rs',
     display_name: 'MagicRS',
-    description: 'Relative strength vs NIFTY 500. Zone: Strong Bull → Strong Bear. Proprietary KD signal.',
+    description: 'Relative strength vs NIFTY 500. Zone: Strong Uptrend → Strong Downtrend. Proprietary KD signal.',
     block_type: 'widget',
     placement: 'panel_block',
     data_source: 'db_column',
@@ -295,7 +295,7 @@ const WIDGETS: CatalogItem[] = [
   {
     id: 'conviction_flow',
     display_name: 'Conviction Flow',
-    description: '5-day delivery surge vs 22-day baseline. Detects quiet institutional accumulation.',
+    description: '5-day delivery surge vs 22-day baseline. Detects quiet institutional flow increase.',
     block_type: 'scanner',
     placement: 'output_panel',
     data_source: 'computed_ts',

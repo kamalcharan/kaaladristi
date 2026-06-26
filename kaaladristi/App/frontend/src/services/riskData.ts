@@ -57,16 +57,16 @@ const EXPLANATIONS: Record<string, string[]> = {
     'Multiple planetary stress factors converging. Heavy structural resistance from Saturn aspects combined with momentum disruption suggests extreme caution.',
     'High-risk temporal window. Mars-Ketu conjunction amplifying volatility while Mercury retrograde creates informational noise across sectors.',
   ],
-  'Distribution': [
+  'Falling Flow': [
     'Transition phase detected. Cycle analysis shows deteriorating momentum with sector-specific vulnerability in financials and IT.',
     'Mixed signals from planetary alignments. Structural factors showing weakness while deception indicators suggest hidden selling pressure.',
   ],
   'Expansion': [
     'Favorable planetary alignment supporting upward momentum. Jupiter influence providing structural support to heavyweight sectors.',
-    'Positive cycle window. Venus-Jupiter harmony reducing volatility while Moon in favorable nakshatra supports accumulation.',
+    'Positive cycle window. Venus-Jupiter harmony reducing volatility while Moon in favorable nakshatra supports rising flow.',
   ],
-  'Accumulation': [
-    'Low-risk environment. Benign planetary configuration with minimal stress factors. Favorable for systematic accumulation.',
+  'Rising Flow': [
+    'Low-risk environment. Benign planetary configuration with minimal stress factors. Favorable for systematic rising flow.',
     'Calm temporal window. No major planetary aspects creating disruption. Baseline conditions support steady market behavior.',
   ],
 };
@@ -81,7 +81,7 @@ export async function fetchDayRisk(date: string, symbol: MarketSymbol): Promise<
   const factors = seededFactors(date, symbol);
   const regime = getRegimeFromScore(score);
   const seed = hashSeed(`${date}-${symbol}`);
-  const explanations = EXPLANATIONS[regime] || EXPLANATIONS['Accumulation'];
+  const explanations = EXPLANATIONS[regime] || EXPLANATIONS['Rising Flow'];
 
   return {
     date,

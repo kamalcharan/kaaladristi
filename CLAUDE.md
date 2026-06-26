@@ -1263,3 +1263,16 @@ Reference: "Stock & Commodity Traders Hand-Book of Trend Determination" — Geor
 - breakout_price, breakout_date, ageing do not exist
 - Backlog B55: build breakout event detection pipeline
   to store true breakout price, date, and ageing in DB
+
+---
+
+## Pending SEBI Review — Astro Labels
+Astro signal labels (Nak-Vara: Bullish/Bearish,
+AstroStrip Bearish legend etc.) use directional
+language in an astro context. Deferred — needs
+separate product decision on appropriate
+SEBI-safe language for astro signals.
+Files to review:
+- components/domain/ConfluenceDotGrid.tsx lines 114-115
+- components/domain/VisualPulse/AstroStrip.tsx line 148
+Review in Sprint 13 (Astro Integration sprint).
