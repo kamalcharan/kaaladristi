@@ -11,7 +11,7 @@ import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-re
 import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS } from '@/constants/signalScale';
-import { useIndexDetail, useIndexSparkline, useConstituentDetails, useIndexFlowIntensity } from '@/hooks/useSectorRotation';
+import { useIndexDetail, useIndexSparkline, useConstituentDetails, useConstituentFlowMap } from '@/hooks/useSectorRotation';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
 import type { ChartOverlay } from '@/types/framework';
 
@@ -609,7 +609,7 @@ function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
 // ── FlowMap tab ───────────────────────────────────────────────────────────────
 
 function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string }) {
-  const { data, isLoading, error } = useIndexFlowIntensity(indexId, 22);
+  const { data, isLoading, error } = useConstituentFlowMap(indexId);
 
   if (isLoading) {
     return (
@@ -627,21 +627,15 @@ function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string
     );
   }
 
-  if (!data || data.rows.length === 0) {
-    return (
-      <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 24 }}>
-        No constituent flow data available.
-      </div>
-    );
-  }
-
   return (
     <div style={{ padding: '20px 24px' }}>
       <FlowIntensityMap
-        rows={data.rows}
-        dates={data.dates}
-        cells={data.cells}
-        subtitle={indexName}
+        mode="constituent"
+        rows={data?.rows ?? []}
+        dates={data?.dates ?? []}
+        cells={data?.cells ?? {}}
+        title="Flow Intensity"
+        subtitle={`${indexName} · Last 22 Sessions`}
       />
     </div>
   );

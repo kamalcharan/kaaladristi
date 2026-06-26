@@ -1,40 +1,58 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+// REUSE:
+// 1. IndexDetailPage Tab 4 — constituent mode (Sprint 10)
+// 2. SectorRotationPage Heat toggle — index mode (Sprint 10)
+// 3. CustomIndex detail — constituent mode (Sprint 12)
+// 4. Visual Pulse peer view — constituent mode (Post-MVP)
+
+import { useState, useCallback, useMemo } from 'react';
+import { Card } from '@/components/ui/Card';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface CellData {
-  amt: number;   // ₹ Cr traded value
-  sx: number;    // surge multiple vs 66D avg baseline
-  d1: number;    // 1D price % change (sign → border color)
+  d1: number;        // 1D price % (sign → border color)
+  amt: number;       // ₹ Cr traded value
+  sx?: number;       // surge× vs 66D baseline (constituent mode)
+  amt_5d?: number;   // avg_amt_5d (index mode)
+  amt_22d?: number;  // avg_amt_22d (index mode)
+  ret_5d?: number;   // 5D return % (index mode)
+  ret_22d?: number;  // 22D return % (index mode, tooltip only)
 }
 
 interface FlowIntensityMapProps {
+  mode: 'constituent' | 'index';
   rows: string[];
   dates: string[];
   cells: Record<string, CellData[]>;
   title?: string;
   subtitle?: string;
-  mode?: 'sx' | 'amt';
+  surgeToggle?: 'sx' | 'amt';          // constituent only — controlled externally or internal
+  dayWindow?: 5 | 22 | 66;             // index only
+  onDayWindowChange?: (d: 5 | 22 | 66) => void;
+  cellWidth?: number;                   // default 28 for constituent, 52 for index
 }
 
-// ── Per-row percentile coloring ───────────────────────────────────────────────
-// Color = where a cell sits within THAT STOCK'S OWN distribution, not global.
-// Guarantees every row shows the full color range regardless of absolute volume.
-// CSS vars: --risk-green=#10b981  --risk-amber=#f59e0b  --risk-red=#ef4444
-// Hardcoded: dark green #166534 (no token), light pink #f87171 (no token)
-const NO_DATA_COLOR = '#1e293b';
+// ── Color constants ────────────────────────────────────────────────────────────
+// #166534 and #f87171 are the only tokens not covered by CSS vars (per SKILL.md)
+
+const DARK_GREEN = '#166534';
+const PINK       = '#f87171';
+const NO_DATA    = '#1e293b';
+
+// ── Constituent mode: per-row percentile cuts ─────────────────────────────────
 
 interface RowCuts { p20: number; p40: number; p60: number; p80: number }
-type CutsMap = Record<string, RowCuts>;
 
 function computeRowCuts(
   rows: string[],
   cells: Record<string, CellData[]>,
   field: 'sx' | 'amt',
-): CutsMap {
-  const result: CutsMap = {};
+): Record<string, RowCuts> {
+  const result: Record<string, RowCuts> = {};
   for (const sym of rows) {
     const vals: number[] = [];
-    for (const c of (cells[sym] ?? [])) {
-      const v = field === 'sx' ? c.sx : c.amt;
+    for (const c of cells[sym] ?? []) {
+      const v = field === 'sx' ? (c.sx ?? 0) : c.amt;
       if (v > 0) vals.push(v);
     }
     if (vals.length === 0) {
@@ -48,77 +66,143 @@ function computeRowCuts(
   return result;
 }
 
-function discreteColor(val: number, cuts: RowCuts): string {
-  if (val <= 0)          return NO_DATA_COLOR;
-  if (val >= cuts.p80)   return '#166534';             // top 20% for this stock
-  if (val >= cuts.p60)   return 'var(--risk-green)';  // 60–80th pct
-  if (val >= cuts.p40)   return 'var(--risk-amber)';  // 40–60th pct
-  if (val >= cuts.p20)   return '#f87171';            // 20–40th pct
-  return 'var(--risk-red)';                           // bottom 20%
+function constituentColor(val: number, cuts: RowCuts): string {
+  if (val <= 0)        return NO_DATA;
+  if (val >= cuts.p80) return DARK_GREEN;
+  if (val >= cuts.p60) return 'var(--risk-green)';
+  if (val >= cuts.p40) return 'var(--risk-amber)';
+  if (val >= cuts.p20) return PINK;
+  return 'var(--risk-red)';
 }
 
-// ── Keyframe injection (singleton) ───────────────────────────────────────────
-let _keyframeInjected = false;
-function ensureKeyframe() {
-  if (_keyframeInjected) return;
-  _keyframeInjected = true;
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fim-cell-in {
-      from { opacity: 0; transform: scale(0.7); }
-      to   { opacity: 1; transform: scale(1); }
-    }
-  `;
-  document.head.appendChild(style);
+// ── Index mode: 4-state composite signal ─────────────────────────────────────
+
+type IndexSignal = 'STRONG' | 'MODERATE' | 'WEAK' | 'LOW_FLOW';
+
+function indexSignal(c: CellData): IndexSignal {
+  const flowUp = (c.amt_5d ?? 0) > (c.amt_22d ?? 0);
+  const ret    = c.ret_5d ?? 0;
+  if (flowUp  && ret >  1.5) return 'STRONG';
+  if (flowUp  && ret >= 0.5) return 'MODERATE';
+  if (!flowUp && ret <  0)   return 'LOW_FLOW';
+  return 'WEAK';
 }
+
+const SIGNAL_COLOR: Record<IndexSignal, string> = {
+  STRONG:   DARK_GREEN,
+  MODERATE: 'var(--risk-green)',
+  WEAK:     'var(--risk-amber)',
+  LOW_FLOW: 'var(--risk-red)',
+};
+
+const SIGNAL_LABEL: Record<IndexSignal, string> = {
+  STRONG:   'Strong Flow',
+  MODERATE: 'Moderate Flow',
+  WEAK:     'Weak Flow',
+  LOW_FLOW: 'Low Flow',
+};
 
 // ── Tooltip state ─────────────────────────────────────────────────────────────
+
 interface TooltipState {
   x: number;
   y: number;
-  symbol: string;
+  row: string;
   date: string;
-  amt: number;
-  sx: number;
-  d1: number;
+  cell: CellData;
+  signal?: IndexSignal;
 }
 
-const CELL = 28;
-const GAP  = 2;
-const LABEL_W = 100;
+// ── Fixed sizing ──────────────────────────────────────────────────────────────
+
+const CELL_H_CON = 28;  // constituent mode — color block only, no text
+const CELL_H_IDX = 40;  // index mode — two lines of text need more height
+const GAP        = 2;
+const LABEL_W    = 104;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function trunc(s: string, n: number) {
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function fmtPct(v: number | undefined) {
+  if (v == null) return '—';
+  return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+
+function fmtCr(v: number) {
+  return '₹' + v.toFixed(1) + ' Cr';
+}
+
+// ── Toggle button shared style ────────────────────────────────────────────────
+
+function toggleBtnStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '3px 9px',
+    borderRadius: 4,
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 11,
+    fontWeight: active ? 600 : 400,
+    background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+    color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+    transition: 'background 0.15s, color 0.15s',
+  };
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function FlowIntensityMap({
+  mode,
   rows,
   dates,
   cells,
   title = 'Flow Intensity',
   subtitle,
-  mode: initMode = 'sx',
+  surgeToggle: surgeToggleProp,
+  dayWindow,
+  onDayWindowChange,
+  cellWidth,
 }: FlowIntensityMapProps) {
-  ensureKeyframe();
+  // Cell width: caller-overridable; defaults differ by mode
+  const cellW = cellWidth ?? (mode === 'index' ? 52 : 28);
+  const cellH = mode === 'index' ? CELL_H_IDX : CELL_H_CON;
 
-  const [mode, setMode] = useState<'sx' | 'amt'>(initMode);
+  // Constituent surge toggle — uncontrolled when surgeToggleProp not passed
+  const [internalSurge, setInternalSurge] = useState<'sx' | 'amt'>('sx');
+  const surgeField = surgeToggleProp ?? internalSurge;
+
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Per-row percentile cuts — recomputed only when data changes
+  // Per-row percentile cuts (constituent mode only)
   const sxCuts  = useMemo(() => computeRowCuts(rows, cells, 'sx'),  [rows, cells]);
   const amtCuts = useMemo(() => computeRowCuts(rows, cells, 'amt'), [rows, cells]);
 
   const cellColor = useCallback(
-    (sym: string, c: CellData) => {
-      const cuts = mode === 'sx' ? sxCuts[sym] : amtCuts[sym];
-      if (!cuts) return NO_DATA_COLOR;
-      return discreteColor(mode === 'sx' ? c.sx : c.amt, cuts);
+    (row: string, c: CellData): string => {
+      if (mode === 'index') return SIGNAL_COLOR[indexSignal(c)];
+      const cuts = surgeField === 'sx' ? sxCuts[row] : amtCuts[row];
+      if (!cuts) return NO_DATA;
+      return constituentColor(surgeField === 'sx' ? (c.sx ?? 0) : c.amt, cuts);
     },
-    [mode, sxCuts, amtCuts],
+    [mode, surgeField, sxCuts, amtCuts],
+  );
+
+  const borderColor = useCallback(
+    (c: CellData): string => {
+      const sign = mode === 'index' ? (c.ret_5d ?? 0) : c.d1;
+      return sign >= 0 ? 'var(--risk-green)' : 'var(--risk-red)';
+    },
+    [mode],
   );
 
   const handleMouseMove = useCallback(
-    (e: React.MouseEvent, sym: string, dateStr: string, c: CellData) => {
-      setTooltip({ x: e.clientX, y: e.clientY, symbol: sym, date: dateStr, amt: c.amt, sx: c.sx, d1: c.d1 });
+    (e: React.MouseEvent, row: string, date: string, c: CellData) => {
+      const sig = mode === 'index' ? indexSignal(c) : undefined;
+      setTooltip({ x: e.clientX, y: e.clientY, row, date, cell: c, signal: sig });
     },
-    [],
+    [mode],
   );
 
   const handleMouseLeave = useCallback(() => setTooltip(null), []);
@@ -131,93 +215,90 @@ export default function FlowIntensityMap({
     );
   }
 
-  const totalCellW = dates.length * (CELL + GAP) - GAP;
+  const totalCellW = dates.length * (cellW + GAP) - GAP;
 
   return (
-    <div style={{ fontFamily: 'inherit', userSelect: 'none' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+    <Card variant="default" className="p-5">
+
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div>
-          <span style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600 }}>{title}</span>
+          <span style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600 }}>
+            {title}
+          </span>
           {subtitle && (
-            <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 8 }}>{subtitle}</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 8 }}>
+              {subtitle}
+            </span>
           )}
         </div>
-        {/* Toggle */}
-        <div
-          style={{
-            display: 'flex',
-            background: 'var(--kd-elevated, rgba(255,255,255,0.05))',
-            borderRadius: 6,
-            padding: 2,
-            gap: 2,
-          }}
-        >
-          {(['sx', 'amt'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              style={{
-                padding: '3px 10px',
-                borderRadius: 4,
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 11,
-                fontWeight: 500,
-                background: mode === m ? 'rgba(16,185,129,0.15)' : 'transparent',
-                color: mode === m ? 'var(--risk-green)' : 'var(--text-muted)',
-                transition: 'background 0.15s, color 0.15s',
-              }}
-            >
-              {m === 'sx' ? 'Surge×' : '₹ Cr'}
-            </button>
-          ))}
-        </div>
+
+        {/* Constituent toggle: Surge× | ₹ Cr */}
+        {mode === 'constituent' && !surgeToggleProp && (
+          <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: 2, gap: 2 }}>
+            {(['sx', 'amt'] as const).map((m) => (
+              <button key={m} style={toggleBtnStyle(surgeField === m)} onClick={() => setInternalSurge(m)}>
+                {m === 'sx' ? 'Surge×' : '₹ Cr'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Index toggle: 5D | 22D | 66D */}
+        {mode === 'index' && onDayWindowChange && (
+          <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: 2, gap: 2 }}>
+            {([5, 22, 66] as const).map((d) => (
+              <button key={d} style={toggleBtnStyle(dayWindow === d)} onClick={() => onDayWindowChange(d)}>
+                {d}D
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Grid */}
-      <div ref={containerRef} style={{ display: 'flex', alignItems: 'flex-start' }}>
+      {/* ── Grid ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+
         {/* Label column */}
         <div style={{ flexShrink: 0, width: LABEL_W }}>
-          {/* Date header spacer */}
-          <div style={{ height: CELL + GAP }} />
-          {rows.map((sym) => (
+          {/* Spacer for date header row */}
+          <div style={{ height: CELL_H_CON + GAP }} />
+          {rows.map((row) => (
             <div
-              key={sym}
+              key={row}
               style={{
-                height: CELL,
+                height: cellH,
                 marginBottom: GAP,
                 display: 'flex',
                 alignItems: 'center',
                 paddingRight: 8,
                 color: 'var(--text-muted)',
                 fontSize: 11,
+                fontFamily: 'monospace',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                fontFamily: 'monospace',
               }}
             >
-              {sym}
+              {trunc(row, 14)}
             </div>
           ))}
         </div>
 
-        {/* Scrollable cells */}
+        {/* Scrollable cell area */}
         <div style={{ overflowX: 'auto', flex: 1 }}>
-          {/* Date row */}
+
+          {/* Date header row */}
           <div style={{ display: 'flex', gap: GAP, marginBottom: GAP, width: totalCellW }}>
             {dates.map((d) => (
               <div
                 key={d}
                 style={{
-                  width: CELL,
+                  width: cellW,
                   flexShrink: 0,
                   textAlign: 'center',
                   color: 'var(--text-muted)',
                   fontSize: 9,
-                  lineHeight: '1',
-                  paddingTop: 4,
                   overflow: 'hidden',
                 }}
               >
@@ -227,40 +308,81 @@ export default function FlowIntensityMap({
           </div>
 
           {/* Data rows */}
-          {rows.map((sym, rowIdx) => {
-            const rowData = cells[sym] ?? [];
+          {rows.map((row) => {
+            const rowData = cells[row] ?? [];
             return (
-              <div key={sym} style={{ display: 'flex', gap: GAP, marginBottom: GAP }}>
+              <div key={row} style={{ display: 'flex', gap: GAP, marginBottom: GAP }}>
                 {dates.map((dateStr, colIdx) => {
                   const c = rowData[colIdx];
                   if (!c) {
                     return (
                       <div
                         key={dateStr}
-                        style={{ width: CELL, height: CELL, flexShrink: 0, borderRadius: 3, background: NO_DATA_COLOR }}
+                        style={{
+                          width: cellW,
+                          height: cellH,
+                          flexShrink: 0,
+                          borderRadius: 3,
+                          background: NO_DATA,
+                        }}
                       />
                     );
                   }
-                  const bg = cellColor(sym, c);
-                  const borderColor = c.d1 >= 0 ? 'var(--risk-green)' : 'var(--risk-red)';
-                  const delay = colIdx * 14 + rowIdx * 40;
+
+                  const bg     = cellColor(row, c);
+                  const border = borderColor(c);
+
                   return (
                     <div
                       key={dateStr}
-                      onMouseMove={(e) => handleMouseMove(e, sym, dateStr, c)}
+                      onMouseMove={(e) => handleMouseMove(e, row, dateStr, c)}
                       onMouseLeave={handleMouseLeave}
                       style={{
-                        width: CELL,
-                        height: CELL,
+                        width: cellW,
+                        height: cellH,
                         flexShrink: 0,
                         borderRadius: 3,
                         background: bg,
-                        borderTop: `2.5px solid ${borderColor}`,
+                        borderTop: `2.5px solid ${border}`,
                         cursor: 'default',
-                        animation: `fim-cell-in 0.2s ease both`,
-                        animationDelay: `${delay}ms`,
+                        overflow: 'hidden',
+                        ...(mode === 'index' ? {
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          padding: '0 2px',
+                        } : {}),
                       }}
-                    />
+                    >
+                      {mode === 'index' && (
+                        <>
+                          <div style={{
+                            fontSize: 9,
+                            fontFamily: 'monospace',
+                            color: 'rgba(255,255,255,0.75)',
+                            lineHeight: 1.2,
+                            textAlign: 'center',
+                            width: '100%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {trunc(row, 12)}
+                          </div>
+                          <div style={{
+                            fontSize: 9,
+                            fontFamily: 'monospace',
+                            lineHeight: 1.2,
+                            textAlign: 'center',
+                            color: (c.ret_5d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
+                          }}>
+                            {fmtPct(c.ret_5d)}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -269,57 +391,91 @@ export default function FlowIntensityMap({
         </div>
       </div>
 
-      {/* Footer */}
-      <div style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
-        Bright cells indicate above-average flow for that stock's own history. Edge color shows price direction.
+      {/* ── Footer ── */}
+      <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
+        Cell color reflects flow relative to baseline. Edge indicates price direction for that session.
       </div>
 
-      {/* Custom tooltip */}
+      {/* ── Cell tooltip (fixed-position, rich multi-field) ── */}
       {tooltip && (
         <div
           style={{
             position: 'fixed',
-            left: tooltip.x + 12,
-            top: tooltip.y - 10,
+            left: tooltip.x + 14,
+            top: tooltip.y - 12,
             zIndex: 9999,
-            background: 'var(--kd-elevated, #1a2030)',
-            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'var(--card)',
+            border: '1px solid var(--border-strong)',
             borderRadius: 6,
-            padding: '7px 10px',
+            padding: '8px 11px',
             pointerEvents: 'none',
-            minWidth: 150,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+            minWidth: 165,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.45)',
           }}
         >
-          <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 12, marginBottom: 4, fontFamily: 'monospace' }}>
-            {tooltip.symbol}
+          <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12, color: 'var(--text-primary)', marginBottom: 4 }}>
+            {tooltip.row}
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 2 }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6 }}>
             {tooltip.date}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px', marginTop: 5 }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>Traded Value</span>
-            <span style={{ color: 'var(--text-primary)', fontSize: 10, textAlign: 'right', fontFamily: 'monospace' }}>
-              ₹{tooltip.amt.toFixed(1)} Cr
-            </span>
-            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>vs 66D Avg</span>
-            <span style={{ color: 'var(--text-primary)', fontSize: 10, textAlign: 'right', fontFamily: 'monospace' }}>
-              {tooltip.sx.toFixed(2)}×
-            </span>
-            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>1D Change</span>
-            <span
-              style={{
-                fontSize: 10,
-                textAlign: 'right',
-                fontFamily: 'monospace',
-                color: tooltip.d1 >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
-              }}
-            >
-              {tooltip.d1 >= 0 ? '+' : ''}{tooltip.d1.toFixed(2)}%
-            </span>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '2px 12px' }}>
+            {mode === 'constituent' ? (
+              <>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Traded Value</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {fmtCr(tooltip.cell.amt)}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>vs 66D Avg</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {(tooltip.cell.sx ?? 0).toFixed(2)}×
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>1D Change</span>
+                <span style={{
+                  fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+                  color: tooltip.cell.d1 >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
+                }}>
+                  {fmtPct(tooltip.cell.d1)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Traded Value</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {fmtCr(tooltip.cell.amt)}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg 5D Amt</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {tooltip.cell.amt_5d != null ? fmtCr(tooltip.cell.amt_5d) : '—'}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg 22D Amt</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {tooltip.cell.amt_22d != null ? fmtCr(tooltip.cell.amt_22d) : '—'}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>5D Return</span>
+                <span style={{
+                  fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+                  color: (tooltip.cell.ret_5d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
+                }}>
+                  {fmtPct(tooltip.cell.ret_5d)}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>22D Return</span>
+                <span style={{
+                  fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+                  color: (tooltip.cell.ret_22d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
+                }}>
+                  {fmtPct(tooltip.cell.ret_22d)}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow Signal</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {SIGNAL_LABEL[tooltip.signal!]}
+                </span>
+              </>
+            )}
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

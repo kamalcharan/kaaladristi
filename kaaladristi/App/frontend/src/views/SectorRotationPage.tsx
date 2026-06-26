@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Table2 } from 'lucide-react';
-import { useSectorIndices, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
+import { Flame, LayoutGrid, Table2 } from 'lucide-react';
+import { useSectorIndices, useIndexFlowMap, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import { SECTOR_TAB_LABELS, type SectorTab, type SectorIndexRow } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
 import { DristiQLoader } from '@/components/ui';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
 import type { ChartOverlay } from '@/types/framework';
+import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 
 const EMPTY_OVERLAYS: ChartOverlay[] = [];
 
 const TABS: SectorTab[] = ['broad', 'sectoral', 'thematic'];
-type ViewMode = 'table' | 'chart';
+type ViewMode = 'table' | 'chart' | 'heat';
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
 
@@ -69,6 +70,34 @@ const SIGNAL_COLOR: Record<NonNullable<SignalType>, string> = {
   flow_exiting:   'var(--bear)',
   sustained_flow: 'var(--gold)',
 };
+
+// ── Day-window toggle (heat view) ────────────────────────────────────────────
+
+function DayToggle({ days, onChange }: { days: 5 | 22 | 66; onChange: (d: 5 | 22 | 66) => void }) {
+  const btnStyle = (active: boolean): React.CSSProperties => ({
+    ...MONO,
+    fontSize: 11,
+    fontWeight: active ? 600 : 400,
+    color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+    background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+    border: '1px solid',
+    borderColor: active ? 'rgba(255,255,255,0.15)' : 'var(--border)',
+    borderRadius: 4,
+    padding: '4px 9px',
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+    letterSpacing: '0.03em',
+  });
+  return (
+    <div style={{ display: 'inline-flex', gap: 3 }}>
+      {([5, 22, 66] as const).map((d) => (
+        <button key={d} style={btnStyle(days === d)} onClick={() => onChange(d)}>
+          {d === 5 ? '5D' : d === 22 ? '22D' : '66D'}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ── VIX band ──────────────────────────────────────────────────────────────────
 
@@ -349,8 +378,45 @@ function ChartGrid({ rows }: { rows: SectorIndexRow[] }) {
 
 // ── Tab content ───────────────────────────────────────────────────────────────
 
-function TabContent({ tab, view, forDate }: { tab: SectorTab; view: ViewMode; forDate?: string }) {
+function TabContent({ tab, view, forDate, heatDays }: {
+  tab: SectorTab;
+  view: ViewMode;
+  forDate?: string;
+  heatDays: 5 | 22 | 66;
+}) {
   const { data: rows = [], isLoading, error } = useSectorIndices(tab, forDate);
+  const { data: heatData } = useIndexFlowMap(tab, heatDays);
+
+  if (view === 'heat') {
+    return (
+      <div style={{ padding: '20px 24px' }}>
+        <FlowIntensityMap
+          mode="index"
+          rows={heatData?.rows ?? []}
+          dates={heatData?.dates ?? []}
+          cells={heatData?.cells ?? {}}
+          dayWindow={heatDays}
+          subtitle={`${SECTOR_TAB_LABELS[tab]} · Last ${heatDays} Sessions`}
+        />
+        <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+          {([
+            { color: '#166534',           label: 'Strong Flow',   desc: 'Flow rising + return > 1.5%' },
+            { color: 'var(--risk-green)', label: 'Moderate Flow', desc: 'Flow rising + return > 0.5%' },
+            { color: 'var(--risk-amber)', label: 'Weak Flow',     desc: 'Mixed or flat signal' },
+            { color: 'var(--risk-red)',   label: 'Low Flow',      desc: 'Outflow + negative return' },
+          ] as const).map(({ color, label, desc }) => (
+            <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
+              <span style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)' }}>
+                <strong style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</strong>
+                {' '}— {desc}
+              </span>
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <DristiQLoader message={`Loading ${SECTOR_TAB_LABELS[tab]} indices…`} />;
@@ -450,6 +516,10 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
         <LayoutGrid size={13} />
         Chart
       </button>
+      <button style={btnStyle(view === 'heat')} onClick={() => onChange('heat')}>
+        <Flame size={13} />
+        Heat
+      </button>
     </div>
   );
 }
@@ -459,6 +529,7 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 export default function SectorRotationPage() {
   const [activeTab, setActiveTab] = useState<SectorTab>('broad');
   const [view, setView] = useState<ViewMode>('table');
+  const [heatDays, setHeatDays] = useState<5 | 22 | 66>(22);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const { latestDate, earliestDate } = useIndexDateRange();
   const today = new Date().toISOString().split('T')[0];
@@ -545,21 +616,24 @@ export default function SectorRotationPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8 }}>
-          {selectedDate && (
-            <DatePicker
-              value={selectedDate}
-              onChange={setSelectedDate}
-              min={earliestDate ?? undefined}
-              max={today}
-            />
-          )}
+          {view === 'heat'
+            ? <DayToggle days={heatDays} onChange={setHeatDays} />
+            : selectedDate && (
+                <DatePicker
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  min={earliestDate ?? undefined}
+                  max={today}
+                />
+              )
+          }
           <ViewToggle view={view} onChange={setView} />
         </div>
       </div>
 
       {/* Tab content */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-        <TabContent tab={activeTab} view={view} forDate={selectedDate || undefined} />
+        <TabContent tab={activeTab} view={view} forDate={selectedDate || undefined} heatDays={heatDays} />
       </div>
     </div>
   );
