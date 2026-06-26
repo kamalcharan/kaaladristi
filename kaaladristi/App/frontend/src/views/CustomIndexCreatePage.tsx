@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 
@@ -78,8 +78,14 @@ function RowItem({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+interface LocationState {
+  name?: string;
+  constituents?: { symbol: string }[];
+}
+
 export default function CustomIndexCreatePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [query, setQuery] = useState('');
@@ -90,6 +96,21 @@ export default function CustomIndexCreatePage() {
     queryFn: fetchNseEquities,
     staleTime: 10 * 60 * 1000,
   });
+
+  const prePopulated = useRef(false);
+
+  useEffect(() => {
+    if (prePopulated.current || equities.length === 0) return;
+    const state = location.state as LocationState | null;
+    if (!state?.name || !state?.constituents) return;
+    prePopulated.current = true;
+    setName(state.name);
+    const symbolMap = new Map(equities.map((r) => [r.symbol, r]));
+    const resolved = state.constituents
+      .map((c) => symbolMap.get(c.symbol))
+      .filter((r): r is EquityRow => r !== undefined);
+    if (resolved.length > 0) setBasket(resolved);
+  }, [equities, location.state]);
 
   const basketIds = useMemo(() => new Set(basket.map((r) => r.id)), [basket]);
 
