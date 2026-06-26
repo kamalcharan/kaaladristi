@@ -115,8 +115,8 @@ interface TooltipState {
 
 // ── Fixed sizing ──────────────────────────────────────────────────────────────
 
-const CELL_H_CON = 28;  // constituent mode — color block only, no text
-const CELL_H_IDX = 40;  // index mode — two lines of text need more height
+const CELL_H_CON = 56;  // constituent mode — color block only, no text
+const CELL_H_IDX = 80;  // index mode — two lines of text need more height
 const GAP        = 2;
 const LABEL_W    = 104;
 
@@ -166,7 +166,7 @@ export default function FlowIntensityMap({
   cellWidth,
 }: FlowIntensityMapProps) {
   // Cell width: caller-overridable; defaults differ by mode
-  const cellW = cellWidth ?? (mode === 'index' ? 52 : 28);
+  const cellW = cellWidth ?? (mode === 'index' ? 104 : 56);
   const cellH = mode === 'index' ? CELL_H_IDX : CELL_H_CON;
 
   // Constituent surge toggle — uncontrolled when surgeToggleProp not passed
@@ -298,7 +298,7 @@ export default function FlowIntensityMap({
                   flexShrink: 0,
                   textAlign: 'center',
                   color: 'var(--text-muted)',
-                  fontSize: 9,
+                  fontSize: 10,
                   overflow: 'hidden',
                 }}
               >
@@ -359,7 +359,7 @@ export default function FlowIntensityMap({
                       {mode === 'index' && (
                         <>
                           <div style={{
-                            fontSize: 9,
+                            fontSize: 11,
                             fontFamily: 'monospace',
                             color: 'rgba(255,255,255,0.75)',
                             lineHeight: 1.2,
@@ -372,7 +372,7 @@ export default function FlowIntensityMap({
                             {trunc(row, 12)}
                           </div>
                           <div style={{
-                            fontSize: 9,
+                            fontSize: 11,
                             fontFamily: 'monospace',
                             lineHeight: 1.2,
                             textAlign: 'center',
