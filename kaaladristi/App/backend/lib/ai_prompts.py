@@ -341,6 +341,36 @@ _VANI_CORRELATION_INSIGHT_SYSTEM = (
 )
 
 
+# ── Skill: Sector Insight (per-index rotation narrative) ─────────────────────
+
+_SECTOR_INSIGHT_SYSTEM = (
+    _IDENTITY
+    + "You are an expert in Indian equity sector rotation and index-level participation analysis. "
+    "You interpret real-time flow, momentum, and delivery data for a specific NSE index to produce "
+    "a concise 2-sentence rotation narrative for practitioners. "
+    "\n\n"
+    "You will receive a snapshot for ONE index containing:\n"
+    "- Index name and category (Broad Market / Sectoral / Thematic)\n"
+    "- Flow type: FRESH_LONGS / SHORT_COVERING / FRESH_SHORTS / LONG_LIQUIDATION / MIXED / LOW_VOLUME\n"
+    "  FRESH_LONGS = institutional conviction entering. SHORT_COVERING = fragile bounce, not fresh buying.\n"
+    "  FRESH_SHORTS = institutional selling pressure. LONG_LIQUIDATION = forced exits.\n"
+    "- Score momentum: Score 5D vs Score 22D — whether near-term participation exceeds the baseline.\n"
+    "- Return profile: 5D, 22D, 66D percentage returns — short, medium, and intermediate horizon.\n"
+    "- RSI(14): momentum oscillator level.\n"
+    "- MagicRS zone: relative strength vs CNX500 (Strong Bull / Mild Bull / Neutral / Mild Bear / Strong Bear).\n"
+    "- Delivery surge: ratio of 5D avg delivery vs 22D avg delivery — above 1.2 = rising conviction.\n"
+    "- Institutional reading (sniper_inst): 0–50, above 30 = heavy institutional presence.\n"
+    "- Stock count: number of active constituents contributing to the index.\n"
+    "\n"
+    "Given this snapshot, write exactly 2 sentences:\n"
+    "(1) The rotation posture — characterise the current flow type and whether momentum (score, returns, RSI) "
+    "is confirming or diverging from the flow direction. Mention MagicRS zone if it adds context.\n"
+    "(2) The delivery and institutional picture — what the delivery surge and institutional reading reveal "
+    "about conviction behind the current move, and whether this is sustainable or a fragile technical reaction.\n"
+    + _RULES
+)
+
+
 _RULE_INSIGHT_SYSTEM = """You are VaNi, the planetary intelligence engine of DristiQ. Your role is to explain an astro-trading rule in plain language to a practitioner.
 
 You will receive:
@@ -388,4 +418,5 @@ SKILLS: dict[str, Skill] = {
     "vani_morning_brief":        Skill(system=_VANI_MORNING_BRIEF_SYSTEM,          max_tokens=240),
     "vani_correlation_insight":  Skill(system=_VANI_CORRELATION_INSIGHT_SYSTEM,    max_tokens=200),
     "rule_insight":              Skill(system=_RULE_INSIGHT_SYSTEM,                max_tokens=250),
+    "sector_insight":            Skill(system=_SECTOR_INSIGHT_SYSTEM,              max_tokens=220),
 }

@@ -116,6 +116,23 @@ export function useMarketPulseInsight(date?: string) {
   });
 }
 
+export function useSectorInsight(indexId: number | null, date?: string) {
+  const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
+  return useQuery({
+    queryKey: ['sector_insight', indexId, date],
+    queryFn: async (): Promise<{ index_id: number; date: string; insight: string | null; ai: boolean }> => {
+      const params = new URLSearchParams({ index_id: String(indexId) });
+      if (date) params.set('date', date);
+      const res = await fetch(`${pipelineUrl}/api/ai/sector-insight?${params}`);
+      if (!res.ok) return { index_id: indexId!, date: date ?? '', insight: null, ai: false };
+      return res.json();
+    },
+    staleTime: 60 * 60 * 1000,
+    enabled: !!indexId,
+    retry: false,
+  });
+}
+
 /** Inferences active across the next 6 trading days (from tomorrow, Mon–Fri only). */
 export function useOutlookInferences(fromDate: string) {
   const start = shiftDate(fromDate, 1);

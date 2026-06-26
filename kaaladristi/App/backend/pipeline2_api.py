@@ -2662,6 +2662,95 @@ def breadth_roc_insight():
     return {"date": target_date, "insight": insight, "ai": insight is not None}
 
 
+@app.get('/api/ai/sector-insight')
+def sector_insight(index_id: int, date: str = None):
+    if not _AI_ENABLED:
+        return {"index_id": index_id, "date": date, "insight": None, "ai": False}
+    cache_key = f"sector:{index_id}:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"index_id": index_id, "date": date, "insight": _insight_cache[cache_key], "ai": True}
+    try:
+        sym_rows = _db().select(
+            'km_index_symbols', 'name,category',
+            filters={'id': index_id}, limit=1
+        )
+        if date:
+            eod_rows = _db().select(
+                'km_index_eod',
+                'trade_date,flow_type,rsi_14,magic_rs,magic_rs_zone,sniper_inst,'
+                'ret_5d,ret_22d,ret_66d,score_5d,score_22d,avg_amt_5d,avg_amt_22d',
+                filters={'index_id': index_id, 'trade_date': date},
+                limit=1,
+            )
+        else:
+            eod_rows = _db().select(
+                'km_index_eod',
+                'trade_date,flow_type,rsi_14,magic_rs,magic_rs_zone,sniper_inst,'
+                'ret_5d,ret_22d,ret_66d,score_5d,score_22d,avg_amt_5d,avg_amt_22d',
+                filters={'index_id': index_id},
+                order='trade_date.desc',
+                limit=1,
+            )
+    except Exception as e:
+        log.error(f'sector_insight fetch error: {e}')
+        return {"index_id": index_id, "date": date, "insight": None, "ai": False}
+    if not eod_rows:
+        return {"index_id": index_id, "date": date, "insight": None, "ai": False}
+    eod = eod_rows[0]
+    sym = sym_rows[0] if sym_rows else {}
+    target_date = str(eod.get('trade_date', date or ''))
+    index_name  = sym.get('name', f'Index {index_id}')
+    category    = sym.get('category', 'index')
+    flow        = eod.get('flow_type') or 'N/A'
+    rsi         = eod.get('rsi_14')
+    mrs_zone    = eod.get('magic_rs_zone') or 'Neutral'
+    inst        = eod.get('sniper_inst')
+    ret5        = eod.get('ret_5d')
+    ret22       = eod.get('ret_22d')
+    ret66       = eod.get('ret_66d')
+    sc5         = eod.get('score_5d')
+    sc22        = eod.get('score_22d')
+    amt5        = eod.get('avg_amt_5d')
+    amt22       = eod.get('avg_amt_22d')
+    surge       = (amt5 / amt22) if (amt5 and amt22 and amt22 > 0) else None
+    def _pct(v): return f"{v:+.2f}%" if v is not None else "N/A"
+    def _f(v, d=1): return f"{v:.{d}f}" if v is not None else "N/A"
+    score_trend = (
+        "rising (5D above 22D)" if (sc5 and sc22 and sc5 > sc22) else
+        "falling (5D below 22D)" if (sc5 and sc22 and sc5 < sc22) else "flat"
+    )
+    user_msg = (
+        f"Sector snapshot — {index_name} ({category}) as of {target_date}:\n"
+        f"Flow type: {flow}\n"
+        f"Returns: 5D {_pct(ret5)} · 22D {_pct(ret22)} · 66D {_pct(ret66)}\n"
+        f"Score momentum: {_f(sc5)} (5D) vs {_f(sc22)} (22D) — {score_trend}\n"
+        f"RSI(14): {_f(rsi)}\n"
+        f"MagicRS zone: {mrs_zone}\n"
+        f"Delivery surge (5D/22D avg): {_f(surge)} {'(elevated conviction)' if surge and surge > 1.2 else '(subdued)' if surge and surge < 0.8 else ''}\n"
+        f"Institutional reading: {_f(inst)} / 50\n"
+        f"\nProvide your 2-sentence sector rotation narrative."
+    )
+    skill = _AI_SKILLS.get("sector_insight")
+    if not skill:
+        return {"index_id": index_id, "date": target_date, "insight": None, "ai": False}
+    _t0_s = time.monotonic()
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _lat_s = int((time.monotonic() - _t0_s) * 1000)
+    if insight:
+        _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/sector-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"index_id": index_id, "date": target_date, "flow": flow, "surge": surge},
+            model_version=_AI_MODEL,
+            latency_ms=_lat_s,
+        )
+    return {"index_id": index_id, "date": target_date, "insight": insight, "ai": insight is not None}
+
+
 @app.get('/api/ai/instrument-insight')
 def instrument_insight(id: int, type: str = 'index', date: str = None):
     if not _AI_ENABLED or not _AI_OPTIONAL_OK:
