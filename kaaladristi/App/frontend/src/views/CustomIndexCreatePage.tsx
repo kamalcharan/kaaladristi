@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
@@ -105,7 +105,40 @@ export default function CustomIndexCreatePage() {
       .slice(0, 30);
   }, [query, equities, basketIds]);
 
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const canSave = name.trim().length > 0 && basket.length > 0;
+
+  const saveIndex = useCallback(async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const { data: idxData, error: idxErr } = await from('km_index_symbols')
+        .insert({ name: name.trim(), category: 'custom', exchange: 'NSE', is_active: true })
+        .execute();
+      if (idxErr) throw new Error(idxErr.message);
+      const newIndex = Array.isArray(idxData) ? idxData[0] : idxData;
+      if (!newIndex?.id) throw new Error('Insert succeeded but returned no id');
+
+      const today = new Date().toISOString().split('T')[0];
+      const rows = basket.map((r) => ({
+        index_id: newIndex.id,
+        equity_id: r.id,
+        snapshot_date: today,
+      }));
+      const { error: constErr } = await from('km_index_constituents')
+        .insert(rows)
+        .execute();
+      if (constErr) throw new Error(constErr.message);
+
+      navigate('/custom-index');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }, [name, basket, navigate]);
 
   function addToBasket(row: EquityRow) {
     setBasket((prev) => [...prev, row]);
@@ -233,21 +266,27 @@ export default function CustomIndexCreatePage() {
 
           <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button
-              disabled={!canSave}
+              disabled={!canSave || saving}
+              onClick={saveIndex}
               style={{
                 padding: '9px 0',
                 fontSize: '13px',
                 fontWeight: 600,
                 borderRadius: '8px',
                 border: 'none',
-                background: canSave ? 'var(--accent-indigo)' : 'rgba(255,255,255,0.06)',
-                color: canSave ? '#fff' : 'var(--text-faint)',
-                cursor: canSave ? 'pointer' : 'not-allowed',
+                background: canSave && !saving ? 'var(--accent-indigo)' : 'rgba(255,255,255,0.06)',
+                color: canSave && !saving ? '#fff' : 'var(--text-faint)',
+                cursor: canSave && !saving ? 'pointer' : 'not-allowed',
                 width: '100%',
               }}
             >
-              Save Index
+              {saving ? 'Saving…' : 'Save Index'}
             </button>
+            {saveError && (
+              <p style={{ fontSize: '11px', color: 'var(--risk-red)', margin: '4px 0 0', lineHeight: 1.4 }}>
+                {saveError}
+              </p>
+            )}
             <button
               onClick={() => navigate('/custom-index')}
               style={{
