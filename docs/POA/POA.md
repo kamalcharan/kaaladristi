@@ -666,7 +666,7 @@ Sort: score_5d DESC
 
 ---
 
-### Sprint 11 — Breadth + ROC (planned)
+### Sprint 11 — Breadth + ROC ✅ COMPLETE (2026-06-26)
 
 **Goal:** Add participation and momentum axis to Sector Rotation and Market Today.
 **Tasks:** B64, B65, B66, B68, B69, B62, B67 (CapitalHeat)
@@ -674,26 +674,36 @@ Sort: score_5d DESC
 
 | Task | Description | Status |
 |---|---|---|
-| B64 | Breadth Score per index — percentile zones | ⬜ |
-| B65 | ROC per index — 4-state badge | ⬜ |
-| B66 | 3-axis signal badge (Money + Participation + Momentum) | ⬜ |
-| B68 | BreadthGauge Skill | ⬜ |
-| B69 | ROCChart Skill | ⬜ |
-| B62 | Populate `weight_pct` in `km_index_constituents` | ⬜ |
-| B67 | CapitalHeat Skill | ⬜ |
+| B64 | Breadth Score per index — percentile zones | ✅ |
+| B65 | ROC per index — 4-state badge (expanding/slowing/turning/contracting) | ✅ |
+| B67 | Heatmap verification complete, FlowIntensityMap renders on both surfaces | ✅ |
+| B68 | BreadthGauge Skill — MarketBreadthChart parameterized (prop injection) | ✅ |
+| B69 | ROCChart Skill — BreadthRocChart parameterized (prop injection) | ✅ |
+| B66 | 3-axis signal badge (Money + Participation + Momentum) | → Sprint 13 (alongside B74) |
+| B62 | Populate `weight_pct` in `km_index_constituents` | → Sprint 12 |
+
+**Completed work (2026-06-26):**
+- Migration 117: extended `v_equity_eod_deduped` with `ema_20`, `sma_50` (appended to end of SELECT — required by PostgreSQL `CREATE OR REPLACE VIEW` ordinal-position rule)
+- `fetchIndexBreadth` in `sectorRotation.ts`: two PostgREST calls, client-side breadth + ROC computation. Returns `data[]`, `roc[]`, `rocBadge`, `percentileRank`, `stockCount`, `zoneMode`
+- `MarketBreadthChart` + `BreadthRocChart` rewritten with prop injection — accept external `data`, `isLoading`, `isError`; internal hooks are always called (React rules) but result is ignored when props provided
+- SEBI label fix: ROC badge states use `expanding/slowing/turning/contracting/warming_up` — no bull/bear/uptrend/downtrend
+- `useIndexBreadth` hook added to `useSectorRotation.ts`
+- Both charts wired into `IndexDetailPage.tsx` Tab 1 (Overview), between Sparkline and Constituents
+- Heatmap date order fixed: newest date is column 0 (both constituent and index flow maps)
 
 ---
 
-### Sprint 12 — VaNi + Custom Index (planned)
+### Sprint 12 — VaNi + Custom Index (next)
 
 **Goal:** VaNi sector narrative + Custom Index Phase B — DB schema, Admin UI, AI basket creation.
-**Tasks:** B71, B56, B57, B58, B70
+**Tasks:** B71, B56, B57, B58, B70, B62 (carried from S11)
 **Spec:** `docs/specs/DristiQ_SectorRotation_Spec_v1.0.docx §8`
 
 | Task | Description | Status |
 |---|---|---|
 | B71 | VaNiSector Skill — 2-sentence sector insight | ⬜ |
 | B70 | ScoreCard Skill — unified index score card | ⬜ |
+| B62 | Populate `weight_pct` in `km_index_constituents` for all 93 indices | ⬜ (carried from S11) |
 | B56 | DB schema — `km_custom_index`, `km_custom_index_constituents`, `km_custom_index_eod` tables | ⬜ |
 | B57 | Custom Index Admin UI — create/edit/deactivate baskets, manage constituents | ⬜ |
 | B58 | Custom Index scoring — equal-weight, 66D baseline per D30 | ⬜ |
