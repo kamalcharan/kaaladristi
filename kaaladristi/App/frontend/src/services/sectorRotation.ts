@@ -459,9 +459,13 @@ export async function fetchConstituentFlowMap(
     avgSx[sym] = sxVals.length > 0 ? sxVals.reduce((a, b) => a + b, 0) / sxVals.length : 0;
   }
 
-  // Step 5: sort rows by avg sx DESC
+  // Step 5: sort rows by avg sx DESC, reverse so newest date is column 0
   const sortedRows = Object.keys(cellMap).sort((a, b) => (avgSx[b] ?? 0) - (avgSx[a] ?? 0));
-  return { rows: sortedRows, dates: formattedDates, cells: cellMap };
+  const reversedConstDates = [...formattedDates].reverse();
+  for (const sym of Object.keys(cellMap)) {
+    cellMap[sym] = [...cellMap[sym]].reverse();
+  }
+  return { rows: sortedRows, dates: reversedConstDates, cells: cellMap };
 }
 
 // ── Index Breadth (per-index, computed client-side) ───────────────────────────
@@ -770,8 +774,12 @@ export async function fetchIndexFlowMap(
     latestRet[name] = last?.ret_5d ?? 0;
   }
 
-  // Step 5: sort by latest ret_5d DESC
+  // Step 5: sort by latest ret_5d DESC, reverse so newest date is column 0
   const sortedRows = Object.keys(cellMap).sort((a, b) => (latestRet[b] ?? 0) - (latestRet[a] ?? 0));
-  return { rows: sortedRows, dates: formattedDates, cells: cellMap };
+  const reversedIdxDates = [...formattedDates].reverse();
+  for (const name of Object.keys(cellMap)) {
+    cellMap[name] = [...cellMap[name]].reverse();
+  }
+  return { rows: sortedRows, dates: reversedIdxDates, cells: cellMap };
 }
 
