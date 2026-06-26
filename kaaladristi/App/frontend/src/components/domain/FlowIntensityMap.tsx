@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 
 export interface CellData {
   amt: number;   // ₹ Cr traded value
@@ -15,43 +15,42 @@ interface FlowIntensityMapProps {
   mode?: 'sx' | 'amt';
 }
 
-// ── Amber ramp (7 stops, log scale) ──────────────────────────────────────────
-const RAMP: Array<[number, [number, number, number]]> = [
-  [0.00, [19,  25,  34]],
-  [0.16, [42,  36,  21]],
-  [0.34, [92,  67,  24]],
-  [0.55, [165, 110, 28]],
-  [0.74, [224, 151, 42]],
-  [0.89, [246, 196, 87]],
-  [1.00, [252, 232, 184]],
-];
+// ── Discrete color buckets (matches ConfluenceDotGrid language) ───────────────
+// CSS vars: --risk-green=#10b981  --risk-amber=#f59e0b  --risk-red=#ef4444
+// Hardcoded: dark green #166534 (no token), light pink #f87171 (no token)
+const NO_DATA_COLOR = '#1e293b';
 
-function interpolateRamp(t: number): string {
-  const clamped = Math.max(0, Math.min(1, t));
-  let lo = RAMP[0];
-  let hi = RAMP[RAMP.length - 1];
-  for (let i = 0; i < RAMP.length - 1; i++) {
-    if (clamped >= RAMP[i][0] && clamped <= RAMP[i + 1][0]) {
-      lo = RAMP[i];
-      hi = RAMP[i + 1];
-      break;
-    }
-  }
-  const span = hi[0] - lo[0];
-  const f = span === 0 ? 0 : (clamped - lo[0]) / span;
-  const r = Math.round(lo[1][0] + f * (hi[1][0] - lo[1][0]));
-  const g = Math.round(lo[1][1] + f * (hi[1][1] - lo[1][1]));
-  const b = Math.round(lo[1][2] + f * (hi[1][2] - lo[1][2]));
-  return `rgb(${r},${g},${b})`;
+function sxColor(sx: number): string {
+  if (sx <= 0)  return NO_DATA_COLOR;
+  if (sx >= 3.0) return '#166534';              // very high flow
+  if (sx >= 1.5) return 'var(--risk-green)';   // above average
+  if (sx >= 0.8) return 'var(--risk-amber)';   // normal
+  if (sx >= 0.4) return '#f87171';             // below average
+  return 'var(--risk-red)';                    // very low flow
 }
 
-function logNorm(val: number, min: number, max: number): number {
-  if (max <= min || val <= 0) return 0;
-  const lv = Math.log(Math.max(val, 1e-6));
-  const lmin = Math.log(Math.max(min, 1e-6));
-  const lmax = Math.log(Math.max(max, 1e-6));
-  if (lmax === lmin) return 0;
-  return Math.max(0, Math.min(1, (lv - lmin) / (lmax - lmin)));
+interface AmtCuts { p20: number; p40: number; p60: number; p80: number }
+
+function computeAmtPercentiles(rows: string[], cells: Record<string, CellData[]>): AmtCuts {
+  const vals: number[] = [];
+  for (const sym of rows) {
+    for (const c of (cells[sym] ?? [])) {
+      if (c.amt > 0) vals.push(c.amt);
+    }
+  }
+  if (vals.length === 0) return { p20: 0, p40: 0, p60: 0, p80: 0 };
+  vals.sort((a, b) => a - b);
+  const pct = (p: number) => vals[Math.floor((vals.length - 1) * p / 100)];
+  return { p20: pct(20), p40: pct(40), p60: pct(60), p80: pct(80) };
+}
+
+function amtColor(amt: number, cuts: AmtCuts): string {
+  if (amt <= 0)          return NO_DATA_COLOR;
+  if (amt >= cuts.p80)   return '#166534';
+  if (amt >= cuts.p60)   return 'var(--risk-green)';
+  if (amt >= cuts.p40)   return 'var(--risk-amber)';
+  if (amt >= cuts.p20)   return '#f87171';
+  return 'var(--risk-red)';
 }
 
 // ── Keyframe injection (singleton) ───────────────────────────────────────────
@@ -98,27 +97,12 @@ export default function FlowIntensityMap({
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Compute domain for log normalization
-  const { minVal, maxVal } = (() => {
-    let mn = Infinity, mx = 0;
-    for (const sym of rows) {
-      const row = cells[sym];
-      if (!row) continue;
-      for (const c of row) {
-        const v = mode === 'sx' ? c.sx : c.amt;
-        if (v > 0) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
-      }
-    }
-    return { minVal: mn === Infinity ? 0 : mn, maxVal: mx };
-  })();
+  // Percentile cuts for ₹ Cr mode — recomputed only when cells/rows change
+  const amtCuts = useMemo(() => computeAmtPercentiles(rows, cells), [rows, cells]);
 
   const cellColor = useCallback(
-    (c: CellData) => {
-      const v = mode === 'sx' ? c.sx : c.amt;
-      const t = logNorm(v, minVal, maxVal);
-      return interpolateRamp(t);
-    },
-    [mode, minVal, maxVal],
+    (c: CellData) => mode === 'sx' ? sxColor(c.sx) : amtColor(c.amt, amtCuts),
+    [mode, amtCuts],
   );
 
   const handleMouseMove = useCallback(
@@ -171,8 +155,8 @@ export default function FlowIntensityMap({
                 cursor: 'pointer',
                 fontSize: 11,
                 fontWeight: 500,
-                background: mode === m ? 'rgba(246,196,87,0.18)' : 'transparent',
-                color: mode === m ? 'rgb(246,196,87)' : 'var(--text-muted)',
+                background: mode === m ? 'rgba(16,185,129,0.15)' : 'transparent',
+                color: mode === m ? 'var(--risk-green)' : 'var(--text-muted)',
                 transition: 'background 0.15s, color 0.15s',
               }}
             >
@@ -244,7 +228,7 @@ export default function FlowIntensityMap({
                     return (
                       <div
                         key={dateStr}
-                        style={{ width: CELL, height: CELL, flexShrink: 0, borderRadius: 3, background: 'rgb(19,25,34)' }}
+                        style={{ width: CELL, height: CELL, flexShrink: 0, borderRadius: 3, background: NO_DATA_COLOR }}
                       />
                     );
                   }
