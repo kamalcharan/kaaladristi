@@ -40,6 +40,7 @@ const navSections: NavSection[] = [
       { to: '/data-pipeline',       glyph: '▦', label: 'Data Pipeline',       adminOnly: true },
       { to: '/admin/panchang',      glyph: '⊟', label: 'Panchang Admin',      adminOnly: true },
       { to: '/rules',               glyph: '⊠', label: 'Rule Engine',         adminOnly: true },
+      { to: '/custom-index',        glyph: '⊞', label: 'Custom Index',         adminOnly: true },
     ],
   },
 ];
