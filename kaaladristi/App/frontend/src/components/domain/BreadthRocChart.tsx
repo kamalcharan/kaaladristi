@@ -80,10 +80,10 @@ export default function BreadthRocChart() {
   const rocStatus = (() => {
     const r = latest?.roc_13 ?? 0;
     const s = latest?.sma_breadth ?? 0;
-    if (r > 0 && r > s) return { label: 'Bull ✓',    style: { background: 'var(--bull-bg)', color: 'var(--bull)', border: '1px solid color-mix(in srgb, var(--bull) 40%, transparent)' } };
+    if (r > 0 && r > s) return { label: 'Uptrend ✓', style: { background: 'var(--bull-bg)', color: 'var(--bull)', border: '1px solid color-mix(in srgb, var(--bull) 40%, transparent)' } };
     if (r > 0 && r <= s) return { label: 'Caution',  style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
     if (r <= 0 && r > s)  return { label: 'Recovering', style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
-    return                       { label: 'Bear',     style: { background: 'var(--bear-bg)',  color: 'var(--bear)', border: '1px solid color-mix(in srgb, var(--bear) 40%, transparent)'  } };
+    return                       { label: 'Downtrend', style: { background: 'var(--bear-bg)',  color: 'var(--bear)', border: '1px solid color-mix(in srgb, var(--bear) 40%, transparent)'  } };
   })();
 
   // Dynamic Y domain with some padding

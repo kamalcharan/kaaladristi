@@ -100,11 +100,11 @@ async function fetchLeaderboard(): Promise<{ top: LeaderboardStock[]; bottom: Le
 // ── Zone badge ──
 
 const ZONE_BADGE: Record<string, { label: string; color: string }> = {
-  'Strong Bull': { label: 'STRONG BULL', color: 'text-risk-green bg-risk-green/15 border-risk-green/30' },
-  'Mild Bull':   { label: 'MILD BULL',   color: 'text-risk-green/80 bg-risk-green/10 border-risk-green/20' },
-  'Neutral':     { label: 'NEUTRAL',     color: 'text-muted bg-kd-elevated border-kd-border' },
-  'Mild Bear':   { label: 'MILD BEAR',   color: 'text-risk-red/80 bg-risk-red/10 border-risk-red/20' },
-  'Strong Bear': { label: 'STRONG BEAR', color: 'text-risk-red bg-risk-red/15 border-risk-red/30' },
+  'Strong Bull': { label: 'STRONG UPTREND',   color: 'text-risk-green bg-risk-green/15 border-risk-green/30' },
+  'Mild Bull':   { label: 'MILD UPTREND',     color: 'text-risk-green/80 bg-risk-green/10 border-risk-green/20' },
+  'Neutral':     { label: 'NEUTRAL',          color: 'text-muted bg-kd-elevated border-kd-border' },
+  'Mild Bear':   { label: 'MILD DOWNTREND',   color: 'text-risk-red/80 bg-risk-red/10 border-risk-red/20' },
+  'Strong Bear': { label: 'STRONG DOWNTREND', color: 'text-risk-red bg-risk-red/15 border-risk-red/30' },
 };
 
 const FLOW_SHORT: Record<string, { label: string; color: string }> = {

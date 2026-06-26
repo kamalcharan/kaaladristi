@@ -155,7 +155,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     key: 'magic_rs',
     label: 'MagicRS vs N500',
     shortLabel: 'MRS',
-    tooltip: 'MagicRS — Relative Strength benchmarked against NIFTY 500 (CNX500). Proprietary 144-bar momentum oscillator: positive = outperforming NIFTY 500, negative = underperforming. Color reflects zone: Strong Bull (green) → Strong Bear (red).',
+    tooltip: 'MagicRS — Relative Strength benchmarked against NIFTY 500 (CNX500). Proprietary 144-bar momentum oscillator: positive = outperforming NIFTY 500, negative = underperforming. Color reflects zone: Strong Uptrend (green) → Strong Downtrend (red).',
     type: 'zone',
     width: 72,
     colorFn: (_val: any, row?: any) => {
@@ -301,7 +301,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   accum_distrib: {
     key: 'accum_distrib',
     label: 'Accum/Dist',
-    tooltip: 'Accumulation/Distribution regime. ACCUMULATION = price below GreenLine with bullish momentum (smart money buying). DISTRIBUTION = price above GreenLine with bearish momentum (smart money selling). NEUTRAL = no contested A/D regime. NULL = SMA 150 not yet computed.',
+    tooltip: 'Rising/Falling Flow regime. ACCUMULATION = price below GreenLine with positive momentum (smart money buying). DISTRIBUTION = price above GreenLine with negative momentum (smart money selling). NEUTRAL = no contested regime. NULL = SMA 150 not yet computed.',
     type: 'category',
     width: 95,
     colorFn: (val: any) => {
@@ -314,7 +314,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   supertrend_dir: {
     key: 'supertrend_dir',
     label: 'ST',
-    tooltip: 'Supertrend direction. ▲ = bullish bias (price above supertrend). ▼ = bearish bias (price below supertrend).',
+    tooltip: 'Supertrend direction. ▲ = uptrend bias (price above supertrend). ▼ = downtrend bias (price below supertrend).',
     type: 'trend',
     width: 48,
     formatFn: (val: any) => {

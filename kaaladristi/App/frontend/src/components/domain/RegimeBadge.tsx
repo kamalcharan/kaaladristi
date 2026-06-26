@@ -12,9 +12,9 @@ interface RegimeBadgeProps {
 function getRegimeVariant(regime: string): VariantProps<typeof badgeVariants>['variant'] {
   switch (regime) {
     case 'Capital Protection': return 'red';
-    case 'Distribution':       return 'amber';
+    case 'Falling Flow':       return 'amber';
     case 'Expansion':          return 'cyan';
-    case 'Accumulation':       return 'green';
+    case 'Rising Flow':        return 'green';
     default:                   return 'default';
   }
 }

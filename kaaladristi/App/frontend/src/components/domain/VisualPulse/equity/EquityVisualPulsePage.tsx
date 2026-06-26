@@ -299,8 +299,8 @@ export default function EquityVisualPulsePage() {
         <div className="flex gap-3 py-1 text-[8px] font-mono text-muted flex-wrap">
           <span><span className="text-accent-gold">{'\u254C'}</span> Golden Line (SMA 150)</span>
           <span><span className="text-accent-violet">{'\u25CF'}</span> Volume Drive</span>
-          <span><span className="text-accent-indigo">{'\u25CF'}</span> Accumulation</span>
-          <span><span className="text-risk-amber">{'\u25CF'}</span> Distribution</span>
+          <span><span className="text-accent-indigo">{'\u25CF'}</span> Rising Flow</span>
+          <span><span className="text-risk-amber">{'\u25CF'}</span> Falling Flow</span>
         </div>
 
         {/* Astro Strip */}
@@ -458,11 +458,11 @@ function buildSmNarrative(snap: PulseSnapshot): string {
   const sm = snap.sm;
 
   if (sm.smTrending) parts.push('Smart money trending higher.');
-  else if (sm.smExiting) parts.push('Smart money declining \u2014 distribution risk.');
+  else if (sm.smExiting) parts.push('Smart money declining \u2014 falling flow risk.');
   else parts.push('Smart money flat.');
 
   if (sm.hasSVD5) parts.push('Volume Drive signal in last 5 bars \u2014 institutional volume confirmed.');
-  if (sm.hasSYD) parts.push('Distribution signal present \u2014 caution.');
+  if (sm.hasSYD) parts.push('Falling flow signal present \u2014 caution.');
   if (sm.pumpSignal) parts.push('Smart declining while fast rising \u2014 pump signature.');
 
   if (sm.relationship === 'Aligned') parts.push('Both layers aligned.');

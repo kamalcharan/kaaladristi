@@ -202,7 +202,7 @@ function IndexTile({ tile }: { tile: IndexTileData }) {
         )}
         {tile.rssZone && tile.rssZone !== 'NEUTRAL' && (
           <span className={cn('font-bold', rssColor)}>
-            {tile.rssZone === 'OVERBOUGHT' ? 'Overbought' : tile.rssZone === 'OVERSOLD' ? 'Oversold' : tile.rssZone === 'BULLISH' ? 'Bullish' : 'Bearish'}
+            {tile.rssZone === 'OVERBOUGHT' ? 'Overbought' : tile.rssZone === 'OVERSOLD' ? 'Oversold' : tile.rssZone === 'BULLISH' ? 'Positive' : 'Negative'}
           </span>
         )}
         {flow && (

@@ -18,15 +18,15 @@ import {
 // ── Bias meta ─────────────────────────────────────────────────────────────────
 
 const BIAS: Record<string, { fill: string; border: string; label: string }> = {
-  strong_bullish: { fill: 'rgba(110,207,154,0.85)', border: 'var(--bull)',    label: 'Strong Bull' },
-  bullish:        { fill: 'rgba(110,207,154,0.55)', border: 'var(--bull)',    label: 'Bullish'     },
-  mild_bullish:   { fill: 'rgba(110,207,154,0.28)', border: 'var(--bull)',    label: 'Mild Bull'   },
-  neutral:        { fill: 'rgba(255,255,255,0.04)', border: 'transparent',   label: 'Neutral'     },
-  turning:        { fill: 'rgba(212,168,75,0.45)',  border: 'var(--gold)',   label: 'Turning'     },
-  mild_bearish:   { fill: 'rgba(200,130,50,0.28)',  border: 'var(--caution)',label: 'Mild Bear'   },
-  bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Bearish'     },
-  strong_bearish: { fill: 'rgba(217,80,68,0.80)',   border: 'var(--bear)',   label: 'Strong Bear' },
-  closed:         { fill: 'rgba(46,42,34,0.35)',    border: 'transparent',   label: 'Closed'      },
+  strong_bullish: { fill: 'rgba(110,207,154,0.85)', border: 'var(--bull)',    label: 'Strong Uptrend'   },
+  bullish:        { fill: 'rgba(110,207,154,0.55)', border: 'var(--bull)',    label: 'Positive'         },
+  mild_bullish:   { fill: 'rgba(110,207,154,0.28)', border: 'var(--bull)',    label: 'Mild Uptrend'     },
+  neutral:        { fill: 'rgba(255,255,255,0.04)', border: 'transparent',   label: 'Neutral'          },
+  turning:        { fill: 'rgba(212,168,75,0.45)',  border: 'var(--gold)',   label: 'Turning'          },
+  mild_bearish:   { fill: 'rgba(200,130,50,0.28)',  border: 'var(--caution)',label: 'Mild Downtrend'   },
+  bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Negative'         },
+  strong_bearish: { fill: 'rgba(217,80,68,0.80)',   border: 'var(--bear)',   label: 'Strong Downtrend' },
+  closed:         { fill: 'rgba(46,42,34,0.35)',    border: 'transparent',   label: 'Closed'           },
 };
 
 const OUTCOME_MAP: Record<string, { label: string; color: string }> = {

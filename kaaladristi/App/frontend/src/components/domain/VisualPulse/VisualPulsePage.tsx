@@ -321,11 +321,11 @@ function buildSmNarrative(snap: PulseSnapshot): string {
   const sm = snap.sm;
 
   if (sm.smTrending) parts.push('Smart money trending higher.');
-  else if (sm.smExiting) parts.push('Smart money declining — distribution risk.');
+  else if (sm.smExiting) parts.push('Smart money declining — falling flow risk.');
   else parts.push('Smart money flat.');
 
   if (sm.hasSVD5) parts.push('SVD signal in last 5 bars — institutional volume confirmed.');
-  if (sm.hasSYD) parts.push('SYD present — distribution caution.');
+  if (sm.hasSYD) parts.push('SYD present — falling flow caution.');
   if (sm.pumpSignal) parts.push('Smart declining while fast rising — pump signature.');
 
   if (sm.relationship === 'Aligned') parts.push('Both layers aligned.');

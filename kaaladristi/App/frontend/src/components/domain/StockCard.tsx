@@ -49,13 +49,13 @@ export function SignalDots({ svd, sbd, syd }: { svd: boolean; sbd: boolean; syd:
       {sbd && (
         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-accent-cyan">
           <span className="w-2.5 h-2.5 rounded-full bg-accent-cyan shrink-0" />
-          Accumulation
+          Rising Flow
         </span>
       )}
       {syd && (
         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-risk-red">
           <span className="w-2.5 h-2.5 rounded-full bg-risk-red shrink-0" />
-          Distribution
+          Falling Flow
         </span>
       )}
     </div>
@@ -351,8 +351,8 @@ export function StockCard({
           )}
 
           {/* Accum / Distrib */}
-          {stock.accum_distrib === 'ACCUMULATION' && <SigPill label="Accumulation" bull />}
-          {stock.accum_distrib === 'DISTRIBUTION' && <SigPill label="Distribution" bear />}
+          {stock.accum_distrib === 'ACCUMULATION' && <SigPill label="Rising Flow" bull />}
+          {stock.accum_distrib === 'DISTRIBUTION' && <SigPill label="Falling Flow" bear />}
 
           {/* RVOL */}
           {stock.rvol != null && (
@@ -369,8 +369,8 @@ export function StockCard({
         {(stock.has_recent_svd || stock.has_recent_sbd || stock.has_recent_syd) && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '7px' }}>
             {stock.has_recent_svd && <DotTag label="Volume Drive" color="var(--bull)" />}
-            {stock.has_recent_sbd && <DotTag label="Accumulation" color="#06b6d4" />}
-            {stock.has_recent_syd && <DotTag label="Distribution" color="var(--bear)" />}
+            {stock.has_recent_sbd && <DotTag label="Rising Flow" color="#06b6d4" />}
+            {stock.has_recent_syd && <DotTag label="Falling Flow" color="var(--bear)" />}
           </div>
         )}
       </div>

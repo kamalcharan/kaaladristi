@@ -18,10 +18,10 @@ export interface MarketStatusOption {
 export const MARKET_STATUS: MarketStatusOption[] = [
   { value: 'major_positive', label: 'Major Positive', color: 'green'  },
   { value: 'minor_positive', label: 'Minor Positive', color: 'green'  },
-  { value: 'bullish',        label: 'Bullish',        color: 'green'  },
+  { value: 'bullish',        label: 'Positive',       color: 'green'  },
   { value: 'major_negative', label: 'Major Negative', color: 'red'    },
   { value: 'minor_negative', label: 'Minor Negative', color: 'red'    },
-  { value: 'bearish',        label: 'Bearish',        color: 'red'    },
+  { value: 'bearish',        label: 'Negative',       color: 'red'    },
   { value: 'highly_volatile',label: 'Highly Volatile',color: 'amber'  },
   { value: 'volatile',       label: 'Volatile',       color: 'amber'  },
   { value: 'cautious',       label: 'Cautious',       color: 'amber'  },

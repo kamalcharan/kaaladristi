@@ -22,14 +22,14 @@ export type MarketImpact =
   | 'strong_bearish';
 
 export const SIGNAL_LABELS: Record<string, string> = {
-  strong_bullish: 'Strong Bull',
-  bullish:        'Bullish',
-  mild_bullish:   'Mild Bull',
+  strong_bullish: 'Strong Uptrend',
+  bullish:        'Positive',
+  mild_bullish:   'Mild Uptrend',
   neutral:        'Neutral',
   turning:        'Turning',
-  mild_bearish:   'Mild Bear',
-  bearish:        'Bearish',
-  strong_bearish: 'Strong Bear',
+  mild_bearish:   'Mild Downtrend',
+  bearish:        'Negative',
+  strong_bearish: 'Strong Downtrend',
 };
 
 export type SignalColor = 'green' | 'red' | 'amber' | 'slate';
@@ -63,13 +63,13 @@ export const IMPACT_OPTIONS: MarketImpact[] = [
 // ── 2. MagicRS Zones (Title Case — as stored in DB) ──────────────────────────
 
 export const ZONE_LABELS: Record<string, { label: string; color: string }> = {
-  'Strong Bull':  { label: 'Strong Bull',  color: 'text-risk-green' },
-  'Mild Bull':    { label: 'Mild Bull',    color: 'text-risk-green/70' },
-  'Neutral Bull': { label: 'Neutral Bull', color: 'text-risk-green/40' },
-  'Neutral':      { label: 'Neutral',      color: 'text-muted' },         // legacy
-  'Neutral Bear': { label: 'Neutral Bear', color: 'text-risk-red/40' },
-  'Mild Bear':    { label: 'Mild Bear',    color: 'text-risk-red/70' },
-  'Strong Bear':  { label: 'Strong Bear',  color: 'text-risk-red' },
+  'Strong Bull':  { label: 'Strong Uptrend',   color: 'text-risk-green' },
+  'Mild Bull':    { label: 'Mild Uptrend',      color: 'text-risk-green/70' },
+  'Neutral Bull': { label: 'Neutral Uptrend',   color: 'text-risk-green/40' },
+  'Neutral':      { label: 'Neutral',           color: 'text-muted' },         // legacy
+  'Neutral Bear': { label: 'Neutral Downtrend', color: 'text-risk-red/40' },
+  'Mild Bear':    { label: 'Mild Downtrend',    color: 'text-risk-red/70' },
+  'Strong Bear':  { label: 'Strong Downtrend',  color: 'text-risk-red' },
 };
 
 // ── 3. Flow Types (UPPER_SNAKE — as stored in DB) ─────────────────────────────

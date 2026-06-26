@@ -88,7 +88,7 @@ export default function MarketsView() {
                 {latest.supertrend_dir != null && (
                   <StatPill
                     label="SuperTrend"
-                    value={latest.supertrend_dir === 1 ? 'Bullish' : 'Bearish'}
+                    value={latest.supertrend_dir === 1 ? 'Uptrend' : 'Downtrend'}
                   />
                 )}
                 {latest.magic_rs_zone && <StatPill label="MagicRS vs N500" value={latest.magic_rs_zone} />}

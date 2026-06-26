@@ -251,23 +251,23 @@ function overlayName(id: string): string {
 }
 
 function buildVaNiNote(result: CorrelationResult, itemA: string, itemB: string): string {
-  const direction = result.avg_return_5d >= 0 ? 'bullish' : 'bearish'
+  const direction = result.avg_return_5d >= 0 ? 'positive' : 'negative'
   const strength  = Math.abs(result.avg_return_5d) >= 2 ? 'meaningfully' : 'mildly'
   const a = overlayName(itemA)
   const b = overlayName(itemB)
-  const bullPct = result.n_instances > 0
+  const posPct = result.n_instances > 0
     ? Math.round((result.bullish_count / result.n_instances) * 100) : 0
 
   if (result.shape === 'EVENT_OVERLAP') {
-    return `When ${a} and ${b} overlap, markets have historically been ${strength} ${direction} — ${bullPct}% bullish across ${result.n_instances} instances (avg 5D: ${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%).`
+    return `When ${a} and ${b} overlap, markets have historically been ${strength} ${direction} — ${posPct}% positive across ${result.n_instances} instances (avg 5D: ${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%).`
   }
   if (result.shape === 'THRESHOLD_CROSS') {
-    return `${a} crossing its threshold during ${b} periods has produced ${strength} ${direction} outcomes — ${bullPct}% of ${result.n_instances} instances resolved bullishly.`
+    return `${a} crossing its threshold during ${b} periods has produced ${strength} ${direction} outcomes — ${posPct}% of ${result.n_instances} instances resolved positively.`
   }
   if (result.shape === 'EVENT_IN_STATE') {
-    return `${a} events occurring while ${b} is active have historically tilted ${direction} with ${bullPct}% bullish across ${result.n_instances} observations.`
+    return `${a} events occurring while ${b} is active have historically tilted ${direction} with ${posPct}% positive across ${result.n_instances} observations.`
   }
-  return `This combination of ${a} + ${b} has co-occurred ${result.n_instances} times — ${bullPct}% resolved ${direction} (avg 5D: ${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%).`
+  return `This combination of ${a} + ${b} has co-occurred ${result.n_instances} times — ${posPct}% resolved ${direction} (avg 5D: ${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%).`
 }
 
 function ReturnBar({ value }: { value: number | null }) {
@@ -364,7 +364,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
         {[
           { label: '5D avg',  val: `${result.avg_return_5d >= 0 ? '+' : ''}${result.avg_return_5d.toFixed(2)}%` },
           { label: '22D avg', val: `${result.avg_return_22d >= 0 ? '+' : ''}${result.avg_return_22d.toFixed(2)}%` },
-          { label: 'Bull',    val: `${result.bullish_count}/${result.n_instances}` },
+          { label: 'Positive', val: `${result.bullish_count}/${result.n_instances}` },
         ].map(({ label, val }) => (
           <div key={label} style={{ background: 'rgba(255,255,255,.04)', borderRadius: 6,
             padding: '4px 8px', flex: 1, textAlign: 'center' }}>
