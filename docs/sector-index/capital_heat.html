@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Capital Heat — Affordable Housing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0C0F14; --panel:#11151C; --line:#1C222C; --line2:#252D39;
+  --ink:#ECE5D6; --muted:#828B98; --faint:#525A66;
+  --up:#46B98A; --down:#E0574C;
+  --serif:"Fraunces",Georgia,serif; --mono:"IBM Plex Mono",monospace; --sans:"IBM Plex Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans)}
+body{padding:34px 30px 26px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+h1{font-family:var(--serif);font-weight:800;font-size:clamp(34px,5.4vw,58px);line-height:.96;letter-spacing:-.015em;margin:0}
+h1 em{font-style:italic;font-weight:400;color:#E0972A}
+.sub{max-width:62ch;color:var(--muted);font-size:14.5px;line-height:1.55;margin:14px 0 0}
+.sub b{color:var(--ink);font-weight:600}
+
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin:26px 0 16px}
+.toggle{display:inline-flex;border:1px solid var(--line2);border-radius:999px;padding:3px;background:#0E131A}
+.toggle button{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--muted);background:none;border:none;padding:7px 15px;border-radius:999px;cursor:pointer;transition:.18s}
+.toggle button.on{background:#E0972A;color:#1A1206;font-weight:600}
+.ramp{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.rampbar{width:160px;height:9px;border-radius:5px;background:linear-gradient(90deg,#131922,#2A2415,#5C4318,#A56E1C,#E0972A,#F6C457,#FCE8B8)}
+.dirkey{display:flex;gap:14px;font-family:var(--mono);font-size:11px;color:var(--muted);align-items:center}
+.dirkey span{display:inline-flex;align-items:center;gap:6px}
+.swatch{width:16px;height:4px;border-radius:2px;display:inline-block}
+
+.board{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:18px 18px 14px;overflow-x:auto}
+.grid{display:grid;gap:0;min-width:760px}
+.axis{display:grid;grid-template-columns:108px 1fr;align-items:end;margin-bottom:9px}
+.axis .ticks{display:grid}
+.tick{font-family:var(--mono);font-size:10px;color:var(--faint);text-align:center;white-space:nowrap}
+.row{display:grid;grid-template-columns:108px 1fr;align-items:center}
+.row + .row{margin-top:6px}
+.name{font-family:var(--mono);font-size:12.5px;color:var(--ink);letter-spacing:.02em;padding-right:12px;text-align:right}
+.cells{display:grid;gap:4px}
+.cell{position:relative;aspect-ratio:1/1;border-radius:3px;border-top:2.5px solid transparent;cursor:default;transition:transform .12s ease, box-shadow .12s ease;opacity:0;transform:translateY(3px)}
+.cell.in{opacity:1;transform:none}
+.cell:hover{transform:scale(1.18);z-index:5;box-shadow:0 0 0 1px #0C0F14,0 4px 16px rgba(0,0,0,.5)}
+.cell.hot{box-shadow:0 0 10px -1px rgba(224,151,42,.55)}
+.cell.empty{background:#0E131A;border-top-color:transparent}
+
+.foot{display:flex;flex-wrap:wrap;gap:8px 26px;margin:16px 2px 0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.foot .lead{color:var(--ink);font-weight:600}
+.scalehint{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:7px}
+
+#tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;background:#070A0E;border:1px solid var(--line2);border-radius:9px;padding:9px 11px;font-family:var(--mono);font-size:11.5px;line-height:1.5;color:var(--ink);z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.55);min-width:150px}
+#tip .t-date{color:var(--faint);font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px}
+#tip .t-name{color:#E0972A;font-weight:600;margin-bottom:5px}
+#tip .t-row{display:flex;justify-content:space-between;gap:16px}
+#tip .t-row span:first-child{color:var(--muted)}
+.up{color:var(--up)} .down{color:var(--down)}
+@media (prefers-reduced-motion: reduce){.cell{transition:none;opacity:1;transform:none}}
+@media (max-width:560px){ body{padding:24px 14px} .name{font-size:11px} .row,.axis{grid-template-columns:78px 1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">DristiQ · Money-Flow Read</p>
+  <h1>Capital <em>Heat</em></h1>
+  <p class="sub">Thirty sessions of money flowing into the five affordable-housing financiers. Heat is <b>abnormal inflow</b> — each day's traded value against the stock's own 66-day norm — so an accumulation surge reads as a bright band. The edge on every cell marks the day's price direction: <b>rising</b> or <b>falling</b>. A hot cell with a rising edge is accumulation the score rewards; a hot cell falling is heavy selling the score gates to zero.</p>
+
+  <div class="controls">
+    <div class="toggle" id="toggle">
+      <button data-mode="sx" class="on">Surge&nbsp;&times;</button>
+      <button data-mode="amt">&#8377;&nbsp;Cr</button>
+    </div>
+    <div class="ramp"><span id="rlo">quiet</span><div class="rampbar"></div><span id="rhi">white-hot</span></div>
+    <div class="dirkey">
+      <span><i class="swatch" style="background:var(--up)"></i>up day</span>
+      <span><i class="swatch" style="background:var(--down)"></i>down day</span>
+    </div>
+  </div>
+
+  <div class="board">
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <p class="scalehint" id="scalehint"></p>
+  <div class="foot">
+    <div><span class="lead">How to read it.</span> Bright = unusually large money flow that day. The brightest cells (AADHARHFC 19 Jun, AAVAS's late-May spikes) are the surges that drive the 5-day score.</div>
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+const D = {"dates":["14 May","15 May","18 May","19 May","20 May","21 May","22 May","25 May","26 May","27 May","29 May","01 Jun","02 Jun","03 Jun","04 Jun","05 Jun","08 Jun","09 Jun","10 Jun","11 Jun","12 Jun","15 Jun","16 Jun","17 Jun","18 Jun","19 Jun","22 Jun","23 Jun","24 Jun","25 Jun"],"stocks":["AADHARHFC","APTUS","HOMEFIRST","AAVAS","INDIASHLTR"],"cells":{"AADHARHFC":[{"amt":3.45,"sx":1.0,"d1":-2.47},{"amt":15.42,"sx":4.3,"d1":-2.24},{"amt":5.51,"sx":1.5,"d1":0.03},{"amt":7.53,"sx":2.1,"d1":1.81},{"amt":11.68,"sx":3.2,"d1":1.48},{"amt":4.83,"sx":1.3,"d1":-1.04},{"amt":10.15,"sx":2.8,"d1":0.16},{"amt":11.74,"sx":3.2,"d1":-0.46},{"amt":7.43,"sx":2.0,"d1":1.05},{"amt":4.68,"sx":1.3,"d1":-0.08},{"amt":11.61,"sx":3.2,"d1":-0.13},{"amt":18.16,"sx":5.0,"d1":-2.19},{"amt":12.15,"sx":3.3,"d1":-0.34},{"amt":6.45,"sx":1.8,"d1":-0.58},{"amt":7.22,"sx":2.0,"d1":1.61},{"amt":11.05,"sx":3.0,"d1":-0.37},{"amt":3.83,"sx":1.1,"d1":-1.64},{"amt":3.83,"sx":1.1,"d1":1.61},{"amt":7.93,"sx":2.3,"d1":0.43},{"amt":25.66,"sx":7.3,"d1":-3.58},{"amt":15.92,"sx":4.5,"d1":4.55},{"amt":20.7,"sx":5.9,"d1":3.23},{"amt":11.83,"sx":3.4,"d1":-0.81},{"amt":5.04,"sx":1.4,"d1":0.6},{"amt":8.38,"sx":2.4,"d1":-0.3},{"amt":113.65,"sx":32.4,"d1":5.89},{"amt":12.01,"sx":3.4,"d1":-3.84},{"amt":4.09,"sx":1.2,"d1":0.02},{"amt":9.8,"sx":2.8,"d1":2.2},{"amt":37.7,"sx":10.8,"d1":2.41}],"APTUS":[{"amt":24.99,"sx":2.7,"d1":0.15},{"amt":13.27,"sx":1.4,"d1":-1.98},{"amt":10.45,"sx":1.1,"d1":-2.78},{"amt":7.19,"sx":0.8,"d1":-0.99},{"amt":19.03,"sx":2.2,"d1":5.72},{"amt":5.33,"sx":0.7,"d1":-1.49},{"amt":4.14,"sx":0.6,"d1":-1.79},{"amt":8.44,"sx":1.2,"d1":0.85},{"amt":5.44,"sx":0.8,"d1":-0.9},{"amt":2.43,"sx":0.4,"d1":0.96},{"amt":6.67,"sx":1.1,"d1":-0.91},{"amt":6.57,"sx":1.2,"d1":-0.08},{"amt":5.3,"sx":1.0,"d1":0.19},{"amt":3.3,"sx":0.7,"d1":-1.15},{"amt":16.96,"sx":3.5,"d1":2.08},{"amt":8.84,"sx":1.8,"d1":0.89},{"amt":10.04,"sx":2.1,"d1":-3.51},{"amt":10.77,"sx":2.2,"d1":-1.15},{"amt":18.69,"sx":3.8,"d1":-0.2},{"amt":14.19,"sx":2.9,"d1":2.34},{"amt":35.27,"sx":7.2,"d1":5.13},{"amt":13.75,"sx":2.8,"d1":0.37},{"amt":12.28,"sx":2.5,"d1":-1.21},{"amt":4.95,"sx":1.1,"d1":0.26},{"amt":5.06,"sx":1.1,"d1":0.98},{"amt":11.61,"sx":2.6,"d1":-1.1},{"amt":4.79,"sx":1.1,"d1":0.32},{"amt":16.15,"sx":3.7,"d1":-2.92},{"amt":41.87,"sx":9.5,"d1":0.76},{"amt":17.96,"sx":4.1,"d1":0.15}],"HOMEFIRST":[{"amt":8.88,"sx":2.1,"d1":-0.59},{"amt":9.81,"sx":2.3,"d1":-1.14},{"amt":3.79,"sx":0.9,"d1":-0.91},{"amt":7.89,"sx":1.9,"d1":0.98},{"amt":11.18,"sx":2.7,"d1":0.25},{"amt":11.3,"sx":2.7,"d1":-0.62},{"amt":7.08,"sx":1.7,"d1":-0.84},{"amt":11.01,"sx":2.6,"d1":1.57},{"amt":33.08,"sx":7.9,"d1":0.63},{"amt":10.78,"sx":2.6,"d1":2.85},{"amt":42.24,"sx":10.1,"d1":-4.71},{"amt":12.92,"sx":3.1,"d1":1.02},{"amt":4.11,"sx":1.0,"d1":-0.6},{"amt":7.48,"sx":1.8,"d1":-0.49},{"amt":20.89,"sx":4.9,"d1":-0.5},{"amt":13.79,"sx":3.2,"d1":1.87},{"amt":4.19,"sx":1.0,"d1":-2.98},{"amt":18.93,"sx":4.6,"d1":3.19},{"amt":9.36,"sx":2.3,"d1":-2.87},{"amt":6.6,"sx":1.6,"d1":-1.85},{"amt":41.44,"sx":10.0,"d1":7.73},{"amt":10.1,"sx":2.4,"d1":0.56},{"amt":7.9,"sx":1.9,"d1":1.84},{"amt":12.19,"sx":2.9,"d1":0.85},{"amt":20.31,"sx":4.9,"d1":0.03},{"amt":11.33,"sx":2.7,"d1":0.68},{"amt":5.46,"sx":1.3,"d1":-0.5},{"amt":6.37,"sx":1.5,"d1":-2.07},{"amt":12.81,"sx":3.1,"d1":3.49},{"amt":31.32,"sx":7.5,"d1":2.42}],"AAVAS":[{"amt":1.95,"sx":0.6,"d1":-0.63},{"amt":2.18,"sx":0.8,"d1":-0.82},{"amt":2.45,"sx":0.9,"d1":-3.29},{"amt":9.93,"sx":3.7,"d1":-0.21},{"amt":2.44,"sx":1.0,"d1":1.63},{"amt":2.95,"sx":1.2,"d1":1.22},{"amt":20.79,"sx":8.2,"d1":1.61},{"amt":2.49,"sx":1.0,"d1":-1.57},{"amt":23.81,"sx":9.7,"d1":1.33},{"amt":23.06,"sx":9.4,"d1":-1.74},{"amt":8.0,"sx":3.3,"d1":-1.89},{"amt":4.8,"sx":2.0,"d1":-1.39},{"amt":3.7,"sx":1.5,"d1":-1.46},{"amt":10.72,"sx":4.4,"d1":0.54},{"amt":12.76,"sx":5.2,"d1":-0.88},{"amt":17.62,"sx":7.2,"d1":-0.2},{"amt":15.6,"sx":6.3,"d1":-2.97},{"amt":13.43,"sx":5.5,"d1":-0.19},{"amt":9.37,"sx":3.8,"d1":3.4},{"amt":86.86,"sx":35.3,"d1":2.2},{"amt":33.45,"sx":13.6,"d1":5.83},{"amt":14.27,"sx":5.8,"d1":-0.04},{"amt":4.89,"sx":2.0,"d1":-0.83},{"amt":16.59,"sx":6.7,"d1":4.23},{"amt":8.08,"sx":3.3,"d1":1.05},{"amt":15.71,"sx":6.4,"d1":0.29},{"amt":46.43,"sx":18.9,"d1":-0.36},{"amt":13.13,"sx":5.3,"d1":-0.98},{"amt":20.44,"sx":8.3,"d1":2.09},{"amt":6.99,"sx":2.8,"d1":0.49}],"INDIASHLTR":[{"amt":4.27,"sx":2.3,"d1":0.15},{"amt":3.03,"sx":1.7,"d1":-1.03},{"amt":2.08,"sx":1.2,"d1":-4.05},{"amt":2.34,"sx":1.3,"d1":-1.8},{"amt":1.88,"sx":1.1,"d1":0.12},{"amt":9.2,"sx":5.3,"d1":1.33},{"amt":0.96,"sx":0.6,"d1":-0.68},{"amt":1.98,"sx":1.3,"d1":-0.63},{"amt":2.22,"sx":1.4,"d1":0.06},{"amt":2.18,"sx":1.4,"d1":0.9},{"amt":10.33,"sx":6.6,"d1":-2.98},{"amt":1.78,"sx":1.2,"d1":-1.12},{"amt":2.56,"sx":1.7,"d1":2.29},{"amt":2.21,"sx":1.5,"d1":1.04},{"amt":2.3,"sx":1.5,"d1":-2.49},{"amt":1.2,"sx":0.8,"d1":-0.6},{"amt":0.92,"sx":0.7,"d1":-2.11},{"amt":0.86,"sx":0.7,"d1":-0.07},{"amt":1.07,"sx":1.0,"d1":-0.39},{"amt":1.13,"sx":1.1,"d1":-1.25},{"amt":33.88,"sx":33.6,"d1":8.96},{"amt":2.33,"sx":2.3,"d1":-1.71},{"amt":4.23,"sx":4.2,"d1":0.91},{"amt":5.26,"sx":5.2,"d1":-2.26},{"amt":2.06,"sx":2.0,"d1":-0.13},{"amt":8.09,"sx":8.0,"d1":2.1},{"amt":1.61,"sx":1.6,"d1":-0.89},{"amt":3.28,"sx":3.3,"d1":-0.68},{"amt":1.6,"sx":1.6,"d1":1.37},{"amt":3.01,"sx":3.0,"d1":-1.79}]}};
+const stops = [[0,[19,25,34]],[0.16,[42,36,21]],[0.34,[92,67,24]],[0.55,[165,110,28]],[0.74,[224,151,42]],[0.89,[246,196,87]],[1,[252,232,184]]];
+function ramp(t){ t=Math.max(0,Math.min(1,t));
+  for(let i=1;i<stops.length;i++){ if(t<=stops[i][0]){ const a=stops[i-1],b=stops[i]; const f=(t-a[0])/(b[0]-a[0]);
+    const c=a[1].map((v,k)=>Math.round(v+(b[1][k]-v)*f)); return `rgb(${c[0]},${c[1]},${c[2]})`; } }
+  return 'rgb(252,232,184)'; }
+
+// build domains (log) per mode
+function logd(arr){ const v=arr.filter(x=>x>0); return [Math.min(...v),Math.max(...v)]; }
+const allSx=[], allAmt=[];
+D.stocks.forEach(s=>D.cells[s].forEach(c=>{ if(c){allSx.push(c.sx); allAmt.push(c.amt);} }));
+const domSx=logd(allSx), domAmt=logd(allAmt);
+function norm(val,dom){ const lo=Math.log(dom[0]), hi=Math.log(dom[1]); return (Math.log(val)-lo)/(hi-lo); }
+
+let MODE='sx';
+const grid=document.getElementById('grid');
+const tip=document.getElementById('tip');
+
+function fmtDate(d){return d;}
+function build(){
+  grid.innerHTML='';
+  // axis row with sparse date ticks
+  const axis=document.createElement('div'); axis.className='axis';
+  axis.innerHTML='<div></div>';
+  const ticks=document.createElement('div'); ticks.className='ticks';
+  ticks.style.gridTemplateColumns=`repeat(${D.dates.length},1fr)`;
+  D.dates.forEach((dt,i)=>{ const t=document.createElement('div'); t.className='tick';
+    t.textContent=(i%5===0||i===D.dates.length-1)?dt.replace(' ','\u00A0'):''; ticks.appendChild(t); });
+  axis.appendChild(ticks); grid.appendChild(axis);
+
+  D.stocks.forEach((s,ri)=>{
+    const row=document.createElement('div'); row.className='row';
+    const nm=document.createElement('div'); nm.className='name'; nm.textContent=s; row.appendChild(nm);
+    const cells=document.createElement('div'); cells.className='cells';
+    cells.style.gridTemplateColumns=`repeat(${D.dates.length},1fr)`;
+    D.cells[s].forEach((c,ci)=>{
+      const el=document.createElement('div'); el.className='cell';
+      if(!c){ el.classList.add('empty'); }
+      else{
+        const val = MODE==='sx'? c.sx : c.amt;
+        const t = norm(val, MODE==='sx'?domSx:domAmt);
+        el.style.background=ramp(t);
+        el.style.borderTopColor = c.d1>=0 ? 'var(--up)' : 'var(--down)';
+        if(t>0.8) el.classList.add('hot');
+        el.addEventListener('mousemove',e=>showTip(e,s,D.dates[ci],c));
+        el.addEventListener('mouseleave',()=>{tip.style.opacity=0;});
+      }
+      // staggered reveal
+      const delay = (ci*14 + ri*40);
+      requestAnimationFrame(()=>setTimeout(()=>el.classList.add('in'), delay));
+      cells.appendChild(el);
+    });
+    row.appendChild(cells); grid.appendChild(row);
+  });
+  document.getElementById('scalehint').textContent =
+    MODE==='sx' ? `heat scale · surge ${domSx[0].toFixed(1)}\u00D7 \u2192 ${domSx[1].toFixed(1)}\u00D7 (log)`
+                : `heat scale · \u20B9${domAmt[0].toFixed(1)} Cr \u2192 \u20B9${domAmt[1].toFixed(1)} Cr (log)`;
+}
+function showTip(e,name,date,c){
+  const dir = c.d1>=0?'up':'down'; const sign=c.d1>=0?'+':'';
+  tip.innerHTML=`<div class="t-date">${date}</div><div class="t-name">${name}</div>`+
+    `<div class="t-row"><span>flow</span><span>\u20B9${c.amt.toFixed(2)} Cr</span></div>`+
+    `<div class="t-row"><span>surge</span><span>${c.sx.toFixed(1)}\u00D7</span></div>`+
+    `<div class="t-row"><span>day</span><span class="${dir}">${sign}${c.d1.toFixed(2)}%</span></div>`;
+  tip.style.opacity=1;
+  let x=e.clientX+14, y=e.clientY+14;
+  if(x>innerWidth-180) x=e.clientX-166; if(y>innerHeight-100) y=e.clientY-92;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+document.getElementById('toggle').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  [...e.currentTarget.children].forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  MODE=b.dataset.mode; build();
+});
+build();
+</script>
+</body>
+</html>
