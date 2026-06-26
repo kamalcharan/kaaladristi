@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, Table2 } from 'lucide-react';
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { useSectorIndices, useVix, useIndexSparklines } from '@/hooks/useSectorRotation';
+import { FLOW_LABELS } from '@/constants/signalScale';
 import { SECTOR_TAB_LABELS, type SectorTab, type SectorIndexRow } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
 import { DristiQLoader } from '@/components/ui';
@@ -148,6 +149,34 @@ function VixBand() {
 
 // ── Index card (chart view) ───────────────────────────────────────────────────
 
+function RetPill({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+      <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        {label}
+      </span>
+      <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: pctColor(value) }}>
+        {fmtPct(value)}
+      </span>
+    </div>
+  );
+}
+
+function RsiBar({ value }: { value: number | null }) {
+  if (value == null) return null;
+  const w = Math.min(100, Math.max(0, value));
+  const color = value >= 60 ? 'var(--bull)' : value <= 40 ? 'var(--bear)' : 'var(--gold-soft)';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.06em', flexShrink: 0 }}>RSI</span>
+      <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${w}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.3s' }} />
+      </div>
+      <span style={{ ...MONO, fontSize: 10, color, minWidth: 28, textAlign: 'right' }}>{value.toFixed(0)}</span>
+    </div>
+  );
+}
+
 function IndexCard({
   row,
   sparkline,
@@ -159,12 +188,13 @@ function IndexCard({
 }) {
   const signal = computeSignal(row);
   const lineColor = (row.ret_22d ?? 0) >= 0 ? 'var(--bull)' : 'var(--bear)';
+  const flowInfo = row.flow_type ? (FLOW_LABELS[row.flow_type] ?? null) : null;
+  const flowColorVar = flowInfo?.color.replace('text-risk-', '--risk-').replace('text-', '--') ?? null;
 
   return (
     <div
       onClick={onClick}
       style={{
-        height: 200,
         background: 'var(--card)',
         border: '1px solid var(--border)',
         borderRadius: 8,
@@ -172,7 +202,7 @@ function IndexCard({
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
-        gap: 6,
+        gap: 0,
         transition: 'border-color 0.15s',
         overflow: 'hidden',
       }}
@@ -180,7 +210,7 @@ function IndexCard({
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
     >
       {/* Header: name + signal badge */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, minHeight: 32 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
         <span
           style={{
             ...MONO,
@@ -219,9 +249,9 @@ function IndexCard({
         )}
       </div>
 
-      {/* Close + %Chg */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ ...MONO, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+      {/* Close + %Chg + flow badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
           {row.close != null
             ? '₹' + row.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })
             : '—'}
@@ -229,13 +259,45 @@ function IndexCard({
         <span style={{ ...MONO, fontSize: 11, color: pctColor(row.pct_chng) }}>
           {fmtPct(row.pct_chng)}
         </span>
+        {flowInfo && flowColorVar && (
+          <span
+            style={{
+              ...MONO,
+              fontSize: 9,
+              fontWeight: 500,
+              letterSpacing: '0.05em',
+              color: `var(${flowColorVar}, var(--text-faint))`,
+              background: 'rgba(255,255,255,0.04)',
+              borderRadius: 3,
+              padding: '1px 5px',
+              marginLeft: 'auto',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {flowInfo.label}
+          </span>
+        )}
       </div>
 
       {/* Sparkline */}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ height: 56, marginBottom: 10 }}>
         {sparkline.length > 1 ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={sparkline} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+              <Tooltip
+                contentStyle={{
+                  background: 'var(--card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  color: 'var(--text-primary)',
+                  padding: '4px 8px',
+                }}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={(v: any) => [typeof v === 'number' ? '₹' + v.toFixed(2) : v, '']}
+                labelFormatter={(l: unknown) => String(l)}
+              />
               <Line
                 type="monotone"
                 dataKey="close"
@@ -243,6 +305,7 @@ function IndexCard({
                 strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}
+                activeDot={{ r: 2, fill: lineColor }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -251,6 +314,37 @@ function IndexCard({
             <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>No data</span>
           </div>
         )}
+      </div>
+
+      {/* RSI bar */}
+      <div style={{ marginBottom: 10 }}>
+        <RsiBar value={row.rsi_14} />
+      </div>
+
+      {/* 5D / 22D / 66D returns */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 0,
+          background: 'rgba(255,255,255,0.03)',
+          borderRadius: 5,
+          border: '1px solid rgba(255,255,255,0.05)',
+          overflow: 'hidden',
+        }}
+      >
+        {([['5D', row.ret_5d], ['22D', row.ret_22d], ['66D', row.ret_66d]] as [string, number | null][]).map(([label, val], i) => (
+          <div
+            key={label}
+            style={{
+              padding: '7px 0',
+              textAlign: 'center',
+              borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+            }}
+          >
+            <RetPill label={label} value={val} />
+          </div>
+        ))}
       </div>
     </div>
   );
