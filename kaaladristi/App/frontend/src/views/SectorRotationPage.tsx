@@ -1,12 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, Table2 } from 'lucide-react';
-import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
-import { useSectorIndices, useVix, useIndexSparklines } from '@/hooks/useSectorRotation';
+import { useSectorIndices, useVix } from '@/hooks/useSectorRotation';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import { SECTOR_TAB_LABELS, type SectorTab, type SectorIndexRow } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
 import { DristiQLoader } from '@/components/ui';
+import WorkspaceChart from '@/components/workspace/WorkspaceChart';
+import type { ChartOverlay } from '@/types/framework';
+
+const EMPTY_OVERLAYS: ChartOverlay[] = [];
 
 const TABS: SectorTab[] = ['broad', 'sectoral', 'thematic'];
 type ViewMode = 'table' | 'chart';
@@ -179,17 +182,18 @@ function RsiBar({ value }: { value: number | null }) {
 
 function IndexCard({
   row,
-  sparkline,
   onClick,
 }: {
   row: SectorIndexRow;
-  sparkline: Array<{ trade_date: string; close: number }>;
   onClick: () => void;
 }) {
   const signal = computeSignal(row);
-  const lineColor = (row.ret_22d ?? 0) >= 0 ? 'var(--bull)' : 'var(--bear)';
   const flowInfo = row.flow_type ? (FLOW_LABELS[row.flow_type] ?? null) : null;
   const flowColorVar = flowInfo?.color.replace('text-risk-', '--risk-').replace('text-', '--') ?? null;
+  const instrument = useMemo(
+    () => ({ id: row.index_id, symbol: row.name, type: 'index' as const }),
+    [row.index_id, row.name],
+  );
 
   return (
     <div
@@ -279,41 +283,9 @@ function IndexCard({
         )}
       </div>
 
-      {/* Sparkline */}
-      <div style={{ height: 56, marginBottom: 10 }}>
-        {sparkline.length > 1 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sparkline} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
-                  color: 'var(--text-primary)',
-                  padding: '4px 8px',
-                }}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                formatter={(v: any) => [typeof v === 'number' ? '₹' + v.toFixed(2) : v, '']}
-                labelFormatter={(l: unknown) => String(l)}
-              />
-              <Line
-                type="monotone"
-                dataKey="close"
-                stroke={lineColor}
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-                activeDot={{ r: 2, fill: lineColor }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)' }}>No data</span>
-          </div>
-        )}
+      {/* OHLC candlestick — display only, clicks bubble up to card */}
+      <div style={{ height: 200, pointerEvents: 'none', marginBottom: 10, borderRadius: 4, overflow: 'hidden' }}>
+        <WorkspaceChart instrument={instrument} overlays={EMPTY_OVERLAYS} standalone />
       </div>
 
       {/* RSI bar */}
@@ -354,12 +326,6 @@ function IndexCard({
 
 function ChartGrid({ rows }: { rows: SectorIndexRow[] }) {
   const navigate = useNavigate();
-  const indexIds = useMemo(() => rows.map((r) => r.index_id), [rows]);
-  const { data: sparklineMap, isLoading } = useIndexSparklines(indexIds, true);
-
-  if (isLoading) {
-    return <DristiQLoader message="Loading chart data…" />;
-  }
 
   return (
     <div
@@ -374,7 +340,6 @@ function ChartGrid({ rows }: { rows: SectorIndexRow[] }) {
         <IndexCard
           key={row.index_id}
           row={row}
-          sparkline={sparklineMap?.get(row.index_id) ?? []}
           onClick={() => navigate(`/sector-rotation/${row.index_id}`)}
         />
       ))}
