@@ -86,7 +86,7 @@ export default function CustomIndexCreatePage() {
   const [basket, setBasket] = useState<EquityRow[]>([]);
 
   const { data: equities = [] } = useQuery({
-    queryKey: ['search-index'],
+    queryKey: ['search-index-nse'],
     queryFn: fetchNseEquities,
     staleTime: 10 * 60 * 1000,
   });
