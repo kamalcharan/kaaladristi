@@ -9,6 +9,7 @@
  */
 
 import { from } from './postgrest';
+import type { MarketBreadthDay } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -461,6 +462,153 @@ export async function fetchConstituentFlowMap(
   // Step 5: sort rows by avg sx DESC
   const sortedRows = Object.keys(cellMap).sort((a, b) => (avgSx[b] ?? 0) - (avgSx[a] ?? 0));
   return { rows: sortedRows, dates: formattedDates, cells: cellMap };
+}
+
+// ── Index Breadth (per-index, computed client-side) ───────────────────────────
+
+const BREADTH_LOOKBACK = 252;  // sessions for percentile history
+const BREADTH_FLOOR    = 126;  // min sessions before percentile mode activates
+const BREADTH_MIN_N    = 8;    // min constituents — below this, suppress gauge
+
+export interface IndexBreadthResult {
+  /** Computed breadth rows, oldest first. Length = min(days, available sessions). */
+  data: MarketBreadthDay[];
+  /** 0–1 percentile rank of latest score in the index's own history. Null if < BREADTH_FLOOR sessions. */
+  percentileRank: number | null;
+  /** Number of constituents found in km_index_constituents for this index. */
+  stockCount: number;
+  /**
+   * 'absolute'    — fewer than BREADTH_FLOOR sessions; use NSE 35/55 zones.
+   * 'provisional' — BREADTH_FLOOR ≤ sessions < BREADTH_LOOKBACK; percentile + provisional label.
+   * 'percentile'  — full BREADTH_LOOKBACK history available; relative zones.
+   */
+  zoneMode: 'absolute' | 'provisional' | 'percentile';
+}
+
+/**
+ * Compute market breadth for a specific index from constituent-level EOD data.
+ *
+ * Two PostgREST calls:
+ *   1. km_index_constituents — resolve equity_id set for this index
+ *   2. v_equity_eod_deduped  — fetch close/ema_20/sma_50/sma_150 for those IDs
+ *
+ * Computation (per Breadth_ROC_Spec_v1.0 §2):
+ *   p20  = count(close > ema_20)  / N_with_valid_ema20
+ *   p50  = count(close > sma_50)  / N_with_valid_sma50
+ *   p150 = count(close > sma_150) / N_with_valid_sma150
+ *   BreadthScore = 100 × (0.50·p20 + 0.30·p50 + 0.20·p150)
+ *
+ * Constituents with ema_20/sma_50/sma_150 = 0 or null are excluded from that
+ * ratio's denominator (new listings / insufficient price history).
+ */
+export async function fetchIndexBreadth(
+  indexId: number,
+  days = 66,
+): Promise<IndexBreadthResult> {
+  // ── Step 1: resolve constituent equity IDs ────────────────────────────────
+  const { data: constData, error: constErr } = await from('km_index_constituents')
+    .select('equity_id')
+    .eq('index_id', indexId)
+    .execute();
+  if (constErr) throw new Error(`[indexBreadth] constituents: ${constErr.message}`);
+
+  const equityIds = ((constData ?? []) as { equity_id: number }[]).map((r) => r.equity_id);
+  const stockCount = equityIds.length;
+
+  if (stockCount < BREADTH_MIN_N) {
+    return { data: [], percentileRank: null, stockCount, zoneMode: 'absolute' };
+  }
+
+  // ── Step 2: fetch constituent EOD from the deduped view ───────────────────
+  // Calendar cutoff = 1.6× trading days to safely cover BREADTH_LOOKBACK sessions.
+  const calendarDays = Math.ceil(BREADTH_LOOKBACK * 1.6);
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - calendarDays);
+  const cutoff = cutoffDate.toISOString().split('T')[0];
+
+  const { data: eodData, error: eodErr } = await from('v_equity_eod_deduped')
+    .select('trade_date,close,ema_20,sma_50,sma_150')
+    .in('equity_id', equityIds)
+    .gte('trade_date', cutoff)
+    .order('trade_date', { ascending: true })
+    .execute();
+  if (eodErr) throw new Error(`[indexBreadth] eod: ${eodErr.message}`);
+
+  // ── Step 3: group by date and compute breadth score ───────────────────────
+  type EodRow = {
+    trade_date: string;
+    close:   number | null;
+    ema_20:  number | null;
+    sma_50:  number | null;
+    sma_150: number | null;
+  };
+  const rows = (eodData ?? []) as EodRow[];
+
+  const byDate = new Map<string, EodRow[]>();
+  for (const row of rows) {
+    if (!byDate.has(row.trade_date)) byDate.set(row.trade_date, []);
+    byDate.get(row.trade_date)!.push(row);
+  }
+
+  const allDates = [...byDate.keys()].sort();
+
+  const computed: MarketBreadthDay[] = allDates.map((date) => {
+    const dayRows = byDate.get(date)!;
+    let n20 = 0, a20 = 0;
+    let n50 = 0, a50 = 0;
+    let n150 = 0, a150 = 0;
+
+    for (const r of dayRows) {
+      if (r.close == null) continue;
+      // Exclude constituent from denominator if indicator is null or 0 (warm-up / new listing)
+      if (r.ema_20  != null && r.ema_20  > 0) { n20++;  if (r.close > r.ema_20)  a20++;  }
+      if (r.sma_50  != null && r.sma_50  > 0) { n50++;  if (r.close > r.sma_50)  a50++;  }
+      if (r.sma_150 != null && r.sma_150 > 0) { n150++; if (r.close > r.sma_150) a150++; }
+    }
+
+    const p20  = n20  > 0 ? a20  / n20  : 0;
+    const p50  = n50  > 0 ? a50  / n50  : 0;
+    const p150 = n150 > 0 ? a150 / n150 : 0;
+    const anyValid = n20 > 0 || n50 > 0 || n150 > 0;
+
+    return {
+      trade_date:    date,
+      pct_above_20:  n20  > 0 ? Math.round(p20  * 1000) / 10 : null,
+      pct_above_50:  n50  > 0 ? Math.round(p50  * 1000) / 10 : null,
+      pct_above_150: n150 > 0 ? Math.round(p150 * 1000) / 10 : null,
+      breadth_score: anyValid
+        ? Math.round((100 * (0.50 * p20 + 0.30 * p50 + 0.20 * p150)) * 10) / 10
+        : null,
+      stock_count: dayRows.length,
+    };
+  });
+
+  // ── Step 4: zone mode + percentile rank ───────────────────────────────────
+  const historyLen = computed.length;
+  const zoneMode: IndexBreadthResult['zoneMode'] =
+    historyLen < BREADTH_FLOOR    ? 'absolute'    :
+    historyLen < BREADTH_LOOKBACK ? 'provisional' :
+    'percentile';
+
+  let percentileRank: number | null = null;
+  if (zoneMode !== 'absolute') {
+    const latestScore = computed.at(-1)?.breadth_score ?? null;
+    if (latestScore != null) {
+      const scores = computed
+        .map((d) => d.breadth_score)
+        .filter((s): s is number => s != null);
+      const below = scores.filter((s) => s < latestScore).length;
+      percentileRank = scores.length > 0 ? below / scores.length : null;
+    }
+  }
+
+  // ── Step 5: trim to display window ───────────────────────────────────────
+  return {
+    data:          computed.slice(-days),
+    percentileRank,
+    stockCount,
+    zoneMode,
+  };
 }
 
 /**
