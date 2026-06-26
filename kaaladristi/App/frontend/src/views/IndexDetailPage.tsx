@@ -523,7 +523,10 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   return (
     <div style={{ padding: '24px' }}>
 
-      {/* B70: ScoreCard — unified score summary */}
+      {/* Signal explanation */}
+      <SignalCard row={row} />
+
+      {/* B70: ScoreCard — unified numeric summary */}
       <IndexScoreCard row={row} />
 
       {/* Sparkline */}

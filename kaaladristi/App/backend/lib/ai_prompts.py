@@ -365,9 +365,11 @@ _SECTOR_INSIGHT_SYSTEM = (
     "Given this snapshot, write exactly 2 sentences:\n"
     "(1) The rotation posture — characterise the current flow type and whether momentum (score, returns, RSI) "
     "is confirming or diverging from the flow direction. Mention MagicRS zone if it adds context.\n"
-    "(2) The delivery and institutional picture — what the delivery surge and institutional reading reveal "
-    "about conviction behind the current move, and whether this is sustainable or a fragile technical reaction.\n"
+    "(2) The delivery and institutional picture — describe what the delivery surge ratio and institutional "
+    "reading reveal about the conviction level behind the current move. State the figures and what they "
+    "indicate directionally about participation, without evaluating whether the move will continue.\n"
     + _RULES
+    + " Never use: sustainable, fragile, unlikely to, likely to, expected to."
 )
 
 
