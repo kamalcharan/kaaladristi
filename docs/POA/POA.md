@@ -606,6 +606,14 @@ Sort: score_5d DESC
 - SR-F11 (CapitalHeat): not yet scheduled — depends on B67 Skill being built first
 - B13 (lookback 5D/22D/66D toggle) still open
 
+**DEFERRED FROM SPRINT 10 → SPRINT 12:**
+- **Custom Index Tab 4** on `/sector-rotation` page — Tab "Custom" requires `km_custom_index`, `km_custom_index_constituents`, `km_custom_index_eod` tables not yet created
+- **Custom Index Admin UI** in Settings — create/edit/deactivate baskets, manage constituents
+- **AI Mode A** — user types a theme → Claude identifies matching stocks from NSE universe
+- **AI Mode B** — proactive discovery → Claude surfaces emergent themes from market data
+- Reason: Phase A (NSE Sectoral + Thematic indices, Tabs 1–3) ships first. Custom Index is Phase B.
+- Full spec: `docs/specs/DristiQ_SectorRotation_Spec_v1.0.docx §8`
+
 ---
 
 ### Sprint 11 — Breadth + ROC (planned)
@@ -628,17 +636,20 @@ Sort: score_5d DESC
 
 ### Sprint 12 — VaNi + Custom Index (planned)
 
-**Goal:** VaNi sector narrative + Custom Index scoring parity.
+**Goal:** VaNi sector narrative + Custom Index Phase B — DB schema, Admin UI, AI basket creation.
 **Tasks:** B71, B56, B57, B58, B70
-**Spec:** `docs/sector-index/DristiQ_SectorRotation_Spec_v1.0` §8
+**Spec:** `docs/specs/DristiQ_SectorRotation_Spec_v1.0.docx §8`
 
 | Task | Description | Status |
 |---|---|---|
 | B71 | VaNiSector Skill — 2-sentence sector insight | ⬜ |
 | B70 | ScoreCard Skill — unified index score card | ⬜ |
-| B56 | Custom Index CRUD (user-defined themes) | ⬜ |
-| B57 | Custom Index seed data (Affordable Housing etc.) | ⬜ |
-| B58 | Custom Index scoring — equal-weight, 66D baseline | ⬜ |
+| B56 | DB schema — `km_custom_index`, `km_custom_index_constituents`, `km_custom_index_eod` tables | ⬜ |
+| B57 | Custom Index Admin UI — create/edit/deactivate baskets, manage constituents | ⬜ |
+| B58 | Custom Index scoring — equal-weight, 66D baseline per D30 | ⬜ |
+| B75 | Custom Index Tab 4 on `/sector-rotation` — wire to Phase B schema | ⬜ |
+| B76 | AI Mode A — user types theme → Claude identifies matching NSE stocks | ⬜ |
+| B77 | AI Mode B — proactive discovery → Claude surfaces emergent themes | ⬜ |
 
 ---
 
