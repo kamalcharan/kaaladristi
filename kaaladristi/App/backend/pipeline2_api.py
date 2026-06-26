@@ -40,7 +40,7 @@ from lib.db_client import get_db as _get_db  # noqa: E402
 # Optional AI / assembler modules — gracefully absent if not installed
 try:
     from lib.ai_prompts import SKILLS as _AI_SKILLS          # noqa: E402
-    from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
+    from lib.ai_client import complete as _ai_complete, claude_complete as _claude_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
     from lib.data_assemblers import (                         # noqa: E402
         assemble_instrument_context,
         assemble_market_pulse_context,
@@ -61,7 +61,8 @@ except ImportError:
     _AI_SKILLS = {}
     _VANI_INTENTS = {}
     _get_intents_for_page = lambda page: {}  # noqa: E731
-    _ai_complete = lambda **_: None  # noqa: E731
+    _ai_complete = lambda **_: None      # noqa: E731
+    _claude_complete = lambda **_: None  # noqa: E731
     _AI_ENABLED = False
     _AI_MODEL = ""
     _AI_OPTIONAL_OK = False
@@ -5411,5 +5412,99 @@ async def payments_webhook(request: Request):
     except Exception as exc:
         log.error(f'webhook handler error: {event} {exc}')
         # Always return 200 to Razorpay — never let webhook retry loop
+
+
+# ── Custom Index — AI Discover ────────────────────────────────────────────────
+
+class _DiscoverRequest(BaseModel):
+    llm: str = 'claude'  # 'claude' | 'qwen'
+
+
+@app.post('/api/custom-index/discover')
+async def custom_index_discover(req: _DiscoverRequest):
+    """
+    Fetch top 300 NSE stocks by signal strength (≥2 of 5 conditions),
+    build prompt, call LLM, return parsed themes.
+
+    Returns: { stock_count: int, themes: [{ theme_name, description, rationale, constituent_symbols[] }] }
+    """
+    llm = req.llm.lower()
+    if llm not in ('claude', 'qwen'):
+        raise HTTPException(status_code=400, detail="llm must be 'claude' or 'qwen'")
+
+    db = _get_db()
+    try:
+        cur = db.cursor()
+        cur.execute("""
+            WITH latest AS (
+                SELECT MAX(trade_date) AS dt FROM km_equity_eod
+            ),
+            scored AS (
+                SELECT
+                    s.symbol,
+                    s.company_name,
+                    s.industry,
+                    e.score_5d,
+                    e.delivery_surge_x,
+                    e.sniper_inst,
+                    e.flow_type,
+                    (
+                        (CASE WHEN e.score_5d > 20                              THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.delivery_surge_x > 1.2                     THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.sniper_inst > 30                            THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.close > e.sma_150                           THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.flow_type IN ('FRESH_LONGS','SHORT_COVERING') THEN 1 ELSE 0 END)
+                    ) AS signal_count
+                FROM km_equity_eod e
+                JOIN km_equity_symbols s ON s.id = e.equity_id
+                WHERE e.trade_date = (SELECT dt FROM latest)
+                  AND s.exchange = 'NSE'
+                  AND s.is_active = true
+            )
+            SELECT symbol, company_name, industry, score_5d,
+                   delivery_surge_x, sniper_inst, flow_type, signal_count
+            FROM scored
+            WHERE signal_count >= 2
+            ORDER BY signal_count DESC, score_5d DESC NULLS LAST
+            LIMIT 300
+        """)
+        rows = cur.fetchall()
+        cols = [d[0] for d in cur.description]
+        stocks = [dict(zip(cols, r)) for r in rows]
+    finally:
+        db.close()
+
+    if not stocks:
+        return {'themes': [], 'stock_count': 0}
+
+    system_prompt = (
+        "You are a sector analyst reviewing NSE-listed Indian equities. "
+        "Identify cohesive sub-themes where 5+ companies share a common business model, "
+        "supply chain position, or structural tailwind — and where existing NSE sectoral "
+        "indices do not capture the group. Focus on themes with current accumulation signals."
+    )
+    user_prompt = (
+        f"Here are NSE-listed active stocks with recent signals: {json.dumps(stocks)}. "
+        "Identify 3–5 emerging themes. For each theme return: theme_name, description, "
+        "rationale, constituent_symbols[]. "
+        "Respond in JSON only, no preamble, no markdown fences."
+    )
+
+    if llm == 'claude':
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
+    else:
+        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
+
+    if raw is None:
+        raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
+
+    try:
+        themes = json.loads(raw)
+        if not isinstance(themes, list):
+            raise ValueError('expected JSON array')
+    except Exception:
+        raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
+
+    return {'themes': themes, 'stock_count': len(stocks)}
 
     return {'ok': True}
