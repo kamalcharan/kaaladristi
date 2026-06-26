@@ -12,12 +12,15 @@ import {
   fetchIndexDetail,
   fetchLatestIndexDate,
   fetchEarliestIndexDate,
+  fetchConstituentFlowMap,
+  fetchIndexFlowMap,
   SECTOR_TAB_CATEGORIES,
   type SectorTab,
   type SectorIndexRow,
   type VixRow,
   type SparklinePoint,
   type ConstituentDetail,
+  type FlowMapData,
 } from '@/services/sectorRotation';
 
 const STALE = 5 * 60 * 1000; // 5 minutes
@@ -114,4 +117,27 @@ export function useIndexDateRange() {
     earliestDate: earliest.data ?? null,
     isLoading:    latest.isLoading || earliest.isLoading,
   };
+}
+
+/** Per-constituent flow intensity heatmap for an index over the last 22 sessions. */
+export function useConstituentFlowMap(indexId: number | null) {
+  return useQuery<FlowMapData, Error>({
+    queryKey: ['constituentFlowMap', indexId],
+    queryFn:  () => fetchConstituentFlowMap(indexId!, 22),
+    enabled:  indexId != null,
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Per-index flow heatmap for a sector tab category over N trading days. */
+export function useIndexFlowMap(tab: SectorTab, days: 5 | 22 | 66) {
+  const categories = SECTOR_TAB_CATEGORIES[tab];
+  return useQuery<FlowMapData, Error>({
+    queryKey: ['indexFlowMap', tab, days],
+    queryFn:  () => fetchIndexFlowMap(categories, days),
+    enabled:  categories.length > 0,
+    staleTime: STALE,
+    retry: 1,
+  });
 }
