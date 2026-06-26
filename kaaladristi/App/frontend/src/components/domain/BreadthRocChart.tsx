@@ -17,6 +17,38 @@ const PERIODS = [
 ] as const;
 type PeriodLabel = typeof PERIODS[number]['label'];
 
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+export type RocBadge = 'expanding' | 'slowing' | 'turning' | 'contracting' | 'warming_up';
+
+export interface BreadthRocChartProps {
+  /** External data. When provided, the internal hook fetch is ignored. */
+  data?: BreadthRocDay[];
+  isLoading?: boolean;
+  isError?: boolean;
+  /** Display name shown in the header instead of "Breadth Momentum (ROC)". */
+  indexName?: string;
+  /** Override constituent count (used when data comes from an index slice). */
+  stockCount?: number;
+  /**
+   * Pre-computed ROC badge key from the caller (e.g. IndexDetailPage).
+   * When omitted, the component derives it from the latest roc_13 vs sma_breadth.
+   */
+  rocBadge?: RocBadge;
+}
+
+// ── ROC badge map ─────────────────────────────────────────────────────────────
+// Single source of truth for all 5 badge states.
+// Labels use observation vocabulary per D39: no directional market predictions.
+
+const ROC_BADGE_MAP: Record<RocBadge, { label: string; style: React.CSSProperties }> = {
+  expanding:   { label: 'Expanding',   style: { background: 'var(--bull-bg)',    color: 'var(--bull)',    border: '1px solid color-mix(in srgb, var(--bull) 40%, transparent)'    } },
+  slowing:     { label: 'Slowing',     style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } },
+  turning:     { label: 'Turning',     style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } },
+  contracting: { label: 'Contracting', style: { background: 'var(--bear-bg)',    color: 'var(--bear)',    border: '1px solid color-mix(in srgb, var(--bear) 40%, transparent)'    } },
+  warming_up:  { label: 'Warming up',  style: { background: 'var(--kd-elevated)', color: 'var(--text-muted)', border: '1px solid var(--kd-border)' } },
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -28,6 +60,15 @@ function fmtDate(d: string): string {
 
 function fmtRoc(v: number | null): string {
   return v == null ? '—' : (v >= 0 ? `+${v.toFixed(4)}` : v.toFixed(4));
+}
+
+function deriveRocBadge(roc13: number | null, smaBreadth: number | null): RocBadge {
+  const r = roc13 ?? 0;
+  const s = smaBreadth ?? 0;
+  if (r > 0 && r > s)  return 'expanding';
+  if (r > 0 && r <= s) return 'slowing';
+  if (r <= 0 && r > s) return 'turning';
+  return 'contracting';
 }
 
 // ── Custom Tooltip ────────────────────────────────────────────────────────────
@@ -63,33 +104,40 @@ function RocTooltip({ active, payload }: any) {
   );
 }
 
-// ── Sign-split helper (for dual-color area fill) ──────────────────────────────
-// Recharts doesn't support split fills natively, so we use two overlapping Areas
-// clipped by ReferenceArea zones — instead we just use opacity on positive/negative.
-
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function BreadthRocChart() {
+export default function BreadthRocChart({
+  data: dataProp,
+  isLoading: isLoadingProp,
+  isError: isErrorProp,
+  indexName,
+  stockCount: stockCountProp,
+  rocBadge: rocBadgeProp,
+}: BreadthRocChartProps = {}) {
   const [period, setPeriod] = useState<PeriodLabel>('66D');
   const days = PERIODS.find(p => p.label === period)!.days;
 
-  const { data = [], isLoading, isError } = useBreadthRoc(days);
+  // Internal hook always runs (React rules). Its result is used only when no prop data.
+  const internal = useBreadthRoc(days);
+
+  const data      = dataProp      ?? (internal.data    ?? []);
+  const isLoading = isLoadingProp ?? internal.isLoading;
+  const isError   = isErrorProp   ?? internal.isError;
+
   const latest = data[data.length - 1];
 
-  // 4-state ROC status based on crossover relationship
-  const rocStatus = (() => {
-    const r = latest?.roc_13 ?? 0;
-    const s = latest?.sma_breadth ?? 0;
-    if (r > 0 && r > s) return { label: 'Uptrend ✓', style: { background: 'var(--bull-bg)', color: 'var(--bull)', border: '1px solid color-mix(in srgb, var(--bull) 40%, transparent)' } };
-    if (r > 0 && r <= s) return { label: 'Caution',  style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
-    if (r <= 0 && r > s)  return { label: 'Recovering', style: { background: 'var(--caution-bg)', color: 'var(--caution)', border: '1px solid color-mix(in srgb, var(--caution) 40%, transparent)' } };
-    return                       { label: 'Downtrend', style: { background: 'var(--bear-bg)',  color: 'var(--bear)', border: '1px solid color-mix(in srgb, var(--bear) 40%, transparent)'  } };
-  })();
+  const displayStockCount = stockCountProp ?? latest?.stock_count ?? null;
+
+  // Resolve badge: prop wins; otherwise derive from latest data point
+  const badge: RocBadge = rocBadgeProp ?? deriveRocBadge(latest?.roc_13 ?? null, latest?.sma_breadth ?? null);
+  const rocStatus = ROC_BADGE_MAP[badge];
 
   // Dynamic Y domain with some padding
   const allVals = data.flatMap(d => [d.roc_13, d.roc_55, d.sma_breadth].filter((v): v is number => v != null));
   const yMax = allVals.length ? Math.max(...allVals.map(Math.abs)) * 1.2 : 0.02;
   const yDomain: [number, number] = [-yMax, yMax];
+
+  const title = indexName ? `Momentum (ROC) · ${indexName}` : 'Breadth Momentum (ROC)';
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -97,10 +145,10 @@ export default function BreadthRocChart() {
       {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Breadth Momentum (ROC)</h3>
-          {latest?.stock_count != null && (
+          <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
+          {displayStockCount != null && (
             <p className="text-[10px] text-muted mt-0.5">
-              {latest.stock_count.toLocaleString()}+ stocks · GroupAvg ROC oscillator
+              {displayStockCount.toLocaleString()}+ stocks · GroupAvg ROC oscillator
             </p>
           )}
         </div>

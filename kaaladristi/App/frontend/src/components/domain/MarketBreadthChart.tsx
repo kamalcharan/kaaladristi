@@ -20,10 +20,56 @@ type PeriodLabel = typeof PERIODS[number]['label'];
 const GREED_THRESHOLD = 55;
 const FEAR_THRESHOLD  = 35;
 
-function regime(score: number): { label: string; color: string; bg: string; border: string } {
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+export interface MarketBreadthChartProps {
+  /** External data. When provided, the internal hook fetch is ignored. */
+  data?: MarketBreadthDay[];
+  isLoading?: boolean;
+  isError?: boolean;
+  /** Display name shown in the header instead of "Market Breadth". */
+  indexName?: string;
+  /** Override constituent count (used when data comes from an index slice). */
+  stockCount?: number;
+  /**
+   * Zone mode drives the regime badge logic:
+   *   'absolute'    — NSE universe 35/55 thresholds (default)
+   *   'percentile'  — relative to own history (pctRank252 required)
+   *   'provisional' — percentile + "provisional" label (short history < 126 sessions)
+   */
+  zoneMode?: 'absolute' | 'percentile' | 'provisional';
+  /** 0–1 percentile rank of today's breadth score in the index's own 252-day history. */
+  percentileRank?: number;
+}
+
+// ── Regime helpers ────────────────────────────────────────────────────────────
+
+type RegimeInfo = { label: string; color: string; bg: string; border: string };
+
+function regimeAbsolute(score: number): RegimeInfo {
   if (score > GREED_THRESHOLD) return { label: 'Greed',   color: 'text-risk-red',   bg: 'bg-risk-red/10',   border: 'border-risk-red/40'   };
   if (score < FEAR_THRESHOLD)  return { label: 'Fear',    color: 'text-risk-green', bg: 'bg-risk-green/10', border: 'border-risk-green/40' };
   return                               { label: 'Neutral', color: 'text-risk-amber', bg: 'bg-risk-amber/10', border: 'border-risk-amber/40' };
+}
+
+function regimePercentile(pctRank: number, provisional: boolean): RegimeInfo {
+  const suffix = provisional ? ' *' : '';
+  if (pctRank >= 0.70) return { label: `Greed${suffix}`,   color: 'text-risk-red',   bg: 'bg-risk-red/10',   border: 'border-risk-red/40'   };
+  if (pctRank <= 0.30) return { label: `Fear${suffix}`,    color: 'text-risk-green', bg: 'bg-risk-green/10', border: 'border-risk-green/40' };
+  return                       { label: `Neutral${suffix}`, color: 'text-risk-amber', bg: 'bg-risk-amber/10', border: 'border-risk-amber/40' };
+}
+
+function resolveRegime(
+  score: number,
+  zoneMode: MarketBreadthChartProps['zoneMode'],
+  percentileRank: number | undefined,
+): RegimeInfo {
+  if (zoneMode === 'percentile' || zoneMode === 'provisional') {
+    if (percentileRank != null) {
+      return regimePercentile(percentileRank, zoneMode === 'provisional');
+    }
+  }
+  return regimeAbsolute(score);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -61,11 +107,11 @@ function EmaStat({ label, value, prev }: { label: string; value: number | null; 
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
 
-function BreadthTooltip({ active, payload, label }: any) {
+function BreadthTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload as MarketBreadthDay;
   if (!d) return null;
-  const r = regime(d.breadth_score ?? 0);
+  const r = regimeAbsolute(d.breadth_score ?? 0);
   return (
     <div className="glass-card rounded-xl p-3 text-[11px] border border-kd-border min-w-[160px]">
       <div className="font-bold text-[var(--text-primary)] mb-2">{fmtDate(d.trade_date)}</div>
@@ -78,11 +124,11 @@ function BreadthTooltip({ active, payload, label }: any) {
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_20)}</span>
       </div>
       <div className="flex justify-between gap-4 mb-0.5">
-        <span className="text-muted">Above 50 EMA</span>
+        <span className="text-muted">Above 50 SMA</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_50)}</span>
       </div>
       <div className="flex justify-between gap-4">
-        <span className="text-muted">Above 150 EMA</span>
+        <span className="text-muted">Above 150 SMA</span>
         <span className="mono text-[var(--text-secondary)]">{fmtPct(d.pct_above_150)}</span>
       </div>
     </div>
@@ -91,14 +137,38 @@ function BreadthTooltip({ active, payload, label }: any) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function MarketBreadthChart() {
+export default function MarketBreadthChart({
+  data: dataProp,
+  isLoading: isLoadingProp,
+  isError: isErrorProp,
+  indexName,
+  stockCount: stockCountProp,
+  zoneMode = 'absolute',
+  percentileRank,
+}: MarketBreadthChartProps = {}) {
   const [period, setPeriod] = useState<PeriodLabel>('66D');
   const days = PERIODS.find(p => p.label === period)!.days;
 
-  const { data = [], isLoading, isError } = useMarketBreadth(days);
+  // Internal hook always runs (React rules). Its result is used only when no prop data.
+  const internal = useMarketBreadth(days);
+
+  const data      = dataProp     ?? (internal.data    ?? []);
+  const isLoading = isLoadingProp ?? internal.isLoading;
+  const isError   = isErrorProp   ?? internal.isError;
+
   const latest = data[data.length - 1];
   const prev   = data[data.length - 2];
-  const r      = latest?.breadth_score != null ? regime(latest.breadth_score) : null;
+
+  const displayStockCount = stockCountProp ?? latest?.stock_count ?? null;
+
+  // Minimum-constituent guard: suppress gauge below 8 stocks
+  const tooSmall = displayStockCount != null && displayStockCount < 8;
+
+  const r = latest?.breadth_score != null
+    ? resolveRegime(latest.breadth_score, zoneMode, percentileRank)
+    : null;
+
+  const title = indexName ? `Breadth · ${indexName}` : 'Market Breadth';
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -106,10 +176,10 @@ export default function MarketBreadthChart() {
       {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Market Breadth</h3>
-          {latest?.stock_count != null && (
+          <h3 className="text-[13px] font-bold text-[var(--text-primary)]">{title}</h3>
+          {displayStockCount != null && (
             <p className="text-[10px] text-muted mt-0.5">
-              {latest.stock_count.toLocaleString()}+ stocks analyzed
+              {displayStockCount.toLocaleString()}+ stocks analyzed
             </p>
           )}
         </div>
@@ -134,14 +204,16 @@ export default function MarketBreadthChart() {
           </div>
 
           {/* EMA stats */}
-          <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
-            <EmaStat label="20 EMA"  value={latest?.pct_above_20  ?? null} prev={prev?.pct_above_20  ?? null} />
-            <EmaStat label="50 EMA"  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
-            <EmaStat label="150 EMA" value={latest?.pct_above_150 ?? null} prev={prev?.pct_above_150 ?? null} />
-          </div>
+          {!tooSmall && (
+            <div className="flex items-center gap-4 pl-2 border-l border-kd-border">
+              <EmaStat label="20 EMA"  value={latest?.pct_above_20  ?? null} prev={prev?.pct_above_20  ?? null} />
+              <EmaStat label="50 SMA"  value={latest?.pct_above_50  ?? null} prev={prev?.pct_above_50  ?? null} />
+              <EmaStat label="150 SMA" value={latest?.pct_above_150 ?? null} prev={prev?.pct_above_150 ?? null} />
+            </div>
+          )}
 
           {/* Regime badge */}
-          {r && (
+          {r && !tooSmall && (
             <span className={cn('px-2.5 py-1 rounded-lg text-[10px] font-bold border uppercase tracking-wider', r.bg, r.color, r.border)}>
               {r.label}
             </span>
@@ -153,9 +225,12 @@ export default function MarketBreadthChart() {
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className="text-[11px] font-bold text-[var(--text-secondary)]">Breadth Score Trend</div>
-          <div className="text-[9px] text-muted">50% Above 20 EMA · 30% Above 50 EMA · 20% Above 150 EMA</div>
+          <div className="text-[9px] text-muted">50% Above 20 EMA · 30% Above 50 SMA · 20% Above 150 SMA</div>
+          {zoneMode === 'provisional' && (
+            <div className="text-[9px] text-risk-amber mt-0.5">* Provisional — short index history</div>
+          )}
         </div>
-        {latest?.breadth_score != null && (
+        {latest?.breadth_score != null && !tooSmall && (
           <div className="text-right">
             <div className={cn('text-[22px] font-bold mono leading-none', r?.color)}>
               {latest.breadth_score.toFixed(1)}
@@ -166,7 +241,14 @@ export default function MarketBreadthChart() {
       </div>
 
       {/* ── Chart ── */}
-      {isLoading ? (
+      {tooSmall ? (
+        <div className="flex flex-col items-center justify-center h-[200px] gap-1">
+          <AlertCircle className="w-4 h-4 text-muted" />
+          <p className="text-xs text-muted text-center">
+            Insufficient constituents ({displayStockCount}) — breadth requires ≥ 8 stocks
+          </p>
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center justify-center h-[200px] gap-2">
           <Loader2 className="w-4 h-4 text-accent-indigo animate-spin" />
           <span className="text-sm text-muted">Loading...</span>
@@ -244,18 +326,20 @@ export default function MarketBreadthChart() {
       )}
 
       {/* ── Legend ── */}
-      <div className="flex items-center justify-center gap-5 mt-2">
-        {[
-          { color: 'bg-risk-red',   label: `Greed (>${GREED_THRESHOLD})` },
-          { color: 'bg-risk-amber', label: `Neutral (${FEAR_THRESHOLD}-${GREED_THRESHOLD})` },
-          { color: 'bg-risk-green', label: `Fear (<${FEAR_THRESHOLD})` },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <span className={cn('w-2 h-2 rounded-full', color)} />
-            <span className="text-[9px] text-muted">{label}</span>
-          </div>
-        ))}
-      </div>
+      {!tooSmall && (
+        <div className="flex items-center justify-center gap-5 mt-2">
+          {[
+            { color: 'bg-risk-red',   label: `Greed (>${GREED_THRESHOLD})` },
+            { color: 'bg-risk-amber', label: `Neutral (${FEAR_THRESHOLD}-${GREED_THRESHOLD})` },
+            { color: 'bg-risk-green', label: `Fear (<${FEAR_THRESHOLD})` },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-1.5">
+              <span className={cn('w-2 h-2 rounded-full', color)} />
+              <span className="text-[9px] text-muted">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
     </div>
   );

@@ -14,6 +14,7 @@ import {
   fetchEarliestIndexDate,
   fetchConstituentFlowMap,
   fetchIndexFlowMap,
+  fetchIndexBreadth,
   SECTOR_TAB_CATEGORIES,
   type SectorTab,
   type SectorIndexRow,
@@ -21,6 +22,7 @@ import {
   type SparklinePoint,
   type ConstituentDetail,
   type FlowMapData,
+  type IndexBreadthResult,
 } from '@/services/sectorRotation';
 
 const STALE = 5 * 60 * 1000; // 5 minutes
@@ -137,6 +139,17 @@ export function useIndexFlowMap(tab: SectorTab, days: 5 | 22 | 66) {
     queryKey: ['indexFlowMap', tab, days],
     queryFn:  () => fetchIndexFlowMap(categories, days),
     enabled:  categories.length > 0,
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Computed market breadth + ROC series for a specific index. */
+export function useIndexBreadth(indexId: number | null, days = 66) {
+  return useQuery<IndexBreadthResult, Error>({
+    queryKey: ['indexBreadth', indexId, days],
+    queryFn:  () => fetchIndexBreadth(indexId!, days),
+    enabled:  indexId !== null,
     staleTime: STALE,
     retry: 1,
   });

@@ -9,6 +9,7 @@
  */
 
 import { from } from './postgrest';
+import type { MarketBreadthDay, BreadthRocDay } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -458,9 +459,226 @@ export async function fetchConstituentFlowMap(
     avgSx[sym] = sxVals.length > 0 ? sxVals.reduce((a, b) => a + b, 0) / sxVals.length : 0;
   }
 
-  // Step 5: sort rows by avg sx DESC
+  // Step 5: sort rows by avg sx DESC, reverse so newest date is column 0
   const sortedRows = Object.keys(cellMap).sort((a, b) => (avgSx[b] ?? 0) - (avgSx[a] ?? 0));
-  return { rows: sortedRows, dates: formattedDates, cells: cellMap };
+  const reversedConstDates = [...formattedDates].reverse();
+  for (const sym of Object.keys(cellMap)) {
+    cellMap[sym] = [...cellMap[sym]].reverse();
+  }
+  return { rows: sortedRows, dates: reversedConstDates, cells: cellMap };
+}
+
+// ── Index Breadth (per-index, computed client-side) ───────────────────────────
+
+const BREADTH_LOOKBACK = 252;  // sessions for percentile history
+const BREADTH_FLOOR    = 126;  // min sessions before percentile mode activates
+const BREADTH_MIN_N    = 8;    // min constituents — below this, suppress gauge
+
+export type RocBadge = 'expanding' | 'slowing' | 'turning' | 'contracting' | 'warming_up';
+
+export interface IndexBreadthResult {
+  /** Computed breadth rows, oldest first. Length = min(days, available sessions). */
+  data: MarketBreadthDay[];
+  /** Computed ROC rows, oldest first. Length = min(days, available sessions). */
+  roc: BreadthRocDay[];
+  /** 0–1 percentile rank of latest score in the index's own history. Null if < BREADTH_FLOOR sessions. */
+  percentileRank: number | null;
+  /** Number of constituents found in km_index_constituents for this index. */
+  stockCount: number;
+  /**
+   * 'absolute'    — fewer than BREADTH_FLOOR sessions; use NSE 35/55 zones.
+   * 'provisional' — BREADTH_FLOOR ≤ sessions < BREADTH_LOOKBACK; percentile + provisional label.
+   * 'percentile'  — full BREADTH_LOOKBACK history available; relative zones.
+   */
+  zoneMode: 'absolute' | 'provisional' | 'percentile';
+  /** Badge key derived from latest roc_13 vs sma_breadth. */
+  rocBadge: RocBadge;
+}
+
+/**
+ * Compute market breadth for a specific index from constituent-level EOD data.
+ *
+ * Two PostgREST calls:
+ *   1. km_index_constituents — resolve equity_id set for this index
+ *   2. v_equity_eod_deduped  — fetch close/ema_20/sma_50/sma_150 for those IDs
+ *
+ * Computation (per Breadth_ROC_Spec_v1.0 §2):
+ *   p20  = count(close > ema_20)  / N_with_valid_ema20
+ *   p50  = count(close > sma_50)  / N_with_valid_sma50
+ *   p150 = count(close > sma_150) / N_with_valid_sma150
+ *   BreadthScore = 100 × (0.50·p20 + 0.30·p50 + 0.20·p150)
+ *
+ * Constituents with ema_20/sma_50/sma_150 = 0 or null are excluded from that
+ * ratio's denominator (new listings / insufficient price history).
+ */
+export async function fetchIndexBreadth(
+  indexId: number,
+  days = 66,
+): Promise<IndexBreadthResult> {
+  // ── Step 1: resolve constituent equity IDs ────────────────────────────────
+  const { data: constData, error: constErr } = await from('km_index_constituents')
+    .select('equity_id')
+    .eq('index_id', indexId)
+    .execute();
+  if (constErr) throw new Error(`[indexBreadth] constituents: ${constErr.message}`);
+
+  const equityIds = ((constData ?? []) as { equity_id: number }[]).map((r) => r.equity_id);
+  const stockCount = equityIds.length;
+
+  if (stockCount < BREADTH_MIN_N) {
+    return { data: [], roc: [], percentileRank: null, stockCount, zoneMode: 'absolute', rocBadge: 'warming_up' };
+  }
+
+  // ── Step 2: fetch constituent EOD from the deduped view ───────────────────
+  // Calendar cutoff = 1.6× trading days to safely cover BREADTH_LOOKBACK sessions.
+  const calendarDays = Math.ceil(BREADTH_LOOKBACK * 1.6);
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - calendarDays);
+  const cutoff = cutoffDate.toISOString().split('T')[0];
+
+  const { data: eodData, error: eodErr } = await from('v_equity_eod_deduped')
+    .select('equity_id,trade_date,close,ema_20,sma_50,sma_150')
+    .in('equity_id', equityIds)
+    .gte('trade_date', cutoff)
+    .order('trade_date', { ascending: true })
+    .execute();
+  if (eodErr) throw new Error(`[indexBreadth] eod: ${eodErr.message}`);
+
+  // ── Step 3: group by date and compute breadth score ───────────────────────
+  type EodRow = {
+    equity_id: number;
+    trade_date: string;
+    close:   number | null;
+    ema_20:  number | null;
+    sma_50:  number | null;
+    sma_150: number | null;
+  };
+  const rows = (eodData ?? []) as EodRow[];
+
+  const byDate = new Map<string, EodRow[]>();
+  for (const row of rows) {
+    if (!byDate.has(row.trade_date)) byDate.set(row.trade_date, []);
+    byDate.get(row.trade_date)!.push(row);
+  }
+
+  const allDates = [...byDate.keys()].sort();
+
+  const computed: MarketBreadthDay[] = allDates.map((date) => {
+    const dayRows = byDate.get(date)!;
+    let n20 = 0, a20 = 0;
+    let n50 = 0, a50 = 0;
+    let n150 = 0, a150 = 0;
+
+    for (const r of dayRows) {
+      if (r.close == null) continue;
+      // Exclude constituent from denominator if indicator is null or 0 (warm-up / new listing)
+      if (r.ema_20  != null && r.ema_20  > 0) { n20++;  if (r.close > r.ema_20)  a20++;  }
+      if (r.sma_50  != null && r.sma_50  > 0) { n50++;  if (r.close > r.sma_50)  a50++;  }
+      if (r.sma_150 != null && r.sma_150 > 0) { n150++; if (r.close > r.sma_150) a150++; }
+    }
+
+    const p20  = n20  > 0 ? a20  / n20  : 0;
+    const p50  = n50  > 0 ? a50  / n50  : 0;
+    const p150 = n150 > 0 ? a150 / n150 : 0;
+    const anyValid = n20 > 0 || n50 > 0 || n150 > 0;
+
+    return {
+      trade_date:    date,
+      pct_above_20:  n20  > 0 ? Math.round(p20  * 1000) / 10 : null,
+      pct_above_50:  n50  > 0 ? Math.round(p50  * 1000) / 10 : null,
+      pct_above_150: n150 > 0 ? Math.round(p150 * 1000) / 10 : null,
+      breadth_score: anyValid
+        ? Math.round((100 * (0.50 * p20 + 0.30 * p50 + 0.20 * p150)) * 10) / 10
+        : null,
+      stock_count: dayRows.length,
+    };
+  });
+
+  // ── Step 4: zone mode + percentile rank ───────────────────────────────────
+  const historyLen = computed.length;
+  const zoneMode: IndexBreadthResult['zoneMode'] =
+    historyLen < BREADTH_FLOOR    ? 'absolute'    :
+    historyLen < BREADTH_LOOKBACK ? 'provisional' :
+    'percentile';
+
+  let percentileRank: number | null = null;
+  if (zoneMode !== 'absolute') {
+    const latestScore = computed.at(-1)?.breadth_score ?? null;
+    if (latestScore != null) {
+      const scores = computed
+        .map((d) => d.breadth_score)
+        .filter((s): s is number => s != null);
+      const below = scores.filter((s) => s < latestScore).length;
+      percentileRank = scores.length > 0 ? below / scores.length : null;
+    }
+  }
+
+  // ── Step 6: per-constituent ROC → index-level average ROC ────────────────────
+  const dateIdx = new Map<string, number>(allDates.map((d, i) => [d, i]));
+  const constituentSeries = new Map<number, Map<number, number>>();
+
+  for (const row of rows) {
+    if (row.close == null) continue;
+    const i = dateIdx.get(row.trade_date);
+    if (i == null) continue;
+    if (!constituentSeries.has(row.equity_id)) constituentSeries.set(row.equity_id, new Map());
+    constituentSeries.get(row.equity_id)!.set(i, row.close);
+  }
+
+  const rocRaw: { trade_date: string; roc_13: number | null; roc_55: number | null; stock_count: number }[] = [];
+
+  for (let i = 0; i < allDates.length; i++) {
+    const r13: number[] = [];
+    const r55: number[] = [];
+    for (const series of constituentSeries.values()) {
+      const c0 = series.get(i);
+      if (c0 == null || c0 === 0) continue;
+      if (i >= 13) {
+        const c13 = series.get(i - 13);
+        if (c13 != null && c13 > 0) r13.push((c0 / c13 - 1) * 100);
+      }
+      if (i >= 55) {
+        const c55 = series.get(i - 55);
+        if (c55 != null && c55 > 0) r55.push((c0 / c55 - 1) * 100);
+      }
+    }
+    rocRaw.push({
+      trade_date: allDates[i],
+      roc_13: r13.length > 0 ? r13.reduce((a, b) => a + b, 0) / r13.length : null,
+      roc_55: r55.length > 0 ? r55.reduce((a, b) => a + b, 0) / r55.length : null,
+      stock_count: byDate.get(allDates[i])?.length ?? 0,
+    });
+  }
+
+  const roc: BreadthRocDay[] = rocRaw.map((row, i) => {
+    let sma_breadth: number | null = null;
+    if (i >= 4) {
+      const window = rocRaw.slice(i - 4, i + 1).map((r) => r.roc_13).filter((v): v is number => v != null);
+      if (window.length === 5) sma_breadth = window.reduce((a, b) => a + b, 0) / 5;
+    }
+    return { ...row, sma_breadth };
+  });
+
+  const latestRoc = roc.at(-1);
+  const rocBadge: RocBadge = (() => {
+    if (!latestRoc || latestRoc.roc_13 == null || latestRoc.sma_breadth == null) return 'warming_up';
+    const r = latestRoc.roc_13;
+    const s = latestRoc.sma_breadth;
+    if (r > 0 && r > s)  return 'expanding';
+    if (r > 0 && r <= s) return 'slowing';
+    if (r <= 0 && r > s) return 'turning';
+    return 'contracting';
+  })();
+
+  // ── Step 7: trim to display window ───────────────────────────────────────────
+  return {
+    data:    computed.slice(-days),
+    roc:     roc.slice(-days),
+    percentileRank,
+    stockCount,
+    zoneMode,
+    rocBadge,
+  };
 }
 
 /**
@@ -556,8 +774,12 @@ export async function fetchIndexFlowMap(
     latestRet[name] = last?.ret_5d ?? 0;
   }
 
-  // Step 5: sort by latest ret_5d DESC
+  // Step 5: sort by latest ret_5d DESC, reverse so newest date is column 0
   const sortedRows = Object.keys(cellMap).sort((a, b) => (latestRet[b] ?? 0) - (latestRet[a] ?? 0));
-  return { rows: sortedRows, dates: formattedDates, cells: cellMap };
+  const reversedIdxDates = [...formattedDates].reverse();
+  for (const name of Object.keys(cellMap)) {
+    cellMap[name] = [...cellMap[name]].reverse();
+  }
+  return { rows: sortedRows, dates: reversedIdxDates, cells: cellMap };
 }
 
