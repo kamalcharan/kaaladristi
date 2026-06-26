@@ -1279,4 +1279,9 @@ SEBI-safe language for astro signals.
 Files to review:
 - components/domain/ConfluenceDotGrid.tsx lines 114-115
 - components/domain/VisualPulse/AstroStrip.tsx line 148
+- constants/signalScale.ts ZONE_LABELS — values use "Uptrend/Downtrend"
+  (e.g. "Strong Uptrend", "Mild Downtrend"). These feed IndexScoreCard
+  (IndexDetailPage) and any other component using ZONE_LABELS inline
+  styles. Needs SEBI-safe zone vocabulary aligned with the astro label
+  decision. Added Sprint 12 (B70 IndexScoreCard).
 Review in Sprint 13 (Astro Integration sprint).
