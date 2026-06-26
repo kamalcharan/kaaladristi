@@ -12,14 +12,12 @@ import {
   fetchIndexDetail,
   fetchLatestIndexDate,
   fetchEarliestIndexDate,
-  fetchIndexFlowIntensity,
   SECTOR_TAB_CATEGORIES,
   type SectorTab,
   type SectorIndexRow,
   type VixRow,
   type SparklinePoint,
   type ConstituentDetail,
-  type FlowIntensityData,
 } from '@/services/sectorRotation';
 
 const STALE = 5 * 60 * 1000; // 5 minutes
@@ -89,17 +87,6 @@ export function useVix() {
   return useQuery<VixRow | null, Error>({
     queryKey: ['vix'],
     queryFn: fetchVix,
-    staleTime: STALE,
-    retry: 1,
-  });
-}
-
-/** Flow intensity heatmap data for an index's constituents over the last N trading days. */
-export function useIndexFlowIntensity(indexId: number | undefined, days = 22) {
-  return useQuery<FlowIntensityData, Error>({
-    queryKey: ['index-flow-intensity', indexId, days],
-    queryFn: () => fetchIndexFlowIntensity(indexId!, days),
-    enabled: indexId != null,
     staleTime: STALE,
     retry: 1,
   });
