@@ -36,6 +36,16 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | D18 | Migrations run manually — no automated migration tooling | Infra constraint |
 | D19 | `v_equity_eod_deduped` is canonical source for all cross-stock queries | Data pattern |
 | D20 | Walk mode deferred post-cashflow | Parked |
+| D29 | Score formula: ret_N + max(0, surge_N) if ret_N > 0, else 0. Surge = (recent/baseline − 1) × 100. No fallbacks, no surge²×25. Per Index_Score_Spec_v1.0 | Validated against live data — 14/14 Nifty Auto stocks, 5/5 Affordable Housing stocks |
+| D30 | Sectoral stock surge baseline: 22D for 5D score, 66D for 22D score. Custom index: 66D for both. Per Index_Score_Spec_v1.0 §3 | Hard-coding a single window silently corrupts half the scores |
+| D31 | Index-level score: real index ret + max(0, pct_amt_chg) for Sectoral. Equal-weight constituent mean ret + max(0, pct_amt_chg) for Custom Index | Index aggregation rule — per family |
+| D32 | avg_amt at index level = SUM of constituent N-day averages (not index value_cr) | Confirmed via Nifty Auto 5D Amt = sum of 15 constituent 5D avgs |
+| D33 | Breadth is equal-weight always — never cap or float weighted. Per Breadth_ROC_Spec_v1.0 §5 | Equal-weight breadth diverges from cap-weighted Score; that divergence is the signal |
+| D34 | Absolute breadth zones (35/55) valid at NSE universe tier only. Sub-populations use percentile-of-own-history zones with min 126 session floor. Per Breadth_ROC_Spec_v1.0 §4 | Prevents 5-name theme swinging 20pt on one stock wiggle |
+| D35 | Every new capability is a Skill. One input contract, one output contract, one SKILL.md. No page builds its own variant of an existing Skill | Architecture principle — prevents the 4-rotation-implementation problem |
+| D36 | CapitalHeat is a Skill. Input: {rows[], dates[], cells{amt, sx, d1}}. Reused across IndexDetailPage, SectorRotation, CustomIndex, any future theme page | Defined in docs/sector-index/capital_heat.html |
+| D37 | Color system: text-risk-green (up/positive), text-risk-red (down/negative), text-risk-amber (neutral/caution), text-accent-indigo (symbols/links). No new color tokens without explicit decision | Design system constraint |
+| D38 | VaNi explains data, never duplicates it. Tooltip = data value. VaNi = what it means in context | VaNi role boundary |
 
 ---
 
@@ -169,6 +179,25 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | B45 | Product-led onboarding UX — guided exploration flow | Feature | Sprint 4 | Full onboarding redesign post workspace shell |
 | B46 | User-specific VaNi thresholds | Feature | B06, B15 | Users override admin defaults |
 | B47 | Community saved filters (users share filter sets) | Feature | B07 | Optional — review post MVP |
+
+#### Sector Rotation & Index Scoring (Sprint 10+)
+
+| # | Item | Type | Dependency | Notes |
+|---|---|---|---|---|
+| B61 | Score formula update — retire surge²×25, implement `ret_N + max(0, surge_N)` per Index_Score_Spec_v1.0 | Backend + Frontend | None | Both families. Sectoral stock 5D baseline=22D, 22D baseline=66D. Custom both=66D. |
+| B62 | Populate `weight_pct` in `km_index_constituents` for all 93 indices | Data | None | Required before cap-weighted index score is possible |
+| B63 | Market-cap weighted index score variant | Feature | B62 | Optional alongside equal-weight — comparison view |
+| B64 | Breadth Score per index — equal-weight, percentile zones, min-constituent guard | Backend + Frontend | None | Per Breadth_ROC_Spec_v1.0 §2–§4. Absolute 35/55 for NSE universe; percentile 30/70 for sub-tiers |
+| B65 | ROC per index — fast/slow lines, 4-state badge (Bull/Caution/Recovering/Bear) | Backend + Frontend | B64 | Per Breadth_ROC_Spec_v1.0 §3 |
+| B66 | 3-axis signal badge (Money + Participation + Momentum) on all sector/index cards | Frontend | B64, B65 | Replaces single-axis score dot |
+| B67 | CapitalHeat Skill — SKILL.md + reusable component | Frontend | None | Input: {rows[], dates[], cells{amt, sx, d1}}. Log-scale color, two toggle modes |
+| B68 | BreadthGauge Skill — gauge component + data hook | Frontend | B64 | Reusable across IndexDetailPage, SectorRotation, MarketStructure |
+| B69 | ROCChart Skill — ROC chart component + data hook | Frontend | B65 | Same reuse sites as BreadthGauge |
+| B70 | ScoreCard Skill — unified index score card component | Frontend | B61 | Replaces ad-hoc score display in SectorRotation + IndexDetail |
+| B71 | VaNiSector Skill — sector-level VaNi narrative | Feature | B66, D16 | Input: {index, score, breadth, roc, pct_amt_chg}. Output: 2-sentence insight |
+| B72 | Astro → sector historical correlation | Feature | km_astro_calendar populated | Which sectors historically react to which astro events |
+| B73 | Astro forward signal overlay on sector cards | Feature | B72 | Show upcoming favorable/unfavorable astro windows per sector |
+| B74 | Real-time 3-axis confluence badge | Feature | B64, B65, B66 | All three axes aligned → strong confirmation glow |
 
 ### P3 — Future
 
@@ -540,3 +569,98 @@ Sort: score_5d DESC
 - delivery_surge_x in direct-query scanners = NULL 
   for non-Breeze stocks — fix pending
 - SEBI label replacement text — TBD
+
+---
+
+## Sprint 10 — Sector Rotation MVP ✅ COMPLETE
+
+**Goal:** Build the full Sector Rotation page (`/sector-rotation`) with index scoring, history date picker, and sector/custom index tabs.
+**Spec:** `docs/sector-index/DristiQ_SectorRotation_Spec_v1.0`
+
+| Task | Description | Status | Notes |
+|---|---|---|---|
+| SR-B1 | Migration 022 — `km_index_constituents` table | ✅ | FK → `km_index_symbols` |
+| SR-B2 | Seed `km_index_constituents` for all Sectoral indices | ✅ | NSE official constituent lists |
+| SR-B3 | `fetchSectorIndices()` service function | ✅ | PostgREST query with index+constituent join |
+| SR-B4 | `useSectorIndices()` React Query hook | ✅ | Caches per tab, auto-refetch on stale |
+| SR-B5 | `SectorRotationPage` route + shell | ✅ | `/sector-rotation`, tab state, view toggle |
+| SR-B6 | `SectorIndexCard` component | ✅ | Score, return dots, amt change, signal badge |
+| SR-F1 | Tab strip: Sectoral / Custom / Thematic | ✅ | Maps to `km_index_symbols.family` |
+| SR-F2 | Card grid layout — responsive 2/3/4 col | ✅ | Tailwind grid, cards auto-fill |
+| SR-F3 | 5D / 22D score formula wired to live data | ✅ | `ret_N + max(0, pct_amt_chg)` at index level |
+| SR-F4 | Direction dots (1D / 5D / 22D / 66D) | ✅ | Green/red per return sign |
+| SR-F5 | `% Amt Chg` column + color coding | ✅ | (5D−22D)/22D×100, risk-green/red |
+| SR-F6 | `5D+` constituent count badge | ✅ | Count of positive 5D movers |
+| SR-F7 | Signal badge (Strong Bull → Strong Bear) | ✅ | 5-state, derived from score thresholds |
+| SR-F8 | View toggle: Cards / Table | ✅ | Preserved per session |
+| SR-F9 | IndexDetailPage — constituent list + chart | ✅ | Click card → detail page, OHLCV chart |
+| SR-F9b | IndexDetailPage Tab 3 — OHLC candlestick + volume bars | ✅ | lightweight-charts CandlestickSeries + HistogramSeries |
+| SR-F10 | History date picker — select any past date | ✅ | `useIndexDateRange` hook, DatePicker component, `forDate` prop propagation |
+| SR-F11 | CapitalHeat Skill — `amt` / `sx` grid view | ⬜ | Per B67. Spec: `docs/sector-index/capital_heat.html` |
+| SR-F12 | Constituent-level score breakdown panel | ⬜ | Click index → see per-stock score + surge |
+| SR-F13 | Score formula backend update — retire surge²×25 | ⬜ | Per B61, D29, D30 |
+| SR-B7 | Pipeline: populate `avg_amt_5d` / `avg_amt_22d` for index constituents | ⬜ | Required for SR-F13 |
+
+**Open decisions:**
+- SR-F9 chart type: candlestick confirmed. Candlestick + Volume bars in Tab 3.
+- SR-F11 (CapitalHeat): not yet scheduled — depends on B67 Skill being built first
+- B13 (lookback 5D/22D/66D toggle) still open
+
+**DEFERRED FROM SPRINT 10 → SPRINT 12:**
+- **Custom Index Tab 4** on `/sector-rotation` page — Tab "Custom" requires `km_custom_index`, `km_custom_index_constituents`, `km_custom_index_eod` tables not yet created
+- **Custom Index Admin UI** in Settings — create/edit/deactivate baskets, manage constituents
+- **AI Mode A** — user types a theme → Claude identifies matching stocks from NSE universe
+- **AI Mode B** — proactive discovery → Claude surfaces emergent themes from market data
+- Reason: Phase A (NSE Sectoral + Thematic indices, Tabs 1–3) ships first. Custom Index is Phase B.
+- Full spec: `docs/specs/DristiQ_SectorRotation_Spec_v1.0.docx §8`
+
+---
+
+### Sprint 11 — Breadth + ROC (planned)
+
+**Goal:** Add participation and momentum axis to Sector Rotation and Market Today.
+**Tasks:** B64, B65, B66, B68, B69, B62, B67 (CapitalHeat)
+**Spec:** `docs/sector-index/Breadth_ROC_Spec_v1.0.md`
+
+| Task | Description | Status |
+|---|---|---|
+| B64 | Breadth Score per index — percentile zones | ⬜ |
+| B65 | ROC per index — 4-state badge | ⬜ |
+| B66 | 3-axis signal badge (Money + Participation + Momentum) | ⬜ |
+| B68 | BreadthGauge Skill | ⬜ |
+| B69 | ROCChart Skill | ⬜ |
+| B62 | Populate `weight_pct` in `km_index_constituents` | ⬜ |
+| B67 | CapitalHeat Skill | ⬜ |
+
+---
+
+### Sprint 12 — VaNi + Custom Index (planned)
+
+**Goal:** VaNi sector narrative + Custom Index Phase B — DB schema, Admin UI, AI basket creation.
+**Tasks:** B71, B56, B57, B58, B70
+**Spec:** `docs/specs/DristiQ_SectorRotation_Spec_v1.0.docx §8`
+
+| Task | Description | Status |
+|---|---|---|
+| B71 | VaNiSector Skill — 2-sentence sector insight | ⬜ |
+| B70 | ScoreCard Skill — unified index score card | ⬜ |
+| B56 | DB schema — `km_custom_index`, `km_custom_index_constituents`, `km_custom_index_eod` tables | ⬜ |
+| B57 | Custom Index Admin UI — create/edit/deactivate baskets, manage constituents | ⬜ |
+| B58 | Custom Index scoring — equal-weight, 66D baseline per D30 | ⬜ |
+| B75 | Custom Index Tab 4 on `/sector-rotation` — wire to Phase B schema | ⬜ |
+| B76 | AI Mode A — user types theme → Claude identifies matching NSE stocks | ⬜ |
+| B77 | AI Mode B — proactive discovery → Claude surfaces emergent themes | ⬜ |
+
+---
+
+### Sprint 13 — Astro Integration (planned)
+
+**Goal:** Surface astro-sector correlations and forward windows.
+**Tasks:** B72, B73, B74
+**Dependency:** `km_astro_calendar` fully populated for 2026–2027
+
+| Task | Description | Status |
+|---|---|---|
+| B72 | Astro → sector historical correlation | ⬜ |
+| B73 | Astro forward signal overlay on sector cards | ⬜ |
+| B74 | Real-time 3-axis confluence badge | ⬜ |

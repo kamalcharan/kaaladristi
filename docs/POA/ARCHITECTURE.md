@@ -397,7 +397,80 @@ flow_meaning     → (deprecated)
 
 ---
 
-## 13. Session Handover Checklist
+## 13. Reusability Architecture
+
+### Visual Component Rules
+
+1. **No component built for one page only.** Before building, identify ≥2 planned use sites. If only one exists today, note the second in a `// REUSE:` comment at the top of the file.
+2. **Skill = one input contract + one output contract + one SKILL.md.** A Skill is a self-contained capability. It owns its data hook, its display component, and its documentation. No page builds its own variant of an existing Skill.
+3. **Skills live in `src/components/domain/Skills/`.** Each Skill is a directory: `CapitalHeat/`, `BreadthGauge/`, `ROCChart/`, `ScoreCard/`, `VaNiSector/`.
+
+#### Canonical Reusable Component Register
+
+| Component | File | Current Use Sites | Planned Use Sites |
+|---|---|---|---|
+| `FlowChip` | `components/domain/FlowChip.tsx` | ScanTable, StockCard | IndexDetailPage constituent list |
+| `MiniTower` | `components/domain/MiniTower.tsx` | ScanTable score columns | ScoreCard Skill |
+| `SignalBadge` | `components/domain/SignalBadge.tsx` | SectorIndexCard | 3-axis badge (B66) |
+| `CapitalHeat` | `components/domain/Skills/CapitalHeat/` | (Sprint 11) | SectorRotation, IndexDetail, CustomIndex |
+| `BreadthGauge` | `components/domain/Skills/BreadthGauge/` | (Sprint 11) | MarketStructure, SectorRotation, Workspace Today |
+| `ROCChart` | `components/domain/Skills/ROCChart/` | (Sprint 11) | MarketStructure, SectorRotation, Workspace Today |
+| `SparklineCard` | `components/domain/SparklineCard.tsx` | IndexDetailPage | ScoreCard Skill |
+| `AtmosphericBadge` | `components/domain/AtmosphericBadge.tsx` | All scanners, Workspace tab bar | SectorRotation cards (Sprint 13) |
+| `ScoreCard` | `components/domain/Skills/ScoreCard/` | (Sprint 12) | SectorRotation, CustomIndex, IndexDetail |
+
+---
+
+### Score Formula (canonical — do not override)
+
+These are the locked formulas per **D29–D32**. No component, hook, or service may implement a different variant without an explicit locked decision.
+
+#### Stock Level
+
+```
+# Sectoral Index constituent
+score_5  = ret_5  + max(0, (avg_amt_5d  / avg_amt_22d - 1) × 100)   if ret_5  > 0, else 0
+score_22 = ret_22 + max(0, (avg_amt_22d / avg_amt_66d - 1) × 100)   if ret_22 > 0, else 0
+
+# Custom Index constituent
+score_5  = ret_5  + max(0, (avg_amt_5d  / avg_amt_66d - 1) × 100)   if ret_5  > 0, else 0
+score_22 = ret_22 + max(0, (avg_amt_22d / avg_amt_66d - 1) × 100)   if ret_22 > 0, else 0
+```
+
+#### Index Level (both families)
+
+```
+pct_amt_chg  = (idx_5d_avg_amt − idx_22d_avg_amt) / idx_22d_avg_amt × 100
+
+# where idx_5d_avg_amt = SUM of each constituent's 5-day avg daily amount
+#       idx_22d_avg_amt = SUM of each constituent's 22-day avg daily amount
+
+index_score_5  = index_ret_5  + max(0, pct_amt_chg)   if index_ret_5  > 0, else 0
+index_score_22 = index_ret_22 + max(0, pct_amt_chg)   if index_ret_22 > 0, else 0
+
+# index_ret_N = real index N-session return    (Sectoral)
+#             = equal-weight mean of constituent returns  (Custom Index)
+```
+
+> **The old `surge²×25` formula is retired as of D29. Any instance of `surge²×25` in code is a bug.**
+
+---
+
+### Skills Registry
+
+Each Skill must have: an `input` contract type, an `output` (display) contract, and a `SKILL.md` in its directory.
+
+| Skill | Directory | Input Contract | Output | Status |
+|---|---|---|---|---|
+| `capital_heat` | `Skills/CapitalHeat/` | `{ rows: string[], dates: string[], cells: Record<string, {amt: number, sx: number, d1: number}> }` | Heatmap grid — log-scale color, Surge×/₹Cr toggle | Planned (B67) |
+| `breadth_gauge` | `Skills/BreadthGauge/` | `{ indexId: number, lookback?: number }` | Gauge 0–100, zone color, percentile label | Planned (B68) |
+| `roc_chart` | `Skills/ROCChart/` | `{ indexId: number, lookback?: number }` | ROC-13 / ROC-55 / SMA-5 chart + 4-state badge | Planned (B69) |
+| `score_card` | `Skills/ScoreCard/` | `{ indexId: number, forDate?: string }` | Unified score card — ret, surge, 5D+, direction dots | Planned (B70) |
+| `vani_sector` | `Skills/VaNiSector/` | `{ index: string, score: number, breadth: number, roc: string, pct_amt_chg: number }` | 2-sentence VaNi narrative via `/api/ai/sector-insight` | Planned (B71) |
+
+---
+
+## 14. Session Handover Checklist
 
 Before ending any session:
 1. Update `POA.md` — mark completed steps, update sprint status
