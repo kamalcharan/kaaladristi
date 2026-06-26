@@ -11,7 +11,7 @@ import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-re
 import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS } from '@/constants/signalScale';
-import { useIndexDetail, useIndexSparkline, useConstituentDetails } from '@/hooks/useSectorRotation';
+import { useIndexDetail, useIndexSparkline, useConstituentDetails, useIndexFlowIntensity } from '@/hooks/useSectorRotation';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
 import type { ChartOverlay } from '@/types/framework';
 
@@ -19,6 +19,7 @@ const EMPTY_OVERLAYS: ChartOverlay[] = [];
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol } from '@/lib/symbolUtils';
 import type { SectorIndexRow } from '@/services/sectorRotation';
+import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 
 // ── Signal ────────────────────────────────────────────────────────────────────
 
@@ -605,16 +606,58 @@ function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
   );
 }
 
+// ── FlowMap tab ───────────────────────────────────────────────────────────────
+
+function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string }) {
+  const { data, isLoading, error } = useIndexFlowIntensity(indexId, 22);
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+        <DristiQLoader />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 24 }}>
+        Unable to load flow data.
+      </div>
+    );
+  }
+
+  if (!data || data.rows.length === 0) {
+    return (
+      <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 24 }}>
+        No constituent flow data available.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '20px 24px' }}>
+      <FlowIntensityMap
+        rows={data.rows}
+        dates={data.dates}
+        cells={data.cells}
+        subtitle={indexName}
+      />
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type DetailTab = 'overview' | 'chart';
+type DetailTab = 'overview' | 'chart' | 'flowmap';
 
 const TAB_LABELS: Record<DetailTab, string> = {
   overview: 'Overview',
   chart:    'Chart',
+  flowmap:  'Flow Map',
 };
 
-const DETAIL_TABS: DetailTab[] = ['overview', 'chart'];
+const DETAIL_TABS: DetailTab[] = ['overview', 'chart', 'flowmap'];
 
 export default function IndexDetailPage() {
   const { indexId: indexIdStr } = useParams<{ indexId: string }>();
@@ -759,6 +802,7 @@ export default function IndexDetailPage() {
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
         {activeTab === 'overview' && <OverviewTab row={row} indexId={indexId!} />}
         {activeTab === 'chart' && <ChartTab row={row} indexId={indexId!} />}
+        {activeTab === 'flowmap' && <FlowMapTab indexId={indexId!} indexName={row.name} />}
       </div>
     </div>
   );
