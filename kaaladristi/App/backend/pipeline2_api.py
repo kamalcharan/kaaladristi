@@ -62,7 +62,7 @@ except ImportError:
     _VANI_INTENTS = {}
     _get_intents_for_page = lambda page: {}  # noqa: E731
     _ai_complete = lambda **_: None      # noqa: E731
-    _claude_complete = lambda **_: None  # noqa: E731
+    def _claude_complete(system, user, **_): return None  # noqa: E731
     _AI_ENABLED = False
     _AI_MODEL = ""
     _AI_OPTIONAL_OK = False
