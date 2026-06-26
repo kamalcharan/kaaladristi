@@ -13,6 +13,9 @@ import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import { useIndexDetail, useIndexSparkline, useConstituentDetails } from '@/hooks/useSectorRotation';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
+import type { ChartOverlay } from '@/types/framework';
+
+const EMPTY_OVERLAYS: ChartOverlay[] = [];
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol } from '@/lib/symbolUtils';
 import type { SectorIndexRow } from '@/services/sectorRotation';
@@ -594,7 +597,7 @@ function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
       >
         <WorkspaceChart
           instrument={{ id: indexId, symbol: row.name, type: 'index' }}
-          overlays={[]}
+          overlays={EMPTY_OVERLAYS}
           standalone
         />
       </div>

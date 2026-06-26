@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { fetchIndicatorDataById } from '@/services/indicatorData'
 import { fetchEquityEodById } from '@/services/indicatorData'
@@ -22,7 +22,11 @@ interface Props {
 
 export default function WorkspaceChart({ instrument, overlays: overlaysProp, standalone = false }: Props) {
   const frameworkOverlays = useFrameworkStore(s => s.framework?.chart_overlays ?? [])
-  const effectiveOverlays = overlaysProp !== undefined ? overlaysProp : frameworkOverlays
+  const effectiveOverlays = useMemo(
+    () => overlaysProp !== undefined ? overlaysProp : frameworkOverlays,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [overlaysProp, frameworkOverlays],
+  )
   const containerRef = useRef<HTMLDivElement>(null)
   const [chartHeight, setChartHeight] = useState(400)
 
@@ -35,7 +39,8 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
     staleTime: 120_000,
   })
 
-  const { setTotalBars, setActiveBarIndex, setVisibleRange, playerBarIndex } = useChartSyncStore()
+  const playerBarIndex = useChartSyncStore(s => s.playerBarIndex)
+  const { setTotalBars, setActiveBarIndex, setVisibleRange } = useChartSyncStore.getState()
   const astroBands = useAstroOverlayBands(effectiveOverlays)
   const [zoneExplain, setZoneExplain] = useState<ZoneExplain | null>(null)
 
