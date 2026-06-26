@@ -72,10 +72,22 @@ export const SECTOR_TAB_LABELS: Record<SectorTab, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Fetch the latest available trade_date in km_index_eod */
-async function fetchLatestIndexDate(): Promise<string | null> {
+export async function fetchLatestIndexDate(): Promise<string | null> {
   const { data, error } = await from('km_index_eod')
     .select('trade_date')
     .order('trade_date', { ascending: false })
+    .limit(1)
+    .execute();
+
+  if (error || !data || data.length === 0) return null;
+  return (data[0] as { trade_date: string }).trade_date;
+}
+
+/** Fetch the earliest available trade_date in km_index_eod */
+export async function fetchEarliestIndexDate(): Promise<string | null> {
+  const { data, error } = await from('km_index_eod')
+    .select('trade_date')
+    .order('trade_date', { ascending: true })
     .limit(1)
     .execute();
 

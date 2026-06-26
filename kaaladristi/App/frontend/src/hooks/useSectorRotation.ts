@@ -10,6 +10,8 @@ import {
   fetchIndexSparklines,
   fetchConstituentDetails,
   fetchIndexDetail,
+  fetchLatestIndexDate,
+  fetchEarliestIndexDate,
   SECTOR_TAB_CATEGORIES,
   type SectorTab,
   type SectorIndexRow,
@@ -88,4 +90,28 @@ export function useVix() {
     staleTime: STALE,
     retry: 1,
   });
+}
+
+/**
+ * Returns the earliest and latest available trade_date in km_index_eod.
+ * Used to set min/max/default on the SectorRotation date picker.
+ */
+export function useIndexDateRange() {
+  const latest = useQuery<string | null, Error>({
+    queryKey: ['index-date-latest'],
+    queryFn: fetchLatestIndexDate,
+    staleTime: 10 * 60_000,
+    retry: 1,
+  });
+  const earliest = useQuery<string | null, Error>({
+    queryKey: ['index-date-earliest'],
+    queryFn: fetchEarliestIndexDate,
+    staleTime: 60 * 60_000,
+    retry: 1,
+  });
+  return {
+    latestDate:   latest.data  ?? null,
+    earliestDate: earliest.data ?? null,
+    isLoading:    latest.isLoading || earliest.isLoading,
+  };
 }

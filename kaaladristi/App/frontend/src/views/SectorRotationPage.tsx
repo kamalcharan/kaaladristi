@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, Table2 } from 'lucide-react';
-import { useSectorIndices, useVix } from '@/hooks/useSectorRotation';
+import { useSectorIndices, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import { SECTOR_TAB_LABELS, type SectorTab, type SectorIndexRow } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
@@ -349,8 +349,8 @@ function ChartGrid({ rows }: { rows: SectorIndexRow[] }) {
 
 // ── Tab content ───────────────────────────────────────────────────────────────
 
-function TabContent({ tab, view }: { tab: SectorTab; view: ViewMode }) {
-  const { data: rows = [], isLoading, error } = useSectorIndices(tab);
+function TabContent({ tab, view, forDate }: { tab: SectorTab; view: ViewMode; forDate?: string }) {
+  const { data: rows = [], isLoading, error } = useSectorIndices(tab, forDate);
 
   if (isLoading) {
     return <DristiQLoader message={`Loading ${SECTOR_TAB_LABELS[tab]} indices…`} />;
@@ -370,7 +370,9 @@ function TabContent({ tab, view }: { tab: SectorTab; view: ViewMode }) {
     return (
       <div style={{ padding: '48px 24px', textAlign: 'center' }}>
         <span style={{ ...MONO, fontSize: '12px', color: 'var(--text-faint)' }}>
-          No {SECTOR_TAB_LABELS[tab]} indices found.
+          {forDate
+            ? `No data for ${forDate} — market may have been closed on this date.`
+            : `No ${SECTOR_TAB_LABELS[tab]} indices found.`}
         </span>
       </div>
     );
@@ -378,6 +380,43 @@ function TabContent({ tab, view }: { tab: SectorTab; view: ViewMode }) {
 
   if (view === 'chart') return <ChartGrid rows={rows} />;
   return <SectorRotationTable rows={rows} />;
+}
+
+// ── Date picker ───────────────────────────────────────────────────────────────
+
+function DatePicker({
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  value: string;
+  onChange: (date: string) => void;
+  min?: string;
+  max?: string;
+}) {
+  return (
+    <input
+      type="date"
+      value={value}
+      min={min}
+      max={max}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        ...MONO,
+        fontSize: 11,
+        color: 'var(--text-secondary)',
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        padding: '4px 8px',
+        cursor: 'pointer',
+        outline: 'none',
+        colorScheme: 'dark',
+        letterSpacing: '0.03em',
+      }}
+    />
+  );
 }
 
 // ── View toggle ───────────────────────────────────────────────────────────────
@@ -420,6 +459,13 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 export default function SectorRotationPage() {
   const [activeTab, setActiveTab] = useState<SectorTab>('broad');
   const [view, setView] = useState<ViewMode>('table');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const { latestDate, earliestDate } = useIndexDateRange();
+  const today = new Date().toISOString().split('T')[0];
+
+  useEffect(() => {
+    if (latestDate && !selectedDate) setSelectedDate(latestDate);
+  }, [latestDate, selectedDate]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -498,14 +544,22 @@ export default function SectorRotationPage() {
           })}
         </div>
 
-        <div style={{ paddingBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8 }}>
+          {selectedDate && (
+            <DatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+              min={earliestDate ?? undefined}
+              max={today}
+            />
+          )}
           <ViewToggle view={view} onChange={setView} />
         </div>
       </div>
 
       {/* Tab content */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-        <TabContent tab={activeTab} view={view} />
+        <TabContent tab={activeTab} view={view} forDate={selectedDate || undefined} />
       </div>
     </div>
   );
