@@ -11,7 +11,7 @@ import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-re
 import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import { FLOW_LABELS } from '@/constants/signalScale';
-import { useIndexDetail, useIndexSparkline, useConstituentDetails, useConstituentFlowMap } from '@/hooks/useSectorRotation';
+import { useIndexDetail, useIndexSparkline, useConstituentDetails, useConstituentFlowMap, useIndexBreadth } from '@/hooks/useSectorRotation';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
 import type { ChartOverlay } from '@/types/framework';
 
@@ -20,6 +20,8 @@ import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol } from '@/lib/symbolUtils';
 import type { SectorIndexRow } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
+import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
+import BreadthRocChart from '@/components/domain/BreadthRocChart';
 
 // ── Signal ────────────────────────────────────────────────────────────────────
 
@@ -373,6 +375,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
 
 function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
   const { data: sparkline = [], isLoading: sparkLoading } = useIndexSparkline(indexId);
+  const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66);
 
   const pctAmtChg =
     row.avg_amt_5d != null && row.avg_amt_22d != null && row.avg_amt_22d !== 0
@@ -462,6 +465,24 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
             <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>No data</span>
           </div>
         )}
+      </div>
+
+      {/* Breadth charts */}
+      <div style={{ marginBottom: 24 }}>
+        <MarketBreadthChart
+          data={breadthData?.data}
+          isLoading={breadthLoading}
+          zoneMode={breadthData?.zoneMode}
+          percentileRank={breadthData?.percentileRank ?? undefined}
+          stockCount={breadthData?.stockCount}
+        />
+      </div>
+      <div style={{ marginBottom: 24 }}>
+        <BreadthRocChart
+          data={breadthData?.roc}
+          isLoading={breadthLoading}
+          rocBadge={breadthData?.rocBadge}
+        />
       </div>
 
       {/* Constituents */}
