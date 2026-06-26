@@ -1,7 +1,7 @@
 # DristiQ — Plan of Action (POA)
 > Living document. Updated every session. Single source of truth for all work items.
 > Location in repo: `/docs/poa/POA.md`
-> Last updated: 2026-06-22
+> Last updated: 2026-06-26
 
 ---
 
@@ -286,6 +286,9 @@ DristiQ is a Vedic astro-market intelligence data platform for Indian equity tra
 | C50 | Visual language standardized across Table and Card views — same color thresholds, same labels, same tower bars. | Sprint 7 | — |
 | C51 | Institution=green, Hot Money=gold, RSS=indigo — distinct color language per signal type locked in fieldConfig. | Sprint 7 | — |
 | C52 | MRS zone dot added to ScanTable — colored 7px dot before number matches card zone color. | Sprint 7 | — |
+| C53 | SR-B7 — Score formula updated to `ret_N + max(0, surge_N)` at equity + index level. Migration 116 (`compute_all_index_scores()` v3). Sectoral stock: 5D baseline=22D, 22D baseline=66D. Custom index: 66D for both. | Sprint 10 | — |
+| C54 | SR-F13 — FlowIntensityMap Skill built as reusable component. Constituent heatmap in IndexDetailPage Tab 3 (Heat view). Percentile coloring, discrete color buckets, index + constituent modes. SKILL.md registered. | Sprint 10 | — |
+| C55 | SEBI Sweep — 48 directional language violations fixed across 20 files. Replaced: Strong Bull → Strong Uptrend, Strong Bear → Strong Downtrend, Bull/Bear → Uptrend/Downtrend, Bullish/Bearish → Positive/Negative. Astro labels deferred to Sprint 13. SKILL.md created at `App/mnt/skills/user/sebi-sweep/SKILL.md`. | Sprint 10 | — |
 
 ---
 
@@ -475,6 +478,53 @@ POA: /docs/POA/POA.md
 Architecture: /docs/POA/ARCHITECTURE.md
 ```
 
+```
+SESSION HANDOVER
+================
+Date: 2026-06-26
+Active Sprint: Sprint 10 — Sector Rotation MVP (COMPLETE)
+Last completed: SR-B7 (score formula v3, migration 116) +
+  SR-F13 (FlowIntensityMap Skill, IndexDetailPage Tab 3 Heat view) +
+  SEBI sweep (48 violations fixed across 20 files)
+
+Completed this session:
+  - SR-B7: Score formula updated — retire surge²×25,
+           implement ret_N + max(0, surge_N) per Index_Score_Spec_v1.0.
+           Migration 116: compute_all_index_scores() v3.
+           backfill_rolling_metrics_fast.py updated.
+  - SR-F13: FlowIntensityMap Skill rebuilt from scratch.
+            Constituent flow heatmap in IndexDetailPage Tab 3 (Heat view).
+            Percentile coloring, discrete color buckets, index + constituent modes.
+            fetchConstituentFlowMap + fetchIndexFlowMap services added.
+            useConstituentFlowMap + useIndexFlowMap hooks added.
+            SKILL.md at App/mnt/skills/user/flow_intensity_map/SKILL.md.
+  - SEBI Sweep: 48 directional language violations fixed in 20 files.
+    Replacements: Strong Bull→Strong Uptrend, Strong Bear→Strong Downtrend,
+    Bull/Bear→Uptrend/Downtrend, Bullish/Bearish→Positive/Negative.
+    signalScale.ts SIGNAL_LABELS updated as source of truth.
+    Astro labels (AstroStrip, ConfluenceDotGrid) deferred to Sprint 13.
+    SKILL.md created at App/mnt/skills/user/sebi-sweep/SKILL.md.
+
+Next sprint: Sprint 11 — Breadth + ROC
+Next steps:
+  - B64: Breadth Score per index (equal-weight, percentile zones)
+  - B65: ROC per index — 4-state badge
+  - B66: 3-axis signal badge (Money + Participation + Momentum)
+  - B67: CapitalHeat Skill — SKILL.md + component
+  - B68: BreadthGauge Skill
+  - B69: ROCChart Skill
+  Remaining Sprint 10 open items:
+  - SR-F11: CapitalHeat Skill (blocked on B67)
+  - SR-F12: Constituent-level score breakdown panel
+
+Open questions:
+  - Astro label SEBI-safe replacements — decision pending (Sprint 13)
+  - VaNi Opportunity rename — pending
+
+POA: /docs/POA/POA.md
+Architecture: /docs/POA/ARCHITECTURE.md
+```
+
 ## Sprint 9 Decisions (2026-06-24)
 
 ### Scanner Group Restructure
@@ -598,8 +648,8 @@ Sort: score_5d DESC
 | SR-F10 | History date picker — select any past date | ✅ | `useIndexDateRange` hook, DatePicker component, `forDate` prop propagation |
 | SR-F11 | CapitalHeat Skill — `amt` / `sx` grid view | ⬜ | Per B67. Spec: `docs/sector-index/capital_heat.html` |
 | SR-F12 | Constituent-level score breakdown panel | ⬜ | Click index → see per-stock score + surge |
-| SR-F13 | Score formula backend update — retire surge²×25 | ⬜ | Per B61, D29, D30 |
-| SR-B7 | Pipeline: populate `avg_amt_5d` / `avg_amt_22d` for index constituents | ⬜ | Required for SR-F13 |
+| SR-F13 | FlowIntensityMap Skill — constituent flow heatmap in IndexDetailPage Tab 3 (Heat view) | ✅ | SKILL.md at `App/mnt/skills/user/flow_intensity_map/SKILL.md`. Percentile coloring, index + constituent modes. Migration 116. |
+| SR-B7 | Score formula update — retire surge²×25, implement `ret_N + max(0, surge_N)` per Index_Score_Spec_v1.0 | ✅ | Migration 116 (`compute_all_index_scores()` v3). Both equity + index level. Constituent avg_amt fetched from DB. |
 
 **Open decisions:**
 - SR-F9 chart type: candlestick confirmed. Candlestick + Volume bars in Tab 3.
