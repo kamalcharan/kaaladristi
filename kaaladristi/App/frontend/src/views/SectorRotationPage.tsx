@@ -4,6 +4,7 @@ import { Flame, LayoutGrid, Table2 } from 'lucide-react';
 import { useSectorIndices, useIndexFlowMap, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import { SECTOR_TAB_LABELS, type SectorTab, type SectorIndexRow } from '@/services/sectorRotation';
+import { useAuthStore } from '@/stores/authStore';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
 import { DristiQLoader } from '@/components/ui';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
@@ -12,7 +13,7 @@ import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 
 const EMPTY_OVERLAYS: ChartOverlay[] = [];
 
-const TABS: SectorTab[] = ['broad', 'sectoral', 'thematic'];
+const TABS: SectorTab[] = ['broad', 'sectoral', 'thematic', 'custom'];
 type ViewMode = 'table' | 'chart' | 'heat';
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
@@ -528,6 +529,7 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 
 export default function SectorRotationPage() {
   const [activeTab, setActiveTab] = useState<SectorTab>('broad');
+  const { isAdmin } = useAuthStore();
   const [view, setView] = useState<ViewMode>('table');
   const [heatDays, setHeatDays] = useState<5 | 22 | 66>(22);
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -582,7 +584,7 @@ export default function SectorRotationPage() {
         }}
       >
         <div style={{ display: 'flex', gap: '2px' }}>
-          {TABS.map((tab) => {
+          {TABS.filter(t => t !== 'custom' || isAdmin).map((tab) => {
             const isActive = tab === activeTab;
             return (
               <button
