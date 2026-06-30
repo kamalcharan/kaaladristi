@@ -198,3 +198,33 @@ def _fallback_complete(
     except Exception as e:
         log.error(f"AI LLM_BASE_URL fallback failed: {e}")
         return None
+
+
+# ── Claude-direct completion (always Anthropic, never Qwen3 fallback) ─────────
+
+def claude_complete(
+    system: str,
+    user: str,
+    max_tokens: int = 300,
+    model: str = "claude-sonnet-4-6",
+) -> str | None:
+    """
+    Call Anthropic API directly. Ignores AI_PROVIDER / LLM_BASE_URL.
+    Uses AI_API_KEY (or ANTHROPIC_API_KEY). Returns str or None on error.
+    """
+    if not _API_KEY:
+        log.warning("claude_complete: AI_API_KEY / ANTHROPIC_API_KEY not set")
+        return None
+
+    req = _anthropic_req(system, user, max_tokens, temperature=None)
+    req["json"]["model"] = model  # override global AI_MODEL
+    try:
+        resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=90)
+        resp.raise_for_status()
+        return _anthropic_parse(resp.json())
+    except _requests.HTTPError as e:
+        log.error(f"claude_complete HTTP {e.response.status_code}: {e.response.text[:200]}")
+        return None
+    except Exception as e:
+        log.error(f"claude_complete failed: {e}")
+        return None

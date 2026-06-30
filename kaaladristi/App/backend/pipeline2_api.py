@@ -40,7 +40,7 @@ from lib.db_client import get_db as _get_db  # noqa: E402
 # Optional AI / assembler modules — gracefully absent if not installed
 try:
     from lib.ai_prompts import SKILLS as _AI_SKILLS          # noqa: E402
-    from lib.ai_client import complete as _ai_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
+    from lib.ai_client import complete as _ai_complete, claude_complete as _claude_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
     from lib.data_assemblers import (                         # noqa: E402
         assemble_instrument_context,
         assemble_market_pulse_context,
@@ -61,7 +61,8 @@ except ImportError:
     _AI_SKILLS = {}
     _VANI_INTENTS = {}
     _get_intents_for_page = lambda page: {}  # noqa: E731
-    _ai_complete = lambda **_: None  # noqa: E731
+    _ai_complete = lambda **_: None      # noqa: E731
+    def _claude_complete(system, user, **_): return None  # noqa: E731
     _AI_ENABLED = False
     _AI_MODEL = ""
     _AI_OPTIONAL_OK = False
@@ -2660,6 +2661,95 @@ def breadth_roc_insight():
             latency_ms=_latency_roc,
         )
     return {"date": target_date, "insight": insight, "ai": insight is not None}
+
+
+@app.get('/api/ai/sector-insight')
+def sector_insight(index_id: int, date: str = None):
+    if not _AI_ENABLED:
+        return {"index_id": index_id, "date": date, "insight": None, "ai": False}
+    cache_key = f"sector:{index_id}:{date or 'latest'}"
+    if cache_key in _insight_cache:
+        return {"index_id": index_id, "date": date, "insight": _insight_cache[cache_key], "ai": True}
+    try:
+        sym_rows = _db().select(
+            'km_index_symbols', 'name,category',
+            filters={'id': index_id}, limit=1
+        )
+        if date:
+            eod_rows = _db().select(
+                'km_index_eod',
+                'trade_date,flow_type,rsi_14,magic_rs,magic_rs_zone,sniper_inst,'
+                'ret_5d,ret_22d,ret_66d,score_5d,score_22d,avg_amt_5d,avg_amt_22d',
+                filters={'index_id': index_id, 'trade_date': date},
+                limit=1,
+            )
+        else:
+            eod_rows = _db().select(
+                'km_index_eod',
+                'trade_date,flow_type,rsi_14,magic_rs,magic_rs_zone,sniper_inst,'
+                'ret_5d,ret_22d,ret_66d,score_5d,score_22d,avg_amt_5d,avg_amt_22d',
+                filters={'index_id': index_id},
+                order='trade_date.desc',
+                limit=1,
+            )
+    except Exception as e:
+        log.error(f'sector_insight fetch error: {e}')
+        return {"index_id": index_id, "date": date, "insight": None, "ai": False}
+    if not eod_rows:
+        return {"index_id": index_id, "date": date, "insight": None, "ai": False}
+    eod = eod_rows[0]
+    sym = sym_rows[0] if sym_rows else {}
+    target_date = str(eod.get('trade_date', date or ''))
+    index_name  = sym.get('name', f'Index {index_id}')
+    category    = sym.get('category', 'index')
+    flow        = eod.get('flow_type') or 'N/A'
+    rsi         = eod.get('rsi_14')
+    mrs_zone    = eod.get('magic_rs_zone') or 'Neutral'
+    inst        = eod.get('sniper_inst')
+    ret5        = eod.get('ret_5d')
+    ret22       = eod.get('ret_22d')
+    ret66       = eod.get('ret_66d')
+    sc5         = eod.get('score_5d')
+    sc22        = eod.get('score_22d')
+    amt5        = eod.get('avg_amt_5d')
+    amt22       = eod.get('avg_amt_22d')
+    surge       = (amt5 / amt22) if (amt5 and amt22 and amt22 > 0) else None
+    def _pct(v): return f"{v:+.2f}%" if v is not None else "N/A"
+    def _f(v, d=1): return f"{v:.{d}f}" if v is not None else "N/A"
+    score_trend = (
+        "rising (5D above 22D)" if (sc5 and sc22 and sc5 > sc22) else
+        "falling (5D below 22D)" if (sc5 and sc22 and sc5 < sc22) else "flat"
+    )
+    user_msg = (
+        f"Sector snapshot — {index_name} ({category}) as of {target_date}:\n"
+        f"Flow type: {flow}\n"
+        f"Returns: 5D {_pct(ret5)} · 22D {_pct(ret22)} · 66D {_pct(ret66)}\n"
+        f"Score momentum: {_f(sc5)} (5D) vs {_f(sc22)} (22D) — {score_trend}\n"
+        f"RSI(14): {_f(rsi)}\n"
+        f"MagicRS zone: {mrs_zone}\n"
+        f"Delivery surge (5D/22D avg): {_f(surge)} {'(elevated conviction)' if surge and surge > 1.2 else '(subdued)' if surge and surge < 0.8 else ''}\n"
+        f"Institutional reading: {_f(inst)} / 50\n"
+        f"\nProvide your 2-sentence sector rotation narrative."
+    )
+    skill = _AI_SKILLS.get("sector_insight")
+    if not skill:
+        return {"index_id": index_id, "date": target_date, "insight": None, "ai": False}
+    _t0_s = time.monotonic()
+    insight = _ai_complete(system=skill.system, user=user_msg, max_tokens=skill.max_tokens, no_think=True)
+    _lat_s = int((time.monotonic() - _t0_s) * 1000)
+    if insight:
+        _insight_cache[cache_key] = insight
+        _log_interaction(
+            product="dristiq",
+            endpoint="/api/ai/sector-insight",
+            user_input=user_msg,
+            llm_response=insight,
+            system_prompt=skill.system,
+            context_payload={"index_id": index_id, "date": target_date, "flow": flow, "surge": surge},
+            model_version=_AI_MODEL,
+            latency_ms=_lat_s,
+        )
+    return {"index_id": index_id, "date": target_date, "insight": insight, "ai": insight is not None}
 
 
 @app.get('/api/ai/instrument-insight')
@@ -5322,5 +5412,99 @@ async def payments_webhook(request: Request):
     except Exception as exc:
         log.error(f'webhook handler error: {event} {exc}')
         # Always return 200 to Razorpay — never let webhook retry loop
+
+
+# ── Custom Index — AI Discover ────────────────────────────────────────────────
+
+class _DiscoverRequest(BaseModel):
+    llm: str = 'claude'  # 'claude' | 'qwen'
+
+
+@app.post('/api/custom-index/discover')
+async def custom_index_discover(req: _DiscoverRequest):
+    """
+    Fetch top 300 NSE stocks by signal strength (≥2 of 5 conditions),
+    build prompt, call LLM, return parsed themes.
+
+    Returns: { stock_count: int, themes: [{ theme_name, description, rationale, constituent_symbols[] }] }
+    """
+    llm = req.llm.lower()
+    if llm not in ('claude', 'qwen'):
+        raise HTTPException(status_code=400, detail="llm must be 'claude' or 'qwen'")
+
+    db = _get_db()
+    try:
+        cur = db.cursor()
+        cur.execute("""
+            WITH latest AS (
+                SELECT MAX(trade_date) AS dt FROM km_equity_eod
+            ),
+            scored AS (
+                SELECT
+                    s.symbol,
+                    s.company_name,
+                    s.industry,
+                    e.score_5d,
+                    e.delivery_surge_x,
+                    e.sniper_inst,
+                    e.flow_type,
+                    (
+                        (CASE WHEN e.score_5d > 20                              THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.delivery_surge_x > 1.2                     THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.sniper_inst > 30                            THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.close > e.sma_150                           THEN 1 ELSE 0 END) +
+                        (CASE WHEN e.flow_type IN ('FRESH_LONGS','SHORT_COVERING') THEN 1 ELSE 0 END)
+                    ) AS signal_count
+                FROM km_equity_eod e
+                JOIN km_equity_symbols s ON s.id = e.equity_id
+                WHERE e.trade_date = (SELECT dt FROM latest)
+                  AND s.exchange = 'NSE'
+                  AND s.is_active = true
+            )
+            SELECT symbol, company_name, industry, score_5d,
+                   delivery_surge_x, sniper_inst, flow_type, signal_count
+            FROM scored
+            WHERE signal_count >= 2
+            ORDER BY signal_count DESC, score_5d DESC NULLS LAST
+            LIMIT 300
+        """)
+        rows = cur.fetchall()
+        cols = [d[0] for d in cur.description]
+        stocks = [dict(zip(cols, r)) for r in rows]
+    finally:
+        db.close()
+
+    if not stocks:
+        return {'themes': [], 'stock_count': 0}
+
+    system_prompt = (
+        "You are a sector analyst reviewing NSE-listed Indian equities. "
+        "Identify cohesive sub-themes where 5+ companies share a common business model, "
+        "supply chain position, or structural tailwind — and where existing NSE sectoral "
+        "indices do not capture the group. Focus on themes with current accumulation signals."
+    )
+    user_prompt = (
+        f"Here are NSE-listed active stocks with recent signals: {json.dumps(stocks)}. "
+        "Identify 3–5 emerging themes. For each theme return: theme_name, description, "
+        "rationale, constituent_symbols[]. "
+        "Respond in JSON only, no preamble, no markdown fences."
+    )
+
+    if llm == 'claude':
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
+    else:
+        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
+
+    if raw is None:
+        raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
+
+    try:
+        themes = json.loads(raw)
+        if not isinstance(themes, list):
+            raise ValueError('expected JSON array')
+    except Exception:
+        raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
+
+    return {'themes': themes, 'stock_count': len(stocks)}
 
     return {'ok': True}

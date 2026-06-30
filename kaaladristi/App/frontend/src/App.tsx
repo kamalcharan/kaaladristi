@@ -36,6 +36,9 @@ import AccountPage from '@/views/AccountPage';
 import CorrelationPage from '@/views/CorrelationPage';
 import SectorRotationPage from '@/views/SectorRotationPage';
 import IndexDetailPage from '@/views/IndexDetailPage';
+import CustomIndexPage from '@/views/CustomIndexPage';
+import CustomIndexCreatePage from '@/views/CustomIndexCreatePage';
+import CustomIndexDiscoverPage from '@/views/CustomIndexDiscoverPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -134,6 +137,9 @@ function AppRoutes() {
           <Route path="/planetary-intel" element={<PlanetaryIntelView />} />
           <Route path="/rules" element={<RuleList />} />
           <Route path="/rules/:id" element={<RuleDetail />} />
+          <Route path="/custom-index" element={<CustomIndexPage />} />
+          <Route path="/custom-index/create" element={<CustomIndexCreatePage />} />
+          <Route path="/custom-index/discover" element={<CustomIndexDiscoverPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/account" element={<AccountPage />} />
         </Route>

@@ -10,7 +10,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { DristiQLoader } from '@/components/ui';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
-import { FLOW_LABELS } from '@/constants/signalScale';
+import { FLOW_LABELS, ZONE_LABELS } from '@/constants/signalScale';
 import { useIndexDetail, useIndexSparkline, useConstituentDetails, useConstituentFlowMap, useIndexBreadth } from '@/hooks/useSectorRotation';
 import WorkspaceChart from '@/components/workspace/WorkspaceChart';
 import type { ChartOverlay } from '@/types/framework';
@@ -22,6 +22,8 @@ import type { SectorIndexRow } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
+import VaNiInsight from '@/components/domain/VaNiInsight';
+import { useSectorInsight } from '@/hooks/useDashboardExtras';
 
 // ── Signal ────────────────────────────────────────────────────────────────────
 
@@ -371,31 +373,152 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
   );
 }
 
+// ── B70: IndexScoreCard ───────────────────────────────────────────────────────
+
+function IndexScoreCard({ row }: { row: SectorIndexRow }) {
+  const signal = computeSignal(row);
+  const signalStyle = signal ? SIGNAL_STYLE[signal] : null;
+  const flowInfo = row.flow_type ? (FLOW_LABELS[row.flow_type] ?? null) : null;
+  const flowColorVar = flowInfo?.color.replace('text-', '').replace('risk-', '--');
+  const surge =
+    row.avg_amt_5d != null && row.avg_amt_22d != null && row.avg_amt_22d > 0
+      ? row.avg_amt_5d / row.avg_amt_22d
+      : null;
+  const scoreUp = (row.score_5d ?? 0) > (row.score_22d ?? 0);
+  const zoneInfo = row.magic_rs_zone ? ZONE_LABELS[row.magic_rs_zone] : null;
+
+  return (
+    <div
+      style={{
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '16px 20px',
+        marginBottom: 16,
+      }}
+    >
+      {/* Top row: flow + signal */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        {flowInfo && (
+          <span
+            style={{
+              ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+              textTransform: 'uppercase', padding: '4px 10px', borderRadius: 4,
+              background: 'rgba(255,255,255,0.06)',
+              color: `var(${flowColorVar}, var(--text-secondary))`,
+              border: `1px solid rgba(255,255,255,0.1)`,
+            }}
+          >
+            {flowInfo.label}
+          </span>
+        )}
+        {signal && signalStyle && (
+          <span
+            style={{
+              ...MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
+              textTransform: 'uppercase', padding: '3px 8px', borderRadius: 4,
+              color: signalStyle.color, background: signalStyle.bg,
+              border: `1px solid ${signalStyle.border}`,
+            }}
+          >
+            {FLOW_LABELS[signal]?.label ?? signal}
+          </span>
+        )}
+        {zoneInfo && (
+          <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
+            RS ·{' '}
+            <span
+              style={{
+                color:
+                  zoneInfo.color.includes('risk-green') ? 'var(--bull)' :
+                  zoneInfo.color.includes('risk-red')   ? 'var(--bear)' :
+                  'var(--text-secondary)',
+                opacity: zoneInfo.color.includes('/70') ? 0.7 : zoneInfo.color.includes('/40') ? 0.5 : 1,
+              }}
+            >
+              {zoneInfo.label}
+            </span>
+          </span>
+        )}
+      </div>
+
+      {/* Returns row */}
+      <div style={{ display: 'flex', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
+        {([['5D', row.ret_5d], ['22D', row.ret_22d], ['66D', row.ret_66d]] as [string, number | null][]).map(([label, v]) => (
+          <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label} Ret</span>
+            <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: pctColor(v) }}>{fmtPct(v)}</span>
+          </div>
+        ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>RSI 14</span>
+          <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: rsiColor(row.rsi_14) }}>
+            {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
+          </span>
+        </div>
+      </div>
+
+      {/* Score + delivery row */}
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Score</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ ...MONO, fontSize: 13, fontWeight: 600, color: scoreColor(row.score_5d) }}>
+              {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
+            </span>
+            {scoreUp ? <ArrowUp size={11} color="var(--bull)" /> : <ArrowDown size={11} color="var(--bear)" />}
+            <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>
+              {row.score_22d != null ? row.score_22d.toFixed(1) : '—'}
+            </span>
+            <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D·22D</span>
+          </div>
+        </div>
+        {surge != null && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Delivery</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span
+                style={{
+                  ...MONO, fontSize: 13, fontWeight: 600,
+                  color: surge >= 1.2 ? 'var(--bull)' : surge <= 0.8 ? 'var(--bear)' : 'var(--text-secondary)',
+                }}
+              >
+                {surge.toFixed(2)}×
+              </span>
+              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)' }}>5D/22D</span>
+            </div>
+          </div>
+        )}
+        {row.sniper_inst != null && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Smart Money</span>
+            <span
+              style={{
+                ...MONO, fontSize: 13, fontWeight: 600,
+                color: row.sniper_inst >= 30 ? 'var(--bull)' : row.sniper_inst >= 15 ? 'var(--gold)' : 'var(--text-secondary)',
+              }}
+            >
+              {row.sniper_inst.toFixed(0)}
+            </span>
+          </div>
+        )}
+        {row.stock_count != null && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginLeft: 'auto' }}>
+            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Constituents</span>
+            <span style={{ ...MONO, fontSize: 13, color: 'var(--text-secondary)' }}>{row.stock_count}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
   const { data: sparkline = [], isLoading: sparkLoading } = useIndexSparkline(indexId);
   const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66);
-
-  const pctAmtChg =
-    row.avg_amt_5d != null && row.avg_amt_22d != null && row.avg_amt_22d !== 0
-      ? ((row.avg_amt_5d - row.avg_amt_22d) / row.avg_amt_22d) * 100
-      : null;
-
-  const metrics: Array<{ label: string; value: string; color?: string }> = [
-    { label: 'Close',       value: '₹' + (row.close ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 }), color: 'var(--text-primary)' },
-    { label: '% Chg',       value: fmtPct(row.pct_chng),    color: pctColor(row.pct_chng) },
-    { label: 'RSI 14',      value: fmt(row.rsi_14, 1),       color: rsiColor(row.rsi_14) },
-    { label: '5D Return',   value: fmtPct(row.ret_5d),       color: pctColor(row.ret_5d) },
-    { label: '22D Return',  value: fmtPct(row.ret_22d),      color: pctColor(row.ret_22d) },
-    { label: '66D Return',  value: fmtPct(row.ret_66d),      color: pctColor(row.ret_66d) },
-    { label: 'Score 5D',    value: fmt(row.score_5d, 1),     color: scoreColor(row.score_5d) },
-    { label: 'Score 22D',   value: fmt(row.score_22d, 1),    color: scoreColor(row.score_22d) },
-    { label: 'Avg Amt 5D',  value: row.avg_amt_5d != null ? `${row.avg_amt_5d.toFixed(1)} Cr` : '—' },
-    { label: 'Avg Amt 22D', value: row.avg_amt_22d != null ? `${row.avg_amt_22d.toFixed(1)} Cr` : '—' },
-    { label: '% Amt Chg',   value: fmtPct(pctAmtChg),       color: pctColor(pctAmtChg) },
-    { label: 'Magic RS',    value: fmt(row.magic_rs, 1) },
-  ];
+  const { data: sectorInsight, isLoading: insightLoading } = useSectorInsight(indexId, row.trade_date);
 
   return (
     <div style={{ padding: '24px' }}>
@@ -403,25 +526,8 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
       {/* Signal explanation */}
       <SignalCard row={row} />
 
-      {/* Metrics grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-          gap: 1,
-          background: 'var(--border)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          overflow: 'hidden',
-          marginBottom: 20,
-        }}
-      >
-        {metrics.map(({ label, value, color }) => (
-          <div key={label} style={{ background: 'var(--card)', padding: '13px 16px' }}>
-            <MetricCell label={label} value={value} color={color} />
-          </div>
-        ))}
-      </div>
+      {/* B70: ScoreCard — unified numeric summary */}
+      <IndexScoreCard row={row} />
 
       {/* Sparkline */}
       <div
@@ -477,13 +583,28 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
           stockCount={breadthData?.stockCount}
         />
       </div>
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: breadthData?.roc ? 8 : 24 }}>
         <BreadthRocChart
           data={breadthData?.roc}
           isLoading={breadthLoading}
           rocBadge={breadthData?.rocBadge}
         />
       </div>
+
+      {/* B71: VaNi sector narrative */}
+      {(insightLoading || sectorInsight?.insight) && (
+        <div
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '14px 18px',
+            marginBottom: 24,
+          }}
+        >
+          <VaNiInsight insight={sectorInsight?.insight} isLoading={insightLoading} />
+        </div>
+      )}
 
       {/* Constituents */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
