@@ -5432,47 +5432,45 @@ async def custom_index_discover(req: _DiscoverRequest):
     if llm not in ('claude', 'qwen'):
         raise HTTPException(status_code=400, detail="llm must be 'claude' or 'qwen'")
 
-    db = _get_db()
+    conn = _conn()
     try:
-        cur = db.cursor()
-        cur.execute("""
-            WITH latest AS (
-                SELECT MAX(trade_date) AS dt FROM km_equity_eod
-            ),
-            scored AS (
-                SELECT
-                    s.symbol,
-                    s.company_name,
-                    s.industry,
-                    e.score_5d,
-                    e.delivery_surge_x,
-                    e.sniper_inst,
-                    e.flow_type,
-                    (
-                        (CASE WHEN e.score_5d > 20                              THEN 1 ELSE 0 END) +
-                        (CASE WHEN e.delivery_surge_x > 1.2                     THEN 1 ELSE 0 END) +
-                        (CASE WHEN e.sniper_inst > 30                            THEN 1 ELSE 0 END) +
-                        (CASE WHEN e.close > e.sma_150                           THEN 1 ELSE 0 END) +
-                        (CASE WHEN e.flow_type IN ('FRESH_LONGS','SHORT_COVERING') THEN 1 ELSE 0 END)
-                    ) AS signal_count
-                FROM km_equity_eod e
-                JOIN km_equity_symbols s ON s.id = e.equity_id
-                WHERE e.trade_date = (SELECT dt FROM latest)
-                  AND s.exchange = 'NSE'
-                  AND s.is_active = true
-            )
-            SELECT symbol, company_name, industry, score_5d,
-                   delivery_surge_x, sniper_inst, flow_type, signal_count
-            FROM scored
-            WHERE signal_count >= 2
-            ORDER BY signal_count DESC, score_5d DESC NULLS LAST
-            LIMIT 300
-        """)
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description]
-        stocks = [dict(zip(cols, r)) for r in rows]
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                WITH latest AS (
+                    SELECT MAX(trade_date) AS dt FROM km_equity_eod
+                ),
+                scored AS (
+                    SELECT
+                        s.symbol,
+                        s.company_name,
+                        s.industry,
+                        e.score_5d,
+                        e.delivery_surge_x,
+                        e.sniper_inst,
+                        e.flow_type,
+                        (
+                            (CASE WHEN e.score_5d > 20                              THEN 1 ELSE 0 END) +
+                            (CASE WHEN e.delivery_surge_x > 1.2                     THEN 1 ELSE 0 END) +
+                            (CASE WHEN e.sniper_inst > 30                            THEN 1 ELSE 0 END) +
+                            (CASE WHEN e.close > e.sma_150                           THEN 1 ELSE 0 END) +
+                            (CASE WHEN e.flow_type IN ('FRESH_LONGS','SHORT_COVERING') THEN 1 ELSE 0 END)
+                        ) AS signal_count
+                    FROM km_equity_eod e
+                    JOIN km_equity_symbols s ON s.id = e.equity_id
+                    WHERE e.trade_date = (SELECT dt FROM latest)
+                      AND s.exchange = 'NSE'
+                      AND s.is_active = true
+                )
+                SELECT symbol, company_name, industry, score_5d,
+                       delivery_surge_x, sniper_inst, flow_type, signal_count
+                FROM scored
+                WHERE signal_count >= 2
+                ORDER BY signal_count DESC, score_5d DESC NULLS LAST
+                LIMIT 300
+            """)
+            stocks = [dict(r) for r in cur.fetchall()]
     finally:
-        db.close()
+        conn.close()
 
     if not stocks:
         return {'themes': [], 'stock_count': 0}
@@ -5506,5 +5504,3 @@ async def custom_index_discover(req: _DiscoverRequest):
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
 
     return {'themes': themes, 'stock_count': len(stocks)}
-
-    return {'ok': True}

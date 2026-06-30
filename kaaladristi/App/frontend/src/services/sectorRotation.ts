@@ -56,18 +56,20 @@ export interface SectorIndexRow {
 
 // Broad Market needs two category values — others are single strings.
 // Callers pass the tab key; this map resolves the DB filter.
-export type SectorTab = 'broad' | 'sectoral' | 'thematic';
+export type SectorTab = 'broad' | 'sectoral' | 'thematic' | 'custom';
 
 export const SECTOR_TAB_CATEGORIES: Record<SectorTab, string[]> = {
   broad:     ['index', 'broad market index'],
   sectoral:  ['sectoral index'],
   thematic:  ['thematic market index'],
+  custom:    ['custom'],
 };
 
 export const SECTOR_TAB_LABELS: Record<SectorTab, string> = {
   broad:    'Broad Market',
   sectoral: 'Sectoral',
   thematic: 'Thematic',
+  custom:   'Custom',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
