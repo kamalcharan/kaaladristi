@@ -710,6 +710,7 @@ Sort: score_5d DESC
 | B75 | Custom Index Tab 4 on `/sector-rotation` — wire to Phase B schema | ⬜ |
 | B76 | AI Mode A — user types theme → Claude identifies matching NSE stocks | ⬜ |
 | B77 | AI Mode B — proactive discovery → Claude surfaces emergent themes | ⬜ |
+| B78 | Custom Index: populate `rsi_14` and `flow_type` in `km_index_eod` for custom indices. Currently `compute_custom_index_eod.py` only computes `close/ret_5d/22d/66d`; existing Step 0d (`compute_all_pending_indicators`) and Step 0e (`compute_all_flow_intelligence`) are NSE-bhav-gated and skip custom baskets entirely, leaving Signal badge blank for all custom indices. Needs equal-weight RSI calc + flow type derivation, or extension of Step 0d/0e to include custom category. | ⬜ |
 
 ---
 
