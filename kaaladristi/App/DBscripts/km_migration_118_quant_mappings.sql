@@ -10,7 +10,10 @@
 
 -- -----------------------------------------------------------------------------
 -- 1. NEW SECTORS
+-- Advance sequence past explicit IDs inserted by km_seed_data.sql
 -- -----------------------------------------------------------------------------
+SELECT setval('km_sectors_id_seq', (SELECT MAX(id) FROM km_sectors));
+
 INSERT INTO km_sectors (name) VALUES
   ('Nickel'),
   ('Iron Ore'),
