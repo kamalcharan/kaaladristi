@@ -11,6 +11,13 @@ Configuration (App/.env):
   AI_BASE_URL=                   # optional override — e.g. a proxy or local server
   LLM_BASE_URL=                  # fallback OpenAI-compat endpoint (e.g. llm.dristiq.io/v1)
 
+claude_complete() configuration — separate from the AI_* vars above, used only
+by claude_complete() (never by complete()/Qwen3 fallback):
+  CLAUDE_API_KEY=sk-ant-…              # required — no fallback to AI_API_KEY/ANTHROPIC_API_KEY
+  CLAUDE_MODEL=claude-sonnet-4-6        # default model when caller doesn't override
+  CLAUDE_API_URL=https://api.anthropic.com/v1/messages
+  CLAUDE_MAX_TOKENS_DISCOVER=8000       # used by custom_index_discover in pipeline2_api.py
+
 Usage:
   from lib.ai_client import complete, AI_ENABLED
 
@@ -41,6 +48,12 @@ _PROVIDER_BASE: dict[str, str] = {
     "anthropic": "https://api.anthropic.com",
     "openai":    "https://api.openai.com",
 }
+
+# claude_complete()-only config — intentionally separate from AI_API_KEY (Qwen).
+CLAUDE_API_KEY: str  = os.getenv("CLAUDE_API_KEY", "")
+CLAUDE_MODEL: str    = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+CLAUDE_API_URL: str  = os.getenv("CLAUDE_API_URL", "https://api.anthropic.com/v1/messages")
+CLAUDE_MAX_TOKENS_DISCOVER: int = int(os.getenv("CLAUDE_MAX_TOKENS_DISCOVER", "8000"))
 
 # ── Request builders ──────────────────────────────────────────────────────────
 
@@ -206,20 +219,30 @@ def claude_complete(
     system: str,
     user: str,
     max_tokens: int = 300,
-    model: str = "claude-sonnet-4-6",
+    model: str | None = None,
 ) -> str | None:
     """
     Call Anthropic API directly. Ignores AI_PROVIDER / LLM_BASE_URL.
-    Uses AI_API_KEY (or ANTHROPIC_API_KEY). Returns str or None on error.
+    Uses CLAUDE_API_KEY only — no fallback to AI_API_KEY / ANTHROPIC_API_KEY
+    (that key belongs to the Qwen path via complete()). Returns str or None on error.
     """
-    if not _API_KEY:
-        log.warning("claude_complete: AI_API_KEY / ANTHROPIC_API_KEY not set")
+    if not CLAUDE_API_KEY:
+        log.warning("claude_complete: CLAUDE_API_KEY not set")
         return None
 
-    req = _anthropic_req(system, user, max_tokens, temperature=None)
-    req["json"]["model"] = model  # override global AI_MODEL
+    body: dict = {
+        "model": model or CLAUDE_MODEL,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+    }
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
     try:
-        resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=90)
+        resp = _requests.post(CLAUDE_API_URL, headers=headers, json=body, timeout=90)
         resp.raise_for_status()
         return _anthropic_parse(resp.json())
     except _requests.HTTPError as e:

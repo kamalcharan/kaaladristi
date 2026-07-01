@@ -40,7 +40,7 @@ from lib.db_client import get_db as _get_db  # noqa: E402
 # Optional AI / assembler modules — gracefully absent if not installed
 try:
     from lib.ai_prompts import SKILLS as _AI_SKILLS          # noqa: E402
-    from lib.ai_client import complete as _ai_complete, claude_complete as _claude_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL  # noqa: E402
+    from lib.ai_client import complete as _ai_complete, claude_complete as _claude_complete, AI_ENABLED as _AI_ENABLED, AI_MODEL as _AI_MODEL, CLAUDE_MAX_TOKENS_DISCOVER as _CLAUDE_MAX_TOKENS_DISCOVER  # noqa: E402
     from lib.data_assemblers import (                         # noqa: E402
         assemble_instrument_context,
         assemble_market_pulse_context,
@@ -65,6 +65,7 @@ except ImportError:
     def _claude_complete(system, user, **_): return None  # noqa: E731
     _AI_ENABLED = False
     _AI_MODEL = ""
+    _CLAUDE_MAX_TOKENS_DISCOVER = 8000
     _AI_OPTIONAL_OK = False
 
 try:
@@ -5489,7 +5490,7 @@ async def custom_index_discover(req: _DiscoverRequest):
     )
 
     if llm == 'claude':
-        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=_CLAUDE_MAX_TOKENS_DISCOVER)
     else:
         raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
 
