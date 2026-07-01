@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -5417,6 +5418,14 @@ async def payments_webhook(request: Request):
 
 # ── Custom Index — AI Discover ────────────────────────────────────────────────
 
+def _strip_json_fences(text: str) -> str:
+    """Strip a leading/trailing ```json or ``` markdown code fence, if present."""
+    text = text.strip()
+    text = re.sub(r'^```(?:json)?\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    return text.strip()
+
+
 class _DiscoverRequest(BaseModel):
     llm: str = 'claude'  # 'claude' | 'qwen'
 
@@ -5497,11 +5506,16 @@ async def custom_index_discover(req: _DiscoverRequest):
     if raw is None:
         raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
 
+    cleaned = _strip_json_fences(raw)
     try:
-        themes = json.loads(raw)
+        themes = json.loads(cleaned)
         if not isinstance(themes, list):
             raise ValueError('expected JSON array')
     except Exception:
+        log.warning(
+            f"custom_index_discover: unparseable JSON from {llm} — "
+            f"raw_len={len(raw)}, cleaned_len={len(cleaned)}, tail={cleaned[-200:]!r}"
+        )
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
 
     return {'themes': themes, 'stock_count': len(stocks)}

@@ -244,7 +244,14 @@ def claude_complete(
     try:
         resp = _requests.post(CLAUDE_API_URL, headers=headers, json=body, timeout=90)
         resp.raise_for_status()
-        return _anthropic_parse(resp.json())
+        data = resp.json()
+        if data.get("stop_reason") == "max_tokens":
+            usage = data.get("usage", {})
+            log.warning(
+                f"claude_complete: response truncated (stop_reason=max_tokens) — "
+                f"max_tokens={max_tokens}, output_tokens={usage.get('output_tokens')}"
+            )
+        return _anthropic_parse(data)
     except _requests.HTTPError as e:
         log.error(f"claude_complete HTTP {e.response.status_code}: {e.response.text[:200]}")
         return None
