@@ -693,7 +693,7 @@ Sort: score_5d DESC
 
 ---
 
-### Sprint 12 — VaNi + Custom Index (next)
+### Sprint 12 — VaNi + Custom Index ✅ COMPLETE (2026-07-01)
 
 **Goal:** VaNi sector narrative + Custom Index Phase B — DB schema, Admin UI, AI basket creation.
 **Tasks:** B71, B56, B57, B58, B70, B62 (carried from S11)
@@ -701,27 +701,34 @@ Sort: score_5d DESC
 
 | Task | Description | Status |
 |---|---|---|
-| B71 | VaNiSector Skill — 2-sentence sector insight | ⬜ |
-| B70 | ScoreCard Skill — unified index score card | ⬜ |
-| B62 | Populate `weight_pct` in `km_index_constituents` for all 93 indices | ⬜ (carried from S11) |
-| B56 | DB schema — `km_custom_index`, `km_custom_index_constituents`, `km_custom_index_eod` tables | ⬜ |
-| B57 | Custom Index Admin UI — create/edit/deactivate baskets, manage constituents | ⬜ |
-| B58 | Custom Index scoring — equal-weight, 66D baseline per D30 | ⬜ |
-| B75 | Custom Index Tab 4 on `/sector-rotation` — wire to Phase B schema | ⬜ |
-| B76 | AI Mode A — user types theme → Claude identifies matching NSE stocks | ⬜ |
-| B77 | AI Mode B — proactive discovery → Claude surfaces emergent themes | ⬜ |
-| B78 | Custom Index: populate `rsi_14` and `flow_type` in `km_index_eod` for custom indices. Currently `compute_custom_index_eod.py` only computes `close/ret_5d/22d/66d`; existing Step 0d (`compute_all_pending_indicators`) and Step 0e (`compute_all_flow_intelligence`) are NSE-bhav-gated and skip custom baskets entirely, leaving Signal badge blank for all custom indices. Needs equal-weight RSI calc + flow type derivation, or extension of Step 0d/0e to include custom category. | ⬜ |
+| B71 | VaNiSector Skill — 2-sentence sector insight | ✅ Done, reviewed, deployed |
+| B70 | ScoreCard Skill — unified index score card | ✅ Done, reviewed, deployed |
+| B56 | DB schema — no new tables needed. Reused `km_index_symbols` / `km_index_constituents` / `km_index_eod` with `category='custom'` | ✅ |
+| B57 | Custom Index Admin UI — `/custom-index` listing, `/custom-index/create` (manual path), `/custom-index/discover` (shell + backend endpoint deployed) | ✅ |
+| B58 | Custom Index scoring — `compute_custom_index_eod.py`, equal-weight `close/ret_5d/22d/66d`, verified on index 95 | ✅ |
+| B75 | Custom Index Tab 4 on `/sector-rotation` — admin-gated, verified rendering | ✅ |
+| B62 | Populate `weight_pct` in `km_index_constituents` for all 93 indices | ❌ Not started → carry to Sprint 13 |
+| B76 | AI Mode A — UI built, backend endpoint deployed. Architecture needs rework: Path 2 redesign (theme name → Sonnet → stock identification + astro tagging). Qwen3 insufficient for Indian mid/small cap knowledge. | 🟡 Partial → carry to Sprint 13 |
+| B77 | AI Mode B — proactive discovery → Claude surfaces emergent themes | ❌ Not started → carry to Sprint 13 |
+| B78 | Custom Index: populate `rsi_14` and `flow_type` in `km_index_eod`. Documented as D41. Parked. | ❌ Parked → Sprint 13 backlog |
 
 ---
 
-### Sprint 13 — Astro Integration (planned)
+### Sprint 13 — Astro Integration + Custom Index Carry (active)
 
-**Goal:** Surface astro-sector correlations and forward windows.
-**Tasks:** B72, B73, B74
-**Dependency:** `km_astro_calendar` fully populated for 2026–2027
+**Goal:** Astro-sector correlations, forward windows, confluence badge. Carry: B76 Path 2 redesign, B62, B77, B78.
+**Dependency:** `km_astro_calendar` fully populated for 2026–2027. Migration 118 foundation complete.
 
 | Task | Description | Status |
 |---|---|---|
+| Migration 118 | Astro foundation — `km_sector_zodiac` table + 51 sector-zodiac mappings + outer-planet zodiac co-rulers (Scorpio→Pluto, Aquarius→Hershel, Pisces→Neptune) | ✅ Done |
+| B76 | AI Mode A Path 2 redesign — theme name → Sonnet → liquid NSE stock identification + astro tagging via `km_sector_lords`/`km_sector_zodiac` → admin review/edit/save | ⬜ |
+| B62 | Populate `weight_pct` in `km_index_constituents` for all 93 indices | ⬜ |
 | B72 | Astro → sector historical correlation | ⬜ |
 | B73 | Astro forward signal overlay on sector cards | ⬜ |
 | B74 | Real-time 3-axis confluence badge | ⬜ |
+| B38 | Astro confluence on sector/industry view — favorable/unfavorable badge per sector | ⬜ |
+| BUG-08 | `compute_all_flow_intelligence()` covers only ~1.2% of stocks — A/D unusable. Pipeline investigation. | ⬜ |
+| B13 | Lookback filter 5D/22D/66D on sector rotation (currently hardcoded at 5D) | ⬜ |
+| B77 | AI Mode B — proactive discovery → Claude surfaces emergent themes | ⬜ |
+| B78 | Custom Index: populate `rsi_14` + `flow_type` in `km_index_eod` for custom indices (D41, D42) | ⬜ |
