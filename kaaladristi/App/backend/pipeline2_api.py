@@ -5482,7 +5482,7 @@ async def custom_index_discover(req: _DiscoverRequest):
         "indices do not capture the group. Focus on themes with current accumulation signals."
     )
     user_prompt = (
-        f"Here are NSE-listed active stocks with recent signals: {json.dumps(stocks)}. "
+        f"Here are NSE-listed active stocks with recent signals: {json.dumps([dict(r) for r in stocks], default=str)}. "
         "Identify 3–5 emerging themes. For each theme return: theme_name, description, "
         "rationale, constituent_symbols[]. "
         "Respond in JSON only, no preamble, no markdown fences."
