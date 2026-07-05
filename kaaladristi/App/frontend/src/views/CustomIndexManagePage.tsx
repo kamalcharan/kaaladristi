@@ -72,6 +72,8 @@ export default function CustomIndexManagePage() {
   const [error, setError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [computing, setComputing] = useState(false);
+  const [computeMsg, setComputeMsg] = useState<string | null>(null);
 
   const { data: meta, isLoading: metaLoading } = useQuery({
     queryKey: ['custom-index-meta', indexId],
@@ -153,6 +155,27 @@ export default function CustomIndexManagePage() {
     }
   }
 
+  async function calculate() {
+    setComputing(true);
+    setComputeMsg(null);
+    setError(null);
+    try {
+      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${indexId}/compute`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setComputeMsg(`${data.rows_computed} bars computed in ${(data.elapsed_ms / 1000).toFixed(1)}s — Sector Rotation will now show this index.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Calculate failed');
+    } finally {
+      setComputing(false);
+    }
+  }
+
   async function suggest() {
     setSuggesting(true);
     setError(null);
@@ -205,25 +228,48 @@ export default function CustomIndexManagePage() {
             {members.length} stocks
           </span>
         </div>
-        <button
-          onClick={suggest}
-          disabled={suggesting}
-          style={{
-            padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
-            border: '1px solid var(--accent-indigo)',
-            background: suggesting ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)',
-            color: suggesting ? 'var(--text-faint)' : 'var(--accent-indigo)',
-            cursor: suggesting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-          }}
-        >
-          {suggesting ? 'Analysing…' : '✨ Suggest new stocks (AI)'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={calculate}
+            disabled={computing}
+            title="Recompute this index's synthetic EOD history (close/5D/22D/66D) and scores so it reflects the current constituent set in Sector Rotation"
+            style={{
+              padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
+              border: '1px solid var(--risk-green)',
+              background: computing ? 'rgba(255,255,255,0.06)' : 'rgba(34,197,94,0.08)',
+              color: computing ? 'var(--text-faint)' : 'var(--risk-green)',
+              cursor: computing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            {computing ? 'Calculating…' : '⚡ Calculate'}
+          </button>
+          <button
+            onClick={suggest}
+            disabled={suggesting}
+            style={{
+              padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
+              border: '1px solid var(--accent-indigo)',
+              background: suggesting ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)',
+              color: suggesting ? 'var(--text-faint)' : 'var(--accent-indigo)',
+              cursor: suggesting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            {suggesting ? 'Analysing…' : '✨ Suggest new stocks (AI)'}
+          </button>
+        </div>
       </div>
 
       {/* Error */}
       {error && (
         <div style={{ padding: '10px 24px', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
           <p style={{ fontSize: '12px', color: 'var(--risk-red)', margin: 0 }}>{error}</p>
+        </div>
+      )}
+
+      {/* Calculate success */}
+      {computeMsg && (
+        <div style={{ padding: '10px 24px', background: 'rgba(34,197,94,0.08)', borderBottom: '1px solid rgba(34,197,94,0.2)' }}>
+          <p style={{ fontSize: '12px', color: 'var(--risk-green)', margin: 0 }}>{computeMsg}</p>
         </div>
       )}
 
@@ -351,7 +397,7 @@ export default function CustomIndexManagePage() {
       {/* Footnote */}
       <div style={{ padding: '8px 24px 14px', flexShrink: 0 }}>
         <p style={{ fontSize: '11px', color: 'var(--text-faint)', margin: 0 }}>
-          Changes apply from the next EOD compute — the index's synthetic history is rebuilt from the current constituent set.
+          Adding/removing stocks doesn't update Sector Rotation until a compute runs. Hit "⚡ Calculate" to rebuild this index's synthetic history right now, or wait for the next daily pipeline run — either way, history is rebuilt from the current constituent set.
         </p>
       </div>
 
