@@ -69,7 +69,7 @@ export const SECTOR_TAB_LABELS: Record<SectorTab, string> = {
   broad:    'Broad Market',
   sectoral: 'Sectoral',
   thematic: 'Thematic',
-  custom:   'Custom',
+  custom:   'Curated',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
