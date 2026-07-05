@@ -199,6 +199,7 @@ export interface ConstituentDetail {
   flow_type: string | null;
   rsi_14: number | null;
   score_5d: number | null;
+  score_22d: number | null;
   magic_rs: number | null;
 }
 
@@ -270,7 +271,7 @@ export async function fetchConstituentDetails(
       .in('id', equityIds)
       .execute(),
     from('km_equity_eod')
-      .select('equity_id,close,pct_chng,ret_5d,ret_22d,ret_66d,flow_type,rsi_14,score_5d,magic_rs')
+      .select('equity_id,close,pct_chng,ret_5d,ret_22d,ret_66d,flow_type,rsi_14,score_5d,score_22d,magic_rs')
       .in('equity_id', equityIds)
       .eq('trade_date', tradeDate)
       .execute(),
@@ -280,7 +281,7 @@ export async function fetchConstituentDetails(
   if (eodRes.error) throw new Error(`[constituentDetails] ${eodRes.error.message}`);
 
   type SymRow = { id: number; symbol: string; company_name: string };
-  type EodRow = { equity_id: number; close: number | null; pct_chng: number | null; ret_5d: number | null; ret_22d: number | null; ret_66d: number | null; flow_type: string | null; rsi_14: number | null; score_5d: number | null; magic_rs: number | null };
+  type EodRow = { equity_id: number; close: number | null; pct_chng: number | null; ret_5d: number | null; ret_22d: number | null; ret_66d: number | null; flow_type: string | null; rsi_14: number | null; score_5d: number | null; score_22d: number | null; magic_rs: number | null };
 
   const syms = (symRes.data ?? []) as SymRow[];
   const eods = (eodRes.data ?? []) as EodRow[];
@@ -300,6 +301,7 @@ export async function fetchConstituentDetails(
       flow_type: eod?.flow_type ?? null,
       rsi_14: eod?.rsi_14 ?? null,
       score_5d: eod?.score_5d ?? null,
+      score_22d: eod?.score_22d ?? null,
       magic_rs: eod?.magic_rs ?? null,
     };
   });
