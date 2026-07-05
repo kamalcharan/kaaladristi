@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import BetaWelcomeModal from '@/components/ui/BetaWelcomeModal';
 
 interface ProtectedRouteProps {
   requireOnboarded?: boolean;
@@ -33,5 +34,13 @@ export default function ProtectedRoute({ requireOnboarded = true }: ProtectedRou
     return <Navigate to="/setup" replace />;
   }
 
-  return <Outlet />;
+  // Welcome + non-advisory disclaimer — once per user (localStorage-persisted),
+  // on whichever protected page they land on first. Only in the onboarded
+  // layout so it never overlaps the /setup wizard.
+  return (
+    <>
+      {requireOnboarded && <BetaWelcomeModal />}
+      <Outlet />
+    </>
+  );
 }

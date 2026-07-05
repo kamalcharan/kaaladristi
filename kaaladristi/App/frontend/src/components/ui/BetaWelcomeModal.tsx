@@ -1,21 +1,37 @@
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '@/stores/authStore';
 
-// Module-level flag — persists for the lifetime of the JS bundle (one browser session).
-// Must NOT be set inside useState initializer: React.StrictMode calls lazy initializers
-// twice, so the flag would be true on the second call and the modal would never open.
-// useEffect fires once after commit and its state update survives the Strict Mode
-// simulated remount, making it the correct place to trigger the one-time show.
-let welcomeShown = false;
+// Shown once per user per browser: acknowledgement is persisted in
+// localStorage keyed by user id, so the welcome + non-advisory disclaimer
+// survives refreshes and only re-appears on a new device/browser (which is
+// desirable for a disclaimer). Mounted in ProtectedRoute so it fires on
+// whichever protected page the user lands on first — not just /dashboard.
+//
+// The open trigger stays in useEffect (not a useState lazy initializer):
+// React.StrictMode double-invokes initializers, while an effect's state
+// update survives the simulated remount.
+const ackKey = (userId: string) => `kd_welcome_ack_${userId}`;
 
 export default function BetaWelcomeModal() {
+  const user = useAuthStore((s) => s.user);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    if (!welcomeShown) {
-      welcomeShown = true;
+    if (!user?.id) return;
+    try {
+      if (!localStorage.getItem(ackKey(user.id))) setIsOpen(true);
+    } catch {
+      // storage unavailable — fall back to showing once per mount
       setIsOpen(true);
     }
-  }, []);
+  }, [user?.id]);
+
+  function acknowledge() {
+    try {
+      if (user?.id) localStorage.setItem(ackKey(user.id), new Date().toISOString());
+    } catch { /* storage unavailable — modal simply reappears next session */ }
+    setIsOpen(false);
+  }
 
   if (!isOpen) return null;
 
@@ -86,7 +102,7 @@ export default function BetaWelcomeModal() {
         {/* CTA */}
         <div className="px-8 pb-8">
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={acknowledge}
             className="w-full py-4 rounded-xl text-[15px] font-semibold transition-all hover:-translate-y-0.5"
             style={{
               background: 'linear-gradient(135deg, var(--accent-indigo, #6366f1), var(--accent-violet, #8b5cf6))',
