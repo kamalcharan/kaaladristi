@@ -272,6 +272,7 @@ Steps run sequentially for a trade date:
 6b. `compute_all_flow_intelligence()`
 6c. `compute_all_industry_composites()`
 6d. Index returns (ret_5d/ret_22d/ret_66d)
+6d2. `compute_custom_index_eod(trade_date)` RPC (migration 096) — synthesises `km_index_eod` rows for `category='custom'` (user-built sector-basket) indices from their constituents so Sector Rotation 5D/22D/66D always populate. Runs after 6d so the newest bar keeps a value.
 6e. Weekly aggregate (Fridays only)
 6f. Monthly aggregate (last calendar day only)
 **6g. `compute_rolling_metrics_for_date(db, trade_date)`** — populates `d30_pct_chng`, `d365_pct_chng`, `avg_amt_5d`, `avg_amt_22d`, `delivery_surge_x`, `w52_high`, `w52_low`, `lifetime_high`. This step exists because the PostgreSQL RPC (step 6) sets `indicators_computed_at` but never computes these rolling columns.
@@ -420,7 +421,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **096**.
+Next migration number: **097**.
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
@@ -897,7 +898,7 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 - **KaalaDristi voice is observational**: "Strength Confluence" not "Power Buy". Surface conditions, don't issue trade commands.
 - **D39 — ROC badge language (SEBI)**: ROC badge states use neutral participation vocabulary — `expanding / slowing / turning / contracting / warming_up`. Never use bull/bear/uptrend/downtrend in any badge, label, or tooltip. `ROC_BADGE_MAP` in `BreadthRocChart.tsx` is the single source of truth.
 - **D40 — Breadth formula uses ema_20 + sma_50 + sma_150**: `fetchIndexBreadth` uses `ema_20` (true EMA) for p20, and `sma_50`/`sma_150` (SMAs) for p50/p150. This is a conscious deviation from Breadth_ROC_Spec_v1.0 §2 which specifies EMA50/EMA150 — those columns don't exist in `km_equity_eod`. Adding them is deferred; the signal quality difference at these window lengths is minimal.
-- **D41 — `compute_custom_index_eod.py` is standalone, not yet in daily pipeline**: Must be run manually after creating a new custom index, and ideally nightly going forward (not yet automated). Computes equal-weight `close/ret_5d/22d/66d` only — `rsi_14` and `flow_type` require Step 0d/0e extension (B78). Signal badge in SectorRotationTable will remain blank for custom indices until B78 is resolved.
+- **D41 — custom index synthetic EOD is now wired into the daily pipeline** (migration 096): the synthesis SQL lives in RPC `compute_custom_index_eod(p_trade_date DATE)`, called as pipeline step 6d2 (right after step 6d index returns) so Sector Rotation 5D/22D/66D populate for `category='custom'` indices every run — no manual script needed. `scripts/compute_custom_index_eod.py` now calls the same RPC (full history or `--date`) and remains the one-time backfill to run when a new custom index is created (it also refreshes scores via `compute_all_index_scores()`). Still open: the pipeline step computes equal-weight `close/ret_5d/22d/66d` only — `rsi_14` and `flow_type` require Step 0d/0e extension (B78), so the signal badge in SectorRotationTable stays blank for custom indices until B78 is resolved.
 - **D42 — Custom Index Discover (Path 2) architecture**: Admin types a theme name → Sonnet scans liquid active NSE stocks → identifies matching companies using training knowledge → suggests sector lord + zodiac sign from `km_sector_lords`/`km_sector_zodiac` → admin reviews, edits, saves. Qwen3 is not suitable for this task (insufficient knowledge of Indian mid/small caps). Claude Sonnet is the only viable LLM for Path 2. Backend endpoint at `POST /api/custom-index/discover` deployed; architecture rework (B76) needed before production use.
 - **D43 — `km_sector_zodiac` table added in migration 118**: Maps sectors to zodiac signs (many-to-many). Columns: `id SERIAL PK`, `sector_id FK → km_sectors`, `zodiac_id FK → km_zodiac_signs`, `UNIQUE(sector_id, zodiac_id)`. 51 mappings seeded. Used for astro tagging of custom indices in Path 2 discovery.
 - **No-fallback note — constituent warm-up exclusion**: `fetchIndexBreadth` excludes constituents with `ema_20/sma_50/sma_150 = 0 or null` from each ratio's denominator. This is hygiene (new listings without sufficient price history), not a fallback — the denominator is the count of stocks with valid data, not total stock count.
