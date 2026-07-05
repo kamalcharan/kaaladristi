@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
+import { displaySymbol } from '@/lib/symbolUtils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -10,20 +11,29 @@ interface EquityRow {
   symbol: string;
   company_name: string | null;
   industry: string | null;
+  exchange: string;
+  isin: string | null;
 }
 
-// ── Data fetch — shares ['search-index'] cache with SearchStrip ───────────────
+// ── Data fetch — NSE priority + BSE-only additions (ISIN dedup) ───────────────
 
-async function fetchNseEquities(): Promise<EquityRow[]> {
+async function fetchEquityUniverse(): Promise<EquityRow[]> {
   const { data, error } = await from('km_equity_symbols')
-    .select('id,symbol,company_name,industry')
-    .eq('exchange', 'NSE')
+    .select('id,symbol,company_name,industry,exchange,isin')
     .is('is_active', 'true')
     .order('symbol', { ascending: true })
     .limit(8000)
     .execute();
   if (error) throw new Error(error.message);
-  return (data ?? []) as EquityRow[];
+  const rows = (data ?? []) as EquityRow[];
+  // NSE is the priority exchange: include a BSE scrip only when its ISIN has
+  // no active NSE listing (mirrors the discover endpoint's universe rule).
+  const nseIsins = new Set(
+    rows.filter((r) => r.exchange === 'NSE' && r.isin).map((r) => r.isin as string),
+  );
+  return rows.filter(
+    (r) => r.exchange === 'NSE' || (r.isin !== null && !nseIsins.has(r.isin)),
+  );
 }
 
 // ── RowItem ───────────────────────────────────────────────────────────────────
@@ -51,7 +61,23 @@ function RowItem({
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-          {row.symbol}
+          {displaySymbol(row)}
+          {row.exchange === 'BSE' && (
+            <span
+              style={{
+                marginLeft: '6px',
+                fontSize: '9px',
+                fontWeight: 600,
+                padding: '1px 5px',
+                borderRadius: '4px',
+                border: '1px solid var(--border)',
+                color: 'var(--text-faint)',
+                verticalAlign: 'middle',
+              }}
+            >
+              BSE
+            </span>
+          )}
         </div>
         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {row.company_name ?? '—'}{row.industry ? ` · ${row.industry}` : ''}
@@ -92,8 +118,8 @@ export default function CustomIndexCreatePage() {
   const [basket, setBasket] = useState<EquityRow[]>([]);
 
   const { data: equities = [] } = useQuery({
-    queryKey: ['search-index-nse'],
-    queryFn: fetchNseEquities,
+    queryKey: ['custom-create-equities'],
+    queryFn: fetchEquityUniverse,
     staleTime: 10 * 60 * 1000,
   });
 

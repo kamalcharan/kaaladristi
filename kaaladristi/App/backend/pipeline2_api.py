@@ -5444,6 +5444,7 @@ async def custom_index_discover(req: _DiscoverRequest):
                         s.symbol,
                         s.company_name,
                         s.industry,
+                        s.exchange,
                         e.score_5d,
                         e.delivery_surge_x,
                         e.sniper_inst,
@@ -5458,10 +5459,28 @@ async def custom_index_discover(req: _DiscoverRequest):
                     FROM km_equity_eod e
                     JOIN km_equity_symbols s ON s.id = e.equity_id
                     WHERE e.trade_date = (SELECT dt FROM latest)
-                      AND s.exchange = 'NSE'
                       AND s.is_active = true
+                      AND (
+                        s.exchange = 'NSE'
+                        -- BSE-only additions: NSE stays the priority exchange.
+                        -- Include a BSE scrip only when its ISIN has no active
+                        -- NSE listing, and gate on >= 1 Cr daily turnover —
+                        -- calibrated 2026-07-05: 167 of 2,900 BSE-only names
+                        -- qualify. delivery_surge_x never fires for BSE (no
+                        -- delivery data), so BSE effectively scores out of 4.
+                        OR (
+                          s.exchange = 'BSE'
+                          AND s.isin IS NOT NULL
+                          AND (e.close * e.volume) >= 10000000
+                          AND NOT EXISTS (
+                            SELECT 1 FROM km_equity_symbols n
+                            WHERE n.exchange = 'NSE' AND n.is_active = true
+                              AND n.isin = s.isin
+                          )
+                        )
+                      )
                 )
-                SELECT symbol, company_name, industry, score_5d,
+                SELECT symbol, company_name, industry, exchange, score_5d,
                        delivery_surge_x, sniper_inst, flow_type, signal_count
                 FROM scored
                 WHERE signal_count >= 2
@@ -5476,15 +5495,18 @@ async def custom_index_discover(req: _DiscoverRequest):
         return {'themes': [], 'stock_count': 0}
 
     system_prompt = (
-        "You are a sector analyst reviewing NSE-listed Indian equities. "
+        "You are a sector analyst reviewing Indian equities (NSE, plus liquid BSE-only listings). "
         "Identify cohesive sub-themes where 5+ companies share a common business model, "
         "supply chain position, or structural tailwind — and where existing NSE sectoral "
-        "indices do not capture the group. Focus on themes with current accumulation signals."
+        "indices do not capture the group. Focus on themes with current accumulation signals. "
+        "BSE scrips have numeric symbols — identify those companies by company_name, but "
+        "always return the symbol field exactly as provided."
     )
     user_prompt = (
-        f"Here are NSE-listed active stocks with recent signals: {json.dumps([dict(r) for r in stocks], default=str)}. "
+        f"Here are active Indian stocks with recent signals: {json.dumps([dict(r) for r in stocks], default=str)}. "
         "Identify 3–5 emerging themes. For each theme return: theme_name, description, "
-        "rationale, constituent_symbols[]. "
+        "rationale, constituent_symbols[]. Use each stock's symbol exactly as given "
+        "(BSE symbols are numeric codes). "
         "Respond in JSON only, no preamble, no markdown fences."
     )
 
