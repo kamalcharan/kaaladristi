@@ -30,6 +30,7 @@ interface FlowIntensityMapProps {
   dayWindow?: 5 | 22 | 66;             // index only
   onDayWindowChange?: (d: 5 | 22 | 66) => void;
   cellWidth?: number;                   // default 28 for constituent, 52 for index
+  onRowClick?: (row: string) => void;   // row label click → drill-down
 }
 
 // ── Color constants ────────────────────────────────────────────────────────────
@@ -95,6 +96,15 @@ const SIGNAL_COLOR: Record<IndexSignal, string> = {
   LOW_FLOW: 'var(--risk-red)',
 };
 
+// Cell text must contrast with the cell background, not encode return sign
+// (the background already encodes the signal; sign is visible in the +/-).
+const SIGNAL_TEXT: Record<IndexSignal, string> = {
+  STRONG:   '#f8fafc',  // near-white on dark green
+  MODERATE: '#0b1220',  // near-black on bright green
+  WEAK:     '#0b1220',  // near-black on amber
+  LOW_FLOW: '#fef2f2',  // near-white on red
+};
+
 const SIGNAL_LABEL: Record<IndexSignal, string> = {
   STRONG:   'Strong Flow',
   MODERATE: 'Moderate Flow',
@@ -116,9 +126,10 @@ interface TooltipState {
 // ── Fixed sizing ──────────────────────────────────────────────────────────────
 
 const CELL_H_CON = 28;  // constituent mode — color block only, no text
-const CELL_H_IDX = 56;  // index mode — two lines of text; sized for glanceability
+const CELL_H_IDX = 56;  // index mode — single % line; sized for glanceability
 const GAP        = 2;
-const LABEL_W    = 104;
+const LABEL_W_CON = 104;  // constituent mode — short symbols
+const LABEL_W_IDX = 220;  // index mode — full index names, no harsh truncation
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -164,9 +175,10 @@ export default function FlowIntensityMap({
   dayWindow,
   onDayWindowChange,
   cellWidth,
+  onRowClick,
 }: FlowIntensityMapProps) {
   // Cell width: caller-overridable; defaults differ by mode
-  const cellW = cellWidth ?? (mode === 'index' ? 72 : 28);
+  const cellW = cellWidth ?? (mode === 'index' ? 92 : 28);
   const cellH = mode === 'index' ? CELL_H_IDX : CELL_H_CON;
 
   // Constituent surge toggle — uncontrolled when surgeToggleProp not passed
@@ -260,27 +272,32 @@ export default function FlowIntensityMap({
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
         {/* Label column */}
-        <div style={{ flexShrink: 0, width: LABEL_W }}>
+        <div style={{ flexShrink: 0, width: mode === 'index' ? LABEL_W_IDX : LABEL_W_CON }}>
           {/* Spacer for date header row */}
           <div style={{ height: CELL_H_CON + GAP }} />
           {rows.map((row) => (
             <div
               key={row}
+              title={row}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
               style={{
                 height: cellH,
                 marginBottom: GAP,
                 display: 'flex',
                 alignItems: 'center',
-                paddingRight: 8,
-                color: 'var(--text-muted)',
-                fontSize: 11,
+                paddingRight: 10,
+                color: 'var(--text-secondary)',
+                fontSize: 12,
                 fontFamily: 'monospace',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                cursor: onRowClick ? 'pointer' : undefined,
               }}
+              onMouseEnter={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; } : undefined}
+              onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; (e.currentTarget as HTMLElement).style.textDecoration = 'none'; } : undefined}
             >
-              {trunc(row, 14)}
+              {mode === 'index' ? trunc(row, 30) : trunc(row, 14)}
             </div>
           ))}
         </div>
@@ -298,7 +315,7 @@ export default function FlowIntensityMap({
                   flexShrink: 0,
                   textAlign: 'center',
                   color: 'var(--text-muted)',
-                  fontSize: 9,
+                  fontSize: 10,
                   overflow: 'hidden',
                 }}
               >
@@ -357,30 +374,16 @@ export default function FlowIntensityMap({
                       }}
                     >
                       {mode === 'index' && (
-                        <>
-                          <div style={{
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                            color: 'rgba(255,255,255,0.75)',
-                            lineHeight: 1.2,
-                            textAlign: 'center',
-                            width: '100%',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {trunc(row, 14)}
-                          </div>
-                          <div style={{
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                            lineHeight: 1.2,
-                            textAlign: 'center',
-                            color: (c.ret_5d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
-                          }}>
-                            {fmtPct(c.ret_5d)}
-                          </div>
-                        </>
+                        <div style={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          fontFamily: 'monospace',
+                          lineHeight: 1.2,
+                          textAlign: 'center',
+                          color: SIGNAL_TEXT[indexSignal(c)],
+                        }}>
+                          {fmtPct(c.ret_5d)}
+                        </div>
                       )}
                     </div>
                   );
@@ -394,15 +397,27 @@ export default function FlowIntensityMap({
       {/* ── Footer ── */}
       <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
         Cell color reflects flow relative to baseline. Edge indicates price direction for that session.
+        {onRowClick && ' Click an index name to open its detail.'}
       </div>
 
-      {/* ── Cell tooltip (fixed-position, rich multi-field) ── */}
-      {tooltip && (
+      {/* ── Cell tooltip (fixed-position, rich multi-field) ──
+          Flips above the cursor near the bottom edge and left of the cursor
+          near the right edge so it always stays inside the viewport. */}
+      {tooltip && (() => {
+        const TT_W = 210;
+        const ttH  = mode === 'index' ? 200 : 130;
+        const left = tooltip.x + 14 + TT_W > window.innerWidth
+          ? Math.max(8, tooltip.x - TT_W - 14)
+          : tooltip.x + 14;
+        const top = tooltip.y + ttH > window.innerHeight - 8
+          ? Math.max(8, tooltip.y - ttH - 12)
+          : tooltip.y - 12;
+        return (
         <div
           style={{
             position: 'fixed',
-            left: tooltip.x + 14,
-            top: tooltip.y - 12,
+            left,
+            top,
             zIndex: 9999,
             background: 'var(--card)',
             border: '1px solid var(--border-strong)',
@@ -475,7 +490,8 @@ export default function FlowIntensityMap({
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
     </Card>
   );
 }
