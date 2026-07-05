@@ -6,7 +6,7 @@ upserts one km_index_eod row per trading date using equal-weight average of
 that index's constituents from km_equity_eod.
 
 The synthesis SQL now lives in the PostgreSQL RPC compute_custom_index_eod()
-(migration 096) so the daily pipeline and this backfill script share a single
+(migration 119) so the daily pipeline and this backfill script share a single
 source of truth. The daily pipeline calls the RPC for one trade date; this
 script calls it for a date range (or full history) and then refreshes the
 score_5d / score_22d / avg_amt columns via compute_all_index_scores() — scoped
