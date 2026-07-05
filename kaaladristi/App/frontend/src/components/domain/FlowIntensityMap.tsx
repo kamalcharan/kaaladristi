@@ -56,15 +56,14 @@ const NO_DATA    = '#1e293b';
 // INDEX cut = 25 ≈ p90 of positive index score_5d days (calibrated
 // 2026-07-05: p50=4.1, p75=12.7, p90=26.8, p97=39.8).
 //
-// EQUITY cut = 55 is PROVISIONAL — equity score = surge² × 25 when delivery
-// surge ≥ 1 (55 ≈ recent delivery 1.5× its baseline), else max(ret, 0).
-// TODO(calibration): replace with ≈ p90 of positive equity score_5d days:
-//   SELECT percentile_cont(ARRAY[0.5,0.75,0.9,0.97]) WITHIN GROUP
-//     (ORDER BY score_5d) FROM km_equity_eod
-//   WHERE score_5d > 0 AND trade_date >= '2026-01-01';
+// EQUITY cut = 28 ≈ p90 of positive equity score_5d days (calibrated
+// 2026-07-05 on 2026 YTD: p50=4.7, p75=10.8, p90=27.5, p97=86.0). The two
+// distributions land close at p90 despite different formulas because most
+// positive equity-score days sit on the return-only branch; the surge²×25
+// branch produces the long tail (p97=86), which STRONG deliberately catches.
 
 const STRONG_SCORE_CUT_INDEX  = 25;
-const STRONG_SCORE_CUT_EQUITY = 55;
+const STRONG_SCORE_CUT_EQUITY = 28;
 
 type FlowSignal = 'STRONG' | 'BUILDING' | 'FADING' | 'OUTFLOW' | 'QUIET';
 
