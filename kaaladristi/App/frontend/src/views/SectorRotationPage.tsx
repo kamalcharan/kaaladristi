@@ -51,13 +51,19 @@ function DayToggle({ days, onChange }: { days: 5 | 22 | 66; onChange: (d: 5 | 22
     transition: 'all 0.15s',
     letterSpacing: '0.03em',
   });
+  // Labels say "sessions" deliberately: this toggle changes how many days of
+  // HISTORY are shown — it does NOT switch the metric (cells always show
+  // Score 5D). "5D/22D/66D" labels here misread as a metric switch.
   return (
-    <div style={{ display: 'inline-flex', gap: 3 }}>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
       {([5, 22, 66] as const).map((d) => (
         <button key={d} style={btnStyle(days === d)} onClick={() => onChange(d)}>
-          {d === 5 ? '5D' : d === 22 ? '22D' : '66D'}
+          {d}
         </button>
       ))}
+      <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.05em', textTransform: 'uppercase', marginLeft: 4 }}>
+        sessions
+      </span>
     </div>
   );
 }
@@ -178,10 +184,11 @@ function TabContent({ tab, view, forDate, heatDays }: {
         />
         <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
           {([
-            { color: '#166534',           label: 'Strong Flow',   desc: 'Flow rising + return > 1.5%' },
-            { color: 'var(--risk-green)', label: 'Moderate Flow', desc: 'Flow rising + return > 0.5%' },
-            { color: 'var(--risk-amber)', label: 'Weak Flow',     desc: 'Mixed or flat signal' },
-            { color: 'var(--risk-red)',   label: 'Low Flow',      desc: 'Outflow + negative return' },
+            { color: '#166534',           label: 'Strong Conviction', desc: 'Score 25+ and rising — exceptional money flow' },
+            { color: 'var(--risk-green)', label: 'Building',          desc: 'Score rising vs its 1-month pace — money arriving' },
+            { color: 'var(--risk-amber)', label: 'Fading',            desc: 'Score below its 1-month pace — conviction slipping' },
+            { color: 'var(--risk-red)',   label: 'Outflow',           desc: 'Money leaving + price falling' },
+            { color: '#334155',           label: 'Quiet',             desc: 'No conviction signal' },
           ] as const).map(({ color, label, desc }) => (
             <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />

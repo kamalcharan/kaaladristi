@@ -16,8 +16,10 @@ export interface CellData {
   sx?: number;       // surge× vs 66D baseline (constituent mode)
   amt_5d?: number;   // avg_amt_5d (index mode)
   amt_22d?: number;  // avg_amt_22d (index mode)
-  ret_5d?: number;   // 5D return % (index mode)
+  ret_5d?: number;   // 5D return % (index mode — cell top edge + tooltip)
   ret_22d?: number;  // 22D return % (index mode, tooltip only)
+  s5?: number;       // score_5d  — money-flow conviction (index mode: drives cell color + text)
+  s22?: number;      // score_22d — 1-month conviction baseline (index mode)
 }
 
 interface FlowIntensityMapProps {
@@ -77,40 +79,52 @@ function constituentColor(val: number, cuts: RowCuts): string {
   return 'var(--risk-red)';
 }
 
-// ── Index mode: 4-state composite signal ─────────────────────────────────────
+// ── Index mode: 5-state SCORE-based signal ────────────────────────────────────
+// Owner decision 2026-07-05: cells encode money-flow CONVICTION (score_5d),
+// not price % — "scores start moving first; Score is the real moat".
+// STRONG cut = 25 ≈ p90 of positive score_5d days (calibrated 2026-07-05:
+// p50=4.1, p75=12.7, p90=26.8, p97=39.8). Score is floored at 0 for negative
+// returns, so the downside states come from outflow evidence instead.
 
-type IndexSignal = 'STRONG' | 'MODERATE' | 'WEAK' | 'LOW_FLOW';
+const STRONG_SCORE_CUT = 25;
+
+type IndexSignal = 'STRONG' | 'BUILDING' | 'FADING' | 'OUTFLOW' | 'QUIET';
 
 function indexSignal(c: CellData): IndexSignal {
-  const flowUp = (c.amt_5d ?? 0) > (c.amt_22d ?? 0);
-  const ret    = c.ret_5d ?? 0;
-  if (flowUp  && ret >  1.5) return 'STRONG';
-  if (flowUp  && ret >= 0.5) return 'MODERATE';
-  if (!flowUp && ret <  0)   return 'LOW_FLOW';
-  return 'WEAK';
+  const s5  = c.s5  ?? 0;
+  const s22 = c.s22 ?? 0;
+  if (s5 > 0 && s5 >= s22) return s5 >= STRONG_SCORE_CUT ? 'STRONG' : 'BUILDING';
+  if (s5 > 0 && s5 < s22)  return 'FADING';
+  const outflow = (c.amt_5d ?? 0) < (c.amt_22d ?? 0) && (c.ret_5d ?? 0) < 0;
+  return outflow ? 'OUTFLOW' : 'QUIET';
 }
+
+const QUIET_BG = '#334155';  // slate — distinguishable from NO_DATA (#1e293b)
 
 const SIGNAL_COLOR: Record<IndexSignal, string> = {
   STRONG:   DARK_GREEN,
-  MODERATE: 'var(--risk-green)',
-  WEAK:     'var(--risk-amber)',
-  LOW_FLOW: 'var(--risk-red)',
+  BUILDING: 'var(--risk-green)',
+  FADING:   'var(--risk-amber)',
+  OUTFLOW:  'var(--risk-red)',
+  QUIET:    QUIET_BG,
 };
 
 // Cell text must contrast with the cell background, not encode return sign
-// (the background already encodes the signal; sign is visible in the +/-).
+// (the background already encodes the signal).
 const SIGNAL_TEXT: Record<IndexSignal, string> = {
   STRONG:   '#f8fafc',  // near-white on dark green
-  MODERATE: '#0b1220',  // near-black on bright green
-  WEAK:     '#0b1220',  // near-black on amber
-  LOW_FLOW: '#fef2f2',  // near-white on red
+  BUILDING: '#0b1220',  // near-black on bright green
+  FADING:   '#0b1220',  // near-black on amber
+  OUTFLOW:  '#fef2f2',  // near-white on red
+  QUIET:    '#94a3b8',  // muted on slate
 };
 
 const SIGNAL_LABEL: Record<IndexSignal, string> = {
-  STRONG:   'Strong Flow',
-  MODERATE: 'Moderate Flow',
-  WEAK:     'Weak Flow',
-  LOW_FLOW: 'Low Flow',
+  STRONG:   'Strong Conviction',
+  BUILDING: 'Building',
+  FADING:   'Fading',
+  OUTFLOW:  'Outflow',
+  QUIET:    'Quiet',
 };
 
 // ── Tooltip state ─────────────────────────────────────────────────────────────
@@ -149,21 +163,23 @@ function fmtCr(v: number) {
   return '₹' + v.toFixed(1) + ' Cr';
 }
 
-// ── Micro-trend bars (index mode) ─────────────────────────────────────────────
-// One tiny bar per session, chronological left -> right (NOTE: the heat grid
-// runs newest-first, but a trend shape must read oldest -> newest or users
-// misread the direction — hence the reversed order and the title hint).
-// Answers "what is this row's trend shape" without integrating 22 cell colors.
+// ── Micro-trend bars (index mode): CONVICTION trajectory ─────────────────────
+// One bar per session = that day's score_5d, chronological left -> right
+// (the heat grid runs newest-first, but a trend shape must read oldest ->
+// newest — hence the reversed order and the title hint). Bars grow from a
+// bottom baseline (scores are never negative); green = accelerating
+// (score_5d above score_22d that day), amber = fading. The row reads as a
+// conviction timeline — the drill-down's flow-trend chart is its zoom-in.
 
 function MicroTrend({ rowData, height }: { rowData: CellData[]; height: number }) {
-  const vals = [...rowData].reverse().map((c) => c?.d1 ?? 0);
-  if (vals.length === 0) return <div style={{ width: TREND_W }} />;
+  const cells = [...rowData].reverse();
+  if (cells.length === 0) return <div style={{ width: TREND_W }} />;
 
-  const maxAbs = Math.max(0.5, ...vals.map((v) => Math.abs(v)));
+  const vals = cells.map((c) => c?.s5 ?? 0);
+  const maxVal = Math.max(1, ...vals);
   const innerH = height - 14;
-  const mid = innerH / 2;
-  const barW = Math.max(1, Math.floor((TREND_W - 8) / vals.length) - 1);
-  const step = (TREND_W - 8) / vals.length;
+  const barW = Math.max(1, Math.floor((TREND_W - 8) / cells.length) - 1);
+  const step = (TREND_W - 8) / cells.length;
 
   return (
     <svg
@@ -171,17 +187,20 @@ function MicroTrend({ rowData, height }: { rowData: CellData[]; height: number }
       height={innerH}
       style={{ display: 'block' }}
     >
-      <line x1={0} y1={mid} x2={TREND_W - 8} y2={mid} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-      {vals.map((v, i) => {
-        const h = Math.max(1, (Math.abs(v) / maxAbs) * mid);
+      <line x1={0} y1={innerH - 0.5} x2={TREND_W - 8} y2={innerH - 0.5} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      {cells.map((c, i) => {
+        const s5 = c?.s5 ?? 0;
+        if (s5 <= 0) return null;
+        const h = Math.max(1, (s5 / maxVal) * (innerH - 2));
+        const accelerating = s5 >= (c?.s22 ?? 0);
         return (
           <rect
             key={i}
             x={i * step}
-            y={v >= 0 ? mid - h : mid}
+            y={innerH - h}
             width={barW}
             height={h}
-            fill={v >= 0 ? 'var(--risk-green)' : 'var(--risk-red)'}
+            fill={accelerating ? 'var(--risk-green)' : 'var(--risk-amber)'}
             opacity={0.85}
           />
         );
@@ -365,7 +384,7 @@ export default function FlowIntensityMap({
             {rows.map((row) => (
               <div
                 key={row}
-                title="Daily % change across the window, oldest → newest"
+                title="Score 5D (conviction) per session, oldest → newest. Green = accelerating vs its 1-month pace, amber = fading."
                 style={{
                   height: cellH,
                   marginBottom: GAP,
@@ -459,7 +478,7 @@ export default function FlowIntensityMap({
                           textAlign: 'center',
                           color: SIGNAL_TEXT[indexSignal(c)],
                         }}>
-                          {fmtPct(c.ret_5d)}
+                          {c.s5 != null ? Math.round(c.s5) : '—'}
                         </div>
                       )}
                     </div>
@@ -473,7 +492,7 @@ export default function FlowIntensityMap({
 
       {/* ── Footer ── */}
       <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
-        Cell color reflects flow relative to baseline. Edge indicates price direction for that session.
+        Cell fill = money-flow conviction (Score 5D vs its 1-month pace). Cell number = Score 5D. Top edge = price direction that session.
         {onRowClick && ' Click an index name to open its detail.'}
       </div>
 
@@ -484,7 +503,7 @@ export default function FlowIntensityMap({
           re-anchor position:fixed and push it off-screen. */}
       {tooltip && createPortal((() => {
         const TT_W = 210;
-        const ttH  = mode === 'index' ? 200 : 130;
+        const ttH  = mode === 'index' ? 230 : 130;
         const left = Math.min(Math.max(8, tooltip.cx - TT_W / 2), window.innerWidth - TT_W - 8);
         const fitsAbove = tooltip.top - ttH - 10 >= 8;
         const top = fitsAbove ? tooltip.top - ttH - 10 : tooltip.bottom + 10;
@@ -544,6 +563,14 @@ export default function FlowIntensityMap({
                 <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg 22D Amt</span>
                 <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
                   {tooltip.cell.amt_22d != null ? fmtCr(tooltip.cell.amt_22d) : '—'}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 5D</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {tooltip.cell.s5 != null ? tooltip.cell.s5.toFixed(1) : '—'}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 22D</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+                  {tooltip.cell.s22 != null ? tooltip.cell.s22.toFixed(1) : '—'}
                 </span>
                 <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>5D Return</span>
                 <span style={{

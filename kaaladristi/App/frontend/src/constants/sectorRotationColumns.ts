@@ -11,9 +11,9 @@
  *    are always inserted immediately BEFORE the last entry, so keep 'signal'
  *    last for the "verdict on the right edge" reading.
  *
- * Default order tells the story left → right:
- *   today → week (move + conviction) → month (move + conviction) → quarter
- *   → momentum → the money columns → verdict.
+ * Default order tells the story left → right, CONVICTION FIRST (owner
+ * decision 2026-07-05: "Score is the real moat, not %ge — scores start
+ * moving first"): scores → returns → momentum → money columns → verdict.
  */
 
 export type SectorRotationColKey =
@@ -26,11 +26,11 @@ export const SECTOR_ROTATION_COLUMN_ORDER: SectorRotationColKey[] = [
   'name',
   'stock_count',
   'close',
-  'pct_chng',      // labeled 1D%
-  'ret_5d',        // 5D% — paired with its conviction score
-  'score_5d',
-  'ret_22d',       // 22D% — paired with its conviction score
+  'score_5d',      // conviction first — the leading signal
   'score_22d',
+  'pct_chng',      // labeled 1D%
+  'ret_5d',        // 5D% (carries the gaining-strength dot)
+  'ret_22d',
   'ret_66d',
   'rsi_14',
   'avg_amt_5d',
