@@ -263,6 +263,11 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
             <th style={{ ...thBase, textAlign: 'left', width: 110 }}>Symbol</th>
             <th style={{ ...thBase, textAlign: 'left' }}>Company</th>
             <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 76 }} onClick={() => handleSort('score_5d')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                Score 5D<SortIcon col="score_5d" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
             <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('pct_chng')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 1D %<SortIcon col="pct_chng" sortKey={sortKey} sortDir={sortDir} />
@@ -287,11 +292,6 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
             <th style={{ ...thSortable, textAlign: 'right', width: 60 }} onClick={() => handleSort('rsi_14')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 RSI<SortIcon col="rsi_14" sortKey={sortKey} sortDir={sortDir} />
-              </span>
-            </th>
-            <th style={{ ...thSortable, textAlign: 'right', width: 76 }} onClick={() => handleSort('score_5d')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                Score 5D<SortIcon col="score_5d" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th style={{ ...thSortable, textAlign: 'right', width: 80 }} onClick={() => handleSort('magic_rs')}>
@@ -323,6 +323,9 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                   {row.close != null ? '₹' + row.close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: scoreColor(row.score_5d) }}>
+                  {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
                   {fmtPct(row.pct_chng)}
@@ -357,9 +360,6 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
                   {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
-                </td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: scoreColor(row.score_5d) }}>
-                  {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
                   {row.magic_rs != null ? fmt(row.magic_rs, 1) : '—'}
@@ -442,22 +442,6 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
         )}
       </div>
 
-      {/* Returns row */}
-      <div style={{ display: 'flex', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
-        {([['5D', row.ret_5d], ['22D', row.ret_22d], ['66D', row.ret_66d]] as [string, number | null][]).map(([label, v]) => (
-          <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label} Ret</span>
-            <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: pctColor(v) }}>{fmtPct(v)}</span>
-          </div>
-        ))}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>RSI 14</span>
-          <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: rsiColor(row.rsi_14) }}>
-            {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
-          </span>
-        </div>
-      </div>
-
       {/* Score + delivery row */}
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -509,6 +493,22 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
           </div>
         )}
       </div>
+      {/* Returns row */}
+      <div style={{ display: 'flex', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
+        {([['5D', row.ret_5d], ['22D', row.ret_22d], ['66D', row.ret_66d]] as [string, number | null][]).map(([label, v]) => (
+          <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label} Ret</span>
+            <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: pctColor(v) }}>{fmtPct(v)}</span>
+          </div>
+        ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>RSI 14</span>
+          <span style={{ ...MONO, fontSize: 15, fontWeight: 700, color: rsiColor(row.rsi_14) }}>
+            {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
+          </span>
+        </div>
+      </div>
+
     </div>
   );
 }
