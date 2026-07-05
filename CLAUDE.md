@@ -108,7 +108,7 @@ kaaladristi/
 | `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
 | `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
 
-Latest migration: **121** (`km_migration_121_targeted_themes.sql`)
+Latest migration: **123** (`km_migration_123_custom_index_pctchng.sql`)
 
 **Extended table inventory** (breadth/astro/rule/risk/scan/rolling-metric tables, inactive & missing indices): `docs/claude/db-tables.md`
 
