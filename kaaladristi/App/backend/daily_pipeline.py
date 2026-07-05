@@ -393,6 +393,30 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         except Exception as e:
             tracker.fail('index_returns', str(e))
 
+    # ── Step 6d2: Custom index synthetic EOD ──
+    # Synthesises km_index_eod rows for category='custom' (user-built
+    # sector-basket) indices as the equal-weight average of their
+    # constituents. Formerly the manual scripts/compute_custom_index_eod.py
+    # (lesson D41) — now runs every day so Sector Rotation 5D/22D/66D always
+    # populate without a manual run.
+    #
+    # Runs AFTER step 6d on purpose: 6d's LAG window would overwrite the
+    # newest bar's average-based returns with NULL when a young custom index
+    # has fewer than 5 days of synthetic close history. Running afterwards
+    # leaves the latest bar with a value while 6d still refines the trailing
+    # bars on subsequent days.
+    if not skip_indicators:
+        tracker.start('custom_index_eod')
+        try:
+            result = db.rpc('compute_custom_index_eod', {
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
+            })
+            ci_count = result[0].get('compute_custom_index_eod', 0) if result else 0
+            tracker.complete('custom_index_eod', rows=ci_count)
+        except Exception as e:
+            tracker.fail('custom_index_eod', str(e))
+
     # ── Step 6e: Weekly equity aggregate (Fridays only) ──
     if not skip_indicators and is_week_end(trade_date):
         tracker.start('equity_weekly')
