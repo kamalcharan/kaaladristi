@@ -1,16 +1,18 @@
 /**
  * SectorRotationTable
  * ===================
- * Shared table component for all three Sector Rotation tabs
- * (Broad Market / Sectoral / Thematic).
+ * Shared table component for all four Sector Rotation tabs
+ * (Broad Market / Sectoral / Thematic / Curated).
  *
- * Mandatory columns (always visible):
- *   Index name, Close, %Chg, 5D%, 22D%, 66D%, RSI, Score 5D,
- *   Score 22D, Avg Amt 5D, Avg Amt 22D, % Amt Chg (frontend-computed), Signal
+ * COLUMN ORDER is NOT defined here — it lives in
+ * src/constants/sectorRotationColumns.ts (constants-first rule). Both the
+ * header and the body render from that single ordered list, so reordering
+ * the table is a one-line constant edit and header/body can never drift.
  *
- * Sortable headers — click once for asc, again for desc.
- * Alternating row backgrounds, horizontal scroll on mobile.
- * Uses fieldConfig for all shared field labels, formatters, and colors.
+ * Column DEFINITIONS (label, tooltip, width, render) live below in COL_DEFS.
+ *
+ * Sortable headers — click once for desc, again for asc.
+ * Alternating row backgrounds, horizontal scroll, sticky first column.
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
@@ -19,6 +21,10 @@ import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tooltip } from '@/components/ui';
 import { formatValue, getColor } from '@/config/fieldConfig';
 import { FLOW_LABELS } from '@/constants/signalScale';
+import {
+  SECTOR_ROTATION_COLUMN_ORDER,
+  type SectorRotationColKey,
+} from '@/constants/sectorRotationColumns';
 import type { SectorIndexRow } from '@/services/sectorRotation';
 
 // ── Signal logic (spec Section 5) ────────────────────────────────────────────
@@ -59,178 +65,6 @@ const SIGNAL_STYLE: Record<NonNullable<SignalType>, { color: string; bg: string;
   flow_exiting:   { color: 'var(--bear)',  bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.3)' },
   sustained_flow: { color: 'var(--gold)',  bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)' },
 };
-
-// ── Column definition ─────────────────────────────────────────────────────────
-
-type SortKey =
-  | 'name' | 'close' | 'pct_chng'
-  | 'ret_5d' | 'ret_22d' | 'ret_66d'
-  | 'rsi_14' | 'score_5d' | 'score_22d'
-  | 'avg_amt_5d' | 'avg_amt_22d' | 'pct_amt_chg'
-  | 'signal';
-
-interface ColDef {
-  key: SortKey;
-  label: string;
-  tooltip: string;
-  width: number;
-  align?: 'left' | 'right';
-  /** Resolve the raw sort value from a row (defaults to row[key]) */
-  sortVal?: (row: SectorIndexRow & { pct_amt_chg: number | null; signal: SignalType }) => number | string | null;
-}
-
-const COLS: ColDef[] = [
-  {
-    key:     'name',
-    label:   'Index',
-    tooltip: 'NSE index name',
-    width:   200,
-    align:   'left',
-    sortVal: (r) => r.name,
-  },
-  {
-    key:     'close',
-    label:   'Close',
-    tooltip: 'Last traded close (₹)',
-    width:   90,
-    align:   'right',
-    sortVal: (r) => r.close,
-  },
-  {
-    key:     'pct_chng',
-    label:   '%Chg',
-    tooltip: 'Price change today vs the previous close.',
-    width:   72,
-    align:   'right',
-    sortVal: (r) => r.pct_chng,
-  },
-  {
-    key:     'ret_5d',
-    label:   '5D%',
-    tooltip: 'Price change over the last 5 trading days (~1 week). A dot next to this value means 5D is outrunning 22D — the index is gaining strength.',
-    width:   65,
-    align:   'right',
-    sortVal: (r) => r.ret_5d,
-  },
-  {
-    key:     'ret_22d',
-    label:   '22D%',
-    tooltip: 'Price change over the last 22 trading days (~1 month).',
-    width:   65,
-    align:   'right',
-    sortVal: (r) => r.ret_22d,
-  },
-  {
-    key:     'ret_66d',
-    label:   '66D%',
-    tooltip: 'Price change over the last 66 trading days (~3 months).',
-    width:   65,
-    align:   'right',
-    sortVal: (r) => r.ret_66d,
-  },
-  {
-    key:     'rsi_14',
-    label:   'RSI',
-    tooltip: 'Momentum gauge (RSI 14). Above 60 = strong, below 40 = weak, in between = neutral.',
-    width:   60,
-    align:   'right',
-    sortVal: (r) => r.rsi_14,
-  },
-  {
-    key:     'score_5d',
-    label:   'Score 5D',
-    tooltip: 'Money-flow score over ~1 week: combines the 5-day return with rising delivery turnover. Higher = stronger flow into this index.',
-    width:   85,
-    align:   'right',
-    sortVal: (r) => r.score_5d,
-  },
-  {
-    key:     'score_22d',
-    label:   'Score 22D',
-    tooltip: 'Money-flow score over ~1 month. Compare with Score 5D: a higher 5D score means flow is accelerating recently.',
-    width:   85,
-    align:   'right',
-    sortVal: (r) => r.score_22d,
-  },
-  {
-    key:     'avg_amt_5d',
-    label:   'Avg Amt 5D',
-    tooltip: 'Average daily delivery turnover over the last week (₹ Cr) — how much money is moving through this index now.',
-    width:   95,
-    align:   'right',
-    sortVal: (r) => r.avg_amt_5d,
-  },
-  {
-    key:     'avg_amt_22d',
-    label:   'Avg Amt 22D',
-    tooltip: 'Average daily delivery turnover over the last month (₹ Cr) — the baseline to compare recent activity against.',
-    width:   100,
-    align:   'right',
-    sortVal: (r) => r.avg_amt_22d,
-  },
-  {
-    key:     'pct_amt_chg',
-    label:   '% Amt Chg',
-    tooltip: 'Recent turnover vs its 1-month norm. Green = 15%+ above normal (money arriving), red = 15%+ below (money leaving).',
-    width:   90,
-    align:   'right',
-    sortVal: (r) => r.pct_amt_chg,
-  },
-  {
-    key:     'signal',
-    label:   'Signal',
-    tooltip: 'Rotation state: money Entering (green), Sustained (amber), or Exiting (red) this index — based on returns, scores, and turnover together.',
-    width:   120,
-    align:   'left',
-    sortVal: (r) => r.signal ?? '',
-  },
-];
-
-// ── Optional columns ──────────────────────────────────────────────────────────
-
-type OptKey = 'open' | 'high' | 'low' | 'volume' | 'value_cr' | 'magic_rs' | 'avg_amt_66d';
-
-interface OptColDef {
-  key: OptKey;
-  label: string;
-  tooltip: string;
-  width: number;
-  align: 'left' | 'right';
-  render: (row: SectorIndexRow) => string;
-  color?: (row: SectorIndexRow) => string;
-}
-
-const OPT_COLS: OptColDef[] = [
-  {
-    key: 'open', label: 'Open', tooltip: 'Open price (₹)', width: 90, align: 'right',
-    render: (r) => r.open != null ? '₹' + r.open.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
-  },
-  {
-    key: 'high', label: 'High', tooltip: 'Day high (₹)', width: 90, align: 'right',
-    render: (r) => r.high != null ? '₹' + r.high.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
-  },
-  {
-    key: 'low', label: 'Low', tooltip: 'Day low (₹)', width: 90, align: 'right',
-    render: (r) => r.low != null ? '₹' + r.low.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
-  },
-  {
-    key: 'volume', label: 'Volume', tooltip: 'Volume (contracts)', width: 100, align: 'right',
-    render: (r) => r.volume != null ? r.volume.toLocaleString('en-IN') : '—',
-  },
-  {
-    key: 'value_cr', label: 'Turnover', tooltip: 'Turnover (₹ Cr)', width: 95, align: 'right',
-    render: (r) => r.value_cr != null ? `₹${r.value_cr.toFixed(1)} Cr` : '—',
-  },
-  {
-    key: 'magic_rs', label: 'Magic RS', tooltip: 'MagicRS — how this index performs relative to the broad NIFTY 500. Positive = outperforming the market.', width: 90, align: 'right',
-    render: (r) => r.magic_rs != null ? formatValue('magic_rs', r.magic_rs) : '—',
-    color: (r) => r.magic_rs != null ? getColor('magic_rs', r.magic_rs) : 'var(--text-secondary)',
-  },
-  {
-    key: 'avg_amt_66d', label: '66D Avg Amt', tooltip: 'Average turnover over 66 trading days (₹ Cr)', width: 105, align: 'right',
-    render: (r) => r.avg_amt_66d != null ? `${r.avg_amt_66d.toFixed(1)} Cr` : '—',
-  },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -282,6 +116,183 @@ function scoreColor(val: number | null): string {
   return 'var(--text-secondary)';
 }
 
+// ── Column definitions (order lives in sectorRotationColumns.ts) ─────────────
+
+type EnrichedRow = SectorIndexRow & { pct_amt_chg: number | null; signal: SignalType };
+
+interface ColDef {
+  key: SectorRotationColKey;
+  label: string;
+  tooltip: string;
+  width: number;
+  align: 'left' | 'right' | 'center';
+  sortable: boolean;
+  sortVal?: (row: EnrichedRow) => number | string | null;
+  render: (row: EnrichedRow) => React.ReactNode;
+}
+
+const COL_DEFS: Record<SectorRotationColKey, ColDef> = {
+  name: {
+    key: 'name', label: 'Index', tooltip: 'NSE index name', width: 200, align: 'left',
+    sortable: true, sortVal: (r) => r.name,
+    render: (r) => (r.name.length > 28 ? r.name.slice(0, 27) + '…' : r.name),
+  },
+  stock_count: {
+    key: 'stock_count', label: 'Stocks', tooltip: 'Number of constituent stocks in this index.',
+    width: 60, align: 'center', sortable: false,
+    render: (r) => (
+      <span style={{ color: 'var(--text-faint)' }}>{r.stock_count ?? '—'}</span>
+    ),
+  },
+  close: {
+    key: 'close', label: 'Close', tooltip: 'Last traded close (₹)', width: 90, align: 'right',
+    sortable: true, sortVal: (r) => r.close,
+    render: (r) => <span style={{ color: 'var(--text-primary)' }}>{fmtClose(r.close)}</span>,
+  },
+  pct_chng: {
+    key: 'pct_chng', label: '1D%', tooltip: 'Price change today vs the previous close.',
+    width: 72, align: 'right', sortable: true, sortVal: (r) => r.pct_chng,
+    render: (r) => <span style={{ color: pctColor(r.pct_chng) }}>{fmtPct(r.pct_chng)}</span>,
+  },
+  ret_5d: {
+    key: 'ret_5d', label: '5D%',
+    tooltip: 'Price change over the last 5 trading days (~1 week). A dot next to this value means 5D is outrunning 22D — the index is gaining strength.',
+    width: 72, align: 'right', sortable: true, sortVal: (r) => r.ret_5d,
+    render: (r) => (
+      <span style={{ color: pctColor(r.ret_5d), whiteSpace: 'nowrap' }}>
+        {fmtPct(r.ret_5d)}
+        {r.ret_5d != null && r.ret_22d != null && r.ret_5d > r.ret_22d && (
+          <span
+            style={{
+              display: 'inline-block', width: 5, height: 5, borderRadius: '50%',
+              background: 'var(--accent-indigo, #6366f1)', marginLeft: 4, verticalAlign: 'middle',
+            }}
+          />
+        )}
+      </span>
+    ),
+  },
+  score_5d: {
+    key: 'score_5d', label: 'Score 5D',
+    tooltip: 'Money-flow score over ~1 week: combines the 5-day return with rising delivery turnover. Higher = stronger flow into this index. 0 when the return is negative.',
+    width: 85, align: 'right', sortable: true, sortVal: (r) => r.score_5d,
+    render: (r) => <span style={{ color: scoreColor(r.score_5d) }}>{fmtScore(r.score_5d)}</span>,
+  },
+  ret_22d: {
+    key: 'ret_22d', label: '22D%', tooltip: 'Price change over the last 22 trading days (~1 month).',
+    width: 65, align: 'right', sortable: true, sortVal: (r) => r.ret_22d,
+    render: (r) => <span style={{ color: pctColor(r.ret_22d) }}>{fmtPct(r.ret_22d)}</span>,
+  },
+  score_22d: {
+    key: 'score_22d', label: 'Score 22D',
+    tooltip: 'Money-flow score over ~1 month. Compare with Score 5D: a higher 5D score means flow is accelerating recently.',
+    width: 85, align: 'right', sortable: true, sortVal: (r) => r.score_22d,
+    render: (r) => <span style={{ color: scoreColor(r.score_22d) }}>{fmtScore(r.score_22d)}</span>,
+  },
+  ret_66d: {
+    key: 'ret_66d', label: '66D%', tooltip: 'Price change over the last 66 trading days (~3 months).',
+    width: 65, align: 'right', sortable: true, sortVal: (r) => r.ret_66d,
+    render: (r) => <span style={{ color: pctColor(r.ret_66d) }}>{fmtPct(r.ret_66d)}</span>,
+  },
+  rsi_14: {
+    key: 'rsi_14', label: 'RSI',
+    tooltip: 'Momentum gauge (RSI 14). Above 60 = strong, below 40 = weak, in between = neutral.',
+    width: 60, align: 'right', sortable: true, sortVal: (r) => r.rsi_14,
+    render: (r) => (
+      <span style={{ color: rsiColor(r.rsi_14) }}>{r.rsi_14 != null ? r.rsi_14.toFixed(1) : '—'}</span>
+    ),
+  },
+  avg_amt_5d: {
+    key: 'avg_amt_5d', label: 'Avg Amt 5D',
+    tooltip: 'Average daily delivery turnover over the last week (₹ Cr) — how much money is moving through this index now.',
+    width: 95, align: 'right', sortable: true, sortVal: (r) => r.avg_amt_5d,
+    render: (r) => <span style={{ color: 'var(--text-secondary)' }}>{fmtCr(r.avg_amt_5d)}</span>,
+  },
+  avg_amt_22d: {
+    key: 'avg_amt_22d', label: 'Avg Amt 22D',
+    tooltip: 'Average daily delivery turnover over the last month (₹ Cr) — the baseline to compare recent activity against.',
+    width: 100, align: 'right', sortable: true, sortVal: (r) => r.avg_amt_22d,
+    render: (r) => <span style={{ color: 'var(--text-secondary)' }}>{fmtCr(r.avg_amt_22d)}</span>,
+  },
+  pct_amt_chg: {
+    key: 'pct_amt_chg', label: '% Amt Chg',
+    tooltip: 'Recent turnover vs its 1-month norm. Green = 15%+ above normal (money arriving), red = 15%+ below (money leaving).',
+    width: 90, align: 'right', sortable: true, sortVal: (r) => r.pct_amt_chg,
+    render: (r) => <span style={{ color: pctAmtChgColor(r.pct_amt_chg) }}>{fmtPct(r.pct_amt_chg)}</span>,
+  },
+  signal: {
+    key: 'signal', label: 'Signal',
+    tooltip: 'Rotation state: money Entering (green), Sustained (amber), or Exiting (red) this index — based on returns, scores, and turnover together.',
+    width: 120, align: 'left', sortable: true, sortVal: (r) => r.signal ?? '',
+    render: (r) =>
+      r.signal ? (
+        <span
+          style={{
+            display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4,
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', whiteSpace: 'nowrap',
+            color:      SIGNAL_STYLE[r.signal].color,
+            background: SIGNAL_STYLE[r.signal].bg,
+            border:     `1px solid ${SIGNAL_STYLE[r.signal].border}`,
+          }}
+        >
+          {signalLabel(r.signal)}
+        </span>
+      ) : null,
+  },
+};
+
+// Ordered defs — the constant drives everything below.
+const ORDERED_COLS: ColDef[] = SECTOR_ROTATION_COLUMN_ORDER.map((k) => COL_DEFS[k]);
+// Optional picker columns insert before the last ordered column (Signal).
+const MAIN_COLS = ORDERED_COLS.slice(0, -1);
+const LAST_COL  = ORDERED_COLS[ORDERED_COLS.length - 1];
+
+// ── Optional columns ──────────────────────────────────────────────────────────
+
+type OptKey = 'open' | 'high' | 'low' | 'volume' | 'value_cr' | 'magic_rs' | 'avg_amt_66d';
+
+interface OptColDef {
+  key: OptKey;
+  label: string;
+  tooltip: string;
+  width: number;
+  align: 'left' | 'right';
+  render: (row: SectorIndexRow) => string;
+  color?: (row: SectorIndexRow) => string;
+}
+
+const OPT_COLS: OptColDef[] = [
+  {
+    key: 'open', label: 'Open', tooltip: 'Open price (₹)', width: 90, align: 'right',
+    render: (r) => r.open != null ? '₹' + r.open.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
+  },
+  {
+    key: 'high', label: 'High', tooltip: 'Day high (₹)', width: 90, align: 'right',
+    render: (r) => r.high != null ? '₹' + r.high.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
+  },
+  {
+    key: 'low', label: 'Low', tooltip: 'Day low (₹)', width: 90, align: 'right',
+    render: (r) => r.low != null ? '₹' + r.low.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—',
+  },
+  {
+    key: 'volume', label: 'Volume', tooltip: 'Volume (contracts)', width: 100, align: 'right',
+    render: (r) => r.volume != null ? r.volume.toLocaleString('en-IN') : '—',
+  },
+  {
+    key: 'value_cr', label: 'Turnover', tooltip: 'Turnover (₹ Cr)', width: 95, align: 'right',
+    render: (r) => r.value_cr != null ? `₹${r.value_cr.toFixed(1)} Cr` : '—',
+  },
+  {
+    key: 'magic_rs', label: 'Magic RS', tooltip: 'MagicRS — how this index performs relative to the broad NIFTY 500. Positive = outperforming the market.', width: 90, align: 'right',
+    render: (r) => r.magic_rs != null ? formatValue('magic_rs', r.magic_rs) : '—',
+    color: (r) => r.magic_rs != null ? getColor('magic_rs', r.magic_rs) : 'var(--text-secondary)',
+  },
+  {
+    key: 'avg_amt_66d', label: '66D Avg Amt', tooltip: 'Average turnover over 66 trading days (₹ Cr)', width: 105, align: 'right',
+    render: (r) => r.avg_amt_66d != null ? `${r.avg_amt_66d.toFixed(1)} Cr` : '—',
+  },
+];
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -292,7 +303,7 @@ type SortDir = 'asc' | 'desc';
 
 export default function SectorRotationTable({ rows }: Props) {
   const navigate = useNavigate();
-  const [sortKey, setSortKey] = useState<SortKey>('score_5d');
+  const [sortKey, setSortKey] = useState<SectorRotationColKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   // Optional column picker
@@ -333,11 +344,11 @@ export default function SectorRotationTable({ rows }: Props) {
   [rows]);
 
   const sorted = useMemo(() => {
-    const col = COLS.find((c) => c.key === sortKey);
-    if (!col) return enriched;
+    const col = COL_DEFS[sortKey];
+    if (!col?.sortVal) return enriched;
     return [...enriched].sort((a, b) => {
-      const av = col.sortVal ? col.sortVal(a) : (a as any)[sortKey];
-      const bv = col.sortVal ? col.sortVal(b) : (b as any)[sortKey];
+      const av = col.sortVal!(a);
+      const bv = col.sortVal!(b);
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
@@ -348,7 +359,7 @@ export default function SectorRotationTable({ rows }: Props) {
     });
   }, [enriched, sortKey, sortDir]);
 
-  const handleSort = (key: SortKey) => {
+  const handleSort = (key: SectorRotationColKey) => {
     if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -357,7 +368,7 @@ export default function SectorRotationTable({ rows }: Props) {
     }
   };
 
-  const SortIcon = ({ colKey }: { colKey: SortKey }) => {
+  const SortIcon = ({ colKey }: { colKey: SectorRotationColKey }) => {
     if (colKey !== sortKey) return <ChevronsUpDown className="w-3 h-3 opacity-30" />;
     return sortDir === 'asc'
       ? <ChevronUp className="w-3 h-3 opacity-80" />
@@ -378,7 +389,6 @@ export default function SectorRotationTable({ rows }: Props) {
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
-    cursor: 'pointer',
     userSelect: 'none',
     whiteSpace: 'nowrap',
     background: 'var(--card)',
@@ -391,6 +401,31 @@ export default function SectorRotationTable({ rows }: Props) {
     cursor: 'help',
     paddingBottom: 1,
   };
+
+  const renderTh = (col: ColDef) => (
+    <th
+      key={col.key}
+      onClick={col.sortable ? () => handleSort(col.key) : undefined}
+      style={{
+        ...thBase,
+        width: col.width,
+        minWidth: col.width,
+        textAlign: col.align,
+        cursor: col.sortable ? 'pointer' : 'default',
+        color: sortKey === col.key ? 'var(--text-primary)' : 'var(--text-faint)',
+        position: col.key === 'name' ? 'sticky' : undefined,
+        left: col.key === 'name' ? 0 : undefined,
+        zIndex: col.key === 'name' ? 2 : undefined,
+      }}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+        <Tooltip content={col.tooltip} position={col.key === 'signal' ? 'left' : 'bottom'} maxWidth={260}>
+          <span style={HEADER_HINT}>{col.label}</span>
+        </Tooltip>
+        {col.sortable && <SortIcon colKey={col.key} />}
+      </span>
+    </th>
+  );
 
   return (
     <div style={{ width: '100%' }}>
@@ -525,54 +560,11 @@ export default function SectorRotationTable({ rows }: Props) {
             fontFamily: 'var(--font-mono)',
           }}
         >
-          {/* ── Header ── */}
+          {/* ── Header — main cols in constant order, then optional, then last ── */}
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              {/* Mandatory cols (all except Signal) — STOCKS injected after name */}
-              {COLS.filter((c) => c.key !== 'signal').flatMap((col) => {
-                const th = (
-                  <th
-                    key={col.key}
-                    onClick={() => handleSort(col.key)}
-                    style={{
-                      ...thBase,
-                      width: col.width,
-                      minWidth: col.width,
-                      textAlign: col.align ?? 'right',
-                      color: sortKey === col.key ? 'var(--text-primary)' : 'var(--text-faint)',
-                      position: col.key === 'name' ? 'sticky' : undefined,
-                      left: col.key === 'name' ? 0 : undefined,
-                      zIndex: col.key === 'name' ? 2 : undefined,
-                    }}
-                  >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <Tooltip content={col.tooltip} position="bottom" maxWidth={260}>
-                        <span style={HEADER_HINT}>{col.label}</span>
-                      </Tooltip>
-                      <SortIcon colKey={col.key} />
-                    </span>
-                  </th>
-                );
-                if (col.key !== 'name') return [th];
-                return [
-                  th,
-                  <th
-                    key="stock_count"
-                    style={{
-                      ...thBase,
-                      width: 60,
-                      minWidth: 60,
-                      textAlign: 'center',
-                      color: 'var(--text-faint)',
-                      cursor: 'default',
-                    }}
-                  >
-                    Stocks
-                  </th>,
-                ];
-              })}
+              {MAIN_COLS.map(renderTh)}
 
-              {/* Optional cols */}
               {activeOptCols.map((col) => (
                 <th
                   key={col.key}
@@ -591,39 +583,43 @@ export default function SectorRotationTable({ rows }: Props) {
                 </th>
               ))}
 
-              {/* Signal col — always last */}
-              {(() => {
-                const col = COLS.find((c) => c.key === 'signal')!;
-                return (
-                  <th
-                    key="signal"
-                    onClick={() => handleSort('signal')}
-                    style={{
-                      ...thBase,
-                      width: col.width,
-                      minWidth: col.width,
-                      textAlign: col.align ?? 'left',
-                      color: sortKey === 'signal' ? 'var(--text-primary)' : 'var(--text-faint)',
-                    }}
-                  >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      <Tooltip content={col.tooltip} position="left" maxWidth={260}>
-                        <span style={HEADER_HINT}>{col.label}</span>
-                      </Tooltip>
-                      <SortIcon colKey="signal" />
-                    </span>
-                  </th>
-                );
-              })()}
+              {renderTh(LAST_COL)}
             </tr>
           </thead>
 
-          {/* ── Body ── */}
+          {/* ── Body — same ordered lists as the header, drift-proof ── */}
           <tbody>
             {sorted.map((row, i) => {
               const isEven = i % 2 === 0;
               const rowBg = isEven ? 'transparent' : 'rgba(255,255,255,0.025)';
               const stickyBg = isEven ? 'var(--kd-bg, #0e1117)' : 'rgba(255,255,255,0.025)';
+
+              const renderTd = (col: ColDef) => (
+                <td
+                  key={col.key}
+                  title={col.key === 'name' ? row.name : undefined}
+                  style={{
+                    padding: '9px 10px',
+                    textAlign: col.align,
+                    ...(col.key === 'name'
+                      ? {
+                          color: 'var(--text-primary)',
+                          fontWeight: 500,
+                          whiteSpace: 'nowrap',
+                          maxWidth: 200,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          position: 'sticky' as const,
+                          left: 0,
+                          background: stickyBg,
+                          zIndex: 1,
+                        }
+                      : {}),
+                  }}
+                >
+                  {col.render(row)}
+                </td>
+              );
 
               return (
                 <tr
@@ -641,100 +637,8 @@ export default function SectorRotationTable({ rows }: Props) {
                     (e.currentTarget as HTMLElement).style.background = rowBg;
                   }}
                 >
-                  {/* Index name — sticky left */}
-                  <td
-                    style={{
-                      padding: '9px 10px',
-                      color: 'var(--text-primary)',
-                      fontWeight: 500,
-                      whiteSpace: 'nowrap',
-                      maxWidth: 200,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      position: 'sticky',
-                      left: 0,
-                      background: stickyBg,
-                      zIndex: 1,
-                    }}
-                    title={row.name}
-                  >
-                    {row.name.length > 28 ? row.name.slice(0, 27) + '…' : row.name}
-                  </td>
+                  {MAIN_COLS.map(renderTd)}
 
-                  {/* Stocks */}
-                  <td style={{ padding: '9px 10px', textAlign: 'center', color: 'var(--text-faint)', width: 60, minWidth: 60 }}>
-                    {row.stock_count ?? '—'}
-                  </td>
-
-                  {/* Close */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-primary)' }}>
-                    {fmtClose(row.close)}
-                  </td>
-
-                  {/* %Chg */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
-                    {fmtPct(row.pct_chng)}
-                  </td>
-
-                  {/* 5D% — dot marks 5D outrunning 22D: the index is gaining strength */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_5d), whiteSpace: 'nowrap' }}>
-                    {fmtPct(row.ret_5d)}
-                    {row.ret_5d != null && row.ret_22d != null && row.ret_5d > row.ret_22d && (
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          width: 5,
-                          height: 5,
-                          borderRadius: '50%',
-                          background: 'var(--accent-indigo, #6366f1)',
-                          marginLeft: 4,
-                          verticalAlign: 'middle',
-                        }}
-                      />
-                    )}
-                  </td>
-
-                  {/* 22D% */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_22d) }}>
-                    {fmtPct(row.ret_22d)}
-                  </td>
-
-                  {/* 66D% */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_66d) }}>
-                    {fmtPct(row.ret_66d)}
-                  </td>
-
-                  {/* RSI */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
-                    {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
-                  </td>
-
-                  {/* Score 5D */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: scoreColor(row.score_5d) }}>
-                    {fmtScore(row.score_5d)}
-                  </td>
-
-                  {/* Score 22D */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: scoreColor(row.score_22d) }}>
-                    {fmtScore(row.score_22d)}
-                  </td>
-
-                  {/* Avg Amt 5D */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                    {fmtCr(row.avg_amt_5d)}
-                  </td>
-
-                  {/* Avg Amt 22D */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                    {fmtCr(row.avg_amt_22d)}
-                  </td>
-
-                  {/* % Amt Chg — frontend computed */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctAmtChgColor(row.pct_amt_chg) }}>
-                    {fmtPct(row.pct_amt_chg)}
-                  </td>
-
-                  {/* Optional cols — inserted before Signal */}
                   {activeOptCols.map((col) => (
                     <td
                       key={col.key}
@@ -748,28 +652,7 @@ export default function SectorRotationTable({ rows }: Props) {
                     </td>
                   ))}
 
-                  {/* Signal badge — always last */}
-                  <td style={{ padding: '9px 10px' }}>
-                    {row.signal && (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          letterSpacing: '0.04em',
-                          whiteSpace: 'nowrap',
-                          color:      SIGNAL_STYLE[row.signal].color,
-                          background: SIGNAL_STYLE[row.signal].bg,
-                          border:     `1px solid ${SIGNAL_STYLE[row.signal].border}`,
-                        }}
-                      >
-                        {signalLabel(row.signal)}
-                      </span>
-                    )}
-                  </td>
+                  {renderTd(LAST_COL)}
                 </tr>
               );
             })}
