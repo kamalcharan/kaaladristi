@@ -14,6 +14,8 @@ interface RuleSignal {
   total_occurrences: number | null;
 }
 
+import GlossaryTerm from '@/components/ui/GlossaryTerm';
+
 interface PanchangFull {
   vara: string;
   nakshatra_name: string;
@@ -199,7 +201,7 @@ function SectionDivider({ label }: { label: string }) {
       background: 'var(--gold-bg)',
       borderBottom: '1px solid color-mix(in srgb, var(--gold) 12%, transparent)',
     }}>
-      {label}
+      <GlossaryTerm term={label} />
     </div>
   );
 }
