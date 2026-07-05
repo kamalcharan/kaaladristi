@@ -221,6 +221,24 @@ export default function CustomIndexPage() {
                     stocks
                   </div>
                 </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/custom-index/${idx.id}/manage`);
+                  }}
+                  style={{
+                    fontSize: '11px',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'transparent',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  ✎ Manage
+                </button>
                 <div style={{ fontSize: '14px', color: 'var(--text-faint)', flexShrink: 0 }}>›</div>
               </div>
             ))}

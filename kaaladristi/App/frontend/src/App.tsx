@@ -39,6 +39,7 @@ import IndexDetailPage from '@/views/IndexDetailPage';
 import CustomIndexPage from '@/views/CustomIndexPage';
 import CustomIndexCreatePage from '@/views/CustomIndexCreatePage';
 import CustomIndexDiscoverPage from '@/views/CustomIndexDiscoverPage';
+import CustomIndexManagePage from '@/views/CustomIndexManagePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -140,6 +141,7 @@ function AppRoutes() {
           <Route path="/custom-index" element={<CustomIndexPage />} />
           <Route path="/custom-index/create" element={<CustomIndexCreatePage />} />
           <Route path="/custom-index/discover" element={<CustomIndexDiscoverPage />} />
+          <Route path="/custom-index/:indexId/manage" element={<CustomIndexManagePage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/account" element={<AccountPage />} />
         </Route>

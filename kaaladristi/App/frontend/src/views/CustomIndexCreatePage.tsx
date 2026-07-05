@@ -3,38 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 import { displaySymbol } from '@/lib/symbolUtils';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface EquityRow {
-  id: number;
-  symbol: string;
-  company_name: string | null;
-  industry: string | null;
-  exchange: string;
-  isin: string | null;
-}
-
-// ── Data fetch — NSE priority + BSE-only additions (ISIN dedup) ───────────────
-
-async function fetchEquityUniverse(): Promise<EquityRow[]> {
-  const { data, error } = await from('km_equity_symbols')
-    .select('id,symbol,company_name,industry,exchange,isin')
-    .is('is_active', 'true')
-    .order('symbol', { ascending: true })
-    .limit(8000)
-    .execute();
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as EquityRow[];
-  // NSE is the priority exchange: include a BSE scrip only when its ISIN has
-  // no active NSE listing (mirrors the discover endpoint's universe rule).
-  const nseIsins = new Set(
-    rows.filter((r) => r.exchange === 'NSE' && r.isin).map((r) => r.isin as string),
-  );
-  return rows.filter(
-    (r) => r.exchange === 'NSE' || (r.isin !== null && !nseIsins.has(r.isin)),
-  );
-}
+import { fetchEquityUniverse, type EquityRow } from '@/services/equityUniverse';
 
 // ── RowItem ───────────────────────────────────────────────────────────────────
 
