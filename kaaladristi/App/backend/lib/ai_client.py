@@ -202,6 +202,15 @@ def _fallback_complete(
 
 # ── Claude-direct completion (always Anthropic, never Qwen3 fallback) ─────────
 
+# claude_complete must reach the REAL Anthropic API even when AI_BASE_URL /
+# LLM_BASE_URL route the generic complete() at the local Qwen server (whose
+# 4,096-token context cannot hold the custom-index discovery prompts — the
+# _anthropic_req builder honours AI_BASE_URL, so it must not be used here).
+# Prefer ANTHROPIC_API_KEY so a local-LLM key in AI_API_KEY doesn't shadow it.
+_ANTHROPIC_DIRECT_URL = "https://api.anthropic.com"
+_CLAUDE_API_KEY: str = os.getenv("ANTHROPIC_API_KEY") or os.getenv("AI_API_KEY", "")
+
+
 def claude_complete(
     system: str,
     user: str,
@@ -209,17 +218,36 @@ def claude_complete(
     model: str = "claude-sonnet-4-6",
 ) -> str | None:
     """
-    Call Anthropic API directly. Ignores AI_PROVIDER / LLM_BASE_URL.
-    Uses AI_API_KEY (or ANTHROPIC_API_KEY). Returns str or None on error.
+    Call the Anthropic API directly — hardcoded https://api.anthropic.com,
+    deliberately immune to AI_BASE_URL / LLM_BASE_URL overrides (those may
+    point the generic complete() at the local Qwen server).
+    Uses ANTHROPIC_API_KEY, falling back to AI_API_KEY. Returns str or None.
     """
-    if not _API_KEY:
-        log.warning("claude_complete: AI_API_KEY / ANTHROPIC_API_KEY not set")
+    if not _CLAUDE_API_KEY:
+        log.warning("claude_complete: ANTHROPIC_API_KEY / AI_API_KEY not set")
         return None
+    if not _CLAUDE_API_KEY.startswith("sk-ant"):
+        log.warning(
+            "claude_complete: key does not look like an Anthropic key "
+            "(expected sk-ant-…) — set ANTHROPIC_API_KEY in App/.env"
+        )
 
-    req = _anthropic_req(system, user, max_tokens, temperature=None)
-    req["json"]["model"] = model  # override global AI_MODEL
+    body: dict = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+    }
+    headers = {
+        "x-api-key": _CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
     try:
-        resp = _requests.post(req["url"], headers=req["headers"], json=req["json"], timeout=90)
+        resp = _requests.post(
+            f"{_ANTHROPIC_DIRECT_URL}/v1/messages",
+            headers=headers, json=body, timeout=180,
+        )
         resp.raise_for_status()
         return _anthropic_parse(resp.json())
     except _requests.HTTPError as e:
