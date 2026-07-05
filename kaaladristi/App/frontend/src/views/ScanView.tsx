@@ -786,6 +786,55 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
 
 // ── Screen 2: Results ──────────────────────────────────────────
 
+// First-visit orientation: 14 presets with no guidance was a documented
+// drop-off point ("which scanner do I start with?"). Shown once per browser,
+// dismissible; hidden when the user is already on the recommended scan.
+const SCAN_HINT_KEY = 'kd_scan_hint_dismissed';
+
+function ScanStartHereHint({ currentPresetId }: { currentPresetId: string }) {
+  const navigate = useNavigate();
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(SCAN_HINT_KEY) === 'true'; } catch { return true; }
+  });
+
+  if (dismissed || currentPresetId === 'power_buy') return null;
+
+  function dismiss() {
+    try { localStorage.setItem(SCAN_HINT_KEY, 'true'); } catch { /* ignore */ }
+    setDismissed(true);
+  }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, marginTop: 12,
+      padding: '8px 12px', borderRadius: 8,
+      background: 'rgba(240,165,0,0.06)', border: '1px solid rgba(240,165,0,0.2)',
+    }}>
+      <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }}>
+        New to scanners? <strong style={{ color: 'var(--gold)' }}>Strength Confluence</strong> is
+        the best starting point — stocks where several independent conditions line up at once.
+      </span>
+      <button
+        onClick={() => { dismiss(); navigate('/scanner/power_buy'); }}
+        style={{
+          fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+          border: '1px solid var(--gold)', background: 'transparent',
+          color: 'var(--gold)', cursor: 'pointer', whiteSpace: 'nowrap',
+        }}
+      >
+        Open it →
+      </button>
+      <button
+        onClick={dismiss}
+        aria-label="Dismiss"
+        style={{ fontSize: 13, background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '0 2px' }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function ScannerResults({ presetId }: { presetId: string }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -930,6 +979,12 @@ function ScannerResults({ presetId }: { presetId: string }) {
         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
           {preset.description}
         </p>
+        {preset.tooltip && preset.tooltip !== preset.description && (
+          <p style={{ fontSize: '12px', color: 'var(--text-faint)', marginTop: 6, maxWidth: 720, lineHeight: 1.55 }}>
+            {preset.tooltip}
+          </p>
+        )}
+        <ScanStartHereHint currentPresetId={presetId} />
       </div>
     </div>
   );
@@ -1067,8 +1122,13 @@ function ScannerResults({ presetId }: { presetId: string }) {
             padding: '64px 24px', textAlign: 'center',
             background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
           }}>
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 8 }}>
               {oppFilter ? 'No VaNi Opportunity setups in this scan today.' : 'No stocks match this scan criteria today.'}
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--text-faint)', lineHeight: 1.6 }}>
+              {oppFilter
+                ? 'Try turning the VaNi filter off to see all matches.'
+                : 'That can be normal — some conditions only line up a few days a month. Try Strength Confluence for the broadest read, or check back after ~6:30 PM IST on trading days when fresh data lands.'}
             </p>
           </div>
         )
@@ -1113,10 +1173,15 @@ function ScannerResults({ presetId }: { presetId: string }) {
           padding: '64px 24px', textAlign: 'center',
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
         }}>
-          <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 8 }}>
             {oppFilter
               ? 'No VaNi Opportunity setups in this scan today.'
               : 'No stocks match this scan criteria today.'}
+          </p>
+          <p style={{ fontSize: '12px', color: 'var(--text-faint)', lineHeight: 1.6 }}>
+            {oppFilter
+              ? 'Try turning the VaNi filter off to see all matches.'
+              : 'That can be normal — some conditions only line up a few days a month. Try Strength Confluence for the broadest read, or check back after ~6:30 PM IST on trading days when fresh data lands.'}
           </p>
         </div>
       )}

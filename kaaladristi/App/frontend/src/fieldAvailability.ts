@@ -11,10 +11,11 @@ export const FIELD_AVAILABILITY: Record<string, {
 }> = {
 
   price_action: {
+    // Scores lead everywhere (owner: "Score is the real moat") — same
+    // Close | Score 5D | Score 22D | 1D% ordering as the rotation table.
     defaultCols: [
-      'symbol', 'close', 'pct_chng',
+      'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
       'breakout_level', 'pct_from_breakout',
-      'score_5d', 'score_22d',
       'avg_amt_5d', 'avg_amt_22d',
       'rvol', 'rsi_14', 'magic_rs',
     ],
@@ -34,7 +35,7 @@ export const FIELD_AVAILABILITY: Record<string, {
 
   stage_analysis: {
     defaultCols: [
-      'symbol', 'close', 'pct_chng',
+      'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
       'magic_rs', 'rs_percentile', 'stage',
       'rsi_14', 'rvol', 'flow_type',
       'sniper_inst', 'rss_value',
@@ -44,7 +45,7 @@ export const FIELD_AVAILABILITY: Record<string, {
     optionalCols: [
       'avg_amt_66d', 'delivery_surge_x',
       'delivery_pct', 'deliv_value_cr',
-      'score_5d', 'score_22d', 'score_66d',
+      'score_66d',
       'ret_5d', 'ret_22d', 'ret_66d',
       'ema_20', 'sma_50', 'sma_150', 'sma_200',
       'w52_high', 'sniper_hot',
@@ -55,14 +56,14 @@ export const FIELD_AVAILABILITY: Record<string, {
 
   flow: {
     defaultCols: [
-      'symbol', 'close', 'pct_chng',
+      'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
       'delivery_surge_x', 'avg_amt_5d', 'avg_amt_22d',
       'delivery_pct', 'rsi_14', 'ema_20',
       'magic_rs', 'flow_type', 'rvol',
     ],
     optionalCols: [
       'avg_amt_66d',
-      'score_5d', 'score_22d', 'score_66d',
+      'score_66d',
       'ret_5d', 'ret_22d', 'ret_66d',
       'mcap_cr', 'rss_value', 'sniper_inst',
       'sniper_hot', 'accum_distrib',
@@ -75,7 +76,7 @@ export const FIELD_AVAILABILITY: Record<string, {
 
   market: {
     defaultCols: [
-      'symbol', 'close', 'pct_chng',
+      'symbol', 'close', 'score_5d', 'score_22d', 'pct_chng',
       'magic_rs', 'rvol', 'rsi_14',
       'flow_type', 'sniper_inst', 'rss_value',
       'accum_distrib', 'supertrend_dir',
@@ -84,7 +85,7 @@ export const FIELD_AVAILABILITY: Record<string, {
     optionalCols: [
       'avg_amt_66d', 'delivery_surge_x',
       'delivery_pct', 'deliv_value_cr',
-      'score_5d', 'score_22d', 'score_66d',
+      'score_66d',
       'ret_5d', 'ret_22d', 'ret_66d',
       'sniper_hot', 'ema_20',
       'sma_50', 'sma_150', 'sma_200',
