@@ -116,7 +116,7 @@ interface TooltipState {
 // ── Fixed sizing ──────────────────────────────────────────────────────────────
 
 const CELL_H_CON = 28;  // constituent mode — color block only, no text
-const CELL_H_IDX = 40;  // index mode — two lines of text need more height
+const CELL_H_IDX = 56;  // index mode — two lines of text; sized for glanceability
 const GAP        = 2;
 const LABEL_W    = 104;
 
@@ -166,7 +166,7 @@ export default function FlowIntensityMap({
   cellWidth,
 }: FlowIntensityMapProps) {
   // Cell width: caller-overridable; defaults differ by mode
-  const cellW = cellWidth ?? (mode === 'index' ? 52 : 28);
+  const cellW = cellWidth ?? (mode === 'index' ? 72 : 28);
   const cellH = mode === 'index' ? CELL_H_IDX : CELL_H_CON;
 
   // Constituent surge toggle — uncontrolled when surgeToggleProp not passed
@@ -359,7 +359,7 @@ export default function FlowIntensityMap({
                       {mode === 'index' && (
                         <>
                           <div style={{
-                            fontSize: 9,
+                            fontSize: 11,
                             fontFamily: 'monospace',
                             color: 'rgba(255,255,255,0.75)',
                             lineHeight: 1.2,
@@ -369,10 +369,10 @@ export default function FlowIntensityMap({
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                           }}>
-                            {trunc(row, 12)}
+                            {trunc(row, 14)}
                           </div>
                           <div style={{
-                            fontSize: 9,
+                            fontSize: 11,
                             fontFamily: 'monospace',
                             lineHeight: 1.2,
                             textAlign: 'center',

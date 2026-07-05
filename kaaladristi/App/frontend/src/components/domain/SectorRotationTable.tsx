@@ -16,6 +16,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Tooltip } from '@/components/ui';
 import { formatValue, getColor } from '@/config/fieldConfig';
 import { FLOW_LABELS } from '@/constants/signalScale';
 import type { SectorIndexRow } from '@/services/sectorRotation';
@@ -98,7 +99,7 @@ const COLS: ColDef[] = [
   {
     key:     'pct_chng',
     label:   '%Chg',
-    tooltip: 'Day % change',
+    tooltip: 'Price change today vs the previous close.',
     width:   72,
     align:   'right',
     sortVal: (r) => r.pct_chng,
@@ -106,7 +107,7 @@ const COLS: ColDef[] = [
   {
     key:     'ret_5d',
     label:   '5D%',
-    tooltip: '5-day price return (%)',
+    tooltip: 'Price change over the last 5 trading days (~1 week). A dot next to this value means 5D is outrunning 22D — the index is gaining strength.',
     width:   65,
     align:   'right',
     sortVal: (r) => r.ret_5d,
@@ -114,7 +115,7 @@ const COLS: ColDef[] = [
   {
     key:     'ret_22d',
     label:   '22D%',
-    tooltip: '22-day price return (%)',
+    tooltip: 'Price change over the last 22 trading days (~1 month).',
     width:   65,
     align:   'right',
     sortVal: (r) => r.ret_22d,
@@ -122,7 +123,7 @@ const COLS: ColDef[] = [
   {
     key:     'ret_66d',
     label:   '66D%',
-    tooltip: '66-day price return (%)',
+    tooltip: 'Price change over the last 66 trading days (~3 months).',
     width:   65,
     align:   'right',
     sortVal: (r) => r.ret_66d,
@@ -130,7 +131,7 @@ const COLS: ColDef[] = [
   {
     key:     'rsi_14',
     label:   'RSI',
-    tooltip: 'RSI(14). <40 red · 40–60 amber · >60 green.',
+    tooltip: 'Momentum gauge (RSI 14). Above 60 = strong, below 40 = weak, in between = neutral.',
     width:   60,
     align:   'right',
     sortVal: (r) => r.rsi_14,
@@ -138,7 +139,7 @@ const COLS: ColDef[] = [
   {
     key:     'score_5d',
     label:   'Score 5D',
-    tooltip: 'Flow score (5D). surge²×25 when surge≥1, else 0.',
+    tooltip: 'Money-flow score over ~1 week: combines the 5-day return with rising delivery turnover. Higher = stronger flow into this index.',
     width:   85,
     align:   'right',
     sortVal: (r) => r.score_5d,
@@ -146,7 +147,7 @@ const COLS: ColDef[] = [
   {
     key:     'score_22d',
     label:   'Score 22D',
-    tooltip: 'Flow score (22D). surge²×25 when surge≥1, else 0.',
+    tooltip: 'Money-flow score over ~1 month. Compare with Score 5D: a higher 5D score means flow is accelerating recently.',
     width:   85,
     align:   'right',
     sortVal: (r) => r.score_22d,
@@ -154,7 +155,7 @@ const COLS: ColDef[] = [
   {
     key:     'avg_amt_5d',
     label:   'Avg Amt 5D',
-    tooltip: 'Average turnover over 5 trading days (₹ Cr)',
+    tooltip: 'Average daily delivery turnover over the last week (₹ Cr) — how much money is moving through this index now.',
     width:   95,
     align:   'right',
     sortVal: (r) => r.avg_amt_5d,
@@ -162,7 +163,7 @@ const COLS: ColDef[] = [
   {
     key:     'avg_amt_22d',
     label:   'Avg Amt 22D',
-    tooltip: 'Average turnover over 22 trading days (₹ Cr)',
+    tooltip: 'Average daily delivery turnover over the last month (₹ Cr) — the baseline to compare recent activity against.',
     width:   100,
     align:   'right',
     sortVal: (r) => r.avg_amt_22d,
@@ -170,7 +171,7 @@ const COLS: ColDef[] = [
   {
     key:     'pct_amt_chg',
     label:   '% Amt Chg',
-    tooltip: 'Recent turnover vs baseline: (Avg5D − Avg22D) / Avg22D × 100. Green ≥15%, Red ≤−15%.',
+    tooltip: 'Recent turnover vs its 1-month norm. Green = 15%+ above normal (money arriving), red = 15%+ below (money leaving).',
     width:   90,
     align:   'right',
     sortVal: (r) => r.pct_amt_chg,
@@ -178,7 +179,7 @@ const COLS: ColDef[] = [
   {
     key:     'signal',
     label:   'Signal',
-    tooltip: 'Rotation signal. Flow Entering (green) · Sustained Flow (amber) · Flow Exiting (red).',
+    tooltip: 'Rotation state: money Entering (green), Sustained (amber), or Exiting (red) this index — based on returns, scores, and turnover together.',
     width:   120,
     align:   'left',
     sortVal: (r) => r.signal ?? '',
@@ -221,7 +222,7 @@ const OPT_COLS: OptColDef[] = [
     render: (r) => r.value_cr != null ? `₹${r.value_cr.toFixed(1)} Cr` : '—',
   },
   {
-    key: 'magic_rs', label: 'Magic RS', tooltip: 'Magic RS — relative strength vs CNX500', width: 90, align: 'right',
+    key: 'magic_rs', label: 'Magic RS', tooltip: 'MagicRS — how this index performs relative to the broad NIFTY 500. Positive = outperforming the market.', width: 90, align: 'right',
     render: (r) => r.magic_rs != null ? formatValue('magic_rs', r.magic_rs) : '—',
     color: (r) => r.magic_rs != null ? getColor('magic_rs', r.magic_rs) : 'var(--text-secondary)',
   },
@@ -383,6 +384,14 @@ export default function SectorRotationTable({ rows }: Props) {
     background: 'var(--card)',
   };
 
+  // Dotted underline signals "hover for explanation" — the header tooltips are
+  // the primary comprehension affordance on this table.
+  const HEADER_HINT: React.CSSProperties = {
+    borderBottom: '1px dotted var(--text-faint)',
+    cursor: 'help',
+    paddingBottom: 1,
+  };
+
   return (
     <div style={{ width: '100%' }}>
       {/* ── Toolbar: column picker ── */}
@@ -524,7 +533,6 @@ export default function SectorRotationTable({ rows }: Props) {
                 const th = (
                   <th
                     key={col.key}
-                    title={col.tooltip}
                     onClick={() => handleSort(col.key)}
                     style={{
                       ...thBase,
@@ -538,7 +546,9 @@ export default function SectorRotationTable({ rows }: Props) {
                     }}
                   >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      {col.label}
+                      <Tooltip content={col.tooltip} position="bottom" maxWidth={260}>
+                        <span style={HEADER_HINT}>{col.label}</span>
+                      </Tooltip>
                       <SortIcon colKey={col.key} />
                     </span>
                   </th>
@@ -566,7 +576,6 @@ export default function SectorRotationTable({ rows }: Props) {
               {activeOptCols.map((col) => (
                 <th
                   key={col.key}
-                  title={col.tooltip}
                   style={{
                     ...thBase,
                     width: col.width,
@@ -576,7 +585,9 @@ export default function SectorRotationTable({ rows }: Props) {
                     cursor: 'default',
                   }}
                 >
-                  {col.label}
+                  <Tooltip content={col.tooltip} position="bottom" maxWidth={260}>
+                    <span style={HEADER_HINT}>{col.label}</span>
+                  </Tooltip>
                 </th>
               ))}
 
@@ -586,7 +597,6 @@ export default function SectorRotationTable({ rows }: Props) {
                 return (
                   <th
                     key="signal"
-                    title={col.tooltip}
                     onClick={() => handleSort('signal')}
                     style={{
                       ...thBase,
@@ -597,7 +607,9 @@ export default function SectorRotationTable({ rows }: Props) {
                     }}
                   >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                      {col.label}
+                      <Tooltip content={col.tooltip} position="left" maxWidth={260}>
+                        <span style={HEADER_HINT}>{col.label}</span>
+                      </Tooltip>
                       <SortIcon colKey="signal" />
                     </span>
                   </th>
@@ -664,9 +676,22 @@ export default function SectorRotationTable({ rows }: Props) {
                     {fmtPct(row.pct_chng)}
                   </td>
 
-                  {/* 5D% */}
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_5d) }}>
+                  {/* 5D% — dot marks 5D outrunning 22D: the index is gaining strength */}
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: pctColor(row.ret_5d), whiteSpace: 'nowrap' }}>
                     {fmtPct(row.ret_5d)}
+                    {row.ret_5d != null && row.ret_22d != null && row.ret_5d > row.ret_22d && (
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          background: 'var(--accent-indigo, #6366f1)',
+                          marginLeft: 4,
+                          verticalAlign: 'middle',
+                        }}
+                      />
+                    )}
                   </td>
 
                   {/* 22D% */}
