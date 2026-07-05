@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Flame, Table2 } from 'lucide-react';
 import { useSectorIndices, useIndexFlowMap, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
 import { SECTOR_TAB_LABELS, type SectorTab } from '@/services/sectorRotation';
@@ -149,8 +150,16 @@ function TabContent({ tab, view, forDate, heatDays }: {
   forDate?: string;
   heatDays: 5 | 22 | 66;
 }) {
+  const navigate = useNavigate();
   const { data: rows = [], isLoading, error } = useSectorIndices(tab, forDate);
   const { data: heatData } = useIndexFlowMap(tab, heatDays);
+
+  // Heat rows are index NAMES; map back to ids so row labels can drill down
+  // to the same detail page the table rows navigate to.
+  const nameToId = useMemo(
+    () => new Map(rows.map((r) => [r.name, r.index_id])),
+    [rows],
+  );
 
   if (view === 'heat') {
     return (
@@ -162,6 +171,10 @@ function TabContent({ tab, view, forDate, heatDays }: {
           cells={heatData?.cells ?? {}}
           dayWindow={heatDays}
           subtitle={`${SECTOR_TAB_LABELS[tab]} · Last ${heatDays} Sessions`}
+          onRowClick={(name) => {
+            const id = nameToId.get(name);
+            if (id != null) navigate(`/sector-rotation/${id}`);
+          }}
         />
         <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
           {([
