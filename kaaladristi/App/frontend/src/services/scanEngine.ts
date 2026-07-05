@@ -1125,6 +1125,7 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       'volume_divergence_flag', 'delivery_pct',
       'dot_svd', 'dot_sbd', 'dot_syd',
       'stage', 'is_vani_s2', 'rs_percentile',
+      'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S2')
@@ -1209,6 +1210,8 @@ async function fetchStage2Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       reward,
       rewardPct,
       magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
       avg_amt_66d:          null,
       xAmt:                 null,
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
@@ -1239,6 +1242,7 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       'volume_divergence_flag', 'delivery_pct',
       'dot_svd', 'dot_sbd', 'dot_syd',
       'stage', 'rs_percentile', 'chartink_score', 'is_vani_s2',
+      'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S2_CANDIDATE')
@@ -1307,6 +1311,8 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
       magicRsTrend: [],
+      score_5d:  row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d: row.score_22d != null ? Number(row.score_22d) : null,
       reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
       rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
       pctBelow52wHigh,
@@ -1339,6 +1345,7 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       'dot_svd', 'dot_sbd', 'dot_syd',
       'stage', 'rs_percentile', 'chartink_score',
       'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
+      'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('trade_date', latestDate)
@@ -1395,6 +1402,8 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
       rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
       magicRsTrend: [],
+      score_5d:  row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d: row.score_22d != null ? Number(row.score_22d) : null,
       reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
       rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
       pctBelow52wHigh,
@@ -1432,6 +1441,7 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       'supertrend_dir', 'ema_20', 'atr_14',
       'is_vani_weakness', 'is_vani_distrib', 'is_vani_surge',
       'is_vani_breakout', 'is_vani_smart', 'is_vani_oversold',
+      'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S4')
@@ -1516,6 +1526,8 @@ async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanS
       reward,
       rewardPct,
       magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
       avg_amt_66d:          null,
       xAmt:                 null,
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
@@ -1552,6 +1564,7 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       'sniper_inst', 'sniper_hot', 'accum_distrib',
       'supertrend_dir', 'ema_20', 'atr_14',
       'is_vani_weakness',
+      'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S3')
@@ -1637,6 +1650,8 @@ async function fetchStage3Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
       reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
       rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
       magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
       avg_amt_66d:          null, xAmt: null,
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
@@ -1666,6 +1681,7 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
       'sniper_inst', 'sniper_hot',
       'ema_20', 'atr_14',
       'is_vani_weakness', 'is_vani_distrib',
+      'score_5d', 'score_22d',
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('stage', 'S4')
@@ -1743,6 +1759,8 @@ async function fetchVaNiExitWatch(exchangeFilter: ExchangeFilter): Promise<ScanS
       reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
       rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
       magicRsTrend:         [],
+      score_5d:             row.score_5d  != null ? Number(row.score_5d)  : null,
+      score_22d:            row.score_22d != null ? Number(row.score_22d) : null,
       avg_amt_66d:          null, xAmt: null,
       rel_5d_n50:           null, rel_22d_n50:  null, rel_66d_n50:  null,
       rel_5d_n500:          null, rel_22d_n500: null, rel_66d_n500: null,
