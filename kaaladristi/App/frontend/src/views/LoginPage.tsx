@@ -81,10 +81,17 @@ export default function LoginPage() {
       } else if (authMode === 'register') {
         if (!fullName.trim()) { setError('Please enter your full name'); setIsSubmitting(false); return; }
         await signUp(email, password, fullName.trim());
-        navigate('/dashboard');
+        // Load the profile BEFORE navigating — otherwise ProtectedRoute renders
+        // while getProfile() is still in flight (profile === null) and the
+        // onboarding redirect never fires. A fresh account is never onboarded,
+        // so go straight to the wizard.
+        await useAuthStore.getState().refreshProfile();
+        navigate('/setup');
       } else {
         await signIn(email, password);
-        navigate('/dashboard');
+        await useAuthStore.getState().refreshProfile();
+        const prof = useAuthStore.getState().profile;
+        navigate(prof?.onboarded ? '/dashboard' : '/setup');
       }
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
