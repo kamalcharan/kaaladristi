@@ -5693,11 +5693,19 @@ async def custom_index_compute(index_id: int):
 
     Uses migration 122's p_index_id-scoped compute_custom_index_eod (full
     history, this index only — cheap, filtered by index_id) then refreshes
-    scores for all indices via compute_all_index_scores (no per-index
-    scoping exists for scores; acceptable for an on-demand admin action).
+    scores via compute_all_index_scores. The scores RPC has no per-index
+    scoping, but its p_from_date filter only bounds which rows get UPDATEd —
+    every value it reads (avg_amt_5d/22d/66d, ret_5d/22d) is already
+    precomputed elsewhere with no window look-back beyond the filtered rows
+    (migration 116), so scoping to a recent window is exact, not an
+    approximation. A NULL/all-history call recomputes years x every index
+    and blew the statement timeout in production (504 after ~120s) — bound
+    it to the last 100 days (covers the 66-day score window with margin)
+    so this stays fast regardless of how long the index's own history is.
     """
     start = time.time()
-    conn = _conn(statement_timeout_ms=120_000)
+    scores_from = (date.today() - timedelta(days=100)).isoformat()
+    conn = _conn(statement_timeout_ms=30_000)
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -5718,7 +5726,7 @@ async def custom_index_compute(index_id: int):
         conn.commit()
 
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM compute_all_index_scores(%s)", [None])
+            cur.execute("SELECT * FROM compute_all_index_scores(%s)", [scores_from])
             score_rows = cur.fetchall()
         conn.commit()
     except HTTPException:
