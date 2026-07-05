@@ -132,6 +132,7 @@ const CELL_H_IDX = 56;  // index mode — single % line; sized for glanceability
 const GAP        = 2;
 const LABEL_W_CON = 104;  // constituent mode — short symbols
 const LABEL_W_IDX = 220;  // index mode — full index names, no harsh truncation
+const TREND_W     = 72;   // index mode — micro-trend bars between name and cells
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,47 @@ function fmtPct(v: number | undefined) {
 
 function fmtCr(v: number) {
   return '₹' + v.toFixed(1) + ' Cr';
+}
+
+// ── Micro-trend bars (index mode) ─────────────────────────────────────────────
+// One tiny bar per session, chronological left -> right (NOTE: the heat grid
+// runs newest-first, but a trend shape must read oldest -> newest or users
+// misread the direction — hence the reversed order and the title hint).
+// Answers "what is this row's trend shape" without integrating 22 cell colors.
+
+function MicroTrend({ rowData, height }: { rowData: CellData[]; height: number }) {
+  const vals = [...rowData].reverse().map((c) => c?.d1 ?? 0);
+  if (vals.length === 0) return <div style={{ width: TREND_W }} />;
+
+  const maxAbs = Math.max(0.5, ...vals.map((v) => Math.abs(v)));
+  const innerH = height - 14;
+  const mid = innerH / 2;
+  const barW = Math.max(1, Math.floor((TREND_W - 8) / vals.length) - 1);
+  const step = (TREND_W - 8) / vals.length;
+
+  return (
+    <svg
+      width={TREND_W}
+      height={innerH}
+      style={{ display: 'block' }}
+    >
+      <line x1={0} y1={mid} x2={TREND_W - 8} y2={mid} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      {vals.map((v, i) => {
+        const h = Math.max(1, (Math.abs(v) / maxAbs) * mid);
+        return (
+          <rect
+            key={i}
+            x={i * step}
+            y={v >= 0 ? mid - h : mid}
+            width={barW}
+            height={h}
+            fill={v >= 0 ? 'var(--risk-green)' : 'var(--risk-red)'}
+            opacity={0.85}
+          />
+        );
+      })}
+    </svg>
+  );
 }
 
 // ── Toggle button shared style ────────────────────────────────────────────────
@@ -304,6 +346,38 @@ export default function FlowIntensityMap({
             </div>
           ))}
         </div>
+
+        {/* Micro-trend column — index mode only */}
+        {mode === 'index' && (
+          <div style={{ flexShrink: 0, width: TREND_W, paddingRight: 8 }}>
+            <div style={{
+              height: CELL_H_CON + GAP,
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--text-muted)',
+              fontSize: 9,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              fontFamily: 'monospace',
+            }}>
+              Trend
+            </div>
+            {rows.map((row) => (
+              <div
+                key={row}
+                title="Daily % change across the window, oldest → newest"
+                style={{
+                  height: cellH,
+                  marginBottom: GAP,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <MicroTrend rowData={cells[row] ?? []} height={cellH} />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Scrollable cell area */}
         <div style={{ overflowX: 'auto', flex: 1 }}>
