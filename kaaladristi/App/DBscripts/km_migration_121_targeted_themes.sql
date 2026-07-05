@@ -1,7 +1,7 @@
 -- ============================================================
--- Migration 098 · Targeted Theme Discovery Columns
+-- Migration 121 · Targeted Theme Discovery Columns
 --
--- Extends km_discovered_themes (migration 097) for the new
+-- Extends km_discovered_themes (migration 120) for the new
 -- theme-name-driven discovery mode:
 --   source : 'auto'     — signal-first clustering (existing flow)
 --            'targeted' — admin typed a theme name; LLM classified

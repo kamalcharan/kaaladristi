@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 096 · Custom Index Synthetic EOD RPC
+-- Migration 119 · Custom Index Synthetic EOD RPC
 --
 -- Wraps the synthetic-EOD computation that previously lived only
 -- in the standalone script scripts/compute_custom_index_eod.py

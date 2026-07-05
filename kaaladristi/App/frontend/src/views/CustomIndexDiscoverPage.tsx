@@ -50,7 +50,7 @@ export default function CustomIndexDiscoverPage() {
   const [targetName, setTargetName] = useState('');
   const [targeting, setTargeting] = useState(false);
 
-  // Load persisted recommendations (staging table, migration 097) on mount —
+  // Load persisted recommendations (staging table, migration 120) on mount —
   // past discoveries survive navigation without re-invoking the LLM.
   useEffect(() => {
     let cancelled = false;

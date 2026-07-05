@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 097 · Discovered Themes Staging Table
+-- Migration 120 · Discovered Themes Staging Table
 --
 -- Persists AI Discover (Path 2) results so recommendations
 -- survive navigation / page reloads and the LLM does not need

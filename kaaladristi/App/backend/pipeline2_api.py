@@ -5585,7 +5585,7 @@ async def custom_index_discover(req: _DiscoverRequest):
     except Exception:
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
 
-    # Persist to the staging table (migration 097) so recommendations survive
+    # Persist to the staging table (migration 120) so recommendations survive
     # navigation and don't require re-invoking the LLM. Each theme gets its
     # row id back so the UI can mark it used/dismissed later.
     conn = _conn()
@@ -5622,7 +5622,7 @@ async def custom_index_discover(req: _DiscoverRequest):
 
 @app.get('/api/custom-index/themes')
 async def list_discovered_themes(status: str = 'new', limit: int = 50):
-    """List persisted AI-discovered themes (staging table, migration 097).
+    """List persisted AI-discovered themes (staging table, migration 120).
 
     status: 'new' (default) | 'used' | 'dismissed' | 'all'
     """
