@@ -362,6 +362,8 @@ export interface FlowCellData {
   amt_22d?: number;
   ret_5d?: number;
   ret_22d?: number;
+  s5?: number;   // score_5d  — money-flow conviction (index mode)
+  s22?: number;  // score_22d — 1-month conviction baseline (index mode)
 }
 
 export interface FlowMapData {
@@ -734,7 +736,7 @@ export async function fetchIndexFlowMap(
 
   // Step 3: fetch EOD for all indices in the date window
   const { data: eodData, error: eodErr } = await from('km_index_eod')
-    .select('index_id,trade_date,pct_chng,value_cr,avg_amt_5d,avg_amt_22d,ret_5d,ret_22d')
+    .select('index_id,trade_date,pct_chng,value_cr,avg_amt_5d,avg_amt_22d,ret_5d,ret_22d,score_5d,score_22d')
     .in('index_id', indexIds)
     .gte('trade_date', earliestDate)
     .order('trade_date', { ascending: true })
@@ -745,6 +747,7 @@ export async function fetchIndexFlowMap(
     index_id: number; trade_date: string; pct_chng: number | null;
     value_cr: number | null; avg_amt_5d: number | null; avg_amt_22d: number | null;
     ret_5d: number | null; ret_22d: number | null;
+    score_5d: number | null; score_22d: number | null;
   };
   const allRows = (eodData ?? []) as IxRow[];
 
@@ -771,6 +774,8 @@ export async function fetchIndexFlowMap(
         amt_22d: r.avg_amt_22d ?? undefined,
         ret_5d:  r.ret_5d      ?? undefined,
         ret_22d: r.ret_22d     ?? undefined,
+        s5:      r.score_5d    ?? undefined,
+        s22:     r.score_22d   ?? undefined,
       };
     });
 
