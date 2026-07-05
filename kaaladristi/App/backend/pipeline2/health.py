@@ -54,6 +54,10 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     'd365':                  ('km_equity_eod',    'equity_id', ['d365_pct_chng'],                                          0.85),
     'stage_classification':  ('km_equity_eod',    'equity_id', ['stage'],                                                  0.95),
     'vani_flags':            ('km_equity_eod',    'equity_id', ['is_vani_strength', 'is_vani_breakout'],                   1.0),
+    # index_returns samples ret_5d only — ret_22d/ret_66d are legitimately
+    # NULL for indices younger than their window, and indices with no EOD
+    # rows on the date (e.g. inactive ones) never enter the denominator.
+    'index_returns':         ('km_index_eod',     'index_id',  ['ret_5d'],                                                 0.90),
     'industry_composites':   ('km_industry_eod',  None,        None,                                                       None),
     'market_breadth':        ('km_market_breadth', None,       None,                                                       None),
     'breadth_roc':           ('km_breadth_roc',   None,        None,                                                       None),
@@ -94,6 +98,7 @@ LABELS: dict[str, str] = {
     'd365':                  'D365 % Change',
     'stage_classification':  'Stage Classification',
     'vani_flags':            'VaNi Flags',
+    'index_returns':         'Index Returns & Scores',
     'industry_composites':   'Industry Composites',
     'market_breadth':        'Market Breadth',
     'breadth_roc':           'Breadth ROC',
