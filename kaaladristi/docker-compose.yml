@@ -29,6 +29,15 @@ services:
     environment:
       DATABASE_URL: "postgresql://kd_app:${KD_APP_PASSWORD}@vikuna-postgres:5432/kaala_dristi_db"
       LLM_BASE_URL: "http://llm-server:8080/v1"
+      # AI layer — values come from the deploy env-file (repo-root .env,
+      # passed by deploy.sh via --env-file). Images build from a clean git
+      # clone, so a baked-in App/backend/.env never exists in production —
+      # every AI setting must be injected here.
+      AI_ENABLED: "${AI_ENABLED:-true}"
+      AI_PROVIDER: "${AI_PROVIDER:-anthropic}"
+      AI_MODEL: "${AI_MODEL:-claude-haiku-4-5}"
+      AI_API_KEY: "${AI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
     volumes:
       - pipeline_data:/app/data
     command: ["uvicorn", "pipeline2_api:app", "--host", "0.0.0.0", "--port", "8101", "--workers", "1"]
