@@ -11,17 +11,23 @@
 -- using the equal-weight average of that index's constituents
 -- (km_index_constituents JOIN km_equity_eod).
 --
--- p_trade_date:
---   NULL          → recompute ALL trading dates (full backfill)
---   'YYYY-MM-DD'  → recompute only that date (daily pipeline use)
+-- Date range (both bounds optional, inclusive):
+--   (NULL, NULL)              → recompute ALL trading dates (full backfill, slow)
+--   ('2026-05-25', NULL)      → from that date to latest (targeted backfill)
+--   (d, d)                    → a single date (daily pipeline use)
 --
 -- Target database: kaala_dristi_db
 -- ============================================================
 
 BEGIN;
 
+-- Drop the earlier single-date signature if it was already applied, so only
+-- the range version below remains (avoids an ambiguous overload).
+DROP FUNCTION IF EXISTS compute_custom_index_eod(DATE);
+
 CREATE OR REPLACE FUNCTION compute_custom_index_eod(
-  p_trade_date DATE DEFAULT NULL
+  p_from_date DATE DEFAULT NULL,
+  p_to_date   DATE DEFAULT NULL
 )
 RETURNS INT LANGUAGE plpgsql AS $$
 DECLARE
@@ -40,7 +46,8 @@ BEGIN
   JOIN km_index_symbols s ON s.id = c.index_id
   WHERE s.category = 'custom'
     AND s.is_active = true
-    AND (p_trade_date IS NULL OR e.trade_date = p_trade_date)
+    AND (p_from_date IS NULL OR e.trade_date >= p_from_date)
+    AND (p_to_date   IS NULL OR e.trade_date <= p_to_date)
   GROUP BY c.index_id, e.trade_date
   ON CONFLICT (index_id, trade_date) DO UPDATE SET
     close   = EXCLUDED.close,
@@ -55,7 +62,7 @@ $$;
 
 -- ── Permissions ───────────────────────────────────────────────
 
-GRANT EXECUTE ON FUNCTION compute_custom_index_eod(DATE) TO authenticated, kd_app, anon;
+GRANT EXECUTE ON FUNCTION compute_custom_index_eod(DATE, DATE) TO authenticated, kd_app, anon;
 
 NOTIFY pgrst, 'reload schema';
 

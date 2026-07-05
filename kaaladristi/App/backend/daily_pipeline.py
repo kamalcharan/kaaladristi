@@ -409,7 +409,8 @@ def run_nse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.start('custom_index_eod')
         try:
             result = db.rpc('compute_custom_index_eod', {
-                'p_trade_date': str(trade_date),
+                'p_from_date': str(trade_date),
+                'p_to_date':   str(trade_date),
             })
             ci_count = result[0].get('compute_custom_index_eod', 0) if result else 0
             tracker.complete('custom_index_eod', rows=ci_count)
