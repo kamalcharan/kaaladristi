@@ -44,8 +44,8 @@ export const FIELD_AVAILABILITY: Record<string, {
     optionalCols: [
       'avg_amt_66d', 'delivery_surge_x',
       'delivery_pct', 'deliv_value_cr',
-      'ret_5d', 'ret_22d', 'ret_66d',
       'score_5d', 'score_22d', 'score_66d',
+      'ret_5d', 'ret_22d', 'ret_66d',
       'ema_20', 'sma_50', 'sma_150', 'sma_200',
       'w52_high', 'sniper_hot',
       'accum_distrib', 'supertrend_dir',
@@ -62,8 +62,8 @@ export const FIELD_AVAILABILITY: Record<string, {
     ],
     optionalCols: [
       'avg_amt_66d',
-      'ret_5d', 'ret_22d', 'ret_66d',
       'score_5d', 'score_22d', 'score_66d',
+      'ret_5d', 'ret_22d', 'ret_66d',
       'mcap_cr', 'rss_value', 'sniper_inst',
       'sniper_hot', 'accum_distrib',
       'supertrend_dir', 'stage',
@@ -84,8 +84,8 @@ export const FIELD_AVAILABILITY: Record<string, {
     optionalCols: [
       'avg_amt_66d', 'delivery_surge_x',
       'delivery_pct', 'deliv_value_cr',
-      'ret_5d', 'ret_22d', 'ret_66d',
       'score_5d', 'score_22d', 'score_66d',
+      'ret_5d', 'ret_22d', 'ret_66d',
       'sniper_hot', 'ema_20',
       'sma_50', 'sma_150', 'sma_200',
       'w52_high', 'pctBelow52wHigh',
