@@ -5416,6 +5416,64 @@ async def payments_webhook(request: Request):
 
 # ── Custom Index — AI Discover ────────────────────────────────────────────────
 
+# Signal universe shared by discover + per-index suggest. NSE is the priority
+# exchange; BSE-only scrips (ISIN has no active NSE listing) are included when
+# daily turnover >= 1 Cr (calibrated 2026-07-05: 167 of 2,900 qualify).
+# delivery_surge_x never fires for BSE (no delivery data) — implicit stricter gate.
+_SIGNAL_UNIVERSE_SQL = """
+    WITH latest AS (
+        SELECT MAX(trade_date) AS dt FROM km_equity_eod
+    ),
+    scored AS (
+        SELECT
+            s.symbol,
+            s.company_name,
+            s.industry,
+            s.exchange,
+            e.score_5d,
+            e.delivery_surge_x,
+            e.sniper_inst,
+            e.flow_type,
+            (
+                (CASE WHEN e.score_5d > 20                              THEN 1 ELSE 0 END) +
+                (CASE WHEN e.delivery_surge_x > 1.2                     THEN 1 ELSE 0 END) +
+                (CASE WHEN e.sniper_inst > 30                            THEN 1 ELSE 0 END) +
+                (CASE WHEN e.close > e.sma_150                           THEN 1 ELSE 0 END) +
+                (CASE WHEN e.flow_type IN ('FRESH_LONGS','SHORT_COVERING') THEN 1 ELSE 0 END)
+            ) AS signal_count
+        FROM km_equity_eod e
+        JOIN km_equity_symbols s ON s.id = e.equity_id
+        WHERE e.trade_date = (SELECT dt FROM latest)
+          AND s.is_active = true
+          AND NOT (s.id = ANY(%(exclude_ids)s))
+          AND (
+            s.exchange = 'NSE'
+            OR (
+              s.exchange = 'BSE'
+              AND s.isin IS NOT NULL
+              AND (e.close * e.volume) >= 10000000
+              AND NOT EXISTS (
+                SELECT 1 FROM km_equity_symbols n
+                WHERE n.exchange = 'NSE' AND n.is_active = true
+                  AND n.isin = s.isin
+              )
+            )
+          )
+    )
+    SELECT symbol, company_name, industry, exchange, score_5d,
+           delivery_surge_x, sniper_inst, flow_type, signal_count
+    FROM scored
+    WHERE signal_count >= 2
+    ORDER BY signal_count DESC, score_5d DESC NULLS LAST
+    LIMIT 300
+"""
+
+
+def _fetch_signal_universe(cur, exclude_equity_ids: list[int] | None = None) -> list[dict]:
+    cur.execute(_SIGNAL_UNIVERSE_SQL, {'exclude_ids': exclude_equity_ids or []})
+    return [dict(r) for r in cur.fetchall()]
+
+
 class _DiscoverRequest(BaseModel):
     llm: str = 'claude'  # 'claude' | 'qwen'
 
@@ -5435,59 +5493,18 @@ async def custom_index_discover(req: _DiscoverRequest):
     conn = _conn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                WITH latest AS (
-                    SELECT MAX(trade_date) AS dt FROM km_equity_eod
-                ),
-                scored AS (
-                    SELECT
-                        s.symbol,
-                        s.company_name,
-                        s.industry,
-                        s.exchange,
-                        e.score_5d,
-                        e.delivery_surge_x,
-                        e.sniper_inst,
-                        e.flow_type,
-                        (
-                            (CASE WHEN e.score_5d > 20                              THEN 1 ELSE 0 END) +
-                            (CASE WHEN e.delivery_surge_x > 1.2                     THEN 1 ELSE 0 END) +
-                            (CASE WHEN e.sniper_inst > 30                            THEN 1 ELSE 0 END) +
-                            (CASE WHEN e.close > e.sma_150                           THEN 1 ELSE 0 END) +
-                            (CASE WHEN e.flow_type IN ('FRESH_LONGS','SHORT_COVERING') THEN 1 ELSE 0 END)
-                        ) AS signal_count
-                    FROM km_equity_eod e
-                    JOIN km_equity_symbols s ON s.id = e.equity_id
-                    WHERE e.trade_date = (SELECT dt FROM latest)
-                      AND s.is_active = true
-                      AND (
-                        s.exchange = 'NSE'
-                        -- BSE-only additions: NSE stays the priority exchange.
-                        -- Include a BSE scrip only when its ISIN has no active
-                        -- NSE listing, and gate on >= 1 Cr daily turnover —
-                        -- calibrated 2026-07-05: 167 of 2,900 BSE-only names
-                        -- qualify. delivery_surge_x never fires for BSE (no
-                        -- delivery data), so BSE effectively scores out of 4.
-                        OR (
-                          s.exchange = 'BSE'
-                          AND s.isin IS NOT NULL
-                          AND (e.close * e.volume) >= 10000000
-                          AND NOT EXISTS (
-                            SELECT 1 FROM km_equity_symbols n
-                            WHERE n.exchange = 'NSE' AND n.is_active = true
-                              AND n.isin = s.isin
-                          )
-                        )
-                      )
-                )
-                SELECT symbol, company_name, industry, exchange, score_5d,
-                       delivery_surge_x, sniper_inst, flow_type, signal_count
-                FROM scored
-                WHERE signal_count >= 2
-                ORDER BY signal_count DESC, score_5d DESC NULLS LAST
-                LIMIT 300
-            """)
-            stocks = [dict(r) for r in cur.fetchall()]
+            stocks = _fetch_signal_universe(cur)
+
+            # Themes the admin already has (created indices) or has already
+            # seen (staged — any status). Passed to the LLM as exclusions so
+            # a re-run doesn't burn tokens re-proposing the same ideas.
+            cur.execute(
+                "SELECT name AS t FROM km_index_symbols "
+                "WHERE category = 'custom' AND is_active = true "
+                "UNION "
+                "SELECT theme_name AS t FROM km_discovered_themes"
+            )
+            known_themes = sorted({r['t'] for r in cur.fetchall() if r['t']})
     finally:
         conn.close()
 
@@ -5502,11 +5519,19 @@ async def custom_index_discover(req: _DiscoverRequest):
         "BSE scrips have numeric symbols — identify those companies by company_name, but "
         "always return the symbol field exactly as provided."
     )
+    exclusion_clause = (
+        f"The following themes are ALREADY tracked or were previously proposed — do NOT "
+        f"propose them again, nor near-duplicates of them: {json.dumps(known_themes)}. "
+        if known_themes else ""
+    )
     user_prompt = (
         f"Here are active Indian stocks with recent signals: {json.dumps([dict(r) for r in stocks], default=str)}. "
-        "Identify 3–5 emerging themes. For each theme return: theme_name, description, "
+        f"{exclusion_clause}"
+        "Identify 3–5 NEW emerging themes. For each theme return: theme_name, description, "
         "rationale, constituent_symbols[]. Use each stock's symbol exactly as given "
         "(BSE symbols are numeric codes). "
+        "If no genuinely new cohesive themes exist beyond the excluded ones, return fewer "
+        "themes or an empty array rather than repackaging excluded themes. "
         "Respond in JSON only, no preamble, no markdown fences."
     )
 
@@ -5616,3 +5641,88 @@ async def update_discovered_theme(theme_id: int, req: _ThemeStatusRequest):
     finally:
         conn.close()
     return {'ok': True, 'id': theme_id, 'status': req.status}
+
+
+@app.post('/api/custom-index/{index_id}/suggest')
+async def custom_index_suggest(index_id: int, req: _DiscoverRequest):
+    """AI 'new stocks discovery' for an EXISTING custom index.
+
+    Loads the index's current constituents, fetches the live signal universe
+    with those constituents excluded (saves tokens), and asks the LLM which
+    signaling stocks belong to this theme but are not in it yet.
+
+    Returns: { suggestions: [{ symbol, company_name, reason }], stock_count }
+    """
+    llm = req.llm.lower()
+    if llm not in ('claude', 'qwen'):
+        raise HTTPException(status_code=400, detail="llm must be 'claude' or 'qwen'")
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, name FROM km_index_symbols "
+                "WHERE id = %s AND category = 'custom' AND is_active = true",
+                [index_id],
+            )
+            idx = cur.fetchone()
+            if not idx:
+                raise HTTPException(status_code=404, detail=f'custom index {index_id} not found')
+
+            cur.execute(
+                "SELECT s.id, s.symbol, s.company_name, s.industry "
+                "FROM km_index_constituents c "
+                "JOIN km_equity_symbols s ON s.id = c.equity_id "
+                "WHERE c.index_id = %s",
+                [index_id],
+            )
+            members = [dict(r) for r in cur.fetchall()]
+            member_ids = [m['id'] for m in members]
+
+            stocks = _fetch_signal_universe(cur, exclude_equity_ids=member_ids)
+    finally:
+        conn.close()
+
+    if not stocks:
+        return {'suggestions': [], 'stock_count': 0}
+
+    member_desc = [
+        {'symbol': m['symbol'], 'company_name': m['company_name'], 'industry': m['industry']}
+        for m in members
+    ]
+    system_prompt = (
+        "You are a sector analyst maintaining a thematic basket of Indian equities "
+        "(NSE, plus liquid BSE-only listings). Given the theme and its current "
+        "constituents, identify which candidate stocks clearly belong to the same "
+        "theme. Be strict — only suggest stocks with a genuine business-model or "
+        "supply-chain fit, not loose sector neighbours. BSE scrips have numeric "
+        "symbols — identify those companies by company_name, but always return the "
+        "symbol field exactly as provided."
+    )
+    user_prompt = (
+        f"Theme: {idx['name']}. "
+        f"Current constituents: {json.dumps(member_desc, default=str)}. "
+        f"Candidate stocks with current accumulation signals (already-included stocks "
+        f"are excluded): {json.dumps(stocks, default=str)}. "
+        "Return the candidates that genuinely belong to this theme as a JSON array of "
+        "{symbol, company_name, reason} — reason in one short sentence. Use each "
+        "stock's symbol exactly as given. Return [] if none fit. "
+        "Respond in JSON only, no preamble, no markdown fences."
+    )
+
+    if llm == 'claude':
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=1200)
+    else:
+        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=1200)
+
+    if raw is None:
+        raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
+
+    try:
+        suggestions = json.loads(raw)
+        if not isinstance(suggestions, list):
+            raise ValueError('expected JSON array')
+    except Exception:
+        raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
+
+    return {'suggestions': suggestions, 'stock_count': len(stocks)}
