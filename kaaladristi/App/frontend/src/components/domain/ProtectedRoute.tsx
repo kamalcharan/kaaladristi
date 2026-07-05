@@ -23,8 +23,13 @@ export default function ProtectedRoute({ requireOnboarded = true }: ProtectedRou
     return <Navigate to="/" replace />;
   }
 
-  // Authenticated but not onboarded → send to setup
-  if (requireOnboarded && profile && !profile.onboarded) {
+  // Authenticated but not onboarded → send to setup.
+  // profile === null is treated as NOT onboarded: once auth initialization is
+  // done (isLoading handled above), a null profile means the km_profiles row
+  // is missing or unreadable — that must never skip onboarding. LoginPage
+  // awaits refreshProfile() before navigating, so onboarded users don't hit
+  // this with a transiently-null profile.
+  if (requireOnboarded && !profile?.onboarded) {
     return <Navigate to="/setup" replace />;
   }
 
