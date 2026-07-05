@@ -5678,6 +5678,68 @@ async def update_discovered_theme(theme_id: int, req: _ThemeStatusRequest):
     return {'ok': True, 'id': theme_id, 'status': req.status}
 
 
+@app.post('/api/custom-index/{index_id}/compute')
+async def custom_index_compute(index_id: int):
+    """Recompute synthetic EOD (close/ret_5d/22d/66d) + scores for ONE custom
+    index, on demand — the 'Calculate' button.
+
+    A freshly created or edited custom index has no km_index_eod rows (or
+    stale ones) until this runs: the nightly pipeline (step 'index_returns')
+    only computes for the trade date it's processing, so a newly created
+    index's full history stays empty until the next run touches it, and
+    edits (add/remove constituents) don't retroactively rebuild history
+    until then either. This lets an admin trigger it immediately so the
+    index shows up correctly in Sector Rotation -> Custom right away.
+
+    Uses migration 122's p_index_id-scoped compute_custom_index_eod (full
+    history, this index only — cheap, filtered by index_id) then refreshes
+    scores for all indices via compute_all_index_scores (no per-index
+    scoping exists for scores; acceptable for an on-demand admin action).
+    """
+    start = time.time()
+    conn = _conn(statement_timeout_ms=120_000)
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, name FROM km_index_symbols "
+                "WHERE id = %s AND category = 'custom' AND is_active = true",
+                [index_id],
+            )
+            idx = cur.fetchone()
+            if not idx:
+                raise HTTPException(status_code=404, detail=f'custom index {index_id} not found')
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT compute_custom_index_eod(%s, %s, %s)",
+                [None, None, index_id],
+            )
+            rows_computed = cur.fetchone()[0] or 0
+        conn.commit()
+
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM compute_all_index_scores(%s)", [None])
+            score_rows = cur.fetchall()
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f'compute failed: {str(exc)[:300]}')
+    finally:
+        conn.close()
+
+    return {
+        'ok': True,
+        'index_id': index_id,
+        'index_name': idx['name'],
+        'rows_computed': rows_computed,
+        'indices_scored': sum(1 for r in score_rows if (r.get('rows_updated') or 0) > 0),
+        'elapsed_ms': int((time.time() - start) * 1000),
+    }
+
+
 @app.post('/api/custom-index/{index_id}/suggest')
 async def custom_index_suggest(index_id: int, req: _DiscoverRequest):
     """AI 'new stocks discovery' for an EXISTING custom index.
