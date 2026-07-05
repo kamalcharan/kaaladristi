@@ -145,7 +145,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
 
   pct_chng: {
     key: 'pct_chng',
-    label: 'D%',
+    label: '1D%',
     tooltip: 'Price change today (%). Green = up, Red = down.',
     type: 'pct',
     width: 72,
@@ -493,7 +493,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   score_5d: {
     key: 'score_5d',
     label: 'Score 5D',
-    tooltip: 'Delivery surge score over 5 days. surge ≥ 1: surge² × 25. surge < 1: raw 5D return %.',
+    tooltip: 'Stock-level conviction over ~1 week: how strongly delivery money is running above its own norm (squared, ×25). High = real money arriving. NOTE: stock scores run 0–300; index scores use a different formula (0–80) — do not compare across the two.',
     type: 'number',
     width: 90,
     thresholds: {
@@ -508,7 +508,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   score_22d: {
     key: 'score_22d',
     label: 'Score 22D',
-    tooltip: 'Delivery surge score over 22 days. surge ≥ 1: surge² × 25. surge < 1: raw 22D return %.',
+    tooltip: 'Stock-level conviction over ~1 month. Compare with Score 5D: a higher 5D score means money flow is accelerating recently.',
     type: 'number',
     width: 90,
     thresholds: {
@@ -523,7 +523,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   score_66d: {
     key: 'score_66d',
     label: 'Score 66D',
-    tooltip: 'Delivery surge score over 66 days. surge ≥ 1: surge² × 25. surge < 1: raw 66D return %.',
+    tooltip: 'Stock-level conviction over ~3 months — the long-baseline view of delivery money.',
     type: 'number',
     width: 90,
     thresholds: {
