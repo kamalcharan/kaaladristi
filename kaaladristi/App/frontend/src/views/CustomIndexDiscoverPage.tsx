@@ -162,7 +162,7 @@ export default function CustomIndexDiscoverPage() {
             Discover with AI
           </h1>
           <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            NSE Only
+            NSE + Liquid BSE
           </span>
         </div>
 
@@ -209,9 +209,10 @@ export default function CustomIndexDiscoverPage() {
               </p>
               {!initialLoading && (
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-                  Select a model and click "Discover Themes" to scan active NSE stocks with
-                  accumulation signals and surface cohesive sub-themes. Results are saved —
-                  they'll still be here next time without another AI call.
+                  Select a model and click "Discover Themes" to scan active NSE stocks (plus
+                  liquid BSE-only listings) with accumulation signals and surface cohesive
+                  sub-themes. Results are saved — they'll still be here next time without
+                  another AI call.
                 </p>
               )}
             </div>
