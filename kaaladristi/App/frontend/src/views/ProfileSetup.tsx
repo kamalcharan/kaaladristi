@@ -503,7 +503,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
           {done && (
             <div style={{ marginTop:8, animation:'text-in .6s ease both' }}>
               <p style={{ fontSize:14, color:'var(--text-muted)', lineHeight:1.65, marginBottom:20 }}>
-                Your framework is ready. Everything here can be changed.
+                Your starter framework is already applied — you can change any part of it later, from the Catalog.
               </p>
               <div style={{ display:'flex', gap:10 }}>
                 <button onClick={onAccept} disabled={isCommitting}
@@ -519,7 +519,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                     border:'1px solid rgba(255,255,255,.07)', borderRadius:100,
                     fontSize:14, color:'var(--text-muted)', cursor:'pointer',
                     fontFamily:'inherit', transition:'all .2s ease' }}>
-                  Browse Templates
+                  Customize in Catalog →
                 </button>
               </div>
             </div>
