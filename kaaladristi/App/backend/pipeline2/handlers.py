@@ -44,7 +44,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'index_flow', 'nse_flow', 'bse_flow',
     'nse_magic_rs', 'bse_magic_rs',
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
-    'industry_composites', 'market_breadth', 'breadth_roc',
+    'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
 })
 
 
@@ -299,6 +299,56 @@ def handle_vani_flags(conn, trade_date: date, force: bool,
     from scripts.backfill_vani_flags import compute_vani_flags_for_date
     return _handle_script('vani_flags', conn, trade_date, force, on_progress,
                           compute_vani_flags_for_date)
+
+
+def handle_index_returns(conn, trade_date: date, force: bool,
+                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Index returns (ret_5d/22d/66d) + custom-index synthetic EOD + scores.
+
+    Order matters:
+      1. compute_all_index_returns — LAG over close for every index that has
+         EOD rows (NSE-downloaded indices get their returns here).
+      2. compute_custom_index_eod — upserts category='custom' rows as the
+         equal-weight average of constituents (close + returns). Runs AFTER
+         the LAG pass so a young custom index's newest bar is never
+         NULL-clobbered when it has fewer bars than the return window.
+      3. compute_all_index_scores — scores derive from returns, so last.
+    """
+    before = fill_rate(conn, 'index_returns', trade_date)
+    on_progress(f'before fill_rate = {before:.1f}%', 5)
+
+    if force:
+        on_progress('force: nullifying return/score columns', 10)
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE km_index_eod SET ret_5d = NULL, ret_22d = NULL, "
+                "ret_66d = NULL, score_5d = NULL, score_22d = NULL "
+                "WHERE trade_date = %s",
+                [str(trade_date)])
+        conn.commit()
+
+    rows = 0
+    try:
+        on_progress('running compute_all_index_returns', 25)
+        res = _rpc(conn, 'compute_all_index_returns', {'p_from_date': str(trade_date)})
+        rows += sum(r.get('rows_updated', 0) for r in res)
+
+        on_progress('running compute_custom_index_eod', 55)
+        res = _rpc(conn, 'compute_custom_index_eod', {
+            'p_from_date': str(trade_date), 'p_to_date': str(trade_date)})
+        rows += (res[0].get('compute_custom_index_eod', 0) or 0) if res else 0
+
+        on_progress('running compute_all_index_scores', 75)
+        _rpc(conn, 'compute_all_index_scores', {'p_from_date': str(trade_date)})
+    except Exception as e:
+        conn.rollback()
+        return HandlerResult('failed', before, before, 0, error_msg=str(e)[:500])
+
+    on_progress('measuring post-run fill_rate', 90)
+    after = fill_rate(conn, 'index_returns', trade_date)
+    ok_pct = (DIMENSION_HEALTH['index_returns'][3] or 0) * 100.0
+    status = _classify(before, after, ok_pct)
+    return HandlerResult(status, before, after, rows)
 
 
 # ── Row-presence handlers (industry / breadth) ───────────────────────────
@@ -574,6 +624,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_stage_classification(conn, trade_date, force, exchange, on_progress)
     if dimension == 'vani_flags':
         return handle_vani_flags(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'index_returns':
+        return handle_index_returns(conn, trade_date, force, exchange, on_progress)
     if dimension == 'industry_composites':
         return handle_industry_composites(conn, trade_date, force, exchange, on_progress)
     if dimension == 'market_breadth':
@@ -601,6 +653,7 @@ KNOWN_DIMENSIONS = [
     'd365',
     'stage_classification',
     'vani_flags',
+    'index_returns',
     'industry_composites',
     'market_breadth',
     'breadth_roc',

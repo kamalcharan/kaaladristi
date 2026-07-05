@@ -1,10 +1,11 @@
 """Execution order for pipeline v2 daily runs.
 
-The daily run is a sequence of 19 steps:
+The daily run is a sequence of 20 steps:
   Steps 1-3:  Download index bhav + NSE equity bhav + BSE equity bhav.
-  Steps 4-19: Compute indicators, flow, magic_rs, supertrend, rolling metrics,
-              d365, stage classification, VaNi flags, industry composites,
-              market breadth, and breadth ROC.
+  Steps 4-20: Compute indicators, flow, magic_rs, supertrend, rolling metrics,
+              d365, stage classification, VaNi flags, index returns + custom
+              index EOD + scores, industry composites, market breadth, and
+              breadth ROC.
 
 Each step:
   1. Runs its dimension handler (download/compute + fill-rate read).
@@ -47,6 +48,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('d365',                  None),
     ('stage_classification',  None),
     ('vani_flags',            None),
+    ('index_returns',         None),
     ('industry_composites',   None),
     ('market_breadth',        None),
     ('breadth_roc',           None),
