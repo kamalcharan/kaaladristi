@@ -13,7 +13,16 @@ export default function VaNiInsight({ insight, isLoading, className, logId }: Va
   if (!isLoading && !insight) return null;
 
   return (
-    <div className={cn('mt-3 pt-3 border-t border-kd-border', className)}>
+    // Distinct "AI voice" treatment (owner decision 2026-07-05): a soft
+    // indigo-tinted panel with a left accent bar, applied here so every
+    // VaNi insight across the product picks it up. Low-alpha tints of the
+    // theme's accent-indigo keep it legible on all three themes.
+    <div
+      className={cn(
+        'mt-3 px-3 py-2.5 rounded-md bg-accent-indigo/[0.06] border border-accent-indigo/15 border-l-2 border-l-accent-indigo/60',
+        className,
+      )}
+    >
       {/* Header */}
       <div className="flex items-center gap-1.5 mb-1.5">
         <span className="text-accent-indigo text-[11px] leading-none select-none">✦</span>

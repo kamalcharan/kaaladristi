@@ -9,6 +9,7 @@
  */
 
 import { from } from './postgrest';
+import { displaySymbol } from '@/lib/symbolUtils';
 import type { MarketBreadthDay, BreadthRocDay } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -359,13 +360,12 @@ export async function fetchVix(): Promise<VixRow | null> {
 export interface FlowCellData {
   d1: number;
   amt: number;
-  sx?: number;
   amt_5d?: number;
   amt_22d?: number;
   ret_5d?: number;
   ret_22d?: number;
-  s5?: number;   // score_5d  — money-flow conviction (index mode)
-  s22?: number;  // score_22d — 1-month conviction baseline (index mode)
+  s5?: number;   // score_5d  — money-flow conviction (both modes)
+  s22?: number;  // score_22d — 1-month conviction baseline (both modes)
 }
 
 export interface FlowMapData {
@@ -376,14 +376,22 @@ export interface FlowMapData {
 
 /**
  * Fetches last `days` trading days of per-constituent flow data for an index.
- * Rows sorted by average surge DESC.
- * surge = value_cr / (avg_amt_66d / 22) per SKILL.md
+ *
+ * Cells carry the same score/return/amount fields as the sector heatmap
+ * (fetchIndexFlowMap) so FlowIntensityMap renders both maps identically —
+ * conviction-first, per the owner's Score doctrine. The equity score already
+ * embeds delivery surge (Index_Score_Spec: surge is a score component), so
+ * nothing from the old surge-colored map is lost.
+ *
+ * Rows sorted by average Score 5D DESC; date columns run newest-first
+ * (column 0 = latest session), exactly like fetchIndexFlowMap — the
+ * MicroTrend bars provide the chronological oldest → newest read.
  */
 export async function fetchConstituentFlowMap(
   indexId: number,
   days = 22,
 ): Promise<FlowMapData> {
-  // Step 1: get constituent equity IDs + symbols
+  // Step 1: get constituent equity IDs + display names
   const { data: constData, error: constErr } = await from('km_index_constituents')
     .select('equity_id')
     .eq('index_id', indexId)
@@ -394,13 +402,16 @@ export async function fetchConstituentFlowMap(
   if (equityIds.length === 0) return { rows: [], dates: [], cells: {} };
 
   const { data: symData, error: symErr } = await from('km_equity_symbols')
-    .select('id,symbol')
+    .select('id,symbol,company_name')
     .in('id', equityIds)
     .execute();
   if (symErr) throw new Error(`[constituentFlowMap] symbols: ${symErr.message}`);
 
+  // displaySymbol: BSE constituents have numeric scrip codes — render a
+  // human-readable short name derived from company_name instead.
   const symMap = new Map<number, string>(
-    ((symData ?? []) as { id: number; symbol: string }[]).map((s) => [s.id, s.symbol]),
+    ((symData ?? []) as { id: number; symbol: string; company_name: string }[])
+      .map((s) => [s.id, displaySymbol({ symbol: s.symbol, company_name: s.company_name })]),
   );
 
   // Step 2: latest N trade dates from first equity's EOD
@@ -415,7 +426,7 @@ export async function fetchConstituentFlowMap(
 
   const sortedDates = ((dateData as { trade_date: string }[])
     .map((r) => r.trade_date))
-    .sort();                        // oldest first
+    .sort();                        // oldest first — chronological, like the sector heatmap
   const earliestDate = sortedDates[0];
 
   const fmtDate = (d: string) => {
@@ -426,7 +437,7 @@ export async function fetchConstituentFlowMap(
 
   // Step 3: fetch EOD for all constituents in the date window
   const { data: eodData, error: eodErr } = await from('km_equity_eod')
-    .select('equity_id,trade_date,pct_chng,value_cr,avg_amt_66d')
+    .select('equity_id,trade_date,pct_chng,value_cr,ret_5d,ret_22d,score_5d,score_22d,avg_amt_5d,avg_amt_22d')
     .in('equity_id', equityIds)
     .gte('trade_date', earliestDate)
     .order('trade_date', { ascending: true })
@@ -435,13 +446,16 @@ export async function fetchConstituentFlowMap(
 
   type EodRow = {
     equity_id: number; trade_date: string;
-    pct_chng: number | null; value_cr: number | null; avg_amt_66d: number | null;
+    pct_chng: number | null; value_cr: number | null;
+    ret_5d: number | null; ret_22d: number | null;
+    score_5d: number | null; score_22d: number | null;
+    avg_amt_5d: number | null; avg_amt_22d: number | null;
   };
   const allRows = (eodData ?? []) as EodRow[];
 
-  // Step 4: build cell arrays + compute sx = value_cr / (avg_amt_66d / 22)
+  // Step 4: build cell arrays keyed by display name
   const cellMap: Record<string, FlowCellData[]> = {};
-  const avgSx:   Record<string, number>          = {};
+  const avgS5:   Record<string, number>          = {};
 
   for (const equityId of equityIds) {
     const sym = symMap.get(equityId);
@@ -454,34 +468,46 @@ export async function fetchConstituentFlowMap(
 
     const row: FlowCellData[] = sortedDates.map((d) => {
       const r = byDate.get(d);
-      if (!r) return { d1: 0, amt: 0, sx: 0 };
-      const amt      = r.value_cr ?? 0;
-      const baseline = r.avg_amt_66d != null && r.avg_amt_66d > 0
-        ? r.avg_amt_66d / 22
-        : null;
-      const sx = baseline != null ? amt / baseline : 1.0;
-      return { d1: r.pct_chng ?? 0, amt, sx };
+      if (!r) return { d1: 0, amt: 0 };
+      return {
+        d1:      r.pct_chng ?? 0,
+        amt:     r.value_cr ?? 0,
+        ret_5d:  r.ret_5d  ?? undefined,
+        ret_22d: r.ret_22d ?? undefined,
+        s5:      r.score_5d  ?? undefined,
+        s22:     r.score_22d ?? undefined,
+        amt_5d:  r.avg_amt_5d  ?? undefined,
+        amt_22d: r.avg_amt_22d ?? undefined,
+      };
     });
 
     cellMap[sym] = row;
-    const sxVals = row.filter((c) => (c.sx ?? 0) > 0).map((c) => c.sx ?? 0);
-    avgSx[sym] = sxVals.length > 0 ? sxVals.reduce((a, b) => a + b, 0) / sxVals.length : 0;
+    const s5Vals = row.filter((c) => (c.s5 ?? 0) > 0).map((c) => c.s5 ?? 0);
+    avgS5[sym] = s5Vals.length > 0 ? s5Vals.reduce((a, b) => a + b, 0) / s5Vals.length : 0;
   }
 
-  // Step 5: sort rows by avg sx DESC, reverse so newest date is column 0
-  const sortedRows = Object.keys(cellMap).sort((a, b) => (avgSx[b] ?? 0) - (avgSx[a] ?? 0));
-  const reversedConstDates = [...formattedDates].reverse();
+  // Step 5: strongest conviction on top; reverse so newest date is column 0
+  // (same orientation as fetchIndexFlowMap — MicroTrend un-reverses for its
+  // chronological read)
+  const sortedRows = Object.keys(cellMap).sort((a, b) => (avgS5[b] ?? 0) - (avgS5[a] ?? 0));
+  const reversedDates = [...formattedDates].reverse();
   for (const sym of Object.keys(cellMap)) {
     cellMap[sym] = [...cellMap[sym]].reverse();
   }
-  return { rows: sortedRows, dates: reversedConstDates, cells: cellMap };
+  return { rows: sortedRows, dates: reversedDates, cells: cellMap };
 }
 
 // ── Index Breadth (per-index, computed client-side) ───────────────────────────
 
 const BREADTH_LOOKBACK = 252;  // sessions for percentile history
 const BREADTH_FLOOR    = 126;  // min sessions before percentile mode activates
-const BREADTH_MIN_N    = 8;    // min constituents — below this, suppress gauge
+// Min constituents — below this, suppress the gauge entirely (breadth of a
+// handful of names is per-stock noise, Breadth_ROC_Spec §4). Lowered 8→5 for
+// small curated themes (owner decision 2026-07-05), matching the ≥5-stock
+// rule used for km_industry_eod. 5–7 constituents render with a
+// small-sample caption (BREADTH_SMALL_N) rather than being hidden.
+export const BREADTH_MIN_N   = 5;
+export const BREADTH_SMALL_N = 8;
 
 export type RocBadge = 'expanding' | 'slowing' | 'turning' | 'contracting' | 'warming_up';
 

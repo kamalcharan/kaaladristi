@@ -3,6 +3,13 @@
 // 2. SectorRotationPage Heat toggle — index mode (Sprint 10)
 // 3. CustomIndex detail — constituent mode (Sprint 12)
 // 4. Visual Pulse peer view — constituent mode (Post-MVP)
+//
+// Both modes render identically (owner decision 2026-07-05: the constituent
+// Flow Map is the sector heatmap one level down) — score-based 5-state cells,
+// micro-trend bars, portal tooltip. The only mode differences are the label
+// column width, the tooltip amount labels, and the STRONG score cut, because
+// index scores (ret + capped surge, ~0–80) and equity scores (surge² × 25,
+// ~0–300) live on different scales and MUST NOT share a threshold.
 
 import { useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,13 +20,12 @@ import { Card } from '@/components/ui/Card';
 export interface CellData {
   d1: number;        // 1D price % (sign → border color)
   amt: number;       // ₹ Cr traded value
-  sx?: number;       // surge× vs 66D baseline (constituent mode)
-  amt_5d?: number;   // avg_amt_5d (index mode)
-  amt_22d?: number;  // avg_amt_22d (index mode)
-  ret_5d?: number;   // 5D return % (index mode — cell top edge + tooltip)
-  ret_22d?: number;  // 22D return % (index mode, tooltip only)
-  s5?: number;       // score_5d  — money-flow conviction (index mode: drives cell color + text)
-  s22?: number;      // score_22d — 1-month conviction baseline (index mode)
+  amt_5d?: number;   // avg_amt_5d
+  amt_22d?: number;  // avg_amt_22d
+  ret_5d?: number;   // 5D return % (cell top edge + tooltip)
+  ret_22d?: number;  // 22D return % (tooltip only)
+  s5?: number;       // score_5d  — money-flow conviction (drives cell color + text)
+  s22?: number;      // score_22d — 1-month conviction baseline
 }
 
 interface FlowIntensityMapProps {
@@ -29,71 +35,42 @@ interface FlowIntensityMapProps {
   cells: Record<string, CellData[]>;
   title?: string;
   subtitle?: string;
-  surgeToggle?: 'sx' | 'amt';          // constituent only — controlled externally or internal
   dayWindow?: 5 | 22 | 66;             // index only
   onDayWindowChange?: (d: 5 | 22 | 66) => void;
-  cellWidth?: number;                   // default 28 for constituent, 52 for index
+  cellWidth?: number;                   // default 92
   onRowClick?: (row: string) => void;   // row label click → drill-down
 }
 
 // ── Color constants ────────────────────────────────────────────────────────────
-// #166534 and #f87171 are the only tokens not covered by CSS vars (per SKILL.md)
+// #166534 is the only token not covered by CSS vars (per SKILL.md)
 
 const DARK_GREEN = '#166534';
-const PINK       = '#f87171';
 const NO_DATA    = '#1e293b';
 
-// ── Constituent mode: per-row percentile cuts ─────────────────────────────────
-
-interface RowCuts { p20: number; p40: number; p60: number; p80: number }
-
-function computeRowCuts(
-  rows: string[],
-  cells: Record<string, CellData[]>,
-  field: 'sx' | 'amt',
-): Record<string, RowCuts> {
-  const result: Record<string, RowCuts> = {};
-  for (const sym of rows) {
-    const vals: number[] = [];
-    for (const c of cells[sym] ?? []) {
-      const v = field === 'sx' ? (c.sx ?? 0) : c.amt;
-      if (v > 0) vals.push(v);
-    }
-    if (vals.length === 0) {
-      result[sym] = { p20: 0, p40: 0, p60: 0, p80: 0 };
-      continue;
-    }
-    vals.sort((a, b) => a - b);
-    const pct = (p: number) => vals[Math.floor((vals.length - 1) * p / 100)];
-    result[sym] = { p20: pct(20), p40: pct(40), p60: pct(60), p80: pct(80) };
-  }
-  return result;
-}
-
-function constituentColor(val: number, cuts: RowCuts): string {
-  if (val <= 0)        return NO_DATA;
-  if (val >= cuts.p80) return DARK_GREEN;
-  if (val >= cuts.p60) return 'var(--risk-green)';
-  if (val >= cuts.p40) return 'var(--risk-amber)';
-  if (val >= cuts.p20) return PINK;
-  return 'var(--risk-red)';
-}
-
-// ── Index mode: 5-state SCORE-based signal ────────────────────────────────────
+// ── 5-state SCORE-based signal ────────────────────────────────────────────────
 // Owner decision 2026-07-05: cells encode money-flow CONVICTION (score_5d),
 // not price % — "scores start moving first; Score is the real moat".
-// STRONG cut = 25 ≈ p90 of positive score_5d days (calibrated 2026-07-05:
-// p50=4.1, p75=12.7, p90=26.8, p97=39.8). Score is floored at 0 for negative
-// returns, so the downside states come from outflow evidence instead.
+// Score is floored at 0 for negative returns, so the downside states come
+// from outflow evidence instead.
+//
+// INDEX cut = 25 ≈ p90 of positive index score_5d days (calibrated
+// 2026-07-05: p50=4.1, p75=12.7, p90=26.8, p97=39.8).
+//
+// EQUITY cut = 28 ≈ p90 of positive equity score_5d days (calibrated
+// 2026-07-05 on 2026 YTD: p50=4.7, p75=10.8, p90=27.5, p97=86.0). The two
+// distributions land close at p90 despite different formulas because most
+// positive equity-score days sit on the return-only branch; the surge²×25
+// branch produces the long tail (p97=86), which STRONG deliberately catches.
 
-const STRONG_SCORE_CUT = 25;
+const STRONG_SCORE_CUT_INDEX  = 25;
+const STRONG_SCORE_CUT_EQUITY = 28;
 
-type IndexSignal = 'STRONG' | 'BUILDING' | 'FADING' | 'OUTFLOW' | 'QUIET';
+type FlowSignal = 'STRONG' | 'BUILDING' | 'FADING' | 'OUTFLOW' | 'QUIET';
 
-function indexSignal(c: CellData): IndexSignal {
+function flowSignal(c: CellData, strongCut: number): FlowSignal {
   const s5  = c.s5  ?? 0;
   const s22 = c.s22 ?? 0;
-  if (s5 > 0 && s5 >= s22) return s5 >= STRONG_SCORE_CUT ? 'STRONG' : 'BUILDING';
+  if (s5 > 0 && s5 >= s22) return s5 >= strongCut ? 'STRONG' : 'BUILDING';
   if (s5 > 0 && s5 < s22)  return 'FADING';
   const outflow = (c.amt_5d ?? 0) < (c.amt_22d ?? 0) && (c.ret_5d ?? 0) < 0;
   return outflow ? 'OUTFLOW' : 'QUIET';
@@ -101,7 +78,7 @@ function indexSignal(c: CellData): IndexSignal {
 
 const QUIET_BG = '#334155';  // slate — distinguishable from NO_DATA (#1e293b)
 
-const SIGNAL_COLOR: Record<IndexSignal, string> = {
+const SIGNAL_COLOR: Record<FlowSignal, string> = {
   STRONG:   DARK_GREEN,
   BUILDING: 'var(--risk-green)',
   FADING:   'var(--risk-amber)',
@@ -111,7 +88,7 @@ const SIGNAL_COLOR: Record<IndexSignal, string> = {
 
 // Cell text must contrast with the cell background, not encode return sign
 // (the background already encodes the signal).
-const SIGNAL_TEXT: Record<IndexSignal, string> = {
+const SIGNAL_TEXT: Record<FlowSignal, string> = {
   STRONG:   '#f8fafc',  // near-white on dark green
   BUILDING: '#0b1220',  // near-black on bright green
   FADING:   '#0b1220',  // near-black on amber
@@ -119,7 +96,7 @@ const SIGNAL_TEXT: Record<IndexSignal, string> = {
   QUIET:    '#94a3b8',  // muted on slate
 };
 
-const SIGNAL_LABEL: Record<IndexSignal, string> = {
+const SIGNAL_LABEL: Record<FlowSignal, string> = {
   STRONG:   'Strong Conviction',
   BUILDING: 'Building',
   FADING:   'Fading',
@@ -136,17 +113,17 @@ interface TooltipState {
   row: string;
   date: string;
   cell: CellData;
-  signal?: IndexSignal;
+  signal: FlowSignal;
 }
 
 // ── Fixed sizing ──────────────────────────────────────────────────────────────
 
-const CELL_H_CON = 28;  // constituent mode — color block only, no text
-const CELL_H_IDX = 56;  // index mode — single % line; sized for glanceability
-const GAP        = 2;
-const LABEL_W_CON = 104;  // constituent mode — short symbols
-const LABEL_W_IDX = 220;  // index mode — full index names, no harsh truncation
-const TREND_W     = 72;   // index mode — micro-trend bars between name and cells
+const HEADER_ROW_H = 28;  // date header row
+const CELL_H       = 56;  // sized for glanceability — one score line per cell
+const GAP          = 2;
+const LABEL_W_CON  = 130;  // constituent mode — symbols / short BSE display names
+const LABEL_W_IDX  = 220;  // index mode — full index names, no harsh truncation
+const TREND_W      = 72;   // micro-trend bars between name and cells
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -163,7 +140,7 @@ function fmtCr(v: number) {
   return '₹' + v.toFixed(1) + ' Cr';
 }
 
-// ── Micro-trend bars (index mode): CONVICTION trajectory ─────────────────────
+// ── Micro-trend bars: CONVICTION trajectory ───────────────────────────────────
 // One bar per session = that day's score_5d, chronological left -> right
 // (the heat grid runs newest-first, but a trend shape must read oldest ->
 // newest — hence the reversed order and the title hint). Bars grow from a
@@ -234,54 +211,45 @@ export default function FlowIntensityMap({
   cells,
   title = 'Flow Intensity',
   subtitle,
-  surgeToggle: surgeToggleProp,
   dayWindow,
   onDayWindowChange,
   cellWidth,
   onRowClick,
 }: FlowIntensityMapProps) {
-  // Cell width: caller-overridable; defaults differ by mode
-  const cellW = cellWidth ?? (mode === 'index' ? 92 : 28);
-  const cellH = mode === 'index' ? CELL_H_IDX : CELL_H_CON;
-
-  // Constituent surge toggle — uncontrolled when surgeToggleProp not passed
-  const [internalSurge, setInternalSurge] = useState<'sx' | 'amt'>('sx');
-  const surgeField = surgeToggleProp ?? internalSurge;
+  const cellW = cellWidth ?? 92;
+  const labelW = mode === 'index' ? LABEL_W_IDX : LABEL_W_CON;
+  const strongCut = mode === 'index' ? STRONG_SCORE_CUT_INDEX : STRONG_SCORE_CUT_EQUITY;
 
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
-  // Per-row percentile cuts (constituent mode only)
-  const sxCuts  = useMemo(() => computeRowCuts(rows, cells, 'sx'),  [rows, cells]);
-  const amtCuts = useMemo(() => computeRowCuts(rows, cells, 'amt'), [rows, cells]);
-
-  const cellColor = useCallback(
-    (row: string, c: CellData): string => {
-      if (mode === 'index') return SIGNAL_COLOR[indexSignal(c)];
-      const cuts = surgeField === 'sx' ? sxCuts[row] : amtCuts[row];
-      if (!cuts) return NO_DATA;
-      return constituentColor(surgeField === 'sx' ? (c.sx ?? 0) : c.amt, cuts);
-    },
-    [mode, surgeField, sxCuts, amtCuts],
+  const signalFor = useCallback(
+    (c: CellData): FlowSignal => flowSignal(c, strongCut),
+    [strongCut],
   );
 
   const borderColor = useCallback(
-    (c: CellData): string => {
-      const sign = mode === 'index' ? (c.ret_5d ?? 0) : c.d1;
-      return sign >= 0 ? 'var(--risk-green)' : 'var(--risk-red)';
-    },
-    [mode],
+    (c: CellData): string => ((c.ret_5d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)'),
+    [],
   );
 
   const handleMouseEnter = useCallback(
     (e: React.MouseEvent, row: string, date: string, c: CellData) => {
-      const sig = mode === 'index' ? indexSignal(c) : undefined;
       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setTooltip({ cx: r.left + r.width / 2, top: r.top, bottom: r.bottom, row, date, cell: c, signal: sig });
+      setTooltip({ cx: r.left + r.width / 2, top: r.top, bottom: r.bottom, row, date, cell: c, signal: signalFor(c) });
     },
-    [mode],
+    [signalFor],
   );
 
   const handleMouseLeave = useCallback(() => setTooltip(null), []);
+
+  // Amount labels differ by mode: index amounts are the 5D/22D delivery
+  // averages; the equity tooltip says whose baseline it is.
+  const amtLabels = useMemo(
+    () => (mode === 'index'
+      ? { a5: 'Avg 5D Amt', a22: 'Avg 22D Amt' }
+      : { a5: 'Avg 5D Delivery', a22: 'Avg 22D Delivery' }),
+    [mode],
+  );
 
   if (rows.length === 0 || dates.length === 0) {
     return (
@@ -309,17 +277,6 @@ export default function FlowIntensityMap({
           )}
         </div>
 
-        {/* Constituent toggle: Surge× | ₹ Cr */}
-        {mode === 'constituent' && !surgeToggleProp && (
-          <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: 2, gap: 2 }}>
-            {(['sx', 'amt'] as const).map((m) => (
-              <button key={m} style={toggleBtnStyle(surgeField === m)} onClick={() => setInternalSurge(m)}>
-                {m === 'sx' ? 'Surge×' : '₹ Cr'}
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* Index toggle: 5D | 22D | 66D */}
         {mode === 'index' && onDayWindowChange && (
           <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: 2, gap: 2 }}>
@@ -336,16 +293,16 @@ export default function FlowIntensityMap({
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
         {/* Label column */}
-        <div style={{ flexShrink: 0, width: mode === 'index' ? LABEL_W_IDX : LABEL_W_CON }}>
+        <div style={{ flexShrink: 0, width: labelW }}>
           {/* Spacer for date header row */}
-          <div style={{ height: CELL_H_CON + GAP }} />
+          <div style={{ height: HEADER_ROW_H + GAP }} />
           {rows.map((row) => (
             <div
               key={row}
               title={row}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               style={{
-                height: cellH,
+                height: CELL_H,
                 marginBottom: GAP,
                 display: 'flex',
                 alignItems: 'center',
@@ -361,42 +318,40 @@ export default function FlowIntensityMap({
               onMouseEnter={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; } : undefined}
               onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; (e.currentTarget as HTMLElement).style.textDecoration = 'none'; } : undefined}
             >
-              {mode === 'index' ? trunc(row, 30) : trunc(row, 14)}
+              {mode === 'index' ? trunc(row, 30) : trunc(row, 17)}
             </div>
           ))}
         </div>
 
-        {/* Micro-trend column — index mode only */}
-        {mode === 'index' && (
-          <div style={{ flexShrink: 0, width: TREND_W, paddingRight: 8 }}>
-            <div style={{
-              height: CELL_H_CON + GAP,
-              display: 'flex',
-              alignItems: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 9,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              fontFamily: 'monospace',
-            }}>
-              Trend
-            </div>
-            {rows.map((row) => (
-              <div
-                key={row}
-                title="Score 5D (conviction) per session, oldest → newest. Green = accelerating vs its 1-month pace, amber = fading."
-                style={{
-                  height: cellH,
-                  marginBottom: GAP,
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <MicroTrend rowData={cells[row] ?? []} height={cellH} />
-              </div>
-            ))}
+        {/* Micro-trend column */}
+        <div style={{ flexShrink: 0, width: TREND_W, paddingRight: 8 }}>
+          <div style={{
+            height: HEADER_ROW_H + GAP,
+            display: 'flex',
+            alignItems: 'center',
+            color: 'var(--text-muted)',
+            fontSize: 9,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            fontFamily: 'monospace',
+          }}>
+            Trend
           </div>
-        )}
+          {rows.map((row) => (
+            <div
+              key={row}
+              title="Score 5D (conviction) per session, oldest → newest. Green = accelerating vs its 1-month pace, amber = fading."
+              style={{
+                height: CELL_H,
+                marginBottom: GAP,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <MicroTrend rowData={cells[row] ?? []} height={CELL_H} />
+            </div>
+          ))}
+        </div>
 
         {/* Scrollable cell area */}
         <div style={{ overflowX: 'auto', flex: 1 }}>
@@ -413,6 +368,10 @@ export default function FlowIntensityMap({
                   color: 'var(--text-muted)',
                   fontSize: 10,
                   overflow: 'hidden',
+                  height: HEADER_ROW_H,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 {d}
@@ -433,7 +392,7 @@ export default function FlowIntensityMap({
                         key={dateStr}
                         style={{
                           width: cellW,
-                          height: cellH,
+                          height: CELL_H,
                           flexShrink: 0,
                           borderRadius: 3,
                           background: NO_DATA,
@@ -442,8 +401,7 @@ export default function FlowIntensityMap({
                     );
                   }
 
-                  const bg     = cellColor(row, c);
-                  const border = borderColor(c);
+                  const sig = signalFor(c);
 
                   return (
                     <div
@@ -452,35 +410,31 @@ export default function FlowIntensityMap({
                       onMouseLeave={handleMouseLeave}
                       style={{
                         width: cellW,
-                        height: cellH,
+                        height: CELL_H,
                         flexShrink: 0,
                         borderRadius: 3,
-                        background: bg,
-                        borderTop: `2.5px solid ${border}`,
+                        background: SIGNAL_COLOR[sig],
+                        borderTop: `2.5px solid ${borderColor(c)}`,
                         cursor: 'default',
                         overflow: 'hidden',
-                        ...(mode === 'index' ? {
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 1,
-                          padding: '0 2px',
-                        } : {}),
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 1,
+                        padding: '0 2px',
                       }}
                     >
-                      {mode === 'index' && (
-                        <div style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          fontFamily: 'monospace',
-                          lineHeight: 1.2,
-                          textAlign: 'center',
-                          color: SIGNAL_TEXT[indexSignal(c)],
-                        }}>
-                          {c.s5 != null ? Math.round(c.s5) : '—'}
-                        </div>
-                      )}
+                      <div style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        fontFamily: 'monospace',
+                        lineHeight: 1.2,
+                        textAlign: 'center',
+                        color: SIGNAL_TEXT[sig],
+                      }}>
+                        {c.s5 != null ? Math.round(c.s5) : '—'}
+                      </div>
                     </div>
                   );
                 })}
@@ -493,7 +447,7 @@ export default function FlowIntensityMap({
       {/* ── Footer ── */}
       <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
         Cell fill = money-flow conviction (Score 5D vs its 1-month pace). Cell number = Score 5D. Top edge = price direction that session.
-        {onRowClick && ' Click an index name to open its detail.'}
+        {onRowClick && (mode === 'index' ? ' Click an index name to open its detail.' : ' Click a symbol to open its detail.')}
       </div>
 
       {/* ── Cell tooltip ──
@@ -503,7 +457,7 @@ export default function FlowIntensityMap({
           re-anchor position:fixed and push it off-screen. */}
       {tooltip && createPortal((() => {
         const TT_W = 210;
-        const ttH  = mode === 'index' ? 230 : 130;
+        const ttH  = 250;
         const left = Math.min(Math.max(8, tooltip.cx - TT_W / 2), window.innerWidth - TT_W - 8);
         const fitsAbove = tooltip.top - ttH - 10 >= 8;
         const top = fitsAbove ? tooltip.top - ttH - 10 : tooltip.bottom + 10;
@@ -532,66 +486,51 @@ export default function FlowIntensityMap({
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '2px 12px' }}>
-            {mode === 'constituent' ? (
-              <>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Traded Value</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {fmtCr(tooltip.cell.amt)}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>vs 66D Avg</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {(tooltip.cell.sx ?? 0).toFixed(2)}×
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>1D Change</span>
-                <span style={{
-                  fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
-                  color: tooltip.cell.d1 >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
-                }}>
-                  {fmtPct(tooltip.cell.d1)}
-                </span>
-              </>
-            ) : (
-              <>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Traded Value</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {fmtCr(tooltip.cell.amt)}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg 5D Amt</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {tooltip.cell.amt_5d != null ? fmtCr(tooltip.cell.amt_5d) : '—'}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Avg 22D Amt</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {tooltip.cell.amt_22d != null ? fmtCr(tooltip.cell.amt_22d) : '—'}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 5D</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {tooltip.cell.s5 != null ? tooltip.cell.s5.toFixed(1) : '—'}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 22D</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {tooltip.cell.s22 != null ? tooltip.cell.s22.toFixed(1) : '—'}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>5D Return</span>
-                <span style={{
-                  fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
-                  color: (tooltip.cell.ret_5d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
-                }}>
-                  {fmtPct(tooltip.cell.ret_5d)}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>22D Return</span>
-                <span style={{
-                  fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
-                  color: (tooltip.cell.ret_22d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
-                }}>
-                  {fmtPct(tooltip.cell.ret_22d)}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow Signal</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
-                  {SIGNAL_LABEL[tooltip.signal!]}
-                </span>
-              </>
-            )}
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Traded Value</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+              {fmtCr(tooltip.cell.amt)}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{amtLabels.a5}</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+              {tooltip.cell.amt_5d != null ? fmtCr(tooltip.cell.amt_5d) : '—'}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{amtLabels.a22}</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+              {tooltip.cell.amt_22d != null ? fmtCr(tooltip.cell.amt_22d) : '—'}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 5D</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+              {tooltip.cell.s5 != null ? tooltip.cell.s5.toFixed(1) : '—'}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Score 22D</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+              {tooltip.cell.s22 != null ? tooltip.cell.s22.toFixed(1) : '—'}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>1D Change</span>
+            <span style={{
+              fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+              color: tooltip.cell.d1 >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
+            }}>
+              {fmtPct(tooltip.cell.d1)}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>5D Return</span>
+            <span style={{
+              fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+              color: (tooltip.cell.ret_5d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
+            }}>
+              {fmtPct(tooltip.cell.ret_5d)}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>22D Return</span>
+            <span style={{
+              fontSize: 10, fontFamily: 'monospace', textAlign: 'right',
+              color: (tooltip.cell.ret_22d ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)',
+            }}>
+              {fmtPct(tooltip.cell.ret_22d)}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Flow Signal</span>
+            <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--text-primary)', textAlign: 'right' }}>
+              {SIGNAL_LABEL[tooltip.signal]}
+            </span>
           </div>
         </div>
         );
