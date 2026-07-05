@@ -182,6 +182,9 @@ export interface VixRow {
 export interface SparklinePoint {
   trade_date: string;
   close: number;
+  /** Money-flow scores — only populated by fetchIndexSparkline (detail page) */
+  score_5d?: number | null;
+  score_22d?: number | null;
 }
 
 export interface ConstituentDetail {
@@ -202,10 +205,10 @@ export interface ConstituentDetail {
 /** Last 22 trading days of close prices for a single index (newest first). */
 export async function fetchIndexSparkline(indexId: number): Promise<SparklinePoint[]> {
   const { data, error } = await from('km_index_eod')
-    .select('trade_date,close')
+    .select('trade_date,close,score_5d,score_22d')
     .eq('index_id', indexId)
     .order('trade_date', { ascending: false })
-    .limit(22)
+    .limit(30)
     .execute();
 
   if (error) throw new Error(`[sparkline] ${error.message}`);
