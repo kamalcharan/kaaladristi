@@ -5474,6 +5474,41 @@ def _fetch_signal_universe(cur, exclude_equity_ids: list[int] | None = None) -> 
     return [dict(r) for r in cur.fetchall()]
 
 
+# Full liquid universe for TARGETED discovery — no signal gate. Targeted mode
+# searches by theme knowledge, so a core stock must be findable even on a day
+# it shows no accumulation signal. Same exchange rule as the signal universe.
+# Slim columns (symbol/name/industry/exchange) keep the LLM payload small.
+_LIQUID_UNIVERSE_SQL = """
+    WITH latest AS (
+        SELECT MAX(trade_date) AS dt FROM km_equity_eod
+    )
+    SELECT s.symbol, s.company_name, s.industry, s.exchange
+    FROM km_equity_symbols s
+    JOIN km_equity_eod e ON e.equity_id = s.id
+        AND e.trade_date = (SELECT dt FROM latest)
+    WHERE s.is_active = true
+      AND (
+        s.exchange = 'NSE'
+        OR (
+          s.exchange = 'BSE'
+          AND s.isin IS NOT NULL
+          AND (e.close * e.volume) >= 10000000
+          AND NOT EXISTS (
+            SELECT 1 FROM km_equity_symbols n
+            WHERE n.exchange = 'NSE' AND n.is_active = true
+              AND n.isin = s.isin
+          )
+        )
+      )
+    ORDER BY s.symbol
+"""
+
+
+def _fetch_liquid_universe(cur) -> list[dict]:
+    cur.execute(_LIQUID_UNIVERSE_SQL)
+    return [dict(r) for r in cur.fetchall()]
+
+
 class _DiscoverRequest(BaseModel):
     llm: str = 'claude'  # 'claude' | 'qwen'
 
@@ -5550,7 +5585,7 @@ async def custom_index_discover(req: _DiscoverRequest):
     except Exception:
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
 
-    # Persist to the staging table (migration 097) so recommendations survive
+    # Persist to the staging table (migration 120) so recommendations survive
     # navigation and don't require re-invoking the LLM. Each theme gets its
     # row id back so the UI can mark it used/dismissed later.
     conn = _conn()
@@ -5587,7 +5622,7 @@ async def custom_index_discover(req: _DiscoverRequest):
 
 @app.get('/api/custom-index/themes')
 async def list_discovered_themes(status: str = 'new', limit: int = 50):
-    """List persisted AI-discovered themes (staging table, migration 097).
+    """List persisted AI-discovered themes (staging table, migration 120).
 
     status: 'new' (default) | 'used' | 'dismissed' | 'all'
     """
@@ -5726,3 +5761,122 @@ async def custom_index_suggest(index_id: int, req: _DiscoverRequest):
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
 
     return {'suggestions': suggestions, 'stock_count': len(stocks)}
+
+
+class _TargetRequest(BaseModel):
+    theme_name: str
+    llm: str = 'claude'  # 'claude' | 'qwen'
+
+
+@app.post('/api/custom-index/target')
+async def custom_index_target(req: _TargetRequest):
+    """Targeted (theme-name-driven) discovery — the admin names a theme
+    (e.g. 'Data Centers') and the LLM classifies the FULL liquid universe
+    against it, split into CORE (direct revenue exposure) and ECOSYSTEM
+    (suppliers / enablers / adjacent beneficiaries).
+
+    Unlike /discover this is NOT signal-gated — a core stock must be
+    findable even on a day it shows no accumulation signal.
+
+    Persists one km_discovered_themes row (source='targeted', detail JSONB
+    carries the core/ecosystem split). Returns the persisted theme.
+    """
+    theme_name = req.theme_name.strip()
+    if not theme_name:
+        raise HTTPException(status_code=400, detail='theme_name is required')
+    llm = req.llm.lower()
+    if llm not in ('claude', 'qwen'):
+        raise HTTPException(status_code=400, detail="llm must be 'claude' or 'qwen'")
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            stocks = _fetch_liquid_universe(cur)
+    finally:
+        conn.close()
+
+    if not stocks:
+        raise HTTPException(status_code=503, detail='No equity universe available')
+
+    system_prompt = (
+        "You are a sector analyst with deep knowledge of Indian listed companies "
+        "(NSE, plus liquid BSE-only listings). Given a theme, classify which of the "
+        "provided companies belong to it: CORE = direct, substantial revenue exposure "
+        "to the theme (pure-plays and near-pure-plays); ECOSYSTEM = suppliers, "
+        "infrastructure providers, enablers, and clear adjacent beneficiaries. "
+        "Only use companies from the provided list — never invent entries. Identify "
+        "companies by company_name (BSE symbols are numeric codes) but always return "
+        "the symbol field exactly as provided. Be strict: do not force-fit loosely "
+        "related companies; empty lists are acceptable."
+    )
+    user_prompt = (
+        f"Theme: {theme_name}. "
+        f"Universe of listed companies: {json.dumps(stocks, default=str)}. "
+        "Return JSON: {\"description\": one-sentence theme description, "
+        "\"core\": [{symbol, company_name, role}], "
+        "\"ecosystem\": [{symbol, company_name, role}]} "
+        "where role is a short phrase (e.g. 'colocation operator', 'power cable supplier'). "
+        "Respond in JSON only, no preamble, no markdown fences."
+    )
+
+    if llm == 'claude':
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=2000)
+    else:
+        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=2000)
+
+    if raw is None:
+        raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
+
+    try:
+        result = json.loads(raw)
+        core = result.get('core') or []
+        ecosystem = result.get('ecosystem') or []
+        if not isinstance(core, list) or not isinstance(ecosystem, list):
+            raise ValueError('core/ecosystem must be arrays')
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
+
+    all_symbols = [str(e.get('symbol', '')) for e in core + ecosystem if e.get('symbol')]
+    theme_row = {
+        'id': None,
+        'theme_name': theme_name,
+        'description': result.get('description'),
+        'rationale': None,
+        'constituent_symbols': all_symbols,
+        'llm': llm,
+        'source': 'targeted',
+        'detail': {'core': core, 'ecosystem': ecosystem},
+    }
+
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO km_discovered_themes
+                    (theme_name, description, rationale, constituent_symbols,
+                     llm, stock_count, source, detail)
+                VALUES (%s, %s, %s, %s, %s, %s, 'targeted', %s)
+                RETURNING id
+                """,
+                [
+                    theme_name[:200],
+                    result.get('description'),
+                    None,
+                    all_symbols,
+                    llm,
+                    len(stocks),
+                    json.dumps({'core': core, 'ecosystem': ecosystem}),
+                ],
+            )
+            theme_row['id'] = cur.fetchone()[0]
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'targeted theme persist failed: {exc}')
+    finally:
+        conn.close()
+
+    return {'theme': theme_row, 'stock_count': len(stocks)}
