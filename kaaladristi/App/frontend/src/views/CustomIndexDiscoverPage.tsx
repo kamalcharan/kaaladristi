@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Theme {
+  id: number;
   theme_name: string;
   description: string;
   rationale: string;
   constituent_symbols: string[];
+  llm?: string;
+  discovered_at?: string;
 }
 
 type Llm = 'claude' | 'qwen';
@@ -19,12 +22,44 @@ const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
 const DISPLAY: React.CSSProperties = { fontFamily: 'var(--font-display)' };
 
+function agoLabel(iso?: string): string {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${Math.max(mins, 1)}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export default function CustomIndexDiscoverPage() {
   const navigate = useNavigate();
   const [llm, setLlm] = useState<Llm>('claude');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [themes, setThemes] = useState<Theme[] | null>(null);
+
+  // Load persisted recommendations (staging table, migration 097) on mount —
+  // past discoveries survive navigation without re-invoking the LLM.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${PIPELINE_URL}/api/custom-index/themes?status=new`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.themes) && data.themes.length > 0) {
+          setThemes(data.themes);
+        }
+      } catch {
+        // staging table not reachable — page still works, just without history
+      } finally {
+        if (!cancelled) setInitialLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   async function discover() {
     setLoading(true);
@@ -40,7 +75,10 @@ export default function CustomIndexDiscoverPage() {
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
       const data = await res.json();
-      setThemes(data.themes ?? []);
+      // Newest first; keep previously staged themes visible below the fresh batch.
+      setThemes((prev) => [...(data.themes ?? []), ...(prev ?? []).filter(
+        (p) => !(data.themes ?? []).some((n: Theme) => n.id === p.id),
+      )]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Discovery failed');
     } finally {
@@ -48,13 +86,32 @@ export default function CustomIndexDiscoverPage() {
     }
   }
 
+  async function setThemeStatus(id: number | undefined, status: 'used' | 'dismissed') {
+    if (!id) return; // pre-persistence theme (staging insert failed) — nothing to update
+    try {
+      await fetch(`${PIPELINE_URL}/api/custom-index/themes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    } catch {
+      // non-fatal — worst case the theme reappears next visit
+    }
+  }
+
   function useTheme(theme: Theme) {
+    void setThemeStatus(theme.id, 'used');
     navigate('/custom-index/create', {
       state: {
         name: theme.theme_name,
         constituents: theme.constituent_symbols.map((s) => ({ symbol: s })),
       },
     });
+  }
+
+  function dismissTheme(theme: Theme) {
+    void setThemeStatus(theme.id, 'dismissed');
+    setThemes((prev) => (prev ?? []).filter((t) => t !== theme));
   }
 
   function LlmBtn({ value, label }: { value: Llm; label: string }) {
@@ -148,12 +205,15 @@ export default function CustomIndexDiscoverPage() {
             <div style={{ textAlign: 'center', maxWidth: '380px' }}>
               <div style={{ fontSize: '32px', marginBottom: '16px', opacity: 0.4 }}>✨</div>
               <p style={{ ...DISPLAY, fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-                Find emerging themes
+                {initialLoading ? 'Loading saved themes…' : 'Find emerging themes'}
               </p>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-                Select a model and click "Discover Themes" to scan active NSE stocks with
-                accumulation signals and surface cohesive sub-themes.
-              </p>
+              {!initialLoading && (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+                  Select a model and click "Discover Themes" to scan active NSE stocks with
+                  accumulation signals and surface cohesive sub-themes. Results are saved —
+                  they'll still be here next time without another AI call.
+                </p>
+              )}
             </div>
           </div>
         ) : themes.length === 0 ? (
@@ -171,7 +231,7 @@ export default function CustomIndexDiscoverPage() {
           >
             {themes.map((theme, i) => (
               <div
-                key={i}
+                key={theme.id ?? `fresh-${i}`}
                 style={{
                   border: '1px solid var(--border)',
                   borderRadius: '12px',
@@ -182,9 +242,16 @@ export default function CustomIndexDiscoverPage() {
                   gap: '10px',
                 }}
               >
-                <p style={{ ...DISPLAY, fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
-                  {theme.theme_name}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
+                  <p style={{ ...DISPLAY, fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
+                    {theme.theme_name}
+                  </p>
+                  {(theme.llm || theme.discovered_at) && (
+                    <span style={{ ...MONO, fontSize: '9px', color: 'var(--text-faint)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {[theme.llm, agoLabel(theme.discovered_at)].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </div>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                   {theme.description}
                 </p>
@@ -212,23 +279,40 @@ export default function CustomIndexDiscoverPage() {
                     </span>
                   ))}
                 </div>
-                <button
-                  onClick={() => useTheme(theme)}
-                  style={{
-                    marginTop: '6px',
-                    padding: '8px 0',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    borderRadius: '8px',
-                    border: '1px solid var(--accent-indigo)',
-                    background: 'rgba(99,102,241,0.08)',
-                    color: 'var(--accent-indigo)',
-                    cursor: 'pointer',
-                    width: '100%',
-                  }}
-                >
-                  Use this theme →
-                </button>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                  <button
+                    onClick={() => useTheme(theme)}
+                    style={{
+                      flex: 1,
+                      padding: '8px 0',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      borderRadius: '8px',
+                      border: '1px solid var(--accent-indigo)',
+                      background: 'rgba(99,102,241,0.08)',
+                      color: 'var(--accent-indigo)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Use this theme →
+                  </button>
+                  <button
+                    onClick={() => dismissTheme(theme)}
+                    title="Dismiss — hides this recommendation permanently"
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'transparent',
+                      color: 'var(--text-faint)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             ))}
           </div>

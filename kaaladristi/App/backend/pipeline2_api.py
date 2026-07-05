@@ -5503,4 +5503,94 @@ async def custom_index_discover(req: _DiscoverRequest):
     except Exception:
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
 
+    # Persist to the staging table (migration 097) so recommendations survive
+    # navigation and don't require re-invoking the LLM. Each theme gets its
+    # row id back so the UI can mark it used/dismissed later.
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            for t in themes:
+                cur.execute(
+                    """
+                    INSERT INTO km_discovered_themes
+                        (theme_name, description, rationale, constituent_symbols, llm, stock_count)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    [
+                        str(t.get('theme_name', ''))[:200],
+                        t.get('description'),
+                        t.get('rationale'),
+                        [str(s) for s in (t.get('constituent_symbols') or [])],
+                        llm,
+                        len(stocks),
+                    ],
+                )
+                t['id'] = cur.fetchone()[0]
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'discovered_themes persist failed: {exc}')
+        # Non-fatal — still return the themes; they just won't survive reload.
+    finally:
+        conn.close()
+
     return {'themes': themes, 'stock_count': len(stocks)}
+
+
+@app.get('/api/custom-index/themes')
+async def list_discovered_themes(status: str = 'new', limit: int = 50):
+    """List persisted AI-discovered themes (staging table, migration 097).
+
+    status: 'new' (default) | 'used' | 'dismissed' | 'all'
+    """
+    if status not in ('new', 'used', 'dismissed', 'all'):
+        raise HTTPException(status_code=400, detail="status must be new|used|dismissed|all")
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            if status == 'all':
+                cur.execute(
+                    "SELECT * FROM km_discovered_themes "
+                    "ORDER BY discovered_at DESC LIMIT %s",
+                    [min(limit, 200)],
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM km_discovered_themes WHERE status = %s "
+                    "ORDER BY discovered_at DESC LIMIT %s",
+                    [status, min(limit, 200)],
+                )
+            rows = [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+    return {'themes': rows}
+
+
+class _ThemeStatusRequest(BaseModel):
+    status: str                        # 'used' | 'dismissed' | 'new'
+    used_index_id: int | None = None   # set when converted to a custom index
+
+
+@app.patch('/api/custom-index/themes/{theme_id}')
+async def update_discovered_theme(theme_id: int, req: _ThemeStatusRequest):
+    """Update a staged theme's lifecycle status ('used' / 'dismissed' / back to 'new')."""
+    if req.status not in ('new', 'used', 'dismissed'):
+        raise HTTPException(status_code=400, detail="status must be new|used|dismissed")
+
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE km_discovered_themes "
+                "SET status = %s, used_index_id = %s, updated_at = now() "
+                "WHERE id = %s",
+                [req.status, req.used_index_id, theme_id],
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail=f'theme {theme_id} not found')
+        conn.commit()
+    finally:
+        conn.close()
+    return {'ok': True, 'id': theme_id, 'status': req.status}
