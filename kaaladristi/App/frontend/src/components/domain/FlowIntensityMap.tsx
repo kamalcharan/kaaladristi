@@ -5,6 +5,7 @@
 // 4. Visual Pulse peer view — constituent mode (Post-MVP)
 
 import { useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from '@/components/ui/Card';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -115,8 +116,9 @@ const SIGNAL_LABEL: Record<IndexSignal, string> = {
 // ── Tooltip state ─────────────────────────────────────────────────────────────
 
 interface TooltipState {
-  x: number;
-  y: number;
+  cx: number;      // cell horizontal center (viewport coords)
+  top: number;     // cell top edge
+  bottom: number;  // cell bottom edge
   row: string;
   date: string;
   cell: CellData;
@@ -209,10 +211,11 @@ export default function FlowIntensityMap({
     [mode],
   );
 
-  const handleMouseMove = useCallback(
+  const handleMouseEnter = useCallback(
     (e: React.MouseEvent, row: string, date: string, c: CellData) => {
       const sig = mode === 'index' ? indexSignal(c) : undefined;
-      setTooltip({ x: e.clientX, y: e.clientY, row, date, cell: c, signal: sig });
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setTooltip({ cx: r.left + r.width / 2, top: r.top, bottom: r.bottom, row, date, cell: c, signal: sig });
     },
     [mode],
   );
@@ -352,7 +355,7 @@ export default function FlowIntensityMap({
                   return (
                     <div
                       key={dateStr}
-                      onMouseMove={(e) => handleMouseMove(e, row, dateStr, c)}
+                      onMouseEnter={(e) => handleMouseEnter(e, row, dateStr, c)}
                       onMouseLeave={handleMouseLeave}
                       style={{
                         width: cellW,
@@ -400,24 +403,24 @@ export default function FlowIntensityMap({
         {onRowClick && ' Click an index name to open its detail.'}
       </div>
 
-      {/* ── Cell tooltip (fixed-position, rich multi-field) ──
-          Flips above the cursor near the bottom edge and left of the cursor
-          near the right edge so it always stays inside the viewport. */}
-      {tooltip && (() => {
+      {/* ── Cell tooltip ──
+          Anchored immediately ABOVE the hovered cell (falls below it only
+          when the cell is at the very top of the viewport). Rendered through
+          a portal to document.body so no transformed/filtered ancestor can
+          re-anchor position:fixed and push it off-screen. */}
+      {tooltip && createPortal((() => {
         const TT_W = 210;
         const ttH  = mode === 'index' ? 200 : 130;
-        const left = tooltip.x + 14 + TT_W > window.innerWidth
-          ? Math.max(8, tooltip.x - TT_W - 14)
-          : tooltip.x + 14;
-        const top = tooltip.y + ttH > window.innerHeight - 8
-          ? Math.max(8, tooltip.y - ttH - 12)
-          : tooltip.y - 12;
+        const left = Math.min(Math.max(8, tooltip.cx - TT_W / 2), window.innerWidth - TT_W - 8);
+        const fitsAbove = tooltip.top - ttH - 10 >= 8;
+        const top = fitsAbove ? tooltip.top - ttH - 10 : tooltip.bottom + 10;
         return (
         <div
           style={{
             position: 'fixed',
             left,
             top,
+            width: TT_W,
             zIndex: 9999,
             background: 'var(--card)',
             border: '1px solid var(--border-strong)',
@@ -491,7 +494,7 @@ export default function FlowIntensityMap({
           </div>
         </div>
         );
-      })()}
+      })(), document.body)}
     </Card>
   );
 }
