@@ -9,7 +9,8 @@ import CatalogActionIsland from '@/components/domain/Catalog/CatalogActionIsland
 import type { DeepDiveItem } from '@/components/domain/Catalog/DeepDivePanel'
 
 const CATALOG_SECTIONS = [
-  { id: 'master_frameworks', label: 'Master Frameworks', comingSoon: true },
+  // 'master_frameworks' removed pre-launch (was a comingSoon dead tab) —
+  // returns post-launch as a real template gallery backed by FRAMEWORK_TEMPLATES.
   { id: 'astro_rules',       label: 'Astro Rules',       comingSoon: false },
   { id: 'indicators',        label: 'Chart Indicators',  comingSoon: false },
   { id: 'widgets',           label: 'Intelligence Widgets', comingSoon: false },
@@ -19,26 +20,6 @@ const CATALOG_SECTIONS = [
 type CatalogSection = typeof CATALOG_SECTIONS[number]['id']
 
 const SUBNAV_COLLAPSED_KEY = 'catalog_subnav_collapsed'
-
-function ComingSoonPlaceholder({ title, description }: { title: string; description: string }) {
-  return (
-    <div style={{ maxWidth: 480 }}>
-      <h2 style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: 22,
-        fontWeight: 300,
-        color: 'var(--text-primary)',
-        letterSpacing: '-0.03em',
-        marginBottom: 12,
-      }}>
-        {title}
-      </h2>
-      <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-        {description}
-      </p>
-    </div>
-  )
-}
 
 export default function CatalogPage() {
   const [active, setActive]     = useState<CatalogSection>('astro_rules')
@@ -181,12 +162,6 @@ export default function CatalogPage() {
 
       {/* Right content area */}
       <div className="flex-1 overflow-auto" style={{ padding: 32 }}>
-        {active === 'master_frameworks' && (
-          <ComingSoonPlaceholder
-            title="Master Frameworks"
-            description="Coming in a future release. Build your own framework from the Catalog, or let VaNi suggest a starting point during onboarding."
-          />
-        )}
         {active === 'astro_rules'    && <CatalogAstroSection onSelect={setSelected} />}
         {active === 'indicators'     && <IndicatorsSection   onSelect={setSelected} />}
         {active === 'widgets'        && <WidgetsSection      onSelect={setSelected} />}
