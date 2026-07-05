@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
+
+const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -9,6 +12,8 @@ interface CustomIndex {
   name: string;
   created_at: string | null;
 }
+
+type ComputeStatus = 'idle' | 'loading' | 'done' | 'error';
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -46,6 +51,28 @@ function fmtDate(iso: string | null): string {
 
 export default function CustomIndexPage() {
   const navigate = useNavigate();
+  const [computeState, setComputeState] = useState<Record<number, { status: ComputeStatus; msg?: string }>>({});
+
+  async function calculateIndex(id: number) {
+    setComputeState((prev) => ({ ...prev, [id]: { status: 'loading' } }));
+    try {
+      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${id}/compute`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setComputeState((prev) => ({
+        ...prev,
+        [id]: { status: 'done', msg: `${data.rows_computed} bars in ${(data.elapsed_ms / 1000).toFixed(1)}s` },
+      }));
+    } catch (e) {
+      setComputeState((prev) => ({
+        ...prev,
+        [id]: { status: 'error', msg: e instanceof Error ? e.message : 'failed' },
+      }));
+    }
+  }
 
   const { data: indices = [], isLoading } = useQuery({
     queryKey: ['custom-indices'],
@@ -221,6 +248,36 @@ export default function CustomIndexPage() {
                     stocks
                   </div>
                 </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void calculateIndex(idx.id);
+                  }}
+                  disabled={computeState[idx.id]?.status === 'loading'}
+                  title={
+                    computeState[idx.id]?.msg
+                      ?? "Compute this index's synthetic EOD history + scores so it shows up correctly in Sector Rotation -> Custom"
+                  }
+                  style={{
+                    fontSize: '11px',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: `1px solid ${
+                      computeState[idx.id]?.status === 'error' ? 'var(--risk-red)'
+                      : computeState[idx.id]?.status === 'done' ? 'var(--risk-green)'
+                      : 'var(--risk-green)'
+                    }`,
+                    background: computeState[idx.id]?.status === 'loading' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                    color: computeState[idx.id]?.status === 'error' ? 'var(--risk-red)' : 'var(--risk-green)',
+                    cursor: computeState[idx.id]?.status === 'loading' ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  {computeState[idx.id]?.status === 'loading' ? 'Calculating…'
+                    : computeState[idx.id]?.status === 'done' ? '✓ Calculated'
+                    : computeState[idx.id]?.status === 'error' ? '✕ Retry'
+                    : '⚡ Calculate'}
+                </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
