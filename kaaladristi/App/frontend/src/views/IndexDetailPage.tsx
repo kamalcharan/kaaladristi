@@ -515,39 +515,39 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
 
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
-  const { data: sparkline = [], isLoading: sparkLoading } = useIndexSparkline(indexId);
-  const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66);
-  const { data: sectorInsight, isLoading: insightLoading } = useSectorInsight(indexId, row.trade_date);
+// Money-flow trend — the rotation story over time. When the 1-week score line
+// crosses above the 1-month line, flow into this index is accelerating. This
+// replaced a close-price sparkline that carried no rotation information (the
+// Chart tab has the full price chart).
+function FlowTrendCard({ indexId }: { indexId: number }) {
+  const { data: sparkline = [], isLoading } = useIndexSparkline(indexId);
+  const hasScores = sparkline.some((p) => p.score_5d != null);
 
   return (
-    <div style={{ padding: '24px' }}>
-
-      {/* Signal explanation */}
-      <SignalCard row={row} />
-
-      {/* B70: ScoreCard — unified numeric summary */}
-      <IndexScoreCard row={row} />
-
-      {/* Sparkline */}
-      <div
-        style={{
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          padding: '14px 16px',
-          marginBottom: 24,
-        }}
-      >
-        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 10 }}>
-          Close · 22 Trading Days
+    <div
+      style={{
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '14px 16px',
+        marginBottom: 16,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+        <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+          Money Flow Trend · 30 Sessions
         </span>
-        {sparkLoading ? (
-          <div style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>Loading…</span>
-          </div>
-        ) : sparkline.length > 1 ? (
-          <ResponsiveContainer width="100%" height={72}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          Bright line above dim line = flow accelerating into this index
+        </span>
+      </div>
+      {isLoading ? (
+        <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>Loading…</span>
+        </div>
+      ) : hasScores && sparkline.length > 1 ? (
+        <>
+          <ResponsiveContainer width="100%" height={110}>
             <LineChart data={sparkline} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
               <Tooltip
                 contentStyle={{
@@ -559,21 +559,82 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
                   color: 'var(--text-primary)',
                 }}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                formatter={(v: any) => [typeof v === 'number' ? v.toFixed(2) : v, 'Close']}
+                formatter={(v: any, name: any) => [
+                  typeof v === 'number' ? v.toFixed(1) : v,
+                  name === 'score_5d' ? 'Score 5D (1 week)' : 'Score 22D (1 month)',
+                ]}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 labelFormatter={(l: any) => String(l)}
               />
-              <Line type="monotone" dataKey="close" stroke="var(--gold-soft)" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: 'var(--gold-soft)' }} />
+              <Line type="monotone" dataKey="score_22d" stroke="var(--text-faint)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+              <Line type="monotone" dataKey="score_5d" stroke="var(--gold-soft)" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: 'var(--gold-soft)' }} />
             </LineChart>
           </ResponsiveContainer>
-        ) : (
-          <div style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>No data</span>
+          <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 14, height: 2, background: 'var(--gold-soft)', flexShrink: 0 }} />
+              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Score 5D — 1-week flow</span>
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 14, height: 0, borderTop: '2px dashed var(--text-faint)', flexShrink: 0 }} />
+              <span style={{ ...MONO, fontSize: 9, color: 'var(--text-muted)' }}>Score 22D — 1-month flow</span>
+            </span>
           </div>
-        )}
+        </>
+      ) : (
+        <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>No flow-score history yet for this index</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Section order tells the rotation story: verdict -> plain-language narrative
+// -> the numbers -> flow trend -> which stocks -> breadth context last.
+function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
+  const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66);
+  const { data: sectorInsight, isLoading: insightLoading } = useSectorInsight(indexId, row.trade_date);
+
+  return (
+    <div style={{ padding: '24px' }}>
+
+      {/* 1. Verdict — signal + why */}
+      <SignalCard row={row} />
+
+      {/* 2. VaNi sector narrative — the plain-language read, promoted from the
+             bottom of the page to right under the verdict */}
+      {(insightLoading || sectorInsight?.insight) && (
+        <div
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '14px 18px',
+            marginBottom: 16,
+          }}
+        >
+          <VaNiInsight insight={sectorInsight?.insight} isLoading={insightLoading} />
+        </div>
+      )}
+
+      {/* 3. Numeric summary */}
+      <IndexScoreCard row={row} />
+
+      {/* 4. Money-flow trend */}
+      <FlowTrendCard indexId={indexId} />
+
+      {/* 5. Which stocks — constituents ranked by Score 5D by default */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+            Constituents
+          </span>
+        </div>
+        <ConstituentTable indexId={indexId} tradeDate={row.trade_date} />
       </div>
 
-      {/* Breadth charts */}
+      {/* 6. Breadth context */}
       <div style={{ marginBottom: 24 }}>
         <MarketBreadthChart
           data={breadthData?.data}
@@ -589,31 +650,6 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
           isLoading={breadthLoading}
           rocBadge={breadthData?.rocBadge}
         />
-      </div>
-
-      {/* B71: VaNi sector narrative */}
-      {(insightLoading || sectorInsight?.insight) && (
-        <div
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '14px 18px',
-            marginBottom: 24,
-          }}
-        >
-          <VaNiInsight insight={sectorInsight?.insight} isLoading={insightLoading} />
-        </div>
-      )}
-
-      {/* Constituents */}
-      <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
-            Constituents
-          </span>
-        </div>
-        <ConstituentTable indexId={indexId} tradeDate={row.trade_date} />
       </div>
     </div>
   );
