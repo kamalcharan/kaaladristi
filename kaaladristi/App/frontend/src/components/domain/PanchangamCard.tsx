@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Sun, Moon, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import GlossaryTerm from '@/components/ui/GlossaryTerm';
 import { usePanchang } from '@/hooks';
 import type { DailyPanchang } from '@/types';
 
@@ -85,7 +86,7 @@ function Row({
 
   return (
     <div className="flex items-baseline justify-between gap-2 py-1 border-b border-kd-border last:border-b-0">
-      <span className="text-[10px] uppercase tracking-widest text-muted font-bold shrink-0">{label}</span>
+      <span className="text-[10px] uppercase tracking-widest text-muted font-bold shrink-0"><GlossaryTerm term={label} /></span>
       <div className="flex items-center gap-1.5 min-w-0">
         <span className="text-[12px] font-medium text-right truncate text-[var(--text-primary)]">
           {displayValue}
@@ -156,7 +157,7 @@ function PanchangContent({ p, istTime }: { p: DailyPanchang; istTime: string }) 
         )}
 
         <div className="flex justify-between">
-          <span className="text-[9px] text-muted">{paksha} Paksha</span>
+          <span className="text-[9px] text-muted"><GlossaryTerm term="Paksha">{`${paksha} Paksha`}</GlossaryTerm></span>
           {progress !== null && (
             <span className="text-[9px] text-muted mono">{progress}% of day</span>
           )}
@@ -207,7 +208,7 @@ export default function PanchangamCard({ date }: { date: string }) {
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <span className="text-base">🪐</span>
-        <h3 className="text-[13px] font-bold text-[var(--text-primary)]">Panchangam</h3>
+        <h3 className="text-[13px] font-bold text-[var(--text-primary)]"><GlossaryTerm term="Panchangam" position="right" /></h3>
         <span className="ml-auto text-[10px] text-muted mono">{date}</span>
       </div>
 
