@@ -173,7 +173,7 @@ function SignalCard({ row }: { row: SectorIndexRow }) {
 
 // ── Constituent table ─────────────────────────────────────────────────────────
 
-type SortKey = 'score_5d' | 'pct_chng' | 'ret_5d' | 'ret_22d' | 'ret_66d' | 'rsi_14' | 'magic_rs';
+type SortKey = 'score_5d' | 'score_22d' | 'pct_chng' | 'ret_5d' | 'ret_22d' | 'ret_66d' | 'rsi_14' | 'magic_rs';
 type SortDir = 'asc' | 'desc';
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
@@ -268,6 +268,11 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                 Score 5D<SortIcon col="score_5d" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 82 }} onClick={() => handleSort('score_22d')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                Score 22D<SortIcon col="score_22d" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
             <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('pct_chng')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 1D %<SortIcon col="pct_chng" sortKey={sortKey} sortDir={sortDir} />
@@ -326,6 +331,9 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: scoreColor(row.score_5d) }}>
                   {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: scoreColor(row.score_22d) }}>
+                  {row.score_22d != null ? row.score_22d.toFixed(1) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
                   {fmtPct(row.pct_chng)}
