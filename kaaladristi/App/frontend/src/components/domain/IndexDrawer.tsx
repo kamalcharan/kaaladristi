@@ -220,7 +220,7 @@ function ConstituentList({
           borderBottom: '1px solid var(--border)',
         }}
       >
-        {['Symbol', 'Flow', 'RSI', 'Scr5D'].map((h) => (
+        {['Symbol', 'Flow', 'Scr5D', 'RSI'].map((h) => (
           <span key={h} style={{ ...monoSm, color: 'var(--text-faint)', fontSize: '9px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             {h}
           </span>
@@ -237,11 +237,11 @@ function ConstituentList({
             </div>
           </div>
           <FlowChip flowType={row.flow_type} />
-          <span style={{ ...monoSm, color: rsiColor(row.rsi_14), textAlign: 'right' }}>
-            {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
-          </span>
           <span style={{ ...monoSm, color: 'var(--text-secondary)', textAlign: 'right' }}>
             {row.score_5d != null ? row.score_5d.toFixed(1) : '—'}
+          </span>
+          <span style={{ ...monoSm, color: rsiColor(row.rsi_14), textAlign: 'right' }}>
+            {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
           </span>
         </div>
       ))}
@@ -396,9 +396,9 @@ export default function IndexDrawer({ indexId, row, onClose }: IndexDrawerProps)
             >
               {[
                 { label: 'Close',      value: fmt(row.close, 2),          color: 'var(--text-primary)' },
-                { label: '%Chg',       value: fmtPct(row.pct_chng),       color: pctColor(row.pct_chng) },
-                { label: 'RSI',        value: fmt(row.rsi_14, 1),         color: rsiColor(row.rsi_14) },
                 { label: 'Score 5D',   value: fmt(row.score_5d, 1),       color: 'var(--text-secondary)' },
+                { label: '1D%',        value: fmtPct(row.pct_chng),       color: pctColor(row.pct_chng) },
+                { label: 'RSI',        value: fmt(row.rsi_14, 1),         color: rsiColor(row.rsi_14) },
                 { label: 'Avg Amt 5D', value: row.avg_amt_5d != null ? `${row.avg_amt_5d.toFixed(2)} Cr` : '—', color: 'var(--text-secondary)' },
                 { label: '% Amt Chg', value: pctAmtChg != null ? fmtPct(pctAmtChg) : '—', color: pctColor(pctAmtChg) },
               ].map(({ label, value, color }) => (
