@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router-dom';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface ThemeEntry {
+  symbol: string;
+  company_name?: string | null;
+  role?: string | null;
+}
+
 interface Theme {
   id: number;
   theme_name: string;
@@ -11,6 +17,8 @@ interface Theme {
   constituent_symbols: string[];
   llm?: string;
   discovered_at?: string;
+  source?: string; // 'auto' | 'targeted'
+  detail?: { core?: ThemeEntry[]; ecosystem?: ThemeEntry[] } | null;
 }
 
 type Llm = 'claude' | 'qwen';
@@ -39,6 +47,8 @@ export default function CustomIndexDiscoverPage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [themes, setThemes] = useState<Theme[] | null>(null);
+  const [targetName, setTargetName] = useState('');
+  const [targeting, setTargeting] = useState(false);
 
   // Load persisted recommendations (staging table, migration 097) on mount —
   // past discoveries survive navigation without re-invoking the LLM.
@@ -83,6 +93,33 @@ export default function CustomIndexDiscoverPage() {
       setError(err instanceof Error ? err.message : 'Discovery failed');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function target() {
+    const name = targetName.trim();
+    if (!name) return;
+    setTargeting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${PIPELINE_URL}/api/custom-index/target`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme_name: name, llm }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.theme) {
+        setThemes((prev) => [data.theme, ...(prev ?? [])]);
+        setTargetName('');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Targeted discovery failed');
+    } finally {
+      setTargeting(false);
     }
   }
 
@@ -191,6 +228,56 @@ export default function CustomIndexDiscoverPage() {
         </div>
       </div>
 
+      {/* Targeted discovery bar */}
+      <div
+        style={{
+          padding: '10px 24px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+          Or search a specific theme:
+        </span>
+        <input
+          value={targetName}
+          onChange={(e) => setTargetName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !targeting) void target(); }}
+          placeholder='e.g. "Data Centers" — AI finds core + ecosystem stocks'
+          style={{
+            flex: 1,
+            maxWidth: '420px',
+            padding: '7px 12px',
+            fontSize: '12px',
+            borderRadius: '8px',
+            border: '1px solid var(--border)',
+            background: 'transparent',
+            color: 'var(--text-primary)',
+            outline: 'none',
+          }}
+        />
+        <button
+          onClick={() => void target()}
+          disabled={targeting || targetName.trim().length === 0}
+          style={{
+            padding: '7px 16px',
+            fontSize: '12px',
+            fontWeight: 600,
+            borderRadius: '8px',
+            border: '1px solid var(--accent-indigo)',
+            background: targeting ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)',
+            color: targeting || targetName.trim().length === 0 ? 'var(--text-faint)' : 'var(--accent-indigo)',
+            cursor: targeting || targetName.trim().length === 0 ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {targeting ? 'Searching…' : '🎯 Find Stocks'}
+        </button>
+      </div>
+
       {/* Error */}
       {error && (
         <div style={{ padding: '10px 24px', background: 'rgba(239,68,68,0.08)', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
@@ -247,9 +334,9 @@ export default function CustomIndexDiscoverPage() {
                   <p style={{ ...DISPLAY, fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
                     {theme.theme_name}
                   </p>
-                  {(theme.llm || theme.discovered_at) && (
+                  {(theme.llm || theme.discovered_at || theme.source === 'targeted') && (
                     <span style={{ ...MONO, fontSize: '9px', color: 'var(--text-faint)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {[theme.llm, agoLabel(theme.discovered_at)].filter(Boolean).join(' · ')}
+                      {[theme.source === 'targeted' ? '🎯 targeted' : null, theme.llm, agoLabel(theme.discovered_at)].filter(Boolean).join(' · ')}
                     </span>
                   )}
                 </div>
@@ -261,25 +348,63 @@ export default function CustomIndexDiscoverPage() {
                     {theme.rationale}
                   </p>
                 )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '2px' }}>
-                  {(theme.constituent_symbols ?? []).map((sym) => (
-                    <span
-                      key={sym}
-                      style={{
-                        ...MONO,
-                        fontSize: '10px',
-                        fontWeight: 600,
-                        padding: '2px 7px',
-                        borderRadius: '4px',
-                        border: '1px solid var(--border)',
-                        color: 'var(--text-secondary)',
-                        background: 'rgba(255,255,255,0.03)',
-                      }}
-                    >
-                      {sym}
-                    </span>
-                  ))}
-                </div>
+                {theme.detail && ((theme.detail.core?.length ?? 0) + (theme.detail.ecosystem?.length ?? 0)) > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                    {(['core', 'ecosystem'] as const).map((group) => {
+                      const entries = theme.detail?.[group] ?? [];
+                      if (entries.length === 0) return null;
+                      const isCore = group === 'core';
+                      return (
+                        <div key={group}>
+                          <div style={{ ...MONO, fontSize: '9px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: isCore ? 'var(--accent-indigo)' : 'var(--text-faint)', marginBottom: '4px' }}>
+                            {isCore ? 'Core' : 'Ecosystem'} · {entries.length}
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                            {entries.map((e) => (
+                              <span
+                                key={e.symbol}
+                                title={[e.company_name, e.role].filter(Boolean).join(' — ')}
+                                style={{
+                                  ...MONO,
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  padding: '2px 7px',
+                                  borderRadius: '4px',
+                                  border: `1px solid ${isCore ? 'var(--accent-indigo)' : 'var(--border)'}`,
+                                  color: isCore ? 'var(--accent-indigo)' : 'var(--text-secondary)',
+                                  background: isCore ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
+                                  cursor: 'default',
+                                }}
+                              >
+                                {e.symbol}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '2px' }}>
+                    {(theme.constituent_symbols ?? []).map((sym) => (
+                      <span
+                        key={sym}
+                        style={{
+                          ...MONO,
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          padding: '2px 7px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          background: 'rgba(255,255,255,0.03)',
+                        }}
+                      >
+                        {sym}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
                   <button
                     onClick={() => useTheme(theme)}
