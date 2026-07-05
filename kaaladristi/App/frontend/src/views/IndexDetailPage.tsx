@@ -18,7 +18,7 @@ import type { ChartOverlay } from '@/types/framework';
 const EMPTY_OVERLAYS: ChartOverlay[] = [];
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol } from '@/lib/symbolUtils';
-import type { SectorIndexRow } from '@/services/sectorRotation';
+import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
@@ -134,7 +134,7 @@ function SignalCard({ row }: { row: SectorIndexRow }) {
         borderRadius: 8,
         background: signal && signalStyle ? signalStyle.bg : 'var(--card)',
         padding: '14px 16px',
-        marginBottom: 20,
+        marginBottom: 16,
       }}
     >
       {signal && signalStyle ? (
@@ -255,8 +255,13 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
   }
 
   return (
-    <div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+    // Own scroll region: overflow:auto gives horizontal reach to the right
+    // columns (Flow/RSI/MagicRS were clipped with no scrollbar) while the
+    // maxHeight keeps the sticky header working — sticky anchors to the
+    // nearest scroll container, so an unbounded overflowX-only wrapper would
+    // silently stop the header from sticking.
+    <div style={{ overflow: 'auto', maxHeight: '70vh' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 980 }}>
         <thead>
           <tr>
             <th style={{ ...thBase, textAlign: 'left', width: 36 }}>#</th>
@@ -450,8 +455,8 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
         )}
       </div>
 
-      {/* Score + delivery row */}
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+      {/* Score + delivery row — scores first (owner doctrine), returns below */}
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 14 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>Score</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -502,7 +507,7 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
         )}
       </div>
       {/* Returns row */}
-      <div style={{ display: 'flex', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         {([['5D', row.ret_5d], ['22D', row.ret_22d], ['66D', row.ret_66d]] as [string, number | null][]).map(([label, v]) => (
           <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{label} Ret</span>
@@ -598,8 +603,11 @@ function FlowTrendCard({ indexId }: { indexId: number }) {
   );
 }
 
-// Section order tells the rotation story: verdict -> plain-language narrative
-// -> the numbers -> flow trend -> which stocks -> breadth context last.
+// Layout (owner decision 2026-07-05): verdict + narrative + numbers in a
+// narrow left column, the constituent evidence beside them on the right —
+// verdict and evidence side-by-side instead of verdict-then-scroll. Breadth
+// context spans full width below. flexWrap collapses to a single stack on
+// narrow screens.
 function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
   const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66);
   const { data: sectorInsight, isLoading: insightLoading } = useSectorInsight(indexId, row.trade_date);
@@ -607,58 +615,94 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
   return (
     <div style={{ padding: '24px' }}>
 
-      {/* 1. Verdict — signal + why */}
-      <SignalCard row={row} />
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 8 }}>
 
-      {/* 2. VaNi sector narrative — the plain-language read, promoted from the
-             bottom of the page to right under the verdict */}
-      {(insightLoading || sectorInsight?.insight) && (
+        {/* ── Left column: verdict → narrative → numbers → flow trend ── */}
+        <div style={{ flex: '1 1 340px', minWidth: 320 }}>
+
+          {/* 1. Verdict — signal + why */}
+          <SignalCard row={row} />
+
+          {/* 2. VaNi sector narrative — the plain-language read */}
+          {(insightLoading || sectorInsight?.insight) && (
+            <div style={{ marginBottom: 16 }}>
+              <VaNiInsight
+                insight={sectorInsight?.insight}
+                isLoading={insightLoading}
+                className="mt-0"
+              />
+            </div>
+          )}
+
+          {/* 3. Numeric summary */}
+          <IndexScoreCard row={row} />
+
+          {/* 4. Money-flow trend */}
+          <FlowTrendCard indexId={indexId} />
+        </div>
+
+        {/* ── Right column: which stocks — ranked by Score 5D by default ── */}
+        <div style={{ flex: '2 1 520px', minWidth: 0 }}>
+          <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+                Constituents
+              </span>
+            </div>
+            <ConstituentTable indexId={indexId} tradeDate={row.trade_date} />
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Breadth context — needs a population: suppressed under 5
+             constituents, small-sample caption from 5 to 7 (Breadth_ROC_Spec §4) */}
+      {!breadthLoading && breadthData != null && breadthData.stockCount < BREADTH_MIN_N ? (
         <div
           style={{
             background: 'var(--card)',
-            border: '1px solid var(--border)',
+            border: '1px dashed var(--border)',
             borderRadius: 8,
-            padding: '14px 18px',
-            marginBottom: 16,
+            padding: '18px 20px',
+            marginBottom: 24,
           }}
         >
-          <VaNiInsight insight={sectorInsight?.insight} isLoading={insightLoading} />
-        </div>
-      )}
-
-      {/* 3. Numeric summary */}
-      <IndexScoreCard row={row} />
-
-      {/* 4. Money-flow trend */}
-      <FlowTrendCard indexId={indexId} />
-
-      {/* 5. Which stocks — constituents ranked by Score 5D by default */}
-      <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
-        <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
-            Constituents
+          <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', display: 'block', marginBottom: 6 }}>
+            Market Breadth · Breadth Momentum
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Breadth charts will be available once this index has at least {BREADTH_MIN_N} constituents
+            (currently {breadthData.stockCount}). Breadth measures what fraction of a population is
+            participating — it needs a population.
           </span>
         </div>
-        <ConstituentTable indexId={indexId} tradeDate={row.trade_date} />
-      </div>
-
-      {/* 6. Breadth context */}
-      <div style={{ marginBottom: 24 }}>
-        <MarketBreadthChart
-          data={breadthData?.data}
-          isLoading={breadthLoading}
-          zoneMode={breadthData?.zoneMode}
-          percentileRank={breadthData?.percentileRank ?? undefined}
-          stockCount={breadthData?.stockCount}
-        />
-      </div>
-      <div style={{ marginBottom: breadthData?.roc ? 8 : 24 }}>
-        <BreadthRocChart
-          data={breadthData?.roc}
-          isLoading={breadthLoading}
-          rocBadge={breadthData?.rocBadge}
-        />
-      </div>
+      ) : (
+        <>
+          {!breadthLoading && breadthData != null && breadthData.stockCount < BREADTH_SMALL_N && (
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ ...MONO, fontSize: 10, color: 'var(--caution, var(--risk-amber))' }}>
+                Small sample · {breadthData.stockCount} stocks — one constituent crossing an average
+                moves this gauge noticeably
+              </span>
+            </div>
+          )}
+          <div style={{ marginBottom: 24 }}>
+            <MarketBreadthChart
+              data={breadthData?.data}
+              isLoading={breadthLoading}
+              zoneMode={breadthData?.zoneMode}
+              percentileRank={breadthData?.percentileRank ?? undefined}
+              stockCount={breadthData?.stockCount}
+            />
+          </div>
+          <div style={{ marginBottom: breadthData?.roc ? 8 : 24 }}>
+            <BreadthRocChart
+              data={breadthData?.roc}
+              isLoading={breadthLoading}
+              rocBadge={breadthData?.rocBadge}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
