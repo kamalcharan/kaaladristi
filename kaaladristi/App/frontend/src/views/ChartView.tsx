@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft 
 import { fetchIndicatorDataById, fetchEquityEodById } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import { InstrumentIntelligence } from '@/components/domain';
+import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { TimeRange } from '@/types';
@@ -206,6 +207,28 @@ export default function ChartView() {
             {isIndex ? 'INDEX' : 'EQUITY'}
           </span>
           <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
+          <PulseStudySwitch
+            active="study"
+            type={isEquity ? 'equity' : 'index'}
+            id={numId}
+            name={name}
+          />
+          {/* Verdict chip — the ONLY decision-layer element allowed on Study
+              (POA Phase 0.2): the Pulse verdict travels with the user. */}
+          {snapshot && (
+            <span
+              title={`${snapshot.corrState.tagline} — open Pulse for the full verdict`}
+              onClick={() => navigate(isEquity ? `/pulse/equity/${numId}` : `/pulse/${numId}`)}
+              className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border cursor-pointer"
+              style={{
+                color: snapshot.corrState.color,
+                borderColor: `color-mix(in srgb, ${snapshot.corrState.color} 40%, transparent)`,
+                background: `color-mix(in srgb, ${snapshot.corrState.color} 12%, transparent)`,
+              }}
+            >
+              ● Pulse: {snapshot.corrState.state}
+            </span>
+          )}
           {isEquity && equityPulse.meta?.industry && (
             <span className="text-[10px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
               {equityPulse.meta.industry}

@@ -298,6 +298,19 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   }}>
                     Indicator
                   </span>
+                  {/* Layer contract (POA Phase 0.3): indicators apply to Study
+                      charts only — Pulse is curated and takes no widgets. */}
+                  <span
+                    title="Applies to Study charts (the chart pages and your My Space chart). Pulse views are curated and not configurable."
+                    style={{
+                      fontSize: 8.5, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
+                      color: 'var(--gold)', letterSpacing: '0.08em',
+                      textTransform: 'uppercase', background: 'rgba(240,165,0,0.08)',
+                      border: '1px solid rgba(240,165,0,0.25)', padding: '1px 5px', borderRadius: 3,
+                      cursor: 'help',
+                    }}>
+                    Study Charts
+                  </span>
                 </div>
 
                 {/* Name */}

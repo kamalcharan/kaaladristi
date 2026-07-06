@@ -81,6 +81,11 @@ export default function BetaWelcomeModal() {
             astronomical layers.
           </p>
           <p className="text-[15px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            Every stock and index has two views: <strong style={{ color: 'var(--text-primary)' }}>Pulse</strong> gives
+            you the 5-second verdict, <strong style={{ color: 'var(--text-primary)' }}>Study</strong> is
+            where you verify it with your own overlays and timeframes.
+          </p>
+          <p className="text-[15px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             This is not investment advice. DristiQ is an atmospheric intelligence platform —
             it observes patterns, not predictions.
           </p>

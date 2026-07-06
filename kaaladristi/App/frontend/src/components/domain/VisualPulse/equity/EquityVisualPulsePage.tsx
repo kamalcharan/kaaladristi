@@ -11,7 +11,8 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import PulseStudySwitch, { PulseStudyHint } from '@/components/domain/PulseStudySwitch';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import type { EquityPulseBar } from '@/hooks/useEquityVisualPulse';
 import {
@@ -81,6 +82,7 @@ function exchangeColor(exchange: string | null): string {
 export default function EquityVisualPulsePage() {
   const { equityId: rawId } = useParams<{ equityId: string }>();
   const equityId = rawId ? parseInt(rawId, 10) : null;
+  const navigate = useNavigate();
 
   const {
     meta,
@@ -255,7 +257,11 @@ export default function EquityVisualPulsePage() {
               {meta.industry}
             </span>
           )}
+          <span className="ml-auto">
+            <PulseStudySwitch active="pulse" type="equity" id={equityId!} name={meta.symbol} />
+          </span>
         </div>
+        <PulseStudyHint />
 
         {/* Price line */}
         <div className="flex items-center gap-3 mb-2">
@@ -364,6 +370,7 @@ export default function EquityVisualPulsePage() {
                 corrState={snapshot.corrState}
                 date={bar.trade_date}
                 isFading={isFading}
+                onStudyClick={() => navigate(`/chart/equity/${equityId}?name=${encodeURIComponent(meta.symbol)}`)}
               />
 
               {/* Scan Presence */}

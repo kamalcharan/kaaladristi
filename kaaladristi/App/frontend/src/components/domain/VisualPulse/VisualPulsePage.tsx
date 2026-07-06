@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import PulseStudySwitch, { PulseStudyHint } from '@/components/domain/PulseStudySwitch';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import {
   computePulseSnapshot,
@@ -38,6 +39,7 @@ function buildRssHistory(bars: PulseBar[]): number[] {
 export default function VisualPulsePage() {
   const { indexId } = useParams<{ indexId: string }>();
   const numId = indexId ? parseInt(indexId, 10) : null;
+  const navigate = useNavigate();
 
   const { bars, dcInferences, isLoading, error } = useVisualPulse(numId);
 
@@ -181,7 +183,11 @@ export default function VisualPulsePage() {
           }}>
             Candle {effectiveIdx + 1} / {bars.length}
           </span>
+          <span style={{ marginLeft: 'auto' }}>
+            <PulseStudySwitch active="pulse" type="index" id={numId!} />
+          </span>
         </div>
+        <PulseStudyHint />
 
         {/* Chart */}
         <div style={{ flex: 1, minHeight: 0 }}>
@@ -239,6 +245,7 @@ export default function VisualPulsePage() {
                 corrState={snapshot.corrState}
                 date={bar.trade_date}
                 isFading={isFading}
+                onStudyClick={() => navigate(`/chart/index/${numId}`)}
               />
 
               {/* Correlation */}
