@@ -4,8 +4,8 @@
  * The rotation verdict without the trip to /sector-rotation: three semantic
  * buckets driven by the same 5-state money-flow signal as the sector heatmap
  * (flowSignal, STRONG cut 25 — single source of truth, imported). Sectoral +
- * curated indices together; curated marked ✱. Replaces the old industry-rank
- * rotation panel (owner decision 2026-07-06 — one taxonomy, the stable one).
+ * curated indices together. Replaces the old industry-rank rotation panel
+ * (owner decision 2026-07-06 — one taxonomy, the stable one).
  */
 
 import { useMemo } from 'react';
@@ -45,6 +45,7 @@ function scoreColor(v: number | null | undefined): string {
 function PulseRow({ row, onClick }: { row: SectorPulseRow; onClick: () => void }) {
   const latest = row.cells[0];
   const s5 = latest?.s5 ?? null;
+  const s22 = latest?.s22 ?? null;
   return (
     <div
       onClick={onClick}
@@ -63,10 +64,12 @@ function PulseRow({ row, onClick }: { row: SectorPulseRow; onClick: () => void }
         }}
       >
         {row.name.replace(/^NIFTY /, '')}
-        {row.isCustom && <span style={{ color: 'var(--gold)', marginLeft: 4 }}>✱</span>}
       </span>
       <span style={{ ...MONO, fontSize: 12, fontWeight: 600, color: scoreColor(s5), flexShrink: 0, width: 28, textAlign: 'right' }}>
         {s5 != null ? Math.round(s5) : '—'}
+      </span>
+      <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)', flexShrink: 0, width: 28, textAlign: 'right' }}>
+        {s22 != null ? Math.round(s22) : '—'}
       </span>
       <div style={{ flexShrink: 0 }}>
         <MicroTrend rowData={row.cells} height={30} />
@@ -101,7 +104,7 @@ export default function SectorPulse() {
           Sector Pulse
         </span>
         <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-          Money-flow verdict per sector · number = Score 5D · bars = 22-session conviction trend · ✱ curated
+          Money-flow verdict per sector · bars = 22-session conviction trend
         </span>
         <button
           onClick={() => navigate('/sector-rotation')}
@@ -141,6 +144,12 @@ export default function SectorPulse() {
                   <span style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
                     {rows.length}
                   </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 4px', borderBottom: '1px solid var(--border)', marginBottom: 2 }}>
+                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flex: 1 }}>Sector</span>
+                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 28, textAlign: 'right', flexShrink: 0 }}>5D</span>
+                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 28, textAlign: 'right', flexShrink: 0 }}>22D</span>
+                  <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 72, flexShrink: 0 }}>Trend</span>
                 </div>
                 {rows.length === 0 ? (
                   <div style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', padding: '6px 6px 8px' }}>
