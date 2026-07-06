@@ -36,6 +36,15 @@ interface PanelDef {
 
 const PANELS: PanelDef[] = [
   {
+    id: 'conviction',
+    title: 'Conviction · Score 5D vs 22D',
+    series: [
+      { key: 'score_5d', color: 'var(--gold, #d4a84b)', label: 'Score 5D' },
+      { key: 'score_22d', color: 'var(--text-faint, #64748b)', label: 'Score 22D', dashed: true },
+    ],
+    domain: [0, 'auto'],
+  },
+  {
     id: 'momentum',
     title: 'Momentum · RSI / MFI',
     series: [
@@ -68,7 +77,7 @@ const PANELS: PanelDef[] = [
 ];
 
 function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
-  const [open, setOpen] = useState(def.id === 'momentum');
+  const [open, setOpen] = useState(def.id === 'conviction');
 
   const data = rows.slice(-WINDOW).map((r) => {
     const point: Record<string, unknown> = { trade_date: r.trade_date };
