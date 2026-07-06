@@ -12,6 +12,7 @@ import RsiWidget from '@/components/domain/Catalog/widgets/RsiWidget'
 import WorkspaceTimelineWidget from '@/components/domain/Catalog/widgets/WorkspaceTimelineWidget'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
+import PlanetRegimeStrip from '@/components/domain/DashboardV3/PlanetRegimeStrip'
 import WorkspaceChart from '@/components/workspace/WorkspaceChart'
 import { executeScan } from '@/services/scanEngine'
 import { from } from '@/services/postgrest'
@@ -63,6 +64,7 @@ const WIDGET_COMPONENT_MAP: Record<string, () => React.ReactElement> = {
   chart_player:    () => <WorkspaceTimelineWidget />,
   breadth_roc:     () => <BreadthRocChart />,
   six_day_outlook: () => <SixDayOutlookCompact date={TODAY} />,
+  planet_regime:   () => <PlanetRegimeStrip />,
 }
 
 // ── Scanner block content ─────────────────────────────────────
