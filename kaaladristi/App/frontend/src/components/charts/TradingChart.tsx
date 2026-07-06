@@ -76,6 +76,9 @@ interface TradingChartProps {
   highlightDate?: string | null;
   overlays?: ChartOverlay[];
   astroBands?: AstroBand[];
+  /** Big Money days (Phase 3): gold dashed price line at each event's zone
+   *  low + a ₹ marker on the event bar. Observational annotations only. */
+  bigMoneyEvents?: { trade_date: string; price: number; label: string }[];
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
@@ -184,7 +187,7 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], onVisibleRangeChange, onCrosshairMove, onZoneClick }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], bigMoneyEvents = [], onVisibleRangeChange, onCrosshairMove, onZoneClick }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -351,14 +354,28 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
     }
 
+    // Big Money days (Phase 3): gold dashed line at each zone low
+    for (const ev of bigMoneyEvents) {
+      candleSeries.createPriceLine({
+        price: ev.price,
+        color: '#d4a84b',
+        lineWidth: 1 as LineWidth,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: ev.label,
+      });
+    }
+
     // Markers: Dot signals + Swing High/Low
     const markers: SeriesMarker<Time>[] = [];
+    const bmDates = new Set(bigMoneyEvents.map((e) => e.trade_date));
     for (const d of data) {
       if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.violet, shape: 'circle', text: 'SVD' });
       if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.indigo, shape: 'circle', text: 'SBD' });
       if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskAmber, shape: 'circle', text: 'SYD' });
       if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown', text: 'SH' });
       if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp', text: 'SL' });
+      if (bmDates.has(d.trade_date)) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: '#d4a84b', shape: 'circle', text: '₹' });
     }
     if (markers.length > 0) {
       markers.sort((a, b) => (a.time as string).localeCompare(b.time as string));
@@ -597,7 +614,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     });
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
     requestAnimationFrame(() => { drawBandsRef.current?.(); });
-  }, [data, height, compact, workspaceMode, indicatorOverlays, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, onVisibleRangeChange, onCrosshairMove]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
