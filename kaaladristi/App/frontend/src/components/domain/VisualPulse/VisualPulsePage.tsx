@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import PulseStudySwitch, { PulseStudyHint } from '@/components/domain/PulseStudySwitch';
 import { useIndexDetail } from '@/hooks/useSectorRotation';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
+import { useInstrumentInsight } from '@/hooks';
 import {
   computePulseSnapshot,
   computeCorrHistory,
@@ -16,7 +17,8 @@ import {
 import VisualPulseChart from './VisualPulseChart';
 import AstroStrip from './AstroStrip';
 import TimelineSlider from './TimelineSlider';
-import { CorrelationCard, OrderFlowCard, SmartMoneyCard, DivergenceCard, VaNiHeader, VaNiSentence } from './index';
+import PulseVerdictBand from './PulseVerdictBand';
+import { OrderFlowCard, SmartMoneyCard, DivergenceCard, VaNiHeader } from './index';
 import type { SmartMoneyBar } from './SmartMoneyCard';
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -36,6 +38,10 @@ function buildRssHistory(bars: PulseBar[]): number[] {
 }
 
 // ── Main Page ───────────────────────────────────────────────────
+// Layout pass 2026-07-06: verdict-first restructure on the shared responsive
+// shell (same shell as EquityVisualPulsePage). The PulseVerdictBand above the
+// chart replaces the sidebar's VaNiSentence + CorrelationCard; the sidebar
+// keeps only the evidence trio (Order Flow / Smart Money / Divergence).
 
 export default function VisualPulsePage() {
   const { indexId } = useParams<{ indexId: string }>();
@@ -46,6 +52,10 @@ export default function VisualPulsePage() {
   // Header label was hardcoded "NIFTY 50" regardless of the viewed index —
   // resolve the real name (fixed alongside Phase 1, owner request).
   const { data: indexMeta } = useIndexDetail(numId ?? undefined);
+
+  // AI narrative for the LATEST bar only — one cached call per instrument per
+  // day (platform VaNi presence pattern). Scrubbing never fires LLM calls.
+  const insightQuery = useInstrumentInsight(numId ?? 0, 'index');
 
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
@@ -116,21 +126,17 @@ export default function VisualPulsePage() {
   // ── Loading / Error states ──
   if (isLoading) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100%', color: 'var(--text-muted)',
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
-      }}>Loading Visual Pulse...</div>
+      <div className="flex items-center justify-center h-full text-muted font-mono text-xs">
+        Loading Visual Pulse...
+      </div>
     );
   }
 
   if (error || bars.length === 0) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100%', color: 'var(--text-muted)',
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 12,
-      }}>{error ? `Error: ${error.message}` : 'No data available'}</div>
+      <div className="flex items-center justify-center h-full text-muted font-mono text-xs">
+        {error ? `Error: ${error.message}` : 'No data available'}
+      </div>
     );
   }
 
@@ -138,63 +144,54 @@ export default function VisualPulsePage() {
   const isNow = effectiveIdx === bars.length - 1;
 
   // Flow narrative (for order flow card)
-  const flowNarrative = snapshot
-    ? buildFlowNarrative(snapshot)
-    : '';
+  const flowNarrative = snapshot ? buildFlowNarrative(snapshot) : '';
 
   // SM narrative (for smart money card)
-  const smNarrative = snapshot
-    ? buildSmNarrative(snapshot)
-    : '';
+  const smNarrative = snapshot ? buildSmNarrative(snapshot) : '';
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 380px',
-      gridTemplateRows: '1fr 58px',
-      height: '100%',
-      overflow: 'hidden',
-      background: 'var(--kd-bg)',
-    }}>
-      {/* Left Panel — Chart + Astro */}
-      <div style={{
-        gridColumn: 1, gridRow: 1,
-        display: 'flex', flexDirection: 'column',
-        padding: '12px 16px',
-        overflow: 'hidden',
-      }}>
-        {/* Top bar mini */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8,
-        }}>
-          <span style={{
-            fontSize: 13, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
-            color: 'var(--text-primary)', letterSpacing: 2,
-          }}>
-            DristiQ
+    <div className="h-full overflow-hidden bg-kd-bg flex flex-col lg:grid lg:grid-cols-[1fr_340px] lg:grid-rows-[1fr_58px]">
+
+      {/* ── Left Panel — Verdict + Chart + Astro ── */}
+      <div className="flex flex-col min-h-0 overflow-y-auto lg:overflow-hidden lg:col-start-1 lg:row-start-1 px-3 pt-3 pb-2 md:px-4">
+
+        {/* Header */}
+        <div className="flex items-center gap-3 flex-wrap mb-1">
+          <span className="text-base font-serif font-bold text-primary leading-none">
+            {indexMeta?.name ?? '…'}
           </span>
-          <span style={{
-            fontSize: 15, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
-            color: 'var(--text-primary)',
-          }}>{indexMeta?.name ?? '…'}</span>
-          <span style={{
-            fontSize: 15, fontFamily: 'var(--font-mono, monospace)',
-            color: bar.close >= (bar.open ?? 0) ? 'var(--risk-green)' : 'var(--risk-red)',
-          }}>{bar.close?.toLocaleString()}</span>
-          <span style={{
-            fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-            color: 'var(--text-muted)',
-          }}>
-            Candle {effectiveIdx + 1} / {bars.length}
+          <span
+            className="text-[15px] font-mono"
+            style={{ color: bar.close >= (bar.open ?? 0) ? 'var(--risk-green)' : 'var(--risk-red)' }}
+          >
+            {bar.close?.toLocaleString('en-IN')}
           </span>
-          <span style={{ marginLeft: 'auto' }}>
+          <span className="ml-auto">
             <PulseStudySwitch active="pulse" type="index" id={numId!} />
           </span>
         </div>
         <PulseStudyHint />
 
+        {/* Verdict band — the 5-second answer, first thing the eye lands on */}
+        {snapshot && (
+          <PulseVerdictBand
+            corrState={snapshot.corrState}
+            astroScore={snapshot.astroScore}
+            techScore={snapshot.techScore}
+            smScore={snapshot.smScore}
+            selectedStyle={selectedStyle}
+            onStyleChange={handleStyleChange}
+            date={bar.trade_date}
+            isNow={isNow}
+            isFading={isFading}
+            narrative={insightQuery.data?.ai ? insightQuery.data.insight : null}
+            narrativeLoading={insightQuery.isLoading}
+            onStudyClick={() => navigate(`/chart/index/${numId}`)}
+          />
+        )}
+
         {/* Chart */}
-        <div style={{ flex: 1, minHeight: 0 }}>
+        <div className="flex-1 min-h-[200px]">
           <VisualPulseChart
             bars={bars}
             activeIndex={effectiveIdx}
@@ -203,30 +200,23 @@ export default function VisualPulsePage() {
           />
         </div>
 
-        {/* Legend */}
-        <div style={{
-          display: 'flex', gap: 14, padding: '4px 0',
-          fontSize: 8, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)',
-        }}>
-          <span><span style={{ color: 'var(--accent-gold)' }}>╌</span> Golden Line</span>
-          <span><span style={{ color: 'var(--accent-violet)' }}>{'\u25CF'}</span> SVD</span>
-          <span><span style={{ color: 'var(--accent-indigo)' }}>{'\u25CF'}</span> SBD</span>
-          <span><span style={{ color: 'var(--risk-amber)' }}>{'\u25CF'}</span> SYD</span>
+        {/* Legend — mapped vocabulary, same as equity VP */}
+        <div className="flex gap-3.5 py-1 text-[10px] font-mono text-muted flex-wrap">
+          <span><span style={{ color: 'var(--accent-gold)' }}>╌</span> Golden Line (SMA 150)</span>
+          <span><span style={{ color: 'var(--accent-violet)' }}>●</span> Volume Drive</span>
+          <span><span style={{ color: 'var(--accent-indigo)' }}>●</span> Rising Flow</span>
+          <span><span style={{ color: 'var(--risk-amber)' }}>●</span> Falling Flow</span>
         </div>
 
         {/* Astro Strip */}
         <AstroStrip dcInferences={dcInferences} activeDate={bar.trade_date} />
       </div>
 
-      {/* Right Panel — VaNi + Cards */}
-      <div style={{
-        gridColumn: 2, gridRow: 1,
-        borderLeft: '1px solid var(--kd-border)',
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
+      {/* ── Right Sidebar — evidence trio ── */}
+      <div className="border-t lg:border-t-0 lg:border-l border-kd-border flex flex-col min-h-0 lg:col-start-2 lg:row-start-1 overflow-hidden">
+
         {/* VaNi Header */}
-        <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--kd-border)' }}>
+        <div className="px-3 py-2 border-b border-kd-border shrink-0">
           <VaNiHeader
             date={bar.trade_date}
             barPosition={isNow ? 'NOW' : `Candle ${effectiveIdx + 1} / ${bars.length}`}
@@ -235,33 +225,12 @@ export default function VisualPulsePage() {
         </div>
 
         {/* Scrollable cards */}
-        <div style={{
-          flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 14px',
-          display: 'flex', flexDirection: 'column', gap: 10,
-          opacity: isFading ? 0.3 : 1,
-          transition: 'opacity 0.15s ease',
-        }}>
+        <div
+          className="flex-1 min-h-0 overflow-y-auto px-3 py-2.5 flex flex-col gap-2.5"
+          style={{ opacity: isFading ? 0.3 : 1, transition: 'opacity 0.15s ease' }}
+        >
           {snapshot && (
             <>
-              {/* VaNi Narrative — AI only, no fallback */}
-              <VaNiSentence
-                narrative={null}
-                corrState={snapshot.corrState}
-                date={bar.trade_date}
-                isFading={isFading}
-                onStudyClick={() => navigate(`/chart/index/${numId}`)}
-              />
-
-              {/* Correlation */}
-              <CorrelationCard
-                astroScore={snapshot.astroScore}
-                techScore={snapshot.techScore}
-                smScore={snapshot.smScore}
-                corrState={snapshot.corrState}
-                selectedStyle={selectedStyle}
-                onStyleChange={handleStyleChange}
-              />
-
               {/* Order Flow + RSS */}
               <OrderFlowCard
                 bar={snapshot.bar}
@@ -289,8 +258,8 @@ export default function VisualPulsePage() {
         </div>
       </div>
 
-      {/* Bottom — Timeline Slider */}
-      <div style={{ gridColumn: '1 / -1', gridRow: 2 }}>
+      {/* ── Bottom — Timeline Slider ── */}
+      <div className="lg:col-span-2 lg:row-start-2 shrink-0">
         <TimelineSlider
           total={bars.length}
           activeIndex={effectiveIdx}
@@ -335,8 +304,8 @@ function buildSmNarrative(snap: PulseSnapshot): string {
   else if (sm.smExiting) parts.push('Smart money declining — falling flow risk.');
   else parts.push('Smart money flat.');
 
-  if (sm.hasSVD5) parts.push('SVD signal in last 5 bars — institutional volume confirmed.');
-  if (sm.hasSYD) parts.push('SYD present — falling flow caution.');
+  if (sm.hasSVD5) parts.push('Volume Drive signal in last 5 bars — institutional volume confirmed.');
+  if (sm.hasSYD) parts.push('Falling flow signal present — caution.');
   if (sm.pumpSignal) parts.push('Smart declining while fast rising — pump signature.');
 
   if (sm.relationship === 'Aligned') parts.push('Both layers aligned.');

@@ -28,21 +28,20 @@ import {
 import VisualPulseChart from '../VisualPulseChart';
 import AstroStrip from '../AstroStrip';
 import TimelineSlider from '../TimelineSlider';
+import PulseVerdictBand from '../PulseVerdictBand';
 import {
-  CorrelationCard,
   OrderFlowCard,
   SmartMoneyCard,
   DivergenceCard,
   VaNiHeader,
-  VaNiSentence,
 } from '../index';
 import type { SmartMoneyBar } from '../SmartMoneyCard';
 import MagicRsSubchart from '../MagicRsSubchart';
 import MultiTimeframePills from './MultiTimeframePills';
 import PumpDumpBanner, { scanBarsForManipulation } from './PumpDumpBanner';
-import ScanPresenceCard from './ScanPresenceCard';
-import IndustryContextCard from './IndustryContextCard';
+import StockContextCard from './StockContextCard';
 import { useScanPresence } from '@/hooks/useScanPresence';
+import { useInstrumentInsight } from '@/hooks';
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -101,6 +100,10 @@ export default function EquityVisualPulsePage() {
 
   // Scan presence (which scans contain this stock)
   const scanPresence = useScanPresence(equityId);
+
+  // AI narrative for the LATEST bar only — one cached call per instrument per
+  // day (platform VaNi presence pattern). Scrubbing never fires LLM calls.
+  const insightQuery = useInstrumentInsight(equityId ?? 0, 'equity');
 
   // Pre-compute dots for all bars
   const dotsHistory: DotSignals[] = useMemo(() => {
@@ -291,6 +294,24 @@ export default function EquityVisualPulsePage() {
         {/* Pump/Dump Banner */}
         {pumpDumpResult && <PumpDumpBanner result={pumpDumpResult} />}
 
+        {/* Verdict band — the 5-second answer, first thing the eye lands on */}
+        {snapshot && (
+          <PulseVerdictBand
+            corrState={snapshot.corrState}
+            astroScore={snapshot.astroScore}
+            techScore={snapshot.techScore}
+            smScore={snapshot.smScore}
+            selectedStyle={selectedStyle}
+            onStyleChange={handleStyleChange}
+            date={bar.trade_date}
+            isNow={isNow}
+            isFading={isFading}
+            narrative={insightQuery.data?.ai ? insightQuery.data.insight : null}
+            narrativeLoading={insightQuery.isLoading}
+            onStudyClick={() => navigate(`/chart/equity/${equityId}?name=${encodeURIComponent(meta.symbol)}`)}
+          />
+        )}
+
         {/* Price Chart — uses shared VisualPulseChart */}
         <div className="flex-shrink-0 min-h-[180px] md:min-h-[220px] mt-1">
           <VisualPulseChart
@@ -302,7 +323,7 @@ export default function EquityVisualPulsePage() {
         </div>
 
         {/* Legend */}
-        <div className="flex gap-3 py-1 text-[8px] font-mono text-muted flex-wrap">
+        <div className="flex gap-3 py-1 text-[10px] font-mono text-muted flex-wrap">
           <span><span className="text-accent-gold">{'\u254C'}</span> Golden Line (SMA 150)</span>
           <span><span className="text-accent-violet">{'\u25CF'}</span> Volume Drive</span>
           <span><span className="text-accent-indigo">{'\u25CF'}</span> Rising Flow</span>
@@ -365,34 +386,12 @@ export default function EquityVisualPulsePage() {
         >
           {snapshot && (
             <>
-              <VaNiSentence
-                narrative={null}
-                corrState={snapshot.corrState}
-                date={bar.trade_date}
-                isFading={isFading}
-                onStudyClick={() => navigate(`/chart/equity/${equityId}?name=${encodeURIComponent(meta.symbol)}`)}
-              />
-
-              {/* Scan Presence */}
-              <ScanPresenceCard
+              {/* Context — merged Scan Presence + Industry rotation */}
+              <StockContextCard
                 stock={scanPresence.stock}
                 matchedScans={scanPresence.matchedScans}
-              />
-
-              {/* Industry Context */}
-              <IndustryContextCard
                 industry={meta.industry}
                 context={industryContext}
-              />
-
-              {/* Correlation */}
-              <CorrelationCard
-                astroScore={snapshot.astroScore}
-                techScore={snapshot.techScore}
-                smScore={snapshot.smScore}
-                corrState={snapshot.corrState}
-                selectedStyle={selectedStyle}
-                onStyleChange={handleStyleChange}
               />
 
               {/* Order Flow + RSS */}
