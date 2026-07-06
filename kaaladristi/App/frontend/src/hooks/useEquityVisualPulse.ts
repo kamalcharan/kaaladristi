@@ -32,6 +32,7 @@ export interface EquityMeta {
   exchange: string | null;
   isin: string | null;
   is_active: boolean;
+  mcap_cr?: number | null;
 }
 
 // ── Columns fetched from km_equity_eod ─────────────────────────
@@ -52,7 +53,7 @@ const EQUITY_PULSE_COLS = [
 
 async function fetchEquityMeta(equityId: number): Promise<EquityMeta | null> {
   const { data, error } = await from('km_equity_symbols')
-    .select('id,symbol,company_name,industry,exchange,isin,is_active')
+    .select('id,symbol,company_name,industry,exchange,isin,is_active,mcap_cr')
     .eq('id', equityId)
     .limit(1)
     .single()
