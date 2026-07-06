@@ -16,8 +16,10 @@ import {
   fetchIndexFlowMap,
   fetchIndexBreadth,
   fetchSectorPulse,
+  fetchStockMembership,
   SECTOR_TAB_CATEGORIES,
   type SectorPulseRow,
+  type StockMembership,
   type SectorTab,
   type SectorIndexRow,
   type VixRow,
@@ -48,6 +50,17 @@ export function useSectorPulse() {
   return useQuery<SectorPulseRow[], Error>({
     queryKey: ['sector-pulse'],
     queryFn: () => fetchSectorPulse(),
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Index/theme membership for one stock (Study cockpit membership card). */
+export function useStockMembership(equityId: number | null) {
+  return useQuery<StockMembership[], Error>({
+    queryKey: ['stock-membership', equityId],
+    queryFn: () => fetchStockMembership(equityId!),
+    enabled: equityId != null,
     staleTime: STALE,
     retry: 1,
   });

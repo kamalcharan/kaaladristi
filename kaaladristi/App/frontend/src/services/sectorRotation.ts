@@ -573,6 +573,66 @@ export async function fetchSectorPulse(days = 22): Promise<SectorPulseRow[]> {
   return result;
 }
 
+// ── Stock membership (Study cockpit) ──────────────────────────────────────────
+
+export interface StockMembership {
+  id: number;
+  name: string;
+  isCurated: boolean;
+}
+
+/**
+ * Which indices does this stock belong to? Official NSE indices come from
+ * km_equity_symbols.index_names[]; curated themes from km_index_constituents.
+ * Names are resolved against active km_index_symbols so every chip can link
+ * to its /sector-rotation drilldown.
+ */
+export async function fetchStockMembership(equityId: number): Promise<StockMembership[]> {
+  const [symRes, idxRes, constRes] = await Promise.all([
+    from('km_equity_symbols')
+      .select('id,index_names')
+      .eq('id', equityId)
+      .limit(1)
+      .execute(),
+    from('km_index_symbols')
+      .select('id,name,category')
+      .is('is_active', 'true')
+      .execute(),
+    from('km_index_constituents')
+      .select('index_id')
+      .eq('equity_id', equityId)
+      .execute(),
+  ]);
+
+  if (symRes.error) throw new Error(`[membership] symbol: ${symRes.error.message}`);
+  if (idxRes.error) throw new Error(`[membership] indices: ${idxRes.error.message}`);
+  if (constRes.error) throw new Error(`[membership] constituents: ${constRes.error.message}`);
+
+  const indexNames: string[] =
+    ((symRes.data ?? []) as { index_names: string[] | null }[])[0]?.index_names ?? [];
+  const allIndices = (idxRes.data ?? []) as { id: number; name: string; category: string }[];
+  const byName = new Map(allIndices.map((i) => [i.name.toUpperCase(), i]));
+  const byId = new Map(allIndices.map((i) => [i.id, i]));
+
+  const result = new Map<number, StockMembership>();
+
+  for (const n of indexNames) {
+    const idx = byName.get(n.toUpperCase());
+    if (idx) result.set(idx.id, { id: idx.id, name: idx.name, isCurated: idx.category === 'custom' });
+  }
+  for (const c of (constRes.data ?? []) as { index_id: number }[]) {
+    const idx = byId.get(c.index_id);
+    if (idx && !result.has(idx.id)) {
+      result.set(idx.id, { id: idx.id, name: idx.name, isCurated: idx.category === 'custom' });
+    }
+  }
+
+  // Curated themes first (the user built those lenses), then alphabetical.
+  return [...result.values()].sort(
+    (a, b) => Number(b.isCurated) - Number(a.isCurated) || a.name.localeCompare(b.name),
+  );
+}
+
 // ── Index Breadth (per-index, computed client-side) ───────────────────────────
 
 const BREADTH_LOOKBACK = 252;  // sessions for percentile history

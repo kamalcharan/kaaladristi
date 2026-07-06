@@ -13,8 +13,8 @@ import type { ScanStock } from '@/types';
 interface ScanPresenceCardProps {
   /** Current stock as ScanStock (with DOT flags) */
   stock: ScanStock | null;
-  /** Array of scan IDs this stock appears in */
-  matchedScans: { id: string; name: string }[];
+  /** Scans this stock appears in; vani = ✦ VaNi Highlight within that scan */
+  matchedScans: { id: string; name: string; vani?: boolean }[];
 }
 
 export default function ScanPresenceCard({ stock, matchedScans }: ScanPresenceCardProps) {
@@ -41,6 +41,15 @@ export default function ScanPresenceCard({ stock, matchedScans }: ScanPresenceCa
               <span className="text-[11px] font-mono text-secondary group-hover:text-accent-indigo transition-colors">
                 {scan.name}
               </span>
+              {scan.vani && (
+                <span
+                  title="✦ VaNi Highlight within this scan — independent confirmation from another dimension"
+                  className="text-[10px] shrink-0"
+                  style={{ color: 'var(--gold, #d4a84b)' }}
+                >
+                  ✦
+                </span>
+              )}
               <span className="ml-auto text-[10px] text-muted group-hover:text-accent-indigo transition-colors">
                 &rarr;
               </span>
