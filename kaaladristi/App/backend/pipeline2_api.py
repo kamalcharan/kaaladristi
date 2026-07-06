@@ -5466,8 +5466,12 @@ _SIGNAL_UNIVERSE_SQL = """
     FROM scored
     WHERE signal_count >= 2
     ORDER BY signal_count DESC, score_5d DESC NULLS LAST
-    LIMIT 300
+    LIMIT 600
 """
+# LIMIT 300 -> 600 (2026-07-06): calibration showed 695 stocks passing the
+# >=2-signal gate (228 at >=3), so the old cap halved the pool and could split
+# mid-strength themes below the 5-member proposal threshold. 600 keeps the
+# strongest and drops only the weakest 2-signal tail (~12k tokens for the LLM).
 
 
 def _fetch_signal_universe(cur, exclude_equity_ids: list[int] | None = None) -> list[dict]:
@@ -5517,7 +5521,7 @@ class _DiscoverRequest(BaseModel):
 @app.post('/api/custom-index/discover')
 async def custom_index_discover(req: _DiscoverRequest):
     """
-    Fetch top 300 NSE stocks by signal strength (≥2 of 5 conditions),
+    Fetch top 600 stocks by signal strength (≥2 of 5 conditions),
     build prompt, call LLM, return parsed themes.
 
     Returns: { stock_count: int, themes: [{ theme_name, description, rationale, constituent_symbols[] }] }
