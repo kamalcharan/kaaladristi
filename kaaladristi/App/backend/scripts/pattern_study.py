@@ -194,6 +194,19 @@ class BenchSeries:
         i = bisect_right(self.dates, d) - 1
         return i if i >= 0 else None
 
+    def baseline_drift(self, horizons):
+        """Unconditional avg forward return per horizon across the whole
+        series — the drift every level-break forward return must beat."""
+        out = {}
+        for h in horizons:
+            rets = []
+            for i in range(len(self.close) - h):
+                a, b = self.close[i], self.close[i + h]
+                if a and b:
+                    rets.append((b - a) / a * 100)
+            out[f'avg_{h}d'] = r4(statistics.fmean(rets)) if rets else None
+        return out
+
     def range_high_low(self, start, end):
         """(high, low) over trading days in [start, end]; None if no bars."""
         i = bisect_left(self.dates, start)
@@ -223,6 +236,23 @@ def classify_anchor(rule):
     """window_end for combust/retrograde window sets, window_start otherwise."""
     types = {w['snapshot'].get('rule_type') for w in rule['windows']}
     return 'window_end' if types & END_ANCHORED_TYPES else 'window_start'
+
+
+def coverage_ratio(rule):
+    """Fraction of the rule's own span covered by its windows. Journey/
+    calendar rules (sign transits) tile the calendar (~1.0) — they are
+    states, not events, and must not count as peers."""
+    ws = rule['windows']
+    if not ws:
+        return 0.0
+    covered = sum((w['end'] - w['start']).days + 1 for w in ws)
+    span = (max(w['end'] for w in ws) - min(w['start'] for w in ws)).days + 1
+    return covered / span if span > 0 else 0.0
+
+
+CONTINUOUS_COVERAGE = 0.90   # above this, a rule is a calendar, not an event
+CONTINUOUS_MIN_WINDOWS = 5   # coverage is meaningless for 1-2 windows (a
+                             # single window always covers 100% of its span)
 
 
 def classify_band(rule):
@@ -264,6 +294,13 @@ def stamp_windows(rules, context_lookups):
     band_of = {r['id']: r['band'] for r in rules}
     # Interval sets per rule for the peer test
     sets = {r['id']: IntervalSet(r['windows']) for r in rules}
+    # Calendar-tiling rules (sign transits/journeys) are states, not events —
+    # they contain EVERY anchor by construction and would make the clean
+    # subset permanently empty (found on first real run: Mercury combust had
+    # n_clean=0 because TRN-MER-MAN-TRN tiles the calendar). Context only.
+    continuous = {r['id'] for r in rules
+                  if len(r['windows']) >= CONTINUOUS_MIN_WINDOWS
+                  and coverage_ratio(r) >= CONTINUOUS_COVERAGE}
 
     for rule in rules:
         for w in rule['windows']:
@@ -274,6 +311,8 @@ def stamp_windows(rules, context_lookups):
             peers = []
             for other in rules:
                 if other['id'] == rule['id']:
+                    continue
+                if other['id'] in continuous:
                     continue
                 if band_of[other['id']] != rule['band']:
                     continue
@@ -542,7 +581,9 @@ def base_params(rule):
         't_threshold': T_THRESHOLD,
         'min_n': MIN_N, 'min_combo_n': MIN_COMBO_N,
         'indicator_fields': list(INDICATOR_FIELDS),
-        'peer_test': 'same-band rule window containing anchor day',
+        'peer_test': 'same-band rule window containing anchor day; '
+                     'calendar-tiling rules (coverage >= 0.90) excluded',
+        'continuous_coverage_threshold': CONTINUOUS_COVERAGE,
         'break_basis': 'close',
         'n_rule_windows_total': len(rule['windows']),
     }
@@ -593,6 +634,7 @@ def main():
                     series = load_bench_series(cur, bench_id)
                     if series is None or len(series.dates) < MIN_BENCH_BARS:
                         continue
+                    bench_baseline = series.baseline_drift(FWD_HORIZONS)
 
                     for rule in rules:
                         params = json.dumps(base_params(rule))
@@ -602,6 +644,7 @@ def main():
                             rule['windows'], series,
                             level_break_for_window, aggregate_level_break)
                         if res:
+                            res['benchmark_baseline'] = bench_baseline
                             if rule['band'] != 'tactical':
                                 dens = [w.get('tactical_inside', 0) for w in rule['windows']]
                                 res['tactical_density'] = {'avg_events_inside': r4(statistics.fmean(dens))}
