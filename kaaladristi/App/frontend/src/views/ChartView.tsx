@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, type EquityTimeframe } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import { InstrumentIntelligence } from '@/components/domain';
 import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
@@ -10,6 +10,8 @@ import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
+import BigMoneyCard from '@/components/domain/StockCockpit/BigMoneyCard';
+import { detectBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
@@ -89,7 +91,11 @@ export default function ChartView() {
     queryFn: () =>
       isEquity
         ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))
-        : fetchIndicatorDataById(numId, range),
+        // Index W/M: no aggregate tables exist — resample full daily history
+        // client-side (indices carry no delivery data, so nothing is lost)
+        : (tf === 'daily'
+            ? fetchIndicatorDataById(numId, range)
+            : fetchIndicatorDataById(numId, 'MAX').then((r) => resampleRows(r, tf))),
     staleTime: 120_000,
     enabled: !!numId && (isIndex || isEquity),
   });
@@ -154,6 +160,20 @@ export default function ChartView() {
   // Evidence rail renders for equities with data (index rail arrives with
   // index-applicable cards in a later phase)
   const showRail = isEquity && rows.length > 0;
+
+  // Big Money days (Phase 3) — daily equity bars only
+  const bigMoneyEvents = useMemo(
+    () => (isEquity && tf === 'daily' ? detectBigMoneyDays(rows) : []),
+    [isEquity, tf, rows],
+  );
+  const bigMoneyChartLines = useMemo(
+    () => bigMoneyEvents.map((ev) => ({
+      trade_date: ev.trade_date,
+      price: ev.low,
+      label: `₹${ev.delivCr >= 100 ? ev.delivCr.toFixed(0) : ev.delivCr.toFixed(1)} Cr`,
+    })),
+    [bigMoneyEvents],
+  );
 
   return (
     <ErrorBoundary>
@@ -283,9 +303,10 @@ export default function ChartView() {
               {/* Time range selector */}
               {!isLoading && !isError && rows.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
-                  {/* D/W/M timeframe (Phase 2.3) — equity only; index weekly
-                      aggregates pending DB verification */}
-                  {isEquity && (
+                  {/* D/W/M timeframe (Phase 2.3) — equity from DB aggregate
+                      tables, index resampled client-side (no aggregate tables
+                      exist; verified 2026-07-07) */}
+                  {(
                     <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
                       {(['daily', 'weekly', 'monthly'] as const).map((t) => (
                         <button
@@ -379,6 +400,7 @@ export default function ChartView() {
                   highlightDate={null}
                   overlays={frameworkOverlays}
                   astroBands={astroBands}
+                  bigMoneyEvents={bigMoneyChartLines}
                 />
               )}
             </div>
@@ -417,6 +439,7 @@ export default function ChartView() {
                 matchedScans={scanPresence.matchedScans}
               />
               <SectorMembershipCard equityId={numId} />
+              <BigMoneyCard events={bigMoneyEvents} />
               <DeliveryVsTraded rows={rows} />
               <IndustryContextCard
                 industry={equityPulse.meta?.industry ?? null}
