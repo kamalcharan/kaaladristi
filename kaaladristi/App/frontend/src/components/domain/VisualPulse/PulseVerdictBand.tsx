@@ -38,10 +38,13 @@ function getLayerVerdict(score: number, type: 'astro' | 'tech' | 'sm'): { verdic
   return { verdict: 'Absent', color: 'var(--text-muted)' };
 }
 
-/** First N sentences of a text — the Pulse slot never shows an essay. */
+/** First N sentences of a text — the Pulse slot never shows an essay.
+ *  Also strips list markers ("(1)", "1.", "•") the insight prompt sometimes
+ *  emits, so the clamp reads as a sentence, not a fragment of a numbered list. */
 function clampSentences(text: string, n: number): string {
-  const matches = text.match(/[^.!?]+[.!?]+(\s|$)/g);
-  if (!matches || matches.length <= n) return text.trim();
+  const clean = text.replace(/(^|\s)\(?\d+[).]\s+/g, '$1').replace(/(^|\s)[•·-]\s+/g, '$1').trim();
+  const matches = clean.match(/[^.!?]+[.!?]+(\s|$)/g);
+  if (!matches || matches.length <= n) return clean;
   return matches.slice(0, n).join('').trim();
 }
 
