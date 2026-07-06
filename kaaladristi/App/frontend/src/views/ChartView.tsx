@@ -6,6 +6,14 @@ import { fetchIndicatorDataById, fetchEquityEodById } from '@/services/indicator
 import TradingChart from '@/components/charts/TradingChart';
 import { InstrumentIntelligence } from '@/components/domain';
 import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
+import StatStrip from '@/components/domain/StockCockpit/StatStrip';
+import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
+import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
+import { useFrameworkStore } from '@/stores/frameworkStore';
+import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
+import type { ChartOverlay } from '@/types/framework';
+
+const NO_OVERLAYS: ChartOverlay[] = [];
 import { Skeleton, ErrorBoundary } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { TimeRange } from '@/types';
@@ -16,25 +24,10 @@ import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
 import {
   computePulseSnapshot,
-  computeCorrHistory,
-  computeDots,
   type TradingStyle,
-  type DotSignals,
-  type CorrelationState,
   type PulseSnapshot,
   type PulseBar,
 } from '@/services/visualPulseEngine';
-import {
-  CorrelationCard,
-  OrderFlowCard,
-  SmartMoneyCard,
-  DivergenceCard,
-  VaNiHeader,
-  VaNiSentence,
-  TimelineSlider,
-} from '@/components/domain/VisualPulse';
-
-import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 
 // Equity-specific pulse components
 import PumpDumpBanner, { scanBarsForManipulation } from '@/components/domain/VisualPulse/equity/PumpDumpBanner';
@@ -64,8 +57,13 @@ export default function ChartView() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [range, setRange] = useState<TimeRange>('1Y');
-  const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [selectedStyle] = useState<TradingStyle>('Balanced');
+
+  // Study Layer contract (POA Phase 1.5): the cockpit chart honors the SAME
+  // framework overlays as the My Space chart — what you turn on in Catalog
+  // follows you everywhere. Astro zones render in legacy chart mode too.
+  const frameworkOverlays = useFrameworkStore((st) => st.framework?.chart_overlays ?? NO_OVERLAYS);
+  const astroBands = useAstroOverlayBands(frameworkOverlays);
 
   const numId = Number(id);
   const rawName = searchParams.get('name') ?? `${type} #${id}`;
@@ -120,50 +118,14 @@ export default function ChartView() {
 
   const errorMsg = error instanceof Error ? error.message : '';
 
-  // ── Visual Pulse computations (shared for both index + equity) ──
-  const pulseIdx = activeIndex ?? (pulseBars.length > 0 ? pulseBars.length - 1 : 0);
+  // ── Pulse snapshot — feeds the header verdict chip only (Study gives no
+  //     verdicts; the chip is the traveling decision context, POA Phase 0.2) ──
+  const pulseIdx = pulseBars.length > 0 ? pulseBars.length - 1 : 0;
 
   const snapshot: PulseSnapshot | null = useMemo(() => {
     if (pulseBars.length === 0) return null;
     return computePulseSnapshot(pulseBars, pulseIdx, dcInferences, selectedStyle);
   }, [pulseBars, pulseIdx, dcInferences, selectedStyle]);
-
-  const corrHistory: CorrelationState[] = useMemo(() => {
-    if (pulseBars.length === 0) return [];
-    return computeCorrHistory(pulseBars, dcInferences, selectedStyle);
-  }, [pulseBars, dcInferences, selectedStyle]);
-
-  const dotsHistory: DotSignals[] = useMemo(() => {
-    return pulseBars.map((b, i) => computeDots(b, i > 0 ? pulseBars[i - 1] : null));
-  }, [pulseBars]);
-
-  const smHistory: SmartMoneyBar[] = useMemo(() => {
-    const start = Math.max(0, pulseIdx - 29);
-    const slice = pulseBars.slice(start, pulseIdx + 1);
-    const dotsSlice = dotsHistory.slice(start, pulseIdx + 1);
-    return slice.map((b, i) => ({
-      sm: b.sniper_inst ?? 0,
-      fm: b.sniper_hot ?? 0,
-      isSVD: dotsSlice[i]?.isSVD ?? false,
-      isSBD: dotsSlice[i]?.isSBD ?? false,
-      isSYD: dotsSlice[i]?.isSYD ?? false,
-    }));
-  }, [pulseBars, pulseIdx, dotsHistory]);
-
-  const rssHistory: number[] = useMemo(() => {
-    const start = Math.max(0, pulseIdx - 19);
-    return pulseBars.slice(start, pulseIdx + 1).map((b) => b.rss_value ?? 0);
-  }, [pulseBars, pulseIdx]);
-
-  const priceHistory = useMemo(() => {
-    const start = Math.max(0, pulseIdx - 19);
-    return pulseBars.slice(start, pulseIdx + 1).map((b) => b.close);
-  }, [pulseBars, pulseIdx]);
-
-  const rsiHistory = useMemo(() => {
-    const start = Math.max(0, pulseIdx - 19);
-    return pulseBars.slice(start, pulseIdx + 1).map((b) => b.rsi_14 ?? 50);
-  }, [pulseBars, pulseIdx]);
 
   // ── Equity-specific computations ──
   const rsChange1d = useMemo(() => rsChangeLookback(pulseBars, pulseIdx, 1), [pulseBars, pulseIdx]);
@@ -176,16 +138,9 @@ export default function ChartView() {
     return scanBarsForManipulation(pulseBars, 30);
   }, [isEquity, pulseBars]);
 
-  const handleStyleChange = useCallback((style: TradingStyle) => {
-    setSelectedStyle(style);
-  }, []);
-
-  const handleSliderChange = useCallback((idx: number) => {
-    setActiveIndex(idx);
-  }, []);
-
-  // Show pulse panel for index or equity with data
-  const showPulse = pulseBars.length > 0 && snapshot != null;
+  // Evidence rail renders for equities with data (index rail arrives with
+  // index-applicable cards in a later phase)
+  const showRail = isEquity && rows.length > 0;
 
   return (
     <ErrorBoundary>
@@ -270,6 +225,15 @@ export default function ChartView() {
           )}
         </div>
 
+        {/* ═══ Stat strip — Price · Momentum · Liquidity · Returns (Phase 1.1) ═══ */}
+        {!isLoading && latest && (
+          <StatStrip
+            latest={latest}
+            mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null}
+            isEquity={isEquity}
+          />
+        )}
+
         {/* ═══ Equity: Pump/Dump Banner + Magic RS Pills ═══ */}
         {isEquity && pumpDumpResult && (
           <div className="mb-2">
@@ -291,15 +255,10 @@ export default function ChartView() {
         {/* ═══ Main Grid: starts immediately after header ═══ */}
         <div className={cn(
           'gap-3',
-          showPulse ? 'flex flex-col lg:grid lg:grid-cols-[1fr_420px] xl:grid-cols-[1fr_480px]' : '',
+          showRail ? 'flex flex-col lg:grid lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]' : '',
         )}>
           {/* ── Left Panel: Intelligence + Chart ── */}
           <div className="min-w-0">
-            {/* Intelligence Panel — hidden when Visual Pulse cards are showing */}
-            {!showPulse && !isLoading && !isError && rows.length > 0 && (
-              <InstrumentIntelligence id={numId} type={type ?? 'index'} />
-            )}
-
             {/* Chart area */}
             <div className="glass-card rounded-2xl p-3 mt-2">
               {/* Time range selector */}
@@ -350,7 +309,7 @@ export default function ChartView() {
                   </p>
                 </div>
               ) : (
-                <TradingChart data={rows} compact={showPulse} highlightDate={pulseBars[pulseIdx]?.trade_date ?? null} />
+                <TradingChart data={rows} compact={showRail} highlightDate={null} astroBands={astroBands} />
               )}
             </div>
 
@@ -360,90 +319,36 @@ export default function ChartView() {
               </p>
             )}
 
+            {/* VaNi instrument insight — evidence narration below the chart
+                (Phase 1.6; indigo panel style comes from VaNiInsight itself) */}
+            {!isLoading && !isError && rows.length > 0 && (
+              <div className="mt-2">
+                <InstrumentIntelligence id={numId} type={type ?? 'index'} />
+              </div>
+            )}
+
           </div>
 
-          {/* ── Right Panel: Visual Pulse Cards ── */}
-          {showPulse && snapshot && (
+          {/* ── Right Panel: evidence rail (Phase 1.2–1.4) — Study shows
+                evidence, never verdicts ── */}
+          {showRail && (
             <div className="min-w-0 flex flex-col gap-2.5 overflow-y-auto pb-4 lg:max-h-[calc(100vh-80px)]"
               style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
             >
-              {/* VaNi Header */}
-              <div className="glass-card rounded-xl p-2.5">
-                <VaNiHeader
-                  date={snapshot.bar.trade_date}
-                  barPosition="Latest"
-                />
-              </div>
-
-              {/* VaNi Narrative */}
-              <VaNiSentence
-                narrative={null}
-                corrState={snapshot.corrState}
-                date={snapshot.bar.trade_date}
+              <ScanPresenceCard
+                stock={scanPresence.stock}
+                matchedScans={scanPresence.matchedScans}
               />
-
-              {/* Equity-specific cards */}
-              {isEquity && (
-                <>
-                  <ScanPresenceCard
-                    stock={scanPresence.stock}
-                    matchedScans={scanPresence.matchedScans}
-                  />
-                  <IndustryContextCard
-                    industry={equityPulse.meta?.industry ?? null}
-                    context={equityPulse.industryContext}
-                  />
-                </>
-              )}
-
-              {/* Correlation */}
-              <CorrelationCard
-                astroScore={snapshot.astroScore}
-                techScore={snapshot.techScore}
-                smScore={snapshot.smScore}
-                corrState={snapshot.corrState}
-                selectedStyle={selectedStyle}
-                onStyleChange={handleStyleChange}
-              />
-
-              {/* Order Flow + RSS */}
-              <OrderFlowCard
-                bar={snapshot.bar}
-                rss={snapshot.rss}
-                rssHistory={rssHistory}
-                narrative={buildFlowNarrative(snapshot)}
-              />
-
-              {/* Smart Money */}
-              <SmartMoneyCard
-                smHistory={smHistory}
-                sm={snapshot.sm}
-                dots={[snapshot.dots]}
-                narrative={buildSmNarrative(snapshot)}
-              />
-
-              {/* Divergence */}
-              <DivergenceCard
-                divergence={snapshot.divergence}
-                rsiHistory={rsiHistory}
-                priceHistory={priceHistory}
+              <SectorMembershipCard equityId={numId} />
+              <DeliveryVsTraded rows={rows} />
+              <IndustryContextCard
+                industry={equityPulse.meta?.industry ?? null}
+                context={equityPulse.industryContext}
               />
             </div>
           )}
         </div>
 
-        {/* ═══ Timeline Slider (full width) ═══ */}
-        {showPulse && (
-          <div className="mt-3 glass-card rounded-2xl overflow-hidden">
-            <TimelineSlider
-              total={pulseBars.length}
-              activeIndex={pulseIdx}
-              bars={pulseBars}
-              corrHistory={corrHistory}
-              onChange={handleSliderChange}
-            />
-          </div>
-        )}
       </div>
     </ErrorBoundary>
   );
@@ -464,44 +369,4 @@ function fmt(n: number): string {
   return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// ── Card narratives (flow + smart money) ────────────────────────
 
-function buildFlowNarrative(snap: PulseSnapshot): string {
-  const parts: string[] = [];
-  const ft = snap.bar.flow_type;
-  const rvol = snap.bar.rvol ?? 0;
-
-  if (ft === 'FRESH_LONGS') parts.push('Fresh capital entering.');
-  else if (ft === 'SHORT_COVERING') parts.push('Shorts unwinding \u2014 watch for confirmation.');
-  else if (ft === 'FRESH_SHORTS') parts.push('Selling pressure building.');
-  else if (ft === 'LONG_LIQUIDATION') parts.push('Longs exiting \u2014 exhaustion watch.');
-  else if (ft === 'LOW_VOLUME') parts.push('Volume absent.');
-  else parts.push('Mixed flow signals.');
-
-  if (rvol > 2) parts.push(`High conviction volume (RVOL ${rvol.toFixed(1)}x).`);
-  else if (rvol < 0.5) parts.push('Thin volume \u2014 signals unreliable.');
-
-  if (snap.rss.zone === 'OVERBOUGHT') parts.push('RSS overbought \u2014 momentum stretched.');
-  else if (snap.rss.zone === 'OVERSOLD') parts.push('RSS at floor \u2014 reversal watch.');
-  else if (snap.rss.spreadRepaired) parts.push('Structural spread positive.');
-
-  return parts.join(' ');
-}
-
-function buildSmNarrative(snap: PulseSnapshot): string {
-  const parts: string[] = [];
-  const sm = snap.sm;
-
-  if (sm.smTrending) parts.push('Smart money trending higher.');
-  else if (sm.smExiting) parts.push('Smart money declining \u2014 falling flow risk.');
-  else parts.push('Smart money flat.');
-
-  if (sm.hasSVD5) parts.push('Volume Drive signal in last 5 bars \u2014 institutional volume confirmed.');
-  if (sm.hasSYD) parts.push('Falling flow signal present \u2014 caution.');
-  if (sm.pumpSignal) parts.push('Smart declining while fast rising \u2014 pump signature.');
-
-  if (sm.relationship === 'Aligned') parts.push('Both layers aligned.');
-  else if (sm.relationship === 'Diverging') parts.push('Layers diverging \u2014 elevated risk.');
-
-  return parts.join(' ');
-}

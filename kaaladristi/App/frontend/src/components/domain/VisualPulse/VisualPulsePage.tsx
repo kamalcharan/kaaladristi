@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PulseStudySwitch, { PulseStudyHint } from '@/components/domain/PulseStudySwitch';
+import { useIndexDetail } from '@/hooks/useSectorRotation';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import {
   computePulseSnapshot,
@@ -42,6 +43,9 @@ export default function VisualPulsePage() {
   const navigate = useNavigate();
 
   const { bars, dcInferences, isLoading, error } = useVisualPulse(numId);
+  // Header label was hardcoded "NIFTY 50" regardless of the viewed index —
+  // resolve the real name (fixed alongside Phase 1, owner request).
+  const { data: indexMeta } = useIndexDetail(numId ?? undefined);
 
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
@@ -172,7 +176,7 @@ export default function VisualPulsePage() {
           <span style={{
             fontSize: 15, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
             color: 'var(--text-primary)',
-          }}>NIFTY 50</span>
+          }}>{indexMeta?.name ?? '…'}</span>
           <span style={{
             fontSize: 15, fontFamily: 'var(--font-mono, monospace)',
             color: bar.close >= (bar.open ?? 0) ? 'var(--risk-green)' : 'var(--risk-red)',

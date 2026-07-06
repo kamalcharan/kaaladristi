@@ -242,7 +242,11 @@ export async function fetchEquityEodById(
   range: TimeRange,
 ): Promise<IndicatorRow[]> {
   const startDate = getStartDate(range);
-  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS}`;
+  // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
+  // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
+  // widget read these.
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low';
+  const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
   let query = from('km_equity_eod')
     .select(cols)
