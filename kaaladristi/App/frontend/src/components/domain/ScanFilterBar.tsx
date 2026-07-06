@@ -15,6 +15,12 @@ export interface ScanFilters {
   rvolMin?: number;
   pctFromBreakoutMin?: number;
   pctFromBreakoutMax?: number;
+  /** Minimum Score 5D — money-flow conviction (equity scale: median ≈ 5, top decile ≈ 28). */
+  score5dMin?: number;
+  /** Minimum Score 22D. */
+  score22dMin?: number;
+  /** Doctrine filter: Score 5D > 0 AND Score 5D ≥ Score 22D (conviction building). */
+  accelerating?: boolean;
 }
 
 export const EMPTY_FILTERS: ScanFilters = {};
@@ -37,14 +43,16 @@ function getFilterGroup(presetId: string): FilterGroup {
 
 export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanStock[] {
   const { mcapMin, mcapMax, industries, move5dMax, move22dMax, move66dMax,
-    surgeMin, deliveryPctMin, rvolMin, pctFromBreakoutMin, pctFromBreakoutMax } = filters;
+    surgeMin, deliveryPctMin, rvolMin, pctFromBreakoutMin, pctFromBreakoutMax,
+    score5dMin, score22dMin, accelerating } = filters;
 
   if (
     mcapMin == null && mcapMax == null &&
     (!industries || industries.length === 0) &&
     move5dMax == null && move22dMax == null && move66dMax == null &&
     surgeMin == null && deliveryPctMin == null && rvolMin == null &&
-    pctFromBreakoutMin == null && pctFromBreakoutMax == null
+    pctFromBreakoutMin == null && pctFromBreakoutMax == null &&
+    score5dMin == null && score22dMin == null && !accelerating
   ) return stocks;
 
   return stocks.filter((s) => {
@@ -59,6 +67,9 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     if (rvolMin != null && (s.rvol ?? 0) < rvolMin) return false;
     if (pctFromBreakoutMin != null && s.pct_from_breakout != null && s.pct_from_breakout < pctFromBreakoutMin) return false;
     if (pctFromBreakoutMax != null && s.pct_from_breakout != null && s.pct_from_breakout > pctFromBreakoutMax) return false;
+    if (score5dMin  != null && (s.score_5d  ?? -1) < score5dMin)  return false;
+    if (score22dMin != null && (s.score_22d ?? -1) < score22dMin) return false;
+    if (accelerating && !((s.score_5d ?? 0) > 0 && (s.score_5d ?? 0) >= (s.score_22d ?? 0))) return false;
     return true;
   });
 }
@@ -69,7 +80,8 @@ export function hasActiveFilters(f: ScanFilters): boolean {
     (f.industries && f.industries.length > 0) ||
     f.move5dMax != null || f.move22dMax != null || f.move66dMax != null ||
     f.surgeMin != null || f.deliveryPctMin != null || f.rvolMin != null ||
-    f.pctFromBreakoutMin != null || f.pctFromBreakoutMax != null
+    f.pctFromBreakoutMin != null || f.pctFromBreakoutMax != null ||
+    f.score5dMin != null || f.score22dMin != null || !!f.accelerating
   );
 }
 
@@ -236,8 +248,22 @@ interface ScanFilterBarProps {
   onFiltersChange: (f: ScanFilters) => void;
 }
 
+const FILTERS_OPEN_KEY = 'kd_scan_filters_open';
+
 export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: ScanFilterBarProps) {
-  const [open, setOpen] = useState(false);
+  // Open state persists across scans and reloads (owner request 2026-07-06);
+  // active filters force it open so applied criteria are never hidden.
+  const [open, setOpenState] = useState<boolean>(() => {
+    try { return localStorage.getItem(FILTERS_OPEN_KEY) === 'true' || hasActiveFilters(filters); }
+    catch { return hasActiveFilters(filters); }
+  });
+  const setOpen = (updater: (o: boolean) => boolean) => {
+    setOpenState((o) => {
+      const next = updater(o);
+      try { localStorage.setItem(FILTERS_OPEN_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
   const group = getFilterGroup(presetId);
 
   const industries = useMemo(() => {
@@ -309,6 +335,28 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
             onChange={(v) => set('industries', v.length > 0 ? v : undefined)}
           />
 
+          {/* Scores — all groups (owner doctrine: scores are the leading signal).
+              Placeholders carry the calibrated equity-scale landmarks so users
+              don't guess the range (median ≈ 5, top decile ≈ 28). */}
+          <NumInput label="Score 5D Min" value={filters.score5dMin} onChange={(v) => set('score5dMin', v)} placeholder="p90≈28" />
+          <NumInput label="Score 22D Min" value={filters.score22dMin} onChange={(v) => set('score22dMin', v)} placeholder="—" />
+          <div style={fieldStyle}>
+            <span style={labelStyle}>Accelerating</span>
+            <label style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px', height: '26px',
+              fontSize: '11px', color: filters.accelerating ? 'var(--text-primary)' : 'var(--text-muted)',
+              cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+            }}>
+              <input
+                type="checkbox"
+                checked={!!filters.accelerating}
+                onChange={(e) => set('accelerating', e.target.checked || undefined)}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              5D ≥ 22D
+            </label>
+          </div>
+
           <div style={{ width: '1px', height: '36px', background: 'var(--border)', flexShrink: 0 }} />
 
           {/* Group-specific filters */}
@@ -374,5 +422,8 @@ function countActive(f: ScanFilters): number {
   if (f.rvolMin != null) n++;
   if (f.pctFromBreakoutMin != null) n++;
   if (f.pctFromBreakoutMax != null) n++;
+  if (f.score5dMin != null) n++;
+  if (f.score22dMin != null) n++;
+  if (f.accelerating) n++;
   return n;
 }
