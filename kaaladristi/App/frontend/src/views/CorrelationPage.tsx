@@ -12,6 +12,7 @@ import { recommendVisualisations } from '@/utils/correlationVizSkill'
 import type { VisualisationOption } from '@/utils/correlationVizSkill'
 import InlineGate from '@/components/workspace/InlineGate'
 import { getCatalogItem } from '@/constants/catalogItems'
+import { ASTRO_GROUP_OVERLAYS } from '@/constants/astroGroupOverlays'
 import VaNiFeedback from '@/components/domain/VaNi/VaNiFeedback'
 
 const WALK_TIERS = ['trial', 'quarterly', 'annual', 'beta'] as const
@@ -64,7 +65,7 @@ function VaNiModal() {
 const VIZ_PREF_KEY = (a: string, b: string) => `corr_viz:${a}:${b}`
 
 function fmtId(id: string): string {
-  return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
+  return id.replace('astro_rule:', '').replace('astro_group:', '').replace(/_/g, ' ').toUpperCase()
 }
 
 function fmtPct(n: number | null, digits = 2): string {
@@ -85,7 +86,9 @@ function fmtDateShort(s: string): string {
 function resolveDisplayName(id: string): string {
   const item = getCatalogItem(id)
   if (item) return item.display_name
-  return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
+  const group = ASTRO_GROUP_OVERLAYS.find(g => g.id === id)
+  if (group) return group.display_name
+  return id.replace('astro_rule:', '').replace('astro_group:', '').replace(/_/g, ' ').toUpperCase()
 }
 
 function resolveDescription(id: string): string {

@@ -5077,7 +5077,7 @@ def _get_indicator_state(item_id: str, start_date, index_id: int, conn) -> str:
 
 def _classify_shape(item_a: str, item_b: str) -> str:
     def is_event(x):
-        return x.startswith('astro_rule:')
+        return x.startswith(('astro_rule:', 'astro_group:'))
     def is_threshold(x):
         return x in ('rsi_14', 'rsi_9')
     def is_zone(x):
@@ -5117,6 +5117,29 @@ def _get_astro_ranges(rule_code: str, conn) -> list[tuple]:
             ORDER BY t.start_date
         """, (rule_code,))
         return [(r[0], r[1]) for r in cur.fetchall()]
+
+
+def _get_astro_group_ranges(tag: str, conn) -> list[tuple]:
+    """All transit windows of every rule carrying `tag`, merged into
+    non-overlapping ranges — a group overlay behaves as one combined event."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT t.start_date, t.end_date
+            FROM km_rule_transits t
+            JOIN km_astro_rule_master r ON r.id = t.rule_id
+            WHERE %s = ANY(r.tags)
+              AND r.is_deleted = FALSE
+            ORDER BY t.start_date
+        """, (tag,))
+        rows = cur.fetchall()
+    merged: list[list] = []
+    for s, e in rows:
+        if merged and s <= merged[-1][1]:
+            if e > merged[-1][1]:
+                merged[-1][1] = e
+        else:
+            merged.append([s, e])
+    return [(s, e) for s, e in merged]
 
 
 def _get_indicator_ranges(item_id: str, index_id: int, conn) -> list[tuple]:
@@ -5201,6 +5224,9 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
             if item_id.startswith('astro_rule:'):
                 rc = item_id[len('astro_rule:'):]
                 return _get_astro_ranges(rc, conn)
+            if item_id.startswith('astro_group:'):
+                tag = item_id[len('astro_group:'):]
+                return _get_astro_group_ranges(tag, conn)
             return _get_indicator_ranges(item_id, bm_id, conn)
 
         ranges_a = get_ranges(body.item_a)
@@ -5214,7 +5240,7 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
         today = date.today()
         shape = _classify_shape(body.item_a, body.item_b)
         # Identify which item is the zone indicator (for EVENT_IN_STATE state labels)
-        zone_item = body.item_b if body.item_a.startswith('astro_rule:') else body.item_a
+        zone_item = body.item_b if body.item_a.startswith(('astro_rule:', 'astro_group:')) else body.item_a
         instances, bullish, bearish = [], 0, 0
         ret5_sum = ret22_sum = ret5_cnt = ret22_cnt = 0.0
 
