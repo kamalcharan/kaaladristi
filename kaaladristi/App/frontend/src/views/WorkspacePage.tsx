@@ -16,8 +16,8 @@ import CurrentSkyRail from '@/components/domain/DashboardV3/CurrentSkyRail'
 import PanchangamCard from '@/components/domain/PanchangamCard'
 import SixDayOutlookCompact from '@/components/domain/DashboardV3/SixDayOutlookCompact'
 import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals'
-import SectorRotationFlow from '@/components/domain/DashboardV3/SectorRotationFlow'
-import ScannerWidget from '@/components/domain/ScannerWidget'
+import SectorPulse from '@/components/domain/DashboardV3/SectorPulse'
+import VaNiHighlightsBoard from '@/components/domain/VaNiHighlightsBoard'
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
 
 type ActiveTab = 'today' | 'discovery' | 'myspace'
@@ -305,22 +305,16 @@ export default function WorkspacePage() {
 
       {activeTab === 'discovery' && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {/* Sector Rotation Flow */}
+          {/* Sector Pulse — score-framework rotation verdict (replaced the old
+              industry-rank panel, owner decision 2026-07-06; per-scan preview
+              widgets remain available as My Space catalog widgets) */}
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-            <SectorRotationFlow />
+            <SectorPulse />
           </div>
 
-          {/* Scanner widgets */}
+          {/* VaNi Highlights — union of ✦ across all scanners, both sides open */}
           <div style={{ padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-faint)', letterSpacing: '.06em',
-              textTransform: 'uppercase', marginBottom: 12, fontFamily: 'var(--font-mono, monospace)' }}>
-              Scan Highlights
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-              <ScannerWidget presetId="stage_2_leaders" title="Stage 2 Leaders" maxRows={4} />
-              <ScannerWidget presetId="conviction_flow" title="Conviction Flow" maxRows={4} />
-              <ScannerWidget presetId="vani_opportunity" title="VaNi Opportunity" maxRows={4} variant="stage" />
-            </div>
+            <VaNiHighlightsBoard />
           </div>
         </div>
       )}
