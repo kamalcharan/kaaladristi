@@ -37,6 +37,7 @@ const INDICATOR_COLS = [
   'dot_svd', 'dot_sbd', 'dot_syd',
   'swing_high', 'swing_low',
   'flow_type', 'vacuum_flag', 'accum_distrib', 'volume_divergence_flag',
+  'score_5d', 'score_22d',
 ].join(',');
 
 export interface IndicatorRow {
@@ -112,6 +113,10 @@ export interface IndicatorRow {
   vacuum_flag: string | null;
   accum_distrib: string | null;
   volume_divergence_flag: string | null;
+  // Money-flow conviction (owner doctrine: scores lead)
+  score_5d: number | null;
+  score_22d: number | null;
+  delivery_surge_x?: number | null;
 }
 
 export async function fetchIndicatorData(
@@ -314,7 +319,7 @@ export async function fetchEquityEodById(
   // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
   // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
   // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low';
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x';
   const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
   let query = from('km_equity_eod')

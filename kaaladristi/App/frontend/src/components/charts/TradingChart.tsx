@@ -370,11 +370,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
     const markers: SeriesMarker<Time>[] = [];
     const bmColorByDate = new Map(bigMoneyEvents.map((e) => [e.trade_date, e.color ?? '#d4a84b']));
     for (const d of data) {
-      if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.violet, shape: 'circle', text: 'SVD' });
-      if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.indigo, shape: 'circle', text: 'SBD' });
-      if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskAmber, shape: 'circle', text: 'SYD' });
-      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown', text: 'SH' });
-      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp', text: 'SL' });
+      // Signal dots — color IS the vocabulary (owner 2026-07-07: no text
+      // labels): SVD violet, SBD blue, SYD yellow. Swing pivots stay as
+      // bare arrows (red down = swing high, green up = swing low).
+      if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: '#8b5cf6', shape: 'circle' });
+      if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: '#3b82f6', shape: 'circle' });
+      if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: '#eab308', shape: 'circle' });
+      if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown' });
+      if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp' });
       if (bmColorByDate.has(d.trade_date)) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: bmColorByDate.get(d.trade_date)!, shape: 'circle', text: '₹' });
     }
     if (markers.length > 0) {
