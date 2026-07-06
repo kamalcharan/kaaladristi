@@ -78,7 +78,7 @@ interface TradingChartProps {
   astroBands?: AstroBand[];
   /** Big Money days (Phase 3): gold dashed price line at each event's zone
    *  low + a ₹ marker on the event bar. Observational annotations only. */
-  bigMoneyEvents?: { trade_date: string; price: number; label: string }[];
+  bigMoneyEvents?: { trade_date: string; price: number; label: string; color?: string }[];
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
@@ -358,7 +358,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     for (const ev of bigMoneyEvents) {
       candleSeries.createPriceLine({
         price: ev.price,
-        color: '#d4a84b',
+        color: ev.color ?? '#d4a84b',
         lineWidth: 1 as LineWidth,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
@@ -368,14 +368,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
     // Markers: Dot signals + Swing High/Low
     const markers: SeriesMarker<Time>[] = [];
-    const bmDates = new Set(bigMoneyEvents.map((e) => e.trade_date));
+    const bmColorByDate = new Map(bigMoneyEvents.map((e) => [e.trade_date, e.color ?? '#d4a84b']));
     for (const d of data) {
       if (d.dot_svd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.violet, shape: 'circle', text: 'SVD' });
       if (d.dot_sbd) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.indigo, shape: 'circle', text: 'SBD' });
       if (d.dot_syd) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskAmber, shape: 'circle', text: 'SYD' });
       if (d.swing_high) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: C.riskRed, shape: 'arrowDown', text: 'SH' });
       if (d.swing_low) markers.push({ time: toTime(d.trade_date), position: 'belowBar', color: C.riskGreen, shape: 'arrowUp', text: 'SL' });
-      if (bmDates.has(d.trade_date)) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: '#d4a84b', shape: 'circle', text: '₹' });
+      if (bmColorByDate.has(d.trade_date)) markers.push({ time: toTime(d.trade_date), position: 'aboveBar', color: bmColorByDate.get(d.trade_date)!, shape: 'circle', text: '₹' });
     }
     if (markers.length > 0) {
       markers.sort((a, b) => (a.time as string).localeCompare(b.time as string));

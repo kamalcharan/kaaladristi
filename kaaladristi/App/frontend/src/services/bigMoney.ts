@@ -34,10 +34,35 @@ interface DayRow {
   high?: number | null;
   volume?: number | null;
   delivery_qty?: number | null;
+  pct_chng?: number | null;
+}
+
+/**
+ * Direction is an INFERENCE, not a fact: delivery is two-sided by definition
+ * (every delivered share had a buyer and a seller). What price tells us is
+ * how the handover was absorbed:
+ *   entry — up day closing in the top of its range: buyers paid up
+ *   exit  — down day closing in the bottom of its range: holders sold down
+ *   mixed — large ownership change with no clear price verdict
+ */
+export type BigMoneyDirection = 'entry' | 'exit' | 'mixed';
+
+function classifyDirection(r: DayRow): BigMoneyDirection {
+  const pct = r.pct_chng ?? null;
+  const closePos =
+    r.close != null && r.low != null && r.high != null && r.high > r.low
+      ? (r.close - r.low) / (r.high - r.low)
+      : null;
+  if (pct != null && closePos != null) {
+    if (pct > 0 && closePos >= 0.6) return 'entry';
+    if (pct < 0 && closePos <= 0.4) return 'exit';
+  }
+  return 'mixed';
 }
 
 export interface BigMoneyEvent {
   trade_date: string;
+  direction: BigMoneyDirection;
   delivCr: number;      // delivered value that day, ₹ Cr
   ratio: number;        // vs the stock's own trailing 66-bar delivered norm
   low: number;          // event day's price range — the zone where money moved
@@ -79,6 +104,7 @@ export function detectBigMoneyDays(rows: DayRow[]): BigMoneyEvent[] {
       if (r.low != null && r.high != null && r.close != null) {
         events.push({
           trade_date: r.trade_date,
+          direction: classifyDirection(r),
           delivCr: value,
           ratio: value / baseline,
           low: r.low,
