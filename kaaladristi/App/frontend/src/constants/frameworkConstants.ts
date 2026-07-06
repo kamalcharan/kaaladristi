@@ -40,3 +40,21 @@ export const PAID_TIERS: TierType[] = ['trial', 'quarterly', 'annual', 'beta']
 // Added-by types
 export const ADDED_BY_TYPES = ['user', 'vani'] as const
 export type AddedByType = typeof ADDED_BY_TYPES[number]
+
+// ── Default chart lens ────────────────────────────────────────────
+// Owner decision 2026-07-07: charts have NO hardcoded lines — they draw
+// exactly what the framework says, on every Study surface. New users (empty
+// chart_overlays) are seeded with this classic set as REMOVABLE overlays so
+// a fresh chart still reads familiar. Shape matches ChartOverlay
+// (types/framework.ts) — declared structurally to avoid a circular import.
+export const DEFAULT_CHART_OVERLAYS: Array<{
+  catalog_item_id: string
+  type: 'indicator_line'
+  visible: boolean
+  label: string
+}> = [
+  { catalog_item_id: 'sma_50',     type: 'indicator_line', visible: true, label: 'SMA 50' },
+  { catalog_item_id: 'sma_150',    type: 'indicator_line', visible: true, label: 'SMA 150' },
+  { catalog_item_id: 'sma_200',    type: 'indicator_line', visible: true, label: 'SMA 200' },
+  { catalog_item_id: 'supertrend', type: 'indicator_line', visible: true, label: 'SuperTrend' },
+]

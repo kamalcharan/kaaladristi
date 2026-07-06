@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
@@ -9,7 +9,10 @@ import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
+import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
 import { useFrameworkStore } from '@/stores/frameworkStore';
+import { useAuthStore } from '@/stores/authStore';
+import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
 import { useAstroOverlayBands } from '@/hooks/useAstroOverlayBands';
 import type { ChartOverlay } from '@/types/framework';
 
@@ -63,9 +66,17 @@ export default function ChartView() {
 
   // Study Layer contract (POA Phase 1.5): the cockpit chart honors the SAME
   // framework overlays as the My Space chart — what you turn on in Catalog
-  // follows you everywhere. Astro zones render in legacy chart mode too.
-  const frameworkOverlays = useFrameworkStore((st) => st.framework?.chart_overlays ?? NO_OVERLAYS);
+  // follows you everywhere. The framework store is normally hydrated by the
+  // Workspace page; a user landing directly on the cockpit would otherwise
+  // see zero overlays, so load it here too.
+  const { framework, loadFramework } = useFrameworkStore();
+  const { profile } = useAuthStore();
+  useEffect(() => {
+    if (!framework && profile?.id) loadFramework(profile.id);
+  }, [framework, profile?.id, loadFramework]);
+  const frameworkOverlays = framework?.chart_overlays ?? NO_OVERLAYS;
   const astroBands = useAstroOverlayBands(frameworkOverlays);
+  const [overlayDrawerOpen, setOverlayDrawerOpen] = useState(false);
 
   const numId = Number(id);
   const rawName = searchParams.get('name') ?? `${type} #${id}`;
@@ -313,9 +324,16 @@ export default function ChartView() {
                     </span>
                   )}
                   <button
+                    onClick={() => setOverlayDrawerOpen(true)}
+                    title="Add or remove chart overlays (Study charts only)"
+                    className="ml-auto px-2.5 py-1 rounded-lg text-[10px] font-bold text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 hover:bg-accent-indigo/20 transition-all"
+                  >
+                    + Overlay
+                  </button>
+                  <button
                     onClick={() => setIsFull((f) => !f)}
                     title={isFull ? 'Exit fullscreen' : 'Fullscreen chart'}
-                    className="ml-auto px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
+                    className="px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
                   >
                     {isFull ? '✕' : '⛶'}
                   </button>
@@ -350,10 +368,14 @@ export default function ChartView() {
                   </p>
                 </div>
               ) : (
+                // workspaceMode = the ONE chart rendering path (owner
+                // 2026-07-07: no hardcoded lines; both Study surfaces work
+                // the same way). Lines come exclusively from framework
+                // overlays; RSI/Sniper/MagicRS live in the panels below.
                 <TradingChart
                   data={rows}
-                  compact={showRail && !isFull}
-                  height={isFull ? Math.max(700, window.innerHeight - 120) : undefined}
+                  workspaceMode
+                  height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
                   highlightDate={null}
                   overlays={frameworkOverlays}
                   astroBands={astroBands}
@@ -365,6 +387,13 @@ export default function ChartView() {
               <p className="text-[9px] text-muted mt-1 text-right mono">
                 {rows.length} days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
               </p>
+            )}
+
+            {/* Momentum / Smart Money / Magic RS evidence panels — replaced
+                the fused chart subpanes when the chart moved to the single
+                framework-driven rendering path */}
+            {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
+              <CockpitIndicatorPanels rows={rows} />
             )}
 
             {/* VaNi instrument insight — evidence narration below the chart
@@ -398,6 +427,13 @@ export default function ChartView() {
         </div>
 
       </div>
+
+      {/* Overlay picker — the same Workspace-launched drawer (z-200) */}
+      <CatalogDrawer
+        isOpen={overlayDrawerOpen}
+        onClose={() => setOverlayDrawerOpen(false)}
+        context="overlay"
+      />
     </ErrorBoundary>
   );
 }

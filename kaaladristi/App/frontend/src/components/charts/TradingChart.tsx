@@ -626,7 +626,12 @@ export default function TradingChart({ data, height = 900, compact = false, work
     };
 
     window.addEventListener('resize', handleResize);
+    // Container-driven resizes too (fullscreen toggle, rail collapse, grid
+    // reflow) — window resize alone left the chart at its stale width.
+    const ro = new ResizeObserver(() => handleResize());
+    if (mainRef.current) ro.observe(mainRef.current);
     return () => {
+      ro.disconnect();
       window.removeEventListener('resize', handleResize);
       chartsRef.current.forEach((c) => c.remove());
       chartsRef.current = [];
