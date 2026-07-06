@@ -26,7 +26,7 @@ pattern_study.py  →  km_rule_patterns  →  Patterns tab on /rules/:id
 | Decision | Value |
 |---|---|
 | Event anchor | **Window END** for combust/retrograde rules (the station/release moment is the trend change); **window ENTRY** for sign transits |
-| Benchmarks v1 | **Real indices only — all 102** in `km_index_eod`, per-pair n-gating |
+| Benchmarks v1 | **All indices with sufficient history** — standard AND curated (custom) baskets; curated are first-class benchmarks (owner, 2026-07-06). Per-pair n-gating. Future *pseudo* indices (history-backcast only) will carry an explicit marker and be excluded. |
 | n-gates | n ≥ 20 → publish · 10–19 → shown greyed "insufficient occurrences" · < 10 → computed, never displayed. **No silent caps** — gated cells say why. |
 | Frequency bands | Tactical ≤ 10d · Trend 11–90d · Structural > 90d — classified from each rule's own **median window duration** (data-driven, no hardcoded list) |
 | Overlap: same band | True **peers** → clean vs overlapped split; recurring combinations (n ≥ 20) promoted to named confluence stat lines |
@@ -37,7 +37,7 @@ pattern_study.py  →  km_rule_patterns  →  Patterns tab on /rules/:id
 | Copy | Observational base rates only ("window-high broken first in 61% of 259 occurrences") — never targets, never advice. SEBI voice throughout. |
 
 ### ⏸ Explicitly ON HOLD (owner, 2026-07-06)
-1. **Pseudo-sector reconstruction** — backcasting sector composites from constituents via the custom-index machinery. Verified feasible (equity data to 1996; 1,433 stocks trading by 2005; ≥5-constituent gate + survivorship labeling designed) — parked, not rejected. The benchmark dimension is a generic `index_id`, so pseudo-sectors slot in later with zero schema change.
+1. **Pseudo-sector reconstruction** — creating NEW indices purely to backcast sector history (distinct from existing curated baskets, which run as normal benchmarks). Verified feasible (equity data to 1996; 1,433 stocks trading by 2005; ≥5-constituent gate + survivorship labeling designed) — parked, not rejected. When created, pseudo indices will be explicitly marked as such and pattern results labeled accordingly.
 2. **Stock-level calculations** — per-stock patterns and transit-sensitivity scores. False-discovery risk and stock idiosyncrasy documented in session discussion; revisit only as aggregate scoring with hard gates.
 
 ---

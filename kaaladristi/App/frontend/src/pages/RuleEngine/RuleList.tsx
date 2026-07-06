@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/components/ui';
 import { ToastContainer } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import PatternStudyButton from './PatternStudyButton';
 import RuleFormModal, { emptyForm, type FormMode } from './RuleFormModal';
 import { createRule, toggleRuleActive, toggleCatalogVisible, fetchRules, fetchConfidence, fetchTransitDates, type AstroRuleFull, type AstroRule, type RuleConfidence, type TransitDateInfo } from './ruleService';
 import DiscoveryPanel from './DiscoveryPanel';
@@ -500,12 +501,15 @@ export default function RuleList() {
             {activeTab === 'rules' && <StatsBar rules={filtered} />}
           </div>
           {activeTab === 'rules' && (
-            <button
-              onClick={() => { setSaveError(null); setModalOpen(true); }}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all shrink-0"
-            >
-              <Plus className="w-4 h-4" /> Add Rule
-            </button>
+            <div className="flex items-start gap-2 shrink-0">
+              <PatternStudyButton />
+              <button
+                onClick={() => { setSaveError(null); setModalOpen(true); }}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" /> Add Rule
+              </button>
+            </div>
           )}
         </header>
 
