@@ -8,14 +8,15 @@
  * Entirely data-driven from km_rule_transits (the almanac windows built in
  * migrations 127-130): each planet's current sign (Journey rules) and
  * motion (Motion rules), plus the next 90 days of engine events from the
- * future windows already generated to 2030. Zero LLM, zero new backend.
- * Cells click through to the rule's detail page (Almanac/Patterns tabs).
+ * future windows already generated to 2030. Zero LLM in the strip itself.
+ * Clicking a cell or chip opens the VaNi explain popover (same user-facing
+ * surface as the chart confluence pill) — never the admin-gated /rules pages.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { from } from '@/services/postgrest';
+import OverlayExplainPopover from '@/components/domain/VaNi/OverlayExplainPopover';
 
 // ── Engine rule codes (migrations 127-130) ──────────────────────────────────
 
@@ -70,7 +71,7 @@ interface RegimeData {
     retro: boolean; motionDaysLeft: number | null;
     journeyRuleId: number | null; motionRuleId: number | null;
   }>;
-  upcoming: { days: number; label: string; ruleId: number }[];
+  upcoming: { days: number; label: string; ruleId: number; planet: string }[];
 }
 
 const ALL_CODES = [...Object.values(JOURNEY), ...Object.values(MOTION)];
@@ -122,6 +123,7 @@ async function fetchRegime(): Promise<RegimeData> {
             days: dayDiff(w.start_date),
             label: `${planet} enters ${w.conditions_snapshot?.sign ?? '…'}`,
             ruleId: jId,
+            planet,
           });
         }
       }
@@ -129,9 +131,9 @@ async function fetchRegime(): Promise<RegimeData> {
         if (active) {
           p.retro = true;
           p.motionDaysLeft = dayDiff(w.end_date);
-          upcoming.push({ days: dayDiff(w.end_date), label: `${planet} stations direct`, ruleId: mId });
+          upcoming.push({ days: dayDiff(w.end_date), label: `${planet} stations direct`, ruleId: mId, planet });
         } else if (w.start_date > today) {
-          upcoming.push({ days: dayDiff(w.start_date), label: `${planet} retrograde begins`, ruleId: mId });
+          upcoming.push({ days: dayDiff(w.start_date), label: `${planet} retrograde begins`, ruleId: mId, planet });
         }
       }
     }
@@ -144,8 +146,16 @@ async function fetchRegime(): Promise<RegimeData> {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+interface ExplainTarget {
+  tag: string;                 // planet tag on the almanac rules (Mercury / Mars / Jupiter / Saturn)
+  focusRuleId?: number | null; // set on chip clicks — lead with that specific window's insight
+  focusRuleLabel?: string;
+  x: number;
+  y: number;
+}
+
 export default function PlanetRegimeStrip() {
-  const navigate = useNavigate();
+  const [explain, setExplain] = useState<ExplainTarget | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ['planet-regime'],
     queryFn: fetchRegime,
@@ -188,8 +198,11 @@ export default function PlanetRegimeStrip() {
           return (
             <button
               key={c.planet}
-              onClick={() => c.journeyRuleId && navigate(`/rules/${c.journeyRuleId}`)}
-              title={`${c.planet} — ${ROLES[c.planet]} layer. Click for the almanac & patterns.`}
+              onClick={e => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setExplain({ tag: c.planet, x: r.left, y: r.bottom });
+              }}
+              title={`${c.planet} — ${ROLES[c.planet]} layer. Click for what's active and VaNi's read.`}
               style={{
                 flex: '1 1 150px', minWidth: 150, textAlign: 'left', cursor: 'pointer',
                 background: 'transparent', border: '1px solid var(--border)',
@@ -252,7 +265,13 @@ export default function PlanetRegimeStrip() {
           {data.upcoming.map((u, i) => (
             <button
               key={`${u.label}-${i}`}
-              onClick={() => navigate(`/rules/${u.ruleId}`)}
+              onClick={e => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setExplain({
+                  tag: u.planet, focusRuleId: u.ruleId, focusRuleLabel: u.label,
+                  x: r.left, y: r.bottom,
+                });
+              }}
               style={{
                 background: 'transparent', border: '1px solid var(--border)',
                 borderRadius: 100, padding: '2px 9px', cursor: 'pointer',
@@ -263,6 +282,18 @@ export default function PlanetRegimeStrip() {
             </button>
           ))}
         </div>
+      )}
+
+      {/* User-facing explain surface — same pattern as the chart confluence pill */}
+      {explain && (
+        <OverlayExplainPopover
+          tag={explain.tag}
+          anchorX={explain.x}
+          anchorY={explain.y}
+          focusRuleId={explain.focusRuleId}
+          focusRuleLabel={explain.focusRuleLabel}
+          onClose={() => setExplain(null)}
+        />
       )}
     </div>
   );
