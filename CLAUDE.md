@@ -108,7 +108,7 @@ kaaladristi/
 | `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
 | `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
 
-Latest migration: **127** (`km_migration_127_mercury_almanac.sql` — Mercury Retrograde motion rule + unified `Mercury` tag for the almanac view)
+Latest migration: **128** (`km_migration_128_mars_almanac.sql` — Mars Retrograde + Sign Transit rules, unified `Mars` tag for the almanac view)
 
 **Extended table inventory** (breadth/astro/rule/risk/scan/rolling-metric tables, inactive & missing indices): `docs/claude/db-tables.md`
 
@@ -381,7 +381,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **128**.
+Next migration number: **129**.
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
