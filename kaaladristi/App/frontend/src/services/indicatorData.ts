@@ -172,6 +172,30 @@ export async function fetchIndicatorDataById(
   return (data ?? []) as IndicatorRow[];
 }
 
+export type EquityTimeframe = 'daily' | 'weekly' | 'monthly';
+
+/** Weekly/monthly bars for the Study cockpit's D/W/M toggle (Phase 2.3).
+ *  km_equity_weekly/monthly carry trade_date (= period end), OHLCV, and
+ *  avg_deliv_pct — mapped to delivery_pct so the volume shading and hover
+ *  legend work unchanged. Indicator columns don't exist at these
+ *  timeframes; the chart's line loops skip missing values gracefully. */
+export async function fetchEquityTimeframeById(
+  equityId: number,
+  tf: 'weekly' | 'monthly',
+): Promise<IndicatorRow[]> {
+  const table = tf === 'weekly' ? 'km_equity_weekly' : 'km_equity_monthly';
+  const { data, error } = await from(table)
+    .select('trade_date,open,high,low,close,volume,avg_deliv_pct')
+    .eq('equity_id', equityId)
+    .order('trade_date', { ascending: true })
+    .limit(3000)
+    .execute();
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<Record<string, unknown>>)
+    .filter((r) => r.trade_date != null && r.close != null)
+    .map((r) => ({ ...r, delivery_pct: r.avg_deliv_pct ?? null })) as unknown as IndicatorRow[];
+}
+
 // Symbol shorthand → km_index_symbols.name mapping
 const INDEX_SHORTHAND: Record<string, string> = {
   NIFTY50:   'NIFTY 50',

@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, type EquityTimeframe } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import { InstrumentIntelligence } from '@/components/domain';
 import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
@@ -57,6 +57,8 @@ export default function ChartView() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [range, setRange] = useState<TimeRange>('1Y');
+  const [tf, setTf] = useState<EquityTimeframe>('daily');
+  const [isFull, setIsFull] = useState(false);
   const [selectedStyle] = useState<TradingStyle>('Balanced');
 
   // Study Layer contract (POA Phase 1.5): the cockpit chart honors the SAME
@@ -72,10 +74,10 @@ export default function ChartView() {
 
   // ── Chart data (full history for TradingChart) ──
   const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['chart', type, numId, range],
+    queryKey: ['chart', type, numId, range, tf],
     queryFn: () =>
       isEquity
-        ? fetchEquityEodById(numId, range)
+        ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))
         : fetchIndicatorDataById(numId, range),
     staleTime: 120_000,
     enabled: !!numId && (isIndex || isEquity),
@@ -260,24 +262,63 @@ export default function ChartView() {
           {/* ── Left Panel: Intelligence + Chart ── */}
           <div className="min-w-0">
             {/* Chart area */}
-            <div className="glass-card rounded-2xl p-3 mt-2">
+            <div
+              className={cn(
+                'glass-card rounded-2xl p-3 mt-2',
+                isFull && 'fixed inset-2 z-[300] overflow-auto',
+              )}
+              style={isFull ? { background: 'var(--kd-bg, #0b0f17)' } : undefined}
+            >
               {/* Time range selector */}
               {!isLoading && !isError && rows.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
-                  {TIME_RANGES.map(r => (
-                    <button
-                      key={r}
-                      onClick={() => setRange(r)}
-                      className={cn(
-                        'px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all duration-200',
-                        range === r
-                          ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
-                          : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
-                      )}
-                    >
-                      {r}
-                    </button>
-                  ))}
+                  {/* D/W/M timeframe (Phase 2.3) — equity only; index weekly
+                      aggregates pending DB verification */}
+                  {isEquity && (
+                    <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
+                      {(['daily', 'weekly', 'monthly'] as const).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setTf(t)}
+                          className={cn(
+                            'px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all',
+                            tf === t
+                              ? 'bg-accent-indigo/25 text-accent-indigo'
+                              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                          )}
+                        >
+                          {t === 'daily' ? 'D' : t === 'weekly' ? 'W' : 'M'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {tf === 'daily' ? (
+                    TIME_RANGES.map(r => (
+                      <button
+                        key={r}
+                        onClick={() => setRange(r)}
+                        className={cn(
+                          'px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all duration-200',
+                          range === r
+                            ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
+                        )}
+                      >
+                        {r}
+                      </button>
+                    ))
+                  ) : (
+                    <span className="text-[9px] text-muted font-mono px-1">
+                      full history · {tf} bars
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setIsFull((f) => !f)}
+                    title={isFull ? 'Exit fullscreen' : 'Fullscreen chart'}
+                    className="ml-auto px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
+                  >
+                    {isFull ? '✕' : '⛶'}
+                  </button>
                 </div>
               )}
 
@@ -309,7 +350,14 @@ export default function ChartView() {
                   </p>
                 </div>
               ) : (
-                <TradingChart data={rows} compact={showRail} highlightDate={null} astroBands={astroBands} />
+                <TradingChart
+                  data={rows}
+                  compact={showRail && !isFull}
+                  height={isFull ? Math.max(700, window.innerHeight - 120) : undefined}
+                  highlightDate={null}
+                  overlays={frameworkOverlays}
+                  astroBands={astroBands}
+                />
               )}
             </div>
 
