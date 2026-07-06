@@ -738,7 +738,8 @@ def scan_presets():
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 "SELECT id,name,description,tooltip,sort_order,result_limit,is_active,"
-                "       category,category_label,category_color,category_sort,universe,timeframe,is_default_tab "
+                "       category,category_label,category_color,category_sort,universe,timeframe,is_default_tab,"
+                "       vani_rule "
                 "FROM kd_scan_presets WHERE is_active = true "
                 "ORDER BY category_sort, sort_order"
             )

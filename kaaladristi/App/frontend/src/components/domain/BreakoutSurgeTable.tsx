@@ -203,7 +203,7 @@ export default function BreakoutSurgeCards({ stocks }: { stocks: ScanStock[] }) 
         <>
           <ScanSectionLabel>
             <span style={{ color: 'var(--gold)', marginRight: '6px' }}>✦</span>
-            VaNi Opportunity · {vani.length} stock{vani.length !== 1 ? 's' : ''}{' '}
+            VaNi Highlight · {vani.length} stock{vani.length !== 1 ? 's' : ''}{' '}
             <span style={{ fontWeight: 400 }}>
               — RVOL &gt; 5× · breakout within 5% · RSI &lt; 75
             </span>
