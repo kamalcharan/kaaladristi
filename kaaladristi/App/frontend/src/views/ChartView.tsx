@@ -10,6 +10,8 @@ import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
+import BigMoneyCard from '@/components/domain/StockCockpit/BigMoneyCard';
+import { detectBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
@@ -158,6 +160,20 @@ export default function ChartView() {
   // Evidence rail renders for equities with data (index rail arrives with
   // index-applicable cards in a later phase)
   const showRail = isEquity && rows.length > 0;
+
+  // Big Money days (Phase 3) — daily equity bars only
+  const bigMoneyEvents = useMemo(
+    () => (isEquity && tf === 'daily' ? detectBigMoneyDays(rows) : []),
+    [isEquity, tf, rows],
+  );
+  const bigMoneyChartLines = useMemo(
+    () => bigMoneyEvents.map((ev) => ({
+      trade_date: ev.trade_date,
+      price: ev.low,
+      label: `₹${ev.delivCr >= 100 ? ev.delivCr.toFixed(0) : ev.delivCr.toFixed(1)} Cr`,
+    })),
+    [bigMoneyEvents],
+  );
 
   return (
     <ErrorBoundary>
@@ -384,6 +400,7 @@ export default function ChartView() {
                   highlightDate={null}
                   overlays={frameworkOverlays}
                   astroBands={astroBands}
+                  bigMoneyEvents={bigMoneyChartLines}
                 />
               )}
             </div>
@@ -422,6 +439,7 @@ export default function ChartView() {
                 matchedScans={scanPresence.matchedScans}
               />
               <SectorMembershipCard equityId={numId} />
+              <BigMoneyCard events={bigMoneyEvents} />
               <DeliveryVsTraded rows={rows} />
               <IndustryContextCard
                 industry={equityPulse.meta?.industry ?? null}

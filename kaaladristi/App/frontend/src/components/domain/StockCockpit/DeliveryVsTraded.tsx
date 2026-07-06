@@ -9,8 +9,9 @@ import { BarChart3 } from 'lucide-react';
 
 interface DayRow {
   trade_date: string;
-  value_cr?: number | null;
-  deliv_value_cr?: number | null;
+  close?: number | null;
+  volume?: number | null;
+  delivery_qty?: number | null;
   delivery_pct?: number | null;
 }
 
@@ -22,14 +23,12 @@ function fmtDay(d: string): string {
 
 export default function DeliveryVsTraded({ rows }: { rows: DayRow[] }) {
   // rows arrive oldest-first from the chart fetch; take last 10, newest on top
+  // Quantity-based ₹ Cr (volume × close, delivery_qty × close) — the stored
+  // value_cr / deliv_value_cr columns carry a 100× scale bug (diagnosed
+  // 2026-07-07; pipeline fix tracked separately).
   const days = rows.slice(-10).reverse().map((r) => {
-    const traded = r.value_cr ?? null;
-    const delivered =
-      r.deliv_value_cr != null
-        ? r.deliv_value_cr
-        : traded != null && r.delivery_pct != null
-          ? (traded * r.delivery_pct) / 100
-          : null;
+    const traded = r.volume != null && r.close != null ? (r.volume * r.close) / 1e7 : null;
+    const delivered = r.delivery_qty != null && r.close != null ? (r.delivery_qty * r.close) / 1e7 : null;
     const pctVal =
       r.delivery_pct != null
         ? r.delivery_pct
