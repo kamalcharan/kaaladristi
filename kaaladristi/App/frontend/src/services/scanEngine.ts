@@ -195,7 +195,7 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   // Phase 2: fetch everything else in parallel.
   // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
   // Upper-bound each chunk with confirmedLatestDate to exclude any partially-ingested rows.
-  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,stage,score_5d,score_22d,pct_5d,pct_22d,pct_66d,avg_amt_66d,surge_22d,ret_5d,ret_22d,ret_66d,breakout_level,pct_from_breakout,pct_below_52w_high,deliv_value_cr';
+  const EOD_COLS = 'equity_id,trade_date,open,high,low,close,prev_close,pct_chng,volume,value_cr,rvol,tvol,rsi_14,magic_rs,magic_rs_zone,flow_type,accum_distrib,sniper_inst,sniper_hot,rss_value,rss_spread,sma_150,volume_divergence_flag,ema_20,atr_14,delivery_pct,delivery_qty,avg_amt_5d,avg_amt_22d,delivery_surge_x,w52_high,sma_50,sma_200,w52_low,supertrend_dir,lifetime_high,is_vani_surge,is_vani_breakout,is_vani_distrib,is_vani_weakness,is_vani_smart,is_vani_s2,is_vani_oversold,stage,score_5d,score_22d,pct_5d,pct_22d,pct_66d,avg_amt_66d,surge_22d,ret_5d,ret_22d,ret_66d,breakout_level,pct_from_breakout,pct_below_52w_high,deliv_value_cr';
   console.log('[loadDailyBundle] EOD_COLS select:', EOD_COLS);
   const CHUNK = 400;
   const idChunks: number[][] = [];
@@ -711,8 +711,18 @@ function buildScanStock(
     pctBelow52wHigh,
   };
 
+  // One VaNi standard (owner 2026-07-06: "VaNi highlight is not configured
+  // for all the scanners"): the preset's vani_rule decides the highlight,
+  // same as the stage/breakout scans. The old ATR/EMA-band config was a
+  // BULLISH-only gate — on bearish scans (Weakness Confluence, Distribution
+  // Warnings) it could never fire, so they showed zero highlights forever.
+  // The config path survives only as a fallback for presets with no rule.
+  const vaniRule = presetId ? getPresetMeta(presetId)?.vani_rule : null;
   const presetCfg = presetId ? (bundle.oppConfigMap.get(presetId) ?? null) : null;
-  return { ...partial, vaniOpportunity: presetCfg ? evaluateOpportunity(partial, presetCfg) : false };
+  const vaniOpportunity = vaniRule
+    ? computeVaniOpportunity(eod as VaniRow, vaniRule)
+    : presetCfg ? evaluateOpportunity(partial, presetCfg) : false;
+  return { ...partial, vaniOpportunity };
 }
 
 // ── VaNi Opportunity Rule — data-driven ────────────────────────
