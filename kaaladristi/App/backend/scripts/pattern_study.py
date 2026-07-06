@@ -5,8 +5,8 @@ POA: docs/POA/POA-astro-pattern-engine.md (approved 2026-07-06)
 Prerequisite: migration 132 (km_rule_patterns).
 
 Computes three pattern types for every rule that has transit windows,
-against every real (non-custom) index benchmark, and upserts results
-into km_rule_patterns:
+against every index benchmark with enough history — standard AND curated
+(custom) baskets — and upserts results into km_rule_patterns:
 
   level_break      — window high/low as reference levels: which side broke
                      first after the window, time-to-break, forward returns
@@ -143,12 +143,15 @@ def load_rules(cur, only_rule=None, only_tag=None):
 
 
 def load_benchmarks(cur, only_benchmark=None):
-    """Non-custom indices with enough history. Returns [(id, name)]."""
+    """All indices with enough history — standard AND curated (custom)
+    baskets; curated indices are first-class benchmarks (owner decision
+    2026-07-06). Future pseudo indices (created purely to backcast sector
+    history) will carry an explicit 'pseudo' marker and be excluded here
+    once that marker exists."""
     q = """
         SELECT s.id, s.name
         FROM km_index_symbols s
-        WHERE COALESCE(s.category, '') <> 'custom'
-          AND (SELECT COUNT(*) FROM km_index_eod e WHERE e.index_id = s.id) >= %s
+        WHERE (SELECT COUNT(*) FROM km_index_eod e WHERE e.index_id = s.id) >= %s
     """
     args = [MIN_BENCH_BARS]
     if only_benchmark:
@@ -591,16 +594,14 @@ def base_params(rule):
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--rule', help='single rule_code')
-    ap.add_argument('--benchmark', help='single benchmark name or index id')
-    ap.add_argument('--tag', help='only rules carrying this tag (e.g. MajorTransit)')
-    args = ap.parse_args()
-
+def run_study(rule=None, benchmark=None, tag=None, progress_cb=None):
+    """Run the pattern study. Callable from the API (background job) or CLI.
+    progress_cb(bench_name, benches_done, benches_total, rows_written) is
+    invoked after each benchmark. Returns a summary dict."""
     conn = get_conn()
     today = date.today()
     written = 0
+    benches_done = 0
     try:
         with conn:
             with conn.cursor() as cur:
@@ -608,7 +609,7 @@ def main():
                 all_rules = load_rules(cur)
                 context_lookups = build_context_lookups(all_rules)
 
-                rules = load_rules(cur, only_rule=args.rule, only_tag=args.tag)
+                rules = load_rules(cur, only_rule=rule, only_tag=tag)
                 for r in rules:
                     # Historical windows only — future windows can't be studied
                     r['windows'] = [w for w in r['windows'] if w['end'] < today]
@@ -627,7 +628,7 @@ def main():
                 stamped = {r['rule_code']: r for r in all_rules}
                 rules = [stamped[r['rule_code']] for r in rules if r['rule_code'] in stamped]
 
-                benches = load_benchmarks(cur, only_benchmark=args.benchmark)
+                benches = load_benchmarks(cur, only_benchmark=benchmark)
                 print(f"\n  Rules: {len(rules)}   Benchmarks: {len(benches)}\n")
 
                 for bench_id, bench_name in benches:
@@ -678,11 +679,25 @@ def main():
                                 params, json.dumps(seq), n_w, n_c))
                             written += 1
 
-                    print(f"  [{bench_id:>4}] {bench_name:<40} done")
+                    benches_done += 1
+                    print(f"  [{bench_id:>4}] {bench_name:<40} done", flush=True)
+                    if progress_cb:
+                        progress_cb(bench_name, benches_done, len(benches), written)
 
-        print(f"\n  Pattern rows written/updated: {written}\n")
+        print(f"\n  Pattern rows written/updated: {written}\n", flush=True)
+        return {'rows_written': written, 'benchmarks': benches_done,
+                'rules': len(rules)}
     finally:
         conn.close()
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--rule', help='single rule_code')
+    ap.add_argument('--benchmark', help='single benchmark name or index id')
+    ap.add_argument('--tag', help='only rules carrying this tag (e.g. MajorTransit)')
+    args = ap.parse_args()
+    run_study(rule=args.rule, benchmark=args.benchmark, tag=args.tag)
 
 
 if __name__ == '__main__':

@@ -10,6 +10,7 @@ import { useBackendStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import AlmanacTab from './AlmanacTab';
+import PatternsTab from './PatternsTab';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
 import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery, dropRuleSignals } from './discoveryService';
 
@@ -788,13 +789,14 @@ function BacktestTabs({
   highlightId: number | null;
   onHighlight: (id: number | null) => void;
 }) {
-  const [tab, setTab] = useState<'transits' | 'upcoming' | 'signals' | 'occurrences' | 'yearly' | 'almanac'>('transits');
+  const [tab, setTab] = useState<'transits' | 'upcoming' | 'signals' | 'occurrences' | 'yearly' | 'almanac' | 'patterns'>('transits');
   const totalPages = Math.ceil(signalsTotal / PAGE_SIZE);
 
   const tabs = [
     { key: 'transits'    as const, label: `Transits · ${transits.length}` },
     { key: 'upcoming'    as const, label: `Upcoming · ${upcomingTransits.length}` },
     { key: 'almanac'     as const, label: 'Almanac' },
+    { key: 'patterns'    as const, label: 'Patterns' },
     { key: 'signals'     as const, label: `Next Signals · ${upcomingSignals.length}` },
     { key: 'occurrences' as const, label: `Daily · ${signalsTotal.toLocaleString()}` },
     ...(yearlyConf.length > 0 ? [{ key: 'yearly' as const, label: `Year-by-Year · ${yearlyConf.length}` }] : []),
@@ -917,6 +919,9 @@ function BacktestTabs({
 
       {/* Almanac tab — full forward calendar of windows (screenshot format) */}
       {tab === 'almanac' && <AlmanacTab ruleId={ruleId} />}
+
+      {/* Patterns tab — Astro Pattern Engine results (POA Phase 3) */}
+      {tab === 'patterns' && <PatternsTab ruleId={ruleId} />}
 
       {/* Next Signals tab */}
       {tab === 'signals' && (

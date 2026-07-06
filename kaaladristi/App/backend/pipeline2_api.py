@@ -3480,6 +3480,94 @@ def _run_confidence_bg():
         _confidence_state['finished_at'] = datetime.utcnow().isoformat()
 
 
+
+# ── Astro Pattern Engine — background study job (mirrors discovery) ───────────
+# POA: docs/POA/POA-astro-pattern-engine.md. Frontend admin-gates the trigger
+# (same convention as discovery). Single job at a time.
+
+_pattern_state: dict = {
+    'job_id':          None,
+    'running':         False,
+    'started_at':      None,
+    'finished_at':     None,
+    'benches_total':   0,
+    'benches_done':    0,
+    'rows_written':    0,
+    'current_bench':   None,
+    'error':           None,
+    'summary':         None,
+}
+
+
+def _run_pattern_study_bg(rule: str | None = None, benchmark: str | None = None,
+                          tag: str | None = None):
+    """Background task: run the pattern study and update _pattern_state."""
+    global _pattern_state
+    try:
+        from scripts.pattern_study import run_study  # noqa: PLC0415
+
+        def progress(bench_name, done, total, rows):
+            _pattern_state['current_bench'] = bench_name
+            _pattern_state['benches_done'] = done
+            _pattern_state['benches_total'] = total
+            _pattern_state['rows_written'] = rows
+
+        summary = run_study(rule=rule, benchmark=benchmark, tag=tag,
+                            progress_cb=progress)
+        _pattern_state['summary'] = summary
+        _pattern_state['rows_written'] = summary.get('rows_written', 0)
+    except Exception as exc:
+        log.error(f'pattern study failed: {exc}')
+        _pattern_state['error'] = str(exc)
+    finally:
+        _pattern_state['running'] = False
+        _pattern_state['current_bench'] = None
+        _pattern_state['finished_at'] = datetime.utcnow().isoformat()
+
+
+@app.post('/api/patterns/run')
+def patterns_run(background_tasks: BackgroundTasks,
+                 rule: str | None = None, benchmark: str | None = None,
+                 tag: str | None = None):
+    """Trigger the pattern study (full by default; rule/benchmark/tag narrow it)."""
+    if _pattern_state['running']:
+        raise HTTPException(409, 'A pattern study is already running')
+    job_id = str(uuid.uuid4())
+    _pattern_state.update({
+        'job_id': job_id, 'running': True, 'error': None, 'summary': None,
+        'started_at': datetime.utcnow().isoformat(), 'finished_at': None,
+        'benches_total': 0, 'benches_done': 0, 'rows_written': 0,
+        'current_bench': None,
+    })
+    background_tasks.add_task(_run_pattern_study_bg, rule, benchmark, tag)
+    return {'job_id': job_id, 'status': 'started'}
+
+
+@app.get('/api/patterns/status')
+def patterns_status():
+    """Current or last pattern-study job state + row summary."""
+    state = dict(_pattern_state)
+    try:
+        conn = _conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT rule_id), "
+                "COUNT(DISTINCT benchmark_index_id), MAX(computed_at) "
+                "FROM km_rule_patterns"
+            )
+            row = cur.fetchone()
+            state['table'] = {
+                'rows': row[0] or 0, 'rules': row[1] or 0,
+                'benchmarks': row[2] or 0,
+                'last_computed_at': row[3].isoformat() if row[3] else None,
+            }
+        conn.close()
+    except Exception as exc:
+        log.warning(f'patterns_status summary query failed: {exc}')
+        state['table'] = None
+    return state
+
+
 @app.post('/api/confidence/compute')
 def confidence_compute(background_tasks: BackgroundTasks):
     """Score all km_rule_signals against Nifty returns and upsert km_rule_confidence."""
