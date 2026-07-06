@@ -346,6 +346,23 @@ const WIDGETS: CatalogItem[] = [
     ],
   },
   {
+    id: 'planet_regime',
+    display_name: 'Sky Regime',
+    description: 'The four-planet market engine live: Saturn (structure), Jupiter (trend), Mars (momentum), Mercury (signal) — current sign, dignity, motion, and the next 90 days of engine events.',
+    block_type: 'widget',
+    placement: 'panel_block',
+    data_source: 'api_endpoint',
+    config_schema: { table: 'km_rule_transits' },
+    applicable_to: ['equity', 'index'],
+    tier_required: 'free',
+    vani_explanation: "Sky Regime reads the four-planet hierarchy the way a weather report reads pressure systems. Saturn's sign sets the multi-year structure, Jupiter's sign sets the sector trend of the year, Mars's motion sets whether momentum is available, and Mercury's motion sets the information-noise level. Each cell links to that planet's full almanac and historical patterns. The 'coming up' row previews the next 90 days of engine events before they happen.",
+    vani_tags: [
+      { text: 'Market season context', type: 'works' },
+      { text: 'Forward event preview', type: 'works' },
+      { text: 'Not an entry signal', type: 'limit' },
+    ],
+  },
+  {
     id: 'stage_4_leaders',
     display_name: 'Stage 4 Leaders',
     description: 'Stocks in confirmed downtrend — below SMA50 and SMA200, death cross confirmed',
