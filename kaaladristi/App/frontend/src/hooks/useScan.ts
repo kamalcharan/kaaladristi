@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { executeScan, getAllScanCounts, fetchScanPresets, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult } from '@/services/scanEngine';
+import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights } from '@/services/scanEngine';
 import type { ScanStock, ScanDefinition } from '@/types';
 
 const PIPELINE_URL = import.meta.env.VITE_PIPELINE_API_URL ?? '';
@@ -96,6 +96,16 @@ export function useAllScanCounts(exchangeFilter: ExchangeFilter = 'combined') {
   return useQuery<ScanCountsResult>({
     queryKey: ['scan_counts', exchangeFilter],
     queryFn: () => getAllScanCounts(exchangeFilter, 'daily'), // landing always daily
+    staleTime: 3 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** Union of ✦ VaNi Highlights across all scanners (Workspace Discovery board). */
+export function useVaniHighlights() {
+  return useQuery<VaniHighlights>({
+    queryKey: ['vani_highlights'],
+    queryFn: fetchVaniHighlights,
     staleTime: 3 * 60 * 1000,
     retry: 1,
   });

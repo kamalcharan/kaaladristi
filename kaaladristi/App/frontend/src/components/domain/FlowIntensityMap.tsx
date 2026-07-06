@@ -62,12 +62,12 @@ const NO_DATA    = '#1e293b';
 // positive equity-score days sit on the return-only branch; the surge²×25
 // branch produces the long tail (p97=86), which STRONG deliberately catches.
 
-const STRONG_SCORE_CUT_INDEX  = 25;
+export const STRONG_SCORE_CUT_INDEX  = 25;
 const STRONG_SCORE_CUT_EQUITY = 28;
 
-type FlowSignal = 'STRONG' | 'BUILDING' | 'FADING' | 'OUTFLOW' | 'QUIET';
+export type FlowSignal = 'STRONG' | 'BUILDING' | 'FADING' | 'OUTFLOW' | 'QUIET';
 
-function flowSignal(c: CellData, strongCut: number): FlowSignal {
+export function flowSignal(c: CellData, strongCut: number): FlowSignal {
   const s5  = c.s5  ?? 0;
   const s22 = c.s22 ?? 0;
   if (s5 > 0 && s5 >= s22) return s5 >= strongCut ? 'STRONG' : 'BUILDING';
@@ -148,7 +148,7 @@ function fmtCr(v: number) {
 // (score_5d above score_22d that day), amber = fading. The row reads as a
 // conviction timeline — the drill-down's flow-trend chart is its zoom-in.
 
-function MicroTrend({ rowData, height }: { rowData: CellData[]; height: number }) {
+export function MicroTrend({ rowData, height }: { rowData: CellData[]; height: number }) {
   const cells = [...rowData].reverse();
   if (cells.length === 0) return <div style={{ width: TREND_W }} />;
 

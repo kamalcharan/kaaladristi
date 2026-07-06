@@ -497,6 +497,82 @@ export async function fetchConstituentFlowMap(
   return { rows: sortedRows, dates: reversedDates, cells: cellMap };
 }
 
+// ── Sector Pulse (Workspace · Discovery) ──────────────────────────────────────
+
+export interface SectorPulseRow {
+  id: number;
+  name: string;
+  isCustom: boolean;
+  /** Score/flow cells, NEWEST FIRST (index 0 = latest session) — same shape
+   *  the heatmap uses, so flowSignal() and MicroTrend consume them directly. */
+  cells: FlowCellData[];
+}
+
+/**
+ * Data for the Workspace Discovery "Sector Pulse" widget — sectoral + curated
+ * indices with enough recent history to compute the 5-state money-flow signal
+ * and render a micro-trend. Replaces the old industry-rank rotation panel
+ * (owner decision 2026-07-06: the sector-index score framework is the stable
+ * taxonomy; one verdict language across workspace and /sector-rotation).
+ */
+export async function fetchSectorPulse(days = 22): Promise<SectorPulseRow[]> {
+  const { data: symbols, error: symErr } = await from('km_index_symbols')
+    .select('id,name,category')
+    .in('category', [...SECTOR_TAB_CATEGORIES.sectoral, ...SECTOR_TAB_CATEGORIES.custom])
+    .is('is_active', 'true')
+    .execute();
+  if (symErr) throw new Error(`[sectorPulse] symbols: ${symErr.message}`);
+
+  const syms = (symbols ?? []) as SectorIndexSymbol[];
+  if (syms.length === 0) return [];
+  const indexIds = syms.map((s) => s.id);
+
+  const latestDate = await fetchLatestIndexDate();
+  if (!latestDate) return [];
+  const cutoff = new Date(latestDate);
+  cutoff.setDate(cutoff.getDate() - Math.ceil(days * 1.8));
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  const { data: eodData, error: eodErr } = await from('km_index_eod')
+    .select('index_id,trade_date,pct_chng,value_cr,score_5d,score_22d,avg_amt_5d,avg_amt_22d,ret_5d,ret_22d')
+    .in('index_id', indexIds)
+    .gte('trade_date', cutoffStr)
+    .order('trade_date', { ascending: true })
+    .execute();
+  if (eodErr) throw new Error(`[sectorPulse] eod: ${eodErr.message}`);
+
+  type Row = {
+    index_id: number; trade_date: string; pct_chng: number | null; value_cr: number | null;
+    score_5d: number | null; score_22d: number | null;
+    avg_amt_5d: number | null; avg_amt_22d: number | null;
+    ret_5d: number | null; ret_22d: number | null;
+  };
+  const byIndex = new Map<number, Row[]>();
+  for (const r of (eodData ?? []) as Row[]) {
+    const arr = byIndex.get(r.index_id) ?? [];
+    arr.push(r);
+    byIndex.set(r.index_id, arr);
+  }
+
+  const result: SectorPulseRow[] = [];
+  for (const sym of syms) {
+    const rows = byIndex.get(sym.id);
+    if (!rows || rows.length === 0) continue;
+    const cells: FlowCellData[] = [...rows].reverse().slice(0, days).map((r) => ({
+      d1:      r.pct_chng ?? 0,
+      amt:     r.value_cr ?? 0,
+      s5:      r.score_5d  ?? undefined,
+      s22:     r.score_22d ?? undefined,
+      amt_5d:  r.avg_amt_5d  ?? undefined,
+      amt_22d: r.avg_amt_22d ?? undefined,
+      ret_5d:  r.ret_5d  ?? undefined,
+      ret_22d: r.ret_22d ?? undefined,
+    }));
+    result.push({ id: sym.id, name: sym.name, isCustom: sym.category === 'custom', cells });
+  }
+  return result;
+}
+
 // ── Index Breadth (per-index, computed client-side) ───────────────────────────
 
 const BREADTH_LOOKBACK = 252;  // sessions for percentile history
