@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, type EquityTimeframe } from '@/services/indicatorData';
+import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
 import { InstrumentIntelligence } from '@/components/domain';
 import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
@@ -89,7 +89,11 @@ export default function ChartView() {
     queryFn: () =>
       isEquity
         ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))
-        : fetchIndicatorDataById(numId, range),
+        // Index W/M: no aggregate tables exist — resample full daily history
+        // client-side (indices carry no delivery data, so nothing is lost)
+        : (tf === 'daily'
+            ? fetchIndicatorDataById(numId, range)
+            : fetchIndicatorDataById(numId, 'MAX').then((r) => resampleRows(r, tf))),
     staleTime: 120_000,
     enabled: !!numId && (isIndex || isEquity),
   });
@@ -283,9 +287,10 @@ export default function ChartView() {
               {/* Time range selector */}
               {!isLoading && !isError && rows.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
-                  {/* D/W/M timeframe (Phase 2.3) — equity only; index weekly
-                      aggregates pending DB verification */}
-                  {isEquity && (
+                  {/* D/W/M timeframe (Phase 2.3) — equity from DB aggregate
+                      tables, index resampled client-side (no aggregate tables
+                      exist; verified 2026-07-07) */}
+                  {(
                     <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
                       {(['daily', 'weekly', 'monthly'] as const).map((t) => (
                         <button

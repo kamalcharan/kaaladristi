@@ -196,6 +196,51 @@ export async function fetchEquityTimeframeById(
     .map((r) => ({ ...r, delivery_pct: r.avg_deliv_pct ?? null })) as unknown as IndicatorRow[];
 }
 
+/** Client-side W/M resampling for instruments WITHOUT aggregate tables
+ *  (indices — km_index_weekly/monthly don't exist; equity uses the DB
+ *  tables). Standard OHLCV rules: first open, max high, min low, last
+ *  close, summed volume; bar dated at the period's last session.
+ *  Indicator columns are period-undefined and left null. */
+export function resampleRows(rows: IndicatorRow[], tf: 'weekly' | 'monthly'): IndicatorRow[] {
+  const keyOf = (d: string): string => {
+    if (tf === 'monthly') return d.slice(0, 7);
+    // ISO week key
+    const dt = new Date(d + 'T00:00:00');
+    const day = (dt.getDay() + 6) % 7; // Mon=0
+    const thursday = new Date(dt);
+    thursday.setDate(dt.getDate() - day + 3);
+    const jan1 = new Date(thursday.getFullYear(), 0, 1);
+    const week = 1 + Math.round(((thursday.getTime() - jan1.getTime()) / 86400000 - 3 + ((jan1.getDay() + 6) % 7)) / 7);
+    return `${thursday.getFullYear()}-W${String(week).padStart(2, '0')}`;
+  };
+
+  const out: IndicatorRow[] = [];
+  let cur: IndicatorRow | null = null;
+  let curKey = '';
+  for (const r of rows) {
+    if (r.open == null || r.close == null) continue;
+    const k = keyOf(r.trade_date);
+    if (k !== curKey) {
+      if (cur) out.push(cur);
+      curKey = k;
+      cur = { ...EMPTY_INDICATORS, trade_date: r.trade_date, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume ?? 0 } as IndicatorRow;
+    } else if (cur) {
+      cur.high = Math.max(cur.high, r.high);
+      cur.low = Math.min(cur.low, r.low);
+      cur.close = r.close;
+      cur.trade_date = r.trade_date;
+      cur.volume = (cur.volume ?? 0) + (r.volume ?? 0);
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// All-null indicator fields for resampled bars
+const EMPTY_INDICATORS = Object.freeze(
+  Object.fromEntries(INDICATOR_COLS.split(',').map((c) => [c, null])),
+) as Partial<IndicatorRow>;
+
 // Symbol shorthand → km_index_symbols.name mapping
 const INDEX_SHORTHAND: Record<string, string> = {
   NIFTY50:   'NIFTY 50',
