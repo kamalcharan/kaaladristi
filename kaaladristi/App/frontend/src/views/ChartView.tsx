@@ -171,6 +171,7 @@ export default function ChartView() {
       trade_date: ev.trade_date,
       price: ev.low,
       label: `₹${ev.delivCr >= 100 ? ev.delivCr.toFixed(0) : ev.delivCr.toFixed(1)} Cr`,
+      color: ev.direction === 'entry' ? '#22c55e' : ev.direction === 'exit' ? '#ef4444' : '#d4a84b',
     })),
     [bigMoneyEvents],
   );
