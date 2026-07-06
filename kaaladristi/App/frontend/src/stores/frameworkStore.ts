@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { DEFAULT_CHART_OVERLAYS } from '@/constants/frameworkConstants'
 import { useThemeStore } from '@/stores/themeStore'
 import type { UserFramework, FrameworkBlock, ChartOverlay, GridPosition, InstrumentRef } from '@/types/framework'
 import type { CatalogItem } from '@/constants/catalogItems'
@@ -214,6 +215,17 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       }
       const needsBaseSave = baseOverlaysToInject.length > 0
 
+      // Default chart lens: charts draw ONLY framework overlays (no hardcoded
+      // lines anywhere — owner 2026-07-07). A brand-new framework with zero
+      // overlays gets the classic removable set so first-run charts read
+      // familiar. Seeded ONLY when chart_overlays is completely empty, and
+      // persisted — so a user who later removes lines stays line-free.
+      let needsDefaultSave = false
+      if (data.chart_overlays.length === 0) {
+        data.chart_overlays = DEFAULT_CHART_OVERLAYS.map(o => ({ ...o }))
+        needsDefaultSave = true
+      }
+
       // Bootstrap: inject NIFTY50 chart block if none present
       if (!deduped.some(b => b.type === 'chart')) {
         data.blocks = [...deduped, makeDefaultChartBlock()]
@@ -223,7 +235,7 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
       } else {
         data.blocks = deduped
         set({ framework: data, isLoading: false })
-        if (needsSave || needsBaseSave) {
+        if (needsSave || needsBaseSave || needsDefaultSave) {
           const { saveFramework } = get()
           scheduleSave(saveFramework)
         }
