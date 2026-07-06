@@ -1,72 +1,33 @@
 /**
  * EquityVisualPulsePage — Equity-specific Visual Pulse
  * =====================================================
- * Full-page equity analysis: price chart with SMA 21/55/150,
- * Magic RS subchart, astro strip, manipulation banner,
- * sidebar cards (scan presence, industry context, smart money,
- * order flow, divergence).
- *
- * Architecture: separate page from IndexVisualPulsePage,
- * sharing atomic components (chart, cards, slider, astro strip).
+ * Strip-to-the-studs pass 2026-07-06 (owner: "everything is bothering me").
+ * The Pulse contract is a 4–5 second verdict, no widgets — the page is:
+ * identity row → pump/dump warning → verdict hero → context line → chart →
+ * timeline replay. The evidence cards (Order Flow / Smart Money /
+ * Divergence / Magic RS subchart / MTF pills / astro strip) live on the
+ * Study cockpit, one click away via the hero's CTA and the switch.
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import PulseStudySwitch, { PulseStudyHint } from '@/components/domain/PulseStudySwitch';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
-import type { EquityPulseBar } from '@/hooks/useEquityVisualPulse';
 import {
   computePulseSnapshot,
   computeCorrHistory,
   computeDots,
   type TradingStyle,
-  type PulseBar,
   type PulseSnapshot,
   type CorrelationState,
   type DotSignals,
 } from '@/services/visualPulseEngine';
 import VisualPulseChart from '../VisualPulseChart';
-import AstroStrip from '../AstroStrip';
 import TimelineSlider from '../TimelineSlider';
 import PulseVerdictBand from '../PulseVerdictBand';
-import {
-  OrderFlowCard,
-  SmartMoneyCard,
-  DivergenceCard,
-  VaNiHeader,
-} from '../index';
-import type { SmartMoneyBar } from '../SmartMoneyCard';
-import MagicRsSubchart from '../MagicRsSubchart';
-import MultiTimeframePills from './MultiTimeframePills';
 import PumpDumpBanner, { scanBarsForManipulation } from './PumpDumpBanner';
-import StockContextCard from './StockContextCard';
 import { useScanPresence } from '@/hooks/useScanPresence';
 import { useInstrumentInsight } from '@/hooks';
-
-// ── Helpers ─────────────────────────────────────────────────────
-
-function buildSmHistory(bars: PulseBar[], dotsHistory: DotSignals[]): SmartMoneyBar[] {
-  return bars.map((b, i) => ({
-    sm: b.sniper_inst ?? 0,
-    fm: b.sniper_hot ?? 0,
-    isSVD: dotsHistory[i]?.isSVD ?? false,
-    isSBD: dotsHistory[i]?.isSBD ?? false,
-    isSYD: dotsHistory[i]?.isSYD ?? false,
-  }));
-}
-
-function buildRssHistory(bars: PulseBar[]): number[] {
-  return bars.map((b) => b.rss_value ?? 0);
-}
-
-/** Compute Magic RS change over N bars */
-function rsChangeLookback(bars: PulseBar[], idx: number, lookback: number): number | null {
-  if (idx < lookback) return null;
-  const current = bars[idx]?.magic_rs;
-  const prior = bars[idx - lookback]?.magic_rs;
-  if (current == null || prior == null) return null;
-  return current - prior;
-}
 
 // ── Exchange badge color ────────────────────────────────────────
 
@@ -75,6 +36,13 @@ function exchangeColor(exchange: string | null): string {
   if (exchange === 'BSE') return 'text-risk-amber';
   return 'text-muted';
 }
+
+const ROTATION_LABEL: Record<string, { label: string; color: string }> = {
+  rotating_in:  { label: '↑ Rotating In',  color: 'var(--risk-green)' },
+  leading:      { label: 'Leading',        color: 'var(--accent-gold)' },
+  rotating_out: { label: '↓ Rotating Out', color: 'var(--risk-red)' },
+  stable:       { label: 'Stable',         color: 'var(--text-muted)' },
+};
 
 // ── Main Page ───────────────────────────────────────────────────
 
@@ -105,71 +73,26 @@ export default function EquityVisualPulsePage() {
   // day (platform VaNi presence pattern). Scrubbing never fires LLM calls.
   const insightQuery = useInstrumentInsight(equityId ?? 0, 'equity');
 
-  // Pre-compute dots for all bars
   const dotsHistory: DotSignals[] = useMemo(() => {
     return bars.map((b, i) => computeDots(b, i > 0 ? bars[i - 1] : null));
   }, [bars]);
 
-  // Pre-compute correlation history
   const corrHistory: CorrelationState[] = useMemo(() => {
     if (bars.length === 0) return [];
     return computeCorrHistory(bars, dcInferences, selectedStyle);
   }, [bars, dcInferences, selectedStyle]);
 
-  // Compute snapshot for active bar
   const snapshot: PulseSnapshot | null = useMemo(() => {
     if (bars.length === 0) return null;
     return computePulseSnapshot(bars, effectiveIdx, dcInferences, selectedStyle);
   }, [bars, effectiveIdx, dcInferences, selectedStyle]);
 
-  // Smart money history (last 30 bars up to active)
-  const smHistory: SmartMoneyBar[] = useMemo(() => {
-    const start = Math.max(0, effectiveIdx - 29);
-    const slice = bars.slice(start, effectiveIdx + 1);
-    const dotsSlice = dotsHistory.slice(start, effectiveIdx + 1);
-    return buildSmHistory(slice, dotsSlice);
-  }, [bars, effectiveIdx, dotsHistory]);
-
-  // RSS history (last 20 values up to active)
-  const rssHistory: number[] = useMemo(() => {
-    const start = Math.max(0, effectiveIdx - 19);
-    return buildRssHistory(bars.slice(start, effectiveIdx + 1));
-  }, [bars, effectiveIdx]);
-
-  // Price + RSI history for divergence card (last 20)
-  const priceHistory = useMemo(() => {
-    const start = Math.max(0, effectiveIdx - 19);
-    return bars.slice(start, effectiveIdx + 1).map((b) => b.close);
-  }, [bars, effectiveIdx]);
-
-  const rsiHistory = useMemo(() => {
-    const start = Math.max(0, effectiveIdx - 19);
-    return bars.slice(start, effectiveIdx + 1).map((b) => b.rsi_14 ?? 50);
-  }, [bars, effectiveIdx]);
-
-  // Magic RS data for subchart
-  const magicRsData = useMemo(() => {
-    return bars.map((b) => ({
-      trade_date: b.trade_date,
-      magic_rs: b.magic_rs,
-      magic_ma: b.magic_ma,
-      magic_rs_zone: b.magic_rs_zone,
-    }));
-  }, [bars]);
-
-  // Multi-timeframe RS deltas
-  const rsChange1d = useMemo(() => rsChangeLookback(bars, effectiveIdx, 1), [bars, effectiveIdx]);
-  const rsChange5d = useMemo(() => rsChangeLookback(bars, effectiveIdx, 5), [bars, effectiveIdx]);
-  const rsChange20d = useMemo(() => rsChangeLookback(bars, effectiveIdx, 20), [bars, effectiveIdx]);
-
-  // Pump/dump banner props
   // Scan all bars for pump/dump signals (not just current bar)
   const pumpDumpResult = useMemo(() => {
     if (bars.length === 0) return null;
     return scanBarsForManipulation(bars, 30);
   }, [bars]);
 
-  // Slider change with fade animation
   const handleSliderChange = useCallback((idx: number) => {
     setIsFading(true);
     setTimeout(() => {
@@ -215,214 +138,154 @@ export default function EquityVisualPulsePage() {
   const bar = snapshot?.bar ?? bars[effectiveIdx];
   const equityBar = bars[effectiveIdx]; // typed as EquityPulseBar with pct_chng
   const isNow = effectiveIdx === bars.length - 1;
-  const currentRs = bar?.magic_rs ?? null;
 
-  // Determine if stock is inactive / delisted
+  // Inactive / stale-data flags
   const isInactive = !meta.is_active;
   const lastTradeDate = bars[bars.length - 1]?.trade_date;
-
-  // Data freshness — detect stale BSE-only stocks
   const todayIso = new Date().toISOString().split('T')[0];
   const daysSinceLastTrade = lastTradeDate
     ? Math.round((new Date(todayIso).getTime() - new Date(lastTradeDate).getTime()) / 86400000)
     : null;
   const isStaleData = daysSinceLastTrade != null && daysSinceLastTrade > 1 && !isInactive;
 
-  // Insufficient history for Magic RS
-  const hasRsData = bars.some((b) => b.magic_rs != null);
-  const limitedHistory = bars.length < 60;
-
-  // Flow narrative
-  const flowNarrative = snapshot ? buildFlowNarrative(snapshot) : '';
-  const smNarrative = snapshot ? buildSmNarrative(snapshot) : '';
+  const rotation = industryContext ? ROTATION_LABEL[industryContext.category] : null;
+  const matchedScans = scanPresence.matchedScans;
 
   // ── Render ──
 
   return (
-    <div className="h-full overflow-hidden bg-kd-bg flex flex-col lg:grid lg:grid-cols-[1fr_340px] lg:grid-rows-[1fr_58px]">
+    <div className="h-full overflow-hidden bg-kd-bg flex flex-col">
 
-      {/* ── Left Panel — Header + Charts ── */}
-      <div className="flex flex-col min-h-0 overflow-y-auto lg:overflow-hidden lg:col-start-1 lg:row-start-1 px-3 pt-3 pb-2 md:px-4 md:pt-3">
+      {/* Scrollable content — one centered column, capped for wide monitors */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-[1100px] mx-auto h-full flex flex-col px-4 pt-4 pb-2">
 
-        {/* Stock Header */}
-        <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span className={`text-[10px] font-mono font-bold ${exchangeColor(meta.exchange)}`}>
-            {meta.exchange}
-          </span>
-          <span className="text-base font-serif font-bold text-primary leading-none">
-            {meta.symbol}
-          </span>
-          <span className="text-xs text-secondary truncate max-w-[180px] md:max-w-none">
-            {meta.company_name}
-          </span>
-          {meta.industry && (
-            <span className="text-[10px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
-              {meta.industry}
+          {/* Identity row */}
+          <div className="flex items-baseline gap-2.5 flex-wrap mb-1 shrink-0">
+            <span className={`text-[11px] font-mono font-bold ${exchangeColor(meta.exchange)}`}>
+              {meta.exchange}
             </span>
-          )}
-          <span className="ml-auto">
-            <PulseStudySwitch active="pulse" type="equity" id={equityId!} name={meta.symbol} />
-          </span>
-        </div>
-        <PulseStudyHint />
-
-        {/* Price line */}
-        <div className="flex items-center gap-3 mb-2">
-          <span className={`text-lg font-mono font-bold ${bar.close >= bar.open ? 'text-risk-green' : 'text-risk-red'}`}>
-            {'\u20B9'}{bar.close?.toLocaleString('en-IN')}
-          </span>
-          {equityBar?.pct_chng != null && (
-            <span className={`text-xs font-mono ${(equityBar.pct_chng ?? 0) >= 0 ? 'text-risk-green' : 'text-risk-red'}`}>
-              {(equityBar.pct_chng ?? 0) >= 0 ? '+' : ''}{(equityBar.pct_chng ?? 0).toFixed(2)}%
+            <span className="text-lg font-serif font-bold text-primary leading-none">
+              {meta.symbol}
             </span>
-          )}
-          <span className="text-[10px] font-mono text-muted">
-            {isNow ? 'Latest' : `Candle ${effectiveIdx + 1} / ${bars.length}`}
-          </span>
-          {isInactive && (
-            <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
-              Inactive — last traded {lastTradeDate}
+            <span className="text-xs text-secondary truncate max-w-[240px] md:max-w-none">
+              {meta.company_name}
             </span>
-          )}
-          {isStaleData && (
-            <span className="text-[10px] font-mono text-muted">
-              Last updated: {meta.exchange} {lastTradeDate} ({daysSinceLastTrade}d delayed)
+            <span
+              className="text-lg font-mono font-semibold"
+              style={{ color: (equityBar?.pct_chng ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)' }}
+            >
+              ₹{bar.close?.toLocaleString('en-IN')}
             </span>
+            {equityBar?.pct_chng != null && (
+              <span
+                className="text-xs font-mono"
+                style={{ color: (equityBar.pct_chng ?? 0) >= 0 ? 'var(--risk-green)' : 'var(--risk-red)' }}
+              >
+                {(equityBar.pct_chng ?? 0) >= 0 ? '+' : ''}{(equityBar.pct_chng ?? 0).toFixed(2)}%
+              </span>
+            )}
+            {isInactive && (
+              <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
+                Inactive — last traded {lastTradeDate}
+              </span>
+            )}
+            {isStaleData && (
+              <span className="text-[10px] font-mono text-muted">
+                Last updated: {meta.exchange} {lastTradeDate} ({daysSinceLastTrade}d delayed)
+              </span>
+            )}
+            <span className="ml-auto">
+              <PulseStudySwitch active="pulse" type="equity" id={equityId!} name={meta.symbol} />
+            </span>
+          </div>
+          <PulseStudyHint />
+
+          {/* Pump/Dump warning — a genuine 5-second signal, stays on Pulse */}
+          {pumpDumpResult && (
+            <div className="mt-1 shrink-0">
+              <PumpDumpBanner result={pumpDumpResult} />
+            </div>
           )}
-        </div>
 
-        {/* Pump/Dump Banner */}
-        {pumpDumpResult && <PumpDumpBanner result={pumpDumpResult} />}
-
-        {/* Verdict band — the 5-second answer, first thing the eye lands on */}
-        {snapshot && (
-          <PulseVerdictBand
-            corrState={snapshot.corrState}
-            astroScore={snapshot.astroScore}
-            techScore={snapshot.techScore}
-            smScore={snapshot.smScore}
-            selectedStyle={selectedStyle}
-            onStyleChange={handleStyleChange}
-            date={bar.trade_date}
-            isNow={isNow}
-            isFading={isFading}
-            narrative={insightQuery.data?.ai ? insightQuery.data.insight : null}
-            narrativeLoading={insightQuery.isLoading}
-            onStudyClick={() => navigate(`/chart/equity/${equityId}?name=${encodeURIComponent(meta.symbol)}`)}
-          />
-        )}
-
-        {/* Price Chart — uses shared VisualPulseChart */}
-        <div className="flex-shrink-0 min-h-[180px] md:min-h-[220px] mt-1">
-          <VisualPulseChart
-            bars={bars}
-            activeIndex={effectiveIdx}
-            corrHistory={corrHistory}
-            dotsHistory={dotsHistory}
-          />
-        </div>
-
-        {/* Legend */}
-        <div className="flex gap-3 py-1 text-[10px] font-mono text-muted flex-wrap">
-          <span><span className="text-accent-gold">{'\u254C'}</span> Golden Line (SMA 150)</span>
-          <span><span className="text-accent-violet">{'\u25CF'}</span> Volume Drive</span>
-          <span><span className="text-accent-indigo">{'\u25CF'}</span> Rising Flow</span>
-          <span><span className="text-risk-amber">{'\u25CF'}</span> Falling Flow</span>
-        </div>
-
-        {/* Astro Strip */}
-        <AstroStrip dcInferences={dcInferences} activeDate={bar.trade_date} />
-
-        {/* Magic RS Section */}
-        <div className="mt-2">
-          <MultiTimeframePills
-            rsChange1d={rsChange1d}
-            rsChange5d={rsChange5d}
-            rsChange20d={rsChange20d}
-            currentRs={currentRs}
-            benchmarkLabel="NIFTY 500"
-          />
-
-          {hasRsData ? (
-            <div className="mt-1">
-              <MagicRsSubchart
-                data={magicRsData}
-                activeIndex={effectiveIdx}
-                benchmarkLabel="NIFTY 500"
+          {/* Verdict hero — the point of the page */}
+          {snapshot && (
+            <div className="mt-2 shrink-0">
+              <PulseVerdictBand
+                corrState={snapshot.corrState}
+                astroScore={snapshot.astroScore}
+                techScore={snapshot.techScore}
+                smScore={snapshot.smScore}
+                selectedStyle={selectedStyle}
+                onStyleChange={handleStyleChange}
+                date={bar.trade_date}
+                isNow={isNow}
+                isFading={isFading}
+                narrative={insightQuery.data?.ai ? insightQuery.data.insight : null}
+                narrativeLoading={insightQuery.isLoading}
+                onStudyClick={() => navigate(`/chart/equity/${equityId}?name=${encodeURIComponent(meta.symbol)}`)}
               />
-              {limitedHistory && (
-                <div className="text-[9px] font-mono text-muted text-center mt-0.5">
-                  Limited history — fewer than 60 trading days available
-                </div>
+            </div>
+          )}
+
+          {/* Context line — where this stock sits, in one glance */}
+          {(meta.industry || matchedScans.length > 0) && (
+            <div className="flex items-center gap-2.5 flex-wrap mt-2 text-[11px] font-mono shrink-0">
+              {meta.industry && (
+                <Link
+                  to={`/industry-transition?expand=${encodeURIComponent(meta.industry)}`}
+                  className="text-secondary hover:text-accent-indigo transition-colors"
+                >
+                  {meta.industry}
+                </Link>
+              )}
+              {rotation && industryContext && (
+                <span style={{ color: rotation.color }}>
+                  {rotation.label} · {industryContext.percentile}%ile
+                  {industryContext.stockRank != null && industryContext.industryStockCount > 0 &&
+                    ` · #${industryContext.stockRank} of ${industryContext.industryStockCount} by RS`}
+                </span>
+              )}
+              {matchedScans.length > 0 && (
+                <span className="text-muted">
+                  · In {matchedScans.length} scan{matchedScans.length !== 1 ? 's' : ''}:{' '}
+                  {matchedScans.slice(0, 3).map((s, i) => (
+                    <React.Fragment key={s.id}>
+                      {i > 0 && ', '}
+                      <Link to={`/scanner/${s.id}`} className="text-secondary hover:text-accent-indigo transition-colors">
+                        {s.name}{s.vani ? ' ✦' : ''}
+                      </Link>
+                    </React.Fragment>
+                  ))}
+                  {matchedScans.length > 3 && ` +${matchedScans.length - 3}`}
+                </span>
               )}
             </div>
-          ) : (
-            <div className="mt-2 py-4 text-center text-[11px] font-mono text-muted bg-kd-elevated rounded-lg border border-kd-border">
-              Multi-benchmark RS not yet computed for this stock
-            </div>
           )}
+
+          {/* Chart — the visual gut-check */}
+          <div className="flex-1 min-h-[280px] mt-3">
+            <VisualPulseChart
+              bars={bars}
+              activeIndex={effectiveIdx}
+              corrHistory={corrHistory}
+              dotsHistory={dotsHistory}
+              showConvergenceBand={false}
+            />
+          </div>
+
+          {/* Legend */}
+          <div className="flex gap-4 py-1.5 text-[10px] font-mono text-muted flex-wrap shrink-0">
+            <span><span style={{ color: 'var(--accent-gold)' }}>╌</span> Golden Line (SMA 150)</span>
+            <span><span style={{ color: 'var(--accent-violet)' }}>●</span> Volume Drive</span>
+            <span><span style={{ color: 'var(--accent-indigo)' }}>●</span> Rising Flow</span>
+            <span><span style={{ color: 'var(--risk-amber)' }}>●</span> Falling Flow</span>
+          </div>
         </div>
       </div>
 
-      {/* ── Right Sidebar ── */}
-      <div className="border-t lg:border-t-0 lg:border-l border-kd-border flex flex-col min-h-0 lg:col-start-2 lg:row-start-1 overflow-hidden">
-
-        {/* VaNi Header */}
-        <div className="px-3 py-2 border-b border-kd-border shrink-0">
-          <VaNiHeader
-            date={bar.trade_date}
-            barPosition={isNow ? 'NOW' : `Candle ${effectiveIdx + 1} / ${bars.length}`}
-            isThinking={isFading}
-          />
-        </div>
-
-        {/* Scrollable cards */}
-        <div
-          className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-2.5"
-          style={{
-            opacity: isFading ? 0.3 : 1,
-            transition: 'opacity 0.15s ease',
-          }}
-        >
-          {snapshot && (
-            <>
-              {/* Context — merged Scan Presence + Industry rotation */}
-              <StockContextCard
-                stock={scanPresence.stock}
-                matchedScans={scanPresence.matchedScans}
-                industry={meta.industry}
-                context={industryContext}
-              />
-
-              {/* Order Flow + RSS */}
-              <OrderFlowCard
-                bar={snapshot.bar}
-                rss={snapshot.rss}
-                rssHistory={rssHistory}
-                narrative={flowNarrative}
-              />
-
-              {/* Smart Money */}
-              <SmartMoneyCard
-                smHistory={smHistory}
-                sm={snapshot.sm}
-                dots={[snapshot.dots]}
-                narrative={smNarrative}
-              />
-
-              {/* Divergence */}
-              <DivergenceCard
-                divergence={snapshot.divergence}
-                rsiHistory={rsiHistory}
-                priceHistory={priceHistory}
-              />
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Bottom — Timeline Slider ── */}
-      <div className="lg:col-span-2 lg:row-start-2 shrink-0">
+      {/* Timeline replay — the differentiator, pinned */}
+      <div className="shrink-0">
         <TimelineSlider
           total={bars.length}
           activeIndex={effectiveIdx}
@@ -433,46 +296,4 @@ export default function EquityVisualPulsePage() {
       </div>
     </div>
   );
-}
-
-// ── Card-specific narrative builders (same as index VP) ─────────
-
-function buildFlowNarrative(snap: PulseSnapshot): string {
-  const parts: string[] = [];
-  const ft = snap.bar.flow_type;
-  const rvol = snap.bar.rvol ?? 0;
-
-  if (ft === 'FRESH_LONGS') parts.push('Fresh capital entering.');
-  else if (ft === 'SHORT_COVERING') parts.push('Shorts unwinding \u2014 watch for confirmation.');
-  else if (ft === 'FRESH_SHORTS') parts.push('Selling pressure building.');
-  else if (ft === 'LONG_LIQUIDATION') parts.push('Longs exiting \u2014 exhaustion watch.');
-  else if (ft === 'LOW_VOLUME') parts.push('Volume absent.');
-  else parts.push('Mixed flow signals.');
-
-  if (rvol > 2) parts.push(`High conviction volume (RVOL ${rvol.toFixed(1)}x).`);
-  else if (rvol < 0.5) parts.push('Thin volume \u2014 signals unreliable.');
-
-  if (snap.rss.zone === 'OVERBOUGHT') parts.push('RSS overbought \u2014 momentum stretched.');
-  else if (snap.rss.zone === 'OVERSOLD') parts.push('RSS at floor \u2014 reversal watch.');
-  else if (snap.rss.spreadRepaired) parts.push('Structural spread positive.');
-
-  return parts.join(' ');
-}
-
-function buildSmNarrative(snap: PulseSnapshot): string {
-  const parts: string[] = [];
-  const sm = snap.sm;
-
-  if (sm.smTrending) parts.push('Smart money trending higher.');
-  else if (sm.smExiting) parts.push('Smart money declining \u2014 falling flow risk.');
-  else parts.push('Smart money flat.');
-
-  if (sm.hasSVD5) parts.push('Volume Drive signal in last 5 bars \u2014 institutional volume confirmed.');
-  if (sm.hasSYD) parts.push('Falling flow signal present \u2014 caution.');
-  if (sm.pumpSignal) parts.push('Smart declining while fast rising \u2014 pump signature.');
-
-  if (sm.relationship === 'Aligned') parts.push('Both layers aligned.');
-  else if (sm.relationship === 'Diverging') parts.push('Layers diverging \u2014 elevated risk.');
-
-  return parts.join(' ');
 }

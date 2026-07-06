@@ -122,25 +122,26 @@ export default function TimelineSlider({ total, activeIndex, bars, corrHistory, 
       {/* Slider track */}
       <div style={{ flex: 1, position: 'relative', height: 40 }}>
         {/* Chapter marks */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 18 }}>
+        {/* Color ticks only — the per-transition text labels overlapped into
+            an unreadable smear on long histories (VP layout pass 2026-07-06).
+            State name + date live in the hover tooltip. */}
+        <div style={{ position: 'absolute', top: 6, left: 0, right: 0, height: 12 }}>
           {chapters.map((ch, i) => (
             <div
               key={i}
               onClick={() => onChange(ch.idx)}
+              title={`${ch.label} · ${fmtDate(bars[ch.idx]?.trade_date)}`}
               style={{
                 position: 'absolute',
                 left: `${max > 0 ? (ch.idx / max) * 100 : 0}%`,
                 transform: 'translateX(-50%)',
                 cursor: 'pointer',
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                width: 10, height: 12,
+                display: 'flex', justifyContent: 'center',
               }}
             >
-              <span style={{
-                fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
-                color: ch.color, whiteSpace: 'nowrap',
-              }}>{ch.label.slice(0, 5)}</span>
               <div style={{
-                width: 2, height: 6, background: ch.color, borderRadius: 1, marginTop: 1,
+                width: 2, height: 10, background: ch.color, borderRadius: 1,
               }} />
             </div>
           ))}

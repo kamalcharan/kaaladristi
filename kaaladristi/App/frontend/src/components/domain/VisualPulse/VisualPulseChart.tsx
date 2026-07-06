@@ -14,6 +14,10 @@ interface VisualPulseChartProps {
   activeIndex: number;
   corrHistory: CorrelationState[];
   dotsHistory: DotSignals[];
+  /** Per-bar correlation color strip under the candles. On by default for
+   *  Intraday; the Pulse pages pass false — the verdict hero + slider ticks
+   *  already carry the state, the strip was redundant noise. */
+  showConvergenceBand?: boolean;
 }
 
 // ── Color resolution (CSS var → computed hex for canvas) ────────
@@ -27,7 +31,7 @@ const VISIBLE_BARS = 40;
 const PAD = { t: 12, b: 28, l: 8, r: 52 };
 const CHART_H = 220;
 
-export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsHistory }: VisualPulseChartProps) {
+export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsHistory, showConvergenceBand = true }: VisualPulseChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -205,7 +209,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
     // ── Convergence band (bottom 12px) ──
     const bandH = 12;
     const bandY = CHART_H - PAD.b + 2;
-    visible.forEach((_, i) => {
+    if (showConvergenceBand) visible.forEach((_, i) => {
       const globalIdx = startIdx + i;
       const corr = corrHistory[globalIdx];
       if (!corr) return;
@@ -286,7 +290,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
         ctx.fillText(`${parseInt(d)} ${months[parseInt(m)]}`, toX(i), CHART_H - 4);
       }
     });
-  }, [bars, activeIndex, corrHistory, dotsHistory]);
+  }, [bars, activeIndex, corrHistory, dotsHistory, showConvergenceBand]);
 
   // Redraw on data change or resize
   useEffect(() => {
