@@ -9,6 +9,7 @@ import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
+import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
 import CatalogDrawer from '@/components/domain/Catalog/CatalogDrawer';
@@ -367,10 +368,14 @@ export default function ChartView() {
                   </p>
                 </div>
               ) : (
+                // workspaceMode = the ONE chart rendering path (owner
+                // 2026-07-07: no hardcoded lines; both Study surfaces work
+                // the same way). Lines come exclusively from framework
+                // overlays; RSI/Sniper/MagicRS live in the panels below.
                 <TradingChart
                   data={rows}
-                  compact={showRail && !isFull}
-                  height={isFull ? Math.max(700, window.innerHeight - 120) : undefined}
+                  workspaceMode
+                  height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
                   highlightDate={null}
                   overlays={frameworkOverlays}
                   astroBands={astroBands}
@@ -382,6 +387,13 @@ export default function ChartView() {
               <p className="text-[9px] text-muted mt-1 text-right mono">
                 {rows.length} days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
               </p>
+            )}
+
+            {/* Momentum / Smart Money / Magic RS evidence panels — replaced
+                the fused chart subpanes when the chart moved to the single
+                framework-driven rendering path */}
+            {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
+              <CockpitIndicatorPanels rows={rows} />
             )}
 
             {/* VaNi instrument insight — evidence narration below the chart
