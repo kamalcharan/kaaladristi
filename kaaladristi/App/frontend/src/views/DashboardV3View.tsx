@@ -14,6 +14,7 @@ import {
   type Density,
 } from '@/components/domain/DashboardV3';
 import TickerRail        from '@/components/domain/DashboardV3/TickerRail';
+import PlanetRegimeStrip from '@/components/domain/DashboardV3/PlanetRegimeStrip';
 import NakVaraSignals    from '@/components/domain/DashboardV3/NakVaraSignals';
 import PanchangamCard    from '@/components/domain/PanchangamCard';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
@@ -64,6 +65,9 @@ export default function DashboardV3View() {
 
       {/* ── ROW 0: Ticker Rail — always visible ── */}
       <TickerRail date={displayDate} />
+
+      {/* ── ROW 0.5: Sky Regime — the four-planet engine, always visible ── */}
+      <PlanetRegimeStrip />
 
       {/* ── ROW 1: Astro-Technical Alignment (65%) + Panchangam (35%) — always visible ── */}
       <div
