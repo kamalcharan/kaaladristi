@@ -81,13 +81,14 @@ function HighlightRow({
 }
 
 function HighlightCard({
-  title, color, rows, total, metricOf, viewAllPreset, emptyText,
+  title, color, rows, total, metricOf, metricLabel, viewAllPreset, emptyText,
 }: {
   title: string;
   color: string;
   rows: VaniHighlightRow[];
   total: number;
   metricOf: (r: VaniHighlightRow) => string;
+  metricLabel: string;
   viewAllPreset: string;
   emptyText: string;
 }) {
@@ -116,6 +117,12 @@ function HighlightCard({
         >
           view all →
         </button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 4px', borderBottom: '1px solid var(--border)', marginBottom: 2 }}>
+        <span style={{ width: 10, flexShrink: 0 }} />
+        <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flex: 1 }}>Stock</span>
+        <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', width: 34, textAlign: 'right', flexShrink: 0 }}>{metricLabel}</span>
+        <span style={{ ...MONO, fontSize: 9, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-faint)', flexShrink: 0 }}>Flagged By</span>
       </div>
       {rows.length === 0 ? (
         <div style={{ ...MONO, fontSize: 10, color: 'var(--text-faint)', padding: '6px 6px 8px' }}>
@@ -161,6 +168,7 @@ export default function VaNiHighlightsBoard() {
             rows={data?.strength ?? []}
             total={data?.strengthTotal ?? 0}
             metricOf={(r) => (r.score_5d != null ? String(Math.round(r.score_5d)) : '—')}
+            metricLabel="Score"
             viewAllPreset="power_buy"
             emptyText="no strength highlights today"
           />
@@ -169,7 +177,8 @@ export default function VaNiHighlightsBoard() {
             color="var(--bear)"
             rows={data?.caution ?? []}
             total={data?.cautionTotal ?? 0}
-            metricOf={(r) => (r.rs_percentile != null ? `RS ${Math.round(r.rs_percentile)}` : '—')}
+            metricOf={(r) => (r.rs_percentile != null ? String(Math.round(r.rs_percentile)) : '—')}
+            metricLabel="RS %ile"
             viewAllPreset="power_sell"
             emptyText="no caution flags today — the distribution and weakness signals are naturally sparse"
           />
