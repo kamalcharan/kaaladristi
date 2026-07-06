@@ -42,6 +42,12 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       RAZORPAY_KEY_ID: "${RAZORPAY_KEY_ID:-}"
       RAZORPAY_KEY_SECRET: "${RAZORPAY_KEY_SECRET:-}"
+      # Auth for JWT-secured endpoints (/api/framework, /api/correlation, …).
+      # Must match PostgREST's PGRST_JWT_SECRET — without it every auth-gated
+      # call 500s with 'JWT_SECRET not configured' (Workspace fails to load).
+      JWT_SECRET: "${JWT_SECRET:-}"
+      # VaNi interaction log + observation cache (separate vani_db instance)
+      VANI_DB_URL: "${VANI_DB_URL:-}"
     volumes:
       - pipeline_data:/app/data
     command: ["uvicorn", "pipeline2_api:app", "--host", "0.0.0.0", "--port", "8101", "--workers", "1"]
