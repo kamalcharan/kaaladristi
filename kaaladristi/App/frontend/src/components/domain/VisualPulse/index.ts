@@ -1,5 +1,4 @@
 export { default as CorrelationCard } from './CorrelationCard';
-export { default as PulseVerdictBand } from './PulseVerdictBand';
 export { default as OrderFlowCard } from './OrderFlowCard';
 export { default as SmartMoneyCard } from './SmartMoneyCard';
 export { default as DivergenceCard } from './DivergenceCard';
