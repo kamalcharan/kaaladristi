@@ -203,6 +203,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
     x: number; y: number; band: AstroBand
   } | null>(null);
 
+  // Crosshair hover readout (Phase 2.1): the hovered bar's OHLC + volume +
+  // delivery% render as a floating legend — no more guessing values by eye.
+  const [hoverBar, setHoverBar] = useState<Record<string, unknown> | null>(null);
+
   // Astro-zone overlays are drawn by the canvas overlay — exclude them from
   // buildCharts deps so adding/removing an astro rule doesn't trigger a full
   // chart rebuild (which would wipe mainChartRef before the fetch completes).
@@ -298,11 +302,16 @@ export default function TradingChart({ data, height = 900, compact = false, work
       scaleMargins: { top: 0.8, bottom: 0 },
     });
 
-    const volData: HistogramData<Time>[] = data.map((d) => ({
-      time: toTime(d.trade_date),
-      value: d.volume || 0,
-      color: d.close >= d.open ? C.riskGreen + '4d' : C.riskRed + '4d',
-    }));
+    // Volume opacity scales with delivery % (Phase 2.4) — darker bar = more
+    // of the day's volume was taken home, not day-traded. Rows without
+    // delivery data (indices, W/M without the column) keep the flat alpha.
+    const alphaHex = (a: number) => Math.round(Math.min(1, Math.max(0, a)) * 255).toString(16).padStart(2, '0');
+    const volData: HistogramData<Time>[] = data.map((d) => {
+      const base = d.close >= d.open ? C.riskGreen : C.riskRed;
+      const dp = (d as unknown as Record<string, unknown>).delivery_pct as number | null | undefined;
+      const alpha = dp != null ? 0.16 + Math.min(0.55, (Number(dp) / 100) * 0.6) : 0.3;
+      return { time: toTime(d.trade_date), value: d.volume || 0, color: base + alphaHex(alpha) };
+    });
     volumeSeries.setData(volData);
 
     // SMA lines — only in legacy (non-workspace) mode
@@ -560,14 +569,17 @@ export default function TradingChart({ data, height = 900, compact = false, work
       });
     }
 
-    if (onCrosshairMove) {
-      mainChart.subscribeCrosshairMove((param) => {
-        if (!param.time) return;
-        const date = param.time as string;
-        const idx  = data.findIndex(d => d.trade_date === date);
-        if (idx >= 0) onCrosshairMove(idx, date);
-      });
-    }
+    mainChart.subscribeCrosshairMove((param) => {
+      if (!param.time) { setHoverBar(null); return; }
+      const date = param.time as string;
+      const idx  = data.findIndex(d => d.trade_date === date);
+      if (idx >= 0) {
+        setHoverBar(data[idx] as unknown as Record<string, unknown>);
+        if (onCrosshairMove) onCrosshairMove(idx, date);
+      } else {
+        setHoverBar(null);
+      }
+    });
 
     // Workspace mode: pin the view to the full padded window (±3mo) so future
     // and pre-data overlay zones are visible. Otherwise fit to data.
@@ -926,6 +938,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
             <span className="inline-block w-3 h-0.5 rounded bg-risk-green" />
             SuperTrend
           </span>
+          <span className="ml-auto text-[9px] text-muted">volume shade = delivery %</span>
         </div>
       )}
 
@@ -974,9 +987,38 @@ export default function TradingChart({ data, height = 900, compact = false, work
             setBandTooltip(null);
           }
         }}
-        onMouseLeave={() => setBandTooltip(null)}
+        onMouseLeave={() => { setBandTooltip(null); setHoverBar(null); }}
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
+        {hoverBar != null && (() => {
+          const n = (v: unknown, dec = 2) =>
+            typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: dec }) : '—';
+          const pctChng = hoverBar.pct_chng as number | null | undefined;
+          const dp = hoverBar.delivery_pct as number | null | undefined;
+          return (
+            <div style={{
+              position: 'absolute', top: 8, left: 8, zIndex: 15, pointerEvents: 'none',
+              background: 'rgba(13,17,23,0.88)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 6, padding: '4px 10px',
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
+              display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap',
+              color: 'var(--text-secondary, #cbd5e1)', maxWidth: '85%',
+            }}>
+              <span style={{ color: 'var(--text-muted, #64748b)' }}>{String(hoverBar.trade_date ?? '')}</span>
+              <span>O {n(hoverBar.open)}</span>
+              <span>H {n(hoverBar.high)}</span>
+              <span>L {n(hoverBar.low)}</span>
+              <span style={{ fontWeight: 700, color: 'var(--text-primary, #f1f5f9)' }}>C {n(hoverBar.close)}</span>
+              {pctChng != null && (
+                <span style={{ color: pctChng >= 0 ? 'var(--risk-green, #22c55e)' : 'var(--risk-red, #ef4444)' }}>
+                  {pctChng >= 0 ? '+' : ''}{Number(pctChng).toFixed(2)}%
+                </span>
+              )}
+              <span>Vol {n(hoverBar.volume, 0)}</span>
+              {dp != null && <span>Del {Number(dp).toFixed(0)}%</span>}
+            </div>
+          );
+        })()}
         <canvas
           ref={bandCanvasRef}
           style={{
