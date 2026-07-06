@@ -1,7 +1,9 @@
 # POA — Pulse / Study Two-Layer Charting + Stock Cockpit
 
-**Date:** 2026-07-06 · **Status:** Approved direction, phased build
+**Date:** 2026-07-06 · **Status:** Phases 0–3 shipped and merged to `main` (PRs #109–#119). Phase 4 not started.
 **Origin:** Visual Pulse audit (9 items) + Decision-Layer/Study-Layer discussion (owner + Claude session)
+
+> See `docs/POA/HANDOVER-2026-07-06.md` for the full session handover, calibration status, and next-session scope (VP layout + scanner vocabulary, explicitly deferred by owner).
 
 ---
 
@@ -20,6 +22,18 @@
 2. Same data at both ends is fine; the *presentation contract* is the differentiation, not the feature list.
 
 **UX principles for the whole POA:** one verdict vocabulary product-wide (the 5-state signal + VaNiSentence); no dead controls (every visible control does something on this surface); every empty state explains itself; scores before percentages; SEBI-observational copy only; Pulse renders < 1s, cockpit interactive < 2.5s.
+
+---
+
+## Phase status (as of 2026-07-06 handover)
+
+| Phase | Status | Notes |
+|---|---|---|
+| 0 — Name the layers | ✅ Shipped | `PulseStudySwitch` + `PulseStudyHint`, cross-CTAs, catalog `STUDY CHARTS` tags, BetaWelcomeModal copy. |
+| 1 — Study Cockpit v1 | ✅ Shipped | `StatStrip` (Conviction-first 5-card grid), `SectorMembershipCard`, `DeliveryVsTraded`, framework overlays wired via `loadFramework()` fix, VaNi instrument insight. |
+| 2 — Chart UX pass | ✅ Shipped | Crosshair OHLC+delivery legend, range presets, D/W/M toggle (equity + index via `resampleRows`), delivery-shaded volume, fullscreen (`ResizeObserver` fix). |
+| 3 — Big Money Zones | ✅ Shipped (thresholds provisional) | `services/bigMoney.ts` quantity-based detection + entry/exit/mixed direction inference; `BigMoneyCard`; chart price-line + ₹ markers. **₹25 Cr floor still needs the market-wide calibration query run** — see handover §Open Items. |
+| 4 — Polish sweep | ⬜ Not started | Mobile stat-strip layout, 3-theme check, dot-color legend for SVD/SBD/SYD (now more important since markers are dots-only, no text), glossary tooltips, extract My Space's astro-pill depth (glyphs/active-today/opacity popover) into a shared component so `CockpitOverlayStrip` matches it, full journey test. |
 
 ---
 
