@@ -1,6 +1,6 @@
 # POA — Astro Pattern Engine (Rule Engine → Patterns)
 
-**Date:** 2026-07-06 · **Status:** Approved, not started
+**Date:** 2026-07-06 · **Status:** Phases 1–4 complete (same day); owner SEBI copy review pending
 **Origin:** Owner + Claude discussion following the four-planet almanac sprints (migrations 127–131)
 **Owner's framing:** *"Discovery gives confidence, but what I need is patterns — e.g. Mercury combustion is trend change; if the high/low of combustion is broken, momentum gets good. Also how are technicals reacting for these planets — it starts with institutional money flow first."*
 
@@ -91,9 +91,10 @@ Next to the Almanac tab (same `BacktestTabs` integration pattern):
 - **Context splits table** — Jupiter/Saturn conditioning, min-n gated.
 - **Sector leaderboard** — for rules qualifying on many benchmarks: which indices respond most (dispersion itself is the finding — market rule vs sector rule).
 
-### Phase 4 — Verification & calibration
-- Hand-verify 2–3 Mercury combust windows on NIFTY 50 against the computed stats before trusting anything (lesson learned: check actual data distribution before setting thresholds — applies to the z-threshold in P3).
-- Owner reviews pattern-statement copy for SEBI voice before the tab ships to users.
+### Phase 4 — Verification & calibration ✅ (2026-07-06)
+- **Independent verification: ALL MATCH.** `pattern_verify.py` (zero shared code with the engine — raw SQL + plain loops) re-derived the full TR-MER-CMB-E-BEA × NIFTY 50 level-break aggregate; every stat matched the stored row to 4 decimals (n=150, high-first 60%/3.5s, low-first 36%/5.5s, all forward returns).
+- **Threshold calibration finding:** across 7,584 field-series (1,085 profiles, n≥20), the two-consecutive |t|≥2.0 rule fires on 16.6% — consistent with the multiple-comparison noise expectation (~15–25% given ~19 scanned offset-pairs on autocorrelated curves). Even |t|≥2.5 fires 7.9%. **Conclusion: no per-series threshold separates signal from noise.** Decision: keep T=2.0 as a candidate generator; the published discriminator is **cross-benchmark replication** — a sequence move renders normally only when the same field moves the same direction (±2 sessions) on ≥5 of the rule's benchmarks; unreplicated moves render faded with an explicit label. Implemented client-side in PatternsTab (it already loads all benchmarks per rule).
+- **Owner SEBI copy review: PENDING** — Patterns tab card titles/labels/footer + the 8 Motion/Journey rule remarks.
 
 ---
 
