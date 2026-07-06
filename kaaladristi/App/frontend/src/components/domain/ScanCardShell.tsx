@@ -3,9 +3,9 @@
  *
  * Exports:
  *   Avatar           — 42px circle with initials, gold when VaNi
- *   VaniBadge        — "VaNi Opportunity" pill tag
+ *   VaniBadge        — "VaNi Highlight" pill tag
  *   ScanCardWrapper  — outer card div (bg, border, flex row, avatar included)
- *   ScanSectionLabel — section divider headers ("✦ VaNi Opportunity · N" / "All Results · N")
+ *   ScanSectionLabel — section divider headers ("✦ VaNi Highlight · N" / "All Results · N")
  *
  * Card body content (DataRows, price columns, evidence strips) stays
  * scan-specific — pass as children to ScanCardWrapper.
@@ -72,7 +72,7 @@ export function CardExchangeBadge({ exchange }: { exchange: string | null | unde
   );
 }
 
-// ── VaNi Opportunity badge ────────────────────────────────────────────────────
+// ── VaNi Highlight badge ────────────────────────────────────────────────────
 
 export function VaniBadge() {
   return (
@@ -90,7 +90,7 @@ export function VaniBadge() {
       color: 'var(--gold)',
       flexShrink: 0,
     }}>
-      VaNi Opportunity
+      VaNi Highlight
     </span>
   );
 }

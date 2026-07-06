@@ -218,7 +218,7 @@ export default function ConvictionFlowCards({ stocks }: { stocks: ScanStock[] })
         <>
           <ScanSectionLabel>
             <span style={{ color: 'var(--gold)', marginRight: '6px' }}>✦</span>
-            VaNi Opportunity · {vani.length} stock{vani.length !== 1 ? 's' : ''}{' '}
+            VaNi Highlight · {vani.length} stock{vani.length !== 1 ? 's' : ''}{' '}
             <span style={{ fontWeight: 400 }}>
               — surge &gt; 2× · near EMA20 · avg 22D &gt; 2 Cr
             </span>
