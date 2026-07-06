@@ -11,6 +11,7 @@ import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded'
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
 import BigMoneyCard from '@/components/domain/StockCockpit/BigMoneyCard';
+import CockpitOverlayStrip from '@/components/domain/StockCockpit/CockpitOverlayStrip';
 import { detectBigMoneyDays } from '@/services/bigMoney';
 import { useFrameworkStore } from '@/stores/frameworkStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -346,20 +347,19 @@ export default function ChartView() {
                     </span>
                   )}
                   <button
-                    onClick={() => setOverlayDrawerOpen(true)}
-                    title="Add or remove chart overlays (Study charts only)"
-                    className="ml-auto px-2.5 py-1 rounded-lg text-[10px] font-bold text-accent-indigo bg-accent-indigo/10 border border-accent-indigo/30 hover:bg-accent-indigo/20 transition-all"
-                  >
-                    + Overlay
-                  </button>
-                  <button
                     onClick={() => setIsFull((f) => !f)}
                     title={isFull ? 'Exit fullscreen' : 'Fullscreen chart'}
-                    className="px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
+                    className="ml-auto px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
                   >
                     {isFull ? '✕' : '⛶'}
                   </button>
                 </div>
+              )}
+
+              {/* Active overlays — visible + manageable (owner 2026-07-07:
+                  'we don't see what overlays were included') */}
+              {!isLoading && !isError && rows.length > 0 && (
+                <CockpitOverlayStrip onAdd={() => setOverlayDrawerOpen(true)} />
               )}
 
               {isLoading ? (
