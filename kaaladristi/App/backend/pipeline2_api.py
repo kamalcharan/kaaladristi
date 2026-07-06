@@ -5531,6 +5531,38 @@ async def payments_webhook(request: Request):
 
 # ── Custom Index — AI Discover ────────────────────────────────────────────────
 
+def _parse_llm_json(raw: str):
+    """Parse LLM JSON output defensively.
+
+    Models sometimes ignore the 'no markdown fences' instruction and wrap the
+    payload in ```json fences, add prose around it, or get truncated mid-array
+    at the max_tokens ceiling. Strategy: strip fences → cut leading prose →
+    json.loads → if that fails on an array, trim to the last complete element
+    and close the bracket. Raises ValueError when nothing salvageable remains.
+    """
+    text = (raw or '').strip()
+    if text.startswith('```'):
+        text = text.split('\n', 1)[1] if '\n' in text else ''
+        if text.rstrip().endswith('```'):
+            text = text.rstrip()[:-3]
+    text = text.strip()
+    starts = [i for i in (text.find('['), text.find('{')) if i >= 0]
+    if starts and min(starts) > 0:
+        text = text[min(starts):]
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    if text.startswith('['):
+        last = text.rfind('}')
+        if last > 0:
+            try:
+                return json.loads(text[:last + 1] + ']')
+            except Exception:
+                pass
+    raise ValueError('unparseable JSON')
+
+
 # Signal universe shared by discover + per-index suggest. NSE is the priority
 # exchange; BSE-only scrips (ISIN has no active NSE listing) are included when
 # daily turnover >= 1 Cr (calibrated 2026-07-05: 167 of 2,900 qualify).
@@ -5690,15 +5722,15 @@ async def custom_index_discover(req: _DiscoverRequest):
     )
 
     if llm == 'claude':
-        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=4000)
     else:
-        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=1500)
+        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=4000)
 
     if raw is None:
         raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
 
     try:
-        themes = json.loads(raw)
+        themes = _parse_llm_json(raw)
         if not isinstance(themes, list):
             raise ValueError('expected JSON array')
     except Exception:
@@ -5935,15 +5967,15 @@ async def custom_index_suggest(index_id: int, req: _DiscoverRequest):
     )
 
     if llm == 'claude':
-        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=1200)
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=2500)
     else:
-        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=1200)
+        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=2500)
 
     if raw is None:
         raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
 
     try:
-        suggestions = json.loads(raw)
+        suggestions = _parse_llm_json(raw)
         if not isinstance(suggestions, list):
             raise ValueError('expected JSON array')
     except Exception:
@@ -6009,15 +6041,15 @@ async def custom_index_target(req: _TargetRequest):
     )
 
     if llm == 'claude':
-        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=2000)
+        raw = _claude_complete(system=system_prompt, user=user_prompt, max_tokens=4000)
     else:
-        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=2000)
+        raw = _ai_complete(system=system_prompt, user=user_prompt, max_tokens=4000)
 
     if raw is None:
         raise HTTPException(status_code=503, detail='LLM unavailable or not configured')
 
     try:
-        result = json.loads(raw)
+        result = _parse_llm_json(raw)
         core = result.get('core') or []
         ecosystem = result.get('ecosystem') or []
         if not isinstance(core, list) or not isinstance(ecosystem, list):
