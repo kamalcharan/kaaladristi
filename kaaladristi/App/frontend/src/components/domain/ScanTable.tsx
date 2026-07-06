@@ -5,7 +5,7 @@ import { Tooltip } from '@/components/ui'
 import { ALL_FIELDS, formatValue, getColor, getFieldConfig, getLabel, getTooltip } from '@/config/fieldConfig'
 import { MiniTower } from '@/components/ui'
 import type React from 'react'
-import { SCAN_PRESETS } from '@/services/scanEngine'
+import { getPresetMeta } from '@/services/scanEngine'
 import { getFieldsForGroup } from '@/fieldAvailability'
 
 // ── Preset column overrides ─────────────────────────────────────────────────────
@@ -21,7 +21,8 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   stage_3_watch:    { key: 'rs_percentile',     dir: 'asc'  },
   vani_exit_watch:  { key: 'rs_percentile',     dir: 'asc'  },
   conviction_flow:  { key: 'delivery_surge_x',  dir: 'desc' },
-  breakout_surge:   { key: 'rvol',              dir: 'desc' },
+  // Score first (owner doctrine) — matches the merged scan's engine ranking.
+  breakout_surge:   { key: 'score_5d',          dir: 'desc' },
 }
 
 function getDefaultSort(presetId: string) {
@@ -56,7 +57,7 @@ interface ScanTableProps {
 }
 
 export default function ScanTable({ stocks, presetId, onRowClick }: ScanTableProps) {
-  const preset = SCAN_PRESETS.find(p => p.id === presetId)
+  const preset = getPresetMeta(presetId)
   const { defaultCols: groupDefaultCols, optionalCols: groupOptionalCols } = getFieldsForGroup(preset?.category ?? '')
   const ds = getDefaultSort(presetId)
 

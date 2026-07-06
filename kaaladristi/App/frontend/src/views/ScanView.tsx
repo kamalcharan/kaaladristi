@@ -16,11 +16,16 @@ import { ScanFilterBar, applyFilters, EMPTY_FILTERS, type ScanFilters } from '@/
 
 // ── Sort ──────────────────────────────────────────────────────
 
-type SortKey = 'magic_rs' | 'rsi_14' | 'rvol' | 'pct_chng' | 'reward' | 'symbol' | 'vaniOpportunity';
+type SortKey = 'score_5d' | 'score_22d' | 'magic_rs' | 'rsi_14' | 'rvol' | 'pct_chng' | 'reward' | 'symbol' | 'vaniOpportunity';
 type SortDir = 'asc' | 'desc';
 
+// Scores first (owner doctrine). These chips drive CARD view ordering only —
+// in table view the table's own sortable headers are the single sort control
+// (the chips used to render there too but were silently ignored).
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'vaniOpportunity', label: '✦ VaNi Opportunity' },
+  { key: 'vaniOpportunity', label: '✦ VaNi Highlight' },
+  { key: 'score_5d',        label: 'Score 5D' },
+  { key: 'score_22d',       label: 'Score 22D' },
   { key: 'magic_rs',        label: 'RS' },
   { key: 'rvol',            label: 'RVOL' },
   { key: 'reward',          label: 'Reward' },
@@ -36,6 +41,8 @@ function sortStocks(stocks: ScanStock[], key: SortKey, dir: SortDir): ScanStock[
     let vb: string | number = 0;
     switch (key) {
       case 'symbol':          va = a.symbol;                    vb = b.symbol;                    break;
+      case 'score_5d':        va = a.score_5d ?? -1;            vb = b.score_5d ?? -1;            break;
+      case 'score_22d':       va = a.score_22d ?? -1;           vb = b.score_22d ?? -1;           break;
       case 'pct_chng':        va = a.pct_chng ?? 0;             vb = b.pct_chng ?? 0;             break;
       case 'magic_rs':        va = a.magic_rs ?? 0;             vb = b.magic_rs ?? 0;             break;
       case 'rsi_14':          va = a.rsi_14 ?? 0;               vb = b.rsi_14 ?? 0;               break;
@@ -129,7 +136,7 @@ function VaniFilterButton({ active, count, onToggle }: { active: boolean; count:
       }}
     >
       <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
-      VaNi Opportunity
+      VaNi Highlight
       <span style={{
         fontFamily: 'var(--font-mono)', fontSize: '10px',
         padding: '1px 6px', borderRadius: '100px',
@@ -385,7 +392,7 @@ function VaniSectionHeader({
           textTransform: 'uppercase', color: 'var(--gold)',
           display: 'flex', alignItems: 'center', gap: '5px',
         }}>
-          <span>✦</span> VaNi Opportunity
+          <span>✦</span> VaNi Highlight
           <span style={{
             background: 'rgba(240,165,0,0.12)', color: 'var(--gold2, #ffd166)',
             padding: '1px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
@@ -535,8 +542,10 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
           onFiltersChange={setFilters}
         />
 
-        {/* Sort strip — right side */}
+        {/* Sort strip — right side. Chips are CARD view only: table view
+            sorts via the table's own headers. */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          {viewMode === 'cards' && (<>
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: '10px',
             color: 'var(--text-faint)', textTransform: 'uppercase',
@@ -564,6 +573,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
               </button>
             );
           })}
+          </>)}
           <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
           <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
           <ViewToggle value={viewMode} onChange={onViewModeChange} />
@@ -724,10 +734,12 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
   const navigate = useNavigate();
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const [filters, setFilters] = useState<ScanFilters>(EMPTY_FILTERS);
+  const [vaniOnly, setVaniOnly] = useState(false);
   const { data: rawStocks = [], isLoading, error } = useScan('conviction_flow', exchangeFilter, timeframe);
   const { show: showToast, Toast } = useToast();
-  const stocks = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
-  const vaniCount = useMemo(() => stocks.filter((s) => s.vaniOpportunity).length, [stocks]);
+  const filtered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
+  const vaniCount = useMemo(() => filtered.filter((s) => s.vaniOpportunity).length, [filtered]);
+  const stocks = useMemo(() => (vaniOnly ? filtered.filter((s) => s.vaniOpportunity) : filtered), [filtered, vaniOnly]);
 
   return (
     <>
@@ -737,6 +749,7 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
         padding: '10px 0', flexWrap: 'wrap', marginBottom: '4px',
       }}>
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={[]} />
+        <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
         <ScanFilterBar
           presetId="conviction_flow"
           stocks={rawStocks}
@@ -744,6 +757,7 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
           onFiltersChange={setFilters}
         />
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <DownloadXlsButton stocks={stocks} scanName={preset.name} />
           <TradingViewExportButton stocks={stocks} scanName={preset.name} />
           <ViewToggle value={viewMode} onChange={onViewModeChange} />
         </div>
@@ -840,7 +854,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [searchParams] = useSearchParams();
   const timeframe = (searchParams.get('timeframe') ?? 'daily') as ScanTimeframe;
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
-  const [sortKey, setSortKey] = useState<SortKey>('magic_rs');
+  const [sortKey, setSortKey] = useState<SortKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [oppFilter, setOppFilter] = useState(false);
   const [filters, setFilters] = useState<ScanFilters>(EMPTY_FILTERS);
@@ -1009,8 +1023,8 @@ function ScannerResults({ presetId }: { presetId: string }) {
     );
   }
 
-  // Breakout Surge — table or custom card layout
-  if (presetId === 'breakout_surge' || presetId === 'breakout_surge_daily') {
+  // Breakout Surge — merged scan (single tab), table or custom card layout
+  if (presetId === 'breakout_surge') {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
@@ -1019,13 +1033,16 @@ function ScannerResults({ presetId }: { presetId: string }) {
           marginBottom: '12px', flexWrap: 'wrap',
         }}>
           <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
+          <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />
           <ScanFilterBar
             presetId={presetId}
             stocks={rawStocks ?? []}
             filters={filters}
             onFiltersChange={setFilters}
           />
-          <div style={{ marginLeft: 'auto' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
+            <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
             <ViewToggle value={viewMode} onChange={setViewMode} />
           </div>
         </div>
@@ -1037,12 +1054,12 @@ function ScannerResults({ presetId }: { presetId: string }) {
           </Card>
         ) : viewMode === 'table' ? (
           <ScanTable
-            stocks={stocks}
+            stocks={exportStocks}
             presetId={presetId}
             onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
           />
         ) : (
-          <BreakoutSurgeCards stocks={stocks} />
+          <BreakoutSurgeCards stocks={oppFilter ? exportStocks : sorted} />
         )}
       </div>
     );
@@ -1068,34 +1085,40 @@ function ScannerResults({ presetId }: { presetId: string }) {
           />
         </div>
 
-        {/* Sort strip */}
+        {/* Sort strip — CARD view only: in table view the table's sortable
+            headers are the single sort control (these chips were silently
+            ignored there and fought the table's internal sort) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-faint)',
-            textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap',
-          }}>
-            Sort
-          </span>
-          {SORT_OPTIONS.map((opt) => {
-            const active = sortKey === opt.key;
-            return (
-              <button
-                key={opt.key}
-                onClick={() => toggleSort(opt.key)}
-                style={{
-                  padding: '5px 12px', borderRadius: '100px', border: 'none',
-                  background: active ? 'var(--indigo-bg)' : 'transparent',
-                  color: active ? 'var(--indigo)' : 'var(--text-muted)',
-                  fontSize: '12px', fontWeight: 500, cursor: 'pointer',
-                  fontFamily: 'var(--font-body)', transition: 'all 0.15s',
-                  whiteSpace: 'nowrap',
-                  outline: active ? '1px solid var(--border-indigo)' : undefined,
-                }}
-              >
-                {opt.label}{active && (sortDir === 'asc' ? ' ↑' : ' ↓')}
-              </button>
-            );
-          })}
+          {viewMode === 'cards' && (
+            <>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-faint)',
+                textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap',
+              }}>
+                Sort
+              </span>
+              {SORT_OPTIONS.map((opt) => {
+                const active = sortKey === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => toggleSort(opt.key)}
+                    style={{
+                      padding: '5px 12px', borderRadius: '100px', border: 'none',
+                      background: active ? 'var(--indigo-bg)' : 'transparent',
+                      color: active ? 'var(--indigo)' : 'var(--text-muted)',
+                      fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+                      fontFamily: 'var(--font-body)', transition: 'all 0.15s',
+                      whiteSpace: 'nowrap',
+                      outline: active ? '1px solid var(--border-indigo)' : undefined,
+                    }}
+                  >
+                    {opt.label}{active && (sortDir === 'asc' ? ' ↑' : ' ↓')}
+                  </button>
+                );
+              })}
+            </>
+          )}
           <DownloadXlsButton stocks={exportStocks} scanName={preset.name} />
           <TradingViewExportButton stocks={exportStocks} scanName={preset.name} />
           <ViewToggle value={viewMode} onChange={setViewMode} />
@@ -1123,7 +1146,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
             background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
           }}>
             <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 8 }}>
-              {oppFilter ? 'No VaNi Opportunity setups in this scan today.' : 'No stocks match this scan criteria today.'}
+              {oppFilter ? 'No VaNi Highlights in this scan today.' : 'No stocks match this scan criteria today.'}
             </p>
             <p style={{ fontSize: '12px', color: 'var(--text-faint)', lineHeight: 1.6 }}>
               {oppFilter
@@ -1143,7 +1166,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
                   <>
                     <ScanSectionLabel>
                       <span style={{ color: 'var(--gold)', marginRight: '6px' }}>✦</span>
-                      VaNi Opportunity · {vaniStocks.length} stock{vaniStocks.length !== 1 ? 's' : ''}
+                      VaNi Highlight · {vaniStocks.length} stock{vaniStocks.length !== 1 ? 's' : ''}
                     </ScanSectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
                       {vaniStocks.map((stock) => (
@@ -1175,7 +1198,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
         }}>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: 8 }}>
             {oppFilter
-              ? 'No VaNi Opportunity setups in this scan today.'
+              ? 'No VaNi Highlights in this scan today.'
               : 'No stocks match this scan criteria today.'}
           </p>
           <p style={{ fontSize: '12px', color: 'var(--text-faint)', lineHeight: 1.6 }}>
