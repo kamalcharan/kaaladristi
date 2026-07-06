@@ -15,7 +15,9 @@ import {
   fetchConstituentFlowMap,
   fetchIndexFlowMap,
   fetchIndexBreadth,
+  fetchSectorPulse,
   SECTOR_TAB_CATEGORIES,
+  type SectorPulseRow,
   type SectorTab,
   type SectorIndexRow,
   type VixRow,
@@ -36,6 +38,16 @@ export function useSectorIndices(tab: SectorTab, forDate?: string) {
   return useQuery<SectorIndexRow[], Error>({
     queryKey: ['sector-indices', tab, forDate ?? 'latest'],
     queryFn: () => fetchSectorIndices(categories, forDate),
+    staleTime: STALE,
+    retry: 1,
+  });
+}
+
+/** Sector Pulse (Workspace Discovery) — sectoral + curated indices with score cells. */
+export function useSectorPulse() {
+  return useQuery<SectorPulseRow[], Error>({
+    queryKey: ['sector-pulse'],
+    queryFn: () => fetchSectorPulse(),
     staleTime: STALE,
     retry: 1,
   });

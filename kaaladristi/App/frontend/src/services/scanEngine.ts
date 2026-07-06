@@ -1968,6 +1968,104 @@ export async function executeScan(
   return results;
 }
 
+// ── VaNi Highlights board (Workspace · Discovery) ──────────────
+
+export interface VaniHighlightRow {
+  equity_id: number;
+  symbol: string;
+  company_name: string | null;
+  score_5d: number | null;
+  rs_percentile?: number | null;
+  /** Short labels of the scans that flagged this stock — >1 = cross-scan confluence. */
+  scans: string[];
+}
+
+export interface VaniHighlights {
+  strength: VaniHighlightRow[];
+  caution: VaniHighlightRow[];
+  strengthTotal: number;
+  cautionTotal: number;
+}
+
+// The Watch lists are always_true (pre-filtered shortlists) — cap their
+// contribution so they don't flood the union (owner decision 2026-07-06).
+const HIGHLIGHT_SOURCES: { id: string; side: 'strength' | 'caution'; label: string; cap?: number }[] = [
+  { id: 'power_buy',            side: 'strength', label: 'Confluence' },
+  { id: 'smart_money',          side: 'strength', label: 'Smart Money' },
+  { id: 'fresh_breakout',       side: 'strength', label: 'Breakout' },
+  { id: 'quiet_accumulation',   side: 'strength', label: 'Quiet Acc' },
+  { id: 'conviction_flow',      side: 'strength', label: 'Flow' },
+  { id: 'breakout_surge',       side: 'strength', label: 'Surge' },
+  { id: 'stage_2_leaders',      side: 'strength', label: 'S2' },
+  { id: 'stage_2_watch',        side: 'strength', label: 'S2 Watch' },
+  { id: 'vani_opportunity',     side: 'strength', label: 'VaNi', cap: 3 },
+  { id: 'power_sell',           side: 'caution',  label: 'Weakness' },
+  { id: 'distribution_warning', side: 'caution',  label: 'Distribution' },
+  { id: 'stage_3_watch',        side: 'caution',  label: 'S3' },
+  { id: 'stage_4_leaders',      side: 'caution',  label: 'S4' },
+  { id: 'vani_exit_watch',      side: 'caution',  label: 'VaNi', cap: 3 },
+];
+
+/**
+ * Union of ✦ VaNi Highlights across all scanners, deduped per side.
+ * A stock flagged by multiple scans carries all their labels — cross-scan
+ * confluence is the strongest observation this board makes, so both sides
+ * rank by flag count first, then by conviction (strength) / weakness (caution).
+ */
+export async function fetchVaniHighlights(): Promise<VaniHighlights> {
+  // Prime the shared bundle once — firing all bundle-based scans in parallel
+  // before the cache is warm would trigger concurrent full-market downloads.
+  await executeScan(HIGHLIGHT_SOURCES[0].id);
+
+  const settled = await Promise.allSettled(
+    HIGHLIGHT_SOURCES.map((src) => executeScan(src.id)),
+  );
+
+  const buckets: Record<'strength' | 'caution', Map<number, VaniHighlightRow>> = {
+    strength: new Map(),
+    caution: new Map(),
+  };
+
+  settled.forEach((res, i) => {
+    if (res.status !== 'fulfilled') return;
+    const src = HIGHLIGHT_SOURCES[i];
+    let rows = res.value.filter((s) => s.vaniOpportunity);
+    if (src.cap != null) rows = rows.slice(0, src.cap);
+    const bucket = buckets[src.side];
+    for (const s of rows) {
+      const existing = bucket.get(s.equity_id);
+      if (existing) {
+        if (!existing.scans.includes(src.label)) existing.scans.push(src.label);
+        if (existing.score_5d == null && s.score_5d != null) existing.score_5d = s.score_5d;
+        if (existing.rs_percentile == null && s.rs_percentile != null) existing.rs_percentile = s.rs_percentile;
+      } else {
+        bucket.set(s.equity_id, {
+          equity_id: s.equity_id,
+          symbol: s.symbol,
+          company_name: s.company_name ?? null,
+          score_5d: s.score_5d ?? null,
+          rs_percentile: s.rs_percentile ?? null,
+          scans: [src.label],
+        });
+      }
+    }
+  });
+
+  const strength = [...buckets.strength.values()].sort(
+    (a, b) => b.scans.length - a.scans.length || (b.score_5d ?? -1) - (a.score_5d ?? -1),
+  );
+  const caution = [...buckets.caution.values()].sort(
+    (a, b) => b.scans.length - a.scans.length || (a.rs_percentile ?? 101) - (b.rs_percentile ?? 101),
+  );
+
+  return {
+    strength,
+    caution,
+    strengthTotal: strength.length,
+    cautionTotal: caution.length,
+  };
+}
+
 /** Invalidate scan data cache (call after data refresh) */
 export function invalidateScanCache(): void {
   _bundleCache.clear();
