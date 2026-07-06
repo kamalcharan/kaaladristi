@@ -309,6 +309,32 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
     return () => window.removeEventListener('resize', onResize);
   }, [draw]);
 
+  // ── Wheel / trackpad scroll ──
+  // Scroll down or swipe left = forward toward NOW; scroll up or swipe
+  // right = back into history. Native non-passive listener — React's
+  // synthetic onWheel can't preventDefault, so page scroll would fight it.
+  const barsLenRef = useRef(bars.length);
+  barsLenRef.current = bars.length;
+  const wheelAccRef = useRef(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !onScrub) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      wheelAccRef.current += delta;
+      const STEP_PX = 40; // wheel distance per bar
+      const steps = Math.trunc(wheelAccRef.current / STEP_PX);
+      if (steps === 0) return;
+      wheelAccRef.current -= steps * STEP_PX;
+      const next = Math.max(0, Math.min(barsLenRef.current - 1, activeIndexRef.current + steps));
+      if (next !== activeIndexRef.current) onScrub(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [onScrub]);
+
   // ── Drag-to-pan handlers ──
   // Dragging right pulls older bars into view (activeIndex decreases);
   // dragging left moves toward NOW. One bar per barW of pointer travel.
