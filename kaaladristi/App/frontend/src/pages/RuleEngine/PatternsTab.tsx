@@ -199,7 +199,29 @@ function LevelBreakCard({ row }: { row: PatternRow }) {
   );
 }
 
-function SequenceCard({ row }: { row: PatternRow }) {
+/** How many benchmarks show the same field moving the same direction within
+ *  ±2 offsets. Phase 4 calibration finding: per-series |t| thresholds fire at
+ *  noise-consistent rates (16.6% of 7,584 series at t=2.0 ≈ the multiple-
+ *  comparison expectation), so a single-benchmark sequence proves nothing —
+ *  REPLICATION across benchmarks is the discriminator. */
+function replicationCount(move: SequenceMove, allSeqRows: PatternRow[]): number {
+  let count = 0;
+  for (const r of allSeqRows) {
+    const seqs = [
+      ...(((r.results.overall as { sequence?: SequenceMove[] } | null)?.sequence) ?? []),
+      ...(((r.results.clean as { sequence?: SequenceMove[] } | null)?.sequence) ?? []),
+    ];
+    if (seqs.some(m => m.field === move.field && m.direction === move.direction
+        && Math.abs(m.first_move - move.first_move) <= 2)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+const REPLICATION_MIN = 5;   // benchmarks agreeing before a move reads as real
+
+function SequenceCard({ row, allSeqRows }: { row: PatternRow; allSeqRows: PatternRow[] }) {
   const clean = row.results.clean as { sequence?: SequenceMove[] } | null;
   const overall = row.results.overall as { sequence: SequenceMove[]; note?: string } | null;
   const seq = (clean?.sequence?.length ? clean.sequence : overall?.sequence) ?? [];
@@ -214,19 +236,34 @@ function SequenceCard({ row }: { row: PatternRow }) {
           {overall?.note ?? 'No stable sequence at the significance threshold.'}
         </p>
       ) : (
-        <p className="text-[13px] text-secondary leading-relaxed">
-          {seq.map((m, i) => (
-            <span key={m.field}>
-              {i > 0 && <span className="text-muted"> → </span>}
-              <span className="text-white">{FIELD_LABELS[m.field] ?? m.field}</span>
-              <span className={m.direction === 'up' ? 'text-risk-green' : 'text-risk-red/80'}>
-                {' '}{m.direction === 'up' ? '↑' : '↓'}
-              </span>
-              <span className="text-muted font-mono text-[11px]"> D{m.first_move >= 0 ? '+' : ''}{m.first_move}</span>
-            </span>
-          ))}
-          {fromClean && <span className="text-[10px] font-mono text-muted ml-2">(clean subset)</span>}
-        </p>
+        <>
+          <p className="text-[13px] leading-relaxed">
+            {seq.map((m, i) => {
+              const reps = replicationCount(m, allSeqRows);
+              const replicated = reps >= REPLICATION_MIN;
+              return (
+                <span key={m.field} className={replicated ? '' : 'opacity-50'}>
+                  {i > 0 && <span className="text-muted"> → </span>}
+                  <span className="text-white">{FIELD_LABELS[m.field] ?? m.field}</span>
+                  <span className={m.direction === 'up' ? 'text-risk-green' : 'text-risk-red/80'}>
+                    {' '}{m.direction === 'up' ? '↑' : '↓'}
+                  </span>
+                  <span className="text-muted font-mono text-[11px]"> D{m.first_move >= 0 ? '+' : ''}{m.first_move}</span>
+                  <span className={cn('font-mono text-[10px] ml-1',
+                    replicated ? 'text-risk-green/80' : 'text-muted')}>
+                    {replicated ? `· ${reps} benchmarks agree` : `· unreplicated (${reps})`}
+                  </span>
+                </span>
+              );
+            })}
+            {fromClean && <span className="text-[10px] font-mono text-muted ml-2">(clean subset)</span>}
+          </p>
+          <p className="text-[10px] text-muted mt-1.5 leading-relaxed">
+            Single-benchmark sequences fire at noise-consistent rates — only moves the same
+            direction on ≥{REPLICATION_MIN} benchmarks (±2 sessions) read as signatures; the
+            rest are shown faded.
+          </p>
+        </>
       )}
     </div>
   );
@@ -376,6 +413,10 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
   const levelBreak = benchRows.find(r => r.pattern_type === 'level_break');
   const profile = benchRows.find(r => r.pattern_type === 'reaction_profile');
   const sequence = benchRows.find(r => r.pattern_type === 'sequence');
+  const allSeqRows = useMemo(
+    () => rows.filter(r => r.pattern_type === 'sequence'),
+    [rows],
+  );
 
   if (isLoading) return <p className="px-4 py-6 text-sm text-muted text-center">Loading patterns…</p>;
   if (rows.length === 0) {
@@ -423,7 +464,7 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
       <div className={cn(selected && selected.maxN < 20 && 'opacity-70')}>
         <div className="space-y-3">
           {levelBreak && <LevelBreakCard row={levelBreak} />}
-          {sequence && <SequenceCard row={sequence} />}
+          {sequence && <SequenceCard row={sequence} allSeqRows={allSeqRows} />}
           {profile && <ProfileCard row={profile} />}
           {levelBreak && <ContextCard row={levelBreak} />}
           {levelBreak && <PeersCard row={levelBreak} />}
