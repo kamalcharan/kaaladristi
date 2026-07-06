@@ -1093,7 +1093,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
               {bandTooltip.band.matched === false && <span style={{ color: 'var(--bear)' }}>✗ Not matched</span>}
               {bandTooltip.band.matched === null  && (
                 <span style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  {bandTooltip.band.from > new Date().toISOString().slice(0,10) ? '◦ Future transit' : '◦ Pending validation'}
+                  {bandTooltip.band.from > new Date().toISOString().slice(0,10)
+                    ? '◦ Future transit'
+                    : bandTooltip.band.baseBias
+                      ? '◦ Pending validation'
+                      : '◦ Observational window'}
                 </span>
               )}
             </div>

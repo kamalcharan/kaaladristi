@@ -6,7 +6,7 @@ import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtId(id: string): string {
-  return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
+  return id.replace('astro_rule:', '').replace('astro_group:', '').replace(/_/g, ' ').toUpperCase()
 }
 
 function fmtRet(v: number | null): string {

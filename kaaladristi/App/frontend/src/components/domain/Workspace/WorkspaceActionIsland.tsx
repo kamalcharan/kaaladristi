@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useFrameworkStore, type VaNiCorrelation } from '@/stores/frameworkStore'
 
 function fmtId(id: string): string {
-  return id.replace('astro_rule:', '').replace(/_/g, ' ')
+  return id.replace('astro_rule:', '').replace('astro_group:', '').replace(/_/g, ' ')
 }
 
 interface Chip { label: string; type: 'caution' | 'accent' }
@@ -66,7 +66,8 @@ export default function WorkspaceActionIsland({ onOpen, onMorningBrief, bottomOf
   const framework     = useFrameworkStore(s => s.framework)
 
   const astroOverlayCount = (framework?.chart_overlays ?? [])
-    .filter(o => o.catalog_item_id.startsWith('astro_rule:') && o.visible).length
+    .filter(o => (o.catalog_item_id.startsWith('astro_rule:') || o.catalog_item_id.startsWith('astro_group:'))
+      && o.visible).length
 
   const hasActive    = correlations.some(c => c.currently_active)
   const firstActive  = correlations.find(c => c.currently_active) ?? correlations[0] ?? null
