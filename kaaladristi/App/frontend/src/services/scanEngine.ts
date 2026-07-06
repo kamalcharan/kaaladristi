@@ -155,7 +155,11 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   const cached = _bundleCache.get('daily');
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
 
-  const eodCutoff = new Date(Date.now() - 115 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // 45 calendar days ≈ 30 sessions. Deepest history consumer is 23 sessions
+  // (fresh_breakout's 20-day-high walk + xAmt's 22-day value window) — returns
+  // and breakout levels come from DB columns now. Was 115 days when ret_66d
+  // was computed client-side; this cut is ~60% of the scanner page's payload.
+  const eodCutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const last10days = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
@@ -622,10 +626,13 @@ function buildScanStock(
   const avgVal22 = valW22.length > 0 ? valW22.reduce((s, h) => s + h.value_cr!, 0) / valW22.length  : null;
   const xAmt = avgVal5 != null && avgVal22 != null && avgVal22 > 0 ? avgVal5 / avgVal22 : null;
 
-  // REL fields vs NIFTY 50 and NIFTY 500
-  const stockRet5  = history.length >  5 ? ((eod.close - history[5].close)  / history[5].close)  * 100 : null;
-  const stockRet22 = history.length > 22 ? ((eod.close - history[22].close) / history[22].close) * 100 : null;
-  const stockRet66 = history.length > 66 ? ((eod.close - history[66].close) / history[66].close) * 100 : null;
+  // REL fields vs NIFTY 50 and NIFTY 500 — returns come from the DB columns
+  // (migration 111), not a client-side history walk. This is what lets the
+  // bundle window shrink to ~23 sessions (the old 67-bar walk forced 115
+  // calendar days of EOD download for every scanner visit).
+  const stockRet5  = eod.ret_5d  != null ? Number(eod.ret_5d)  : null;
+  const stockRet22 = eod.ret_22d != null ? Number(eod.ret_22d) : null;
+  const stockRet66 = eod.ret_66d != null ? Number(eod.ret_66d) : null;
 
   const n50  = bundle.nifty50Returns;
   const n500 = bundle.nifty500Returns;
@@ -1439,7 +1446,7 @@ async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<Sca
       'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
     ].join(','))
     .eq('trade_date', latestDate)
-    .is('is_vani_s2', true)
+    .is('is_vani_s2', 'true')
     .order('rs_percentile', { ascending: false })
     .limit(50)
     .execute();
