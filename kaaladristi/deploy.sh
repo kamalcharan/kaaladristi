@@ -4,7 +4,7 @@
 set -e
 
 APP_DIR="/opt/vikuna/apps/kaaladristi/kaaladristi"
-VIKUNA_DIR="/opt/vikuna/docker/docker"docker exec kaaladristi-pipeline grep -n "custom-index" /app/pipeline2_api.py | head -5
+VIKUNA_DIR="/opt/vikuna/docker/docker"
 NGINX_CONF_SRC="$APP_DIR/nginx/dristiq-vps.conf"
 NGINX_CONF_DEST="$VIKUNA_DIR/config/nginx/conf.d/dristiq.conf"
 ENV_FILE="$APP_DIR/.env"
