@@ -488,7 +488,16 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
   const [filters, setFilters] = useState<ScanFilters>(EMPTY_FILTERS);
   const { show: showToast, Toast } = useToast();
 
-  const { data: rawStocks = [], isLoading, error, refetch } = useScan(preset.id, exchangeFilter, timeframe);
+  const { data: fetchedStocks = [], isLoading, error, refetch } = useScan(preset.id, exchangeFilter, timeframe);
+
+  // always_true presets are pre-filtered shortlists — every row would carry ✦,
+  // so the flag says nothing within this scan. Strip it at the view boundary
+  // (the Discovery board consumes the engine flag directly and is unaffected).
+  const hideVani = preset.vani_rule === 'always_true';
+  const rawStocks = useMemo(
+    () => hideVani ? fetchedStocks.map((s) => (s.vaniOpportunity ? { ...s, vaniOpportunity: false } : s)) : fetchedStocks,
+    [fetchedStocks, hideVani],
+  );
 
   useEffect(() => { setFilters(EMPTY_FILTERS); }, [preset.id]);
 
@@ -534,7 +543,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
         padding: '10px 0', flexWrap: 'wrap', marginBottom: '4px',
       }}>
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
-        <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
+        {!hideVani && <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />}
         <ScanFilterBar
           presetId={preset.id}
           stocks={rawStocks}
@@ -867,10 +876,21 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const isNseOnly = preset?.universe === 'NSE_ONLY' && timeframe !== 'daily';
   const disabledExchangeOptions: ExchangeFilter[] = isNseOnly ? ['combined', 'BSE'] : [];
 
-  const { data: rawStocks, isLoading, error } = useScan(
+  const { data: fetchedStocks, isLoading, error } = useScan(
     preset ? presetId : (presets[0]?.id ?? presetId),
     exchangeFilter,
     timeframe,
+  );
+
+  // always_true presets are pre-filtered shortlists — every row would carry ✦,
+  // so the flag says nothing within this scan. Strip it at the view boundary
+  // (the Discovery board consumes the engine flag directly and is unaffected).
+  const hideVani = preset?.vani_rule === 'always_true';
+  const rawStocks = useMemo(
+    () => hideVani && fetchedStocks
+      ? fetchedStocks.map((s) => (s.vaniOpportunity ? { ...s, vaniOpportunity: false } : s))
+      : fetchedStocks,
+    [fetchedStocks, hideVani],
   );
 
   useEffect(() => { setFilters(EMPTY_FILTERS); }, [presetId]);
@@ -1033,7 +1053,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
           marginBottom: '12px', flexWrap: 'wrap',
         }}>
           <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
-          <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />
+          {!hideVani && <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />}
           <ScanFilterBar
             presetId={presetId}
             stocks={rawStocks ?? []}
@@ -1076,7 +1096,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={disabledExchangeOptions} />
-          <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />
+          {!hideVani && <VaniFilterButton active={oppFilter} count={oppCount} onToggle={() => setOppFilter((f) => !f)} />}
           <ScanFilterBar
             presetId={presetId}
             stocks={rawStocks ?? []}
@@ -1097,7 +1117,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
               }}>
                 Sort
               </span>
-              {SORT_OPTIONS.map((opt) => {
+              {SORT_OPTIONS.filter((opt) => !(hideVani && opt.key === 'vaniOpportunity')).map((opt) => {
                 const active = sortKey === opt.key;
                 return (
                   <button
@@ -1348,15 +1368,28 @@ export default function ScanView() {
         })}
       </div>
 
-      {/* Right panel — scrollable content area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-        {presetId ? (
-          <ScannerResults presetId={presetId} />
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-            <Loader2 style={{ width: '20px', height: '20px', color: 'var(--text-faint)', animation: 'spin 1s linear infinite' }} />
-          </div>
-        )}
+      {/* Right panel — scrollable content area + standing disclaimer */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+          {presetId ? (
+            <ScannerResults presetId={presetId} />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <Loader2 style={{ width: '20px', height: '20px', color: 'var(--text-faint)', animation: 'spin 1s linear infinite' }} />
+            </div>
+          )}
+        </div>
+        {/* Standing disclaimer — always visible, never scrolls away */}
+        <div style={{
+          flexShrink: 0, padding: '7px 24px',
+          borderTop: '1px solid var(--border)',
+          background: 'var(--sidebar-bg, var(--card))',
+          fontSize: '10.5px', lineHeight: 1.5, color: 'var(--text-faint)',
+          textAlign: 'center',
+        }}>
+          Scans surface observations of market conditions from end-of-day data, for study and education.
+          Nothing here is investment advice or a recommendation to buy or sell any security.
+        </div>
       </div>
     </div>
   );
