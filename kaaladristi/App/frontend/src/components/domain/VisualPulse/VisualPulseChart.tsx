@@ -14,6 +14,15 @@ interface VisualPulseChartProps {
   activeIndex: number;
   corrHistory: CorrelationState[];
   dotsHistory: DotSignals[];
+  /** Per-bar correlation color strip under the candles. On by default for
+   *  Intraday; the Pulse pages pass false — the verdict hero + slider ticks
+   *  already carry the state, the strip was redundant noise. */
+  showConvergenceBand?: boolean;
+  /** Drag-to-pan: dragging the candles right pulls older history into view.
+   *  The window ends at activeIndex, so panning IS scrubbing — the whole
+   *  page (verdict, cards, slider) replays the dragged-to date in sync.
+   *  Called with the new active index while dragging. */
+  onScrub?: (index: number) => void;
 }
 
 // ── Color resolution (CSS var → computed hex for canvas) ────────
@@ -27,9 +36,13 @@ const VISIBLE_BARS = 40;
 const PAD = { t: 12, b: 28, l: 8, r: 52 };
 const CHART_H = 220;
 
-export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsHistory }: VisualPulseChartProps) {
+export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsHistory, showConvergenceBand = true, onScrub }: VisualPulseChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Drag-to-pan state — refs, not state: pointermove must not re-render
+  const dragRef = useRef<{ startX: number; startIdx: number } | null>(null);
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -205,7 +218,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
     // ── Convergence band (bottom 12px) ──
     const bandH = 12;
     const bandY = CHART_H - PAD.b + 2;
-    visible.forEach((_, i) => {
+    if (showConvergenceBand) visible.forEach((_, i) => {
       const globalIdx = startIdx + i;
       const corr = corrHistory[globalIdx];
       if (!corr) return;
@@ -286,7 +299,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
         ctx.fillText(`${parseInt(d)} ${months[parseInt(m)]}`, toX(i), CHART_H - 4);
       }
     });
-  }, [bars, activeIndex, corrHistory, dotsHistory]);
+  }, [bars, activeIndex, corrHistory, dotsHistory, showConvergenceBand]);
 
   // Redraw on data change or resize
   useEffect(() => {
@@ -296,8 +309,71 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
     return () => window.removeEventListener('resize', onResize);
   }, [draw]);
 
+  // ── Wheel / trackpad scroll ──
+  // Scroll down or swipe left = forward toward NOW; scroll up or swipe
+  // right = back into history. Native non-passive listener — React's
+  // synthetic onWheel can't preventDefault, so page scroll would fight it.
+  const barsLenRef = useRef(bars.length);
+  barsLenRef.current = bars.length;
+  const wheelAccRef = useRef(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !onScrub) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      wheelAccRef.current += delta;
+      const STEP_PX = 40; // wheel distance per bar
+      const steps = Math.trunc(wheelAccRef.current / STEP_PX);
+      if (steps === 0) return;
+      wheelAccRef.current -= steps * STEP_PX;
+      const next = Math.max(0, Math.min(barsLenRef.current - 1, activeIndexRef.current + steps));
+      if (next !== activeIndexRef.current) onScrub(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [onScrub]);
+
+  // ── Drag-to-pan handlers ──
+  // Dragging right pulls older bars into view (activeIndex decreases);
+  // dragging left moves toward NOW. One bar per barW of pointer travel.
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onScrub) return;
+    dragRef.current = { startX: e.clientX, startIdx: activeIndexRef.current };
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onScrub || !dragRef.current || !containerRef.current) return;
+    const pw = containerRef.current.offsetWidth - PAD.l - PAD.r;
+    const barW = pw / Math.min(VISIBLE_BARS, bars.length || 1);
+    const dx = e.clientX - dragRef.current.startX;
+    const barsDelta = Math.round(dx / Math.max(barW, 1));
+    if (barsDelta === 0) return;
+    const next = Math.max(0, Math.min(bars.length - 1, dragRef.current.startIdx - barsDelta));
+    if (next !== activeIndexRef.current) onScrub(next);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    try { (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId); } catch { /* already released */ }
+  };
+
   return (
-    <div ref={containerRef} style={{ borderRadius: 8, overflow: 'hidden' }}>
+    <div
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      style={{
+        borderRadius: 8, overflow: 'hidden',
+        cursor: onScrub ? (dragRef.current ? 'grabbing' : 'grab') : undefined,
+        touchAction: onScrub ? 'pan-y' : undefined,
+      }}
+    >
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%' }} />
     </div>
   );

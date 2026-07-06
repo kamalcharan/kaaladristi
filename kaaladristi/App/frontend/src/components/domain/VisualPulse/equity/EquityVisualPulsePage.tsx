@@ -175,6 +175,12 @@ export default function EquityVisualPulsePage() {
     }, 180);
   }, []);
 
+  // Drag-to-pan from the chart — direct index updates, no fade (a fade
+  // timeout per pointermove would make dragging feel laggy).
+  const handleChartScrub = useCallback((idx: number) => {
+    setActiveIndex(idx);
+  }, []);
+
   const handleStyleChange = useCallback((style: TradingStyle) => {
     setIsFading(true);
     setTimeout(() => {
@@ -298,6 +304,7 @@ export default function EquityVisualPulsePage() {
             activeIndex={effectiveIdx}
             corrHistory={corrHistory}
             dotsHistory={dotsHistory}
+            onScrub={handleChartScrub}
           />
         </div>
 

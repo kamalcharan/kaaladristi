@@ -49,7 +49,10 @@ async function computeScanPresence(
     if (res.status !== 'fulfilled') continue;
     const { preset, match } = res.value;
     if (match) {
-      matched.push({ id: preset.id, name: preset.name, vani: !!match.vaniOpportunity });
+      // always_true presets flag every row — ✦ carries no information there,
+      // so presence in the scan is reported without the highlight marker.
+      const vani = preset.vani_rule === 'always_true' ? false : !!match.vaniOpportunity;
+      matched.push({ id: preset.id, name: preset.name, vani });
       if (!foundStock) foundStock = match;
     }
   }

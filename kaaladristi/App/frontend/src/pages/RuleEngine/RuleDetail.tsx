@@ -9,6 +9,7 @@ import { useToast, ToastContainer } from '@/components/ui';
 import { useBackendStatus } from '@/hooks';
 import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
+import AlmanacTab from './AlmanacTab';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
 import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery, dropRuleSignals } from './discoveryService';
 
@@ -768,12 +769,14 @@ function AlphaChart({ transits }: { transits: RuleTransit[] }) {
 // ── Tabbed detail panel ───────────────────────────────────────────────────────
 
 function BacktestTabs({
+  ruleId,
   transits, upcomingTransits,
   signals, upcomingSignals,
   signalsPage, setSignalsPage, signalsTotal,
   yearlyConf,
   highlightId, onHighlight,
 }: {
+  ruleId: number;
   transits: RuleTransit[];
   upcomingTransits: RuleTransit[];
   signals: RuleSignal[];
@@ -785,12 +788,13 @@ function BacktestTabs({
   highlightId: number | null;
   onHighlight: (id: number | null) => void;
 }) {
-  const [tab, setTab] = useState<'transits' | 'upcoming' | 'signals' | 'occurrences' | 'yearly'>('transits');
+  const [tab, setTab] = useState<'transits' | 'upcoming' | 'signals' | 'occurrences' | 'yearly' | 'almanac'>('transits');
   const totalPages = Math.ceil(signalsTotal / PAGE_SIZE);
 
   const tabs = [
     { key: 'transits'    as const, label: `Transits · ${transits.length}` },
     { key: 'upcoming'    as const, label: `Upcoming · ${upcomingTransits.length}` },
+    { key: 'almanac'     as const, label: 'Almanac' },
     { key: 'signals'     as const, label: `Next Signals · ${upcomingSignals.length}` },
     { key: 'occurrences' as const, label: `Daily · ${signalsTotal.toLocaleString()}` },
     ...(yearlyConf.length > 0 ? [{ key: 'yearly' as const, label: `Year-by-Year · ${yearlyConf.length}` }] : []),
@@ -910,6 +914,9 @@ function BacktestTabs({
               })}
           </div>
       )}
+
+      {/* Almanac tab — full forward calendar of windows (screenshot format) */}
+      {tab === 'almanac' && <AlmanacTab ruleId={ruleId} />}
 
       {/* Next Signals tab */}
       {tab === 'signals' && (
@@ -1545,6 +1552,7 @@ export default function RuleDetail() {
 
         {/* Tabbed detail panel */}
         <BacktestTabs
+          ruleId={ruleId}
           transits={transits}
           upcomingTransits={upcomingTransits}
           signals={signalsData.rows}

@@ -5,6 +5,7 @@ Generate Mercury rule transit windows from km_planetary_positions
 and insert into km_rule_transits (ON CONFLICT DO NOTHING).
 
 Rules generated:
+  0. TR-MER-RET          — Plain Mercury retrograde windows (motion almanac, migration 127)
   1. TR-JUP-MER-RET-BUL  — Mercury retrograde windows (+ Jupiter also retrograde)
   2. TR-MER-VEN-RET-BUL  — Mercury retrograde windows where Venus also retrograde
   3. TR-MER-CMB-E-BEA    — Mercury combust windows
@@ -190,6 +191,20 @@ def generate_retrograde(cur, rule_ids: dict) -> dict[str, tuple[int, int]]:
     return results
 
 
+# ── Rule 0: Plain Mercury Retrograde (motion almanac) ─────────────────────────
+
+def generate_plain_retrograde(cur, rule_id: int) -> tuple[int, int]:
+    windows = fetch_retrograde_windows(cur, "Mercury")
+    rows = []
+    for w in windows:
+        snap = json.dumps({
+            "event": "mercury_retrograde",
+            "rule_type": "retrograde",
+        })
+        rows.append((rule_id, w["start_date"], w["end_date"], snap))
+    return bulk_insert(cur, rows)
+
+
 # ── Rule 3: Mercury Combust ────────────────────────────────────────────────────
 
 def generate_combust(cur, rule_id: int) -> tuple[int, int]:
@@ -310,6 +325,7 @@ def main():
 
                 # ── Resolve all rule IDs from DB ──────────────────────────────
                 all_rule_codes = [
+                    "TR-MER-RET",
                     "TR-JUP-MER-RET-BUL",
                     "TR-MER-VEN-RET-BUL",
                     "TR-MER-CMB-E-BEA",
@@ -334,7 +350,13 @@ def main():
                 # ── Generate windows ──────────────────────────────────────────
                 summary: dict[str, tuple[int, int]] = {}
 
-                # Rules 1 & 2: Retrograde (plain + co-retrograde)
+                # Rule 0: Plain retrograde (motion almanac)
+                if "TR-MER-RET" in rule_ids:
+                    summary["TR-MER-RET"] = generate_plain_retrograde(
+                        cur, rule_ids["TR-MER-RET"]
+                    )
+
+                # Rules 1 & 2: Co-retrograde combinations
                 retro_ids = {
                     c: rule_ids[c]
                     for c in ("TR-JUP-MER-RET-BUL", "TR-MER-VEN-RET-BUL")

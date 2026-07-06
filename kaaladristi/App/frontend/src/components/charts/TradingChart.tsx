@@ -187,7 +187,16 @@ function createChartOptions(container: HTMLElement, height: number, colors: Retu
   };
 }
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = [], astroBands = [], bigMoneyEvents = [], onVisibleRangeChange, onCrosshairMove, onZoneClick }: TradingChartProps) {
+// Stable default identities — `= []` in the parameter list mints a NEW array
+// every render, and bigMoneyEvents/overlays feed buildCharts' deps. With the
+// crosshair legend re-rendering on every mouse move, fresh defaults caused a
+// full chart rebuild per mousemove — wiping the user's zoom/scroll position
+// (My Space bug, 2026-07-06).
+const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
+const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
+const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
+
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
