@@ -137,7 +137,7 @@ export default function RuleInferenceModal({
     queryFn: () => fetchInference(ruleId),
     staleTime: 60 * 1000,
   });
-  const rows = data?.inferences ?? [];
+  const rows = Array.isArray(data?.inferences) ? data.inferences : [];
 
   // Applies-To item sources — sectors from Sector Rotation (sectoral +
   // curated), indexes = broad/original, commodities from dc_lookup.
