@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Pencil, Copy, Trash2, Lock, Play, WifiOff, X, Eraser, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Copy, Trash2, Lock, Play, WifiOff, X, Eraser, Sparkles } from 'lucide-react';
 import { from } from '@/services/postgrest';
 import { useAuthStore } from '@/stores/authStore';
 import { fmtDate } from '@/lib/dateUtils';
@@ -1421,21 +1421,15 @@ export default function RuleDetail() {
               <Copy className="w-3.5 h-3.5" /> Clone
             </button>
 
-            {/* Edit metadata — demoted to icon-only: rule_code/tags/base_bias/
-                remarks, a different form from Rule Inference below */}
-            <button
-              onClick={() => { setSaveError(null); setModalMode('edit'); }}
-              title="Edit rule metadata (rule_code, tags, base_bias, remarks)"
-              className="flex items-center justify-center w-8 h-8 text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Rule Inference — the theory-vs-evidence authoring surface, styled like /inference */}
+            {/* Rule Inference — replaces the old Edit button (owner 2026-07-07).
+                Opens the /inference-style modal: manual entry or AI Inference
+                (Claude/Qwen). Rule METADATA editing (rule_code/tags/base_bias)
+                is intentionally no longer on this toolbar — reachable only
+                through the modal's small footer link. */}
             <button
               onClick={() => setInferenceModalOpen(true)}
-              title="Author or generate the expected behavior for this rule (Expected vs Evidence)"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-accent-gold border border-accent-gold/30 bg-accent-gold/10 rounded-lg hover:bg-accent-gold/20 transition-all"
+              title="Author the expected behavior for this rule — manual or AI Inference"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-accent-indigo border border-accent-indigo/30 bg-accent-indigo/10 rounded-lg hover:bg-accent-indigo/20 transition-all"
             >
               <Sparkles className="w-3.5 h-3.5" /> Rule Inference
             </button>
@@ -1592,6 +1586,7 @@ export default function RuleDetail() {
           ruleId={ruleId}
           ruleName={rule.display_name}
           onClose={() => setInferenceModalOpen(false)}
+          onEditMetadata={() => { setSaveError(null); setModalMode('edit'); }}
         />
       )}
 

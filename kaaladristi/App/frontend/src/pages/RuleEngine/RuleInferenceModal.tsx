@@ -1,21 +1,25 @@
 /**
  * RuleInferenceModal — theory-vs-evidence authoring surface (migration 134)
  * =============================================================================
- * Owner directive 2026-07-07: reuse the /inference (InferenceView.tsx) form
- * chrome and layout conventions instead of a compact inline card. AI
- * generation lives INSIDE this form (Claude/Qwen toggle, same pattern as
- * Custom Index Discover), not as a separate outside trigger — admin picks a
- * model, generates a draft, edits it, saves. Manual entry works the same way
- * without ever calling generate.
+ * Opened by the "Rule Inference" button on /rules/:id (which REPLACED the old
+ * "Edit" button — owner 2026-07-07). Same form chrome as /inference
+ * (InferenceView.tsx FormModal): fixed backdrop, max-w-4xl panel, labeled
+ * fields.
  *
- * Opened from the "Rule Inference" button on /rules/:id (renamed from
- * "Edit" — that button now lives as a smaller secondary "Edit metadata"
- * action since it edits different fields: rule_code/tags/base_bias).
+ * Flow (owner spec):
+ *   1. User clicks "Rule Inference" → this modal.
+ *   2. Two options: "Manual" (user fills the form) or "AI Inference".
+ *   3. AI Inference → pick Claude or Qwen (same picker as Custom Index
+ *      Discover) → Generate → draft fills the same editable form.
+ *   4. Review/edit → Save. Outcome vs evidence is computed server-side.
+ *
+ * Rule METADATA editing (rule_code/tags/base_bias — the old Edit form) is
+ * reachable via the small footer link only; it no longer has a toolbar button.
  */
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import { X, Trash2, Sparkles, Loader2, PenLine, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
@@ -23,6 +27,7 @@ const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
 type MarketImpact = 'bullish' | 'bearish' | 'volatile' | 'neutral' | 'mixed';
 type Outcome = 'worked' | 'partial' | 'failed' | 'running' | 'turned' | 'inconclusive' | 'pending';
 type Llm = 'claude' | 'qwen';
+type Mode = 'choose' | 'manual' | 'ai';
 
 interface InferenceRow {
   id: number;
@@ -66,36 +71,22 @@ async function fetchInference(ruleId: number): Promise<InferenceRow[]> {
   return data.inferences ?? [];
 }
 
-function LlmBtn({ value, active, label, onClick }: { value: Llm; active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex-1 py-2 text-xs rounded-lg border transition-all',
-        active
-          ? 'font-semibold border-accent-indigo bg-accent-indigo/12 text-accent-indigo'
-          : 'border-kd-border text-muted hover:border-kd-border-active',
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
 export default function RuleInferenceModal({
-  ruleId, ruleName, onClose,
+  ruleId, ruleName, onClose, onEditMetadata,
 }: {
   ruleId: number;
   ruleName: string;
   onClose: () => void;
+  /** Opens the old rule-metadata form (rule_code/tags/base_bias) — footer link only. */
+  onEditMetadata?: () => void;
 }) {
   const qc = useQueryClient();
+  const [mode, setMode] = useState<Mode>('choose');
   const [text, setText] = useState('');
   const [impact, setImpact] = useState<MarketImpact | null>(null);
   const [pairRuleId, setPairRuleId] = useState('');
-  const [source, setSource] = useState<'manual' | 'ai_generated'>('manual');
-  const [llm, setLlm] = useState<Llm>('qwen');
+  const [llm, setLlm] = useState<Llm>('claude');
+  const [generated, setGenerated] = useState(false);   // AI draft landed in the form
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +97,10 @@ export default function RuleInferenceModal({
     staleTime: 60 * 1000,
   });
 
+  function resetForm() {
+    setText(''); setImpact(null); setPairRuleId(''); setGenerated(false); setError(null);
+  }
+
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
@@ -115,11 +110,11 @@ export default function RuleInferenceModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ llm, pair_rule_id: pairRuleId ? Number(pairRuleId) : null }),
       });
-      if (!res.ok) throw new Error(`generate ${res.status}`);
+      if (!res.ok) throw new Error(`generate failed (${res.status})`);
       const draft = await res.json();
       setText(draft.inference_text ?? '');
       setImpact((draft.market_impact ?? null) as MarketImpact | null);
-      setSource('ai_generated');
+      setGenerated(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'generation failed');
     } finally {
@@ -139,11 +134,12 @@ export default function RuleInferenceModal({
           inference_text: text.trim(),
           market_impact: impact,
           pair_rule_id: pairRuleId ? Number(pairRuleId) : null,
-          source,
+          source: mode === 'ai' && generated ? 'ai_generated' : 'manual',
         }),
       });
-      if (!res.ok) throw new Error(`save ${res.status}`);
-      setText(''); setImpact(null); setPairRuleId(''); setSource('manual');
+      if (!res.ok) throw new Error(`save failed (${res.status})`);
+      resetForm();
+      setMode('choose');
       qc.invalidateQueries({ queryKey: ['rule-inference', ruleId] });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'save failed');
@@ -157,16 +153,18 @@ export default function RuleInferenceModal({
     qc.invalidateQueries({ queryKey: ['rule-inference', ruleId] });
   }
 
+  // Shared editable form — both Manual and AI converge here. In AI mode the
+  // form appears after Generate fills it; in Manual mode it's shown directly.
+  const showForm = mode === 'manual' || (mode === 'ai' && generated);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-4xl bg-kd-surface border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden">
 
-        {/* Header */}
+        {/* Header — /inference FormModal chrome */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-kd-border">
           <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-accent-gold" /> Rule Inference
-            </h2>
+            <h2 className="text-lg font-bold text-white">Rule Inference</h2>
             <p className="text-xs text-muted mt-0.5">{ruleName} — expected behavior vs computed evidence</p>
           </div>
           <button
@@ -177,14 +175,12 @@ export default function RuleInferenceModal({
           </button>
         </div>
 
-        <div className="px-8 py-6 max-h-[80vh] overflow-y-auto space-y-6">
+        <div className="px-8 py-6 max-h-[75vh] overflow-y-auto space-y-6">
 
-          {/* Existing inferences */}
+          {/* Existing inferences with live outcome */}
           {isLoading ? (
             <p className="text-xs text-muted">Loading…</p>
-          ) : rows.length === 0 ? (
-            <p className="text-xs text-muted italic">No inference recorded for this rule yet.</p>
-          ) : (
+          ) : rows.length > 0 && (
             <div className="space-y-2">
               {rows.map(row => {
                 const outcome = OUTCOME_LABEL[row.outcome];
@@ -213,7 +209,7 @@ export default function RuleInferenceModal({
                         n={row.evidence.n}{row.evidence.currently_active ? ' · active now' : ''}
                       </span>
                       <span className="text-muted ml-auto">
-                        {row.source === 'ai_generated' ? '✦ VaNi draft' : 'manual'}
+                        {row.source === 'ai_generated' ? '✦ AI Inference' : 'manual'}
                       </span>
                     </div>
                   </div>
@@ -222,90 +218,154 @@ export default function RuleInferenceModal({
             </div>
           )}
 
-          {/* Add / Generate form */}
-          <div className="border-t border-kd-border pt-5 space-y-5">
-            <h3 className="text-sm font-bold text-white">New inference</h3>
-
-            {/* Pair rule (optional combination) */}
+          {/* ── Step 1: the two options ─────────────────────────────────── */}
+          {mode === 'choose' && (
             <div>
-              <label className={labelCls}>Pair with rule id (optional — combination)</label>
-              <input
-                type="text"
-                value={pairRuleId}
-                onChange={e => setPairRuleId(e.target.value)}
-                placeholder="e.g. Saturn rule's id, for a Saturn x Mercury combination"
-                className={inputCls}
-              />
-            </div>
-
-            {/* AI generation — inside the form, not a separate outside trigger */}
-            <div className="rounded-xl border border-accent-gold/25 bg-accent-gold/5 p-4 space-y-3">
-              <label className={labelCls}>Generate with AI (optional — or write manually below)</label>
-              <div className="flex items-center gap-2">
-                <div className="flex gap-2 flex-1 max-w-xs">
-                  <LlmBtn value="claude" active={llm === 'claude'} label="Claude (Sonnet)" onClick={() => setLlm('claude')} />
-                  <LlmBtn value="qwen" active={llm === 'qwen'} label="Qwen (local)" onClick={() => setLlm('qwen')} />
-                </div>
+              <label className={labelCls}>New inference — choose how</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button
-                  type="button"
-                  onClick={handleGenerate}
-                  disabled={generating}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-accent-gold/40 bg-accent-gold/10 text-xs text-accent-gold hover:bg-accent-gold/20 disabled:opacity-50 transition-all"
+                  onClick={() => { resetForm(); setMode('manual'); }}
+                  className="rounded-2xl border border-kd-border bg-kd-elevated/40 p-5 text-left hover:border-accent-indigo/60 transition-all group"
                 >
-                  {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  {generating ? 'Drafting…' : 'Generate draft'}
+                  <PenLine className="w-5 h-5 text-accent-indigo mb-2" />
+                  <p className="text-sm font-bold text-white group-hover:text-accent-indigo transition-colors">Manual</p>
+                  <p className="text-xs text-muted mt-1">You write the expected behavior and pick the direction yourself.</p>
+                </button>
+                <button
+                  onClick={() => { resetForm(); setMode('ai'); }}
+                  className="rounded-2xl border border-kd-border bg-kd-elevated/40 p-5 text-left hover:border-accent-gold/60 transition-all group"
+                >
+                  <Sparkles className="w-5 h-5 text-accent-gold mb-2" />
+                  <p className="text-sm font-bold text-white group-hover:text-accent-gold transition-colors">AI Inference</p>
+                  <p className="text-xs text-muted mt-1">Claude or Qwen drafts it from the rule's mechanics — you review and edit before saving.</p>
                 </button>
               </div>
             </div>
+          )}
 
-            {/* Inference text */}
-            <div>
-              <label className={labelCls}>Expected behavior</label>
-              <textarea
-                value={text}
-                onChange={e => setText(e.target.value)}
-                placeholder="What should this rule (or combination) mean for the market?"
-                rows={4}
-                className={cn(inputCls, 'resize-none')}
-              />
-            </div>
-
-            {/* Market impact */}
-            <div>
-              <label className={labelCls}>Expected direction</label>
-              <div className="flex flex-wrap gap-2">
-                {IMPACT_OPTIONS.map(o => {
-                  const active = impact === o.value;
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => setImpact(active ? null : o.value)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
-                      style={active
-                        ? { color: o.color, borderColor: o.color, background: `${o.color}1a` }
-                        : { color: 'var(--text-muted)', borderColor: 'var(--kd-border)', background: 'var(--kd-elevated)' }}
-                    >
-                      {o.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {error && <p className="text-xs text-risk-red">{error}</p>}
-
-            <div className="flex justify-end">
+          {/* ── Step 2 (both paths) ─────────────────────────────────────── */}
+          {mode !== 'choose' && (
+            <div className="space-y-5">
               <button
-                onClick={handleSave}
-                disabled={saving || !text.trim()}
-                className="px-5 py-2.5 rounded-xl bg-accent-gold/20 border border-accent-gold/40 text-sm font-semibold text-accent-gold hover:bg-accent-gold/30 disabled:opacity-50 transition-all"
+                onClick={() => { resetForm(); setMode('choose'); }}
+                className="flex items-center gap-1 text-xs text-muted hover:text-white transition-colors"
               >
-                {saving ? 'Saving…' : 'Save inference'}
+                <ChevronLeft className="w-3.5 h-3.5" /> Back
               </button>
+
+              {/* Pair rule — optional combination, both paths */}
+              <div>
+                <label className={labelCls}>Pair with rule id (optional — combination)</label>
+                <input
+                  type="text"
+                  value={pairRuleId}
+                  onChange={e => setPairRuleId(e.target.value)}
+                  placeholder="e.g. Saturn rule's id, for a Saturn x Mercury combination"
+                  className={inputCls}
+                />
+              </div>
+
+              {/* AI path: model picker + generate (Custom Index Discover pattern) */}
+              {mode === 'ai' && (
+                <div>
+                  <label className={labelCls}>Model</label>
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-2 w-72">
+                      {(['claude', 'qwen'] as Llm[]).map(v => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setLlm(v)}
+                          className={cn(
+                            'flex-1 py-2 text-xs rounded-lg border transition-all',
+                            llm === v
+                              ? 'font-semibold border-accent-indigo bg-accent-indigo/12 text-accent-indigo'
+                              : 'border-kd-border text-muted hover:border-kd-border-active',
+                          )}
+                        >
+                          {v === 'claude' ? 'Claude (Sonnet)' : 'Qwen3 (Local)'}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGenerate}
+                      disabled={generating}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-accent-gold/40 bg-accent-gold/10 text-xs text-accent-gold hover:bg-accent-gold/20 disabled:opacity-50 transition-all"
+                    >
+                      {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      {generating ? 'Generating…' : generated ? 'Regenerate' : 'Generate Inference'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* The form — manual directly, or AI after the draft lands */}
+              {showForm && (
+                <>
+                  <div>
+                    <label className={labelCls}>
+                      Inference{mode === 'ai' && <span className="text-accent-gold normal-case font-normal tracking-normal"> — ✦ AI draft, edit freely</span>}
+                    </label>
+                    <textarea
+                      value={text}
+                      onChange={e => setText(e.target.value)}
+                      placeholder="What should this rule (or combination) mean for the market?"
+                      rows={4}
+                      className={cn(inputCls, 'resize-none')}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>Market impact</label>
+                    <div className="flex flex-wrap gap-2">
+                      {IMPACT_OPTIONS.map(o => {
+                        const active = impact === o.value;
+                        return (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() => setImpact(active ? null : o.value)}
+                            className="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+                            style={active
+                              ? { color: o.color, borderColor: o.color, background: `${o.color}1a` }
+                              : { color: 'var(--text-muted)', borderColor: 'var(--kd-border)', background: 'var(--kd-elevated)' }}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !text.trim()}
+                      className="px-5 py-2.5 rounded-xl bg-accent-indigo/20 border border-accent-indigo/40 text-sm font-semibold text-accent-indigo hover:bg-accent-indigo/30 disabled:opacity-50 transition-all"
+                    >
+                      {saving ? 'Saving…' : 'Save Inference'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {error && <p className="text-xs text-risk-red">{error}</p>}
             </div>
-          </div>
+          )}
         </div>
+
+        {/* Footer — metadata editing lives here now, not on the toolbar */}
+        {onEditMetadata && (
+          <div className="px-8 py-3 border-t border-kd-border flex justify-end">
+            <button
+              onClick={() => { onClose(); onEditMetadata(); }}
+              className="text-[11px] text-muted hover:text-secondary transition-colors underline underline-offset-2"
+            >
+              Edit rule metadata (code, tags, bias) →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
