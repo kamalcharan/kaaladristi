@@ -217,25 +217,33 @@ function AdminTagsField({ tags, onChange }: { tags: string[]; onChange: (t: stri
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Form body — shared by the centered modal AND the Rule Inference drawer ────
+// (owner 2026-07-07: rule settings must open INSIDE the slide-in drawer, not
+// as a separate centered modal — so the fields/validation/footer live here
+// and each host supplies its own chrome.)
 
-interface RuleFormModalProps {
+interface RuleFormBodyProps {
   mode: FormMode;
   initial: RuleFormValues;
-  onClose: () => void;
+  onCancel: () => void;
   onSave: (input: RuleInput) => void;
   isSaving: boolean;
   saveError: string | null;
+  /** Layout classes for the <form> — hosts control padding/scroll. */
+  formClassName?: string;
+  footerClassName?: string;
 }
 
-export default function RuleFormModal({
+export function RuleFormBody({
   mode,
   initial,
-  onClose,
+  onCancel,
   onSave,
   isSaving,
   saveError,
-}: RuleFormModalProps) {
+  formClassName = 'flex-1 overflow-y-auto px-7 py-6 space-y-5',
+  footerClassName = 'flex items-center justify-end gap-3 px-7 py-4 border-t border-kd-border shrink-0',
+}: RuleFormBodyProps) {
   const [form, setForm] = useState<RuleFormValues>(initial);
   const [touched, setTouched] = useState(false);
 
@@ -264,35 +272,11 @@ export default function RuleFormModal({
     onSave(formToInput(form));
   };
 
-  const title = mode === 'add' ? 'Add Rule' : mode === 'clone' ? 'Clone Rule' : 'Edit Rule';
   const submitLabel = mode === 'edit' ? 'Save Changes' : 'Create Rule';
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="w-full max-w-2xl bg-kd-surface border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-[92vh]">
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-7 py-5 border-b border-kd-border shrink-0">
-          <div>
-            <h2 className="text-base font-semibold text-white">{title}</h2>
-            {mode === 'clone' && (
-              <p className="text-xs text-muted mt-0.5">Enter a unique rule code for the clone</p>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-muted hover:bg-kd-elevated hover:text-secondary transition-all"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
+    <>
+      <form onSubmit={handleSubmit} className={formClassName}>
 
           {/* Row 1: rule_code + rule_type */}
           <div className="grid grid-cols-2 gap-4">
@@ -503,31 +487,88 @@ export default function RuleFormModal({
               <p className="text-sm text-risk-red">{saveError}</p>
             </div>
           )}
-        </form>
+      </form>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-kd-border shrink-0">
+      {/* Footer */}
+      <div className={footerClassName}>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSaving}
+          className="px-4 py-2 text-sm text-muted hover:text-secondary transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={isSaving}
+          className="px-5 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {isSaving ? (
+            <>
+              <span className="w-3.5 h-3.5 border-2 border-accent-indigo/30 border-t-accent-indigo rounded-full animate-spin" />
+              Saving…
+            </>
+          ) : submitLabel}
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ── Main component — centered-modal chrome around the shared body ─────────────
+
+interface RuleFormModalProps {
+  mode: FormMode;
+  initial: RuleFormValues;
+  onClose: () => void;
+  onSave: (input: RuleInput) => void;
+  isSaving: boolean;
+  saveError: string | null;
+}
+
+export default function RuleFormModal({
+  mode,
+  initial,
+  onClose,
+  onSave,
+  isSaving,
+  saveError,
+}: RuleFormModalProps) {
+  const title = mode === 'add' ? 'Add Rule' : mode === 'clone' ? 'Clone Rule' : 'Edit Rule';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-2xl bg-kd-surface border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-[92vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-7 py-5 border-b border-kd-border shrink-0">
+          <div>
+            <h2 className="text-base font-semibold text-white">{title}</h2>
+            {mode === 'clone' && (
+              <p className="text-xs text-muted mt-0.5">Enter a unique rule code for the clone</p>
+            )}
+          </div>
           <button
-            type="button"
             onClick={onClose}
-            disabled={isSaving}
-            className="px-4 py-2 text-sm text-muted hover:text-secondary transition-colors disabled:opacity-50"
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-muted hover:bg-kd-elevated hover:text-secondary transition-all"
           >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSaving}
-            className="px-5 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isSaving ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-accent-indigo/30 border-t-accent-indigo rounded-full animate-spin" />
-                Saving…
-              </>
-            ) : submitLabel}
+            <X className="w-4 h-4" />
           </button>
         </div>
+
+        <RuleFormBody
+          mode={mode}
+          initial={initial}
+          onCancel={onClose}
+          onSave={onSave}
+          isSaving={isSaving}
+          saveError={saveError}
+        />
       </div>
     </div>
   );

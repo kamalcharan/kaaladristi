@@ -29,12 +29,14 @@ import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/consta
 import {
   AppliesTo, DEFAULT_APPL, applToInput, inputToAppl, type ApplForm, type AppliesToItem,
 } from '@/components/domain/AppliesToSelector';
+import { RuleFormBody, type RuleFormValues } from './RuleFormModal';
+import type { RuleInput } from './ruleService';
 
 const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
 
 type Outcome = 'worked' | 'partial' | 'failed' | 'running' | 'turned' | 'inconclusive' | 'pending';
 type Llm = 'claude' | 'qwen';
-type Mode = 'choose' | 'manual' | 'ai';
+type Mode = 'choose' | 'manual' | 'ai' | 'settings';
 
 interface InferenceRow {
   id: number;
@@ -116,13 +118,18 @@ function fmtWindow(w: InferenceResponse['window']): string {
 }
 
 export default function RuleInferenceModal({
-  ruleId, ruleName, onClose, onEditMetadata,
+  ruleId, ruleName, onClose, metadataForm,
 }: {
   ruleId: number;
   ruleName: string;
   onClose: () => void;
-  /** Opens the old rule-metadata form (rule_code/tags/base_bias) — footer link only. */
-  onEditMetadata?: () => void;
+  /** Rule metadata (code, tags, bias) editing — rendered INSIDE this drawer
+   * as a 'settings' view (owner 2026-07-07: no separate centered modal).
+   * `save` should throw/reject on failure so the drawer can show the error. */
+  metadataForm?: {
+    initial: RuleFormValues;
+    save: (input: RuleInput) => Promise<void>;
+  };
 }) {
   const qc = useQueryClient();
   const [mode, setMode] = useState<Mode>('choose');
@@ -140,6 +147,10 @@ export default function RuleInferenceModal({
   /** id of the active row being edited — saving stores the changes as the
    * new active version (versioning: previous is superseded, verdict frozen). */
   const [editingId, setEditingId] = useState<number | null>(null);
+  // Rule-settings view state — where to return to, and its own save cycle.
+  const settingsReturnMode = useRef<Mode>('choose');
+  const [metaSaving, setMetaSaving] = useState(false);
+  const [metaError, setMetaError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['rule-inference', ruleId],
@@ -287,6 +298,7 @@ export default function RuleInferenceModal({
         <div className="px-6 py-5 flex-1 overflow-y-auto space-y-6">
 
           {/* ── Auto from DB — event + window, never captured ─────────────── */}
+          {mode !== 'settings' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Astro Event · auto</label>
@@ -302,9 +314,10 @@ export default function RuleInferenceModal({
               </div>
             </div>
           </div>
+          )}
 
           {/* ── Existing inferences with live outcome ─────────────────────── */}
-          {isLoading ? (
+          {mode !== 'settings' && (isLoading ? (
             <p className="text-xs text-muted">Loading…</p>
           ) : rows.length > 0 && (
             <div className="space-y-2">
@@ -376,7 +389,7 @@ export default function RuleInferenceModal({
                 );
               })}
             </div>
-          )}
+          ))}
 
           {/* ── Step 1: the two options ───────────────────────────────────── */}
           {mode === 'choose' && (
@@ -407,8 +420,47 @@ export default function RuleInferenceModal({
             </div>
           )}
 
+          {/* ── Rule settings — metadata form INSIDE the drawer ──────────── */}
+          {mode === 'settings' && metadataForm && (
+            <div className="space-y-4">
+              <button
+                onClick={() => { setMetaError(null); setMode(settingsReturnMode.current); }}
+                className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Back to inference
+              </button>
+              <div>
+                <label className={labelCls}>Rule Settings — code, tags, bias</label>
+                <p className="text-[10px] text-muted -mt-1 mb-3">
+                  Metadata of the rule itself. The inference (theory + impact) is authored on the previous screen.
+                </p>
+              </div>
+              <RuleFormBody
+                mode="edit"
+                initial={metadataForm.initial}
+                onCancel={() => { setMetaError(null); setMode(settingsReturnMode.current); }}
+                onSave={async input => {
+                  setMetaSaving(true);
+                  setMetaError(null);
+                  try {
+                    await metadataForm.save(input);
+                    setMode(settingsReturnMode.current);
+                  } catch (e) {
+                    setMetaError(e instanceof Error ? e.message : 'save failed');
+                  } finally {
+                    setMetaSaving(false);
+                  }
+                }}
+                isSaving={metaSaving}
+                saveError={metaError}
+                formClassName="space-y-5"
+                footerClassName="flex items-center justify-end gap-3 pt-4 border-t border-kd-border"
+              />
+            </div>
+          )}
+
           {/* ── Step 2 (both paths converge on the /inference form) ──────── */}
-          {mode !== 'choose' && (
+          {mode !== 'choose' && mode !== 'settings' && (
             <div className="space-y-5">
               <div className="flex items-center justify-between gap-3">
                 <button
@@ -588,14 +640,15 @@ export default function RuleInferenceModal({
           )}
         </div>
 
-        {/* Footer — metadata editing lives here, not on the toolbar */}
-        {onEditMetadata && (
+        {/* Footer — metadata editing switches this drawer to the settings
+            view (stays in the panel; owner 2026-07-07) */}
+        {metadataForm && mode !== 'settings' && (
           <div className="px-6 py-3 border-t border-kd-border flex justify-end shrink-0">
             <button
-              onClick={() => { onClose(); onEditMetadata(); }}
+              onClick={() => { settingsReturnMode.current = mode; setMetaError(null); setMode('settings'); }}
               className="text-[11px] text-muted hover:text-secondary transition-colors underline underline-offset-2"
             >
-              Rule settings — code, tags, bias (opens the rule setup form) →
+              Rule settings — code, tags, bias →
             </button>
           </div>
         )}
