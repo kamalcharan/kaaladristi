@@ -219,11 +219,19 @@ export default function RuleInferenceModal({
   const showForm = mode === 'manual' || (mode === 'ai' && generated);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-4xl bg-kd-surface border border-kd-border rounded-3xl shadow-2xl shadow-black/60 overflow-hidden">
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" />
+
+      {/* Slide-in panel from the right — owner: 'landslide' design */}
+      <div
+        className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-2xl bg-kd-surface border-l border-kd-border shadow-2xl shadow-black/60 flex flex-col"
+        style={{ animation: 'kd-slide-in .25s ease-out' }}
+      >
+        <style>{'@keyframes kd-slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }'}</style>
 
         {/* Header — /inference FormModal chrome */}
-        <div className="flex items-center justify-between px-8 py-6 border-b border-kd-border">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-kd-border shrink-0">
           <div>
             <h2 className="text-lg font-bold text-[var(--text-primary)]">Rule Inference</h2>
             <p className="text-xs text-muted mt-0.5">Expert planetary rule observation — evidence computed by Discovery &amp; Correlation</p>
@@ -236,15 +244,15 @@ export default function RuleInferenceModal({
           </button>
         </div>
 
-        <div className="px-8 py-6 max-h-[78vh] overflow-y-auto space-y-6">
+        <div className="px-6 py-5 flex-1 overflow-y-auto space-y-6">
 
           {/* ── Auto from DB — event + window, never captured ─────────────── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Astro Event · auto</label>
               <div className={cn(inputCls, 'opacity-80 cursor-default select-text')}>
-                {data?.rule?.display_name ?? ruleName}
-                <span className="text-muted font-mono text-xs ml-2">{data?.rule?.rule_code ?? ''}</span>
+                <div className="text-[var(--text-primary)]">{data?.rule?.display_name ?? ruleName}</div>
+                <div className="text-muted font-mono text-[11px] mt-0.5">{data?.rule?.rule_code ?? ''}</div>
               </div>
             </div>
             <div>
@@ -370,7 +378,7 @@ export default function RuleInferenceModal({
               )}
 
               {showForm && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 gap-6">
                   {/* ── Left panel — inference + impact (the captured/AI part) ── */}
                   <div className="space-y-5">
                     <div>
@@ -500,7 +508,7 @@ export default function RuleInferenceModal({
 
         {/* Footer — metadata editing lives here, not on the toolbar */}
         {onEditMetadata && (
-          <div className="px-8 py-3 border-t border-kd-border flex justify-end">
+          <div className="px-6 py-3 border-t border-kd-border flex justify-end shrink-0">
             <button
               onClick={() => { onClose(); onEditMetadata(); }}
               className="text-[11px] text-muted hover:text-secondary transition-colors underline underline-offset-2"
@@ -510,6 +518,6 @@ export default function RuleInferenceModal({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
