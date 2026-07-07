@@ -76,7 +76,7 @@ const LANDING_CSS = `
   @media(max-width:820px){ .dq-persona-grid{ grid-template-columns:1fr !important; } }
 
   .dq-glass {
-    background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.005));
+    background:linear-gradient(180deg,color-mix(in srgb, var(--text-primary) 2%, transparent),color-mix(in srgb, var(--text-primary) 0%, transparent));
     border:1px solid rgba(226,185,111,.18);
     backdrop-filter:blur(8px);
     -webkit-backdrop-filter:blur(8px);

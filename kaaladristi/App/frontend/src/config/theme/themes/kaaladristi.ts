@@ -29,7 +29,7 @@ export const KaalaDrishtiTheme: ThemeConfig = {
     surface: {
       glass:       'rgba(19, 28, 49, 0.95)',    // --card
       glassStrong: '#182340',                    // --card-soft
-      glassBorder: 'rgba(255, 255, 255, 0.07)', // --border
+      glassBorder: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', // --border
     },
   },
   // Dark-only theme — darkMode mirrors colors identically
@@ -57,7 +57,7 @@ export const KaalaDrishtiTheme: ThemeConfig = {
       surface: {
         glass:       'rgba(19, 28, 49, 0.95)',
         glassStrong: '#182340',
-        glassBorder: 'rgba(255, 255, 255, 0.07)',
+        glassBorder: 'color-mix(in srgb, var(--text-primary) 7%, transparent)',
       },
     },
   },

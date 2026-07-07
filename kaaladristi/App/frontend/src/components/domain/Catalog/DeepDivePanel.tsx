@@ -122,7 +122,7 @@ function YearlyBars({ rows }: { rows: RuleConfYearly[] }) {
       <line
         x1={16} y1={H - (50 / maxPct) * H}
         x2={total_w - 16} y2={H - (50 / maxPct) * H}
-        stroke="rgba(255,255,255,0.08)" strokeWidth={0.75} strokeDasharray="3 3"
+        stroke="var(--text-faint)" strokeWidth={0.75} strokeDasharray="3 3"
       />
       {[...rows].reverse().map((row, i) => {
         const x = 16 + i * (BAR_W + BAR_GAP)
@@ -142,7 +142,7 @@ function YearlyBars({ rows }: { rows: RuleConfYearly[] }) {
               x={x + BAR_W / 2} y={H + 12}
               textAnchor="middle"
               fontSize={7}
-              fill="rgba(255,255,255,0.3)"
+              fill="var(--text-muted)"
               fontFamily="monospace"
             >
               {String(row.year).slice(2)}
@@ -200,7 +200,7 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
                   borderRadius: 4,
                   fontSize: 10,
                   fontFamily: 'var(--font-mono, monospace)',
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
                   border: '1px solid var(--border)',
                   color: 'var(--text-secondary)',
                 }}
@@ -397,7 +397,7 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
               background: isSupertrend
                 ? 'linear-gradient(135deg, #2dd4bf 50%, #f43f5e 50%)'
                 : color,
-              border: '1px solid rgba(255,255,255,0.12)',
+              border: '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
             }} />
             {/* Swatches */}
             {!isSupertrend && (
@@ -411,8 +411,8 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
                       width: 20, height: 20, borderRadius: 4,
                       background: s,
                       border: s === color
-                        ? '2px solid rgba(255,255,255,0.8)'
-                        : '1px solid rgba(255,255,255,0.1)',
+                        ? '2px solid color-mix(in srgb, var(--text-primary) 80%, transparent)'
+                        : '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
                       cursor: 'pointer',
                     }}
                   />
@@ -668,7 +668,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
               width: 26, height: 26,
               borderRadius: 5,
               border: '1px solid var(--border)',
-              background: 'rgba(255,255,255,0.04)',
+              background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
               color: 'var(--text-secondary)',
               fontSize: 14,
               cursor: 'pointer',
@@ -680,7 +680,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
             }}
             onMouseEnter={e => {
               const el = e.currentTarget as HTMLElement
-              el.style.borderColor = 'rgba(255,255,255,0.18)'
+              el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 18%, transparent)'
               el.style.color = 'var(--text-primary)'
             }}
             onMouseLeave={e => {
@@ -747,7 +747,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
                     fontFamily: 'var(--font-mono, monospace)',
                     padding: '1px 6px',
                     borderRadius: 3,
-                    background: item.catalog_visible ? 'rgba(45,212,191,0.1)' : 'rgba(255,255,255,0.04)',
+                    background: item.catalog_visible ? 'rgba(45,212,191,0.1)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
                     border: `1px solid ${item.catalog_visible ? 'rgba(45,212,191,0.25)' : 'var(--border)'}`,
                     color: item.catalog_visible ? '#2dd4bf' : 'var(--text-muted)',
                     letterSpacing: '0.06em',
@@ -797,7 +797,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
               width: 40,
               border: '1px solid var(--border)',
               borderRadius: 10,
-              background: 'rgba(255,255,255,0.03)',
+              background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
               color: 'var(--text-secondary)',
               fontSize: 16,
               cursor: 'pointer',
@@ -806,12 +806,12 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
             }}
             onMouseEnter={e => {
               const el = e.currentTarget as HTMLElement
-              el.style.background = 'rgba(255,255,255,0.07)'
-              el.style.borderColor = 'rgba(255,255,255,0.18)'
+              el.style.background = 'color-mix(in srgb, var(--text-primary) 7%, transparent)'
+              el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 18%, transparent)'
             }}
             onMouseLeave={e => {
               const el = e.currentTarget as HTMLElement
-              el.style.background = 'rgba(255,255,255,0.03)'
+              el.style.background = 'color-mix(in srgb, var(--text-primary) 3%, transparent)'
               el.style.borderColor = 'var(--border)'
             }}
             title="Close panel"
@@ -832,7 +832,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
               fontFamily: 'inherit',
               transition: 'all 0.2s',
               background: cta.locked
-                ? 'rgba(255,255,255,0.05)'
+                ? 'color-mix(in srgb, var(--text-primary) 5%, transparent)'
                 : cta.active
                   ? 'linear-gradient(135deg,#2dd4bf,#059669)'
                   : 'linear-gradient(135deg,#7c6af7,#5b4fd4)',

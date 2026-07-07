@@ -591,8 +591,8 @@ export default function SectorRotationTable({ rows }: Props) {
           <tbody>
             {sorted.map((row, i) => {
               const isEven = i % 2 === 0;
-              const rowBg = isEven ? 'transparent' : 'rgba(255,255,255,0.025)';
-              const stickyBg = isEven ? 'var(--kd-bg, #0e1117)' : 'rgba(255,255,255,0.025)';
+              const rowBg = isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2%, transparent)';
+              const stickyBg = isEven ? 'var(--kd-bg, #0e1117)' : 'color-mix(in srgb, var(--text-primary) 2%, transparent)';
 
               const renderTd = (col: ColDef) => (
                 <td
@@ -626,12 +626,12 @@ export default function SectorRotationTable({ rows }: Props) {
                   key={row.index_id}
                   style={{
                     background: rowBg,
-                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
                     cursor: 'pointer',
                   }}
                   onClick={() => navigate(`/sector-rotation/${row.index_id}`)}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)';
+                    (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 6%, transparent)';
                   }}
                   onMouseLeave={(e) => {
                     (e.currentTarget as HTMLElement).style.background = rowBg;

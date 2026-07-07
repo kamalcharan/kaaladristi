@@ -46,7 +46,7 @@ function Sparkline({
     const toY = (v: number) => H - ((v - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * H * 0.85 - H * 0.075
 
     // 30 / 70 reference lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+    ctx.strokeStyle = 'color-mix(in srgb, var(--text-primary) 8%, transparent)'
     ctx.lineWidth = 1
     ctx.setLineDash([3, 3])
     ctx.beginPath(); ctx.moveTo(0, toY(30)); ctx.lineTo(W, toY(30)); ctx.stroke()
@@ -84,7 +84,7 @@ function Sparkline({
 
     // Crosshair vertical
     if (activeIdx >= 0 && activeIdx < n) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-faint').trim() || 'rgba(255,255,255,0.2)'
       ctx.lineWidth = 1
       ctx.setLineDash([2, 3])
       ctx.beginPath()
@@ -141,9 +141,9 @@ export default function RsiWidget() {
 
       {/* Track bar — RSI position */}
       <div style={{ position: 'relative', height: 4, borderRadius: 2,
-        background: 'rgba(255,255,255,0.07)', marginBottom: 10 }}>
+        background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', marginBottom: 10 }}>
         <div style={{ position: 'absolute', left: '30%', right: '30%', top: 0,
-          height: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: 2 }} />
+          height: '100%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 2 }} />
         <div style={{ position: 'absolute', top: -3, width: 10, height: 10,
           borderRadius: '50%', background: color, border: '2px solid rgba(0,0,0,0.5)',
           transform: 'translateX(-50%)', left: `${currentRsi}%` }} />
@@ -160,13 +160,13 @@ export default function RsiWidget() {
       {/* Legend */}
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
         <span style={{ fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
-          color: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ display: 'inline-block', width: 14, height: 2,
             background: color, borderRadius: 1 }} />
           RSI 14
         </span>
         <span style={{ fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
-          color: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ display: 'inline-block', width: 14, height: 2,
             background: '#2dd4bf', opacity: 0.7, borderRadius: 1,
             backgroundImage: 'repeating-linear-gradient(to right, #2dd4bf 0, #2dd4bf 3px, transparent 3px, transparent 5px)' }} />

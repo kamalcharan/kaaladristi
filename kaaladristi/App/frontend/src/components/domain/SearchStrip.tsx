@@ -252,7 +252,7 @@ export default function SearchStrip() {
             paddingBottom: '8px',
             fontSize: '13px',
             color: 'var(--text-faint)',
-            background: 'rgba(255,255,255,0.04)',
+            background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
             border: '1px solid var(--border)',
             borderRadius: '100px',
             outline: 'none',

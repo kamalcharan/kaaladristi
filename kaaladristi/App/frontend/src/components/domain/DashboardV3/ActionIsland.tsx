@@ -53,7 +53,7 @@ export default function ActionIsland({ pingCount = 0, onAction }: ActionIslandPr
         </span>
       </div>
 
-      <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.12)' }} />
+      <div style={{ width: 1, height: 18, background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }} />
 
       <button
         onClick={onAction}

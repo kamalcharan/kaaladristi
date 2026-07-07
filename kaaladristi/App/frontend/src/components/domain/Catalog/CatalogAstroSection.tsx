@@ -64,7 +64,7 @@ function TagColorControl({
         onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
         style={{
           width: 10, height: 10, borderRadius: 2, flexShrink: 0,
-          background: color, border: '1px solid rgba(255,255,255,0.25)',
+          background: color, border: '1px solid color-mix(in srgb, var(--text-primary) 25%, transparent)',
           cursor: 'pointer', marginLeft: 5,
         }}
       />
@@ -74,13 +74,13 @@ function TagColorControl({
           style={{
             position: 'absolute', top: 18, left: 0, zIndex: 500,
             background: 'var(--card, #1a1a2e)',
-            border: '1px solid rgba(255,255,255,0.12)',
+            border: '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
             borderRadius: 8, padding: 10,
             boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
             width: 150,
           }}
         >
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 6,
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 6,
             fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             {tag} color
           </div>
@@ -93,7 +93,7 @@ function TagColorControl({
                 style={{
                   width: 22, height: 22, borderRadius: 4,
                   background: s, cursor: 'pointer', border: 'none',
-                  outline: s === color ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
+                  outline: s === color ? '2px solid color-mix(in srgb, var(--text-primary) 80%, transparent)' : '2px solid transparent',
                   outlineOffset: 1,
                 }}
               />
@@ -102,9 +102,9 @@ function TagColorControl({
           {/* Opacity slider */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)',
+              <span style={{ fontSize: 9, color: 'var(--text-muted)',
                 fontFamily: 'var(--font-mono, monospace)' }}>opacity</span>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)',
+              <span style={{ fontSize: 9, color: 'var(--text-secondary)',
                 fontFamily: 'var(--font-mono, monospace)' }}>{Math.round(opacity * 100)}%</span>
             </div>
             <input
@@ -453,7 +453,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
               paddingRight: 12,
               paddingTop: 7,
               paddingBottom: 7,
-              background: 'rgba(255,255,255,0.04)',
+              background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
               border: '1px solid var(--border)',
               borderRadius: 8,
               fontSize: 12,
@@ -469,7 +469,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
           style={{
-            background: 'rgba(255,255,255,0.04)',
+            background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
             border: '1px solid var(--border)',
             borderRadius: 8,
             padding: '7px 11px',
@@ -515,7 +515,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                   display: 'inline-flex', alignItems: 'center', gap: 4,
                   padding: '4px 10px 4px 8px', borderRadius: 8,
                   border: `1px solid ${added ? 'rgba(124,106,247,0.4)' : 'var(--border)'}`,
-                  background: added ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.05)',
+                  background: added ? 'rgba(124,106,247,0.10)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                   transition: 'all 0.15s',
                 }}
               >
@@ -560,7 +560,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
               fontSize: 11,
               cursor: 'pointer',
               border: `1px solid ${activeTags.length === 0 ? 'rgba(124,106,247,0.5)' : 'var(--border)'}`,
-              background: activeTags.length === 0 ? 'rgba(124,106,247,0.15)' : 'rgba(255,255,255,0.03)',
+              background: activeTags.length === 0 ? 'rgba(124,106,247,0.15)' : 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
               color: activeTags.length === 0 ? '#8b7af8' : 'var(--text-muted)',
               fontFamily: 'inherit',
               transition: 'all 0.15s',
@@ -585,7 +585,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                   {tag}
                   <span className={cn(
                     'text-[10px] leading-none px-1 py-0.5 rounded-full',
-                    active ? 'bg-white/20 text-white' : 'bg-white/10 text-[var(--text-muted)]',
+                    active ? 'bg-[color-mix(in_srgb,var(--text-primary)_20%,transparent)] text-[var(--text-primary)]' : 'bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] text-[var(--text-muted)]',
                   )}>
                     {count}
                   </span>
@@ -621,7 +621,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
         <div style={{ borderRadius: 12, border: '1px solid var(--border)', overflowX: compact ? 'visible' : 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)' }}>
                 {(compact
                   ? ['Rule', 'Type', 'Tags', '']
                   : ['Code', 'Rule', 'Type', 'Outcome', 'Probability', 'Confidence', 'Last', 'Next', 'Tags', '']
@@ -678,10 +678,10 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                       background: active ? 'rgba(45,212,191,0.03)' : undefined,
                     }}
                     onMouseEnter={e => {
-                      if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
+                      if (!active) (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 2%, transparent)'
                     }}
                     onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.background = active ? 'rgba(45,212,191,0.03)' : i % 2 === 0 ? '' : 'rgba(255,255,255,0.01)'
+                      (e.currentTarget as HTMLElement).style.background = active ? 'rgba(45,212,191,0.03)' : i % 2 === 0 ? '' : 'color-mix(in srgb, var(--text-primary) 1%, transparent)'
                     }}
                   >
                     {/* Code — full catalog only */}

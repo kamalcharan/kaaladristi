@@ -98,7 +98,7 @@ export function AtmosphericCard({ atmo, loading }: { atmo: Atmo | null; loading:
       {/* Attention bar */}
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
         <span style={{ fontFamily:MONO, fontSize:9, letterSpacing:'.14em', color:C.ink3 }}>ATTN</span>
-        <div style={{ flex:1, height:4, background:'rgba(255,255,255,0.05)', position:'relative' }}>
+        <div style={{ flex:1, height:4, background:'color-mix(in srgb, var(--text-primary) 5%, transparent)', position:'relative' }}>
           <div style={{
             position:'absolute', left:0, top:0, bottom:0,
             width: loading || !atmo ? '0%' : `${atmo.score}%`,

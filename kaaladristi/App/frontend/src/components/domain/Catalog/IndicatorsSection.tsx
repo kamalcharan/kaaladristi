@@ -31,12 +31,12 @@ function IndicatorPreview({ id, color }: { id: string; color: string }) {
         {[10,22,34,46,58,70,82,94,106,118,130,142,154].map((x, i) => (
           <line key={x} x1={x} y1={36 - (i < 6 ? 14 + i * 2 : 26 - (i-6) * 2)} x2={x}
             y2={36 - (i < 6 ? 8 + i * 2 : 20 - (i-6) * 2)}
-            stroke="rgba(255,255,255,0.1)" strokeWidth={4} strokeLinecap="round" />
+            stroke="var(--text-faint)" strokeWidth={4} strokeLinecap="round" />
         ))}
         {/* SuperTrend — bull phase then bear flip */}
         <path d="M6,26 L70,18" stroke="#2dd4bf" strokeWidth={1.5} fill="none" strokeDasharray="none" />
         <path d="M70,18 L154,10" stroke="#f43f5e" strokeWidth={1.5} fill="none" />
-        <text x={70} y={8} fill="rgba(255,255,255,0.25)" fontSize={7} textAnchor="middle"
+        <text x={70} y={8} fill="var(--text-faint)" fontSize={7} textAnchor="middle"
           fontFamily="monospace">flip</text>
       </svg>
     )
@@ -58,7 +58,7 @@ function IndicatorPreview({ id, color }: { id: string; color: string }) {
         {/* PP label */}
         <text x={4} y={16} fill={color} fontSize={6} fontFamily="monospace" opacity={0.7}>PP</text>
         {/* Price candle */}
-        <path d="M100,8 L140,28" stroke="rgba(255,255,255,0.1)" strokeWidth={6} strokeLinecap="round" />
+        <path d="M100,8 L140,28" stroke="var(--text-faint)" strokeWidth={6} strokeLinecap="round" />
       </svg>
     )
   }
@@ -78,13 +78,13 @@ function IndicatorPreview({ id, color }: { id: string; color: string }) {
     <svg viewBox="0 0 160 36" width="100%" height={36} style={{ display: 'block' }}>
       {/* Faint price line */}
       <path d="M0,26 C20,24 40,20 60,16 S100,10 120,13 S145,16 160,14"
-        stroke="rgba(255,255,255,0.08)" strokeWidth={2} fill="none" />
+        stroke="var(--text-faint)" strokeWidth={2} fill="none" />
       {/* Indicator line */}
       {paths[id] && (
         <path d={paths[id]} stroke={color} strokeWidth={1.5} fill="none" />
       )}
       {/* Chart label */}
-      <text x={4} y={34} fill="rgba(255,255,255,0.18)" fontSize={6} fontFamily="monospace">
+      <text x={4} y={34} fill="var(--text-faint)" fontSize={6} fontFamily="monospace">
         NIFTY 50 · 1Y
       </text>
     </svg>
@@ -122,7 +122,7 @@ function ColorSwatch({
         style={{
           width: 16, height: 16, borderRadius: 3,
           background: isSupertrend ? 'linear-gradient(135deg, #2dd4bf 50%, #f43f5e 50%)' : color,
-          border: '1px solid rgba(255,255,255,0.15)',
+          border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)',
           cursor: isSupertrend ? 'not-allowed' : 'pointer',
           flexShrink: 0,
           opacity: isSupertrend ? 0.6 : 1,
@@ -148,7 +148,7 @@ function ColorSwatch({
               style={{
                 width: 20, height: 20, borderRadius: 4,
                 background: s,
-                border: s === color ? '2px solid rgba(255,255,255,0.8)' : '1px solid rgba(255,255,255,0.1)',
+                border: s === color ? '2px solid color-mix(in srgb, var(--text-primary) 80%, transparent)' : '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
                 cursor: 'pointer',
               }}
             />
@@ -254,7 +254,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   ? 'rgba(45,212,191,0.04)'
                   : selected
                     ? 'rgba(201,168,76,0.04)'
-                    : 'rgba(255,255,255,0.02)',
+                    : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
                 boxShadow: selected ? '0 0 0 1px rgba(201,168,76,0.15), inset 3px 0 0 rgba(201,168,76,0.5)' : 'none',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
@@ -263,14 +263,14 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
               }}
               onMouseEnter={e => {
                 if (!active && !selected) {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.12)'
-                  ;(e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'
+                  (e.currentTarget as HTMLElement).style.borderColor = 'color-mix(in srgb, var(--text-primary) 12%, transparent)'
+                  ;(e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 4%, transparent)'
                 }
               }}
               onMouseLeave={e => {
                 if (!active && !selected) {
                   (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'
-                  ;(e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.02)'
+                  ;(e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 2%, transparent)'
                 }
               }}
             >
@@ -284,7 +284,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                     <span style={{
                       fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
                       color: 'var(--text-muted)', letterSpacing: '0.08em',
-                      textTransform: 'uppercase', background: 'rgba(255,255,255,0.05)',
+                      textTransform: 'uppercase', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                       border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
                     }}>
                       Chart Overlay
@@ -293,7 +293,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   <span style={{
                     fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
                     color: 'var(--text-muted)', letterSpacing: '0.08em',
-                    textTransform: 'uppercase', background: 'rgba(255,255,255,0.05)',
+                    textTransform: 'uppercase', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                     border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
                   }}>
                     Indicator
@@ -362,7 +362,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   {item.db_column && (
                     <span style={{
                       fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-                      color: 'var(--text-faint)', background: 'rgba(255,255,255,0.03)',
+                      color: 'var(--text-faint)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
                       border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
                       flexShrink: 0,
                     }}>

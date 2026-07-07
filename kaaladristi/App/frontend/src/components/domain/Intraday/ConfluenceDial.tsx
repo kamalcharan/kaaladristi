@@ -74,7 +74,7 @@ export default function ConfluenceDial({ breakdown }: ConfluenceDialProps) {
       border: '1px solid var(--kd-border)',
       borderRadius: 4,
       padding: 12,
-      background: 'var(--kd-panel, rgba(255,255,255,0.02))',
+      background: 'var(--kd-panel, color-mix(in srgb, var(--text-primary) 2%, transparent))',
     }}>
       {/* Header */}
       <div style={{

@@ -576,7 +576,7 @@ function MorningModal({ items, profile, onClose }: {
                   style={{
                     position: 'relative',
                     borderRadius: 8, padding: '12px 14px',
-                    background: 'rgba(255,255,255,0.025)',
+                    background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
                     border: `1px solid ${dotColor}22`,
                     borderLeft: `3px solid ${dotColor}`,
                   }}

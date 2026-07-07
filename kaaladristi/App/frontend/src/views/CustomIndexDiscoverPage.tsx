@@ -262,7 +262,7 @@ export default function CustomIndexDiscoverPage() {
               fontWeight: 600,
               borderRadius: '8px',
               border: 'none',
-              background: loading ? 'rgba(255,255,255,0.06)' : 'var(--accent-indigo)',
+              background: loading ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'var(--accent-indigo)',
               color: loading ? 'var(--text-faint)' : '#fff',
               cursor: loading ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
@@ -313,7 +313,7 @@ export default function CustomIndexDiscoverPage() {
             fontWeight: 600,
             borderRadius: '8px',
             border: '1px solid var(--accent-indigo)',
-            background: targeting ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)',
+            background: targeting ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'rgba(99,102,241,0.08)',
             color: targeting || targetName.trim().length === 0 ? 'var(--text-faint)' : 'var(--accent-indigo)',
             cursor: targeting || targetName.trim().length === 0 ? 'not-allowed' : 'pointer',
             whiteSpace: 'nowrap',
@@ -421,7 +421,7 @@ export default function CustomIndexDiscoverPage() {
                                   borderRadius: '4px',
                                   border: `1px solid ${isCore ? 'var(--accent-indigo)' : 'var(--border)'}`,
                                   color: isCore ? 'var(--accent-indigo)' : 'var(--text-secondary)',
-                                  background: isCore ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
+                                  background: isCore ? 'rgba(99,102,241,0.08)' : 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
                                   cursor: 'default',
                                 }}
                               >
@@ -449,7 +449,7 @@ export default function CustomIndexDiscoverPage() {
                           borderRadius: '4px',
                           border: '1px solid var(--border)',
                           color: 'var(--text-secondary)',
-                          background: 'rgba(255,255,255,0.03)',
+                          background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
                         }}
                       >
                         {chipLabel(sym)}

@@ -23,8 +23,8 @@ function detectMonthMarks(dates: string[]): { idx: number; label: string }[] {
 
 const BTN: React.CSSProperties = {
   width: 26, height: 26, borderRadius: 5,
-  border: '1px solid rgba(255,255,255,0.1)',
-  background: 'transparent', color: 'rgba(255,255,255,0.5)',
+  border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+  background: 'transparent', color: 'var(--text-secondary)',
   cursor: 'pointer', fontSize: 11, display: 'flex',
   alignItems: 'center', justifyContent: 'center',
   transition: 'all 0.15s', flexShrink: 0,
@@ -93,7 +93,7 @@ export default function WorkspaceTimelineWidget() {
   if (isLoading || total === 0) {
     return <div style={{ height: 58, display: 'flex', alignItems: 'center',
       padding: '0 16px', opacity: 0.3, fontSize: 11,
-      color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-mono, monospace)' }}>
+      color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
       loading timeline…
     </div>
   }
@@ -102,7 +102,7 @@ export default function WorkspaceTimelineWidget() {
     <div style={{
       height: '100%', display: 'flex', alignItems: 'center', gap: 12,
       padding: '0 14px',
-      borderTop: '1px solid rgba(255,255,255,0.06)',
+      borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
     }}>
 
       {/* Controls */}
@@ -122,9 +122,9 @@ export default function WorkspaceTimelineWidget() {
               borderColor: 'rgba(201,168,76,0.4)',
             } : {}),
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.9)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)' }}
           onMouseLeave={e => {
-            (e.currentTarget as HTMLButtonElement).style.color = active ? '#c9a84c' : 'rgba(255,255,255,0.5)'
+            (e.currentTarget as HTMLButtonElement).style.color = active ? '#c9a84c' : 'var(--text-secondary)'
           }}>
             {icon}
           </button>
@@ -143,11 +143,11 @@ export default function WorkspaceTimelineWidget() {
                 style={{ position: 'absolute', left, transform: 'translateX(-50%)',
                   cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <span style={{ fontSize: 7, fontFamily: 'var(--font-mono, monospace)',
-                  color: 'rgba(255,255,255,0.25)', whiteSpace: 'nowrap',
+                  color: 'var(--text-faint)', whiteSpace: 'nowrap',
                   userSelect: 'none' }}>
                   {label}
                 </span>
-                <div style={{ width: 1, height: 4, background: 'rgba(255,255,255,0.12)', marginTop: 1 }} />
+                <div style={{ width: 1, height: 4, background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', marginTop: 1 }} />
               </div>
             )
           })}
@@ -168,7 +168,7 @@ export default function WorkspaceTimelineWidget() {
           style={{
             position: 'absolute', bottom: 4, left: 0, width: '100%',
             height: 4, appearance: 'none', WebkitAppearance: 'none',
-            background: `linear-gradient(to right, #c9a84c ${pct}%, rgba(255,255,255,0.08) ${pct}%)`,
+            background: `linear-gradient(to right, #c9a84c ${pct}%, color-mix(in srgb, var(--text-primary) 8%, transparent) ${pct}%)`,
             borderRadius: 2, outline: 'none', cursor: 'pointer',
           }}
         />
@@ -182,7 +182,7 @@ export default function WorkspaceTimelineWidget() {
           {isNow ? 'NOW' : activeDate}
         </div>
         <div style={{ fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
-          color: 'rgba(255,255,255,0.2)', marginTop: 1 }}>
+          color: 'var(--text-faint)', marginTop: 1 }}>
           {total} days · {firstDate.slice(0, 7)} → {lastDate.slice(0, 7)}
         </div>
       </div>

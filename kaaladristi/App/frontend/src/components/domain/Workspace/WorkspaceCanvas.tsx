@@ -37,8 +37,8 @@ function GridOverlay() {
     <div style={{
       position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
       backgroundImage: `
-        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px)
+        linear-gradient(color-mix(in srgb, var(--text-primary) 4%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 4%, transparent) 1px, transparent 1px)
       `,
       backgroundSize: `${100 / COLS}% ${CELL_HEIGHT_REM}rem`,
     }} />
@@ -54,7 +54,7 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
       style={{
         gridColumnStart: col, gridColumnEnd: col + 2,
         gridRowStart: row, gridRowEnd: row + 1,
-        border: '1px dashed rgba(255,255,255,.07)', borderRadius: 8,
+        border: '1px dashed color-mix(in srgb, var(--text-primary) 7%, transparent)', borderRadius: 8,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         cursor: 'pointer', minHeight: `${CELL_HEIGHT_REM}rem`,
         transition: 'border-color 0.15s, background 0.15s',
@@ -66,11 +66,11 @@ function AddZone({ col, row, onClick }: { col: number; row: number; onClick: () 
       }}
       onMouseLeave={e => {
         const el = e.currentTarget as HTMLElement
-        el.style.borderColor = 'rgba(255,255,255,.07)'
+        el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 7%, transparent)'
         el.style.background = 'transparent'
       }}
     >
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,.18)',
+      <span style={{ fontSize: 11, color: 'var(--text-faint)',
         fontFamily: 'var(--font-mono, monospace)' }}>+ block</span>
     </div>
   )
@@ -115,7 +115,7 @@ function GroupActiveIndicator({ tag }: { tag: string }) {
       + hist
     return (
       <span title={tip} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 2, flexShrink: 0 }}>
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,.55)', fontFamily: 'var(--font-mono,monospace)' }}>
+        <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono,monospace)' }}>
           · {shortRuleName(active.display_name)}
         </span>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981',
@@ -133,7 +133,7 @@ function GroupActiveIndicator({ tag }: { tag: string }) {
           ? `\nHistorical: ${Math.round(upcoming.confidence_score)}% ${upcoming.base_bias ?? ''}`
           : '')
     return (
-      <span title={tip} style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,.35)',
+      <span title={tip} style={{ width: 6, height: 6, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 35%, transparent)',
         marginLeft: 6, flexShrink: 0, display: 'inline-block' }} />
     )
   }
@@ -162,7 +162,7 @@ function ColorPicker({
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 399 }} />
       <div style={{
         position: 'fixed', left: anchorX, top: anchorY + 8,
-        background: 'var(--card)', border: '1px solid rgba(255,255,255,.12)',
+        background: 'var(--card)', border: '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
         borderRadius: 10, padding: 10, zIndex: 400,
         boxShadow: '0 8px 24px rgba(0,0,0,.6)',
         width: 164,
@@ -202,9 +202,9 @@ function ColorPicker({
           style={{
             width: '100%', boxSizing: 'border-box',
             padding: '4px 6px', borderRadius: 5,
-            border: '1px solid rgba(255,255,255,.12)',
-            background: 'rgba(255,255,255,.05)',
-            color: 'rgba(255,255,255,.8)', fontSize: 10,
+            border: '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
+            background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+            color: 'var(--text-secondary)', fontSize: 10,
             fontFamily: 'var(--font-mono, monospace)',
             outline: 'none',
           }}
@@ -216,9 +216,9 @@ function ColorPicker({
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               marginBottom: 4,
             }}>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,.4)',
+              <span style={{ fontSize: 10, color: 'var(--text-muted)',
                 fontFamily: 'var(--font-mono, monospace)' }}>opacity</span>
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,.6)',
+              <span style={{ fontSize: 10, color: 'var(--text-secondary)',
                 fontFamily: 'var(--font-mono, monospace)' }}>
                 {Math.round((currentOpacity ?? 0.08) * 100)}%
               </span>
@@ -237,8 +237,8 @@ function ColorPicker({
           onClick={onClose}
           style={{
             marginTop: 8, width: '100%', padding: '3px 0',
-            borderRadius: 5, border: '1px solid rgba(255,255,255,.1)',
-            background: 'rgba(255,255,255,.04)', color: 'rgba(255,255,255,.5)',
+            borderRadius: 5, border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+            background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', color: 'var(--text-secondary)',
             fontSize: 10, cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
@@ -381,7 +381,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
       {/* ── Canvas topbar: overlay pills (left) + Edit Canvas (right) ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,.07)',
+        padding: '8px 16px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
         flexShrink: 0,
       }}>
         {/* Overlay pills — grouped by tag so all Mercury rules = 1 pill, all Panchak = 1 pill */}
@@ -429,8 +429,8 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                 return (
                   <div key={groupKey}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 0, borderRadius: 100, flexShrink: 0,
-                      border: '1px solid rgba(255,255,255,.1)',
-                      background: o.visible ? 'rgba(255,255,255,.05)' : 'transparent',
+                      border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+                      background: o.visible ? 'color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'transparent',
                       opacity: o.visible ? 1 : 0.4, transition: 'all .15s' }}
                     onContextMenu={e => {
                       if (!o.catalog_item_id.startsWith('astro_group:')) return
@@ -443,14 +443,14 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                         setPicker({ id: o.catalog_item_id, x: rect.left, y: rect.bottom }) }}
                       title="Change color"
                       style={{ width: 14, height: 14, marginLeft: 8, padding: 0,
-                        border: isPickerOpen ? '2px solid rgba(255,255,255,.6)' : '2px solid rgba(255,255,255,.2)',
+                        border: isPickerOpen ? '2px solid color-mix(in srgb, var(--text-primary) 60%, transparent)' : '2px solid color-mix(in srgb, var(--text-primary) 20%, transparent)',
                         borderRadius: '50%', cursor: 'pointer', background: dotColor, flexShrink: 0, transition: 'border-color .15s' }}
                     />
                     <button onClick={() => toggleOverlayVisibility(o.catalog_item_id)}
                       style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
                         border: 'none', background: 'transparent', cursor: 'pointer',
                         fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                        color: o.visible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)' }}
+                        color: o.visible ? 'var(--text-primary)' : 'var(--text-muted)' }}
                     >{label}</button>
                     {o.catalog_item_id === 'gann_sq9' && (() => {
                       const showOrdinal = !!(o.config?.show_ordinal)
@@ -461,11 +461,11 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                           style={{
                             display: 'inline-flex', alignItems: 'center',
                             padding: '2px 6px', marginRight: 2, borderRadius: 4,
-                            border: `1px solid ${showOrdinal ? 'rgba(245,166,35,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                            border: `1px solid ${showOrdinal ? 'rgba(245,166,35,0.5)' : 'color-mix(in srgb, var(--text-primary) 10%, transparent)'}`,
                             background: showOrdinal ? 'rgba(245,166,35,0.12)' : 'transparent',
                             cursor: 'pointer', fontSize: 9,
                             fontFamily: 'var(--font-mono, monospace)',
-                            color: showOrdinal ? '#F5A623' : 'rgba(255,255,255,0.3)',
+                            color: showOrdinal ? '#F5A623' : 'var(--text-muted)',
                             transition: 'all .15s',
                           }}
                         >
@@ -495,9 +495,9 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                       style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         width: 20, height: 20, borderRadius: '0 100px 100px 0',
                         border: 'none', background: 'transparent', cursor: 'pointer',
-                        fontSize: 9, color: 'rgba(255,255,255,.25)', transition: 'color .15s' }}
+                        fontSize: 9, color: 'var(--text-faint)', transition: 'color .15s' }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.25)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-faint)' }}
                     >✕</button>
                   </div>
                 )
@@ -514,14 +514,14 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
               return (
                 <div key={groupKey}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 0, borderRadius: 100, flexShrink: 0,
-                    border: '1px solid rgba(255,255,255,.1)',
-                    background: anyVisible ? 'rgba(255,255,255,.05)' : 'transparent',
+                    border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+                    background: anyVisible ? 'color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'transparent',
                     opacity: anyVisible ? 1 : 0.4, transition: 'all .15s' }}
                   onContextMenu={e => { e.preventDefault(); setExplain({ tag: pillLabel, x: e.clientX, y: e.clientY }) }}
                 >
                   {/* Group color dot */}
                   <span style={{ width: 10, height: 10, marginLeft: 8, borderRadius: '50%', flexShrink: 0,
-                    background: groupColor, border: '2px solid rgba(255,255,255,.2)', display: 'inline-block' }} />
+                    background: groupColor, border: '2px solid color-mix(in srgb, var(--text-primary) 20%, transparent)', display: 'inline-block' }} />
 
                   {/* Toggle all in group */}
                   <button
@@ -530,7 +530,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                     style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 6px 4px 4px',
                       border: 'none', background: 'transparent', cursor: 'pointer',
                       fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                      color: anyVisible ? 'var(--text-primary)' : 'rgba(255,255,255,.3)' }}
+                      color: anyVisible ? 'var(--text-primary)' : 'var(--text-muted)' }}
                   >
                     {pillLabel}
                     {countBadge && (
@@ -560,9 +560,9 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       width: 20, height: 20, borderRadius: '0 100px 100px 0',
                       border: 'none', background: 'transparent', cursor: 'pointer',
-                      fontSize: 9, color: 'rgba(255,255,255,.25)', transition: 'color .15s' }}
+                      fontSize: 9, color: 'var(--text-faint)', transition: 'color .15s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.25)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-faint)' }}
                   >✕</button>
                 </div>
               )
@@ -607,9 +607,9 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
           style={{
             padding: '6px 14px', borderRadius: 100, cursor: 'pointer', flexShrink: 0,
             fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-            border: '1px dashed rgba(255,255,255,.15)',
+            border: '1px dashed color-mix(in srgb, var(--text-primary) 15%, transparent)',
             background: 'transparent',
-            color: 'rgba(255,255,255,.4)',
+            color: 'var(--text-muted)',
             transition: 'all .15s',
           }}
           onMouseEnter={e => {
@@ -620,8 +620,8 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
           }}
           onMouseLeave={e => {
             const el = e.currentTarget as HTMLElement
-            el.style.borderColor = 'rgba(255,255,255,.15)'
-            el.style.color = 'rgba(255,255,255,.4)'
+            el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 15%, transparent)'
+            el.style.color = 'var(--text-muted)'
             el.style.background = 'transparent'
           }}
         >
@@ -634,7 +634,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
           style={{
             padding: '6px 16px', borderRadius: 100, cursor: 'pointer', flexShrink: 0,
             fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
-            border: editMode ? 'none' : '1px solid rgba(255,255,255,.1)',
+            border: editMode ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
             background: editMode ? 'var(--accent)' : 'transparent',
             color: editMode ? '#fff' : 'var(--text-muted)',
             transition: 'all .2s ease',
@@ -669,7 +669,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                 justifyContent: 'center', gap: 12,
               }}>
                 <div style={{ fontSize: 32, opacity: .3 }}>◎</div>
-                <p style={{ fontSize: 13, color: 'rgba(255,255,255,.25)',
+                <p style={{ fontSize: 13, color: 'var(--text-faint)',
                   textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
                   Your framework is empty.{' '}
                   <span

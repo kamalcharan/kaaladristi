@@ -37,6 +37,7 @@ import { useQuery } from '@tanstack/react-query';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
 import { fetchConfidence, fetchBenchConfidence } from '@/pages/RuleEngine/ruleService';
+import { useThemeStore } from '@/stores/themeStore';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -152,7 +153,7 @@ function getThemeColors() {
   const v = (name: string, fallback: string) => s.getPropertyValue(name).trim() || fallback;
   return {
     bg:         v('--kd-bg',            '#030712'),
-    grid:       v('--kd-border',        'rgba(255,255,255,0.06)'),
+    grid:       v('--kd-border',        'color-mix(in srgb, var(--text-primary) 6%, transparent)'),
     text:       v('--text-muted',       '#64748b'),
     crosshair:  v('--kd-border-active', 'rgba(99,102,241,0.4)'),
     riskGreen:  v('--risk-green',       '#10b981'),
@@ -236,6 +237,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+  // Theme Phase 2: re-create the chart when theme or mode changes so
+  // getThemeColors() re-reads the CSS variables (canvas doesn't track vars).
+  const themeMode = useThemeStore(st => st.mode);
+  const activeThemeId = useThemeStore(st => st.activeTheme);
+
   const confByRule = useMemo(
     () => new Map((confRows ?? []).map(c => [c.rule_id, c])),
     [confRows],
@@ -496,7 +502,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         mfiSeries.setData(mfiLine);
       }
 
-      const refOpts = { color: 'rgba(255,255,255,0.12)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+      const refOpts = { color: 'var(--text-faint)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
       const obLine = rsiChart.addSeries(LineSeries, refOpts);
       obLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 70 })));
       const osLine = rsiChart.addSeries(LineSeries, refOpts);
@@ -567,7 +573,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
       }
 
       const zeroLine = magicChart.addSeries(LineSeries, {
-        color: 'rgba(255,255,255,0.15)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
+        color: 'var(--text-faint)', lineWidth: 1 as LineWidth, lineStyle: LineStyle.Dashed,
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       zeroLine.setData(data.map((d) => ({ time: toTime(d.trade_date), value: 0 })));
@@ -700,7 +706,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
     });
     // Redraw bands immediately after chart rebuild (covers indicator overlay changes)
     requestAnimationFrame(() => { drawBandsRef.current?.(); });
-  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, onVisibleRangeChange, onCrosshairMove]);
+  }, [data, height, compact, workspaceMode, indicatorOverlays, bigMoneyEvents, onVisibleRangeChange, onCrosshairMove, themeMode, activeThemeId]);
 
   // Scroll to highlighted date when slider moves
   useEffect(() => {
@@ -929,7 +935,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           if (glyph && bw > 8) {
             ctx.save()
             ctx.font      = '16px serif'
-            ctx.fillStyle = 'rgba(255,255,255,0.80)'
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || 'rgba(255,255,255,0.80)'
             ctx.textAlign = 'left'
             ctx.fillText(glyph, left + 4, 28)
             ctx.restore()
@@ -1133,7 +1139,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           return (
             <div style={{
               position: 'absolute', top: 8, left: 8, zIndex: 15, pointerEvents: 'none',
-              background: 'rgba(13,17,23,0.88)', border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(13,17,23,0.88)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
               borderRadius: 6, padding: '4px 10px',
               fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
               display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap',
@@ -1197,15 +1203,15 @@ export default function TradingChart({ data, height = 900, compact = false, work
                 const benchLabel = useBench ? (benchmarkName ?? 'this index') : 'NIFTY 50';
                 return (
                   <div key={`${b.ruleCode}-${b.from}-${i}`} style={i > 0 ? {
-                    marginTop: 7, paddingTop: 7, borderTop: '1px solid rgba(255,255,255,0.08)',
+                    marginTop: 7, paddingTop: 7, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
                   } : undefined}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: c, marginBottom: 3, lineHeight: 1.3 }}>
                       {b.displayName}
                     </div>
-                    <div style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>
+                    <div style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)', marginBottom: 4 }}>
                       {b.ruleCode}
                     </div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }}>
                       {b.isPoint ? (
                         <span>{fmtDate(b.from)}</span>
                       ) : (
@@ -1222,7 +1228,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         rule's whole track record. Batsman's average vs
                         today's innings — both true, different scopes. */}
                     <div style={{ marginTop: 5, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                      <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                      <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
                         THIS WINDOW
                       </span>
                       {/* Honesty pass (owner 2026-07-07): matched is scored against
@@ -1231,7 +1237,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                       {b.matched === true  && <span style={{ color: c }}>✓ NIFTY 50 moved as expected</span>}
                       {b.matched === false && <span style={{ color: 'var(--bear)' }}>✗ NIFTY 50 moved against expectation</span>}
                       {b.matched === null  && (
-                        <span style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>
                           {b.from > today
                             ? '◦ upcoming — not scored yet'
                             : b.baseBias
@@ -1247,7 +1253,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                       if (r == null) return null;
                       return (
                         <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                          <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                          <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
                             THIS CHART
                           </span>
                           <span style={{ fontFamily: 'var(--font-mono, monospace)', color: r.pct >= 0 ? 'var(--bull)' : 'var(--bear)' }}>
@@ -1262,16 +1268,16 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         ('vs inference (…)' or 'vs base bias (…)'). */}
                     {conf?.confidence_score != null && (conf.total_occurrences ?? 0) > 0 && (
                       <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
                           RULE OVERALL
                         </span>
-                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.6)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
                           {benchLabel} moved as expected in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
                           {conf.avg_return_matched != null && (
                             <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% when it did</>
                           )}
                           {conf.hypothesis_source && conf.hypothesis_impact && (
-                            <span style={{ color: 'rgba(255,255,255,0.4)' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>
                               {' '}· vs {conf.hypothesis_source === 'inference' ? 'inference' : 'base bias'} ({conf.hypothesis_impact.replace(/_/g, ' ')})
                             </span>
                           )}
@@ -1283,10 +1289,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
                     {conf != null && conf.hypothesis_source === 'inference'
                       && (conf.confidence_score == null || (conf.total_occurrences ?? 0) === 0) && (
                       <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
                           RULE OVERALL
                         </span>
-                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.5)' }}>
+                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
                           inference{conf.hypothesis_impact ? ` (${conf.hypothesis_impact.replace(/_/g, ' ')})` : ''} makes no directional claim — see Patterns for how it plays out
                         </span>
                       </div>
@@ -1295,7 +1301,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                 );
               })}
               {extra > 0 && (
-                <div style={{ marginTop: 6, fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.35)' }}>
+                <div style={{ marginTop: 6, fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>
                   +{extra} more event{extra > 1 ? 's' : ''} here
                 </div>
               )}

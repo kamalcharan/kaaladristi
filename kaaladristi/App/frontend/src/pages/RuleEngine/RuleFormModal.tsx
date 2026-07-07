@@ -548,7 +548,7 @@ export default function RuleFormModal({
         {/* Header */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-kd-border shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-white">{title}</h2>
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
             {mode === 'clone' && (
               <p className="text-xs text-muted mt-0.5">Enter a unique rule code for the clone</p>
             )}

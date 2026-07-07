@@ -110,7 +110,7 @@ export default function IndexBreakdown({ indexId, indexName, onBack }: Props) {
                     className="h-full rounded-md bg-gradient-to-r from-accent-indigo/40 to-accent-indigo flex items-center justify-end px-2"
                     style={{ width: `${Math.max(pct, 4)}%` }}
                   >
-                    <span className="text-[10px] font-semibold text-white/90">{count}</span>
+                    <span className="text-[10px] font-semibold text-[var(--text-primary)]">{count}</span>
                   </div>
                 </div>
                 <span className="text-[10px] text-muted mono w-10 text-right shrink-0">{pct.toFixed(1)}%</span>

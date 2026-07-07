@@ -364,7 +364,7 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
         <p className="text-[10px] font-mono text-muted uppercase tracking-wider mb-1.5">
           Per-Transit Performance · {n} event{n !== 1 ? 's' : ''} · {windowLabel} · as of {today}
         </p>
-        <p className="font-display text-xl text-white leading-snug">
+        <p className="font-display text-xl text-[var(--text-primary)] leading-snug">
           Each bar is{' '}
           <em className="not-italic text-accent-gold font-medium">one transit</em>
           {' '}— the rule fires{avgDuration > 0 ? `, runs for ~${avgDuration}d,` : ''} and ends. Between events, nothing is held.
@@ -380,7 +380,7 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
           return (
             <g key={v}>
               <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
-                stroke={v === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.04)'}
+                stroke={v === 0 ? 'color-mix(in srgb, var(--text-primary) 18%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)'}
                 strokeWidth={v === 0 ? 0.9 : 0.5}
                 strokeDasharray={v === 0 ? undefined : '3 6'}
               />
@@ -421,7 +421,7 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
                 fill={
                   t.matched === true  ? 'var(--bull)' :
                   t.matched === false ? 'var(--bear)' :
-                  'rgba(255,255,255,0.12)'
+                  'color-mix(in srgb, var(--text-primary) 12%, transparent)'
                 }
                 opacity={dim ? 0.18 : 0.9}
               />
@@ -504,7 +504,7 @@ function BacktestStatGrid({ conf, transits, isDaily = false }: {
     { k: 'CONFIDENCE',  v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—',
       sub: `${confQual} · n=${n}${conf.hypothesis_source ? ` · vs ${conf.hypothesis_source === 'inference' ? 'inference' : 'base bias'}${conf.hypothesis_impact ? ` (${conf.hypothesis_impact.replace(/_/g, ' ')})` : ''}` : ''}`,
       color: confidenceColor(conf.confidence_score), big: true },
-    { k: 'HISTORICAL',  v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: n > 0 ? `${n} scored` : '', color: 'text-white' },
+    { k: 'HISTORICAL',  v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: n > 0 ? `${n} scored` : '', color: 'text-[var(--text-primary)]' },
     { k: 'MATCHED',     v: conf.matched_count != null && n > 0 ? `${conf.matched_count}/${n}` : '—', sub: hitRate, color: 'text-accent-gold' },
     { k: 'AVG RETURN',  v: fmtPct(conf.avg_return_all), sub: `All ${occ}`, color: returnColor(conf.avg_return_all) },
     { k: 'AVG MATCHED', v: fmtPct(conf.avg_return_matched), sub: conf.matched_count != null ? `${conf.matched_count} ${occ}` : '', color: 'text-risk-green' },
@@ -790,7 +790,7 @@ function DistributionChart({ transits }: { transits: RuleTransit[] }) {
           +40
         </text>
         <line x1={PAD.l} y1={chartBotY} x2={W - PAD.r} y2={chartBotY}
-          stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"/>
+          stroke="var(--text-faint)" strokeWidth="0.5"/>
         <line x1={avgLineX} y1={PAD.t} x2={avgLineX} y2={chartBotY}
           stroke="var(--gold)" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.8"/>
         <text x={avgLineX + 3} y={PAD.t + 11}
@@ -856,7 +856,7 @@ function AlphaChart({ transits }: { transits: RuleTransit[] }) {
           return (
             <g key={v}>
               <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
-                stroke={v === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)'}
+                stroke={v === 0 ? 'color-mix(in srgb, var(--text-primary) 15%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)'}
                 strokeWidth={v === 0 ? 0.8 : 0.5} strokeDasharray={v === 0 ? undefined : '3 6'}/>
               <text x={PAD.l - 5} y={y + 3.5}
                 fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
@@ -1028,7 +1028,7 @@ function BacktestTabs({
                 const note    = inDays < 7 ? 'Imminent — watch' : inDays < 90 ? 'Future window' : 'Long window — rare';
                 return (
                   <div key={t.id} className="grid grid-cols-[120px_120px_70px_1fr_100px_1fr] gap-2.5 items-center px-4 py-3 border-b border-kd-border/40 hover:bg-kd-elevated/30 transition-colors">
-                    <span className="font-mono text-[12.5px] text-white tabular-nums">{t.start_date}</span>
+                    <span className="font-mono text-[12.5px] text-[var(--text-primary)] tabular-nums">{t.start_date}</span>
                     <span className="font-mono text-[12.5px] text-secondary tabular-nums">{t.end_date}</span>
                     <span className="font-mono text-xs text-muted tabular-nums">{t.duration_days}d</span>
                     <span className="flex items-center gap-2">
@@ -1070,7 +1070,7 @@ function BacktestTabs({
                     <p className={cn('font-mono text-[10px] uppercase tracking-wider mb-1', isNext ? 'text-accent-gold' : 'text-muted')}>
                       {isNext ? `Next · in ${inDays}d` : `T+${inDays}d`}
                     </p>
-                    <p className="font-mono text-lg font-medium text-white">{fmtDate(s.date)}</p>
+                    <p className="font-mono text-lg font-medium text-[var(--text-primary)]">{fmtDate(s.date)}</p>
                     <p className="font-mono text-[10px] text-muted mt-1 uppercase">
                       {dt.toLocaleDateString('en-US', { weekday: 'long' })}
                     </p>
@@ -1601,7 +1601,7 @@ export default function RuleDetail() {
                 </span>
               </div>
               {/* Large serif title */}
-              <h1 className="font-display text-3xl font-medium text-white leading-tight tracking-tight">
+              <h1 className="font-display text-3xl font-medium text-[var(--text-primary)] leading-tight tracking-tight">
                 {rule.display_name}
               </h1>
               {/* Italic remarks inline */}

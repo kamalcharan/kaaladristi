@@ -79,7 +79,7 @@ export default function RuleInferencePanel({ ruleId }: { ruleId: number }) {
         const tierColor = TIER_COLOR[row.confidence_tier_live] ?? TIER_COLOR.UNVALIDATED;
         return (
           <div key={row.id} className="rounded-lg border border-kd-border/60 p-2.5 space-y-1.5">
-            <p className="text-xs text-white leading-relaxed">
+            <p className="text-xs text-[var(--text-primary)] leading-relaxed">
               {row.inference_text}
               {row.pair_rule_label && (
                 <span className="text-muted"> — combined with <strong>{row.pair_rule_label}</strong></span>

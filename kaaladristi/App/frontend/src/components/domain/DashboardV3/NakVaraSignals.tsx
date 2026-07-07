@@ -113,7 +113,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
         alignItems: 'center',
         gap: 10,
         padding: '7px 16px',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
       }}
     >
       {/* Name */}
@@ -179,7 +179,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
             width: 4, height: 4, borderRadius: '50%',
             background: i <= Math.min(sig.strength, 5)
               ? color
-              : 'rgba(255,255,255,0.1)',
+              : 'color-mix(in srgb, var(--text-primary) 10%, transparent)',
           }} />
         ))}
       </div>
@@ -243,7 +243,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '11px 16px 9px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
       }}>
         <div>
           <span style={{

@@ -73,7 +73,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
             <circle
               cx={CX} cy={CY} r={R}
               fill="none"
-              stroke="rgba(255,255,255,0.07)"
+              stroke="var(--text-faint)"
               strokeWidth={8}
             />
             <circle
@@ -95,7 +95,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
             <text
               x={CX} y={CY + 10}
               textAnchor="middle" fontSize={9}
-              fill="rgba(255,255,255,0.4)" fontFamily="monospace"
+              fill="var(--text-muted)" fontFamily="monospace"
             >
               n={n_instances}
             </text>
@@ -106,7 +106,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8 }}>
           {LEGEND_ROWS.map((row, i) => {
             const isActive = i === activeIdx
-            const rowColor = isActive ? color : 'rgba(255,255,255,0.2)'
+            const rowColor = isActive ? color : 'var(--text-faint)'
             return (
               <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
@@ -117,7 +117,7 @@ export default function ConfidenceDial({ n_instances, hit_rate }: ConfidenceDial
                 </span>
                 <div style={{
                   flex: 1, height: 4, borderRadius: 2,
-                  background: isActive ? color : 'rgba(255,255,255,0.07)',
+                  background: isActive ? color : 'var(--text-faint)',
                 }} />
                 <span style={{
                   fontSize: 10, fontFamily: 'var(--font-mono, monospace)',

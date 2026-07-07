@@ -296,7 +296,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                               {stock.exchange && (
                                 <span style={{
                                   fontSize: 8, padding: '1px 3px', borderRadius: 3,
-                                  background: 'rgba(255,255,255,0.06)',
+                                  background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                                   color: 'var(--text-faint)',
                                   fontFamily: 'var(--font-mono)',
                                 }}>

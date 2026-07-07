@@ -133,7 +133,7 @@ function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
                 formatter={(v: any, name: any) => [typeof v === 'number' ? v.toFixed(1) : v, name]}
               />
               {(def.refLines ?? []).map((rl) => (
-                <ReferenceLine key={rl.y} y={rl.y} stroke="rgba(255,255,255,0.12)" strokeDasharray="3 3" />
+                <ReferenceLine key={rl.y} y={rl.y} stroke="var(--text-faint)" strokeDasharray="3 3" />
               ))}
               {def.series.map((sr) => (
                 <Line

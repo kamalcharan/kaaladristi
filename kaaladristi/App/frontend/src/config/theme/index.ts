@@ -127,6 +127,13 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--surface-1', c.utility.primaryBackground);
   set('--surface-2', c.utility.secondaryBackground ?? c.utility.primaryBackground);
 
+  // ── Secondary surfaces (Phase 2) — previously unset; components carried
+  //     dark-assuming rgba-white fallbacks that leak in light mode ──
+  set('--card-deep',   c.utility.secondaryBackground ?? c.utility.primaryBackground);
+  set('--surface-dim', `color-mix(in srgb, ${c.utility.primaryText} 4%, transparent)`);
+  set('--kd-panel',    c.surface.glass);
+  set('--card-alt',    c.surface.glassStrong);
+
   // ── Text faint — primary text at 25% ──
   set('--text-faint', hexToRgba(c.utility.primaryText, 0.25));
 }

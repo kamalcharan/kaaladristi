@@ -77,12 +77,12 @@ function AppRoutes() {
           <div className="w-16 h-16 mx-auto rounded-2xl bg-risk-amber/10 border border-risk-amber/30 flex items-center justify-center mb-6">
             <AlertTriangle className="w-8 h-8 text-risk-amber" />
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">Connection Error</h2>
+          <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Connection Error</h2>
           <p className="text-sm text-secondary mb-4 leading-relaxed">
             Could not connect to the authentication service. The Supabase project may be
             paused or unreachable.
           </p>
-          <p className="text-xs text-muted bg-slate-900/60 border border-white/5 rounded-xl p-3 mb-6 mono">
+          <p className="text-xs text-muted bg-slate-900/60 border border-kd-border rounded-xl p-3 mb-6 mono">
             {authError}
           </p>
           <button

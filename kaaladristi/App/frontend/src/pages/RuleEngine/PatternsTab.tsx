@@ -170,7 +170,7 @@ function BreakRow({ label, side, baseline, color }: {
   return (
     <tr className="border-b border-kd-border/40">
       <td className={cn('px-3 py-2 text-xs font-mono', color)}>{label}</td>
-      <td className="px-3 py-2 text-xs tabular-nums text-center text-white">{side.pct?.toFixed(0)}%</td>
+      <td className="px-3 py-2 text-xs tabular-nums text-center text-[var(--text-primary)]">{side.pct?.toFixed(0)}%</td>
       <td className="px-3 py-2 text-xs tabular-nums text-center text-muted">{side.n}</td>
       <td className="px-3 py-2 text-xs tabular-nums text-center text-muted">
         {side.median_sessions_to_break != null ? `${side.median_sessions_to_break}s` : '—'}
@@ -286,7 +286,7 @@ function SequenceCard({ row, allSeqRows }: { row: PatternRow; allSeqRows: Patter
               return (
                 <span key={m.field} className={replicated ? '' : 'opacity-50'}>
                   {i > 0 && <span className="text-muted"> → </span>}
-                  <span className="text-white">{FIELD_LABELS[m.field] ?? m.field}</span>
+                  <span className="text-[var(--text-primary)]">{FIELD_LABELS[m.field] ?? m.field}</span>
                   <span className={m.direction === 'up' ? 'text-risk-green' : 'text-risk-red/80'}>
                     {' '}{m.direction === 'up' ? '↑' : '↓'}
                   </span>
@@ -508,7 +508,7 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
         <select
           value={effectiveBench ?? ''}
           onChange={e => setBenchId(Number(e.target.value))}
-          className="bg-kd-elevated border border-kd-border rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+          className="bg-kd-elevated border border-kd-border rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-primary)] font-mono"
         >
           {benchmarks.map(b => (
             <option key={b.id} value={b.id}>

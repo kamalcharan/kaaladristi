@@ -74,14 +74,14 @@ function PanchangTableRow({ row }: { row: PanchangRow }) {
   return (
     <tr
       className={cn(
-        'border-b border-white/5 transition-colors hover:bg-white/[0.03]',
+        'border-b border-kd-border transition-colors hover:bg-white/[0.03]',
         weekend && 'opacity-40',
       )}
     >
       {/* Date */}
       <td className="px-3 py-2.5 whitespace-nowrap">
         <div className="flex flex-col">
-          <span className="text-xs font-semibold text-white">{dd} {mmm}</span>
+          <span className="text-xs font-semibold text-[var(--text-primary)]">{dd} {mmm}</span>
           <span className="text-[10px] text-muted">{row.weekday.slice(0, 3)}</span>
         </div>
       </td>
@@ -109,7 +109,7 @@ function PanchangTableRow({ row }: { row: PanchangRow }) {
       {/* Signals / Notes */}
       <td className="px-3 py-2.5">
         {row.notes.length === 0 ? (
-          <span className="text-[10px] text-white/15">—</span>
+          <span className="text-[10px] text-kd-text-faint">—</span>
         ) : (
           <div className="flex flex-col gap-1">
             {row.notes.map(n => (
@@ -157,16 +157,16 @@ export default function PanchangView() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-kd-border">
         <div className="flex items-center gap-2">
           <Moon className="w-4 h-4 text-accent-indigo" />
-          <h1 className="text-base font-semibold text-white">Panchang</h1>
+          <h1 className="text-base font-semibold text-[var(--text-primary)]">Panchang</h1>
           <span className="text-sm text-muted">09:15 IST · Lahiri Sidereal</span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={prev}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] text-secondary transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -174,7 +174,7 @@ export default function PanchangView() {
           <select
             value={month}
             onChange={e => setMonth(Number(e.target.value))}
-            className="text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
+            className="text-sm bg-slate-800/80 border border-kd-border rounded-lg px-2 py-1 text-[var(--text-primary)] focus:outline-none focus:border-accent-indigo/50"
           >
             {MONTH_FULL.map((m, i) => (
               <option key={i + 1} value={i + 1}>{m}</option>
@@ -188,11 +188,11 @@ export default function PanchangView() {
               const v = Number(e.target.value);
               if (v >= 1900 && v <= 2100) setYear(v);
             }}
-            className="w-20 text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white text-center focus:outline-none focus:border-accent-indigo/50"
+            className="w-20 text-sm bg-slate-800/80 border border-kd-border rounded-lg px-2 py-1 text-[var(--text-primary)] text-center focus:outline-none focus:border-accent-indigo/50"
           />
           <button
             onClick={next}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] text-secondary transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -225,10 +225,10 @@ export default function PanchangView() {
         )}
 
         {!isLoading && data && data.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-white/5">
+          <div className="overflow-x-auto rounded-xl border border-kd-border">
             <table className="w-full text-left min-w-[800px]">
               <thead>
-                <tr className="border-b border-white/10">
+                <tr className="border-b border-kd-border">
                   {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra', 'Nak Lord', 'Signals / Notes'].map(h => (
                     <th
                       key={h}

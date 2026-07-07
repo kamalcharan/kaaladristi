@@ -45,11 +45,11 @@ export function InsightSection() {
 
           {/* NOT column */}
           <FadeUp>
-            <div style={{ padding:'40px 36px', border:'1px solid rgba(255,255,255,0.06)', background:'rgba(255,255,255,0.01)', height:'100%' }}>
+            <div style={{ padding:'40px 36px', border:'1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', background:'color-mix(in srgb, var(--text-primary) 1%, transparent)', height:'100%' }}>
               <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.ink4, marginBottom:18 }}>✗ WHAT WE ARE NOT</div>
               <ul style={{ listStyle:'none', padding:0, margin:0 }}>
                 {NOT_LIST.map((x,i) => (
-                  <li key={x} style={{ padding:'14px 0', borderBottom: i<3 ? '1px solid rgba(255,255,255,0.04)' : 'none', color:C.ink3, fontSize:15, display:'flex', alignItems:'center', gap:14, fontFamily:SANS }}>
+                  <li key={x} style={{ padding:'14px 0', borderBottom: i<3 ? '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'none', color:C.ink3, fontSize:15, display:'flex', alignItems:'center', gap:14, fontFamily:SANS }}>
                     <span style={{ color:C.ink4, width:16 }}>×</span>
                     <span style={{ textDecoration:'line-through', textDecorationColor:'rgba(138,131,114,0.4)' }}>{x}</span>
                   </li>

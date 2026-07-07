@@ -14,7 +14,7 @@ function Donut({ pct, size = 72 }: { pct: number; size?: number }) {
     <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
       <circle
         cx={size / 2} cy={size / 2} r={r}
-        fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={3.5}
+        fill="none" stroke="var(--text-faint)" strokeWidth={3.5}
       />
       <circle
         cx={size / 2} cy={size / 2} r={r}

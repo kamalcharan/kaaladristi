@@ -14,18 +14,18 @@ export function DataQualityPill({ coverage_pct, days_covered, date_from, date_to
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6,
       padding: '6px 10px',
-      background: 'rgba(255,255,255,0.02)',
+      background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
       border: '1px solid var(--border)',
       borderRadius: 6,
       fontFamily: 'var(--font-mono, monospace)',
       fontSize: 10,
-      color: 'rgba(255,255,255,0.35)',
+      color: 'var(--text-muted)',
     }}>
       <span style={{ color, fontSize: 8 }}>●</span>
       <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 9 }}>
         EOD DATA
       </span>
-      <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.5)' }}>
+      <span style={{ marginLeft: 'auto', color: 'var(--text-secondary)' }}>
         {days_covered.toLocaleString()} days
       </span>
       <span>·</span>

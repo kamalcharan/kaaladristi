@@ -45,7 +45,7 @@ function LabelSelect({ value, onChange }: { value: MarketImpact; onChange: (v: M
     <select
       value={value}
       onChange={e => onChange(e.target.value as MarketImpact)}
-      className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white focus:outline-none focus:border-accent-indigo/50"
+      className="text-xs bg-slate-800 border border-kd-border rounded px-2 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-accent-indigo/50"
     >
       {IMPACT_OPTIONS.map(opt => (
         <option key={opt} value={opt}>{SIGNAL_LABELS[opt]}</option>
@@ -73,7 +73,7 @@ function SectorCheckboxList({ value, onChange }: { value: string; onChange: (v: 
   }
 
   return (
-    <div className="flex flex-col gap-0.5 max-h-40 overflow-y-auto rounded border border-white/10 bg-slate-900 px-2 py-1.5 w-full">
+    <div className="flex flex-col gap-0.5 max-h-40 overflow-y-auto rounded border border-kd-border bg-slate-900 px-2 py-1.5 w-full">
       {sectors.length === 0 && (
         <span className="text-[11px] text-muted italic">Loading sectors…</span>
       )}
@@ -87,7 +87,7 @@ function SectorCheckboxList({ value, onChange }: { value: string; onChange: (v: 
           />
           <span className={cn(
             'text-[11px] leading-snug',
-            selected.includes(s) ? 'text-white' : 'text-secondary group-hover:text-white',
+            selected.includes(s) ? 'text-[var(--text-primary)]' : 'text-secondary group-hover:text-[var(--text-primary)]',
           )}>
             {s}
           </span>
@@ -135,7 +135,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
 
   if (!editing) {
     return (
-      <div className="flex items-start gap-2 p-2 rounded border border-white/8 bg-white/[0.02] text-xs">
+      <div className="flex items-start gap-2 p-2 rounded border border-kd-border bg-white/[0.02] text-xs">
         <div className="flex flex-col gap-1 flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <LabelPill label={note.calendar_label} />
@@ -155,7 +155,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
         <div className="flex gap-1 shrink-0">
           <button
             onClick={() => setEditing(true)}
-            className="text-[10px] text-muted hover:text-white px-1.5 py-0.5 rounded border border-white/10 hover:bg-white/10 transition-colors"
+            className="text-[10px] text-muted hover:text-[var(--text-primary)] px-1.5 py-0.5 rounded border border-kd-border hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] transition-colors"
           >
             Edit
           </button>
@@ -179,7 +179,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
         <select
           value={scope}
           onChange={e => { setScope(e.target.value as PanchangScope); setScopeVal(''); }}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white focus:outline-none focus:border-accent-indigo/50"
+          className="text-xs bg-slate-800 border border-kd-border rounded px-2 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-accent-indigo/50"
         >
           {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -193,7 +193,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
               scope === 'planet'    ? 'Jupiter, Venus…'       :
                                      'USDINR, EURINR…'
             }
-            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-40 focus:outline-none focus:border-accent-indigo/50"
+            className="text-xs bg-slate-800 border border-kd-border rounded px-2 py-1.5 text-[var(--text-primary)] w-40 focus:outline-none focus:border-accent-indigo/50"
           />
         )}
       </div>
@@ -205,7 +205,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
         onChange={e => setAnnotation(e.target.value)}
         placeholder="Note…"
         rows={3}
-        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-full focus:outline-none focus:border-accent-indigo/50 resize-y"
+        className="text-xs bg-slate-800 border border-kd-border rounded px-2 py-1.5 text-[var(--text-primary)] w-full focus:outline-none focus:border-accent-indigo/50 resize-y"
       />
       <div className="flex gap-1.5">
         <button
@@ -215,7 +215,7 @@ function NoteRow({ note, onSave, onDelete, saving }: NoteRowProps) {
         >
           <Check className="w-3 h-3" /> Save
         </button>
-        <button onClick={cancel} className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-800 border border-white/10 text-muted hover:text-white transition-colors">
+        <button onClick={cancel} className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-800 border border-kd-border text-muted hover:text-[var(--text-primary)] transition-colors">
           <X className="w-3 h-3" /> Cancel
         </button>
       </div>
@@ -259,7 +259,7 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
         <select
           value={scope}
           onChange={e => { setScope(e.target.value as PanchangScope); setScopeVal(''); }}
-          className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white focus:outline-none focus:border-accent-indigo/50"
+          className="text-xs bg-slate-800 border border-kd-border rounded px-2 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-accent-indigo/50"
         >
           {SCOPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -273,7 +273,7 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
               scope === 'planet'    ? 'Jupiter, Venus…'       :
                                      'USDINR, EURINR…'
             }
-            className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-48 focus:outline-none focus:border-accent-indigo/50"
+            className="text-xs bg-slate-800 border border-kd-border rounded px-2 py-1.5 text-[var(--text-primary)] w-48 focus:outline-none focus:border-accent-indigo/50"
           />
         )}
       </div>
@@ -289,7 +289,7 @@ function NewNoteForm({ tradeDate, onAdd, saving }: NewNoteFormProps) {
         onChange={e => setAnnotation(e.target.value)}
         placeholder="Note (optional)…"
         rows={3}
-        className="text-xs bg-slate-800 border border-white/10 rounded px-2 py-1.5 text-white w-full focus:outline-none focus:border-accent-indigo/50 resize-y"
+        className="text-xs bg-slate-800 border border-kd-border rounded px-2 py-1.5 text-[var(--text-primary)] w-full focus:outline-none focus:border-accent-indigo/50 resize-y"
       />
 
       <button
@@ -333,11 +333,11 @@ function AdminPanchangRow({ row, onAddNote, onSaveNote, onDeleteNote, saving }: 
   }
 
   return (
-    <tr className={cn('border-b border-white/5', weekend && 'opacity-40')}>
+    <tr className={cn('border-b border-kd-border', weekend && 'opacity-40')}>
       {/* Date */}
       <td className="px-3 py-2 align-top whitespace-nowrap w-20">
         <div className="flex flex-col">
-          <span className="text-xs font-semibold text-white">{dd} {mmm}</span>
+          <span className="text-xs font-semibold text-[var(--text-primary)]">{dd} {mmm}</span>
           <span className="text-[10px] text-muted">{row.weekday.slice(0, 3)}</span>
         </div>
       </td>
@@ -447,10 +447,10 @@ export default function AdminPanchangView() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-kd-border">
         <div className="flex items-center gap-2">
           <Moon className="w-4 h-4 text-accent-indigo" />
-          <h1 className="text-base font-semibold text-white">Panchang Admin</h1>
+          <h1 className="text-base font-semibold text-[var(--text-primary)]">Panchang Admin</h1>
           <span className="text-xs text-muted bg-accent-indigo/10 border border-accent-indigo/30 rounded px-2 py-0.5">
             Admin
           </span>
@@ -466,7 +466,7 @@ export default function AdminPanchangView() {
             className={cn(
               'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all',
               generateMut.isPending
-                ? 'opacity-50 cursor-not-allowed border-white/10 text-muted'
+                ? 'opacity-50 cursor-not-allowed border-kd-border text-muted'
                 : 'border-accent-indigo/40 text-accent-indigo hover:bg-accent-indigo/10 hover:border-accent-indigo/60',
             )}
           >
@@ -490,13 +490,13 @@ export default function AdminPanchangView() {
           )}
 
           <div className="flex items-center gap-1">
-            <button onClick={prev} className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors">
+            <button onClick={prev} className="p-1.5 rounded-lg hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] text-secondary transition-colors">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <select
               value={month}
               onChange={e => setMonth(Number(e.target.value))}
-              className="text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
+              className="text-sm bg-slate-800/80 border border-kd-border rounded-lg px-2 py-1 text-[var(--text-primary)] focus:outline-none focus:border-accent-indigo/50"
             >
               {MONTH_FULL.map((m, i) => (
                 <option key={i + 1} value={i + 1}>{m}</option>
@@ -506,9 +506,9 @@ export default function AdminPanchangView() {
               type="number"
               value={year}
               onChange={e => { const v = Number(e.target.value); if (v >= 1900 && v <= 2100) setYear(v); }}
-              className="w-20 text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white text-center focus:outline-none focus:border-accent-indigo/50"
+              className="w-20 text-sm bg-slate-800/80 border border-kd-border rounded-lg px-2 py-1 text-[var(--text-primary)] text-center focus:outline-none focus:border-accent-indigo/50"
             />
-            <button onClick={next} className="p-1.5 rounded-lg hover:bg-white/10 text-secondary transition-colors">
+            <button onClick={next} className="p-1.5 rounded-lg hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] text-secondary transition-colors">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -538,10 +538,10 @@ export default function AdminPanchangView() {
           </div>
         )}
         {!isLoading && data && data.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-white/5">
+          <div className="overflow-x-auto rounded-xl border border-kd-border">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-white/10">
+                <tr className="border-b border-kd-border">
                   {['Date', 'Tithi', 'Moon Rashi', 'Nakshatra / Lord', 'Signals / Annotations'].map(h => (
                     <th key={h} className="px-3 py-2.5 text-[11px] font-semibold text-muted uppercase tracking-wide">
                       {h}

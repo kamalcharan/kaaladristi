@@ -230,7 +230,7 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
               {rsi != null ? rsi.toFixed(0) : '—'}
             </span>
           </span>
-          <span style={{ color: 'rgba(255,255,255,0.12)', fontSize: 10 }}>│</span>
+          <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>│</span>
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 9,

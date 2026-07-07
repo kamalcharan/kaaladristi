@@ -118,7 +118,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
                   width: 24, height: 24,
                   borderRadius: 5,
                   border: '1px solid var(--border)',
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
                   color: 'var(--text-secondary)',
                   fontSize: 14,
                   cursor: 'pointer',
@@ -129,7 +129,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
                 }}
                 onMouseEnter={e => {
                   const el = e.currentTarget as HTMLElement
-                  el.style.borderColor = 'rgba(255,255,255,0.18)'
+                  el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 18%, transparent)'
                   el.style.color = 'var(--text-primary)'
                 }}
                 onMouseLeave={e => {
@@ -160,7 +160,7 @@ export default function CatalogDrawer({ isOpen, onClose, context = 'block' }: Ca
                     border: 'none',
                     borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
                     background: 'transparent',
-                    color: isActive ? 'var(--accent)' : 'rgba(255,255,255,0.45)',
+                    color: isActive ? 'var(--accent)' : 'var(--text-muted)',
                     marginBottom: -1,
                     transition: 'color 0.15s',
                   }}

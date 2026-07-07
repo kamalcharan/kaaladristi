@@ -177,10 +177,10 @@ export default function VaNiChatPanel() {
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--accent-indigo)]/20 shrink-0 bg-[var(--bg)]">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
-            <span className="text-white text-sm font-serif font-bold">V</span>
+            <span className="text-[var(--text-primary)] text-sm font-serif font-bold">V</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-base font-serif font-bold text-white leading-tight">
+            <div className="text-base font-serif font-bold text-[var(--text-primary)] leading-tight">
               VaNi <span className="font-normal text-[var(--accent-indigo)]/70">&middot; वाणी</span>
             </div>
             <div className="text-[10px] font-mono text-[var(--accent-indigo)]/50 tracking-wide uppercase mt-0.5">
@@ -191,14 +191,14 @@ export default function VaNiChatPanel() {
             <button
               onClick={() => { setMessages([]); clearEntity(); }}
               title="Reset conversation"
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-[var(--accent-indigo)] transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] hover:text-[var(--accent-indigo)] transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>
           )}
           <button
             onClick={close}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/30 hover:bg-white/10 hover:text-white/70 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:bg-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] hover:text-secondary transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -212,7 +212,7 @@ export default function VaNiChatPanel() {
                 {entity.symbol}
               </span>
               {entity.pageContext && (
-                <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider">
+                <span className="text-[9px] font-mono text-muted uppercase tracking-wider">
                   {entity.pageContext}
                 </span>
               )}
@@ -230,10 +230,10 @@ export default function VaNiChatPanel() {
                 <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[var(--accent-indigo)]/20 to-[var(--accent-violet)]/20 flex items-center justify-center border border-[var(--accent-indigo)]/20">
                   <Sparkles className="w-6 h-6 text-[var(--accent-indigo)]" />
                 </div>
-                <p className="text-sm font-medium text-white/80 mb-1">
+                <p className="text-sm font-medium text-secondary mb-1">
                   {entity ? `Ask about ${entity.symbol}` : 'What would you like to know?'}
                 </p>
-                <p className="text-[11px] text-white/30 max-w-[260px] mx-auto leading-relaxed">
+                <p className="text-[11px] text-muted max-w-[260px] mx-auto leading-relaxed">
                   {entity
                     ? `VaNi will analyse ${entity.symbol}'s signals and context.`
                     : 'VaNi reads the live data on this page and answers your questions.'}
@@ -258,17 +258,17 @@ export default function VaNiChatPanel() {
               {msg.type === 'intent' ? (
                 <div className="flex justify-end">
                   <div className="max-w-[85%] px-4 py-2.5 rounded-2xl rounded-tr-md bg-gradient-to-r from-[var(--accent-indigo)] to-[var(--accent-violet)] shadow-md shadow-indigo-500/10">
-                    <p className="text-xs font-semibold text-white">{msg.text}</p>
+                    <p className="text-xs font-semibold text-[var(--text-primary)]">{msg.text}</p>
                   </div>
                 </div>
               ) : (
                 <div className="flex gap-3">
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-1 shadow shadow-indigo-500/20">
-                    <span className="text-white text-[9px] font-serif font-bold">V</span>
+                    <span className="text-[var(--text-primary)] text-[9px] font-serif font-bold">V</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[#161233] border border-[var(--accent-indigo)]/15">
-                      <p className="text-[12px] text-white/80 leading-[1.7] whitespace-pre-wrap">
+                      <p className="text-[12px] text-secondary leading-[1.7] whitespace-pre-wrap">
                         {msg.text}
                       </p>
                     </div>
@@ -305,12 +305,12 @@ export default function VaNiChatPanel() {
           {askMutation.isPending && (
             <div className="flex gap-3">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--accent-indigo)] to-[var(--accent-violet)] flex items-center justify-center shrink-0 mt-1 shadow shadow-indigo-500/20 animate-pulse">
-                <span className="text-white text-[9px] font-serif font-bold">V</span>
+                <span className="text-[var(--text-primary)] text-[9px] font-serif font-bold">V</span>
               </div>
               <div className="px-4 py-3 rounded-2xl rounded-tl-md bg-[#161233] border border-[var(--accent-indigo)]/15">
                 <div className="flex items-center gap-2.5">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent-indigo)]" />
-                  <span className="text-[11px] text-white/40">VaNi is analysing...</span>
+                  <span className="text-[11px] text-muted">VaNi is analysing...</span>
                 </div>
               </div>
             </div>

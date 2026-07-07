@@ -164,7 +164,7 @@ export function MicroTrend({ rowData, height }: { rowData: CellData[]; height: n
       height={innerH}
       style={{ display: 'block' }}
     >
-      <line x1={0} y1={innerH - 0.5} x2={TREND_W - 8} y2={innerH - 0.5} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      <line x1={0} y1={innerH - 0.5} x2={TREND_W - 8} y2={innerH - 0.5} stroke="var(--text-faint)" strokeWidth={1} />
       {cells.map((c, i) => {
         const s5 = c?.s5 ?? 0;
         if (s5 <= 0) return null;
@@ -196,7 +196,7 @@ function toggleBtnStyle(active: boolean): React.CSSProperties {
     cursor: 'pointer',
     fontSize: 11,
     fontWeight: active ? 600 : 400,
-    background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+    background: active ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'transparent',
     color: active ? 'var(--text-primary)' : 'var(--text-muted)',
     transition: 'background 0.15s, color 0.15s',
   };
@@ -279,7 +279,7 @@ export default function FlowIntensityMap({
 
         {/* Index toggle: 5D | 22D | 66D */}
         {mode === 'index' && onDayWindowChange && (
-          <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.04)', borderRadius: 6, padding: 2, gap: 2 }}>
+          <div style={{ display: 'inline-flex', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 6, padding: 2, gap: 2 }}>
             {([5, 22, 66] as const).map((d) => (
               <button key={d} style={toggleBtnStyle(dayWindow === d)} onClick={() => onDayWindowChange(d)}>
                 {d}D

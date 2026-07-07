@@ -52,7 +52,7 @@ export default function Layout() {
               className={cn(
                 'inline-flex items-center cursor-pointer transition-all',
                 vaniOpen
-                  ? 'text-white'
+                  ? 'text-[var(--text-primary)]'
                   : ''
               )}
               style={{

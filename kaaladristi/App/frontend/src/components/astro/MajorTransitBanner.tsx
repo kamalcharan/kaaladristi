@@ -114,7 +114,7 @@ export default function MajorTransitBanner() {
                 </span>
                 <span className={cn('text-[10px] font-bold', c.text)}>{pct}%</span>
               </div>
-              <div className="h-1 rounded-full bg-white/5 overflow-hidden">
+              <div className="h-1 rounded-full bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)] overflow-hidden">
                 <div
                   className={cn('h-full rounded-full transition-all', c.border.replace('border-', 'bg-').replace('/40', '/60'))}
                   style={{ width: `${pct}%` }}

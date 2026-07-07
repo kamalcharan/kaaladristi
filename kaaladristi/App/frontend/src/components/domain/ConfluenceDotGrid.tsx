@@ -141,7 +141,7 @@ export default function ConfluenceDotGrid() {
   return (
     <div style={{
       background: 'var(--card)',
-      border: '1px solid rgba(255,255,255,0.06)',
+      border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
       borderRadius: 12,
       overflow: 'hidden',
     }}>
@@ -151,7 +151,7 @@ export default function ConfluenceDotGrid() {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '13px 18px 11px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
       }}>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
@@ -168,7 +168,7 @@ export default function ConfluenceDotGrid() {
           gap: 2,
           padding: '3px',
           background: 'rgba(0,0,0,0.25)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
           borderRadius: 8,
         }}>
           {PERIODS.map(p => (
@@ -314,7 +314,7 @@ export default function ConfluenceDotGrid() {
                   transform: 'translate(-50%, -100%)',
                   zIndex: 9999,
                   background: '#0f172a',
-                  border: '1px solid rgba(255,255,255,0.12)',
+                  border: '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
                   borderRadius: 8,
                   padding: '10px 12px',
                   pointerEvents: 'none',

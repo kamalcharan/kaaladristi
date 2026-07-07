@@ -130,10 +130,10 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
                   BEST VALUE
                 </div>
               )}
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.6)', marginBottom: 8, letterSpacing: '.03em' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, letterSpacing: '.03em' }}>
                 {tier.label}
               </div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                 {tier.price}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted, #6b7280)', marginBottom: 24 }}>
@@ -148,8 +148,8 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
                   cursor: (disabled || activating) ? (paying ? 'wait' : 'default') : 'pointer',
                   background: tier.highlight
                     ? 'var(--accent-solid)'
-                    : (isCurrentFree || isCurrent) ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.1)',
-                  color: (isCurrentFree || isCurrent) ? 'rgba(255,255,255,.35)' : '#fff',
+                    : (isCurrentFree || isCurrent) ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'color-mix(in srgb, var(--text-primary) 10%, transparent)',
+                  color: (isCurrentFree || isCurrent) ? 'var(--text-muted)' : '#fff',
                   transition: 'background .15s',
                 }}>
                 {activating        ? 'Activating your plan…' :
@@ -166,18 +166,18 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
       {/* Feature comparison */}
       <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--card)', marginBottom: 32 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px',
-          padding: '12px 20px', background: 'var(--surface-dim, rgba(255,255,255,.04))',
+          padding: '12px 20px', background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 4%, transparent))',
           borderBottom: '1px solid var(--border)', fontSize: 11,
-          color: 'rgba(255,255,255,.4)', fontFamily: 'var(--font-mono,monospace)',
+          color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)',
           letterSpacing: '.04em', textAlign: 'center' }}>
           <span style={{ textAlign: 'left' }}>FEATURE</span>
           <span>FREE</span><span>TRIAL</span><span>QTR</span><span>ANNUAL</span>
         </div>
         {FEATURES.map((f, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px',
-            padding: '11px 20px', borderBottom: '1px solid rgba(255,255,255,.05)',
-            background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.01)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'rgba(255,255,255,.7)' }}>
+            padding: '11px 20px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
+            background: i % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 1%, transparent)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
               <span style={{ color: 'var(--accent)' }}>{f.icon}</span>
               {f.label}
             </div>
@@ -185,7 +185,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
               <div key={j} style={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {yes
                   ? <Check size={14} style={{ color: '#22c55e' }} />
-                  : <span style={{ color: 'rgba(255,255,255,.15)', fontSize: 16 }}>—</span>}
+                  : <span style={{ color: 'var(--text-faint)', fontSize: 16 }}>—</span>}
               </div>
             ))}
           </div>
@@ -206,7 +206,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
 
       {/* Standalone page: footer note */}
       {!isOnboarding && (
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.25)' }}>
+        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-faint)' }}>
           All payments processed by Razorpay. Prices include GST.
           Cancel or change plan from Settings → Account.
         </p>

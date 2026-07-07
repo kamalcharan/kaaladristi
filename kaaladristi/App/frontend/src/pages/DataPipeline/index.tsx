@@ -20,7 +20,7 @@ export default function DataPipelinePage() {
   return (
     <div className="space-y-4">
       <header className="pb-2 border-b border-kd-border/30">
-        <h1 className="text-lg font-semibold text-white">Data Pipeline v2</h1>
+        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Data Pipeline v2</h1>
         <p className="text-xs text-muted mt-0.5">
           Ground-truth fill-rate monitoring & targeted fixes. Parallel to
           legacy <span className="mono">/settings → Data Pipeline</span>.

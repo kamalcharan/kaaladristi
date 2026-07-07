@@ -101,7 +101,7 @@ function ExchangeTabs({
             disabled={isDisabled}
             style={{
               padding: '6px 16px', borderRadius: '100px', border: 'none',
-              background: value === ex ? 'rgba(255,255,255,0.06)' : 'transparent',
+              background: value === ex ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'transparent',
               color: value === ex ? 'var(--text-primary)' : 'var(--text-muted)',
               fontSize: '12px', fontWeight: 500,
               fontFamily: 'var(--font-body)', transition: 'all 0.15s',
@@ -165,7 +165,7 @@ function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMo
           onClick={() => onChange(mode)}
           style={{
             padding: '5px 14px', borderRadius: '100px', border: 'none',
-            background: value === mode ? 'rgba(255,255,255,0.06)' : 'transparent',
+            background: value === mode ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'transparent',
             color: value === mode ? 'var(--text-primary)' : 'var(--text-muted)',
             fontSize: '12px', fontWeight: 500,
             fontFamily: 'var(--font-body)', transition: 'all 0.15s', cursor: 'pointer',
@@ -527,7 +527,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
   const SkeletonCard = () => (
     <div style={{
       height: '64px', borderRadius: '10px',
-      background: 'linear-gradient(90deg, var(--card) 25%, rgba(255,255,255,0.03) 50%, var(--card) 75%)',
+      background: 'linear-gradient(90deg, var(--card) 25%, color-mix(in srgb, var(--text-primary) 3%, transparent) 50%, var(--card) 75%)',
       backgroundSize: '200% 100%', animation: 'pulse 1.5s ease-in-out infinite',
       border: '1px solid var(--border)',
     }} />
@@ -672,7 +672,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
         </span>
         {vaniCount > 0 && !vaniOnly && (
           <>
-            <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+            <div style={{ width: '1px', height: '18px', background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', flexShrink: 0 }} />
             <button
               onClick={() => setVaniOnly(true)}
               style={{
@@ -984,7 +984,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
                   onClick={() => !isDisabled && navigate(`/scanner/${presetId}?timeframe=${tf}`)}
                   style={{
                     padding: '4px 10px', borderRadius: '6px', border: 'none',
-                    background: isActiveTf ? 'rgba(255,255,255,0.06)' : 'transparent',
+                    background: isActiveTf ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'transparent',
                     color: isActiveTf ? 'var(--text-primary)' : 'var(--text-faint)',
                     fontSize: '11px', fontWeight: 500,
                     fontFamily: 'var(--font-body)',
@@ -1241,7 +1241,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
         </span>
         {oppCount > 0 && (
           <>
-            <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+            <div style={{ width: '1px', height: '18px', background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', flexShrink: 0 }} />
             <button
               onClick={() => setOppFilter(true)}
               style={{
@@ -1358,7 +1358,7 @@ export default function ScanView() {
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: '10px',
                 color: isActive ? 'var(--gold)' : 'var(--text-faint)',
-                background: isActive ? 'rgba(240,165,0,0.1)' : 'var(--bg3, rgba(255,255,255,0.04))',
+                background: isActive ? 'rgba(240,165,0,0.1)' : 'var(--bg3, color-mix(in srgb, var(--text-primary) 4%, transparent))',
                 padding: '1px 6px', borderRadius: '3px',
               }}>
                 {catCount > 0 ? catCount : '—'}

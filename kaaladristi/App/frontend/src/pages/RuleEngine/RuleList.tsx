@@ -493,7 +493,7 @@ export default function RuleList() {
         <header className="pb-3 border-b border-kd-border/30 flex items-start justify-between gap-4">
           <div className="space-y-2">
             <div>
-              <h1 className="text-lg font-semibold text-white">Rules Engine</h1>
+              <h1 className="text-lg font-semibold text-[var(--text-primary)]">Rules Engine</h1>
               <p className="text-xs text-muted mt-0.5">
                 Vedic astro-market rules — click any rule to view detail &amp; occurrence history
               </p>

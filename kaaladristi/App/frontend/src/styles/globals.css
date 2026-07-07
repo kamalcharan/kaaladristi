@@ -2,7 +2,7 @@
 :root {
   /* Structural — never overwritten by applyTheme */
   --card-deep: #0d1528;
-  --border-strong: rgba(255,255,255,0.14);
+  --border-strong: color-mix(in srgb, var(--text-primary) 14%, transparent);
   --indigo-strong: #a5b4fc;
   --indigo-bg: rgba(129,140,248,0.12);
   --overlay: rgba(0,0,0,0.55);
@@ -15,7 +15,7 @@
   --bg: #0b1120;
   --card: #131c31;
   --card-soft: #182340;
-  --border: rgba(255,255,255,0.07);
+  --border: color-mix(in srgb, var(--text-primary) 7%, transparent);
   --border-gold: rgba(212,168,75,0.35);
   --border-indigo: rgba(129,140,248,0.28);
   --text-primary: #f1f5f9;
@@ -94,10 +94,10 @@ body::before {
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.38); }
+  ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-primary) 22%, transparent); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--text-primary) 38%, transparent); }
   /* Firefox */
-  * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.22) transparent; }
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text-primary) 22%, transparent) transparent; }
 }
 
 @layer utilities {

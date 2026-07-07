@@ -139,7 +139,7 @@ export default function AlmanacTab({ ruleId }: { ruleId: number }) {
                     live && 'bg-accent-gold/8 border-l-2 border-l-accent-gold',
                   )}
                 >
-                  <td className="px-3 py-2.5 text-xs font-mono text-white whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-2.5 text-xs font-mono text-[var(--text-primary)] whitespace-nowrap tabular-nums">
                     {w.start_date}
                     {live && <span className="ml-2 text-[9px] font-mono text-accent-gold animate-pulse">◉ ACTIVE</span>}
                   </td>

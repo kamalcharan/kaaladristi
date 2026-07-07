@@ -49,7 +49,7 @@ export default function PlanetsSidebar({ date }: Props) {
     <div style={{
       border: '1px solid var(--kd-border)', borderRadius: 4,
       padding: 12,
-      background: 'var(--kd-panel, rgba(255,255,255,0.02))',
+      background: 'var(--kd-panel, color-mix(in srgb, var(--text-primary) 2%, transparent))',
     }}>
       <div style={{
         fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
@@ -75,7 +75,7 @@ export default function PlanetsSidebar({ date }: Props) {
             gridTemplateColumns: '14px 60px 1fr auto',
             alignItems: 'baseline', gap: 6,
             padding: '3px 0',
-            borderBottom: i < ordered.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+            borderBottom: i < ordered.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'none',
             fontFamily: 'var(--font-mono, monospace)', fontSize: 10,
           }}>
             <span style={{
