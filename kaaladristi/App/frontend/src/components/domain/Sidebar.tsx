@@ -41,6 +41,7 @@ const navSections: NavSection[] = [
       { to: '/admin/panchang',      glyph: '⊟', label: 'Panchang Admin',      adminOnly: true },
       { to: '/rules',               glyph: '⊠', label: 'Rule Engine',         adminOnly: true },
       { to: '/custom-index',        glyph: '⊞', label: 'Custom Index',         adminOnly: true },
+      { to: '/users',               glyph: '⚇', label: 'Users',               adminOnly: true },
     ],
   },
 ];
