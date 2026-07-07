@@ -504,7 +504,7 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
       </div>
 
       <p className="text-[10px] text-muted leading-relaxed">
-        Historical base rates from completed transit windows — observations, not predictions or advice.
+        Historical base rates from completed rule windows (transit spans, or single signal days for daily rules) — observations, not predictions or advice.
         Clean = occurrences with no same-band co-occurring event. Forward returns shown against the
         benchmark's unconditional drift. Stats with n &lt; 20 are greyed; n &lt; 10 is never shown.
       </p>
