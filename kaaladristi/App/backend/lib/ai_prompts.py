@@ -405,6 +405,43 @@ IMPORTANT:
 """
 
 
+# ── Skill: Rule Inference Draft (km_rule_inference generate) ──────────────────
+# Deliberately compact — this must also run on the self-hosted Qwen fallback,
+# whose context window is much smaller than a hosted model's. Domain grounding
+# is a condensed version of docs/scanners/PLANETPULSE_RULE.md's Planetary
+# Domain Map, given directly in the prompt (closed-book synthesis, not recall)
+# so a local model can do this reliably — unlike stock-name lookups (D42),
+# this task never needs real-world company knowledge.
+
+_PLANET_DOMAIN_MAP = (
+    "Mercury: trade, commerce, communication, analysis — IT services, telecom, logistics, fintech.\n"
+    "Mars: energy, conflict, machinery, force — defence, steel/metals, mining, heavy engineering.\n"
+    "Jupiter: expansion, abundance, growth — banking/finance, education, healthcare, pharma exports.\n"
+    "Saturn: restriction, structure, discipline, delay — infrastructure, real estate, utilities, "
+    "commodities under stress.\n"
+    "Venus: luxury, finance, relationships, comfort — consumer discretionary, jewellery, banking, lifestyle."
+)
+
+_RULE_INFERENCE_SYSTEM = (
+    "You are a domain analyst drafting an expert expectation for an astro-market rule, "
+    "in the same voice as a seasoned Vedic-market researcher writing a working note — not a marketing claim.\n\n"
+    "Reference domain map (planet -> what it governs, in market terms):\n"
+    f"{_PLANET_DOMAIN_MAP}\n\n"
+    "You will receive one rule's definition (planets, sign/nakshatra, type, existing remarks) — "
+    "or two rules' definitions when this is a combination/pair.\n\n"
+    "Write ONE short paragraph (2-3 sentences) stating what this rule (or this pair, in combination) "
+    "should mean for the market, grounded in the domain map above and the rule's own mechanics. "
+    "Be specific and falsifiable (e.g. 'expect a level break at the window's release, not mid-window drift') "
+    "rather than vague ('markets may be affected').\n\n"
+    "Then classify the expected direction as exactly one of: bullish, bearish, volatile, neutral, mixed.\n\n"
+    "Rules: factual and observational, never buy/sell/target/guaranteed/certain. "
+    "Never invent statistics, occurrence counts, or historical dates — you were not given any; "
+    "state the expectation only, the evidence is computed separately.\n\n"
+    "Respond in JSON only, no preamble, no markdown fences: "
+    '{"inference_text": "...", "market_impact": "bullish|bearish|volatile|neutral|mixed"}'
+)
+
+
 # ── Skill Registry ────────────────────────────────────────────────────────────
 
 SKILLS: dict[str, Skill] = {
@@ -421,4 +458,5 @@ SKILLS: dict[str, Skill] = {
     "vani_correlation_insight":  Skill(system=_VANI_CORRELATION_INSIGHT_SYSTEM,    max_tokens=200),
     "rule_insight":              Skill(system=_RULE_INSIGHT_SYSTEM,                max_tokens=250),
     "sector_insight":            Skill(system=_SECTOR_INSIGHT_SYSTEM,              max_tokens=220),
+    "rule_inference":            Skill(system=_RULE_INFERENCE_SYSTEM,              max_tokens=350),
 }

@@ -5179,138 +5179,443 @@ def _find_overlaps(ranges_a: list[tuple], ranges_b: list[tuple]) -> list[tuple]:
     return result
 
 
+def _compute_correlation(item_a: str, item_b: str, benchmark: str, conn) -> dict:
+    """Core correlation/confluence computation — shared by the
+    /api/correlation/compute endpoint and pair-level rule inference
+    evidence (km_rule_inference rows with rule_b_id set), which calls
+    this in-process instead of a self-HTTP-call. Raises HTTPException
+    on a bad benchmark name; caller's try/except handles the rest."""
+    benchmark_name = _BENCHMARK_NAMES.get(benchmark, 'NIFTY 50')
+    # ── Resolve benchmark index id ──────────────────────────────────────
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM km_index_symbols WHERE name=%s LIMIT 1", (benchmark_name,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(400, f'Benchmark not found: {benchmark_name}')
+        bm_id = row[0]
+
+    # ── Fetch all benchmark closes ordered by date ──────────────────────
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT trade_date, close FROM km_index_eod WHERE index_id=%s AND close IS NOT NULL ORDER BY trade_date",
+            (bm_id,)
+        )
+        rows = cur.fetchall()
+    date_list   = [r[0] for r in rows]
+    price_map   = {r[0]: float(r[1]) for r in rows}
+    date_index  = {d: i for i, d in enumerate(date_list)}
+
+    def _fwd_return(start: date, n: int) -> float | None:
+        idx = date_index.get(start)
+        if idx is None:
+            return None
+        # find nearest trading day on or after start
+        closest = next((date_index[date_list[j]] for j in range(idx, min(idx+3, len(date_list)))
+                        if date_list[j] >= start), idx)
+        fwd_idx = closest + n
+        if fwd_idx >= len(date_list):
+            return None
+        start_close = price_map.get(date_list[closest])
+        end_close   = price_map.get(date_list[fwd_idx])
+        if not start_close or not end_close:
+            return None
+        return round((end_close - start_close) / start_close * 100, 4)
+
+    # ── Get active ranges for each item ────────────────────────────────
+    def get_ranges(item_id: str) -> list[tuple]:
+        if item_id.startswith('astro_rule:'):
+            rc = item_id[len('astro_rule:'):]
+            return _get_astro_ranges(rc, conn)
+        if item_id.startswith('astro_group:'):
+            tag = item_id[len('astro_group:'):]
+            return _get_astro_group_ranges(tag, conn)
+        return _get_indicator_ranges(item_id, bm_id, conn)
+
+    ranges_a = get_ranges(item_a)
+    ranges_b = get_ranges(item_b)
+    overlaps  = _find_overlaps(ranges_a, ranges_b)
+
+    if len(overlaps) < 3:
+        return {'insufficient_data': True, 'n_instances': len(overlaps)}
+
+    # ── Compute returns for each overlap ────────────────────────────────
+    today = date.today()
+    shape = _classify_shape(item_a, item_b)
+    # Identify which item is the zone indicator (for EVENT_IN_STATE state labels)
+    zone_item = item_b if item_a.startswith(('astro_rule:', 'astro_group:')) else item_a
+    instances, bullish, bearish = [], 0, 0
+    ret5_sum = ret22_sum = ret5_cnt = ret22_cnt = 0.0
+
+    for s, e in overlaps:
+        r5  = _fwd_return(s, 5)
+        r22 = _fwd_return(s, 22)
+        dur = (e - s).days + 1
+        inst = {
+            'start_date':    str(s),
+            'end_date':      str(e),
+            'duration_days': dur,
+            'return_5d':     r5,
+            'return_22d':    r22,
+        }
+        if shape == 'EVENT_IN_STATE':
+            inst['state'] = _get_indicator_state(zone_item, s, bm_id, conn)
+        instances.append(inst)
+        if r5 is not None:
+            if r5 > 0: bullish += 1
+            else:       bearish += 1
+            ret5_sum  += r5;  ret5_cnt  += 1
+        if r22 is not None:
+            ret22_sum += r22; ret22_cnt += 1
+
+    # Sort newest first
+    instances.sort(key=lambda x: x['start_date'], reverse=True)
+
+    # Currently active: is today inside any overlap range?
+    currently_active = any(s <= today <= e for s, e in overlaps)
+
+    # ── Data quality metrics ──────────────────────────────────────────
+    # Use NIFTY 50 (index_id=1) as the canonical quality benchmark —
+    # it has the longest, most complete history and reflects real trading
+    # calendar coverage regardless of which index is being correlated.
+    date_from = str(date_list[0])  if date_list else ''
+    date_to   = str(date_list[-1]) if date_list else ''
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+              COUNT(*) FILTER (WHERE close IS NOT NULL) AS valid_days,
+              COUNT(*)                                   AS total_days
+            FROM km_index_eod
+            WHERE index_id = (SELECT id FROM km_index_symbols WHERE name='NIFTY 50' LIMIT 1)
+            """,
+        )
+        row = cur.fetchone()
+        days_covered = row[0] if row else 0
+        days_total   = row[1] if row else 0
+    coverage_pct = round((days_covered / days_total * 100), 2) if days_total else 0.0
+
+    return {
+        'shape':           shape,
+        'n_instances':     len(overlaps),
+        'bearish_count':   bearish,
+        'bullish_count':   bullish,
+        'avg_return_5d':   round(ret5_sum  / ret5_cnt,  4) if ret5_cnt  else 0,
+        'avg_return_22d':  round(ret22_sum / ret22_cnt, 4) if ret22_cnt else 0,
+        'currently_active': currently_active,
+        'instances':       instances,
+        'coverage_pct':    coverage_pct,
+        'days_covered':    days_covered,
+        'days_total':      days_total,
+        'date_from':       date_from,
+        'date_to':         date_to,
+    }
+
+
 @app.post('/api/correlation/compute')
 def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_current_user_id)):
-    benchmark_name = _BENCHMARK_NAMES.get(body.benchmark, 'NIFTY 50')
     conn = _conn(15000)
     try:
-        # ── Resolve benchmark index id ──────────────────────────────────────
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM km_index_symbols WHERE name=%s LIMIT 1", (benchmark_name,))
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(400, f'Benchmark not found: {benchmark_name}')
-            bm_id = row[0]
-
-        # ── Fetch all benchmark closes ordered by date ──────────────────────
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT trade_date, close FROM km_index_eod WHERE index_id=%s AND close IS NOT NULL ORDER BY trade_date",
-                (bm_id,)
-            )
-            rows = cur.fetchall()
-        date_list   = [r[0] for r in rows]
-        price_map   = {r[0]: float(r[1]) for r in rows}
-        date_index  = {d: i for i, d in enumerate(date_list)}
-
-        def _fwd_return(start: date, n: int) -> float | None:
-            idx = date_index.get(start)
-            if idx is None:
-                return None
-            # find nearest trading day on or after start
-            closest = next((date_index[date_list[j]] for j in range(idx, min(idx+3, len(date_list)))
-                            if date_list[j] >= start), idx)
-            fwd_idx = closest + n
-            if fwd_idx >= len(date_list):
-                return None
-            start_close = price_map.get(date_list[closest])
-            end_close   = price_map.get(date_list[fwd_idx])
-            if not start_close or not end_close:
-                return None
-            return round((end_close - start_close) / start_close * 100, 4)
-
-        # ── Get active ranges for each item ────────────────────────────────
-        def get_ranges(item_id: str) -> list[tuple]:
-            if item_id.startswith('astro_rule:'):
-                rc = item_id[len('astro_rule:'):]
-                return _get_astro_ranges(rc, conn)
-            if item_id.startswith('astro_group:'):
-                tag = item_id[len('astro_group:'):]
-                return _get_astro_group_ranges(tag, conn)
-            return _get_indicator_ranges(item_id, bm_id, conn)
-
-        ranges_a = get_ranges(body.item_a)
-        ranges_b = get_ranges(body.item_b)
-        overlaps  = _find_overlaps(ranges_a, ranges_b)
-
-        if len(overlaps) < 3:
-            return {'insufficient_data': True, 'n_instances': len(overlaps)}
-
-        # ── Compute returns for each overlap ────────────────────────────────
-        today = date.today()
-        shape = _classify_shape(body.item_a, body.item_b)
-        # Identify which item is the zone indicator (for EVENT_IN_STATE state labels)
-        zone_item = body.item_b if body.item_a.startswith(('astro_rule:', 'astro_group:')) else body.item_a
-        instances, bullish, bearish = [], 0, 0
-        ret5_sum = ret22_sum = ret5_cnt = ret22_cnt = 0.0
-
-        for s, e in overlaps:
-            r5  = _fwd_return(s, 5)
-            r22 = _fwd_return(s, 22)
-            dur = (e - s).days + 1
-            inst = {
-                'start_date':    str(s),
-                'end_date':      str(e),
-                'duration_days': dur,
-                'return_5d':     r5,
-                'return_22d':    r22,
-            }
-            if shape == 'EVENT_IN_STATE':
-                inst['state'] = _get_indicator_state(zone_item, s, bm_id, conn)
-            instances.append(inst)
-            if r5 is not None:
-                if r5 > 0: bullish += 1
-                else:       bearish += 1
-                ret5_sum  += r5;  ret5_cnt  += 1
-            if r22 is not None:
-                ret22_sum += r22; ret22_cnt += 1
-
-        # Sort newest first
-        instances.sort(key=lambda x: x['start_date'], reverse=True)
-
-        # Currently active: is today inside any overlap range?
-        currently_active = any(s <= today <= e for s, e in overlaps)
-
-        # ── Data quality metrics ──────────────────────────────────────────
-        # Use NIFTY 50 (index_id=1) as the canonical quality benchmark —
-        # it has the longest, most complete history and reflects real trading
-        # calendar coverage regardless of which index is being correlated.
-        date_from = str(date_list[0])  if date_list else ''
-        date_to   = str(date_list[-1]) if date_list else ''
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                  COUNT(*) FILTER (WHERE close IS NOT NULL) AS valid_days,
-                  COUNT(*)                                   AS total_days
-                FROM km_index_eod
-                WHERE index_id = (SELECT id FROM km_index_symbols WHERE name='NIFTY 50' LIMIT 1)
-                """,
-            )
-            row = cur.fetchone()
-            days_covered = row[0] if row else 0
-            days_total   = row[1] if row else 0
-        coverage_pct = round((days_covered / days_total * 100), 2) if days_total else 0.0
-
-        return {
-            'shape':           shape,
-            'n_instances':     len(overlaps),
-            'bearish_count':   bearish,
-            'bullish_count':   bullish,
-            'avg_return_5d':   round(ret5_sum  / ret5_cnt,  4) if ret5_cnt  else 0,
-            'avg_return_22d':  round(ret22_sum / ret22_cnt, 4) if ret22_cnt else 0,
-            'currently_active': currently_active,
-            'instances':       instances,
-            'coverage_pct':    coverage_pct,
-            'days_covered':    days_covered,
-            'days_total':      days_total,
-            'date_from':       date_from,
-            'date_to':         date_to,
-        }
+        return _compute_correlation(body.item_a, body.item_b, body.benchmark, conn)
     except HTTPException:
         raise
     except Exception as exc:
         log.error(f'correlation_compute error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+# ── Rule Inference — theory-vs-evidence layer (migration 134) ─────────────────
+# Owner directive 2026-07-07: dc_inference (migration 004) is too small/sparse
+# (29 rows, 10 with real text, confidence never populated — see session notes)
+# to seed the ~30-35% coverage target via pull; this is a fresh authored layer
+# instead, shaped like the parked PlanetPulse confidence framework so it slots
+# in there later. rule_b_id set = pair/combination inference; NULL = single-rule.
+
+class RuleInferenceCreate(BaseModel):
+    inference_text: str
+    market_impact: str | None = None   # bullish|bearish|volatile|neutral|mixed
+    pair_rule_id: int | None = None
+    source: str = 'manual'              # 'manual' | 'ai_generated' — set 'ai_generated' when saving an AI draft as-is
+    created_by: str | None = None
+
+
+class RuleInferenceGenerateRequest(BaseModel):
+    llm: str = 'qwen'                   # 'claude' | 'qwen' — default Qwen: closed-book synthesis, free
+    pair_rule_id: int | None = None
+
+
+def _rule_meta(cur, rule_id: int) -> dict | None:
+    cur.execute(
+        "SELECT id, rule_code, display_name, rule_type, planet_1, planet_2, sign, "
+        "nakshatra, tithi, vara, planet_state, base_bias, remarks, tags "
+        "FROM km_astro_rule_master WHERE id = %s",
+        (rule_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    cols = ['id', 'rule_code', 'display_name', 'rule_type', 'planet_1', 'planet_2', 'sign',
+            'nakshatra', 'tithi', 'vara', 'planet_state', 'base_bias', 'remarks', 'tags']
+    return dict(zip(cols, row))
+
+
+def _bias_bucket(market_impact: str | None) -> str | None:
+    """Collapse the 7-value market_impact/base_bias vocabularies into
+    bullish/bearish/other so a fresh inference's stated direction can be
+    compared against a rule's own base_bias or an empirical bull/bear split."""
+    if not market_impact:
+        return None
+    m = market_impact.lower()
+    if m in ('bullish', 'strong_bullish', 'mild_bullish', 'major_positive', 'minor_positive'):
+        return 'bullish'
+    if m in ('bearish', 'strong_bearish', 'mild_bearish', 'major_negative', 'minor_negative'):
+        return 'bearish'
+    return 'other'   # neutral / turning / volatile / mixed — no directional claim to score
+
+
+def _single_rule_evidence(cur, rule_id: int) -> dict:
+    """Evidence summary for a single-rule inference — from km_rule_confidence,
+    already computed by the transit-scoring scheduler job (no fresh stats work)."""
+    cur.execute(
+        "SELECT total_occurrences, matched_count, confidence_score, avg_return_matched "
+        "FROM km_rule_confidence WHERE rule_id = %s",
+        (rule_id,),
+    )
+    row = cur.fetchone()
+    if not row or row[0] is None:
+        return {'n': 0, 'confidence_score': None, 'avg_return_matched': None}
+    return {'n': row[0], 'matched_count': row[1], 'confidence_score': float(row[2]) if row[2] is not None else None,
+            'avg_return_matched': float(row[3]) if row[3] is not None else None}
+
+
+def _pair_evidence(conn, code_a: str, code_b: str) -> dict:
+    """Evidence summary for a pair inference — reuses the correlation engine
+    already built for the Workspace confluence detector (astro_rule: items)."""
+    try:
+        result = _compute_correlation(f'astro_rule:{code_a}', f'astro_rule:{code_b}', 'NIFTY50', conn)
+    except HTTPException:
+        return {'n': 0}
+    if result.get('insufficient_data'):
+        return {'n': result.get('n_instances', 0)}
+    return {
+        'n': result['n_instances'],
+        'bullish_count': result['bullish_count'],
+        'bearish_count': result['bearish_count'],
+        'currently_active': result['currently_active'],
+    }
+
+
+def _confidence_tier(n: int) -> str:
+    if n >= 20:
+        return 'VALIDATED'
+    if n >= 10:
+        return 'INDICATIVE'
+    return 'UNVALIDATED'
+
+
+def _inference_outcome(market_impact: str | None, evidence: dict, base_bias: str | None = None) -> str:
+    """worked / partial / failed / directional_na / pending — mirrors the
+    vocabulary evaluate_dc_inferences() already established for dc_inference."""
+    bucket = _bias_bucket(market_impact)
+    if bucket is None or bucket == 'other':
+        return 'directional_na'
+
+    n = evidence.get('n', 0)
+    if n == 0:
+        return 'pending'
+
+    if 'confidence_score' in evidence:   # single-rule path — km_rule_confidence
+        score = evidence.get('confidence_score')
+        if score is None:
+            return 'pending'
+        same_direction = bucket == _bias_bucket(base_bias)
+        rate = score if same_direction else (100 - score)
+    else:                                 # pair path — bullish/bearish split
+        bull, bear = evidence.get('bullish_count', 0), evidence.get('bearish_count', 0)
+        total = bull + bear
+        if total == 0:
+            return 'pending'
+        rate = (bull / total * 100) if bucket == 'bullish' else (bear / total * 100)
+
+    if rate >= 55:
+        return 'worked'
+    if rate <= 35:
+        return 'failed'
+    return 'partial'
+
+
+@app.get('/api/rules/{rule_id}/inference')
+def list_rule_inference(rule_id: int):
+    """All inference rows touching this rule — single-rule (rule_b_id NULL)
+    and any pair rows where this rule is either side — each augmented with a
+    freshly computed confidence_tier + outcome (not the stored snapshot,
+    which only reflects the tier at authoring time)."""
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM km_rule_inference "
+                "WHERE rule_a_id = %s OR rule_b_id = %s "
+                "ORDER BY created_at DESC",
+                (rule_id, rule_id),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+
+            meta_a = _rule_meta(cur, rule_id)
+            if not meta_a:
+                raise HTTPException(404, 'Rule not found')
+
+            out = []
+            for r in rows:
+                other_id = r['rule_b_id'] if r['rule_a_id'] == rule_id else r['rule_a_id']
+                if other_id is None:
+                    evidence = _single_rule_evidence(cur, rule_id)
+                    outcome  = _inference_outcome(r['market_impact'], evidence, meta_a['base_bias'])
+                else:
+                    other = _rule_meta(cur, other_id)
+                    evidence = _pair_evidence(conn, meta_a['rule_code'], other['rule_code']) \
+                        if r['rule_a_id'] == rule_id else _pair_evidence(conn, other['rule_code'], meta_a['rule_code'])
+                    outcome  = _inference_outcome(r['market_impact'], evidence)
+                    r['pair_rule_code']  = other['rule_code']
+                    r['pair_rule_label'] = other['display_name']
+
+                r['evidence'] = evidence
+                r['outcome']  = outcome
+                r['confidence_tier_live'] = _confidence_tier(evidence.get('n', 0))
+                out.append(r)
+
+        return {'rule_id': rule_id, 'inferences': out}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'list_rule_inference error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/rules/{rule_id}/inference')
+def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
+    """Save an inference row — manual entry, or an AI draft the admin reviewed
+    and accepted as-is (source='ai_generated')."""
+    if req.source not in ('manual', 'ai_generated'):
+        raise HTTPException(400, "source must be 'manual' or 'ai_generated'")
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            meta = _rule_meta(cur, rule_id)
+            if not meta:
+                raise HTTPException(404, 'Rule not found')
+
+            rule_a_id, rule_b_id = rule_id, req.pair_rule_id
+            if rule_b_id is not None:
+                other = _rule_meta(cur, rule_b_id)
+                if not other:
+                    raise HTTPException(404, 'Pair rule not found')
+                if rule_b_id == rule_a_id:
+                    raise HTTPException(400, 'A rule cannot be paired with itself')
+                # Store canonically ordered so lookups don't need OR-both-ways logic elsewhere.
+                if rule_b_id < rule_a_id:
+                    rule_a_id, rule_b_id = rule_b_id, rule_a_id
+
+            cur.execute(
+                "INSERT INTO km_rule_inference "
+                "  (rule_a_id, rule_b_id, inference_text, market_impact, source, created_by) "
+                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING *",
+                (rule_a_id, rule_b_id, req.inference_text, req.market_impact, req.source, req.created_by),
+            )
+            row = dict(cur.fetchone())
+        conn.commit()
+        return row
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'create_rule_inference error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/rules/{rule_id}/inference/generate')
+def generate_rule_inference(rule_id: int, req: RuleInferenceGenerateRequest):
+    """AI-drafted inference — NOT saved. Admin reviews/edits, then POSTs to
+    /api/rules/{rule_id}/inference with source='ai_generated' to persist it."""
+    if req.llm not in ('claude', 'qwen'):
+        raise HTTPException(400, "llm must be 'claude' or 'qwen'")
+    if 'rule_inference' not in _AI_SKILLS:
+        raise HTTPException(503, 'AI skill not available')
+
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            meta_a = _rule_meta(cur, rule_id)
+            if not meta_a:
+                raise HTTPException(404, 'Rule not found')
+            meta_b = _rule_meta(cur, req.pair_rule_id) if req.pair_rule_id else None
+            if req.pair_rule_id and not meta_b:
+                raise HTTPException(404, 'Pair rule not found')
+    finally:
+        conn.close()
+
+    def _describe(m: dict) -> str:
+        parts = [f"code={m['rule_code']}", f"name={m['display_name']}", f"type={m['rule_type']}"]
+        if m['planet_1']: parts.append(f"planet_1={m['planet_1']}")
+        if m['planet_2']: parts.append(f"planet_2={m['planet_2']}")
+        if m['sign']: parts.append(f"sign={m['sign']}")
+        if m['nakshatra']: parts.append(f"nakshatra={m['nakshatra']}")
+        if m['planet_state']: parts.append(f"state={m['planet_state']}")
+        parts.append(f"base_bias={m['base_bias']}")
+        if m['remarks']: parts.append(f"remarks={m['remarks']}")
+        return ', '.join(parts)
+
+    skill = _AI_SKILLS['rule_inference']
+    if meta_b:
+        user_prompt = (
+            f"Rule A: {_describe(meta_a)}\nRule B: {_describe(meta_b)}\n"
+            "This is a COMBINATION — draft the inference for what it means when both are active together."
+        )
+    else:
+        user_prompt = f"Rule: {_describe(meta_a)}"
+
+    raw = _claude_complete(system=skill.system, user=user_prompt, max_tokens=skill.max_tokens) \
+        if req.llm == 'claude' else _ai_complete(system=skill.system, user=user_prompt, max_tokens=skill.max_tokens)
+
+    if raw is None:
+        raise HTTPException(503, 'LLM unavailable or not configured')
+
+    try:
+        draft = _parse_llm_json(raw)
+        if not isinstance(draft, dict) or 'inference_text' not in draft:
+            raise ValueError('expected {inference_text, market_impact}')
+    except Exception:
+        raise HTTPException(502, f'LLM returned unparseable JSON: {raw[:200]}')
+
+    return {
+        'inference_text': draft.get('inference_text'),
+        'market_impact':  draft.get('market_impact'),
+        'source':         'ai_generated',
+        'llm':            req.llm,
+    }
+
+
+@app.delete('/api/rules/inference/{inference_id}')
+def delete_rule_inference(inference_id: int):
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM km_rule_inference WHERE id = %s", (inference_id,))
+            if cur.rowcount == 0:
+                raise HTTPException(404, 'Inference not found')
+        conn.commit()
+        return {'deleted': inference_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'delete_rule_inference error: {exc}')
         raise HTTPException(500, str(exc))
     finally:
         conn.close()
