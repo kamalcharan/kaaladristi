@@ -13,7 +13,11 @@ import type { InstrumentRef, ChartOverlay } from '@/types/framework'
 const HEADER_H = 36
 const NO_OVERLAYS: ChartOverlay[] = []
 
-interface ZoneExplain { tag: string; ruleId: number; ruleLabel: string; x: number; y: number }
+interface ZoneExplain {
+  tag: string; ruleId: number; ruleLabel: string; x: number; y: number
+  /** Other rules under the same click point (Overlap Visibility Phase 5). */
+  coincident?: { ruleId: number; label: string }[]
+}
 
 interface Props {
   instrument: InstrumentRef
@@ -45,8 +49,16 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
   const astroBands = useAstroOverlayBands(effectiveOverlays)
   const [zoneExplain, setZoneExplain] = useState<ZoneExplain | null>(null)
 
-  const handleZoneClick = useCallback((band: AstroBand, clientX: number, clientY: number) => {
-    setZoneExplain({ tag: band.groupTag, ruleId: band.ruleId, ruleLabel: band.displayName, x: clientX, y: clientY })
+  const handleZoneClick = useCallback((band: AstroBand, clientX: number, clientY: number, coincident?: AstroBand[]) => {
+    // Dedupe by ruleId — a rule with several windows under the cursor is one entry
+    const others = new Map<number, string>()
+    for (const b of coincident ?? []) {
+      if (b.ruleId !== band.ruleId) others.set(b.ruleId, b.displayName)
+    }
+    setZoneExplain({
+      tag: band.groupTag, ruleId: band.ruleId, ruleLabel: band.displayName, x: clientX, y: clientY,
+      coincident: [...others.entries()].map(([ruleId, label]) => ({ ruleId, label })),
+    })
   }, [])
 
   // Measure container height via ResizeObserver — drives TradingChart height
@@ -107,6 +119,7 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
           tag={zoneExplain.tag}
           focusRuleId={zoneExplain.ruleId}
           focusRuleLabel={zoneExplain.ruleLabel}
+          coincident={zoneExplain.coincident}
           anchorX={zoneExplain.x}
           anchorY={zoneExplain.y}
           onClose={() => setZoneExplain(null)}

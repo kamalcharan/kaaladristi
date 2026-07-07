@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useActiveRuleToday } from '@/hooks/useRuleInsight'
 import RuleInsightCard from './RuleInsightCard'
 
@@ -14,7 +14,7 @@ function fmtDate(iso: string | null | undefined): string {
  * LLM is offline (RuleInsightCard self-hides).
  */
 export default function OverlayExplainPopover({
-  tag, anchorX, anchorY, onClose, focusRuleId, focusRuleLabel,
+  tag, anchorX, anchorY, onClose, focusRuleId, focusRuleLabel, coincident,
 }: {
   tag: string
   anchorX: number
@@ -23,9 +23,16 @@ export default function OverlayExplainPopover({
   /** When set (e.g. a chart zone click), lead with THIS specific rule's insight. */
   focusRuleId?: number | null
   focusRuleLabel?: string
+  /** Other rules under the same click point (Overlap Visibility Phase 5) —
+   * listed below the insight; clicking one switches the focus to it. */
+  coincident?: { ruleId: number; label: string }[]
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const { data, isLoading } = useActiveRuleToday(tag)
+  // Focus can be switched to a coincident rule without closing the popover
+  const [focus, setFocus] = useState<{ id: number | null; label?: string }>(
+    { id: focusRuleId ?? null, label: focusRuleLabel },
+  )
 
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -47,8 +54,13 @@ export default function OverlayExplainPopover({
   const active   = data?.active_now?.[0]
   const upcoming = data?.upcoming?.[0]
   // Chart-zone click → that rule's insight; pill click → the tag's active/next rule.
-  const insightRuleId = focusRuleId ?? active?.id ?? upcoming?.id ?? null
-  const headerLabel   = focusRuleLabel ?? tag
+  const insightRuleId = focus.id ?? active?.id ?? upcoming?.id ?? null
+  const headerLabel   = focus.label ?? tag
+  // Cluster list: every rule under the click point, focused one included so
+  // the user can switch back after exploring a coincident rule.
+  const cluster = (coincident && coincident.length > 0 && focusRuleId != null)
+    ? [{ ruleId: focusRuleId, label: focusRuleLabel ?? tag }, ...coincident]
+    : []
 
   const left = Math.max(8, Math.min(anchorX, window.innerWidth - 348))
 
@@ -108,6 +120,36 @@ export default function OverlayExplainPopover({
           Next: {upcoming.display_name}
           {upcoming.start_date ? ` · ${fmtDate(upcoming.start_date)}` : ''}
           {upcoming.days_until != null ? ` (in ${upcoming.days_until}d)` : ''}
+        </div>
+      )}
+
+      {/* Coincident events at this point (Overlap Visibility Phase 5) —
+          click to switch the insight without closing the popover */}
+      {cluster.length > 1 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+            color: 'var(--text-muted)', fontFamily: 'var(--font-mono,monospace)', marginBottom: 5 }}>
+            Also at this point
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {cluster.map(c => {
+              const isFocused = c.ruleId === (focus.id ?? focusRuleId)
+              return (
+                <button
+                  key={c.ruleId}
+                  onClick={() => setFocus({ id: c.ruleId, label: c.label })}
+                  style={{
+                    fontSize: 10, padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
+                    background: isFocused ? 'rgba(157,143,249,0.15)' : 'transparent',
+                    border: `1px solid ${isFocused ? 'rgba(157,143,249,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                    color: isFocused ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {c.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 
