@@ -3434,6 +3434,7 @@ def _run_confidence_bg():
             compute_confidence_from_daily_signals,
             compute_yearly_breakdown,
             compute_yearly_breakdown_from_signals,
+            rescore_rules,
         )
     except Exception as exc:
         log.error(f'Confidence import failed: {exc}')
@@ -3461,6 +3462,10 @@ def _run_confidence_bg():
         # Confidence aggregation
         upserted  = compute_confidence_from_transits(conn)
         upserted += compute_confidence_from_daily_signals(conn)
+        # POA item 3: re-derive matched vs the CURRENT hypothesis (active
+        # inference, else base_bias) and stamp hypothesis_source/impact.
+        # Before the yearly breakdowns so they see the rescored matched.
+        rescore_rules(conn)
         compute_yearly_breakdown(conn)
         compute_yearly_breakdown_from_signals(conn)
 
@@ -5680,7 +5685,24 @@ def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
             )
             row = dict(cur.fetchone())
         conn.commit()
+
+        # POA item 3: a single-rule inference IS the new hypothesis of record —
+        # re-score this rule's already-scored windows against it immediately
+        # (matched recompute + confidence aggregate + hypothesis stamp), so
+        # /rules and the chart tooltip reflect the new claim without waiting
+        # for the nightly 19:00 job. Pair inferences don't retarget scoring
+        # (pair evidence is computed live from overlap windows).
+        rescored = 0
+        if rule_b_id is None:
+            try:
+                from scripts.confidence_scoring import rescore_rules  # noqa: PLC0415
+                rescored = rescore_rules(conn, [rule_a_id])
+            except Exception as exc:
+                # Non-fatal: the inference is saved; nightly job will re-score.
+                log.error(f'create_rule_inference: rescore failed for rule {rule_a_id}: {exc}')
+
         row['superseded_previous'] = prev['id'] if prev else None
+        row['windows_rescored'] = rescored
         return row
     except HTTPException:
         raise
@@ -5772,10 +5794,27 @@ def delete_rule_inference(inference_id: int):
     conn = _conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM km_rule_inference WHERE id = %s", (inference_id,))
-            if cur.rowcount == 0:
+            cur.execute(
+                "DELETE FROM km_rule_inference WHERE id = %s "
+                "RETURNING rule_a_id, rule_b_id, status",
+                (inference_id,),
+            )
+            deleted = cur.fetchone()
+            if not deleted:
                 raise HTTPException(404, 'Inference not found')
         conn.commit()
+
+        # POA item 3: deleting the ACTIVE single-rule inference reverts the
+        # hypothesis of record to base_bias — re-score so the confidence row
+        # and hypothesis stamp don't keep claiming the deleted inference.
+        rule_a_id, rule_b_id, status = deleted[0], deleted[1], deleted[2]
+        if status == 'active' and rule_b_id is None:
+            try:
+                from scripts.confidence_scoring import rescore_rules  # noqa: PLC0415
+                rescore_rules(conn, [rule_a_id])
+            except Exception as exc:
+                log.error(f'delete_rule_inference: rescore failed for rule {rule_a_id}: {exc}')
+
         return {'deleted': inference_id}
     except HTTPException:
         raise

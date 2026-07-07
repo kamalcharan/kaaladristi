@@ -16,9 +16,15 @@ def get_conn():
 
 NIFTY_SYMBOL = "NIFTY 50"
 
-_BULLISH_SIGNALS = {'bullish', 'strong_bullish', 'mild_bullish'}
-_BEARISH_SIGNALS = {'bearish', 'strong_bearish', 'mild_bearish'}
-_SKIP_SIGNALS    = {'volatile', 'turning', 'neutral'}
+# Directional buckets — cover BOTH vocabularies the hypothesis can arrive in:
+# the rule master's outcome/base_bias values AND km_rule_inference's 12-value
+# /inference vocabulary (migration 135).
+_BULLISH_SIGNALS = {'bullish', 'strong_bullish', 'mild_bullish',
+                    'major_positive', 'minor_positive'}
+_BEARISH_SIGNALS = {'bearish', 'strong_bearish', 'mild_bearish',
+                    'major_negative', 'minor_negative'}
+_SKIP_SIGNALS    = {'volatile', 'turning', 'neutral',
+                    'highly_volatile', 'cautious', 'consolidation', 'mixed'}
 
 # Rule types whose signals live in km_rule_signals only (no km_rule_transits)
 DAILY_ONLY_RULE_TYPES = ('nakshatra_vara', 'tithi_alone', 'eclipse')
@@ -146,10 +152,130 @@ def _flush_transit_batch(conn, batch: list):
 
 
 def load_rule_outcome_map(conn) -> dict:
-    """Return {rule_id: outcome} for all rules."""
+    """Return {rule_id: hypothesis_impact} for all rules.
+
+    Item 3 of the inference-lifecycle POA: the hypothesis of record is the
+    rule's ACTIVE single-rule inference; the seeded outcome/base_bias is
+    only the fallback for rules with no authored inference. Scoring
+    therefore validates what the expert currently claims, not the fossil
+    label — same windows, re-scored whenever the claim changes."""
     cur = conn.cursor()
-    cur.execute("SELECT id, COALESCE(outcome, base_bias) FROM km_astro_rule_master")
+    cur.execute("""
+        SELECT r.id, COALESCE(i.market_impact, COALESCE(r.outcome, r.base_bias))
+        FROM km_astro_rule_master r
+        LEFT JOIN km_rule_inference i
+               ON i.rule_a_id = r.id AND i.rule_b_id IS NULL AND i.status = 'active'
+    """)
     return {row[0]: row[1] for row in cur.fetchall()}
+
+
+# ── Hypothesis-aware re-scoring (POA item 3) ───────────────────────────────────
+#
+# update_transit_returns() only fills rows whose nifty_return_pct IS NULL, so
+# a hypothesis change would never touch already-scored windows. matched is
+# fully derivable from the STORED return + the current hypothesis, so this
+# recomputes it in one UPDATE — cheap enough to run on every inference save
+# (scoped to that rule) and after every nightly scoring pass (all rules).
+
+_RESCORE_MATCHED_SQL = """
+    UPDATE km_rule_transits t
+    SET matched = CASE
+        WHEN h.impact IN %(bullish)s THEN t.nifty_return_pct > 0
+        WHEN h.impact IN %(bearish)s THEN t.nifty_return_pct <= 0
+        ELSE NULL
+    END
+    FROM (
+        SELECT r.id AS rule_id,
+               COALESCE(i.market_impact, COALESCE(r.outcome, r.base_bias)) AS impact
+        FROM km_astro_rule_master r
+        LEFT JOIN km_rule_inference i
+               ON i.rule_a_id = r.id AND i.rule_b_id IS NULL AND i.status = 'active'
+    ) h
+    WHERE h.rule_id = t.rule_id
+      AND t.nifty_return_pct IS NOT NULL
+"""
+
+_HYPOTHESIS_STAMP_SQL = """
+    UPDATE km_rule_confidence c
+    SET hypothesis_source = h.src,
+        hypothesis_impact = h.impact
+    FROM (
+        SELECT r.id AS rule_id,
+               COALESCE(i.market_impact, COALESCE(r.outcome, r.base_bias)) AS impact,
+               CASE WHEN i.market_impact IS NOT NULL THEN 'inference' ELSE 'base_bias' END AS src
+        FROM km_astro_rule_master r
+        LEFT JOIN km_rule_inference i
+               ON i.rule_a_id = r.id AND i.rule_b_id IS NULL AND i.status = 'active'
+    ) h
+    WHERE c.rule_id = h.rule_id
+"""
+
+
+def rescore_rules(conn, rule_ids: list | None = None) -> int:
+    """Recompute matched for already-scored windows against the CURRENT
+    hypothesis (active inference, else base_bias), refresh km_rule_confidence
+    aggregates, and stamp which hypothesis produced the numbers.
+
+    rule_ids=None → all rules (nightly pass); a list → just those rules
+    (called synchronously when an inference is saved)."""
+    cur = conn.cursor()
+    params = {'bullish': tuple(_BULLISH_SIGNALS), 'bearish': tuple(_BEARISH_SIGNALS)}
+
+    sql = _RESCORE_MATCHED_SQL
+    if rule_ids:
+        sql += " AND t.rule_id = ANY(%(rule_ids)s)"
+        params['rule_ids'] = list(rule_ids)
+    cur.execute(sql, params)
+    rescored = cur.rowcount
+
+    # Refresh aggregates for the affected rules (same upsert shape as
+    # compute_confidence_from_transits, scoped when rule_ids given).
+    agg_filter = "AND rule_id = ANY(%(rule_ids)s)" if rule_ids else ""
+    cur.execute(f"""
+        INSERT INTO km_rule_confidence (
+            rule_id, total_occurrences, matched_count, confidence_score,
+            avg_return_all, avg_return_matched, avg_return_unmatched,
+            best_return, worst_return, avg_duration_days,
+            historical_transits, last_computed_at
+        )
+        SELECT
+            rule_id,
+            COUNT(*) FILTER (WHERE matched IS NOT NULL),
+            COUNT(*) FILTER (WHERE matched = TRUE),
+            ROUND(COUNT(*) FILTER (WHERE matched = TRUE)::numeric /
+                  NULLIF(COUNT(*) FILTER (WHERE matched IS NOT NULL), 0) * 100, 2),
+            ROUND(AVG(nifty_return_pct)::numeric, 4),
+            ROUND(AVG(nifty_return_pct) FILTER (WHERE matched = TRUE)::numeric, 4),
+            ROUND(AVG(nifty_return_pct) FILTER (WHERE matched = FALSE)::numeric, 4),
+            ROUND(MAX(nifty_return_pct)::numeric, 4),
+            ROUND(MIN(nifty_return_pct)::numeric, 4),
+            ROUND(AVG(duration_days)::numeric, 1),
+            COUNT(*) FILTER (WHERE nifty_return_pct IS NOT NULL),
+            NOW()
+        FROM km_rule_transits
+        WHERE end_date <= CURRENT_DATE {agg_filter}
+        GROUP BY rule_id
+        ON CONFLICT (rule_id) DO UPDATE SET
+            total_occurrences  = EXCLUDED.total_occurrences,
+            matched_count      = EXCLUDED.matched_count,
+            confidence_score   = EXCLUDED.confidence_score,
+            avg_return_all     = EXCLUDED.avg_return_all,
+            avg_return_matched = EXCLUDED.avg_return_matched,
+            avg_return_unmatched = EXCLUDED.avg_return_unmatched,
+            best_return        = EXCLUDED.best_return,
+            worst_return       = EXCLUDED.worst_return,
+            avg_duration_days  = EXCLUDED.avg_duration_days,
+            historical_transits = EXCLUDED.historical_transits,
+            last_computed_at   = EXCLUDED.last_computed_at
+    """, params)
+
+    stamp_sql = _HYPOTHESIS_STAMP_SQL
+    if rule_ids:
+        stamp_sql += " AND c.rule_id = ANY(%(rule_ids)s)"
+    cur.execute(stamp_sql, params)
+
+    conn.commit()
+    return rescored
 
 
 # ── STEP 2b: Partial-day flags for nakshatra/tithi signals ────────────────────
