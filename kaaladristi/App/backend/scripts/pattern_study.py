@@ -4,7 +4,9 @@ pattern_study.py — Astro Pattern Engine, Phase 2
 POA: docs/POA/POA-astro-pattern-engine.md (approved 2026-07-06)
 Prerequisite: migration 132 (km_rule_patterns).
 
-Computes three pattern types for every rule that has transit windows,
+Computes three pattern types for every rule that has transit windows —
+plus daily-signal rules (nakshatra_vara / tithi_alone / eclipse / seasonal,
+which live in km_rule_signals) studied as synthetic 1-day tactical windows —
 against every index benchmark with enough history — standard AND curated
 (custom) baskets — and upserts results into km_rule_patterns:
 
@@ -78,6 +80,13 @@ INDICATOR_FIELDS  = ('ret_1d', 'rsi_14', 'rvol', 'sniper_inst', 'sniper_hot',
 # Anchor selection by the window's snapshot rule_type
 END_ANCHORED_TYPES = {'combust', 'retrograde'}
 
+# Daily-only rule types (rule_discovery.DAILY_ONLY_TYPES) live in
+# km_rule_signals, not km_rule_transits — each signal is treated as a
+# 1-day tactical window (start = end = signal date) so the Pattern Engine
+# covers them too (owner decision 2026-07-07, 'option b'). Anchor is the
+# signal day itself; band is tactical by construction (median duration 1).
+DAILY_SIGNAL_TYPES = ('nakshatra_vara', 'tithi_alone', 'eclipse', 'seasonal')
+
 # Context rule codes (motion/journey sets from migrations 127-130)
 CONTEXT_MOTION = {
     'mercury_motion': 'TR-MER-RET',
@@ -109,23 +118,40 @@ def mean_or_none(vals):
 # ── Data loading ───────────────────────────────────────────────────────────────
 
 def load_rules(cur, only_rule=None, only_tag=None):
-    """Rules that have transit windows. Returns list of dicts with windows."""
-    q = """
+    """Rules with study-able windows: km_rule_transits rows as-is, plus
+    daily-signal rules (km_rule_signals) as synthetic 1-day windows."""
+    filt = ""
+    filt_args = []
+    if only_rule:
+        filt += " AND r.rule_code = %s"
+        filt_args.append(only_rule)
+    if only_tag:
+        filt += " AND %s = ANY(r.tags)"
+        filt_args.append(only_tag)
+
+    q = f"""
         SELECT r.id, r.rule_code, r.display_name, r.tags,
                t.id AS transit_id, t.start_date, t.end_date,
                t.conditions_snapshot
         FROM km_astro_rule_master r
         JOIN km_rule_transits t ON t.rule_id = r.id
+        WHERE r.is_deleted = false{filt}
+
+        UNION ALL
+
+        SELECT r.id, r.rule_code, r.display_name, r.tags,
+               s.id, s.date, s.date,
+               COALESCE(s.conditions_snapshot, '{{}}'::jsonb)
+                 || jsonb_build_object('rule_type', r.rule_type,
+                                       'daily_signal', true)
+        FROM km_astro_rule_master r
+        JOIN km_rule_signals s ON s.rule_id = r.id
         WHERE r.is_deleted = false
+          AND r.rule_type IN %s{filt}
+
+        ORDER BY 1, 6
     """
-    args = []
-    if only_rule:
-        q += " AND r.rule_code = %s"
-        args.append(only_rule)
-    if only_tag:
-        q += " AND %s = ANY(r.tags)"
-        args.append(only_tag)
-    q += " ORDER BY r.id, t.start_date"
+    args = filt_args + [DAILY_SIGNAL_TYPES] + filt_args
     cur.execute(q, args)
 
     rules = {}
@@ -589,6 +615,10 @@ def base_params(rule):
         'continuous_coverage_threshold': CONTINUOUS_COVERAGE,
         'break_basis': 'close',
         'n_rule_windows_total': len(rule['windows']),
+        # Daily-signal rules are studied as synthetic 1-day windows
+        'window_source': 'daily_signals_1d'
+            if any(w['snapshot'].get('daily_signal') for w in rule['windows'])
+            else 'transits',
     }
 
 
