@@ -108,7 +108,7 @@ kaaladristi/
 | `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
 | `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
 
-Latest migration: **134** (`km_migration_134_rule_inference.sql` — `km_rule_inference` table, theory-vs-evidence layer for single-rule and pair/combination inferences; migration 133 restricts Catalog visibility to Mercury/Mars/Saturn/Jupiter/Bayer/MajorTransit-tagged rules)
+Latest migration: **135** (`km_migration_135_rule_inference_full_shape.sql` — widens `km_rule_inference` to the full /inference capture shape: 12-value market_impact vocabulary, expert `confidence` 1-10, `applicability_scope`/`applicability` JSONB, `notes`; migration 134 created the table, 133 restricts Catalog visibility to Mercury/Mars/Saturn/Jupiter/Bayer/MajorTransit-tagged rules)
 
 **Extended table inventory** (breadth/astro/rule/risk/scan/rolling-metric tables, inactive & missing indices): `docs/claude/db-tables.md`
 
@@ -381,7 +381,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **135**.
+Next migration number: **136**.
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 

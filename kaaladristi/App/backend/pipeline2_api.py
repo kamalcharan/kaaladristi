@@ -5334,9 +5334,13 @@ def correlation_compute(body: CorrelationRequest, _uid: str = Depends(_get_curre
 
 class RuleInferenceCreate(BaseModel):
     inference_text: str
-    market_impact: str | None = None   # bullish|bearish|volatile|neutral|mixed
+    market_impact: str | None = None    # full /inference vocabulary (migration 135 CHECK)
     pair_rule_id: int | None = None
     source: str = 'manual'              # 'manual' | 'ai_generated' — set 'ai_generated' when saving an AI draft as-is
+    confidence: int | None = None       # expert 1-10, always manual — AI never sets it
+    applicability_scope: list[str] | None = None
+    applicability: dict | None = None   # same JSONB shape as dc_inference
+    notes: str | None = None
     created_by: str | None = None
 
 
@@ -5519,7 +5523,47 @@ def list_rule_inference(rule_id: int):
                 r['confidence_tier_live'] = _confidence_tier(evidence.get('n', 0))
                 out.append(r)
 
-        return {'rule_id': rule_id, 'inferences': out}
+            # Auto-context for the form's read-only header: the event and its
+            # dates come from the DB (rule + almanac windows), never captured.
+            # Preference: active window today > next upcoming > most recent past.
+            cur.execute(
+                """
+                SELECT start_date, end_date,
+                       CASE
+                         WHEN start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE THEN 'active'
+                         WHEN start_date > CURRENT_DATE THEN 'upcoming'
+                         ELSE 'past'
+                       END AS status
+                FROM km_rule_transits
+                WHERE rule_id = %s
+                ORDER BY
+                  CASE
+                    WHEN start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE THEN 0
+                    WHEN start_date > CURRENT_DATE THEN 1
+                    ELSE 2
+                  END,
+                  CASE WHEN start_date > CURRENT_DATE THEN start_date END ASC,
+                  end_date DESC
+                LIMIT 1
+                """,
+                (rule_id,),
+            )
+            win = cur.fetchone()
+
+        return {
+            'rule_id': rule_id,
+            'rule': {
+                'rule_code': meta_a['rule_code'],
+                'display_name': meta_a['display_name'],
+                'base_bias': meta_a['base_bias'],
+            },
+            'window': {
+                'start_date': str(win['start_date']),
+                'end_date': str(win['end_date']),
+                'status': win['status'],
+            } if win else None,
+            'inferences': out,
+        }
     except HTTPException:
         raise
     except Exception as exc:
@@ -5556,9 +5600,13 @@ def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
 
             cur.execute(
                 "INSERT INTO km_rule_inference "
-                "  (rule_a_id, rule_b_id, inference_text, market_impact, source, created_by) "
-                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING *",
-                (rule_a_id, rule_b_id, req.inference_text, req.market_impact, req.source, req.created_by),
+                "  (rule_a_id, rule_b_id, inference_text, market_impact, source, "
+                "   confidence, applicability_scope, applicability, notes, created_by) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *",
+                (rule_a_id, rule_b_id, req.inference_text, req.market_impact, req.source,
+                 req.confidence, req.applicability_scope,
+                 json.dumps(req.applicability) if req.applicability is not None else None,
+                 req.notes, req.created_by),
             )
             row = dict(cur.fetchone())
         conn.commit()
@@ -5627,9 +5675,22 @@ def generate_rule_inference(rule_id: int, req: RuleInferenceGenerateRequest):
     except Exception:
         raise HTTPException(502, f'LLM returned unparseable JSON: {raw[:200]}')
 
+    # Sanitize the impact against the full /inference vocabulary (migration
+    # 135 CHECK) — an off-vocab value from the LLM becomes null so the admin
+    # picks manually rather than the save failing at the DB constraint.
+    _IMPACT_VOCAB = {
+        'major_positive', 'minor_positive', 'bullish',
+        'major_negative', 'minor_negative', 'bearish',
+        'highly_volatile', 'volatile', 'cautious',
+        'neutral', 'consolidation', 'mixed',
+    }
+    impact = draft.get('market_impact')
+    if impact not in _IMPACT_VOCAB:
+        impact = None
+
     return {
         'inference_text': draft.get('inference_text'),
-        'market_impact':  draft.get('market_impact'),
+        'market_impact':  impact,
         'source':         'ai_generated',
         'llm':            req.llm,
     }
