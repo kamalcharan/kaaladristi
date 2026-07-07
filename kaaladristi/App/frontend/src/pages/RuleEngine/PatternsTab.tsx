@@ -74,7 +74,7 @@ async function fetchPatterns(ruleId: number): Promise<PatternRow[]> {
     .gte('n_windows', 10)   // POA gate: <10 never displayed
     .execute();
   if (error) throw new Error(error.message);
-  return (data as PatternRow[]) ?? [];
+  return Array.isArray(data) ? (data as PatternRow[]) : [];
 }
 
 async function fetchIndexNames(): Promise<IndexMeta[]> {
@@ -82,10 +82,18 @@ async function fetchIndexNames(): Promise<IndexMeta[]> {
     .select('id,name,category')
     .execute();
   if (error) throw new Error(error.message);
-  return (data as IndexMeta[]) ?? [];
+  return Array.isArray(data) ? (data as IndexMeta[]) : [];
 }
 
 // ── Small pieces ─────────────────────────────────────────────────────────────
+
+/** results JSONB shapes drift between pattern-engine versions — rows written
+ * by an older engine can hold objects where the current UI expects arrays
+ * (crashed /rules/:id Patterns with 't.map is not a function', 2026-07-07).
+ * Every array read from results goes through this guard. */
+function asArray<T>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
+}
 
 function fmtPct(v: number | null | undefined, sign = false): string {
   if (v == null) return '—';
@@ -99,9 +107,10 @@ function retColor(v: number | null | undefined): string {
 }
 
 /** Sparkline for one indicator's mean-delta curve. Zero line + D0 marker. */
-function Spark({ field, offsets }: { field: ProfileField; offsets: number[] }) {
+function Spark({ field, offsets: offsetsRaw }: { field: ProfileField; offsets: number[] }) {
   const W = 180, H = 48, PAD = 4;
-  const vals = field.mean_delta;
+  const vals = asArray<number | null>(field?.mean_delta);
+  const offsets = asArray<number>(offsetsRaw);
   const nums = vals.filter((v): v is number => v != null);
   if (nums.length < 3) return null;
   const lo = Math.min(...nums, 0), hi = Math.max(...nums, 0);
@@ -209,8 +218,8 @@ function replicationCount(move: SequenceMove, allSeqRows: PatternRow[]): number 
   let count = 0;
   for (const r of allSeqRows) {
     const seqs = [
-      ...(((r.results.overall as { sequence?: SequenceMove[] } | null)?.sequence) ?? []),
-      ...(((r.results.clean as { sequence?: SequenceMove[] } | null)?.sequence) ?? []),
+      ...asArray<SequenceMove>((r.results.overall as { sequence?: SequenceMove[] } | null)?.sequence),
+      ...asArray<SequenceMove>((r.results.clean as { sequence?: SequenceMove[] } | null)?.sequence),
     ];
     if (seqs.some(m => m.field === move.field && m.direction === move.direction
         && Math.abs(m.first_move - move.first_move) <= 2)) {
@@ -225,8 +234,9 @@ const REPLICATION_MIN = 5;   // benchmarks agreeing before a move reads as real
 function SequenceCard({ row, allSeqRows }: { row: PatternRow; allSeqRows: PatternRow[] }) {
   const clean = row.results.clean as { sequence?: SequenceMove[] } | null;
   const overall = row.results.overall as { sequence: SequenceMove[]; note?: string } | null;
-  const seq = (clean?.sequence?.length ? clean.sequence : overall?.sequence) ?? [];
-  const fromClean = !!clean?.sequence?.length;
+  const cleanSeq = asArray<SequenceMove>(clean?.sequence);
+  const seq = cleanSeq.length ? cleanSeq : asArray<SequenceMove>(overall?.sequence);
+  const fromClean = cleanSeq.length > 0;
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
       <div className="text-[11px] font-mono uppercase tracking-wider text-accent-gold mb-1.5">
@@ -272,7 +282,7 @@ function SequenceCard({ row, allSeqRows }: { row: PatternRow; allSeqRows: Patter
 
 function ProfileCard({ row }: { row: PatternRow }) {
   const overall = row.results.overall as ProfileStats | null;
-  if (!overall?.fields) return null;
+  if (!overall?.fields || typeof overall.fields !== 'object' || Array.isArray(overall.fields)) return null;
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
       <div className="flex items-center gap-2 mb-2">
@@ -297,7 +307,7 @@ function ProfileCard({ row }: { row: PatternRow }) {
 
 function ContextCard({ row }: { row: PatternRow }) {
   const splits = row.results.context_splits;
-  if (!splits || Object.keys(splits).length === 0) return null;
+  if (!splits || typeof splits !== 'object' || Array.isArray(splits) || Object.keys(splits).length === 0) return null;
   const CONTEXT_LABELS: Record<string, string> = {
     jupiter_motion: 'Jupiter motion', saturn_motion: 'Saturn motion',
     mars_motion: 'Mars motion', mercury_motion: 'Mercury motion',
@@ -310,8 +320,8 @@ function ContextCard({ row }: { row: PatternRow }) {
       </div>
       <div className="space-y-2.5">
         {Object.entries(splits).map(([key, groups]) => {
-          const entries = Object.entries(groups)
-            .filter(([, st]) => (st as BreakStats).n >= 10)
+          const entries = (groups && typeof groups === 'object' ? Object.entries(groups) : [])
+            .filter(([, st]) => st != null && ((st as BreakStats).n ?? 0) >= 10)
             .sort(([, a], [, b]) => ((b as BreakStats).n ?? 0) - ((a as BreakStats).n ?? 0));
           if (entries.length < 2) return null;
           return (
@@ -343,7 +353,7 @@ function ContextCard({ row }: { row: PatternRow }) {
 }
 
 function PeersCard({ row }: { row: PatternRow }) {
-  const peers = row.results.peers ?? [];
+  const peers = asArray<NonNullable<PatternRow['results']['peers']>[number]>(row.results.peers);
   if (peers.length === 0) return null;
   return (
     <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">

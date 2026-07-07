@@ -51,7 +51,7 @@ async function fetchInference(ruleId: number): Promise<InferenceRow[]> {
   const res = await fetch(`${PIPELINE_API}/api/rules/${ruleId}/inference`);
   if (!res.ok) throw new Error(`inference ${res.status}`);
   const data = await res.json();
-  return data.inferences ?? [];
+  return Array.isArray(data?.inferences) ? data.inferences : [];
 }
 
 export default function RuleInferencePanel({ ruleId }: { ruleId: number }) {
