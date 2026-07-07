@@ -34,6 +34,7 @@ import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
 import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
+import { planetColorOfRuleCode } from '@/constants/planetColors';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -861,8 +862,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
       for (const pb of pointBands) {
         const x = ts.timeToCoordinate(pb.from as Time);
         if (x == null) continue;
+        // Overlap Visibility Phase 1: point markers color by SOURCE PLANET
+        // (Mercury blue, Mars red, Venus pink, Neptune sky…) so coincident
+        // events from one group overlay stay distinguishable. Zones keep
+        // group/user colors — this applies to point markers only.
+        const pColor = planetColorOfRuleCode(pb.ruleCode) ?? pb.color;
         ctx.save();
-        ctx.strokeStyle = hexToRgba(pb.color, 0.4);
+        ctx.strokeStyle = hexToRgba(pColor, 0.4);
         ctx.lineWidth   = 1;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
@@ -870,7 +876,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
         ctx.lineTo(x, h);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle  = hexToRgba(pb.color, 0.9);
+        ctx.fillStyle  = hexToRgba(pColor, 0.9);
         ctx.font       = '14px serif';
         ctx.textAlign  = 'center';
         ctx.fillText(pointMarkerLabel(pb.ruleCode), x, 26);
