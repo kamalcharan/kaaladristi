@@ -29,6 +29,7 @@ interface InferenceRow {
   evidence: { n: number; bullish_count?: number; bearish_count?: number; currently_active?: boolean };
   pair_rule_label?: string;
   created_at: string;
+  status?: 'active' | 'superseded';
 }
 
 const OUTCOME_LABEL: Record<Outcome, { label: string; color: string }> = {
@@ -51,7 +52,10 @@ async function fetchInference(ruleId: number): Promise<InferenceRow[]> {
   const res = await fetch(`${PIPELINE_API}/api/rules/${ruleId}/inference`);
   if (!res.ok) throw new Error(`inference ${res.status}`);
   const data = await res.json();
-  return Array.isArray(data?.inferences) ? data.inferences : [];
+  const rows: InferenceRow[] = Array.isArray(data?.inferences) ? data.inferences : [];
+  // The Patterns tab shows only the hypothesis of record — superseded
+  // history lives in the Rule Inference drawer, not here.
+  return rows.filter(r => r.status !== 'superseded');
 }
 
 export default function RuleInferencePanel({ ruleId }: { ruleId: number }) {

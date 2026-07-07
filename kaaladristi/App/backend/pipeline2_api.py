@@ -5519,21 +5519,39 @@ def list_rule_inference(rule_id: int):
             out = []
             for r in rows:
                 other_id = r['rule_b_id'] if r['rule_a_id'] == rule_id else r['rule_a_id']
+                if other_id is not None:
+                    other = _rule_meta(cur, other_id)
+                    r['pair_rule_code']  = other['rule_code'] if other else None
+                    r['pair_rule_label'] = other['display_name'] if other else None
+
+                if r.get('status') == 'superseded':
+                    # History rows show their FROZEN verdict — never recomputed
+                    # (that's the point: it records what the hypothesis scored
+                    # at the moment it was replaced). Pre-versioning rows have
+                    # no snapshot and read as pending history.
+                    snap = r.get('validation') or {}
+                    r['evidence'] = snap.get('evidence') or {'n': 0}
+                    r['outcome']  = snap.get('outcome') or 'pending'
+                    r['confidence_tier_live'] = snap.get('confidence_tier') or 'UNVALIDATED'
+                    out.append(r)
+                    continue
+
                 if other_id is None:
                     evidence = _single_rule_evidence(cur, rule_id)
                     outcome  = _inference_outcome(r['market_impact'], evidence, meta_a['base_bias'])
                 else:
-                    other = _rule_meta(cur, other_id)
                     evidence = _pair_evidence(conn, meta_a['rule_code'], other['rule_code']) \
                         if r['rule_a_id'] == rule_id else _pair_evidence(conn, other['rule_code'], meta_a['rule_code'])
                     outcome  = _inference_outcome(r['market_impact'], evidence)
-                    r['pair_rule_code']  = other['rule_code']
-                    r['pair_rule_label'] = other['display_name']
 
                 r['evidence'] = evidence
                 r['outcome']  = outcome
                 r['confidence_tier_live'] = _confidence_tier(evidence.get('n', 0))
                 out.append(r)
+
+            # Active rows first, then history newest-first (stable two-pass sort)
+            out.sort(key=lambda r: str(r.get('created_at') or ''), reverse=True)
+            out.sort(key=lambda r: r.get('status') == 'superseded')
 
             # Auto-context for the form's read-only header: the event and its
             # dates come from the DB (rule + almanac windows), never captured.
@@ -5588,7 +5606,13 @@ def list_rule_inference(rule_id: int):
 @app.post('/api/rules/{rule_id}/inference')
 def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
     """Save an inference row — manual entry, or an AI draft the admin reviewed
-    and accepted as-is (source='ai_generated')."""
+    and accepted as-is (source='ai_generated').
+
+    Versioning (migration 136): exactly one ACTIVE inference per
+    (rule_a, rule_b) scope. Saving auto-supersedes the previous active row,
+    freezing its validation verdict (outcome + evidence at that moment)
+    into `validation` JSONB — history is kept, never recomputed, so the
+    rule page can show the learning trajectory."""
     if req.source not in ('manual', 'ai_generated'):
         raise HTTPException(400, "source must be 'manual' or 'ai_generated'")
 
@@ -5600,6 +5624,7 @@ def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
                 raise HTTPException(404, 'Rule not found')
 
             rule_a_id, rule_b_id = rule_id, req.pair_rule_id
+            other = None
             if rule_b_id is not None:
                 other = _rule_meta(cur, rule_b_id)
                 if not other:
@@ -5610,11 +5635,44 @@ def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
                 if rule_b_id < rule_a_id:
                     rule_a_id, rule_b_id = rule_b_id, rule_a_id
 
+            # ── Auto-supersede: freeze the current active row's verdict ──
+            cur.execute(
+                "SELECT * FROM km_rule_inference "
+                "WHERE rule_a_id = %s AND COALESCE(rule_b_id, 0) = COALESCE(%s, 0) "
+                "  AND status = 'active' FOR UPDATE",
+                (rule_a_id, rule_b_id),
+            )
+            prev = cur.fetchone()
+            if prev:
+                prev = dict(prev)
+                # Compute the verdict as it stands right now — this snapshot
+                # is what the superseded row shows forever.
+                if rule_b_id is None:
+                    evidence = _single_rule_evidence(cur, rule_a_id)
+                    outcome  = _inference_outcome(prev['market_impact'], evidence, meta['base_bias'])
+                else:
+                    meta_a2 = _rule_meta(cur, rule_a_id)
+                    meta_b2 = _rule_meta(cur, rule_b_id)
+                    evidence = _pair_evidence(conn, meta_a2['rule_code'], meta_b2['rule_code'])
+                    outcome  = _inference_outcome(prev['market_impact'], evidence)
+                snapshot = {
+                    'outcome': outcome,
+                    'evidence': evidence,
+                    'confidence_tier': _confidence_tier(evidence.get('n', 0)),
+                    'frozen_at': datetime.utcnow().isoformat(),
+                }
+                cur.execute(
+                    "UPDATE km_rule_inference "
+                    "SET status = 'superseded', superseded_at = now(), validation = %s "
+                    "WHERE id = %s",
+                    (json.dumps(snapshot), prev['id']),
+                )
+
             cur.execute(
                 "INSERT INTO km_rule_inference "
                 "  (rule_a_id, rule_b_id, inference_text, market_impact, source, "
-                "   confidence, applicability_scope, applicability, notes, created_by) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *",
+                "   confidence, applicability_scope, applicability, notes, created_by, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'active') RETURNING *",
                 (rule_a_id, rule_b_id, req.inference_text, req.market_impact, req.source,
                  req.confidence, req.applicability_scope,
                  json.dumps(req.applicability) if req.applicability is not None else None,
@@ -5622,6 +5680,7 @@ def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
             )
             row = dict(cur.fetchone())
         conn.commit()
+        row['superseded_previous'] = prev['id'] if prev else None
         return row
     except HTTPException:
         raise

@@ -50,6 +50,10 @@ interface InferenceRow {
   pair_rule_label?: string;
   notes: string | null;
   created_at: string;
+  /** Versioning (migration 136): 'active' = hypothesis of record;
+   * 'superseded' = history with a frozen verdict. */
+  status?: 'active' | 'superseded';
+  superseded_at?: string | null;
 }
 
 interface InferenceResponse {
@@ -272,8 +276,17 @@ export default function RuleInferenceModal({
                 const outcome = OUTCOME_LABEL[row.outcome];
                 const s = row.market_impact ? MARKET_STATUS_MAP.get(row.market_impact) : null;
                 const c = STATUS_COLOR_CLASSES[s?.color ?? 'slate'];
+                const superseded = row.status === 'superseded';
                 return (
-                  <div key={row.id} className="rounded-xl border border-kd-border bg-kd-elevated/40 p-3 space-y-1.5">
+                  <div
+                    key={row.id}
+                    className={cn(
+                      'rounded-xl border p-3 space-y-1.5',
+                      superseded
+                        ? 'border-kd-border/50 bg-kd-elevated/20 opacity-60'
+                        : 'border-kd-border bg-kd-elevated/40',
+                    )}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm text-[var(--text-primary)] leading-relaxed flex-1">
                         {row.inference_text}
@@ -281,11 +294,22 @@ export default function RuleInferenceModal({
                           <span className="text-muted"> — combined with <strong>{row.pair_rule_label}</strong></span>
                         )}
                       </p>
-                      <button onClick={() => handleDelete(row.id)} className="text-muted hover:text-risk-red shrink-0">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {!superseded && (
+                        <button onClick={() => handleDelete(row.id)} className="text-muted hover:text-risk-red shrink-0">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono">
+                      {superseded ? (
+                        <span className="px-1.5 py-0.5 rounded border border-kd-border text-muted">
+                          superseded{row.superseded_at ? ` ${String(row.superseded_at).slice(0, 10)}` : ''} — verdict frozen
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded border border-risk-green/40 text-risk-green">
+                          active
+                        </span>
+                      )}
                       {s && (
                         <span className={cn('px-2 py-0.5 rounded-lg font-semibold border', c.bg, c.text, c.border)}>
                           {s.label}
@@ -311,6 +335,10 @@ export default function RuleInferenceModal({
           {mode === 'choose' && (
             <div>
               <label className={labelCls}>New inference — choose how</label>
+              <p className="text-[10px] text-muted mb-3 -mt-1">
+                Saving replaces the current active inference for this scope; the previous one is
+                kept as history with its verdict frozen at that moment.
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button
                   onClick={() => { resetForm(); setMode('manual'); }}
