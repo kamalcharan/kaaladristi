@@ -576,7 +576,7 @@ export default function RuleInferenceModal({
                       <span className="text-muted">{row.confidence_tier_live}</span>
                       {row.confidence != null && <span className="text-muted">expert {row.confidence}/10</span>}
                       <span className="text-muted">
-                        n={row.evidence.n}{row.evidence.currently_active ? ' · active now' : ''}
+                        n={row.evidence.n} vs NIFTY 50{row.evidence.currently_active ? ' · active now' : ''}
                       </span>
                       <span className="text-muted ml-auto">
                         {row.source === 'ai_generated' ? '✦ AI Inference' : 'manual'}

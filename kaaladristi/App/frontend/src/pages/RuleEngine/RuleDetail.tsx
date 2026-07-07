@@ -538,6 +538,12 @@ function BacktestStatGrid({ conf, transits, isDaily = false }: {
           </div>
         ))}
       </div>
+      {/* Honesty pass (owner 2026-07-07): every number in this grid is scored
+          against NIFTY 50 — until applicability-aware benchmarks land, say so
+          instead of letting sector inferences look sector-validated. */}
+      <div className="px-4 py-2 border-t border-kd-border/50 text-[10px] font-mono text-muted">
+        All statistics measured against NIFTY 50 — sector/index-specific behavior lives in the Patterns tab (benchmark selector).
+      </div>
     </div>
   );
 }
