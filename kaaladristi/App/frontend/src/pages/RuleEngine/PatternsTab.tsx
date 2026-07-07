@@ -366,7 +366,7 @@ function PeersCard({ row }: { row: PatternRow }) {
 
 // ── Tab ──────────────────────────────────────────────────────────────────────
 
-export default function PatternsTab({ ruleId, autoOpenInference }: { ruleId: number; autoOpenInference?: boolean }) {
+export default function PatternsTab({ ruleId }: { ruleId: number }) {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['rule-engine', 'patterns', ruleId],
     queryFn: () => fetchPatterns(ruleId),
@@ -423,7 +423,7 @@ export default function PatternsTab({ ruleId, autoOpenInference }: { ruleId: num
   if (rows.length === 0) {
     return (
       <div className="p-3 space-y-3">
-        <RuleInferencePanel ruleId={ruleId} autoOpen={autoOpenInference} />
+        <RuleInferencePanel ruleId={ruleId} />
         <p className="px-4 py-6 text-sm text-muted text-center">
           No pattern data for this rule — run the Pattern Study from the Rules Engine page
           (needs ≥10 completed windows inside a benchmark's history). Rare or recurring-every-few-years
@@ -436,7 +436,7 @@ export default function PatternsTab({ ruleId, autoOpenInference }: { ruleId: num
 
   return (
     <div className="p-3 space-y-3">
-      <RuleInferencePanel ruleId={ruleId} autoOpen={autoOpenInference} />
+      <RuleInferencePanel ruleId={ruleId} />
 
       {/* Benchmark selector */}
       <div className="flex items-center gap-2 flex-wrap">
