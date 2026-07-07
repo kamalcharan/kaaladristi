@@ -5376,7 +5376,16 @@ def _bias_bucket(market_impact: str | None) -> str | None:
 
 def _single_rule_evidence(cur, rule_id: int) -> dict:
     """Evidence summary for a single-rule inference — from km_rule_confidence,
-    already computed by the transit-scoring scheduler job (no fresh stats work)."""
+    already computed by the transit-scoring scheduler job (no fresh stats work).
+    currently_active checked separately since km_rule_confidence only scores
+    CLOSED windows (end_date <= CURRENT_DATE) by design."""
+    cur.execute(
+        "SELECT EXISTS (SELECT 1 FROM km_rule_transits "
+        "WHERE rule_id = %s AND start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE)",
+        (rule_id,),
+    )
+    currently_active = bool(cur.fetchone()[0])
+
     cur.execute(
         "SELECT total_occurrences, matched_count, confidence_score, avg_return_matched "
         "FROM km_rule_confidence WHERE rule_id = %s",
@@ -5384,8 +5393,9 @@ def _single_rule_evidence(cur, rule_id: int) -> dict:
     )
     row = cur.fetchone()
     if not row or row[0] is None:
-        return {'n': 0, 'confidence_score': None, 'avg_return_matched': None}
+        return {'n': 0, 'confidence_score': None, 'avg_return_matched': None, 'currently_active': currently_active}
     return {'n': row[0], 'matched_count': row[1], 'confidence_score': float(row[2]) if row[2] is not None else None,
+            'currently_active': currently_active,
             'avg_return_matched': float(row[3]) if row[3] is not None else None}
 
 
@@ -5415,13 +5425,37 @@ def _confidence_tier(n: int) -> str:
 
 
 def _inference_outcome(market_impact: str | None, evidence: dict, base_bias: str | None = None) -> str:
-    """worked / partial / failed / directional_na / pending — mirrors the
-    vocabulary evaluate_dc_inferences() already established for dc_inference."""
+    """worked / partial / failed / running / turned / inconclusive / pending —
+    the exact vocabulary RuleEvalView.tsx already established for
+    evaluate_dc_inferences() (OUTCOME_STYLES/OUTCOME_ORDER), reused here so
+    the platform has one outcome vocabulary, not two.
+
+    - running: a window is active right now — don't call worked/failed on an
+      unresolved instance (mirrors evaluate_dc_inferences' eval_status='running').
+    - turned: the rule itself is a turning-point call (base_bias='turning'),
+      not a directional bet — 'worked/failed' doesn't apply the same way
+      evaluate_dc_inferences uses 'turned' for market_impact IS NULL rows.
+    - inconclusive: a directional market_impact was stated but the historical
+      rate lands in a dead zone, OR no directional claim was made at all
+      (neutral/volatile/mixed) — same bucket evaluate_dc_inferences uses for
+      ambiguous outcomes.
+    - pending: no evidence at all yet (n=0 / score not computed).
+
+    A currently-open window only forces 'running' when there is NO prior
+    track record (n=0) — the rule's very first live occurrence. Once
+    historical evidence exists, the aggregate worked/partial/failed stays
+    the primary read even while a new instance is active; the UI surfaces
+    "active now" separately (evidence.currently_active) rather than
+    burying an established track record every time a new window opens.
+    """
+    n = evidence.get('n', 0)
+    if n == 0 and evidence.get('currently_active'):
+        return 'running'
+
     bucket = _bias_bucket(market_impact)
     if bucket is None or bucket == 'other':
-        return 'directional_na'
+        return 'turned' if base_bias == 'turning' else 'inconclusive'
 
-    n = evidence.get('n', 0)
     if n == 0:
         return 'pending'
 
@@ -5442,7 +5476,7 @@ def _inference_outcome(market_impact: str | None, evidence: dict, base_bias: str
         return 'worked'
     if rate <= 35:
         return 'failed'
-    return 'partial'
+    return 'partial'   # mixed empirical rate — distinct from 'inconclusive' (no directional claim at all)
 
 
 @app.get('/api/rules/{rule_id}/inference')
