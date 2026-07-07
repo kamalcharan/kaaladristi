@@ -65,10 +65,10 @@ async function fetchInference(ruleId: number): Promise<InferenceRow[]> {
   return data.inferences ?? [];
 }
 
-export default function RuleInferencePanel({ ruleId }: { ruleId: number }) {
+export default function RuleInferencePanel({ ruleId, autoOpen }: { ruleId: number; autoOpen?: boolean }) {
   const qc = useQueryClient();
   const { isAdmin } = useAuthStore();
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(!!autoOpen);
   const [text, setText] = useState('');
   const [impact, setImpact] = useState<MarketImpact | ''>('');
   const [pairRuleId, setPairRuleId] = useState('');
