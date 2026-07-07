@@ -85,8 +85,10 @@ interface TradingChartProps {
   // Workspace sync callbacks — no-op when not provided
   onVisibleRangeChange?: (from: string, to: string) => void;
   onCrosshairMove?: (barIndex: number, date: string) => void;
-  /** Fired when the user clicks an astro band — gives the band + screen coords. */
-  onZoneClick?: (band: AstroBand, clientX: number, clientY: number) => void;
+  /** Fired when the user clicks an astro band — gives the band + screen coords.
+   *  `coincident` (optional 4th arg) lists ALL bands under the click point,
+   *  clicked band first — for popovers that explain a cluster, not one rule. */
+  onZoneClick?: (band: AstroBand, clientX: number, clientY: number, coincident?: AstroBand[]) => void;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -1006,7 +1008,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
           const rect   = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const mouseX = e.clientX - rect.left;
           const ts     = mainChartRef.current.timeScale();
-          let found: AstroBand | null = null;
+          // Collect ALL bands at the click point (Phase 5) — points first so
+          // the popover leads with what the cursor is aimed at.
+          const found: AstroBand[] = [];
           for (const band of astroBands) {
             const x1 = ts.timeToCoordinate(band.from as Time);
             const x2 = ts.timeToCoordinate(band.to   as Time);
@@ -1015,10 +1019,14 @@ export default function TradingChart({ data, height = 900, compact = false, work
             const pad   = band.isPoint ? 4 : 0;
             const left  = Math.min(x1, x2) - pad;
             const right = Math.max(x1, x2) + pad;
-            if (mouseX >= left && mouseX <= right) { found = band; break; }
+            if (mouseX >= left && mouseX <= right) found.push(band);
           }
           // Only suppress the browser menu when the right-click lands on a zone.
-          if (found) { e.preventDefault(); onZoneClick(found, e.clientX, e.clientY); }
+          if (found.length > 0) {
+            found.sort((a, b) => Number(b.isPoint) - Number(a.isPoint));
+            e.preventDefault();
+            onZoneClick(found[0], e.clientX, e.clientY, found);
+          }
         }}
         onMouseMove={e => {
           if (astroBands.length === 0 || !mainChartRef.current) {

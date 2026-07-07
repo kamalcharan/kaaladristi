@@ -9,9 +9,10 @@
  * so it survives component remounts.
  */
 
-import { useEffect, useRef, useMemo } from 'react'
+import React, { useEffect, useRef, useMemo } from 'react'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useCorrelationResult } from './useCorrelationResult'
+import { useActiveRuleToday } from './useRuleInsight'
 
 /**
  * Returns all pairs of visible overlay catalog_item_ids.
@@ -43,6 +44,10 @@ interface PairMonitorProps {
   itemA: string
   itemB: string
   benchmark?: string
+  /** Only fire when the overlap is active TODAY — used for intra-group
+   * rule pairs so the island surfaces live overlaps, not every
+   * historical co-occurrence of two rules in the same group. */
+  requireActive?: boolean
 }
 
 /**
@@ -50,7 +55,7 @@ interface PairMonitorProps {
  * when the correlation has ≥3 instances and is currently active.
  */
 export function ConfluencePairMonitor({
-  itemA, itemB, benchmark = 'NIFTY50',
+  itemA, itemB, benchmark = 'NIFTY50', requireActive = false,
 }: PairMonitorProps): null {
   const { result } = useCorrelationResult(itemA, itemB, benchmark)
   const addVaNiCorrelation = useFrameworkStore(s => s.addVaNiCorrelation)
@@ -59,6 +64,7 @@ export function ConfluencePairMonitor({
   useEffect(() => {
     if (!result) return
     if (result.n_instances < 3) return
+    if (requireActive && !result.currently_active) return
     if (firedRef.current) return
 
     firedRef.current = true
@@ -66,4 +72,40 @@ export function ConfluencePairMonitor({
   }, [result])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return null
+}
+
+/**
+ * Overlap Visibility Phases 3-4 — intra-group overlaps reach the island.
+ *
+ * A group overlay (astro_group:Bayer, astro_group:MajorTransit …) bundles
+ * many rules; the confluence engine previously saw it only as ONE merged
+ * event, so "Mercury combust ∩ Neptune retrograde" inside the same group
+ * was invisible ("they did not come on the island, so I will never know").
+ *
+ * Renders nothing. For one visible group overlay: fetches the tag's rules
+ * active TODAY (same /api/ai/active-rule-today the explain popover uses),
+ * pairs them, and mounts a ConfluencePairMonitor per pair as astro_rule:
+ * items — riding the existing correlation engine, island chips, drawer,
+ * and full-analysis page. requireActive keeps it to live overlaps.
+ */
+const MAX_GROUP_RULES = 4   // 4 active rules → 6 pairs, the practical ceiling
+
+export function GroupOverlapMonitor({ tag }: { tag: string }): React.ReactElement | null {
+  const { data } = useActiveRuleToday(tag)
+  const active = (data?.active_now ?? []).slice(0, MAX_GROUP_RULES)
+  if (active.length < 2) return null
+
+  const pairs: Array<[string, string]> = []
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      pairs.push([`astro_rule:${active[i].rule_code}`, `astro_rule:${active[j].rule_code}`])
+    }
+  }
+  return (
+    <>
+      {pairs.map(([a, b]) => (
+        <ConfluencePairMonitor key={`${a}:${b}`} itemA={a} itemB={b} requireActive />
+      ))}
+    </>
+  )
 }
