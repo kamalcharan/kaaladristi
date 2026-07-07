@@ -377,11 +377,12 @@ function PeersCard({ row }: { row: PatternRow }) {
 // ── Tab ──────────────────────────────────────────────────────────────────────
 
 export default function PatternsTab({ ruleId }: { ruleId: number }) {
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, error: fetchError } = useQuery({
     queryKey: ['rule-engine', 'patterns', ruleId],
     queryFn: () => fetchPatterns(ruleId),
     enabled: !isNaN(ruleId),
     staleTime: 10 * 60 * 1000,
+    retry: 1,
   });
   const { data: indices = [] } = useQuery({
     queryKey: ['rule-engine', 'index-names'],
@@ -430,6 +431,19 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
   );
 
   if (isLoading) return <p className="px-4 py-6 text-sm text-muted text-center">Loading patterns…</p>;
+  // A failed fetch must NOT masquerade as "no data" — rule 223 had 267
+  // healthy rows in km_rule_patterns while this tab claimed none existed
+  // (owner, 2026-07-07). Surface the real error so it can be diagnosed.
+  if (fetchError) {
+    return (
+      <div className="p-3 space-y-3">
+        <RuleInferencePanel ruleId={ruleId} />
+        <p className="px-4 py-6 text-sm text-risk-red/80 text-center font-mono">
+          Pattern data failed to load: {(fetchError as Error).message}
+        </p>
+      </div>
+    );
+  }
   if (rows.length === 0) {
     return (
       <div className="p-3 space-y-3">
