@@ -1985,6 +1985,9 @@ export interface VaniHighlights {
   caution: VaniHighlightRow[];
   strengthTotal: number;
   cautionTotal: number;
+  /** Trade date the scans evaluated (bundle latestDate) — the board shows it
+   * so persistent names read as conviction, not staleness. */
+  asOf: string | null;
 }
 
 // The Watch lists are always_true (pre-filtered shortlists) — cap their
@@ -2016,6 +2019,7 @@ export async function fetchVaniHighlights(): Promise<VaniHighlights> {
   // Prime the shared bundle once — firing all bundle-based scans in parallel
   // before the cache is warm would trigger concurrent full-market downloads.
   await executeScan(HIGHLIGHT_SOURCES[0].id);
+  const bundle = await loadScanData('daily');  // cache hit — just for latestDate
 
   const settled = await Promise.allSettled(
     HIGHLIGHT_SOURCES.map((src) => executeScan(src.id)),
@@ -2063,6 +2067,7 @@ export async function fetchVaniHighlights(): Promise<VaniHighlights> {
     caution,
     strengthTotal: strength.length,
     cautionTotal: caution.length,
+    asOf: bundle.latestDate,
   };
 }
 
