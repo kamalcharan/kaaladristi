@@ -1165,8 +1165,11 @@ export default function TradingChart({ data, height = 900, compact = false, work
                       <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
                         THIS WINDOW
                       </span>
-                      {b.matched === true  && <span style={{ color: c }}>✓ moved as expected</span>}
-                      {b.matched === false && <span style={{ color: 'var(--bear)' }}>✗ moved against expectation</span>}
+                      {/* Honesty pass (owner 2026-07-07): matched is scored against
+                          NIFTY 50 regardless of the instrument this chart shows —
+                          say so instead of implying it belongs to this chart. */}
+                      {b.matched === true  && <span style={{ color: c }}>✓ NIFTY 50 moved as expected</span>}
+                      {b.matched === false && <span style={{ color: 'var(--bear)' }}>✗ NIFTY 50 moved against expectation</span>}
                       {b.matched === null  && (
                         <span style={{ color: 'rgba(255,255,255,0.4)' }}>
                           {b.from > today
@@ -1187,7 +1190,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                           RULE OVERALL
                         </span>
                         <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.6)' }}>
-                          moved as expected in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
+                          NIFTY 50 moved as expected in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
                           {conf.avg_return_matched != null && (
                             <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% when it did</>
                           )}

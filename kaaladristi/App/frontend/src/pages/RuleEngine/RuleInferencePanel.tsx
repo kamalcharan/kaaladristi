@@ -94,7 +94,7 @@ export default function RuleInferencePanel({ ruleId }: { ruleId: number }) {
               <span style={{ color: outcome.color }}>{outcome.label}</span>
               <span style={{ color: tierColor }}>{row.confidence_tier_live}</span>
               <span className="text-muted">
-                n={row.evidence.n}
+                n={row.evidence.n} vs NIFTY 50
                 {row.evidence.currently_active ? ' · active now' : ''}
               </span>
               <span className="text-muted ml-auto">
