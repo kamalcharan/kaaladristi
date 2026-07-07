@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFormModal';
 import AlmanacTab from './AlmanacTab';
 import PatternsTab from './PatternsTab';
+import RuleInferenceModal from './RuleInferenceModal';
 import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
 import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery, dropRuleSignals } from './discoveryService';
 
@@ -776,7 +777,6 @@ function BacktestTabs({
   signalsPage, setSignalsPage, signalsTotal,
   yearlyConf,
   highlightId, onHighlight,
-  jumpToInferenceSignal,
 }: {
   ruleId: number;
   transits: RuleTransit[];
@@ -789,23 +789,8 @@ function BacktestTabs({
   yearlyConf: RuleConfidenceYearly[];
   highlightId: number | null;
   onHighlight: (id: number | null) => void;
-  /** Increments each time the header "Rule Inference" button is clicked —
-   * switches to the Patterns tab with the add-inference form open. A
-   * counter (not a boolean) so repeated clicks re-trigger even if the tab
-   * is already 'patterns'. */
-  jumpToInferenceSignal?: number;
 }) {
   const [tab, setTab] = useState<'transits' | 'upcoming' | 'signals' | 'occurrences' | 'yearly' | 'almanac' | 'patterns'>('transits');
-  // "Rule Inference" header button (in RuleDetail's toolbar) jumps straight
-  // to the Patterns tab with the Expected-vs-Evidence add form already open,
-  // instead of leaving admins to discover it two clicks deep (Patterns tab ->
-  // Add inference). jumpToInferenceSignal is the trigger from that button.
-  const [jumpToInference, setJumpToInference] = useState(false);
-  useEffect(() => {
-    if (!jumpToInferenceSignal) return;
-    setTab('patterns');
-    setJumpToInference(true);
-  }, [jumpToInferenceSignal]);
   const totalPages = Math.ceil(signalsTotal / PAGE_SIZE);
 
   const tabs = [
@@ -828,7 +813,7 @@ function BacktestTabs({
           {tabs.map(t => (
             <button
               key={t.key}
-              onClick={() => { setTab(t.key); setJumpToInference(false); }}
+              onClick={() => setTab(t.key)}
               className={cn(
                 'px-4 py-3 text-[11px] font-mono uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors',
                 tab === t.key
@@ -937,13 +922,7 @@ function BacktestTabs({
       {tab === 'almanac' && <AlmanacTab ruleId={ruleId} />}
 
       {/* Patterns tab — Astro Pattern Engine results (POA Phase 3) */}
-      {tab === 'patterns' && (
-        <PatternsTab
-          ruleId={ruleId}
-          autoOpenInference={jumpToInference}
-          key={jumpToInference ? 'jump' : 'normal'}
-        />
-      )}
+      {tab === 'patterns' && <PatternsTab ruleId={ruleId} />}
 
       {/* Next Signals tab */}
       {tab === 'signals' && (
@@ -1117,8 +1096,9 @@ export default function RuleDetail() {
   const [signalsPage, setSignalsPage] = useState(0);
   // Highlight a transit on the equity chart + table
   const [highlightTransitId, setHighlightTransitId] = useState<number | null>(null);
-  // "Rule Inference" toolbar button — see BacktestTabs' jumpToInferenceSignal
-  const [inferenceJumpCounter, setInferenceJumpCounter] = useState(0);
+  // "Rule Inference" modal (renamed from "Edit" — that button now edits rule
+  // metadata under a smaller secondary action since it's a different form)
+  const [inferenceModalOpen, setInferenceModalOpen] = useState(false);
 
   const backendStatus = useBackendStatus();
 
@@ -1441,17 +1421,19 @@ export default function RuleDetail() {
               <Copy className="w-3.5 h-3.5" /> Clone
             </button>
 
-            {/* Edit */}
+            {/* Edit metadata — demoted to icon-only: rule_code/tags/base_bias/
+                remarks, a different form from Rule Inference below */}
             <button
               onClick={() => { setSaveError(null); setModalMode('edit'); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-accent-indigo border border-accent-indigo/30 bg-accent-indigo/10 rounded-lg hover:bg-accent-indigo/20 transition-all"
+              title="Edit rule metadata (rule_code, tags, base_bias, remarks)"
+              className="flex items-center justify-center w-8 h-8 text-muted border border-kd-border rounded-lg hover:text-secondary hover:border-kd-border-active transition-all"
             >
-              <Pencil className="w-3.5 h-3.5" /> Edit
+              <Pencil className="w-3.5 h-3.5" />
             </button>
 
-            {/* Rule Inference — jumps to Patterns tab with the add-inference form open */}
+            {/* Rule Inference — the theory-vs-evidence authoring surface, styled like /inference */}
             <button
-              onClick={() => setInferenceJumpCounter(c => c + 1)}
+              onClick={() => setInferenceModalOpen(true)}
               title="Author or generate the expected behavior for this rule (Expected vs Evidence)"
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-accent-gold border border-accent-gold/30 bg-accent-gold/10 rounded-lg hover:bg-accent-gold/20 transition-all"
             >
@@ -1601,9 +1583,17 @@ export default function RuleDetail() {
           yearlyConf={yearlyConf}
           highlightId={highlightTransitId}
           onHighlight={setHighlightTransitId}
-          jumpToInferenceSignal={inferenceJumpCounter}
         />
       </div>
+
+      {/* Rule Inference — theory-vs-evidence authoring, styled like /inference */}
+      {inferenceModalOpen && rule && (
+        <RuleInferenceModal
+          ruleId={ruleId}
+          ruleName={rule.display_name}
+          onClose={() => setInferenceModalOpen(false)}
+        />
+      )}
 
       {/* Edit / Clone Modal */}
       {modalMode && (
