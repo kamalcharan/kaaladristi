@@ -56,6 +56,69 @@ def _enqueue_daily_run(dsn: str) -> None:
         conn.close()
 
 
+def _score_recent_transits(dsn: str) -> None:
+    """Runs at 19:00 IST — 60 min after the 18:00 daily run, so today's EOD
+    close is already loaded. Scores every km_rule_transits window whose
+    end_date <= today and nifty_return_pct IS NULL (matched/Confirmed vs
+    Not-matched), then refreshes km_rule_confidence.
+
+    Before this job existed, that scoring only ran as phase 2 of the heavy
+    admin-triggered 'Run Discovery' job — so a transit window that closed
+    yesterday sat 'Pending validation' on the chart/almanac indefinitely
+    unless someone manually re-ran full discovery. This reuses the same
+    lightweight functions confidence_compute() calls (no rule re-discovery,
+    just scoring + aggregation over rows already in km_rule_transits).
+    """
+    try:
+        from scripts.confidence_scoring import (
+            build_nifty_close_map,
+            load_rule_outcome_map,
+            update_transit_returns,
+            populate_partial_day_flags,
+            update_daily_signal_returns,
+            compute_confidence_from_transits,
+            compute_confidence_from_daily_signals,
+            compute_yearly_breakdown,
+            compute_yearly_breakdown_from_signals,
+        )
+    except Exception as e:
+        log.error(f'transit scoring: import failed: {e}')
+        return
+
+    try:
+        conn = psycopg2.connect(dsn)
+    except Exception as e:
+        log.error(f'transit scoring: could not connect to DB: {e}')
+        return
+
+    try:
+        close_map = build_nifty_close_map(conn)
+        rule_outcome_map = load_rule_outcome_map(conn)
+        scored = update_transit_returns(conn, close_map, rule_outcome_map)
+        populate_partial_day_flags(conn)
+        daily_scored = update_daily_signal_returns(conn, close_map, rule_outcome_map)
+        upserted = compute_confidence_from_transits(conn)
+        upserted += compute_confidence_from_daily_signals(conn)
+        compute_yearly_breakdown(conn)
+        compute_yearly_breakdown_from_signals(conn)
+        conn.commit()
+        log.info(
+            f'Transit scoring complete — {scored} transits + {daily_scored} daily '
+            f'signals scored, {upserted} rules upserted'
+        )
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        log.error(f'transit scoring: unexpected error — {e}')
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def _daily_gap_sweep(dsn: str) -> None:
     """Runs at 19:30 IST — 90 min after the 18:00 daily run. Looks at the
     last 3 trading days and enqueues a fix job for every (dimension, date)
@@ -154,6 +217,18 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
         replace_existing=True,
     )
 
+    # 19:00 — 60 min after the 18:00 daily run, so today's close is loaded.
+    # Scores newly-closed transit windows so Almanac/chart tooltips flip from
+    # 'Pending validation' to Confirmed/Not matched without an admin click.
+    sched.add_job(
+        _score_recent_transits,
+        trigger=CronTrigger(hour=19, minute=0, day_of_week='mon-fri', timezone=IST),
+        id='pipeline2_transit_scoring',
+        name='Pipeline v2 transit confidence scoring (19:00 IST, Mon-Fri)',
+        args=[dsn],
+        replace_existing=True,
+    )
+
     # 19:30 gives the 18:00 daily run 90 minutes to complete. Anything still
     # missing / partial after that window is fair game for auto-retry.
     sched.add_job(
@@ -166,7 +241,7 @@ def start_scheduler(dsn: str) -> BackgroundScheduler:
     )
 
     sched.start()
-    log.info('pipeline2 scheduler started (daily_run 18:00 IST, gap_sweep 19:30 IST, Mon-Fri)')
+    log.info('pipeline2 scheduler started (daily_run 18:00, transit_scoring 19:00, gap_sweep 19:30 IST, Mon-Fri)')
     return sched
 
 
