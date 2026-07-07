@@ -214,9 +214,13 @@ class QueryBuilder {
     return this;
   }
 
+  // `limit` is only valid on GET — PostgREST 400s an insert/upsert (POST) or
+  // update (PATCH) request that carries it. single()/maybeSingle() are
+  // chained after insert()/upsert()/update() (which set state.method first),
+  // so gate on the method already set at call time.
   single(): this {
     this.state.single = true;
-    this.state.params.set('limit', '1');
+    if (this.state.method === 'GET') this.state.params.set('limit', '1');
     this.state.headers = {
       ...this.state.headers,
       'Accept': 'application/vnd.pgrst.object+json',
@@ -226,7 +230,7 @@ class QueryBuilder {
 
   maybeSingle(): this {
     this.state.maybeSingle = true;
-    this.state.params.set('limit', '1');
+    if (this.state.method === 'GET') this.state.params.set('limit', '1');
     this.state.headers = {
       ...this.state.headers,
       'Accept': 'application/vnd.pgrst.object+json',
