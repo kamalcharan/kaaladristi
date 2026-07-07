@@ -21,8 +21,9 @@ export const MODES: { id: ThemeMode; label: string; glyph: string }[] = [
 
 // Themes with no designed light palette yet (their darkMode mirrors colors).
 // The mode toggle is disabled for these — honest dark-only, not a broken flip.
-// Phase 3 of the theme audit (2026-07-07) designs DristiQ's light palette.
-export const DARK_ONLY_THEMES: readonly ThemeId[] = ['kaaladristi']
+// Empty since Phase 3 (2026-07-07) shipped DristiQ's light palette; the gate
+// stays for any future dark-only theme.
+export const DARK_ONLY_THEMES: readonly ThemeId[] = []
 
 export function isDarkOnly(id: ThemeId): boolean {
   return DARK_ONLY_THEMES.includes(id)
