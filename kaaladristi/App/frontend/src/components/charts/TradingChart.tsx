@@ -1156,26 +1156,39 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         </>
                       )}
                     </div>
-                    <div style={{ marginTop: 4, fontSize: 10 }}>
-                      {b.matched === true  && <span style={{ color: c }}>✓ Confirmed</span>}
-                      {b.matched === false && <span style={{ color: 'var(--bear)' }}>✗ Not matched</span>}
+                    {/* Two explicitly-scoped lines (owner 2026-07-07: "a user
+                        needs to understand it much better"): THIS WINDOW = the
+                        one occurrence under the cursor; RULE OVERALL = the
+                        rule's whole track record. Batsman's average vs
+                        today's innings — both true, different scopes. */}
+                    <div style={{ marginTop: 5, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                      <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                        THIS WINDOW
+                      </span>
+                      {b.matched === true  && <span style={{ color: c }}>✓ moved as expected</span>}
+                      {b.matched === false && <span style={{ color: 'var(--bear)' }}>✗ moved against expectation</span>}
                       {b.matched === null  && (
-                        <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                        <span style={{ color: 'rgba(255,255,255,0.4)' }}>
                           {b.from > today
-                            ? '◦ Future transit'
+                            ? '◦ upcoming — not scored yet'
                             : b.baseBias
-                              ? '◦ Pending validation'
-                              : '◦ Observational window'}
+                              ? '◦ not scored yet'
+                              : '◦ observational — no directional claim'}
                         </span>
                       )}
                     </div>
                     {/* Aggregate confidence — how the RULE behaves, not just this window */}
                     {conf?.confidence_score != null && (conf.total_occurrences ?? 0) > 0 && (
-                      <div style={{ marginTop: 3, fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.55)' }}>
-                        {conf.confidence_score.toFixed(0)}% historical match (n={conf.total_occurrences})
-                        {conf.avg_return_matched != null && (
-                          <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% matched</>
-                        )}
+                      <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                          RULE OVERALL
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.6)' }}>
+                          moved as expected in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
+                          {conf.avg_return_matched != null && (
+                            <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% when it did</>
+                          )}
+                        </span>
                       </div>
                     )}
                   </div>
