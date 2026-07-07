@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { from } from '@/services/postgrest';
+import { displaySymbol, isNumericSymbol } from '@/lib/symbolUtils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,49 @@ export default function CustomIndexDiscoverPage() {
   const [themes, setThemes] = useState<Theme[] | null>(null);
   const [targetName, setTargetName] = useState('');
   const [targeting, setTargeting] = useState(false);
+  // symbol → company_name for numeric BSE scrip codes in the loaded themes,
+  // so chips read "Triveni Engineering" instead of "500097" (displaySymbol
+  // convention — same as scanners/catalog).
+  const [nameBySymbol, setNameBySymbol] = useState<Map<string, string>>(new Map());
+
+  const numericSymbols = useMemo(() => {
+    const out = new Set<string>();
+    for (const t of themes ?? []) {
+      for (const s of t.constituent_symbols ?? []) if (isNumericSymbol(s)) out.add(s);
+      for (const g of ['core', 'ecosystem'] as const) {
+        for (const e of t.detail?.[g] ?? []) {
+          if (!e.company_name && isNumericSymbol(e.symbol)) out.add(e.symbol);
+        }
+      }
+    }
+    return [...out].sort();
+  }, [themes]);
+
+  useEffect(() => {
+    const missing = numericSymbols.filter(s => !nameBySymbol.has(s));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error: err } = await from('km_equity_symbols')
+        .select('symbol,company_name')
+        .in('symbol', missing)
+        .execute();
+      if (cancelled || err || !Array.isArray(data)) return;
+      setNameBySymbol(prev => {
+        const next = new Map(prev);
+        for (const r of data as { symbol: string; company_name: string | null }[]) {
+          if (r.company_name) next.set(r.symbol, r.company_name);
+        }
+        return next;
+      });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numericSymbols]);
+
+  /** Chip label: NSE ticker as-is; numeric BSE code → short company name. */
+  const chipLabel = (symbol: string, companyName?: string | null) =>
+    displaySymbol({ symbol, company_name: companyName ?? nameBySymbol.get(symbol) ?? null });
 
   // Load persisted recommendations (staging table, migration 120) on mount —
   // past discoveries survive navigation without re-invoking the LLM.
@@ -363,7 +408,11 @@ export default function CustomIndexDiscoverPage() {
                             {entries.map((e) => (
                               <span
                                 key={e.symbol}
-                                title={[e.company_name, e.role].filter(Boolean).join(' — ')}
+                                title={[
+                                  e.company_name ?? nameBySymbol.get(e.symbol),
+                                  isNumericSymbol(e.symbol) ? `BSE ${e.symbol}` : null,
+                                  e.role,
+                                ].filter(Boolean).join(' — ')}
                                 style={{
                                   ...MONO,
                                   fontSize: '10px',
@@ -376,7 +425,7 @@ export default function CustomIndexDiscoverPage() {
                                   cursor: 'default',
                                 }}
                               >
-                                {e.symbol}
+                                {chipLabel(e.symbol, e.company_name)}
                               </span>
                             ))}
                           </div>
@@ -389,6 +438,9 @@ export default function CustomIndexDiscoverPage() {
                     {(theme.constituent_symbols ?? []).map((sym) => (
                       <span
                         key={sym}
+                        title={isNumericSymbol(sym)
+                          ? [nameBySymbol.get(sym), `BSE ${sym}`].filter(Boolean).join(' — ')
+                          : undefined}
                         style={{
                           ...MONO,
                           fontSize: '10px',
@@ -400,7 +452,7 @@ export default function CustomIndexDiscoverPage() {
                           background: 'rgba(255,255,255,0.03)',
                         }}
                       >
-                        {sym}
+                        {chipLabel(sym)}
                       </span>
                     ))}
                   </div>
