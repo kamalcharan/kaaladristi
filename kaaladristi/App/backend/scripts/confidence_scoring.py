@@ -278,6 +278,166 @@ def rescore_rules(conn, rule_ids: list | None = None) -> int:
     return rescored
 
 
+# ── Per-benchmark confidence (POA item 4 part 1, migration 139) ────────────────
+#
+# Windows are universal facts; what differs per instrument is only the return.
+# For every benchmark index with enough history, measure each rule window on
+# THAT index's closes (same close(start)->close(end) + 5-day forward walk as
+# update_transit_returns) and aggregate matched/confidence vs the rule's
+# current hypothesis (active inference, else base_bias). NIFTY 50's aggregate
+# stays in km_rule_confidence; this table answers "does the rule hold on the
+# index the user is actually looking at / the inference actually claims".
+
+MIN_BENCH_BARS = 250   # same gate as pattern_study.py — skip thin benchmarks
+
+
+def _load_hypothesis_maps(conn):
+    """({rule_id: impact}, {rule_id: 'inference'|'base_bias'})"""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT r.id,
+               COALESCE(i.market_impact, COALESCE(r.outcome, r.base_bias)),
+               CASE WHEN i.market_impact IS NOT NULL THEN 'inference' ELSE 'base_bias' END
+        FROM km_astro_rule_master r
+        LEFT JOIN km_rule_inference i
+               ON i.rule_a_id = r.id AND i.rule_b_id IS NULL AND i.status = 'active'
+    """)
+    impact, source = {}, {}
+    for rid, imp, src in cur.fetchall():
+        impact[rid] = imp
+        source[rid] = src
+    return impact, source
+
+
+def score_benchmark_confidence(conn, rule_ids: list | None = None) -> int:
+    """Upsert km_rule_confidence_bench for all (rule, benchmark) pairs.
+
+    rule_ids=None → every rule with completed transit windows (nightly);
+    a list → just those rules (inference save/delete). Daily-signal rules
+    (km_rule_signals) are not fanned out yet — their aggregate stays
+    NIFTY-based in km_rule_confidence.
+    Returns the number of (rule, benchmark) rows upserted."""
+    from datetime import timedelta
+
+    cur = conn.cursor()
+    impact_map, source_map = _load_hypothesis_maps(conn)
+
+    # Completed windows, grouped per rule
+    q = """
+        SELECT rule_id, start_date, end_date
+        FROM km_rule_transits
+        WHERE end_date <= CURRENT_DATE
+    """
+    args = []
+    if rule_ids:
+        q += " AND rule_id = ANY(%s)"
+        args.append(list(rule_ids))
+    cur.execute(q, args)
+    windows_by_rule: dict = {}
+    for rid, sd, ed in cur.fetchall():
+        windows_by_rule.setdefault(rid, []).append((sd, ed))
+    if not windows_by_rule:
+        return 0
+
+    # Benchmarks with enough history (standard + curated)
+    cur.execute("""
+        SELECT s.id FROM km_index_symbols s
+        WHERE (SELECT COUNT(*) FROM km_index_eod e WHERE e.index_id = s.id) >= %s
+        ORDER BY s.id
+    """, (MIN_BENCH_BARS,))
+    bench_ids = [r[0] for r in cur.fetchall()]
+
+    upserted = 0
+    batch: list = []
+
+    def flush():
+        nonlocal upserted, batch
+        if not batch:
+            return
+        psycopg2.extras.execute_values(cur, """
+            INSERT INTO km_rule_confidence_bench (
+                rule_id, benchmark_index_id, total_occurrences, matched_count,
+                confidence_score, avg_return_all, avg_return_matched,
+                avg_return_unmatched, best_return, worst_return,
+                historical_transits, hypothesis_source, hypothesis_impact,
+                last_computed_at
+            ) VALUES %s
+            ON CONFLICT (rule_id, benchmark_index_id) DO UPDATE SET
+                total_occurrences  = EXCLUDED.total_occurrences,
+                matched_count      = EXCLUDED.matched_count,
+                confidence_score   = EXCLUDED.confidence_score,
+                avg_return_all     = EXCLUDED.avg_return_all,
+                avg_return_matched = EXCLUDED.avg_return_matched,
+                avg_return_unmatched = EXCLUDED.avg_return_unmatched,
+                best_return        = EXCLUDED.best_return,
+                worst_return       = EXCLUDED.worst_return,
+                historical_transits = EXCLUDED.historical_transits,
+                hypothesis_source  = EXCLUDED.hypothesis_source,
+                hypothesis_impact  = EXCLUDED.hypothesis_impact,
+                last_computed_at   = NOW()
+        """, batch,
+            template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())")
+        upserted += len(batch)
+        batch = []
+
+    for bench_id in bench_ids:
+        # One benchmark's close map at a time — bounded memory
+        cur.execute(
+            "SELECT trade_date, close FROM km_index_eod "
+            "WHERE index_id = %s AND close IS NOT NULL",
+            (bench_id,),
+        )
+        close_map = {d: float(c) for d, c in cur.fetchall()}
+        if len(close_map) < MIN_BENCH_BARS:
+            continue
+
+        def close_on_or_after(d, _cm=close_map):
+            for off in range(0, 6):
+                c = _cm.get(d + timedelta(days=off))
+                if c is not None:
+                    return c
+            return None
+
+        for rid, windows in windows_by_rule.items():
+            outcome = (impact_map.get(rid) or '').lower()
+            rets, matched_flags = [], []
+            for sd, ed in windows:
+                sc, ec = close_on_or_after(sd), close_on_or_after(ed)
+                if sc is None or ec is None or sc == 0:
+                    continue
+                ret = (ec - sc) / sc * 100
+                rets.append(ret)
+                if outcome in _BULLISH_SIGNALS:
+                    matched_flags.append(ret > 0)
+                elif outcome in _BEARISH_SIGNALS:
+                    matched_flags.append(ret <= 0)
+                else:
+                    matched_flags.append(None)
+
+            if not rets:
+                continue
+            scored = [m for m in matched_flags if m is not None]
+            n = len(scored)
+            matched_count = sum(1 for m in scored if m)
+            matched_rets   = [r for r, m in zip(rets, matched_flags) if m is True]
+            unmatched_rets = [r for r, m in zip(rets, matched_flags) if m is False]
+            batch.append((
+                rid, bench_id, n, matched_count,
+                round(matched_count / n * 100, 2) if n else None,
+                round(sum(rets) / len(rets), 4),
+                round(sum(matched_rets) / len(matched_rets), 4) if matched_rets else None,
+                round(sum(unmatched_rets) / len(unmatched_rets), 4) if unmatched_rets else None,
+                round(max(rets), 4), round(min(rets), 4),
+                len(rets), source_map.get(rid), impact_map.get(rid),
+            ))
+            if len(batch) >= 500:
+                flush()
+
+    flush()
+    conn.commit()
+    return upserted
+
+
 # ── STEP 2b: Partial-day flags for nakshatra/tithi signals ────────────────────
 
 def populate_partial_day_flags(conn) -> int:

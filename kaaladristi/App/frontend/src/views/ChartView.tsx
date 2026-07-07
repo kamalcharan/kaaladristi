@@ -402,6 +402,8 @@ export default function ChartView() {
                   overlays={frameworkOverlays}
                   astroBands={astroBands}
                   bigMoneyEvents={bigMoneyChartLines}
+                  benchmarkIndexId={isIndex && id ? Number(id) : null}
+                  benchmarkName={isIndex ? name : null}
                 />
               )}
             </div>

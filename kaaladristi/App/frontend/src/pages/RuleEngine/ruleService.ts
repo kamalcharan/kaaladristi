@@ -106,6 +106,43 @@ export async function fetchConfidence(): Promise<RuleConfidence[]> {
   return Array.isArray(data) ? (data as RuleConfidence[]) : [];
 }
 
+// ── Per-benchmark confidence (migration 139 — POA item 4 part 1) ─────────────
+
+export interface RuleBenchConfidence {
+  rule_id: number;
+  benchmark_index_id: number;
+  confidence_score: number | null;
+  total_occurrences: number | null;
+  avg_return_matched: number | null;
+  hypothesis_source: 'inference' | 'base_bias' | null;
+  hypothesis_impact: string | null;
+}
+
+const BENCH_COLS = 'rule_id,benchmark_index_id,confidence_score,total_occurrences,avg_return_matched,hypothesis_source,hypothesis_impact';
+
+/** All rules' confidence on ONE benchmark — feeds the chart tooltip when the
+ * viewed instrument is an index. Empty until migration 139 + first scoring
+ * pass — callers must fall back to the NIFTY aggregate. */
+export async function fetchBenchConfidence(benchmarkIndexId: number): Promise<RuleBenchConfidence[]> {
+  const { data, error } = await from('km_rule_confidence_bench')
+    .select(BENCH_COLS)
+    .eq('benchmark_index_id', benchmarkIndexId)
+    .execute();
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? (data as RuleBenchConfidence[]) : [];
+}
+
+/** ONE rule's confidence across all benchmarks — feeds the /rules/:id
+ * "confidence by benchmark" strip. */
+export async function fetchRuleBenchConfidence(ruleId: number): Promise<RuleBenchConfidence[]> {
+  const { data, error } = await from('km_rule_confidence_bench')
+    .select(BENCH_COLS)
+    .eq('rule_id', ruleId)
+    .execute();
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? (data as RuleBenchConfidence[]) : [];
+}
+
 export interface TransitDateInfo {
   rule_id: number;
   last_end: string | null;   // most recent end_date on or before today

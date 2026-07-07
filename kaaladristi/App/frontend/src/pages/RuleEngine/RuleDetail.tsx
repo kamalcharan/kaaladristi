@@ -12,7 +12,7 @@ import RuleFormModal, { ruleToForm, formToInput, type FormMode } from './RuleFor
 import AlmanacTab from './AlmanacTab';
 import PatternsTab from './PatternsTab';
 import RuleInferenceModal from './RuleInferenceModal';
-import { updateRule, softDeleteRule, createRule, type AstroRuleFull } from './ruleService';
+import { updateRule, softDeleteRule, createRule, fetchRuleBenchConfidence, type AstroRuleFull, type RuleBenchConfidence } from './ruleService';
 import { runRuleDiscovery, fetchDiscoveryStatus, cancelDiscovery, dropRuleSignals } from './discoveryService';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -543,6 +543,119 @@ function BacktestStatGrid({ conf, transits, isDaily = false }: {
           instead of letting sector inferences look sector-validated. */}
       <div className="px-4 py-2 border-t border-kd-border/50 text-[10px] font-mono text-muted">
         All statistics measured against NIFTY 50 — sector/index-specific behavior lives in the Patterns tab (benchmark selector).
+      </div>
+    </div>
+  );
+}
+
+// ── Confidence by benchmark (POA item 4 part 1, migration 139) ────────────────
+// The benchmarks the ACTIVE inference claims in Applies To (sectors are
+// Sector Rotation index names; indexes are broad indices) — each shown with
+// ITS OWN confidence, so "affects auto" is finally validated on NIFTY AUTO,
+// not NIFTY 50. NIFTY 50 leads as the baseline. Empty until migration 139's
+// first scoring pass — renders nothing rather than a hollow section.
+
+interface ActiveApplicability {
+  applicability: {
+    equity?: { all_sectors?: boolean; sectors?: string[] };
+    index?: { all?: boolean; list?: string[] };
+  } | null;
+}
+
+function BenchConfidenceStrip({ ruleId }: { ruleId: number }) {
+  const { data: benchRows = [] } = useQuery({
+    queryKey: ['rule-engine', 'confidence-bench-rule', ruleId],
+    queryFn: () => fetchRuleBenchConfidence(ruleId),
+    enabled: !isNaN(ruleId),
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+  const { data: indices = [] } = useQuery({
+    queryKey: ['rule-engine', 'index-names'],
+    queryFn: async () => {
+      const { data, error } = await from('km_index_symbols').select('id,name').execute();
+      if (error) throw new Error(error.message);
+      return (data ?? []) as { id: number; name: string }[];
+    },
+    staleTime: 30 * 60 * 1000,
+  });
+  const { data: appl = null } = useQuery({
+    queryKey: ['rule-engine', 'active-applicability', ruleId],
+    queryFn: async () => {
+      const { data, error } = await from('km_rule_inference')
+        .select('applicability')
+        .eq('rule_a_id', ruleId)
+        .is('rule_b_id', 'null')
+        .eq('status', 'active')
+        .limit(1)
+        .execute();
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? (data[0] as ActiveApplicability | undefined) : undefined;
+      return row?.applicability ?? null;
+    },
+    enabled: !isNaN(ruleId),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
+  const chips = useMemo(() => {
+    if (benchRows.length === 0) return [];
+    const idByName = new Map(indices.map(i => [i.name, i.id]));
+    const rowByBench = new Map<number, RuleBenchConfidence>(
+      benchRows.map(r => [r.benchmark_index_id, r]));
+
+    // Claimed benchmarks from the active inference's Applies To
+    const claimed = [
+      ...(appl?.equity?.sectors ?? []),
+      ...(appl?.index?.list ?? []),
+    ];
+    const names = ['NIFTY 50', ...claimed.filter(n => n !== 'NIFTY 50')];
+    return names
+      .map(name => {
+        const benchId = idByName.get(name);
+        const row = benchId != null ? rowByBench.get(benchId) : undefined;
+        return row ? { name, row, claimed: name !== 'NIFTY 50' } : null;
+      })
+      .filter((c): c is { name: string; row: RuleBenchConfidence; claimed: boolean } => c != null);
+  }, [benchRows, indices, appl]);
+
+  // Nothing claimed beyond the NIFTY baseline → the stat grid already covers it
+  if (chips.length <= 1) return null;
+
+  return (
+    <div className="rounded-xl border border-kd-border bg-kd-card px-4 py-3">
+      <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+        <span className="text-[11px] font-mono uppercase tracking-wider text-accent-gold">
+          Confidence by benchmark
+        </span>
+        <span className="text-[10px] font-mono text-muted">
+          same windows, each index's own returns · benchmarks from the inference's Applies To
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {chips.map(({ name, row, claimed }) => {
+          const n = row.total_occurrences ?? 0;
+          const greyed = n < 20;
+          return (
+            <span
+              key={name}
+              title={row.hypothesis_impact
+                ? `tested vs ${row.hypothesis_source === 'inference' ? 'inference' : 'base bias'} (${row.hypothesis_impact.replace(/_/g, ' ')})`
+                : undefined}
+              className={cn(
+                'px-2 py-1 rounded-md text-[10px] font-mono border',
+                greyed ? 'text-muted border-kd-border opacity-60' : 'text-secondary border-kd-border',
+                claimed && !greyed && 'border-accent-indigo/40',
+              )}
+            >
+              {name}: {row.confidence_score != null ? `${row.confidence_score.toFixed(0)}%` : '—'}
+              <span className="text-muted"> · n={n}{greyed ? ' (low n)' : ''}</span>
+              {row.avg_return_matched != null && (
+                <span className="text-muted"> · avg {row.avg_return_matched >= 0 ? '+' : ''}{row.avg_return_matched.toFixed(1)}%</span>
+              )}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -1557,6 +1670,7 @@ export default function RuleDetail() {
                 onHighlight={setHighlightTransitId}
               />
               <BacktestStatGrid conf={conf} transits={chartsData} isDaily={isDailyOnlyRule} />
+              <BenchConfidenceStrip ruleId={ruleId} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <DistributionChart transits={chartsData} />
                 <AlphaChart transits={chartsData} />

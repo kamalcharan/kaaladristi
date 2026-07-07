@@ -81,6 +81,7 @@ def _score_recent_transits(dsn: str) -> None:
             compute_yearly_breakdown,
             compute_yearly_breakdown_from_signals,
             rescore_rules,
+            score_benchmark_confidence,
         )
     except Exception as e:
         log.error(f'transit scoring: import failed: {e}')
@@ -107,11 +108,19 @@ def _score_recent_transits(dsn: str) -> None:
         rescored = rescore_rules(conn)
         compute_yearly_breakdown(conn)
         compute_yearly_breakdown_from_signals(conn)
+        # POA item 4 part 1 (migration 139): fan the scoring out across every
+        # benchmark index — windows stay universal, returns are per-index.
+        bench_rows = 0
+        try:
+            bench_rows = score_benchmark_confidence(conn)
+        except Exception as e:
+            log.error(f'transit scoring: benchmark confidence failed — {e}')
         conn.commit()
         log.info(
             f'Transit scoring complete — {scored} transits + {daily_scored} daily '
             f'signals scored, {upserted} rules upserted, '
-            f'{rescored} windows re-scored vs current hypothesis'
+            f'{rescored} windows re-scored vs current hypothesis, '
+            f'{bench_rows} rule x benchmark rows'
         )
     except Exception as e:
         try:
