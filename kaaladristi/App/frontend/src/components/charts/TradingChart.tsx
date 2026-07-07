@@ -841,11 +841,15 @@ export default function TradingChart({ data, height = 900, compact = false, work
             fillColor   = hexToRgba(band.color, op)
             borderColor = hexToRgba(band.color, Math.min(op * 6, 0.75))
           } else if (band.matched === false) {
-            fillColor   = hexToRgba(band.color, op * 0.5)
+            // Dimmer than matched, but with a visibility floor — halving a low
+            // user opacity made whole multi-month windows invisible (only the
+            // left border line showed, reading as a point event; owner report
+            // 2026-07-07: Venus combust 27-Nov→17-Feb rendered as one line).
+            fillColor   = hexToRgba(band.color, Math.max(op * 0.5, 0.06))
             borderColor = hexToRgba(band.color, Math.min(op * 3, 0.40))
           } else {
             // null matched (most rules) — use group opacity directly
-            fillColor   = hexToRgba(band.color, op)
+            fillColor   = hexToRgba(band.color, Math.max(op, 0.06))
             borderColor = hexToRgba(band.color, isFuture ? Math.min(op * 5, 0.50) : Math.min(op * 3, 0.30))
             dashed      = isFuture
           }
@@ -853,12 +857,16 @@ export default function TradingChart({ data, height = 900, compact = false, work
           ctx.fillStyle = fillColor
           ctx.fillRect(left, 0, bw, h)
 
+          // Border on BOTH edges so a window reads as a bracketed time span —
+          // a single left line was indistinguishable from a point marker.
           ctx.strokeStyle = borderColor
           ctx.lineWidth   = 1.5
           ctx.setLineDash(dashed ? [4, 3] : [])
           ctx.beginPath()
           ctx.moveTo(left + 1, 0)
           ctx.lineTo(left + 1, h)
+          ctx.moveTo(left + bw - 1, 0)
+          ctx.lineTo(left + bw - 1, h)
           ctx.stroke()
           ctx.setLineDash([])
 
