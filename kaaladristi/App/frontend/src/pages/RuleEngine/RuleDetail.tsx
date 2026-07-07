@@ -1594,7 +1594,13 @@ export default function RuleDetail() {
           ruleId={ruleId}
           ruleName={rule.display_name}
           onClose={() => setInferenceModalOpen(false)}
-          onEditMetadata={() => { setSaveError(null); setModalMode('edit'); }}
+          metadataForm={{
+            initial: ruleToForm(rule, 'edit'),
+            save: async input => {
+              const { rule_code: _rc, rule_type: _rt, ...patch } = input;
+              await editMutation.mutateAsync(patch);
+            },
+          }}
         />
       )}
 
