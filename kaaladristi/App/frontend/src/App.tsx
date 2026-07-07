@@ -26,6 +26,7 @@ import IndustryTransitionView from '@/views/IndustryTransitionView';
 import DataPipelinePage from '@/pages/DataPipeline';
 import PanchangView from '@/views/PanchangView';
 import AdminPanchangView from '@/views/AdminPanchangView';
+import UsersView from '@/views/UsersView';
 import { RuleList, RuleDetail } from '@/pages/RuleEngine';
 import MarketStructureView from '@/views/MarketStructureView';
 import PlanetaryIntelView from '@/views/PlanetaryIntelView';
@@ -134,6 +135,7 @@ function AppRoutes() {
           <Route path="/data-pipeline" element={<DataPipelinePage />} />
           <Route path="/panchang" element={<PanchangView />} />
           <Route path="/admin/panchang" element={<AdminPanchangView />} />
+          <Route path="/users" element={<UsersView />} />
           <Route path="/market-structure" element={<MarketStructureView />} />
           <Route path="/planetary-intel" element={<PlanetaryIntelView />} />
           <Route path="/rules" element={<RuleList />} />

@@ -5835,6 +5835,256 @@ def delete_rule_inference(inference_id: int):
         conn.close()
 
 
+# ── Users admin (/users page — migration 140) ─────────────────────────────────
+# All actions are server-side admin-gated: the JWT gives the caller id, the
+# caller's PROFILE role is checked in the DB (never trust the frontend gate
+# or the token's role claim alone). Every action is written to km_admin_audit.
+
+VALID_TIERS = ('free', 'trial', 'quarterly', 'annual', 'beta')
+# Default grant durations (days) when the admin reassigns a plan without an
+# explicit end date. free/beta don't expire.
+TIER_DEFAULT_DAYS = {'trial': 14, 'quarterly': 90, 'annual': 365}
+
+
+def _require_admin(conn, caller_id: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("SELECT role FROM km_profiles WHERE id = %s", (caller_id,))
+        row = cur.fetchone()
+    if not row or row[0] != 'admin':
+        raise HTTPException(403, 'Admin access required')
+
+
+def _admin_audit(cur, admin_id: str, action: str, target_id: str | None,
+                 target_email: str | None, detail: dict | None = None) -> None:
+    cur.execute(
+        "INSERT INTO km_admin_audit (admin_id, action, target_user_id, target_email, detail) "
+        "VALUES (%s, %s, %s, %s, %s)",
+        (admin_id, action, target_id, target_email,
+         json.dumps(detail) if detail else None),
+    )
+
+
+class AdminSuspendRequest(BaseModel):
+    suspended: bool
+
+
+class AdminPlanRequest(BaseModel):
+    tier: str
+    expires_at: str | None = None   # YYYY-MM-DD; default = tier duration
+
+
+class AdminExtendRequest(BaseModel):
+    expires_at: str                 # YYYY-MM-DD
+
+
+class AdminDeleteRequest(BaseModel):
+    confirm_email: str
+
+
+@app.get('/api/admin/users')
+def admin_list_users(caller_id: str = Depends(_get_current_user_id)):
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT u.id, u.email, u.created_at,
+                       p.display_name, p.full_name, p.role, p.tier,
+                       p.onboarded, COALESCE(p.is_suspended, false) AS is_suspended,
+                       s.tier AS sub_tier, s.started_at AS sub_started_at,
+                       s.expires_at AS sub_expires_at
+                FROM kd_users u
+                LEFT JOIN km_profiles p ON p.id = u.id
+                LEFT JOIN LATERAL (
+                    SELECT tier, started_at, expires_at
+                    FROM user_subscriptions
+                    WHERE user_id = u.id
+                    ORDER BY started_at DESC
+                    LIMIT 1
+                ) s ON true
+                ORDER BY u.created_at DESC
+            """)
+            users = [dict(r) for r in cur.fetchall()]
+        return {'users': users}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'admin_list_users error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/admin/users/{user_id}/suspend')
+def admin_suspend_user(user_id: str, req: AdminSuspendRequest,
+                       caller_id: str = Depends(_get_current_user_id)):
+    if user_id == caller_id:
+        raise HTTPException(400, 'You cannot suspend your own account')
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE km_profiles SET is_suspended = %s, updated_at = now() "
+                "WHERE id = %s RETURNING email",
+                (req.suspended, user_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(404, 'User not found')
+            _admin_audit(cur, caller_id,
+                         'suspend' if req.suspended else 'unsuspend',
+                         user_id, row[0])
+        conn.commit()
+        return {'id': user_id, 'is_suspended': req.suspended}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'admin_suspend_user error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/admin/users/{user_id}/plan')
+def admin_reassign_plan(user_id: str, req: AdminPlanRequest,
+                        caller_id: str = Depends(_get_current_user_id)):
+    if req.tier not in VALID_TIERS:
+        raise HTTPException(400, f'tier must be one of {VALID_TIERS}')
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        expires_at = req.expires_at
+        if expires_at is None and req.tier in TIER_DEFAULT_DAYS:
+            expires_at = (datetime.utcnow() + timedelta(days=TIER_DEFAULT_DAYS[req.tier])).date().isoformat()
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE km_profiles SET tier = %s, updated_at = now() "
+                "WHERE id = %s RETURNING email",
+                (req.tier, user_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(404, 'User not found')
+            cur.execute(
+                "INSERT INTO user_subscriptions (user_id, tier, started_at, expires_at) "
+                "VALUES (%s, %s, now(), %s)",
+                (user_id, req.tier, expires_at),
+            )
+            _admin_audit(cur, caller_id, 'plan_reassign', user_id, row[0],
+                         {'tier': req.tier, 'expires_at': expires_at})
+        conn.commit()
+        return {'id': user_id, 'tier': req.tier, 'expires_at': expires_at}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'admin_reassign_plan error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/admin/users/{user_id}/extend')
+def admin_extend_subscription(user_id: str, req: AdminExtendRequest,
+                              caller_id: str = Depends(_get_current_user_id)):
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        with conn.cursor() as cur:
+            cur.execute("SELECT email, tier FROM km_profiles WHERE id = %s", (user_id,))
+            prof = cur.fetchone()
+            if not prof:
+                raise HTTPException(404, 'User not found')
+            email, tier = prof
+            # Latest subscription row gets the new end date; beta/legacy users
+            # without one get a fresh row at their current tier.
+            cur.execute(
+                "UPDATE user_subscriptions SET expires_at = %s "
+                "WHERE id = (SELECT id FROM user_subscriptions WHERE user_id = %s "
+                "            ORDER BY started_at DESC LIMIT 1) RETURNING id",
+                (req.expires_at, user_id),
+            )
+            if cur.fetchone() is None:
+                cur.execute(
+                    "INSERT INTO user_subscriptions (user_id, tier, started_at, expires_at) "
+                    "VALUES (%s, %s, now(), %s)",
+                    (user_id, tier or 'free', req.expires_at),
+                )
+            _admin_audit(cur, caller_id, 'extend_subscription', user_id, email,
+                         {'expires_at': req.expires_at})
+        conn.commit()
+        return {'id': user_id, 'expires_at': req.expires_at}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'admin_extend_subscription error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/admin/users/{user_id}/delete')
+def admin_delete_user(user_id: str, req: AdminDeleteRequest,
+                      caller_id: str = Depends(_get_current_user_id)):
+    """PHYSICAL delete — kd_users + km_profiles + user_subscriptions +
+    user_frameworks in one transaction, plus the user's VaNi interaction log
+    in vani_db (best-effort — logged, never blocks the main delete). The
+    audit row is the only surviving trace. POST (not DELETE verb) because a
+    body carrying confirm_email is required."""
+    if user_id == caller_id:
+        raise HTTPException(400, 'You cannot delete your own account')
+    conn = _conn()
+    try:
+        _require_admin(conn, caller_id)
+        with conn.cursor() as cur:
+            cur.execute("SELECT email FROM kd_users WHERE id = %s", (user_id,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(404, 'User not found')
+            email = row[0]
+            if req.confirm_email.strip().lower() != (email or '').lower():
+                raise HTTPException(400, 'Confirmation email does not match this user')
+
+            # Audit FIRST — it must survive the delete
+            _admin_audit(cur, caller_id, 'delete_user', user_id, email)
+
+            cur.execute("DELETE FROM user_frameworks WHERE user_id = %s", (user_id,))
+            fw = cur.rowcount
+            cur.execute("DELETE FROM user_subscriptions WHERE user_id = %s", (user_id,))
+            subs = cur.rowcount
+            cur.execute("DELETE FROM km_profiles WHERE id = %s", (user_id,))
+            cur.execute("DELETE FROM kd_users WHERE id = %s", (user_id,))
+        conn.commit()
+
+        # vani_db chat history — separate instance, best-effort
+        vani_deleted = 0
+        try:
+            vconn = _vani_db_conn()
+            try:
+                with vconn.cursor() as vcur:
+                    vcur.execute("DELETE FROM vn_interaction_log WHERE user_id = %s", (user_id,))
+                    vani_deleted = vcur.rowcount
+                vconn.commit()
+            finally:
+                vconn.close()
+        except Exception as vexc:
+            log.error(f'admin_delete_user: vani_db cleanup failed for {user_id}: {vexc}')
+
+        return {'deleted': user_id, 'email': email,
+                'frameworks': fw, 'subscriptions': subs, 'vani_logs': vani_deleted}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        conn.rollback()
+        log.error(f'admin_delete_user error: {exc}')
+        raise HTTPException(500, str(exc))
+    finally:
+        conn.close()
+
+
 # ── Payments (Razorpay) ────────────────────────────────────────────────────────
 
 RAZORPAY_KEY_ID     = os.environ.get('RAZORPAY_KEY_ID', '')
