@@ -2,11 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/globals.css';
-import { applyThemeById } from '@/config/theme';
+import { initTheme } from '@/stores/themeStore';
 
-// Apply theme before React mounts — no flash. Always dark.
-const _storedTheme = localStorage.getItem('kd-theme') ?? import.meta.env.VITE_THEME ?? 'kaaladristi';
-applyThemeById(_storedTheme);
+// Apply persisted theme + mode (dark/light/system) before React mounts — no flash.
+initTheme();
 
 // Service worker management.
 // A stale SW from a prior deployment can intercept /api/ and /db/ requests,

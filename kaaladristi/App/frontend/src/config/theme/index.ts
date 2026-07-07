@@ -133,9 +133,11 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
 
 /**
  * Convenience wrapper: resolve theme by id and apply it.
- * Always dark — DristiQ is dark-only in v1.
+ * `prefersDark` defaults to true; mode resolution (dark/light/system +
+ * dark-only themes) lives in stores/themeStore.ts — prefer initTheme()/
+ * setMode() there over calling this directly.
  */
-export function applyThemeById(id: string): void {
+export function applyThemeById(id: string, prefersDark = true): void {
   const config = getTheme(id);
-  applyTheme(config, true);
+  applyTheme(config, prefersDark);
 }
