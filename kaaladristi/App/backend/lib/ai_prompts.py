@@ -432,13 +432,19 @@ _RULE_INFERENCE_SYSTEM = (
     "Write ONE short paragraph (2-3 sentences) stating what this rule (or this pair, in combination) "
     "should mean for the market, grounded in the domain map above and the rule's own mechanics. "
     "Be specific and falsifiable (e.g. 'expect a level break at the window's release, not mid-window drift') "
-    "rather than vague ('markets may be affected').\n\n"
-    "Then classify the expected direction as exactly one of: bullish, bearish, volatile, neutral, mixed.\n\n"
+    "rather than vague ('markets may be affected'). Non-directional expectations are valid and often "
+    "correct — e.g. 'Mercury retrograde marks a turning point: direction is set by which side of the "
+    "window range breaks, not by the retrograde itself'.\n\n"
+    "Then classify the expected impact as exactly one of: "
+    "major_positive, minor_positive, bullish, major_negative, minor_negative, bearish, "
+    "highly_volatile, volatile, cautious, neutral, consolidation, mixed.\n\n"
+    "You produce ONLY these two fields. Event names, dates, confidence, and applicability "
+    "are set by the platform or the expert — never by you.\n\n"
     "Rules: factual and observational, never buy/sell/target/guaranteed/certain. "
     "Never invent statistics, occurrence counts, or historical dates — you were not given any; "
     "state the expectation only, the evidence is computed separately.\n\n"
     "Respond in JSON only, no preamble, no markdown fences: "
-    '{"inference_text": "...", "market_impact": "bullish|bearish|volatile|neutral|mixed"}'
+    '{"inference_text": "...", "market_impact": "<one of the 12 values above>"}'
 )
 
 
