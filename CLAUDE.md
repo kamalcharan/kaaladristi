@@ -108,7 +108,7 @@ kaaladristi/
 | `km_profiles` | User profiles + roles + `tier` column (RLS-controlled); migration 090 adds `tier TEXT DEFAULT 'free'` |
 | `user_subscriptions` | Payment subscription rows; one per purchase (migration 090); `tier`, `started_at`, `expires_at` |
 
-Latest migration: **136** (`km_migration_136_inference_versioning.sql` — km_rule_inference versioning: one ACTIVE hypothesis per (rule_a, rule_b) scope, auto-supersede on save with frozen validation snapshot; migration 135 widens `km_rule_inference` to the full /inference capture shape: 12-value market_impact vocabulary, expert `confidence` 1-10, `applicability_scope`/`applicability` JSONB, `notes`; migration 134 created the table, 133 restricts Catalog visibility to Mercury/Mars/Saturn/Jupiter/Bayer/MajorTransit-tagged rules)
+Latest migration: **137** (`km_migration_137_patterns_grants_profile_roles.sql` — grants km_rule_patterns/km_rule_inference to profile roles admin/user, the JWT roles PostgREST actually runs as; migration 136 is `km_migration_136_inference_versioning.sql` — km_rule_inference versioning: one ACTIVE hypothesis per (rule_a, rule_b) scope, auto-supersede on save with frozen validation snapshot; migration 135 widens `km_rule_inference` to the full /inference capture shape: 12-value market_impact vocabulary, expert `confidence` 1-10, `applicability_scope`/`applicability` JSONB, `notes`; migration 134 created the table, 133 restricts Catalog visibility to Mercury/Mars/Saturn/Jupiter/Bayer/MajorTransit-tagged rules)
 
 **Extended table inventory** (breadth/astro/rule/risk/scan/rolling-metric tables, inactive & missing indices): `docs/claude/db-tables.md`
 
@@ -381,7 +381,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **137**.
+Next migration number: **138**.
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
@@ -567,6 +567,7 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 - **BSE numeric symbols**: 82% of equity universe has numeric scrip codes. Always use `displaySymbol(stock)` from `lib/symbolUtils.ts` for UI. Filter numeric codes out of TradingView exports.
 - **Scan filter polarity**: inequality direction is critical. `close < w52Low * 1.25` means "not extended from lows". If you invert it, you exclude healthy stocks and get zero results.
 - **PostgREST boolean filters**: use `is.true` / `is.false` (not `eq.true`). The QueryBuilder has an `is()` method for this.
+- **PostgREST grants — JWT role is the PROFILE role, not 'authenticated'**: migration 096 patched `kd_auth_login` to embed the km_profiles role (`admin`/`user`) as the JWT role claim, so PostgREST runs logged-in browser queries as DB role `admin`/`user`. A new table granted only to `authenticated, anon, kd_app` is readable ANONYMOUSLY but permission-denied for logged-in users (hit on `km_rule_patterns`, 2026-07-07 — fixed in migration 137). Every new PostgREST-read table must grant to `admin, "user"` as well.
 - **RLS on pipeline-computed tables**: don't add RLS to aggregate tables (`km_industry_eod`, etc.) — they contain no user data and RLS creates silent access bugs when `kd_app` role differs from `authenticated`.
 - **Coverage metrics**: `coverage_pct NUMERIC(5,2)` overflows on multi-date RPC results. Use `NUMERIC(7,2)` and cap at 999.99 in Python.
 - **KaalaDristi voice is observational**: "Strength Confluence" not "Power Buy". Surface conditions, don't issue trade commands.
