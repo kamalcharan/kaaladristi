@@ -33,8 +33,10 @@ import type { IndicatorRow } from '@/services/indicatorData';
 import type { ChartOverlay } from '@/types/framework';
 import type { AstroBand } from '@/services/astroOverlayService';
 import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
+import { useQuery } from '@tanstack/react-query';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
+import { fetchConfidence } from '@/pages/RuleEngine/ruleService';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -211,10 +213,25 @@ export default function TradingChart({ data, height = 900, compact = false, work
 
   const chartsRef = useRef<IChartApi[]>([]);
 
-  // Tooltip state for astro band hover
+  // Tooltip state for astro band hover — bands: ALL events under the cursor
+  // (coincident point markers list together instead of only the topmost).
   const [bandTooltip, setBandTooltip] = useState<{
-    x: number; y: number; band: AstroBand
+    x: number; y: number; bands: AstroBand[]
   } | null>(null);
+
+  // Per-rule aggregate confidence for the tooltip stats line — the shared
+  // ['rule-engine','confidence'] query Catalog + Rules already use.
+  const { data: confRows } = useQuery({
+    queryKey: ['rule-engine', 'confidence'],
+    queryFn: fetchConfidence,
+    enabled: astroBands.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+  const confByRule = useMemo(
+    () => new Map((confRows ?? []).map(c => [c.rule_id, c])),
+    [confRows],
+  );
 
   // Crosshair hover readout (Phase 2.1): the hovered bar's OHLC + volume +
   // delivery% render as a floating legend — no more guessing values by eye.
@@ -1012,17 +1029,25 @@ export default function TradingChart({ data, height = 900, compact = false, work
           const mouseX = e.clientX - rect.left;
           const mouseY = e.clientY - rect.top;
           const ts     = mainChartRef.current.timeScale();
-          let found: AstroBand | null = null;
+          // Collect EVERY band under the cursor (Overlap Visibility Phase 2):
+          // coincident events tooltip together. Point markers get the same
+          // ±4px hit tolerance hover that right-click always had — a 1px
+          // line was effectively un-hoverable before.
+          const found: AstroBand[] = [];
           for (const band of astroBands) {
             const x1 = ts.timeToCoordinate(band.from as Time);
             const x2 = ts.timeToCoordinate(band.to   as Time);
             if (x1 == null || x2 == null) continue;
-            const left  = Math.min(x1, x2);
-            const right = Math.max(x1, x2);
-            if (mouseX >= left && mouseX <= right) { found = band; break; }
+            const pad   = band.isPoint ? 4 : 0;
+            const left  = Math.min(x1, x2) - pad;
+            const right = Math.max(x1, x2) + pad;
+            if (mouseX >= left && mouseX <= right) found.push(band);
           }
-          if (found) {
-            setBandTooltip({ x: mouseX, y: mouseY, band: found });
+          if (found.length > 0) {
+            // Points first (they're what the cursor is aimed at when both
+            // a wide zone and a thin marker overlap), then narrower zones.
+            found.sort((a, b) => Number(b.isPoint) - Number(a.isPoint));
+            setBandTooltip({ x: mouseX, y: mouseY, bands: found });
           } else if (bandTooltip) {
             setBandTooltip(null);
           }
@@ -1067,48 +1092,87 @@ export default function TradingChart({ data, height = 900, compact = false, work
             borderRadius: 12,
           }}
         />
-        {bandTooltip && (
-          <div style={{
-            position: 'absolute',
-            left: bandTooltip.x + 14,
-            top:  Math.max(8, bandTooltip.y - 60),
-            zIndex: 20,
-            background: 'rgba(13,17,23,0.95)',
-            border: `1px solid ${bandTooltip.band.color}55`,
-            borderLeft: `3px solid ${bandTooltip.band.color}`,
-            borderRadius: 6,
-            padding: '7px 11px',
-            pointerEvents: 'none',
-            minWidth: 180,
-            maxWidth: 260,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: bandTooltip.band.color, marginBottom: 4, lineHeight: 1.3 }}>
-              {bandTooltip.band.displayName}
-            </div>
-            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>
-              {bandTooltip.band.ruleCode}
-            </div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', display: 'flex', gap: 4, alignItems: 'center' }}>
-              <span>{fmtDate(bandTooltip.band.from)}</span>
-              <span style={{ opacity: 0.35 }}>→</span>
-              <span>{fmtDate(bandTooltip.band.to)}</span>
-            </div>
-            <div style={{ marginTop: 5, fontSize: 10 }}>
-              {bandTooltip.band.matched === true  && <span style={{ color: bandTooltip.band.color }}>✓ Confirmed</span>}
-              {bandTooltip.band.matched === false && <span style={{ color: 'var(--bear)' }}>✗ Not matched</span>}
-              {bandTooltip.band.matched === null  && (
-                <span style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  {bandTooltip.band.from > new Date().toISOString().slice(0,10)
-                    ? '◦ Future transit'
-                    : bandTooltip.band.baseBias
-                      ? '◦ Pending validation'
-                      : '◦ Observational window'}
-                </span>
+        {bandTooltip && bandTooltip.bands.length > 0 && (() => {
+          const MAX_SHOWN = 4;
+          const shown  = bandTooltip.bands.slice(0, MAX_SHOWN);
+          const extra  = bandTooltip.bands.length - shown.length;
+          const first  = shown[0];
+          const accent = (b: AstroBand) =>
+            (b.isPoint && planetColorOfRuleCode(b.ruleCode)) || b.color;
+          const today  = new Date().toISOString().slice(0, 10);
+          return (
+            <div style={{
+              position: 'absolute',
+              left: bandTooltip.x + 14,
+              top:  Math.max(8, bandTooltip.y - 60),
+              zIndex: 20,
+              background: 'rgba(13,17,23,0.95)',
+              border: `1px solid ${accent(first)}55`,
+              borderLeft: `3px solid ${accent(first)}`,
+              borderRadius: 6,
+              padding: '7px 11px',
+              pointerEvents: 'none',
+              minWidth: 180,
+              maxWidth: 280,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+            }}>
+              {shown.map((b, i) => {
+                const c    = accent(b);
+                const conf = confByRule.get(b.ruleId);
+                return (
+                  <div key={`${b.ruleCode}-${b.from}-${i}`} style={i > 0 ? {
+                    marginTop: 7, paddingTop: 7, borderTop: '1px solid rgba(255,255,255,0.08)',
+                  } : undefined}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: c, marginBottom: 3, lineHeight: 1.3 }}>
+                      {b.displayName}
+                    </div>
+                    <div style={{ fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.45)', marginBottom: 4 }}>
+                      {b.ruleCode}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', display: 'flex', gap: 4, alignItems: 'center' }}>
+                      {b.isPoint ? (
+                        <span>{fmtDate(b.from)}</span>
+                      ) : (
+                        <>
+                          <span>{fmtDate(b.from)}</span>
+                          <span style={{ opacity: 0.35 }}>→</span>
+                          <span>{fmtDate(b.to)}</span>
+                        </>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: 10 }}>
+                      {b.matched === true  && <span style={{ color: c }}>✓ Confirmed</span>}
+                      {b.matched === false && <span style={{ color: 'var(--bear)' }}>✗ Not matched</span>}
+                      {b.matched === null  && (
+                        <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          {b.from > today
+                            ? '◦ Future transit'
+                            : b.baseBias
+                              ? '◦ Pending validation'
+                              : '◦ Observational window'}
+                        </span>
+                      )}
+                    </div>
+                    {/* Aggregate confidence — how the RULE behaves, not just this window */}
+                    {conf?.confidence_score != null && (conf.total_occurrences ?? 0) > 0 && (
+                      <div style={{ marginTop: 3, fontSize: 10, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.55)' }}>
+                        {conf.confidence_score.toFixed(0)}% historical match (n={conf.total_occurrences})
+                        {conf.avg_return_matched != null && (
+                          <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% matched</>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {extra > 0 && (
+                <div style={{ marginTop: 6, fontSize: 9, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.35)' }}>
+                  +{extra} more event{extra > 1 ? 's' : ''} here
+                </div>
               )}
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {!workspaceMode && !compact && (

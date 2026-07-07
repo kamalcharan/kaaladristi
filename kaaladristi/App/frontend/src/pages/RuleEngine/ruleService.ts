@@ -22,6 +22,8 @@ export interface AstroRule {
 export interface RuleConfidence {
   rule_id: number;
   confidence_score: number | null;
+  total_occurrences: number | null;
+  avg_return_matched: number | null;
 }
 
 export interface RuleInput {
@@ -89,11 +91,14 @@ export async function fetchCatalogRules(): Promise<AstroRule[]> {
 }
 
 export async function fetchConfidence(): Promise<RuleConfidence[]> {
+  // total_occurrences + avg_return_matched feed the chart band tooltip's
+  // at-a-glance stats line (Overlap Visibility Phase 2) — same shared
+  // ['rule-engine','confidence'] query Catalog + Rules already use.
   const { data, error } = await from('km_rule_confidence')
-    .select('rule_id,confidence_score')
+    .select('rule_id,confidence_score,total_occurrences,avg_return_matched')
     .execute();
   if (error) throw new Error(error.message);
-  return (data as RuleConfidence[]) ?? [];
+  return Array.isArray(data) ? (data as RuleConfidence[]) : [];
 }
 
 export interface TransitDateInfo {
