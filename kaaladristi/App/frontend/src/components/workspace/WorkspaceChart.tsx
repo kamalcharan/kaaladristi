@@ -112,6 +112,8 @@ export default function WorkspaceChart({ instrument, overlays: overlaysProp, sta
           onCrosshairMove={handleCrosshairMove}
           onVisibleRangeChange={handleVisibleRangeChange}
           onZoneClick={handleZoneClick}
+          benchmarkIndexId={instrument.type === 'index' ? instrument.id : null}
+          benchmarkName={instrument.type === 'index' ? instrument.symbol : null}
         />
       )}
       {zoneExplain && (

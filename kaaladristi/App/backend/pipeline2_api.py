@@ -3435,6 +3435,7 @@ def _run_confidence_bg():
             compute_yearly_breakdown,
             compute_yearly_breakdown_from_signals,
             rescore_rules,
+            score_benchmark_confidence,
         )
     except Exception as exc:
         log.error(f'Confidence import failed: {exc}')
@@ -3468,6 +3469,11 @@ def _run_confidence_bg():
         rescore_rules(conn)
         compute_yearly_breakdown(conn)
         compute_yearly_breakdown_from_signals(conn)
+        # POA item 4 part 1: per-benchmark confidence fan-out (migration 139)
+        try:
+            score_benchmark_confidence(conn)
+        except Exception as bench_exc:
+            log.error(f'Benchmark confidence failed (non-fatal): {bench_exc}')
 
         _confidence_state['signals_scored'] = scored + daily_scored
         _confidence_state['rules_upserted'] = upserted
@@ -5695,8 +5701,10 @@ def create_rule_inference(rule_id: int, req: RuleInferenceCreate):
         rescored = 0
         if rule_b_id is None:
             try:
-                from scripts.confidence_scoring import rescore_rules  # noqa: PLC0415
+                from scripts.confidence_scoring import rescore_rules, score_benchmark_confidence  # noqa: PLC0415
                 rescored = rescore_rules(conn, [rule_a_id])
+                # Per-benchmark rows retarget to the new hypothesis too
+                score_benchmark_confidence(conn, [rule_a_id])
             except Exception as exc:
                 # Non-fatal: the inference is saved; nightly job will re-score.
                 log.error(f'create_rule_inference: rescore failed for rule {rule_a_id}: {exc}')
@@ -5810,8 +5818,9 @@ def delete_rule_inference(inference_id: int):
         rule_a_id, rule_b_id, status = deleted[0], deleted[1], deleted[2]
         if status == 'active' and rule_b_id is None:
             try:
-                from scripts.confidence_scoring import rescore_rules  # noqa: PLC0415
+                from scripts.confidence_scoring import rescore_rules, score_benchmark_confidence  # noqa: PLC0415
                 rescore_rules(conn, [rule_a_id])
+                score_benchmark_confidence(conn, [rule_a_id])
             except Exception as exc:
                 log.error(f'delete_rule_inference: rescore failed for rule {rule_a_id}: {exc}')
 

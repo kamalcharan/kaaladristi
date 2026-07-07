@@ -36,7 +36,7 @@ import { fmtDate, fmtDateShort } from '@/lib/dateUtils';
 import { useQuery } from '@tanstack/react-query';
 import { INDICATOR_DEFAULT_COLORS } from '@/constants/catalogItems';
 import { planetColorOfRuleCode } from '@/constants/planetColors';
-import { fetchConfidence } from '@/pages/RuleEngine/ruleService';
+import { fetchConfidence, fetchBenchConfidence } from '@/pages/RuleEngine/ruleService';
 
 // ── SMA config — used in legacy (non-workspace) mode ──
 const SMA_LINES: { key: keyof IndicatorRow; color: string; label: string; width: LineWidth }[] = [
@@ -89,6 +89,12 @@ interface TradingChartProps {
    *  `coincident` (optional 4th arg) lists ALL bands under the click point,
    *  clicked band first — for popovers that explain a cluster, not one rule. */
   onZoneClick?: (band: AstroBand, clientX: number, clientY: number, coincident?: AstroBand[]) => void;
+  /** Phase 3 (migration 139): when the viewed instrument is an INDEX, pass its
+   *  id + name so the RULE OVERALL tooltip line uses that index's own
+   *  confidence row (km_rule_confidence_bench). Falls back to the NIFTY 50
+   *  aggregate when unset or when no per-benchmark row exists yet. */
+  benchmarkIndexId?: number | null;
+  benchmarkName?: string | null;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -201,7 +207,7 @@ const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
 const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
 const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -233,6 +239,20 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const confByRule = useMemo(
     () => new Map((confRows ?? []).map(c => [c.rule_id, c])),
     [confRows],
+  );
+
+  // Phase 3: the viewed index's own confidence rows (migration 139). Empty
+  // until the table is populated — the tooltip falls back to NIFTY per rule.
+  const { data: benchConfRows } = useQuery({
+    queryKey: ['rule-engine', 'confidence-bench', benchmarkIndexId],
+    queryFn: () => fetchBenchConfidence(benchmarkIndexId!),
+    enabled: astroBands.length > 0 && benchmarkIndexId != null,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+  const benchConfByRule = useMemo(
+    () => new Map((benchConfRows ?? []).map(c => [c.rule_id, c])),
+    [benchConfRows],
   );
 
   // Phase 2 of the benchmark gap (owner 2026-07-07): the NIFTY verdict stays,
@@ -1168,7 +1188,13 @@ export default function TradingChart({ data, height = 900, compact = false, work
             }}>
               {shown.map((b, i) => {
                 const c    = accent(b);
-                const conf = confByRule.get(b.ruleId);
+                // Phase 3: prefer the viewed index's own confidence row;
+                // NIFTY 50 aggregate is the fallback — label follows the data.
+                const niftyConf = confByRule.get(b.ruleId);
+                const benchConf = benchmarkIndexId != null ? benchConfByRule.get(b.ruleId) : undefined;
+                const useBench  = benchConf != null && (benchConf.total_occurrences ?? 0) > 0;
+                const conf      = useBench ? benchConf : niftyConf;
+                const benchLabel = useBench ? (benchmarkName ?? 'this index') : 'NIFTY 50';
                 return (
                   <div key={`${b.ruleCode}-${b.from}-${i}`} style={i > 0 ? {
                     marginTop: 7, paddingTop: 7, borderTop: '1px solid rgba(255,255,255,0.08)',
@@ -1240,7 +1266,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
                           RULE OVERALL
                         </span>
                         <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.6)' }}>
-                          NIFTY 50 moved as expected in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
+                          {benchLabel} moved as expected in {conf.confidence_score.toFixed(0)}% of {conf.total_occurrences} windows
                           {conf.avg_return_matched != null && (
                             <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% when it did</>
                           )}
