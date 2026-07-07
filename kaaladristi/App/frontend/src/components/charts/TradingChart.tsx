@@ -1177,7 +1177,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         </span>
                       )}
                     </div>
-                    {/* Aggregate confidence — how the RULE behaves, not just this window */}
+                    {/* Aggregate confidence — how the RULE behaves, not just this window.
+                        POA item 3: the % is only meaningful against a stated
+                        hypothesis, so the tested claim is named inline
+                        ('vs inference (…)' or 'vs base bias (…)'). */}
                     {conf?.confidence_score != null && (conf.total_occurrences ?? 0) > 0 && (
                       <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
                         <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
@@ -1188,6 +1191,24 @@ export default function TradingChart({ data, height = 900, compact = false, work
                           {conf.avg_return_matched != null && (
                             <> · avg {conf.avg_return_matched >= 0 ? '+' : ''}{conf.avg_return_matched.toFixed(1)}% when it did</>
                           )}
+                          {conf.hypothesis_source && conf.hypothesis_impact && (
+                            <span style={{ color: 'rgba(255,255,255,0.4)' }}>
+                              {' '}· vs {conf.hypothesis_source === 'inference' ? 'inference' : 'base bias'} ({conf.hypothesis_impact.replace(/_/g, ' ')})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {/* Non-directional inference (volatile/turning/…): no
+                        win-rate exists by design — say so instead of silence. */}
+                    {conf != null && conf.hypothesis_source === 'inference'
+                      && (conf.confidence_score == null || (conf.total_occurrences ?? 0) === 0) && (
+                      <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                        <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                          RULE OVERALL
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.5)' }}>
+                          inference{conf.hypothesis_impact ? ` (${conf.hypothesis_impact.replace(/_/g, ' ')})` : ''} makes no directional claim — see Patterns for how it plays out
                         </span>
                       </div>
                     )}

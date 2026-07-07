@@ -24,6 +24,11 @@ export interface RuleConfidence {
   confidence_score: number | null;
   total_occurrences: number | null;
   avg_return_matched: number | null;
+  /** Which hypothesis the numbers were tested against (migration 138):
+   *  'inference' = the rule's active expert inference; 'base_bias' = seeded fallback. */
+  hypothesis_source: 'inference' | 'base_bias' | null;
+  /** The tested claim's impact value at scoring time (12-value vocabulary). */
+  hypothesis_impact: string | null;
 }
 
 export interface RuleInput {
@@ -95,7 +100,7 @@ export async function fetchConfidence(): Promise<RuleConfidence[]> {
   // at-a-glance stats line (Overlap Visibility Phase 2) — same shared
   // ['rule-engine','confidence'] query Catalog + Rules already use.
   const { data, error } = await from('km_rule_confidence')
-    .select('rule_id,confidence_score,total_occurrences,avg_return_matched')
+    .select('rule_id,confidence_score,total_occurrences,avg_return_matched,hypothesis_source,hypothesis_impact')
     .execute();
   if (error) throw new Error(error.message);
   return Array.isArray(data) ? (data as RuleConfidence[]) : [];

@@ -80,6 +80,7 @@ def _score_recent_transits(dsn: str) -> None:
             compute_confidence_from_daily_signals,
             compute_yearly_breakdown,
             compute_yearly_breakdown_from_signals,
+            rescore_rules,
         )
     except Exception as e:
         log.error(f'transit scoring: import failed: {e}')
@@ -99,12 +100,18 @@ def _score_recent_transits(dsn: str) -> None:
         daily_scored = update_daily_signal_returns(conn, close_map, rule_outcome_map)
         upserted = compute_confidence_from_transits(conn)
         upserted += compute_confidence_from_daily_signals(conn)
+        # POA item 3: re-derive matched for ALL already-scored windows against
+        # the CURRENT hypothesis (active inference, else base_bias), refresh
+        # aggregates, and stamp hypothesis_source/impact on km_rule_confidence.
+        # Runs before the yearly breakdowns so they see the rescored matched.
+        rescored = rescore_rules(conn)
         compute_yearly_breakdown(conn)
         compute_yearly_breakdown_from_signals(conn)
         conn.commit()
         log.info(
             f'Transit scoring complete — {scored} transits + {daily_scored} daily '
-            f'signals scored, {upserted} rules upserted'
+            f'signals scored, {upserted} rules upserted, '
+            f'{rescored} windows re-scored vs current hypothesis'
         )
     except Exception as e:
         try:

@@ -30,6 +30,9 @@ interface RuleConfidence {
   avg_duration_days: number | null;
   historical_transits: number | null;
   last_computed_at: string | null;
+  /** Which hypothesis the numbers were tested against (migration 138). */
+  hypothesis_source: 'inference' | 'base_bias' | null;
+  hypothesis_impact: string | null;
 }
 
 interface RuleTransit {
@@ -119,7 +122,7 @@ async function fetchRuleConfidence(ruleId: number): Promise<RuleConfidence | nul
       'rule_id', 'total_occurrences', 'matched_count', 'confidence_score',
       'avg_return_all', 'avg_return_matched', 'avg_return_unmatched',
       'best_return', 'worst_return', 'avg_duration_days', 'historical_transits',
-      'last_computed_at',
+      'last_computed_at', 'hypothesis_source', 'hypothesis_impact',
     ].join(','))
     .eq('rule_id', ruleId)
     .maybeSingle()
@@ -495,7 +498,12 @@ function BacktestStatGrid({ conf, transits, isDaily = false }: {
     b == null || (t.nifty_return_pct ?? Infinity) < (b.nifty_return_pct ?? Infinity) ? t : b, null);
 
   const top = [
-    { k: 'CONFIDENCE',  v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—', sub: `${confQual} · n=${n}`, color: confidenceColor(conf.confidence_score), big: true },
+    // POA item 3: the % only means something against a stated hypothesis —
+    // name the tested claim right under the number (active inference wins;
+    // base_bias is the fallback for rules with no authored inference).
+    { k: 'CONFIDENCE',  v: conf.confidence_score != null ? `${conf.confidence_score.toFixed(1)}%` : '—',
+      sub: `${confQual} · n=${n}${conf.hypothesis_source ? ` · vs ${conf.hypothesis_source === 'inference' ? 'inference' : 'base bias'}${conf.hypothesis_impact ? ` (${conf.hypothesis_impact.replace(/_/g, ' ')})` : ''}` : ''}`,
+      color: confidenceColor(conf.confidence_score), big: true },
     { k: 'HISTORICAL',  v: conf.historical_transits != null ? String(conf.historical_transits) : '—', sub: n > 0 ? `${n} scored` : '', color: 'text-white' },
     { k: 'MATCHED',     v: conf.matched_count != null && n > 0 ? `${conf.matched_count}/${n}` : '—', sub: hitRate, color: 'text-accent-gold' },
     { k: 'AVG RETURN',  v: fmtPct(conf.avg_return_all), sub: `All ${occ}`, color: returnColor(conf.avg_return_all) },
