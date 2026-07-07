@@ -5120,8 +5120,16 @@ def _get_astro_ranges(rule_code: str, conn) -> list[tuple]:
 
 
 def _get_astro_group_ranges(tag: str, conn) -> list[tuple]:
-    """All transit windows of every rule carrying `tag`, merged into
-    non-overlapping ranges — a group overlay behaves as one combined event."""
+    """Transit windows of every CATALOG-VISIBLE rule carrying `tag`, merged
+    into non-overlapping ranges — a group overlay behaves as one combined
+    event.
+
+    catalog_visible filter (owner, 2026-07-07): the chart's group bands
+    (astroOverlayService) already show only catalog-visible rules; the
+    correlation engine previously counted hidden rules' windows too, so
+    correlation stats and the visual bands were computed over DIFFERENT
+    rule sets. Chart, correlation, and DataQuality now speak the same
+    language over the same rules."""
     with conn.cursor() as cur:
         cur.execute("""
             SELECT t.start_date, t.end_date
@@ -5129,6 +5137,7 @@ def _get_astro_group_ranges(tag: str, conn) -> list[tuple]:
             JOIN km_astro_rule_master r ON r.id = t.rule_id
             WHERE %s = ANY(r.tags)
               AND r.is_deleted = FALSE
+              AND r.catalog_visible = TRUE
             ORDER BY t.start_date
         """, (tag,))
         rows = cur.fetchall()
