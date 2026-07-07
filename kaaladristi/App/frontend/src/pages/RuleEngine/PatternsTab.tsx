@@ -66,12 +66,43 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 // ── Fetch ────────────────────────────────────────────────────────────────────
+// Lazy per-benchmark loading (backlog item, 2026-07-07): fetching results
+// JSONB for EVERY benchmark was an ~8.5MB payload per rule. Split into:
+//   1. meta       — all rows WITHOUT results (a few KB) → benchmark picker
+//   2. bench rows — full results for the SELECTED benchmark only (~3 rows)
+//   3. sequences  — full sequence rows across all benchmarks (tiny JSONB;
+//                   needed because sequence replication counts agreement
+//                   ACROSS benchmarks — see replicationCount)
 
-async function fetchPatterns(ruleId: number): Promise<PatternRow[]> {
+type PatternMetaRow = Omit<PatternRow, 'results'>;
+
+async function fetchPatternMeta(ruleId: number): Promise<PatternMetaRow[]> {
+  const { data, error } = await from('km_rule_patterns')
+    .select('benchmark_index_id,pattern_type,anchor,band,n_windows,n_clean,computed_at')
+    .eq('rule_id', ruleId)
+    .gte('n_windows', 10)   // POA gate: <10 never displayed
+    .execute();
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? (data as PatternMetaRow[]) : [];
+}
+
+async function fetchBenchPatterns(ruleId: number, benchId: number): Promise<PatternRow[]> {
   const { data, error } = await from('km_rule_patterns')
     .select('benchmark_index_id,pattern_type,anchor,band,results,n_windows,n_clean,computed_at')
     .eq('rule_id', ruleId)
-    .gte('n_windows', 10)   // POA gate: <10 never displayed
+    .eq('benchmark_index_id', benchId)
+    .gte('n_windows', 10)
+    .execute();
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? (data as PatternRow[]) : [];
+}
+
+async function fetchSequenceRows(ruleId: number): Promise<PatternRow[]> {
+  const { data, error } = await from('km_rule_patterns')
+    .select('benchmark_index_id,pattern_type,anchor,band,results,n_windows,n_clean,computed_at')
+    .eq('rule_id', ruleId)
+    .eq('pattern_type', 'sequence')
+    .gte('n_windows', 10)
     .execute();
   if (error) throw new Error(error.message);
   return Array.isArray(data) ? (data as PatternRow[]) : [];
@@ -377,9 +408,9 @@ function PeersCard({ row }: { row: PatternRow }) {
 // ── Tab ──────────────────────────────────────────────────────────────────────
 
 export default function PatternsTab({ ruleId }: { ruleId: number }) {
-  const { data: rows = [], isLoading, error: fetchError } = useQuery({
-    queryKey: ['rule-engine', 'patterns', ruleId],
-    queryFn: () => fetchPatterns(ruleId),
+  const { data: meta = [], isLoading, error: fetchError } = useQuery({
+    queryKey: ['rule-engine', 'patterns', ruleId, 'meta'],
+    queryFn: () => fetchPatternMeta(ruleId),
     enabled: !isNaN(ruleId),
     staleTime: 10 * 60 * 1000,
     retry: 1,
@@ -398,7 +429,7 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
   // Benchmarks having any displayable row, NIFTY 50 first then by n desc
   const benchmarks = useMemo(() => {
     const byBench = new Map<number, number>();
-    for (const r of rows) {
+    for (const r of meta) {
       byBench.set(r.benchmark_index_id, Math.max(byBench.get(r.benchmark_index_id) ?? 0, r.n_windows));
     }
     return [...byBench.entries()]
@@ -412,23 +443,32 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
         if (b.name === 'NIFTY 50') return 1;
         return b.maxN - a.maxN || a.name.localeCompare(b.name);
       });
-  }, [rows, indexById]);
+  }, [meta, indexById]);
 
   const [benchId, setBenchId] = useState<number | null>(null);
   const effectiveBench = benchId ?? benchmarks[0]?.id ?? null;
   const selected = benchmarks.find(b => b.id === effectiveBench);
 
-  const benchRows = useMemo(
-    () => rows.filter(r => r.benchmark_index_id === effectiveBench),
-    [rows, effectiveBench],
-  );
+  // Full results for the selected benchmark only (~3 rows, not 8.5MB)
+  const { data: benchRows = [], isLoading: benchLoading, error: benchError } = useQuery({
+    queryKey: ['rule-engine', 'patterns', ruleId, 'bench', effectiveBench],
+    queryFn: () => fetchBenchPatterns(ruleId, effectiveBench!),
+    enabled: !isNaN(ruleId) && effectiveBench != null,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+  // Sequence rows across ALL benchmarks — small payload, powers replication
+  const { data: allSeqRows = [] } = useQuery({
+    queryKey: ['rule-engine', 'patterns', ruleId, 'sequences'],
+    queryFn: () => fetchSequenceRows(ruleId),
+    enabled: !isNaN(ruleId) && meta.some(r => r.pattern_type === 'sequence'),
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+  });
+
   const levelBreak = benchRows.find(r => r.pattern_type === 'level_break');
   const profile = benchRows.find(r => r.pattern_type === 'reaction_profile');
   const sequence = benchRows.find(r => r.pattern_type === 'sequence');
-  const allSeqRows = useMemo(
-    () => rows.filter(r => r.pattern_type === 'sequence'),
-    [rows],
-  );
 
   if (isLoading) return <p className="px-4 py-6 text-sm text-muted text-center">Loading patterns…</p>;
   // A failed fetch must NOT masquerade as "no data" — rule 223 had 267
@@ -444,7 +484,7 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
       </div>
     );
   }
-  if (rows.length === 0) {
+  if (meta.length === 0) {
     return (
       <div className="p-3 space-y-3">
         <RuleInferencePanel ruleId={ruleId} />
@@ -493,15 +533,23 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
         )}
       </div>
 
-      <div className={cn(selected && selected.maxN < 20 && 'opacity-70')}>
-        <div className="space-y-3">
-          {levelBreak && <LevelBreakCard row={levelBreak} />}
-          {sequence && <SequenceCard row={sequence} allSeqRows={allSeqRows} />}
-          {profile && <ProfileCard row={profile} />}
-          {levelBreak && <ContextCard row={levelBreak} />}
-          {levelBreak && <PeersCard row={levelBreak} />}
+      {benchError ? (
+        <p className="px-4 py-6 text-sm text-risk-red/80 text-center font-mono">
+          Pattern data failed to load for this benchmark: {(benchError as Error).message}
+        </p>
+      ) : benchLoading ? (
+        <p className="px-4 py-6 text-sm text-muted text-center">Loading benchmark patterns…</p>
+      ) : (
+        <div className={cn(selected && selected.maxN < 20 && 'opacity-70')}>
+          <div className="space-y-3">
+            {levelBreak && <LevelBreakCard row={levelBreak} />}
+            {sequence && <SequenceCard row={sequence} allSeqRows={allSeqRows} />}
+            {profile && <ProfileCard row={profile} />}
+            {levelBreak && <ContextCard row={levelBreak} />}
+            {levelBreak && <PeersCard row={levelBreak} />}
+          </div>
         </div>
-      </div>
+      )}
 
       <p className="text-[10px] text-muted leading-relaxed">
         Historical base rates from completed rule windows (transit spans, or single signal days for daily rules) — observations, not predictions or advice.
