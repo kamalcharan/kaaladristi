@@ -3,6 +3,23 @@
 > Moved verbatim from CLAUDE.md.
 
 ## Parked — Pending Review
+### Rule Settings view inside the Rule Inference drawer (2026-07-07) — OWNER NOT HAPPY, REVIEW LATER
+- Current state (shipped through PRs #162/#163, live on main): footer link
+  "Rule settings — code, tags, bias →" switches the drawer to an inline
+  settings view — auto Astro Event/Window header, pill rows for
+  Outcome / Base Bias / Probability / Scope, drawer-styled Display Name /
+  Conditions JSON / Remarks / Tags / Catalog toggle. Off-vocabulary saved
+  values (e.g. outcome 'mixed') render as an extra selected pill so saving
+  can't wipe them.
+- Owner verdict: "am not happy with change, mark this for review later" —
+  exact objection not yet articulated. Do NOT iterate further until the
+  owner explains what the edit experience should be; capture his words
+  verbatim before touching the code again.
+- Key files: `RuleInferenceModal.tsx` (settings mode + RuleSettingsForm +
+  PillRow), `RuleFormModal.tsx` (exports OUTCOME_OPTIONS/PROB_OPTIONS/
+  SCOPE_OPTIONS/AdminTagsField + RuleFormBody extraction), `RuleDetail.tsx`
+  (metadataForm prop wiring).
+
 ### scanConvictionFlow + scanBreakoutSurge — VaNi rule migration deferred
 - Status: still using inline `is_vani` local variable as fallback
 - Blocked on: `is_vani_surge` and `is_vani_breakout` columns not yet in ScanDataBundle EOD SELECT
