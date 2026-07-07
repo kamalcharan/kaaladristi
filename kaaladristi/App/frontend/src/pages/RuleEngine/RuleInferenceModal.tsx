@@ -29,7 +29,9 @@ import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/consta
 import {
   AppliesTo, DEFAULT_APPL, applToInput, inputToAppl, type ApplForm, type AppliesToItem,
 } from '@/components/domain/AppliesToSelector';
-import { RuleFormBody, type RuleFormValues } from './RuleFormModal';
+import {
+  OUTCOME_OPTIONS, PROB_OPTIONS, SCOPE_OPTIONS, AdminTagsField, type RuleFormValues,
+} from './RuleFormModal';
 import type { RuleInput } from './ruleService';
 
 const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
@@ -115,6 +117,201 @@ function fmtWindow(w: InferenceResponse['window']): string {
   if (!w) return 'no windows on record';
   const tag = w.status === 'active' ? 'active now' : w.status === 'upcoming' ? 'next window' : 'last window';
   return `${w.start_date} → ${w.end_date} (${tag})`;
+}
+
+// ── Rule settings — drawer-native capture ────────────────────────────────────
+// Same pill/toggle capture pattern as the inference form (Market Impact /
+// Confidence rows), reused for the rule's own settings. Rule code + type are
+// identity — shown read-only, never typed.
+
+const pillCls = (active: boolean) => cn(
+  'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
+  active
+    ? 'bg-accent-indigo/20 text-accent-indigo border-accent-indigo/50'
+    : 'bg-kd-elevated text-muted border-kd-border hover:border-kd-border-active hover:text-[var(--text-secondary)]',
+);
+
+function PillRow({ options, value, onChange }: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  // A stored value outside the standard vocabulary stays visible and
+  // selected — editing settings must never silently wipe it.
+  const opts = value && !options.includes(value) ? [...options, value] : options;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {opts.map(o => {
+        const active = value === o;
+        return (
+          <button key={o} type="button" onClick={() => onChange(active ? '' : o)} className={pillCls(active)}>
+            {o.charAt(0).toUpperCase() + o.slice(1)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RuleSettingsForm({ initial, onCancel, onSave, isSaving, saveError }: {
+  initial: RuleFormValues;
+  onCancel: () => void;
+  onSave: (input: RuleInput) => void;
+  isSaving: boolean;
+  saveError: string | null;
+}) {
+  const [displayName, setDisplayName]   = useState(initial.display_name);
+  const [outcome, setOutcome]           = useState(initial.outcome);
+  const [baseBias, setBaseBias]         = useState(initial.base_bias);
+  const [probability, setProbability]   = useState(initial.probability_label);
+  const [scope, setScope]               = useState<string[]>(initial.scope);
+  const [conditionsText, setConditions] = useState(initial.conditions_text);
+  const [remarks, setRemarks]           = useState(initial.remarks);
+  const [tags, setTags]                 = useState<string[]>(initial.tags);
+  const [catalogVisible, setCatalog]    = useState(initial.catalog_visible);
+  const [err, setErr]                   = useState<string | null>(null);
+
+  const toggleScope = (v: string) =>
+    setScope(prev => prev.includes(v) ? prev.filter(s => s !== v) : [...prev, v]);
+
+  function submit() {
+    if (!displayName.trim()) { setErr('Display name is required'); return; }
+    if (!outcome)            { setErr('Outcome is required'); return; }
+    let conditions: Record<string, unknown> | null = null;
+    if (conditionsText.trim()) {
+      try { conditions = JSON.parse(conditionsText.trim()); }
+      catch { setErr('Conditions must be valid JSON'); return; }
+    }
+    setErr(null);
+    onSave({
+      rule_code:         initial.rule_code,
+      rule_type:         initial.rule_type,
+      display_name:      displayName.trim(),
+      outcome,
+      base_bias:         baseBias.trim() || null,
+      scope:             scope.length > 0 ? scope : null,
+      probability_label: probability || null,
+      conditions,
+      remarks:           remarks.trim() || null,
+      tags,
+      catalog_visible:   catalogVisible,
+    });
+  }
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <label className={labelCls}>Rule Settings</label>
+        <p className="text-[10px] text-muted -mt-1">
+          The rule's own metadata — code and type are identity (auto, above). The inference is authored on the previous screen.
+        </p>
+      </div>
+
+      <div>
+        <label className={labelCls}>Display Name</label>
+        <input
+          type="text"
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
+          maxLength={100}
+          className={inputCls}
+        />
+      </div>
+
+      <div>
+        <label className={labelCls}>Outcome</label>
+        <PillRow options={OUTCOME_OPTIONS} value={outcome} onChange={setOutcome} />
+      </div>
+
+      <div>
+        <label className={labelCls}>Base Bias (optional)</label>
+        <PillRow options={OUTCOME_OPTIONS} value={baseBias} onChange={setBaseBias} />
+      </div>
+
+      <div>
+        <label className={labelCls}>Probability</label>
+        <PillRow options={PROB_OPTIONS} value={probability} onChange={setProbability} />
+      </div>
+
+      <div>
+        <label className={labelCls}>Scope</label>
+        <div className="flex flex-wrap gap-2">
+          {SCOPE_OPTIONS.map(opt => {
+            const active = scope.includes(opt.value);
+            return (
+              <button key={opt.value} type="button" onClick={() => toggleScope(opt.value)} className={pillCls(active)}>
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label className={labelCls}>Conditions (JSON)</label>
+        <textarea
+          value={conditionsText}
+          onChange={e => setConditions(e.target.value)}
+          rows={4}
+          spellCheck={false}
+          placeholder={'{\n  "vara": "Monday"\n}'}
+          className={cn(inputCls, 'resize-none font-mono text-xs leading-relaxed')}
+        />
+      </div>
+
+      <div>
+        <label className={labelCls}>Remarks (optional)</label>
+        <textarea
+          value={remarks}
+          onChange={e => setRemarks(e.target.value)}
+          rows={3}
+          placeholder="Additional notes, source page references…"
+          className={cn(inputCls, 'resize-none')}
+        />
+      </div>
+
+      <AdminTagsField tags={tags} onChange={setTags} />
+
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className={labelCls}>Visible in Catalog</div>
+          <p className="text-[10px] text-muted -mt-1">Shown to users under Catalog → Astro Rules.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCatalog(v => !v)}
+          className={cn(
+            'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none',
+            catalogVisible ? 'bg-risk-green/60' : 'bg-kd-border',
+          )}
+        >
+          <span className={cn(
+            'inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform',
+            catalogVisible ? 'translate-x-4' : 'translate-x-0.5',
+          )} />
+        </button>
+      </div>
+
+      {(err || saveError) && <p className="text-xs text-risk-red">{err ?? saveError}</p>}
+
+      <div className="flex justify-end gap-3 pt-2 border-t border-kd-border">
+        <button
+          onClick={onCancel}
+          disabled={isSaving}
+          className="px-5 py-2.5 rounded-xl text-sm text-muted hover:text-[var(--text-primary)] transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={isSaving}
+          className="px-5 py-2.5 rounded-xl bg-accent-indigo/20 border border-accent-indigo/40 text-sm font-semibold text-accent-indigo hover:bg-accent-indigo/30 disabled:opacity-50 transition-all"
+        >
+          {isSaving ? 'Saving…' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function RuleInferenceModal({
@@ -297,8 +494,9 @@ export default function RuleInferenceModal({
 
         <div className="px-6 py-5 flex-1 overflow-y-auto space-y-6">
 
-          {/* ── Auto from DB — event + window, never captured ─────────────── */}
-          {mode !== 'settings' && (
+          {/* ── Auto from DB — event + window, never captured. Stays visible
+              in the settings view too: identity is auto, only settings are
+              typed — same capture pattern as the inference form. ─────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Astro Event · auto</label>
@@ -314,7 +512,6 @@ export default function RuleInferenceModal({
               </div>
             </div>
           </div>
-          )}
 
           {/* ── Existing inferences with live outcome ─────────────────────── */}
           {mode !== 'settings' && (isLoading ? (
@@ -420,7 +617,9 @@ export default function RuleInferenceModal({
             </div>
           )}
 
-          {/* ── Rule settings — metadata form INSIDE the drawer ──────────── */}
+          {/* ── Rule settings — drawer-native capture (owner 2026-07-07:
+              same capture style as the inference form — pills and cards,
+              identity auto from DB — NOT the old Add-Rule form) ──────────── */}
           {mode === 'settings' && metadataForm && (
             <div className="space-y-4">
               <button
@@ -429,14 +628,7 @@ export default function RuleInferenceModal({
               >
                 <ChevronLeft className="w-3.5 h-3.5" /> Back to inference
               </button>
-              <div>
-                <label className={labelCls}>Rule Settings — code, tags, bias</label>
-                <p className="text-[10px] text-muted -mt-1 mb-3">
-                  Metadata of the rule itself. The inference (theory + impact) is authored on the previous screen.
-                </p>
-              </div>
-              <RuleFormBody
-                mode="edit"
+              <RuleSettingsForm
                 initial={metadataForm.initial}
                 onCancel={() => { setMetaError(null); setMode(settingsReturnMode.current); }}
                 onSave={async input => {
@@ -453,8 +645,6 @@ export default function RuleInferenceModal({
                 }}
                 isSaving={metaSaving}
                 saveError={metaError}
-                formClassName="space-y-5"
-                footerClassName="flex items-center justify-end gap-3 pt-4 border-t border-kd-border"
               />
             </div>
           )}

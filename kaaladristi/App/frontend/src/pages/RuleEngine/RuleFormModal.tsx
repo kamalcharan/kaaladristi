@@ -18,11 +18,11 @@ export const RULE_TYPE_OPTIONS = [
   { value: 'vedh',                 label: 'Vedh'                },
 ];
 
-const OUTCOME_OPTIONS = ['bullish', 'bearish', 'volatile', 'turning'];
+export const OUTCOME_OPTIONS = ['bullish', 'bearish', 'volatile', 'turning'];
 
-const PROB_OPTIONS = ['Very High', 'High', 'Reasonable', 'Low'];
+export const PROB_OPTIONS = ['Very High', 'High', 'Reasonable', 'Low'];
 
-const SCOPE_OPTIONS = [
+export const SCOPE_OPTIONS = [
   { value: 'market',         label: 'Market'          },
   { value: 'gold',           label: 'Gold'            },
   { value: 'silver',         label: 'Silver'          },
@@ -171,7 +171,7 @@ function FieldError({ msg }: { msg?: string }) {
 
 // ── Admin tag chip input ──────────────────────────────────────────────────────
 
-function AdminTagsField({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
+export function AdminTagsField({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
