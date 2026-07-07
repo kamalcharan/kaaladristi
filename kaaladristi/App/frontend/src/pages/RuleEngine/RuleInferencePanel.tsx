@@ -20,7 +20,9 @@ import { cn } from '@/lib/utils';
 const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
 
 type MarketImpact = 'bullish' | 'bearish' | 'volatile' | 'neutral' | 'mixed';
-type Outcome = 'worked' | 'partial' | 'failed' | 'directional_na' | 'pending';
+// Same vocabulary as RuleEvalView.tsx's OUTCOME_STYLES/OUTCOME_ORDER
+// (evaluate_dc_inferences) — one outcome vocabulary across the platform.
+type Outcome = 'worked' | 'partial' | 'failed' | 'running' | 'turned' | 'inconclusive' | 'pending';
 
 interface InferenceRow {
   id: number;
@@ -41,11 +43,13 @@ interface InferenceRow {
 const IMPACT_OPTIONS: MarketImpact[] = ['bullish', 'bearish', 'volatile', 'neutral', 'mixed'];
 
 const OUTCOME_LABEL: Record<Outcome, { label: string; color: string }> = {
-  worked:          { label: '✓ worked',        color: 'var(--risk-green)' },
-  partial:         { label: '◐ partial',       color: 'var(--risk-amber)' },
-  failed:          { label: '✗ failed',        color: 'var(--risk-red)' },
-  directional_na:  { label: '— non-directional', color: 'var(--text-faint)' },
-  pending:         { label: '◦ pending evidence', color: 'var(--text-faint)' },
+  worked:       { label: '✓ Worked',    color: 'var(--risk-green)' },
+  partial:      { label: '◐ Partial',   color: 'var(--risk-amber)' },
+  failed:       { label: '✗ Failed',    color: 'var(--risk-red)' },
+  running:      { label: '● Running',  color: 'var(--risk-amber)' },
+  turned:       { label: '↻ Turned',   color: 'var(--accent-cyan)' },
+  inconclusive: { label: '— No Signal', color: 'var(--text-faint)' },
+  pending:      { label: '◦ Pending',   color: 'var(--accent-indigo)' },
 };
 
 const TIER_COLOR: Record<string, string> = {
