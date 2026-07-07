@@ -22,6 +22,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 import { cn } from '@/lib/utils';
+import RuleInferencePanel from './RuleInferencePanel';
 
 // ── Types (results JSONB shapes from pattern_study.py) ──────────────────────
 
@@ -421,15 +422,22 @@ export default function PatternsTab({ ruleId }: { ruleId: number }) {
   if (isLoading) return <p className="px-4 py-6 text-sm text-muted text-center">Loading patterns…</p>;
   if (rows.length === 0) {
     return (
-      <p className="px-4 py-6 text-sm text-muted text-center">
-        No pattern data for this rule — run the Pattern Study from the Rules Engine page
-        (needs ≥10 completed windows inside a benchmark's history).
-      </p>
+      <div className="p-3 space-y-3">
+        <RuleInferencePanel ruleId={ruleId} />
+        <p className="px-4 py-6 text-sm text-muted text-center">
+          No pattern data for this rule — run the Pattern Study from the Rules Engine page
+          (needs ≥10 completed windows inside a benchmark's history). Rare or recurring-every-few-years
+          combinations may never reach that threshold — the inference above still shows the expected
+          behavior even when the evidence stays thin.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="p-3 space-y-3">
+      <RuleInferencePanel ruleId={ruleId} />
+
       {/* Benchmark selector */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[10px] font-mono text-muted uppercase tracking-wider">Benchmark</span>
