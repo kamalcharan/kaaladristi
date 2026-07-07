@@ -235,6 +235,40 @@ export default function TradingChart({ data, height = 900, compact = false, work
     [confRows],
   );
 
+  // Phase 2 of the benchmark gap (owner 2026-07-07): the NIFTY verdict stays,
+  // but the tooltip also states what THE VIEWED INSTRUMENT did over the
+  // hovered window — computed from the bars already on this chart. Mirrors
+  // discovery's formula: close(start)→close(end), forward-walking up to 5
+  // calendar days to the next trading day (confidence_scoring.py).
+  const closeByDate = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of data) if (d.close != null) m.set(d.trade_date, d.close);
+    return m;
+  }, [data]);
+  const lastBarDate = data.length > 0 ? data[data.length - 1].trade_date : null;
+
+  const chartWindowReturn = (from: string, to: string): { pct: number; ongoing: boolean } | null => {
+    if (!lastBarDate || from > lastBarDate) return null;   // upcoming / off-chart
+    const addDays = (iso: string, n: number) => {
+      const d = new Date(`${iso}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+    const closeOnOrAfter = (iso: string): number | null => {
+      for (let k = 0; k <= 5; k++) {
+        const c = closeByDate.get(addDays(iso, k));
+        if (c != null) return c;
+      }
+      return null;
+    };
+    const start = closeOnOrAfter(from);
+    if (start == null || start === 0) return null;
+    const ongoing = to >= lastBarDate;
+    const end = ongoing ? (closeByDate.get(lastBarDate) ?? null) : closeOnOrAfter(to);
+    if (end == null) return null;
+    return { pct: ((end - start) / start) * 100, ongoing };
+  };
+
   // Crosshair hover readout (Phase 2.1): the hovered bar's OHLC + volume +
   // delivery% render as a floating legend — no more guessing values by eye.
   const [hoverBar, setHoverBar] = useState<Record<string, unknown> | null>(null);
@@ -1180,6 +1214,22 @@ export default function TradingChart({ data, height = 900, compact = false, work
                         </span>
                       )}
                     </div>
+                    {/* Phase 2: the viewed instrument's own move over this
+                        window — the fact this chart can actually attest to. */}
+                    {(() => {
+                      const r = chartWindowReturn(b.from, b.to);
+                      if (r == null) return null;
+                      return (
+                        <div style={{ marginTop: 3, fontSize: 10, display: 'flex', gap: 5, alignItems: 'baseline' }}>
+                          <span style={{ fontSize: 8, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono, monospace)' }}>
+                            THIS CHART
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-mono, monospace)', color: r.pct >= 0 ? 'var(--bull)' : 'var(--bear)' }}>
+                            {r.pct >= 0 ? '+' : ''}{r.pct.toFixed(1)}% over this window{r.ongoing ? ' so far' : ''}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {/* Aggregate confidence — how the RULE behaves, not just this window.
                         POA item 3: the % is only meaningful against a stated
                         hypothesis, so the tested claim is named inline
