@@ -73,6 +73,29 @@ export function applToInput(appl: ApplForm): {
   };
 }
 
+/** Inverse of applToInput — rebuild the form from a stored scope + JSONB pair
+ * (used to prefill the Rule Inference form when editing an existing row). */
+export function inputToAppl(
+  scope: string[] | null | undefined,
+  applicability: Record<string, unknown> | null | undefined,
+): ApplForm {
+  const scopes = Array.isArray(scope) ? scope : [];
+  const a = (applicability ?? {}) as Record<string, Record<string, unknown>>;
+  const eq  = a.equity ?? {};
+  const idx = a.index ?? {};
+  const com = a.commodity ?? {};
+  const eqSectors  = Array.isArray(eq.sectors) ? (eq.sectors as string[]) : [];
+  const idxCodes   = Array.isArray(idx.list) ? (idx.list as string[]) : [];
+  const comCodes   = Array.isArray(com.list) ? (com.list as string[]) : [];
+  if (scopes.length === 0) return { ...DEFAULT_APPL, sectors: { ...DEFAULT_APPL.sectors }, index: { ...DEFAULT_APPL.index }, commodity: { ...DEFAULT_APPL.commodity } };
+  return {
+    stockMarket: scopes.includes('equity') && eq.all_sectors !== false,
+    sectors:     { enabled: eqSectors.length > 0, codes: eqSectors },
+    index:       { enabled: scopes.includes('index'), all: !!idx.all, codes: idxCodes },
+    commodity:   { enabled: scopes.includes('commodity'), all: !!com.all, codes: comCodes },
+  };
+}
+
 export function isApplCardActive(appl: ApplForm, key: ApplPanel): boolean {
   if (key === 'stockMarket') return appl.stockMarket;
   if (key === 'sectors')     return appl.sectors.enabled;

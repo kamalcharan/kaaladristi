@@ -19,7 +19,7 @@
  *     ("Mercury retrograde is a turning point — Pattern shows how it works").
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Trash2, Sparkles, Loader2, PenLine, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,7 @@ import { from } from '@/services/postgrest';
 import { fetchLookupByCategory } from '@/services/dcLookup';
 import { MARKET_STATUS, MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
 import {
-  AppliesTo, DEFAULT_APPL, applToInput, type ApplForm, type AppliesToItem,
+  AppliesTo, DEFAULT_APPL, applToInput, inputToAppl, type ApplForm, type AppliesToItem,
 } from '@/components/domain/AppliesToSelector';
 
 const PIPELINE_API = import.meta.env.VITE_PIPELINE_API_URL ?? '';
@@ -49,6 +49,8 @@ interface InferenceRow {
   evidence: { n: number; currently_active?: boolean };
   pair_rule_label?: string;
   notes: string | null;
+  applicability_scope: string[] | null;
+  applicability: Record<string, unknown> | null;
   created_at: string;
   /** Versioning (migration 136): 'active' = hypothesis of record;
    * 'superseded' = history with a frozen verdict. */
@@ -135,6 +137,9 @@ export default function RuleInferenceModal({
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** id of the active row being edited — saving stores the changes as the
+   * new active version (versioning: previous is superseded, verdict frozen). */
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['rule-inference', ruleId],
@@ -160,7 +165,38 @@ export default function RuleInferenceModal({
   function resetForm() {
     setText(''); setImpact(null); setConfidence(null); setAppl(DEFAULT_APPL);
     setNotes(''); setPairRuleId(''); setGenerated(false); setError(null);
+    setEditingId(null);
   }
+
+  /** Prefill the form from an existing row and switch to edit mode. */
+  function startEdit(row: InferenceRow) {
+    setText(row.inference_text ?? '');
+    setImpact(row.market_impact ?? null);
+    setConfidence(row.confidence ?? null);
+    setAppl(inputToAppl(row.applicability_scope, row.applicability));
+    setNotes(row.notes ?? '');
+    const other = row.rule_a_id === ruleId ? row.rule_b_id : row.rule_a_id;
+    setPairRuleId(other != null ? String(other) : '');
+    setGenerated(false);
+    setError(null);
+    setEditingId(row.id);
+    setMode('manual');
+  }
+
+  // Owner 2026-07-07: a rule that already has an inference should open
+  // straight in EDIT mode with the saved data — not on the blank
+  // Manual/AI choice. Runs once per open, prefers the single-rule active row.
+  const autoEditDone = useRef(false);
+  useEffect(() => {
+    if (autoEditDone.current || isLoading || !data) return;
+    autoEditDone.current = true;
+    const inferences = Array.isArray(data.inferences) ? data.inferences : [];
+    const active =
+      inferences.find(r => r.status !== 'superseded' && r.rule_b_id == null && r.rule_a_id === ruleId)
+      ?? inferences.find(r => r.status !== 'superseded');
+    if (active) startEdit(active);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, isLoading]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -284,7 +320,9 @@ export default function RuleInferenceModal({
                       'rounded-xl border p-3 space-y-1.5',
                       superseded
                         ? 'border-kd-border/50 bg-kd-elevated/20 opacity-60'
-                        : 'border-kd-border bg-kd-elevated/40',
+                        : editingId === row.id
+                          ? 'border-accent-indigo/50 bg-kd-elevated/40 ring-1 ring-accent-indigo/30'
+                          : 'border-kd-border bg-kd-elevated/40',
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -295,9 +333,18 @@ export default function RuleInferenceModal({
                         )}
                       </p>
                       {!superseded && (
-                        <button onClick={() => handleDelete(row.id)} className="text-muted hover:text-risk-red shrink-0">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => startEdit(row)}
+                            title="Edit — saving stores your changes as the new active version"
+                            className="text-muted hover:text-accent-indigo"
+                          >
+                            <PenLine className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(row.id)} className="text-muted hover:text-risk-red">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono">
@@ -363,12 +410,19 @@ export default function RuleInferenceModal({
           {/* ── Step 2 (both paths converge on the /inference form) ──────── */}
           {mode !== 'choose' && (
             <div className="space-y-5">
-              <button
-                onClick={() => { resetForm(); setMode('choose'); }}
-                className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Back
-              </button>
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={() => { resetForm(); setMode('choose'); }}
+                  className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> {editingId != null ? 'New inference instead' : 'Back'}
+                </button>
+                {editingId != null && (
+                  <span className="text-[10px] font-mono px-2 py-1 rounded-lg border border-accent-indigo/40 text-accent-indigo bg-accent-indigo/10">
+                    Editing active inference — saving replaces it (previous kept as history)
+                  </span>
+                )}
+              </div>
 
               {/* AI path: model picker + generate */}
               {mode === 'ai' && (
@@ -526,7 +580,7 @@ export default function RuleInferenceModal({
                     disabled={saving || !text.trim()}
                     className="px-5 py-2.5 rounded-xl bg-accent-indigo/20 border border-accent-indigo/40 text-sm font-semibold text-accent-indigo hover:bg-accent-indigo/30 disabled:opacity-50 transition-all"
                   >
-                    {saving ? 'Saving…' : 'Add Entry'}
+                    {saving ? 'Saving…' : editingId != null ? 'Save Changes' : 'Add Entry'}
                   </button>
                 </div>
               )}
@@ -541,7 +595,7 @@ export default function RuleInferenceModal({
               onClick={() => { onClose(); onEditMetadata(); }}
               className="text-[11px] text-muted hover:text-secondary transition-colors underline underline-offset-2"
             >
-              Edit rule metadata (code, tags, bias) →
+              Rule settings — code, tags, bias (opens the rule setup form) →
             </button>
           </div>
         )}
