@@ -1,12 +1,13 @@
-import { useThemeStore, THEMES, type ThemeId } from '@/stores/themeStore'
+import { useThemeStore, THEMES, MODES, isDarkOnly, type ThemeId } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile } from '@/services/auth'
 import { useState } from 'react'
 
 export default function ThemeSettings() {
-  const { activeTheme, setTheme } = useThemeStore()
+  const { activeTheme, mode, setTheme, setMode } = useThemeStore()
   const { profile, setProfile } = useAuthStore()
   const [saving, setSaving] = useState(false)
+  const darkOnly = isDarkOnly(activeTheme)
 
   async function handleThemeChange(id: ThemeId) {
     setTheme(id)
@@ -67,6 +68,52 @@ export default function ThemeSettings() {
           </div>
         )
       })}
+
+      {/* ── Mode (Phase 1 of the theme audit, 2026-07-07) ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginTop: 10, marginBottom: 4,
+      }}>
+        <span style={{
+          fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.1em',
+          textTransform: 'uppercase', color: 'var(--text-faint)',
+        }}>
+          Mode
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {MODES.map(m => {
+          const isActive = !darkOnly ? m.id === mode : m.id === 'dark'
+          const disabled = darkOnly && m.id !== 'dark'
+          return (
+            <button
+              key={m.id}
+              disabled={disabled}
+              onClick={() => !disabled && setMode(m.id)}
+              title={disabled ? 'DristiQ is dark-only for now — light palette coming' : undefined}
+              style={{
+                flex: 1, padding: '7px 0', borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                fontSize: 11, fontFamily: 'inherit',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.35 : 1,
+                background: isActive ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent',
+                border: `1px solid ${isActive ? 'color-mix(in srgb, var(--accent) 25%, transparent)' : 'var(--border)'}`,
+                color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                transition: 'background .15s, border-color .15s',
+              }}
+            >
+              <span style={{ fontSize: 12 }}>{m.glyph}</span>
+              {m.label}
+            </button>
+          )
+        })}
+      </div>
+      {darkOnly && (
+        <p style={{ fontSize: 10, color: 'var(--text-faint)', margin: '2px 0 0', lineHeight: 1.5 }}>
+          DristiQ is dark-only for now — switch to Tech AI or Jade Thorn to use light mode.
+        </p>
+      )}
     </div>
   )
 }
