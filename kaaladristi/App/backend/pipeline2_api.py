@@ -5350,6 +5350,10 @@ class RuleInferenceGenerateRequest(BaseModel):
 
 
 def _rule_meta(cur, rule_id: int) -> dict | None:
+    """Requires a RealDictCursor (all call sites use one). NOTE: do NOT
+    rebuild the dict via zip(cols, row) — a RealDictRow is already a dict,
+    and zipping over it iterates its KEYS, silently returning column names
+    as values ('display_name' literally shown in the UI — bug 2026-07-07)."""
     cur.execute(
         "SELECT id, rule_code, display_name, rule_type, planet_1, planet_2, sign, "
         "nakshatra, tithi, vara, planet_state, base_bias, remarks, tags "
@@ -5357,11 +5361,7 @@ def _rule_meta(cur, rule_id: int) -> dict | None:
         (rule_id,),
     )
     row = cur.fetchone()
-    if not row:
-        return None
-    cols = ['id', 'rule_code', 'display_name', 'rule_type', 'planet_1', 'planet_2', 'sign',
-            'nakshatra', 'tithi', 'vara', 'planet_state', 'base_bias', 'remarks', 'tags']
-    return dict(zip(cols, row))
+    return dict(row) if row else None
 
 
 def _bias_bucket(market_impact: str | None) -> str | None:
@@ -5383,12 +5383,14 @@ def _single_rule_evidence(cur, rule_id: int) -> dict:
     already computed by the transit-scoring scheduler job (no fresh stats work).
     currently_active checked separately since km_rule_confidence only scores
     CLOSED windows (end_date <= CURRENT_DATE) by design."""
+    # Named keys throughout — call sites use RealDictCursor, where numeric
+    # indexing (row[0]) raises KeyError and 500s the endpoint.
     cur.execute(
         "SELECT EXISTS (SELECT 1 FROM km_rule_transits "
-        "WHERE rule_id = %s AND start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE)",
+        "WHERE rule_id = %s AND start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE) AS active_now",
         (rule_id,),
     )
-    currently_active = bool(cur.fetchone()[0])
+    currently_active = bool(cur.fetchone()['active_now'])
 
     cur.execute(
         "SELECT total_occurrences, matched_count, confidence_score, avg_return_matched "
@@ -5396,11 +5398,12 @@ def _single_rule_evidence(cur, rule_id: int) -> dict:
         (rule_id,),
     )
     row = cur.fetchone()
-    if not row or row[0] is None:
+    if not row or row['total_occurrences'] is None:
         return {'n': 0, 'confidence_score': None, 'avg_return_matched': None, 'currently_active': currently_active}
-    return {'n': row[0], 'matched_count': row[1], 'confidence_score': float(row[2]) if row[2] is not None else None,
+    return {'n': row['total_occurrences'], 'matched_count': row['matched_count'],
+            'confidence_score': float(row['confidence_score']) if row['confidence_score'] is not None else None,
             'currently_active': currently_active,
-            'avg_return_matched': float(row[3]) if row[3] is not None else None}
+            'avg_return_matched': float(row['avg_return_matched']) if row['avg_return_matched'] is not None else None}
 
 
 def _pair_evidence(conn, code_a: str, code_b: str) -> dict:
