@@ -6,10 +6,9 @@ import { updateProfile } from '@/services/auth'
 import { PAID_TIERS } from '@/constants/frameworkConstants'
 import { getTemplateForICP } from '@/constants/frameworkTemplates'
 import type { FrameworkTemplate } from '@/constants/frameworkTemplates'
-import { from } from '@/services/postgrest'
 import PricingCards from '@/components/domain/Pricing/PricingCards'
 
-type Step = 1 | 2 | 3 | 4 | 5
+type Step = 1 | 2 | 3 | 4
 type ICP  = 'investor' | 'trader' | 'both'
 
 // ── Keyframe animations ───────────────────────────────────────────────────────
@@ -573,181 +572,17 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
   )
 }
 
-// ── Screen 4 — Instrument Selector (free tier only) ───────────────────────────
-
-interface EqSuggestion { symbol: string; company_name: string | null; isin: string | null }
-
-async function fetchSuggestions(): Promise<EqSuggestion[]> {
-  // NSE-only, active, ordered by market cap descending (nulls at end).
-  // Fetching 60 to absorb any post-dedup shrinkage before slicing to 30.
-  const { data, error } = await from('km_equity_symbols')
-    .select('symbol,company_name,isin,exchange')
-    .is('is_active', 'true')
-    .eq('exchange', 'NSE')
-    .order('mcap_cr', { ascending: false, nullsFirst: false })
-    .limit(60)
-    .execute()
-
-  if (error || !data) return []
-
-  // Dedup by ISIN (NSE already preferred by the exchange filter, but guard anyway)
-  const seen = new Set<string>()
-  const out: EqSuggestion[] = []
-  for (const r of data as (EqSuggestion & { exchange: string })[]) {
-    const key = r.isin ?? r.symbol
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({ symbol: r.symbol, company_name: r.company_name, isin: r.isin })
-  }
-  return out.slice(0, 30)
-}
-
-interface S4Props {
-  onComplete: (symbols: string[]) => void
-}
-
-function Screen4({ onComplete }: S4Props) {
-  const [search,      setSearch]      = useState('')
-  const [selected,    setSelected]    = useState<string[]>([])
-  const [suggestions, setSuggestions] = useState<EqSuggestion[]>([])
-  const [loading,     setLoading]     = useState(true)
-
-  useEffect(() => {
-    fetchSuggestions()
-      .then(setSuggestions)
-      .finally(() => setLoading(false))
-  }, [])
-
-  const q = search.toUpperCase().trim()
-  const filtered = suggestions
-    .filter(e =>
-      !selected.includes(e.symbol) &&
-      (q === '' || e.symbol.includes(q) || (e.company_name ?? '').toUpperCase().includes(q))
-    )
-    .slice(0, 8)
-
-  function toggle(symbol: string) {
-    if (selected.includes(symbol)) {
-      setSelected(prev => prev.filter(s => s !== symbol))
-    } else if (selected.length < 2) {
-      setSelected(prev => [...prev, symbol])
-    }
-  }
-
-  const canContinue = selected.length === 2
-
-  return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center px-6"
-      style={{ background:'var(--bg)' }}>
-      <div style={{ width:'100%', maxWidth:500, animation:'card-rise .6s cubic-bezier(.22,1,.36,1) both' }}>
-        {/* Header */}
-        <div style={{ textAlign:'center', marginBottom:32 }}>
-          <div style={{ width:48, height:48, borderRadius:14, margin:'0 auto 16px',
-            background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
-            boxShadow:`0 8px 24px ${V}.4)`, display:'flex', alignItems:'center',
-            justifyContent:'center', fontSize:22 }}>⚙️</div>
-          <h2 style={{ fontFamily:'var(--font-display)', fontSize:24, fontWeight:300,
-            color:'var(--text-primary)', letterSpacing:'-0.02em', marginBottom:8 }}>
-            Choose your instruments
-          </h2>
-          <p style={{ fontSize:14, color:'var(--text-muted)', lineHeight:1.6 }}>
-            Pick 2 equities to track alongside Nifty 50. You can always add more later.
-          </p>
-        </div>
-
-        {/* Nifty locked + selected slots */}
-        <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-          {/* Nifty 50 — locked */}
-          <div style={{ padding:'7px 14px', borderRadius:100,
-            background:'rgba(45,212,191,.08)', border:'1px solid rgba(45,212,191,.25)',
-            fontSize:12, color:'#2dd4bf', fontFamily:'var(--font-mono, monospace)',
-            display:'flex', alignItems:'center', gap:6 }}>
-            NIFTY 50
-            <span style={{ fontSize:10, opacity:.6 }}>locked</span>
-          </div>
-          {/* Selected */}
-          {selected.map(s => (
-            <button key={s} onClick={() => toggle(s)}
-              style={{ padding:'7px 14px', borderRadius:100, cursor:'pointer',
-                background:'var(--accent-glow)', border:'1px solid var(--accent-dim)',
-                fontSize:12, color:'var(--accent)', fontFamily:'var(--font-mono, monospace)',
-                display:'flex', alignItems:'center', gap:6, transition:'all .15s' }}>
-              {s}
-              <span style={{ fontSize:14, opacity:.7 }}>✕</span>
-            </button>
-          ))}
-          {/* Empty slots */}
-          {Array.from({ length: 2 - selected.length }).map((_, i) => (
-            <div key={i} style={{ padding:'7px 14px', borderRadius:100,
-              background:'rgba(255,255,255,.02)', border:'1px dashed rgba(255,255,255,.1)',
-              fontSize:12, color:'rgba(255,255,255,.2)',
-              fontFamily:'var(--font-mono, monospace)' }}>
-              + add
-            </div>
-          ))}
-        </div>
-
-        {/* Search */}
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search NSE symbol…"
-          style={{ width:'100%', padding:'11px 16px', marginBottom:12,
-            background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.1)',
-            borderRadius:10, fontSize:13, color:'var(--text-primary)',
-            outline:'none', fontFamily:'inherit' }} />
-
-        {/* Suggestions */}
-        <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:28, minHeight:40 }}>
-          {loading && (
-            <span style={{ fontSize:12, color:'var(--text-muted)', animation:'text-in .4s ease both' }}>
-              Loading…
-            </span>
-          )}
-          {!loading && filtered.map(e => (
-            <button key={e.symbol} onClick={() => toggle(e.symbol)}
-              disabled={selected.length >= 2}
-              title={e.company_name ?? e.symbol}
-              style={{ padding:'6px 14px', borderRadius:100, cursor: selected.length >= 2 ? 'default' : 'pointer',
-                background:'var(--card)', border:'1px solid rgba(255,255,255,.1)',
-                fontSize:12, color:'var(--text-primary)',
-                fontFamily:'var(--font-mono, monospace)',
-                opacity: selected.length >= 2 ? .4 : 1,
-                transition:'all .15s' }}
-              onMouseEnter={e2 => { if (selected.length < 2) (e2.currentTarget).style.borderColor='rgba(255,255,255,.25)' }}
-              onMouseLeave={e2 => { (e2.currentTarget).style.borderColor='rgba(255,255,255,.1)' }}>
-              {e.symbol}
-            </button>
-          ))}
-          {!loading && filtered.length === 0 && q && (
-            <span style={{ fontSize:12, color:'var(--text-muted)' }}>No matches for "{search}"</span>
-          )}
-        </div>
-
-        {/* Continue */}
-        <button onClick={() => onComplete(selected)} disabled={!canContinue}
-          style={{ width:'100%', padding:'14px 0', border:'none', borderRadius:100,
-            cursor: canContinue ? 'pointer' : 'default', fontSize:14, fontWeight:500,
-            fontFamily:'inherit',
-            background: canContinue ? 'var(--accent-solid)' : 'rgba(255,255,255,.06)',
-            color: canContinue ? '#fff' : 'rgba(255,255,255,.25)',
-            boxShadow: canContinue ? `0 4px 20px ${V}.4)` : 'none',
-            transition:'all .3s ease' }}>
-          Continue →
-        </button>
-
-        <p style={{ textAlign:'center', fontSize:11, color:'rgba(255,255,255,.2)', marginTop:14 }}>
-          {canContinue ? 'Ready to enter your workspace' : `Select ${2 - selected.length} more`}
-        </p>
-      </div>
-    </div>
-  )
-}
-
 // ── Root component ────────────────────────────────────────────────────────────
+// (The former Screen 4 "Choose your instruments" free-tier gate was dropped —
+// owner 2026-07-07: a mandatory 2-stock pick right after declining to pay was
+// noise, and its search only covered the top-30 mcap list so most symbols
+// showed "No matches". Free users now land in the workspace directly and add
+// instruments from there when they actually want them.)
 
 export default function ProfileSetup() {
   const navigate = useNavigate()
   const { profile, refreshProfile, setProfile } = useAuthStore()
-  const { loadFramework, applyTemplate, saveFramework, addInstrument, framework } = useFrameworkStore()
+  const { loadFramework, applyTemplate, saveFramework, framework } = useFrameworkStore()
 
   const [step,        setStep]        = useState<Step>(1)
   const [icp,         setIcp]         = useState<ICP | null>(null)
@@ -807,19 +642,12 @@ export default function ProfileSetup() {
     }
   }
 
-  // Screen 4 (plan selection) — paid success → workspace, free skip → Screen 5
+  // Screen 4 (plan selection) — both paths land in the workspace
   function handlePaidSuccess() {
     navigate('/workspace', { replace: true })
   }
 
   function handleFreeSelected() {
-    setStep(5)
-  }
-
-  // Screen 5 complete — add instruments, save, navigate
-  async function handleInstrumentsComplete(symbols: string[]) {
-    symbols.forEach(s => addInstrument(s))
-    await saveFramework()
     navigate('/workspace', { replace: true })
   }
 
@@ -895,9 +723,6 @@ export default function ProfileSetup() {
             />
           </div>
         </div>
-      )}
-      {step === 5 && (
-        <Screen4 onComplete={handleInstrumentsComplete} />
       )}
     </>
   )
