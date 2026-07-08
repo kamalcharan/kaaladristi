@@ -86,7 +86,7 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
 
   if (error || !data) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, color: 'rgba(248,113,113,.4)', fontFamily: 'var(--font-mono,monospace)' }}>
+      fontSize: 11, color: 'var(--bear)', fontFamily: 'var(--font-mono,monospace)' }}>
       error loading scan
     </div>
   )
@@ -107,7 +107,7 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
         {top5.map(stock => {
           const zone = stock.magic_rs_zone ?? ''
           const zoneInfo = ZONE_LABELS[zone as keyof typeof ZONE_LABELS]
-          const pctColor = (stock.pct_chng ?? 0) >= 0 ? '#10b981' : '#ef4444'
+          const pctColor = (stock.pct_chng ?? 0) >= 0 ? 'var(--bull)' : 'var(--bear)'
           return (
             <div key={stock.equity_id} style={{
               display: 'flex', alignItems: 'center', gap: 8,
@@ -196,9 +196,9 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
         <span style={{
           fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
           padding: '2px 8px', borderRadius: 4,
-          background: isActive ? 'rgba(16,185,129,.12)' : 'rgba(248,113,113,.1)',
-          color: isActive ? '#10b981' : 'var(--bear)',
-          border: `1px solid ${isActive ? 'rgba(16,185,129,.25)' : 'rgba(248,113,113,.2)'}`,
+          background: isActive ? 'var(--bull-bg)' : 'var(--bear-bg)',
+          color: isActive ? 'var(--bull)' : 'var(--bear)',
+          border: `1px solid ${isActive ? 'var(--bull-dim)' : 'var(--bear-dim)'}`,
         }}>
           {isActive ? '● Active' : '○ Inactive'}
         </span>
@@ -216,8 +216,8 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
                 fontFamily: 'var(--font-mono,monospace)' }}>{nextSignal.date}</span>
-              <span style={{ fontSize: 9, color: nextSignal.signal === 'bullish' ? '#10b981'
-                : nextSignal.signal === 'bearish' ? '#ef4444' : 'var(--gold)' }}>
+              <span style={{ fontSize: 9, color: nextSignal.signal === 'bullish' ? 'var(--bull)'
+                : nextSignal.signal === 'bearish' ? 'var(--bear)' : 'var(--gold)' }}>
                 {nextSignal.signal}
               </span>
             </div>
@@ -274,7 +274,7 @@ function buildVaNiNote(result: CorrelationResult, itemA: string, itemB: string):
 
 function ReturnBar({ value }: { value: number | null }) {
   if (value == null) return <span style={{ color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', fontSize: 9 }}>—</span>
-  const color = value >= 0 ? '#10b981' : '#ef4444'
+  const color = value >= 0 ? 'var(--bull)' : 'var(--bear)'
   const w = Math.min(Math.abs(value) * 10, 100)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -298,8 +298,8 @@ function InstanceRow({ inst }: { inst: CorrelationInstance }) {
       <span style={{ color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', flexShrink: 0, width: 32 }}>{inst.duration_days}d</span>
       <div style={{ flex: 1 }}><ReturnBar value={inst.return_5d} /></div>
       <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, flexShrink: 0,
-        background: outcome === 'bull' ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.12)',
-        color: outcome === 'bull' ? '#10b981' : '#ef4444' }}>
+        background: outcome === 'bull' ? 'var(--bull-bg)' : 'var(--bear-bg)',
+        color: outcome === 'bull' ? 'var(--bull)' : 'var(--bear)' }}>
         {outcome}
       </span>
     </div>
@@ -346,14 +346,14 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {result.currently_active ? (
           <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10,
-            color: '#10b981', fontWeight: 600 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981',
-              boxShadow: '0 0 6px #10b981', display: 'inline-block',
+            color: 'var(--bull)', fontWeight: 600 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--bull)',
+              boxShadow: '0 0 6px var(--bull)', display: 'inline-block',
               animation: 'pulse 2s infinite' }} />
             Active Now
           </span>
         ) : (
-          <span style={{ fontSize: 10, color: '#f59e0b' }}>Approaching</span>
+          <span style={{ fontSize: 10, color: 'var(--caution)' }}>Approaching</span>
         )}
         <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)',
           fontFamily: 'var(--font-mono,monospace)' }}>
@@ -380,14 +380,14 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
 
       {/* 4. Outcome distribution bar */}
       <div style={{ height: 6, borderRadius: 3, overflow: 'hidden',
-        background: 'rgba(239,68,68,.25)', position: 'relative' }}>
+        background: 'var(--bear-dim)', position: 'relative' }}>
         <div style={{ position: 'absolute', left: 0, top: 0, height: '100%',
-          width: `${bullPct}%`, background: '#10b981', borderRadius: '3px 0 0 3px',
+          width: `${bullPct}%`, background: 'var(--bull)', borderRadius: '3px 0 0 3px',
           transition: 'width .3s' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 8, color: '#10b981' }}>{Math.round(bullPct)}% Bull</span>
-        <span style={{ fontSize: 8, color: '#ef4444' }}>{Math.round(100 - bullPct)}% Bear</span>
+        <span style={{ fontSize: 8, color: 'var(--bull)' }}>{Math.round(bullPct)}% Bull</span>
+        <span style={{ fontSize: 8, color: 'var(--bear)' }}>{Math.round(100 - bullPct)}% Bear</span>
       </div>
 
       {/* 5. Instance list */}
@@ -429,7 +429,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
         </button>
         <button onClick={onDismiss}
           style={{ padding: '5px 10px', fontSize: 9, borderRadius: 5,
-            background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)',
+            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim)',
             color: 'var(--bear)', cursor: 'pointer', fontFamily: 'var(--font-mono,monospace)' }}>
           Dismiss
         </button>
