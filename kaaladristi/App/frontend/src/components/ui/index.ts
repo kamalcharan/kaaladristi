@@ -9,6 +9,7 @@ export { Tabs } from './Tabs';
 export type { TabsProps, TabItem } from './Tabs';
 export { StatCard } from './StatCard';
 export type { StatCardProps } from './StatCard';
+export { NoiseOverlay } from './NoiseOverlay';
 export { Badge } from './Badge';
 export { Button } from './Button';
 export { Progress } from './Progress';

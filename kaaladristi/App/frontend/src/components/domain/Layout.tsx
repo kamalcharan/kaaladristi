@@ -7,6 +7,7 @@ import DataFreshnessChip from './DataFreshnessChip';
 import SearchStrip from './SearchStrip';
 import VaNiChatPanel from './VaNiChatPanel';
 import JobMonitor from './JobMonitor';
+import { NoiseOverlay } from '@/components/ui';
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(
@@ -21,6 +22,7 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text-primary)' }}>
+      <NoiseOverlay />
       <Sidebar collapsed={collapsed} onToggle={toggle} />
 
       <main

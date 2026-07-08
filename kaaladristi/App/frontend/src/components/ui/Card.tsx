@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
-  'border backdrop-blur-xl transition-all',
+  'border backdrop-blur-xl transition-all ease-[cubic-bezier(0.16,1,0.3,1)]',
   {
     variants: {
       variant: {
