@@ -5,6 +5,60 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DristiQ | Time-Cycle Risk Analytics</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%230d0d1a'/><text x='50' y='72' text-anchor='middle' font-size='62' fill='%23e2b96f'>✦</text></svg>">
+    <script>
+      // No-FOUC pre-paint override (Glass UX & Theme Standard §3.4/§11).
+      // This is a CSR app (no SSR), so the standard's adaptation is a
+      // synchronous blocking <script> here in <head> that sets the small
+      // set of most-visible vars from localStorage before first paint.
+      // globals.css's static :root fallback covers the true first-ever
+      // visit (nothing in localStorage yet); this covers every visit
+      // after a user has picked a theme/mode different from that default.
+      // src/stores/themeStore.ts's initTheme() (called at the top of
+      // main.tsx) still runs immediately after and is the source of
+      // truth for the full ~20-var set + the Zustand store state — this
+      // script only prevents the visible flash before that JS executes.
+      //
+      // KEEP THIS TABLE IN SYNC with config/theme/themes/*.ts colors
+      // (utility.primaryBackground/primaryText, brand.primary,
+      // utility.secondaryBackground, surface.glassBorder).
+      (function () {
+        try {
+          var THEMES = {
+            'kaaladristi': {
+              light: { bg: '#f6f5fb', fg: '#191627', primary: '#5b3fb0', card: '#ffffff', border: '#e3e0ee' },
+              dark:  { bg: '#0b0b12', fg: '#ece9f5', primary: '#9b8cff', card: '#191626', border: 'rgba(255,255,255,0.1)' }
+            },
+            'tech-ai': {
+              light: { bg: '#f0f9f8', fg: '#0e1c1c', primary: '#06d5cd', card: '#ffffff', border: '#c2eeec' },
+              dark:  { bg: '#0a1818', fg: '#e8fffd', primary: '#10e8de', card: '#1a3030', border: 'rgba(16,232,222,0.24)' }
+            },
+            'jade-thorn': {
+              light: { bg: '#f6f4ef', fg: '#1a1a1a', primary: '#0f4c3a', card: '#ffffff', border: '#e6e3d9' },
+              dark:  { bg: '#0a0f0d', fg: '#f4f1e9', primary: '#3aad7e', card: '#1a2e22', border: 'rgba(58,173,126,0.24)' }
+            }
+          };
+          var themeId = localStorage.getItem('kd-theme');
+          if (!THEMES[themeId]) themeId = 'kaaladristi';
+          var mode = localStorage.getItem('kd-theme-mode');
+          if (mode !== 'dark' && mode !== 'light' && mode !== 'system') mode = 'dark';
+          var dark = mode === 'system'
+            ? window.matchMedia('(prefers-color-scheme: dark)').matches
+            : mode === 'dark';
+          var c = THEMES[themeId][dark ? 'dark' : 'light'];
+          var el = document.documentElement;
+          el.style.setProperty('--bg', c.bg);
+          el.style.setProperty('--surface-1', c.bg);
+          el.style.setProperty('--text-primary', c.fg);
+          el.style.setProperty('--indigo', c.primary);
+          el.style.setProperty('--accent', c.primary);
+          el.style.setProperty('--card', c.card);
+          el.style.setProperty('--surface-2', c.card);
+          el.style.setProperty('--border', c.border);
+          el.style.setProperty('color-scheme', dark ? 'dark' : 'light');
+          el.dataset.mode = dark ? 'dark' : 'light';
+        } catch (e) { /* localStorage unavailable — CSS fallback in globals.css applies */ }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400;1,500&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
