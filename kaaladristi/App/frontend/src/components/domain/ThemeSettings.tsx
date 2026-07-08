@@ -39,7 +39,8 @@ export default function ThemeSettings() {
         marginBottom: 4,
       }}>
         <span style={{
-          fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.1em',
+          fontSize: 'var(--label-font-size)', fontFamily: 'var(--label-font-family)',
+          fontWeight: 'var(--label-font-weight)', letterSpacing: 'var(--label-letter-spacing)',
           textTransform: 'uppercase', color: 'var(--text-faint)',
         }}>
           Theme
@@ -87,7 +88,8 @@ export default function ThemeSettings() {
         marginTop: 10, marginBottom: 4,
       }}>
         <span style={{
-          fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.1em',
+          fontSize: 'var(--label-font-size)', fontFamily: 'var(--label-font-family)',
+          fontWeight: 'var(--label-font-weight)', letterSpacing: 'var(--label-letter-spacing)',
           textTransform: 'uppercase', color: 'var(--text-faint)',
         }}>
           Mode
