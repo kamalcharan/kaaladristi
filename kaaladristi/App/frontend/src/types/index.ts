@@ -149,6 +149,7 @@ export interface KmProfile {
   tier?: string;        // subscription tier — undefined treated as 'free'
   expires_at?: string | null;  // latest subscription expiry; null = no expiry (beta/lifetime)
   theme?: string;       // active UI theme id; undefined = 'kaaladristi'
+  mode?: 'dark' | 'light' | 'system'; // active UI color mode; undefined = 'dark'
   icp_mode?: 'astro' | 'technical'; // workspace tab default; undefined treated as 'astro'
 }
 

@@ -1,4 +1,4 @@
-import { useThemeStore, THEMES, MODES, isDarkOnly, type ThemeId } from '@/stores/themeStore'
+import { useThemeStore, THEMES, MODES, isDarkOnly, type ThemeId, type ThemeMode } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile } from '@/services/auth'
 import { useState } from 'react'
@@ -17,6 +17,17 @@ export default function ThemeSettings() {
     try {
       const updated = await updateProfile({ theme: id })
       setProfile({ ...profile, theme: id, ...updated })
+    } catch { /* local state already applied */ }
+    finally { setSaving(false) }
+  }
+
+  async function handleModeChange(id: ThemeMode) {
+    setMode(id)
+    if (!profile) return
+    setSaving(true)
+    try {
+      const updated = await updateProfile({ mode: id })
+      setProfile({ ...profile, mode: id, ...updated })
     } catch { /* local state already applied */ }
     finally { setSaving(false) }
   }
@@ -90,7 +101,7 @@ export default function ThemeSettings() {
             <button
               key={m.id}
               disabled={disabled}
-              onClick={() => !disabled && setMode(m.id)}
+              onClick={() => !disabled && handleModeChange(m.id)}
               title={disabled ? `${activeLabel} is dark-only for now — light palette coming` : undefined}
               style={{
                 flex: 1, padding: '7px 0', borderRadius: 8,
