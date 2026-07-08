@@ -134,8 +134,16 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--surface-1', c.utility.primaryBackground);
   set('--surface-2', c.utility.secondaryBackground ?? c.utility.primaryBackground);
 
-  // ── Text faint — primary text at 25% ──
-  set('--text-faint', hexToRgba(c.utility.primaryText, 0.25));
+  // ── Text faint ──
+  // A flat 25% of primaryText reads fine in dark mode (light text dimmed
+  // over a near-black page still has presence) but is nearly invisible in
+  // light mode: 25% of a near-black hex over a white/near-white background
+  // blends to ~1.8:1 contrast, well under WCAG's 3:1 floor for any text —
+  // this is the systemic "washed out" complaint across the ~64 components
+  // that use --text-faint (sidebar footer, PageHeader meta lines, table
+  // captions, etc.), not a per-page bug. Light mode uses a much higher
+  // alpha (~3:1 for small decorative text) to actually be legible.
+  set('--text-faint', hexToRgba(c.utility.primaryText, prefersDark ? 0.25 : 0.45));
 }
 
 /**
