@@ -1,6 +1,8 @@
 export { Card, CardHeader, CardContent } from './Card';
 export { PageHeader } from './PageHeader';
 export type { PageHeaderProps } from './PageHeader';
+export { EmptyState } from './EmptyState';
+export type { EmptyStateProps } from './EmptyState';
 export { Badge } from './Badge';
 export { Button } from './Button';
 export { Progress } from './Progress';
