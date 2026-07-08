@@ -234,8 +234,8 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             </div>
             <span style={{
               fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-              color: item.dot, background: `${item.dot}18`,
-              border: `1px solid ${item.dot}30`,
+              color: item.dot, background: `color-mix(in srgb, ${item.dot} 9%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${item.dot} 19%, transparent)`,
               padding: '1px 5px', borderRadius: 3, flexShrink: 0,
             }}>{item.badge}</span>
           </div>
@@ -355,8 +355,8 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             </div>
             <span style={{
               fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-              color: item.dot, background: `${item.dot}18`,
-              border: `1px solid ${item.dot}30`,
+              color: item.dot, background: `color-mix(in srgb, ${item.dot} 9%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${item.dot} 19%, transparent)`,
               padding: '1px 5px', borderRadius: 3, flexShrink: 0,
             }}>
               {item.badge}

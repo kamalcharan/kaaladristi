@@ -357,9 +357,9 @@ function CountPill({ label, value, color }: { label: string; value: number; colo
     <div style={{
       display: 'flex', alignItems: 'center', gap: 3,
       padding: '3px 7px',
-      border: `1px solid ${color}40`,
+      border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
       borderRadius: 4,
-      background: `${color}10`,
+      background: `color-mix(in srgb, ${color} 6%, transparent)`,
     }}>
       <span style={{ fontSize: 8, color }}>{label}</span>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color }}>{value}</span>
@@ -571,7 +571,7 @@ function DayInspector({
             {signal.signals.map((s: SignalItem) => {
               const om = OUTCOME_MAP[s.outcome] ?? { label: s.outcome, color: 'var(--text-faint)' };
               return (
-                <div key={s.rule_id} style={{ borderLeft: `2px solid ${om.color}40`, paddingLeft: 10 }}>
+                <div key={s.rule_id} style={{ borderLeft: `2px solid color-mix(in srgb, ${om.color} 25%, transparent)`, paddingLeft: 10 }}>
                   <div style={{ fontSize: 11.5, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 3 }}>
                     {s.rule_name}
                   </div>
@@ -580,8 +580,8 @@ function DayInspector({
                       fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
                       letterSpacing: '0.1em', textTransform: 'uppercase',
                       color: om.color,
-                      background: `${om.color}18`,
-                      border: `1px solid ${om.color}40`,
+                      background: `color-mix(in srgb, ${om.color} 9%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${om.color} 25%, transparent)`,
                       borderRadius: 3, padding: '1px 5px',
                     }}>
                       {om.label}

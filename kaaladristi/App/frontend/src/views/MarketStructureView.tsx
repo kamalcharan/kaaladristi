@@ -28,13 +28,13 @@ function rocRegimeColor(regime: string | null): string {
 function nakvarColor(outcome: string | null): string {
   if (outcome === 'bullish') return 'var(--bull)';
   if (outcome === 'bearish') return 'var(--bear)';
-  return '#64748b';
+  return 'var(--text-muted)';
 }
 
 function patternColor(pct: number | null): string {
-  if (pct == null) return '#64748b';
+  if (pct == null) return 'var(--text-muted)';
   if (pct >= 65) return 'var(--bull)';
-  if (pct >= 55) return '#14b8a6';
+  if (pct >= 55) return 'color-mix(in srgb, var(--bull) 70%, transparent)';
   if (pct >= 45) return 'var(--caution)';
   return 'var(--bear)';
 }
@@ -56,8 +56,11 @@ function CondCard({
   badgeColor: string;
   rows?: { k: string; v: string; color?: string }[];
 }) {
-  const bg = `${badgeColor}0d`;
-  const border = `${badgeColor}28`;
+  // color-mix, not a hex-alpha suffix (badgeColor is now often var(--bull)
+  // etc. rather than a plain hex — appending a suffix like the old
+  // `${badgeColor}0d` trick did produces invalid CSS for a var() input).
+  const bg = `color-mix(in srgb, ${badgeColor} 5%, transparent)`;
+  const border = `color-mix(in srgb, ${badgeColor} 16%, transparent)`;
   return (
     <div style={{
       background: bg,
@@ -73,7 +76,7 @@ function CondCard({
         fontSize: 8,
         letterSpacing: '0.18em',
         textTransform: 'uppercase',
-        color: '#475569',
+        color: 'var(--text-muted)',
       }}>
         {label}
       </div>
@@ -84,7 +87,7 @@ function CondCard({
             {value}
           </div>
           {valueSub && (
-            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#64748b', marginTop: 3 }}>
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
               {valueSub}
             </div>
           )}
@@ -96,8 +99,8 @@ function CondCard({
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           color: badgeColor,
-          background: `${badgeColor}18`,
-          border: `1px solid ${badgeColor}38`,
+          background: `color-mix(in srgb, ${badgeColor} 9%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${badgeColor} 22%, transparent)`,
           borderRadius: 5,
           padding: '4px 10px',
           whiteSpace: 'nowrap',
@@ -110,8 +113,8 @@ function CondCard({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
           {rows.map(r => (
             <div key={r.k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#475569' }}>{r.k}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: r.color ?? '#94a3b8', fontWeight: 600 }}>{r.v}</span>
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-muted)' }}>{r.k}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: r.color ?? 'var(--text-secondary)', fontWeight: 600 }}>{r.v}</span>
             </div>
           ))}
         </div>
@@ -131,7 +134,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
         borderRadius: 10,
         padding: '24px',
         textAlign: 'center',
-        color: '#475569',
+        color: 'var(--text-muted)',
         fontFamily: 'var(--font-mono)',
         fontSize: 11,
       }}>
@@ -143,8 +146,8 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
   const pct    = pattern.positive_day_pct;
   const ret    = pattern.avg_day_return;
   const color  = patternColor(pct);
-  const bg     = `${color}0d`;
-  const border = `${color}28`;
+  const bg     = `color-mix(in srgb, ${color} 5%, transparent)`;
+  const border = `color-mix(in srgb, ${color} 16%, transparent)`;
 
   return (
     <div style={{
@@ -170,10 +173,10 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
               borderRadius: 4,
               background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
               border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
-              color: '#94a3b8',
+              color: 'var(--text-secondary)',
             }}
           >
-            {t.k}: <span style={{ color: '#cbd5e1' }}>{t.v}</span>
+            {t.k}: <span style={{ color: 'var(--text-primary)' }}>{t.v}</span>
           </div>
         ))}
       </div>
@@ -184,7 +187,7 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color, lineHeight: 1 }}>
             {pct != null ? `${pct.toFixed(1)}%` : '—'}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#475569', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
             Positive Days
           </div>
         </div>
@@ -192,15 +195,15 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, color: (ret ?? 0) >= 0 ? 'var(--bull)' : 'var(--bear)', lineHeight: 1 }}>
             {ret != null ? `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%` : '—'}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#475569', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
             Avg Day Return
           </div>
         </div>
         <div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: '#94a3b8', lineHeight: 1 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)', lineHeight: 1 }}>
             {pattern.signal_count.toLocaleString()}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#475569', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 3 }}>
             Historical Signals
           </div>
         </div>
@@ -232,7 +235,7 @@ function ConditionsPanel({ cond }: { cond: ConfluenceConditions }) {
         badge={cond.breadth_regime ?? '—'}
         badgeColor={breadthColor}
         rows={[
-          { k: 'Threshold', v: '>55 Elevated · <35 Depressed', color: '#64748b' },
+          { k: 'Threshold', v: '>55 Elevated · <35 Depressed', color: 'var(--text-muted)' },
         ]}
       />
 
@@ -319,8 +322,8 @@ function HistoricalObservations() {
         <div
           key={ins.title}
           style={{
-            background: `${ins.color}08`,
-            border: `1px solid ${ins.color}28`,
+            background: `color-mix(in srgb, ${ins.color} 3%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${ins.color} 16%, transparent)`,
             borderRadius: 10,
             padding: '16px',
             display: 'flex',
@@ -341,19 +344,19 @@ function HistoricalObservations() {
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 19, fontWeight: 700, color: ins.color, lineHeight: 1 }}>{ins.acc}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: '#475569', letterSpacing: '0.1em', marginTop: 2 }}>POSITIVE DAYS</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>POSITIVE DAYS</div>
             </div>
             <div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: ins.color, lineHeight: 1 }}>{ins.ret}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: '#475569', letterSpacing: '0.1em', marginTop: 2 }}>AVG DAY RETURN</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: 'var(--text-muted)', letterSpacing: '0.1em', marginTop: 2 }}>AVG DAY RETURN</div>
             </div>
           </div>
 
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#475569', letterSpacing: '0.06em' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
             {ins.n} of evidence
           </div>
 
-          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#94a3b8', lineHeight: 1.6, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', paddingTop: 8 }}>
+          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', paddingTop: 8 }}>
             {ins.verdict}
           </div>
         </div>
@@ -393,8 +396,8 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
         sub={`Breadth, momentum, and astro state as of ${date}`}
       >
         {isLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#475569' }}>
-            <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#818cf8' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--text-muted)' }}>
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading conditions…</span>
           </div>
         ) : isError || !data ? (
@@ -413,8 +416,8 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
         sub="3-way confluence: most-recent breadth regime × ROC regime × today's astro signal — 30 years of NSE data"
       >
         {isLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: '#475569' }}>
-            <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#818cf8' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--text-muted)' }}>
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading pattern…</span>
           </div>
         ) : (
@@ -431,14 +434,14 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
       <div style={{
         fontFamily: 'var(--font-sans)',
         fontSize: 10,
-        color: '#334155',
+        color: 'var(--text-secondary)',
         lineHeight: 1.6,
         padding: '12px 16px',
         background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
         border: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
         borderRadius: 8,
       }}>
-        <strong style={{ color: '#475569' }}>Disclaimer:</strong> These patterns are historical observations derived from
+        <strong style={{ color: 'var(--text-muted)' }}>Disclaimer:</strong> These patterns are historical observations derived from
         backtested nak-vara astro signals combined with NSE NIFTY 50 breadth and momentum data. Past frequencies do not
         guarantee future outcomes. All figures represent statistical tendencies across a large sample — individual days
         will deviate. This data is educational and should not be used as the sole basis for any trading decision.
@@ -512,8 +515,8 @@ export default function MarketStructureView() {
               border: 'none',
               cursor: 'pointer',
               transition: 'all 0.15s',
-              background: activeTab === t.id ? '#818cf8' : 'transparent',
-              color: activeTab === t.id ? '#fff' : 'var(--text-faint)',
+              background: activeTab === t.id ? 'var(--accent)' : 'transparent',
+              color: activeTab === t.id ? 'var(--text-primary)' : 'var(--text-faint)',
               fontWeight: activeTab === t.id ? 700 : 400,
             }}
           >

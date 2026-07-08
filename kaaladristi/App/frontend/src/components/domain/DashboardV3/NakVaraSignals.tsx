@@ -51,7 +51,7 @@ const OUTCOME_COLOR: Record<string, string> = {
   strong_bullish: 'var(--bull)',
   bullish:        'var(--bull)',
   mild_bullish:   'var(--bull)',
-  neutral:        '#94a3b8',
+  neutral:        'var(--text-muted)',
   turning:        'var(--caution)',
   mild_bearish:   'var(--bear)',
   bearish:        'var(--bear)',
@@ -101,7 +101,7 @@ async function fetchPanchangFull(date: string): Promise<PanchangFull | null> {
 // ── Signal row ────────────────────────────────────────────────────────────────
 
 function SignalRow({ sig }: { sig: RuleSignal }) {
-  const color = OUTCOME_COLOR[sig.outcome] ?? '#94a3b8';
+  const color = OUTCOME_COLOR[sig.outcome] ?? 'var(--text-muted)';
   const label = OUTCOME_LABEL[sig.outcome] ?? sig.outcome;
   const confPct = sig.confidence_score != null ? Math.round(sig.confidence_score) : null;
 
@@ -147,8 +147,8 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
         color,
-        background: `${color}18`,
-        border: `1px solid ${color}40`,
+        background: `color-mix(in srgb, ${color} 9%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
         borderRadius: 4,
         padding: '2px 6px',
         whiteSpace: 'nowrap',
@@ -163,7 +163,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
             fontFamily: 'var(--font-mono)',
             fontSize: 10,
             fontWeight: 600,
-            color: confPct >= 60 ? 'var(--bull)' : confPct >= 40 ? 'var(--caution)' : '#94a3b8',
+            color: confPct >= 60 ? 'var(--bull)' : confPct >= 40 ? 'var(--caution)' : 'var(--text-muted)',
           }}>
             {confPct}%
           </span>

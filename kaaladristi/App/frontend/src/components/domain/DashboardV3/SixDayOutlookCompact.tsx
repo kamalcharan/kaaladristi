@@ -159,8 +159,8 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
                   letterSpacing: '0.1em',
                   textTransform: 'uppercase',
                   color: outcome.color,
-                  background: `${outcome.color}18`,
-                  border: `1px solid ${outcome.color}40`,
+                  background: `color-mix(in srgb, ${outcome.color} 9%, transparent)`,
+                  border: `1px solid color-mix(in srgb, ${outcome.color} 25%, transparent)`,
                   borderRadius: 3,
                   padding: '1px 5px',
                 }}>

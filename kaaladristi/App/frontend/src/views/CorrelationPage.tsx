@@ -132,13 +132,13 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
       {/* Summary row */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         {[
-          { label: 'Closed higher', value: bullCount, color: 'var(--bull)', bg: 'rgba(45,212,191,0.08)' },
-          { label: 'Closed lower',  value: bearCount, color: 'var(--bear)', bg: 'rgba(239,68,68,0.08)' },
+          { label: 'Closed higher', value: bullCount, color: 'var(--bull)', bg: 'var(--bull-bg)' },
+          { label: 'Closed lower',  value: bearCount, color: 'var(--bear)', bg: 'var(--bear-bg)' },
           { label: 'In progress',   value: activeCount, color: 'var(--accent)', bg: 'var(--accent-glow)' },
         ].map(({ label, value, color, bg }) => (
           <div key={label} style={{
             flex: 1, padding: '8px 12px', borderRadius: 8,
-            background: bg, border: `1px solid ${color}22`,
+            background: bg, border: `1px solid color-mix(in srgb, ${color} 13%, transparent)`,
             textAlign: 'center',
           }}>
             <div style={{
