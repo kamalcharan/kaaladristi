@@ -4,6 +4,7 @@ import ThemeSettings from '@/components/domain/ThemeSettings';
 import SectorLordsDetail from './settings/SectorLordsDetail';
 import MarketDataHub from './settings/MarketDataHub';
 import PipelineDashboard from './settings/PipelineDashboard';
+import { PageHeader } from '@/components/ui';
 
 // ── Card config for each settings section ──
 interface SettingsCard {
@@ -47,11 +48,9 @@ export default function SettingsView() {
 
   return (
     <div className="animate-fade-in">
-      <header className="mb-6 sm:mb-10">
-        <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Settings</h1>
-        <p className="text-secondary font-medium">Master data reference tables</p>
-      </header>
+      <PageHeader eyebrow="Settings" title="Settings" meta="Master data reference tables" />
 
+      <div className="pt-6">
       {/* Theme selector — always visible at top */}
       {!activeCard && (
         <div className="bg-kd-surface border border-kd-border rounded-2xl p-5 mb-6" style={{ maxWidth: 360 }}>
@@ -92,6 +91,7 @@ export default function SettingsView() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, ShieldOff, Shield, CalendarPlus, BadgeCheck, Trash2, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { useToast, ToastContainer } from '@/components/ui';
+import { useToast, ToastContainer, PageHeader } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import {
   fetchAdminUsers, suspendUser, reassignPlan, extendSubscription, deleteUser,
@@ -109,20 +109,22 @@ export default function UsersView() {
   };
 
   return (
-    <div className="p-6 space-y-4 max-w-6xl mx-auto">
-      <div className="flex items-baseline gap-3 flex-wrap">
-        <h1 className="text-lg font-bold text-[var(--text-primary)]">Users</h1>
-        <span className="text-[11px] font-mono text-muted">
-          {users.length} accounts · admin actions are audited
-        </span>
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search email or name…"
-          className="ml-auto w-64 px-3 py-1.5 bg-kd-elevated border border-kd-border rounded-lg text-xs text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60"
-        />
-      </div>
+    <div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Users"
+        meta={`${users.length} accounts · admin actions are audited`}
+        actions={
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search email or name…"
+            className="w-64 px-3 py-1.5 bg-kd-elevated border border-kd-border rounded-lg text-xs text-[var(--text-primary)] placeholder:text-muted focus:outline-none focus:border-accent-indigo/60"
+          />
+        }
+      />
+      <div className="p-6 space-y-4 max-w-6xl mx-auto">
 
       {isLoading ? (
         <p className="py-10 text-sm text-muted text-center"><Loader2 className="w-4 h-4 inline animate-spin mr-2" />Loading users…</p>
@@ -321,6 +323,7 @@ export default function UsersView() {
           </div>
         </>
       )}
+      </div>
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </div>
