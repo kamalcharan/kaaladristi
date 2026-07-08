@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 import { displaySymbol } from '@/lib/symbolUtils';
 import { fetchEquityUniverse, type EquityRow } from '@/services/equityUniverse';
+import { PageHeader } from '@/components/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -215,48 +216,50 @@ export default function CustomIndexManagePage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-      {/* Header */}
-      <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-          <button onClick={() => navigate('/custom-index')} style={{ fontSize: '12px', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', marginRight: '8px' }}>
-            ←
-          </button>
-          <h1 style={{ ...DISPLAY, fontSize: '22px', fontWeight: 500, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em' }}>
-            {meta?.name ?? '…'}
-          </h1>
-          <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {members.length} stocks
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={calculate}
-            disabled={computing}
-            title="Recompute this index's synthetic EOD history (close/5D/22D/66D) and scores so it reflects the current constituent set in Sector Rotation"
-            style={{
-              padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
-              border: '1px solid var(--risk-green)',
-              background: computing ? 'rgba(255,255,255,0.06)' : 'rgba(34,197,94,0.08)',
-              color: computing ? 'var(--text-faint)' : 'var(--risk-green)',
-              cursor: computing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            {computing ? 'Calculating…' : '⚡ Calculate'}
-          </button>
-          <button
-            onClick={suggest}
-            disabled={suggesting}
-            style={{
-              padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
-              border: '1px solid var(--accent-indigo)',
-              background: suggesting ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)',
-              color: suggesting ? 'var(--text-faint)' : 'var(--accent-indigo)',
-              cursor: suggesting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            {suggesting ? 'Analysing…' : '✨ Suggest new stocks (AI)'}
-          </button>
-        </div>
+      <div style={{ flexShrink: 0 }}>
+        <PageHeader
+          eyebrow="Custom Index"
+          title={
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              <button onClick={() => navigate('/custom-index')} style={{ fontSize: '12px', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                ←
+              </button>
+              {meta?.name ?? '…'}
+            </span>
+          }
+          meta={`${members.length} stocks`}
+          actions={
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={calculate}
+                disabled={computing}
+                title="Recompute this index's synthetic EOD history (close/5D/22D/66D) and scores so it reflects the current constituent set in Sector Rotation"
+                style={{
+                  padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
+                  border: '1px solid var(--risk-green)',
+                  background: computing ? 'rgba(255,255,255,0.06)' : 'rgba(34,197,94,0.08)',
+                  color: computing ? 'var(--text-faint)' : 'var(--risk-green)',
+                  cursor: computing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                {computing ? 'Calculating…' : '⚡ Calculate'}
+              </button>
+              <button
+                onClick={suggest}
+                disabled={suggesting}
+                style={{
+                  padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
+                  border: '1px solid var(--accent-indigo)',
+                  background: suggesting ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)',
+                  color: suggesting ? 'var(--text-faint)' : 'var(--accent-indigo)',
+                  cursor: suggesting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                {suggesting ? 'Analysing…' : '✨ Suggest new stocks (AI)'}
+              </button>
+            </div>
+          }
+        />
       </div>
 
       {/* Error */}

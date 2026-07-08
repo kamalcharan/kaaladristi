@@ -4,7 +4,7 @@ import { Flame, Table2 } from 'lucide-react';
 import { useSectorIndices, useIndexFlowMap, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
 import { SECTOR_TAB_LABELS, type SectorTab } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
-import { DristiQLoader } from '@/components/ui';
+import { DristiQLoader, PageHeader } from '@/components/ui';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 
 // All four tabs are visible to every user: 'custom' indices are admin-CURATED
@@ -364,32 +364,7 @@ export default function SectorRotationPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Page header */}
-      <div
-        style={{
-          padding: '20px 24px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: '12px',
-        }}
-      >
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '22px',
-            fontWeight: 500,
-            color: 'var(--text-primary)',
-            margin: 0,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          Sector Rotation
-        </h1>
-        <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          NSE Index Flow
-        </span>
-      </div>
+      <PageHeader eyebrow="Sector Rotation" title="Sector Rotation" meta="NSE Index Flow" />
 
       {/* VIX band */}
       <VixBand />

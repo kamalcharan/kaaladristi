@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
+import { PageHeader } from '@/components/ui';
 
 const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
@@ -90,74 +91,44 @@ export default function CustomIndexPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-      {/* Page header */}
-      <div
-        style={{
-          padding: '20px 24px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-          <h1
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '22px',
-              fontWeight: 500,
-              color: 'var(--text-primary)',
-              margin: 0,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            Custom Index
-          </h1>
-          <span
-            style={{
-              fontSize: '11px',
-              color: 'var(--text-faint)',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            NSE Only
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => navigate('/custom-index/create')}
-            style={{
-              padding: '6px 14px',
-              fontSize: '13px',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-            }}
-          >
-            + Create Manually
-          </button>
-          <button
-            onClick={() => navigate('/custom-index/discover')}
-            style={{
-              padding: '6px 14px',
-              fontSize: '13px',
-              borderRadius: '8px',
-              border: '1px solid var(--accent-indigo)',
-              background: 'rgba(99,102,241,0.08)',
-              color: 'var(--accent-indigo)',
-              cursor: 'pointer',
-            }}
-          >
-            ✨ Discover with AI
-          </button>
-        </div>
+      <div style={{ flexShrink: 0 }}>
+        <PageHeader
+          eyebrow="Custom Index"
+          title="Custom Index"
+          meta="NSE Only"
+          actions={
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => navigate('/custom-index/create')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                + Create Manually
+              </button>
+              <button
+                onClick={() => navigate('/custom-index/discover')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--accent-indigo)',
+                  background: 'rgba(99,102,241,0.08)',
+                  color: 'var(--accent-indigo)',
+                  cursor: 'pointer',
+                }}
+              >
+                ✨ Discover with AI
+              </button>
+            </div>
+          }
+        />
       </div>
 
       {/* Body */}

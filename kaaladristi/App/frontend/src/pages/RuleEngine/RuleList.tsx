@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Loader2, AlertCircle, Database, Plus, Lock } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/components/ui';
-import { ToastContainer } from '@/components/ui';
+import { ToastContainer, PageHeader } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import PatternStudyButton from './PatternStudyButton';
 import RuleFormModal, { emptyForm, type FormMode } from './RuleFormModal';
@@ -489,29 +489,25 @@ export default function RuleList() {
   return (
     <>
       <div className="space-y-5">
-        {/* Header */}
-        <header className="pb-3 border-b border-kd-border/30 flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div>
-              <h1 className="text-lg font-semibold text-white">Rules Engine</h1>
-              <p className="text-xs text-muted mt-0.5">
-                Vedic astro-market rules — click any rule to view detail &amp; occurrence history
-              </p>
-            </div>
-            {activeTab === 'rules' && <StatsBar rules={filtered} />}
-          </div>
-          {activeTab === 'rules' && (
-            <div className="flex items-start gap-2 shrink-0">
-              <PatternStudyButton />
-              <button
-                onClick={() => { setSaveError(null); setModalOpen(true); }}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all shrink-0"
-              >
-                <Plus className="w-4 h-4" /> Add Rule
-              </button>
-            </div>
-          )}
-        </header>
+        <PageHeader
+          eyebrow="Rules Engine"
+          title="Rules Engine"
+          meta="Vedic astro-market rules — click any rule to view detail & occurrence history"
+          actions={
+            activeTab === 'rules' && (
+              <div className="flex items-start gap-2 shrink-0">
+                <PatternStudyButton />
+                <button
+                  onClick={() => { setSaveError(null); setModalOpen(true); }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-accent-indigo hover:bg-accent-indigo/30 transition-all shrink-0"
+                >
+                  <Plus className="w-4 h-4" /> Add Rule
+                </button>
+              </div>
+            )
+          }
+        />
+        {activeTab === 'rules' && <StatsBar rules={filtered} />}
 
         {/* Tab switcher */}
         <div className="flex gap-0 border-b border-kd-border/50 -mt-2">

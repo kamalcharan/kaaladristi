@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { from } from '@/services/postgrest';
 import { displaySymbol, isNumericSymbol } from '@/lib/symbolUtils';
+import { PageHeader } from '@/components/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -222,55 +223,47 @@ export default function CustomIndexDiscoverPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-      {/* Header */}
-      <div
-        style={{
-          padding: '20px 24px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-          <button
-            onClick={() => navigate('/custom-index')}
-            style={{ fontSize: '12px', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer', marginRight: '8px' }}
-          >
-            ←
-          </button>
-          <h1 style={{ ...DISPLAY, fontSize: '22px', fontWeight: 500, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em' }}>
-            Discover with AI
-          </h1>
-          <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            NSE + Liquid BSE
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ display: 'flex', gap: '6px', width: '260px' }}>
-            <LlmBtn value="claude" label="Claude (Sonnet 4.6)" />
-            <LlmBtn value="qwen" label="Qwen3 (Local)" />
-          </div>
-          <button
-            onClick={discover}
-            disabled={loading}
-            style={{
-              padding: '7px 18px',
-              fontSize: '13px',
-              fontWeight: 600,
-              borderRadius: '8px',
-              border: 'none',
-              background: loading ? 'rgba(255,255,255,0.06)' : 'var(--accent-indigo)',
-              color: loading ? 'var(--text-faint)' : '#fff',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {loading ? 'Discovering…' : 'Discover Themes'}
-          </button>
-        </div>
+      <div style={{ flexShrink: 0 }}>
+        <PageHeader
+          eyebrow="Custom Index"
+          title={
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              <button
+                onClick={() => navigate('/custom-index')}
+                style={{ fontSize: '12px', color: 'var(--text-faint)', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                ←
+              </button>
+              Discover with AI
+            </span>
+          }
+          meta="NSE + Liquid BSE"
+          actions={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '6px', width: '260px' }}>
+                <LlmBtn value="claude" label="Claude (Sonnet 4.6)" />
+                <LlmBtn value="qwen" label="Qwen3 (Local)" />
+              </div>
+              <button
+                onClick={discover}
+                disabled={loading}
+                style={{
+                  padding: '7px 18px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: loading ? 'rgba(255,255,255,0.06)' : 'var(--accent-indigo)',
+                  color: loading ? 'var(--text-faint)' : '#fff',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {loading ? 'Discovering…' : 'Discover Themes'}
+              </button>
+            </div>
+          }
+        />
       </div>
 
       {/* Targeted discovery bar */}
