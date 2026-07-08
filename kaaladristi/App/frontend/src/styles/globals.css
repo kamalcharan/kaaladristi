@@ -77,6 +77,8 @@
   --bear-bg: rgba(224,85,85,0.1);
   --caution: #e0a040;
   --caution-bg: rgba(224,160,64,0.1);
+  --atmosphere-primary: rgba(155,140,255,0.08);
+  --atmosphere-accent:  rgba(201,178,140,0.1);
 }
 
 body {
@@ -86,12 +88,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Glass UX & Theme Standard §5.5 UxAtmosphere: 3 viewport-relative blooms,
+   fed by each theme's own calibrated surface.primarySubtle (not a fresh
+   10-15% cut off the raw brand hex, and not the --gold-bg/--accent-glow
+   vars other components already rely on). The old 2-bloom version used
+   fixed-pixel ellipses anchored dead-center over the page header — a much
+   stronger, precisely-mislocated bloom that read as a "muddy" tan/violet
+   patch behind every PageHeader in light mode across all 3 themes. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse 900px 500px at 50% -10%, var(--gold-bg), transparent),
-              radial-gradient(ellipse 600px 400px at 10% 80%, var(--accent-glow), transparent);
+  background: radial-gradient(60% 50% at 15% 0%,   var(--atmosphere-primary), transparent 70%),
+              radial-gradient(50% 40% at 100% 20%,  var(--atmosphere-accent),  transparent 70%),
+              radial-gradient(70% 60% at 50% 110%,  var(--atmosphere-primary), transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -170,16 +180,18 @@ body::before {
      backdrop-filter over a 100%-opaque background is a no-op; this is what
      makes these classes actually glass instead of a solid panel with a
      pointless blur declaration. */
+  /* 16px — the standard's one card blur value (§5.4); variants differ by
+     fill (--kd-card vs --kd-elevated), never by blur amount. */
   .glass-card {
     background: var(--kd-card);
     border: 1px solid var(--border);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
   }
 
   .glass-elevated {
     background: var(--kd-elevated);
     border: 1px solid var(--border);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(16px);
   }
 }
 

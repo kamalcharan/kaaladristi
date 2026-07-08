@@ -123,6 +123,13 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--accent-glow',  hexToRgba(c.brand.primary, 0.15));
   set('--accent-solid', hexToRgba(c.brand.primary, 0.9));
 
+  // ── Ambient decorative layer (Glass UX & Theme Standard §5.5 UxAtmosphere)
+  // — reads each theme's own calibrated surface.primarySubtle, not a fresh
+  // 10-15% cut off the raw brand hex (that's what --accent-glow/--gold-bg
+  // above are for, and other components already depend on those values).
+  set('--atmosphere-primary', c.surface.primarySubtle);
+  set('--atmosphere-accent',  `color-mix(in srgb, ${c.brand.secondary} 10%, transparent)`);
+
   // ── Surface aliases ──
   set('--surface-1', c.utility.primaryBackground);
   set('--surface-2', c.utility.secondaryBackground ?? c.utility.primaryBackground);

@@ -36,14 +36,7 @@ export const KaalaDrishtiTheme: ThemeConfig = {
       info:    '#3f6bb0',
     },
     surface: {
-      // Fully opaque, not translucent — a card here sits directly under the
-      // top-center ambient bloom (body::before's 900x500 ellipse, strongest
-      // right where PageHeader lives). At 75% opacity that bloom bled through
-      // the blur as an uneven brass/violet tint ("muddy" patches, reported
-      // across all 3 themes). Light mode reads as a solid frosted card;
-      // the true glass/translucency effect is reserved for dark mode, where
-      // the ambient glow is subtle enough not to look dirty underneath it.
-      glass:         '#ffffff', // --color-surface (light)
+      glass:         'rgba(255,255,255,0.75)', // --color-surface (light) — Glass UX standard's literal value
       glassStrong:   '#ffffff',                 // --color-surface-2 (light)
       glassBorder:   '#e3e0ee',            // --color-border (light)
       primaryDim:    'rgba(91,63,176,.16)', // --color-primary-dim (light)

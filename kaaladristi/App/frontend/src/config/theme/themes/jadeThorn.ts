@@ -34,15 +34,7 @@ export const JadeThornTheme: ThemeConfig = {
       info:    '#2a5f8a',
     },
     surface: {
-      // Fully opaque, not translucent — a card here sits directly under the
-      // top-center ambient bloom (body::before's 900x500 ellipse, strongest
-      // right where PageHeader lives). Any partial opacity (originally a
-      // never-visible 4% jade wash, then a 75% white pass) let that bloom
-      // bleed through the blur as an uneven brass/jade tint ("muddy"
-      // patches, reported across all 3 themes). Light mode reads as a solid
-      // frosted card; true glass/translucency is reserved for dark mode,
-      // where the ambient glow is subtle enough not to look dirty underneath.
-      glass:       '#ffffff',
+      glass:       'rgba(255,255,255,0.75)', // Glass UX standard's literal value
       glassStrong: '#ffffff',
       glassBorder: '#e6e3d9',
       primaryDim:    'rgba(15,76,58,0.25)',
