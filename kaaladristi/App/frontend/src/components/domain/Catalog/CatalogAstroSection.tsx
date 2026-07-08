@@ -609,7 +609,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} /> Loading rules…
         </div>
       ) : isError ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#f87171', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--bear)', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <AlertCircle style={{ width: 16, height: 16 }} /> Could not load rules from database.
         </div>
       ) : filtered.length === 0 ? (

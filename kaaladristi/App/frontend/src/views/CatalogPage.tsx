@@ -59,10 +59,11 @@ export default function CatalogPage() {
         }}>
           {!collapsed && (
             <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
+              fontFamily: 'var(--label-font-family)',
+              fontSize: 'var(--label-font-size)',
+              fontWeight: 'var(--label-font-weight)',
               color: 'var(--text-faint)',
-              letterSpacing: '0.12em',
+              letterSpacing: 'var(--label-letter-spacing)',
               textTransform: 'uppercase',
               paddingLeft: 10,
             }}>

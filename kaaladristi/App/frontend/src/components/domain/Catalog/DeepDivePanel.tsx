@@ -502,9 +502,8 @@ function CatalogItemBody({ item }: { item: CatalogItem }) {
                   <span key={i} style={{
                     padding: '3px 8px', borderRadius: 4, fontSize: 10,
                     fontFamily: 'var(--font-mono, monospace)',
-                    background: tag.type === 'works'
-                      ? 'rgba(45,212,191,0.07)' : 'rgba(239,68,68,0.07)',
-                    border: `1px solid ${tag.type === 'works' ? 'rgba(45,212,191,0.18)' : 'rgba(239,68,68,0.18)'}`,
+                    background: tag.type === 'works' ? 'var(--bull-bg)' : 'var(--bear-bg)',
+                    border: `1px solid ${tag.type === 'works' ? 'var(--bull-dim)' : 'var(--bear-dim)'}`,
                     color: tag.type === 'works' ? 'var(--bull)' : 'var(--bear)',
                   }}>
                     {tag.type === 'works' ? '✓' : '✗'} {tag.text}
