@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, LayoutGrid, AlignLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ErrorBoundary } from '@/components/ui';
+import { ErrorBoundary, PageHeader } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import {
   fetchMonthEvents, fetchMonthSignals, fetchKeyEvents,
@@ -1402,18 +1402,11 @@ export default function DCCalendarView() {
     <ErrorBoundary>
       <div className="animate-fade-in">
 
-        {/* Page header */}
-        <header className="mb-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-1">
-                Planetary Intelligence
-              </h1>
-              <p className="text-secondary font-medium">
-                Astrological event calendar for Indian equity markets
-              </p>
-            </div>
-
+        <PageHeader
+          eyebrow="Calendar"
+          title="Planetary Intelligence"
+          meta="Astrological event calendar for Indian equity markets"
+          actions={
             <div className="flex items-center gap-3">
               {/* View toggle */}
               <div className="flex bg-kd-elevated border border-kd-border rounded-xl p-1 gap-1">
@@ -1478,9 +1471,10 @@ export default function DCCalendarView() {
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        </header>
+          }
+        />
 
+        <div className="pt-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-32 gap-3">
             <Loader2 className="w-5 h-5 text-accent-indigo animate-spin" />
@@ -1578,6 +1572,7 @@ export default function DCCalendarView() {
 
           </>
         )}
+        </div>
       </div>
 
       {/* Top-level edit modal — triggered from day cell ✎ button */}
