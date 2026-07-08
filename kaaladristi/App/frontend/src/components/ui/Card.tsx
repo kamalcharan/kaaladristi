@@ -7,10 +7,14 @@ const cardVariants = cva(
   {
     variants: {
       variant: {
-        default:  'bg-kd-card border-kd-border',
-        elevated: 'bg-kd-elevated border-kd-border',
-        glass:    'bg-kd-card border-kd-border backdrop-blur-2xl',
-        accent:   'bg-kd-card border-kd-border-active',
+        // bg-[var(--kd-card)] (not the bg-kd-card Tailwind class, which maps
+        // to the solid --card) — --kd-card is the actual translucent
+        // surface.glass value applyTheme() sets. A backdrop-blur over a
+        // 100%-opaque background is a no-op; this is what makes it real.
+        default:  'bg-[var(--kd-card)] border-kd-border',
+        elevated: 'bg-[var(--kd-elevated)] border-kd-border',
+        glass:    'bg-[var(--kd-card)] border-kd-border backdrop-blur-2xl',
+        accent:   'bg-[var(--kd-card)] border-kd-border-active',
       },
       rounded: {
         md:  'rounded-2xl',

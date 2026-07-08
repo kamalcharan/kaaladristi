@@ -165,14 +165,19 @@ body::before {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+  /* --kd-card/--kd-elevated (not --card/--card-soft, which are solid) — the
+     actual translucent surface.glass/glassStrong values applyTheme() sets.
+     backdrop-filter over a 100%-opaque background is a no-op; this is what
+     makes these classes actually glass instead of a solid panel with a
+     pointless blur declaration. */
   .glass-card {
-    background: var(--card);
+    background: var(--kd-card);
     border: 1px solid var(--border);
     backdrop-filter: blur(12px);
   }
 
   .glass-elevated {
-    background: var(--card-soft);
+    background: var(--kd-elevated);
     border: 1px solid var(--border);
     backdrop-filter: blur(4px);
   }
