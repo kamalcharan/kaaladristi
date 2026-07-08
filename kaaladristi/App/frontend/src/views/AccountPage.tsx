@@ -9,6 +9,7 @@ import { User, Lock, CreditCard } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile, changePassword } from '@/services/auth'
 import { fmtDate } from '@/lib/dateUtils'
+import { PageHeader, Tabs } from '@/components/ui'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -519,78 +520,33 @@ export default function AccountPage() {
   const [activeTab, setActiveTab] = useState<Tab>('profile')
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg)',
-        padding: '32px 32px 64px',
-      }}
-    >
-      {/* Page header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '26px',
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            margin: 0,
-            letterSpacing: '-0.02em',
-          }}
-        >
-          Account
-        </h1>
-        <p
-          style={{
-            fontSize: '13px',
-            color: 'var(--text-faint)',
-            marginTop: '4px',
-          }}
-        >
-          Manage your profile, security, and subscription.
-        </p>
-      </div>
+    <div style={{ minHeight: '100%' }}>
+      <PageHeader
+        eyebrow="Account"
+        title="Account"
+        meta="Manage your profile, security, and subscription."
+      />
+      <div style={{ padding: '32px' }}>
+        <div style={{ marginBottom: '32px' }}>
+          <Tabs
+            tabs={TABS.map(({ id, label, Icon }) => ({
+              id,
+              label: (
+                <span className="flex items-center gap-2">
+                  <Icon size={14} />
+                  {label}
+                </span>
+              ),
+            }))}
+            activeId={activeTab}
+            onChange={(id) => setActiveTab(id as Tab)}
+          />
+        </div>
 
-      {/* Tab bar */}
-      <div
-        className="flex"
-        style={{
-          gap: '4px',
-          borderBottom: '1px solid var(--border)',
-          marginBottom: '32px',
-        }}
-      >
-        {TABS.map(({ id, label, Icon }) => {
-          const isActive = activeTab === id
-          return (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className="flex items-center gap-2"
-              style={{
-                padding: '10px 16px',
-                fontSize: '13px',
-                fontWeight: 500,
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                color: isActive ? 'var(--text-primary)' : 'var(--text-faint)',
-                borderBottom: isActive ? '2px solid var(--accent-solid)' : '2px solid transparent',
-                marginBottom: '-1px',
-                transition: 'color 0.15s',
-              }}
-            >
-              <Icon size={14} />
-              {label}
-            </button>
-          )
-        })}
+        {activeTab === 'profile'  && <ProfileTab />}
+        {activeTab === 'security' && <SecurityTab />}
+        {activeTab === 'billing'  && <BillingTab />}
       </div>
-
-      {/* Tab content */}
-      {activeTab === 'profile'  && <ProfileTab />}
-      {activeTab === 'security' && <SecurityTab />}
-      {activeTab === 'billing'  && <BillingTab />}
     </div>
   )
 }

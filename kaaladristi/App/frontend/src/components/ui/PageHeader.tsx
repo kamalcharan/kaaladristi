@@ -15,14 +15,20 @@ export interface PageHeaderProps {
 }
 
 /**
- * Mandatory sticky glass header for every app page (Glass UX & Theme
- * Standard §5.3). Pair with a `.page`/`.body` wrapper — no padding on the
- * page container, all padding on the body below this header.
+ * Glass page-title header for every app page (Glass UX & Theme Standard
+ * §5.3) — eyebrow/title/meta/actions in one place instead of a bespoke
+ * inline <h1> block per view.
+ *
+ * NOT sticky: Layout.tsx already owns the one sticky glass boundary in
+ * this app (its topbar — search + VaNi button, sticky top-0 z-40, wrapping
+ * every routed page). A second sticky element here would compete for the
+ * same top:0 slot and overlap it. This renders as a normal in-flow block
+ * directly below that topbar.
  */
 export function PageHeader({ eyebrow, title, titleEm, meta, actions, lead }: PageHeaderProps) {
   return (
     <header
-      className="sticky top-0 z-20 flex flex-wrap items-end gap-4 border-b border-[var(--border)] bg-[var(--kd-card)] px-8 py-5 backdrop-blur-[10px]"
+      className="flex flex-wrap items-end gap-4 border-b border-[var(--border)] bg-[var(--kd-card)] px-8 py-5 backdrop-blur-[10px]"
     >
       <div>
         {eyebrow && (
