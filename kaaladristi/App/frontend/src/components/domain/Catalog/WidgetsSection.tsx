@@ -82,7 +82,7 @@ function ChartPlayerMock() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 9, color: '#8b7af8',
         }}>▶</div>
-        <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', position: 'relative' }}>
+        <div style={{ flex: 1, height: 3, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)', position: 'relative' }}>
           <div style={{ width: '40%', height: '100%', borderRadius: 2, background: 'rgba(139,122,248,0.5)' }} />
         </div>
         <span style={{ fontSize: 9, fontFamily: 'var(--font-mono,monospace)', color: 'var(--text-faint)' }}>1D</span>
@@ -272,7 +272,7 @@ function WidgetCard({
       style={{
         border: `1px solid ${active ? 'rgba(45,212,191,0.28)' : 'rgba(124,106,247,0.18)'}`,
         borderRadius: 12,
-        background: active ? 'rgba(45,212,191,0.04)' : 'rgba(255,255,255,0.02)',
+        background: active ? 'rgba(45,212,191,0.04)' : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
         position: 'relative',
         overflow: 'hidden',
         cursor: 'pointer',
@@ -299,8 +299,8 @@ function WidgetCard({
             position: 'absolute', top: 14, right: 14,
             fontSize: 8, fontFamily: 'var(--font-mono, monospace)',
             padding: '2px 6px',
-            background: locked ? 'rgba(255,255,255,0.04)' : 'rgba(124,106,247,0.10)',
-            border: `1px solid ${locked ? 'rgba(255,255,255,0.12)' : 'rgba(124,106,247,0.28)'}`,
+            background: locked ? 'color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'rgba(124,106,247,0.10)',
+            border: `1px solid ${locked ? 'color-mix(in srgb, var(--text-primary) 12%, transparent)' : 'rgba(124,106,247,0.28)'}`,
             color: locked ? 'var(--text-faint)' : '#8b7af8',
             borderRadius: 3, letterSpacing: '0.06em',
           }}>
@@ -342,7 +342,7 @@ function WidgetCard({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
           <span style={{
             fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-            color: 'var(--text-faint)', background: 'rgba(255,255,255,0.03)',
+            color: 'var(--text-faint)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
             border: '1px solid var(--border)', padding: '1px 5px', borderRadius: 3,
           }}>
             {item.id}

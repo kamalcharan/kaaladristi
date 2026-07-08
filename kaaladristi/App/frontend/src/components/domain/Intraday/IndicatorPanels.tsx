@@ -54,7 +54,7 @@ function PanelShell({ title, summary, defaultOpen = false, children, accentColor
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '6px 14px',
           cursor: 'pointer', userSelect: 'none',
-          background: 'rgba(255,255,255,0.015)',
+          background: 'color-mix(in srgb, var(--text-primary) 1.5%, transparent)',
           borderBottom: open ? '1px solid var(--kd-border)' : 'none',
         }}
       >

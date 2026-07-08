@@ -21,7 +21,7 @@ const BIAS: Record<string, { fill: string; border: string; label: string }> = {
   strong_bullish: { fill: 'rgba(110,207,154,0.85)', border: 'var(--bull)',    label: 'Strong Uptrend'   },
   bullish:        { fill: 'rgba(110,207,154,0.55)', border: 'var(--bull)',    label: 'Positive'         },
   mild_bullish:   { fill: 'rgba(110,207,154,0.28)', border: 'var(--bull)',    label: 'Mild Uptrend'     },
-  neutral:        { fill: 'rgba(255,255,255,0.04)', border: 'transparent',   label: 'Neutral'          },
+  neutral:        { fill: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: 'transparent',   label: 'Neutral'          },
   turning:        { fill: 'rgba(212,168,75,0.45)',  border: 'var(--gold)',   label: 'Turning'          },
   mild_bearish:   { fill: 'rgba(200,130,50,0.28)',  border: 'var(--caution)',label: 'Mild Downtrend'   },
   bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Negative'         },
@@ -162,7 +162,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
               key={lbl}
               style={{
                 background: bias.fill,
-                borderBottom: bias.border !== 'transparent' ? `2px solid ${bias.border}` : '2px solid rgba(255,255,255,0.06)',
+                borderBottom: bias.border !== 'transparent' ? `2px solid ${bias.border}` : '2px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
                 borderRadius: 3,
                 display: 'flex',
                 alignItems: 'center',
@@ -172,7 +172,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
               <span style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 7,
-                color: 'rgba(255,255,255,0.35)',
+                color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)',
                 fontWeight: 700,
                 letterSpacing: '0.06em',
               }}>
@@ -271,7 +271,7 @@ function BiasLegend() {
               width: 14,
               height: 10,
               background: b.fill,
-              borderBottom: `2px solid ${b.border !== 'transparent' ? b.border : 'rgba(255,255,255,0.1)'}`,
+              borderBottom: `2px solid ${b.border !== 'transparent' ? b.border : 'color-mix(in srgb, var(--text-primary) 10%, transparent)'}`,
               borderRadius: 2,
             }} />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
@@ -514,7 +514,7 @@ function DayInspector({
           <>
             <div style={{
               background: bias.fill,
-              borderLeft: `3px solid ${bias.border !== 'transparent' ? bias.border : 'rgba(255,255,255,0.1)'}`,
+              borderLeft: `3px solid ${bias.border !== 'transparent' ? bias.border : 'color-mix(in srgb, var(--text-primary) 10%, transparent)'}`,
               borderRadius: '0 6px 6px 0',
               padding: '10px 14px', marginBottom: 10,
             }}>

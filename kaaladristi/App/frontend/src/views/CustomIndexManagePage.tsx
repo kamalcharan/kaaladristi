@@ -237,7 +237,7 @@ export default function CustomIndexManagePage() {
                 style={{
                   padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
                   border: '1px solid var(--risk-green)',
-                  background: computing ? 'rgba(255,255,255,0.06)' : 'rgba(34,197,94,0.08)',
+                  background: computing ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'rgba(34,197,94,0.08)',
                   color: computing ? 'var(--text-faint)' : 'var(--risk-green)',
                   cursor: computing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
                 }}
@@ -250,7 +250,7 @@ export default function CustomIndexManagePage() {
                 style={{
                   padding: '7px 18px', fontSize: '13px', fontWeight: 600, borderRadius: '8px',
                   border: '1px solid var(--accent-indigo)',
-                  background: suggesting ? 'rgba(255,255,255,0.06)' : 'rgba(99,102,241,0.08)',
+                  background: suggesting ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'rgba(99,102,241,0.08)',
                   color: suggesting ? 'var(--text-faint)' : 'var(--accent-indigo)',
                   cursor: suggesting ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
                 }}

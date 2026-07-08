@@ -271,7 +271,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     const el = e.currentTarget as HTMLElement;
                     el.style.background = section.adminHeading
                       ? 'var(--accent-glow)'
-                      : 'rgba(255,255,255,0.04)';
+                      : 'color-mix(in srgb, var(--text-primary) 4%, transparent)';
                     el.style.color = 'var(--text-secondary)';
                   }}
                   onMouseLeave={e => {

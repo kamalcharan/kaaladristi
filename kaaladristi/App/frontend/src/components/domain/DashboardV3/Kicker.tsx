@@ -18,7 +18,7 @@ const tierTagBg: Record<KickerTier, string> = {
   'opportunity': 'var(--gold-bg)',
   'heads-up':    'var(--indigo-bg)',
   'caution':     'var(--caution-bg)',
-  'info':        'rgba(255,255,255,0.05)',
+  'info':        'color-mix(in srgb, var(--text-primary) 5%, transparent)',
 };
 
 export default function Kicker({ label, tag, tier = 'info', className = '' }: KickerProps) {

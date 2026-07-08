@@ -119,7 +119,7 @@ export default function CatalogPage() {
               }}
               onMouseEnter={e => {
                 if (!isActive) {
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'
+                  (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 4%, transparent)'
                   ;(e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
                 }
               }}
@@ -140,7 +140,7 @@ export default function CatalogPage() {
                       fontFamily: 'var(--font-mono)',
                       color: 'var(--text-faint)',
                       letterSpacing: '0.06em',
-                      background: 'rgba(255,255,255,0.04)',
+                      background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
                       padding: '1px 5px',
                       borderRadius: 3,
                       flexShrink: 0,

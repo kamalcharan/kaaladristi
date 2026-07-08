@@ -79,7 +79,7 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
 
   if (isLoading) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, color: 'rgba(255,255,255,.2)', fontFamily: 'var(--font-mono,monospace)' }}>
+      fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
       scanning…
     </div>
   )
@@ -99,7 +99,7 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
       <div style={{ padding: '4px 12px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)',
           fontFamily: 'var(--font-mono,monospace)' }}>{data.length}</span>
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,.35)', textTransform: 'uppercase',
+        <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', textTransform: 'uppercase',
           letterSpacing: '0.06em' }}>matches</span>
       </div>
       {/* Top 5 rows */}
@@ -112,8 +112,8 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
             <div key={stock.equity_id} style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '5px 6px', borderRadius: 6, marginBottom: 2,
-              background: 'rgba(255,255,255,.03)',
-              borderBottom: '1px solid rgba(255,255,255,.04)',
+              background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
+              borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
             }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
                 flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -134,7 +134,7 @@ function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
         })}
         {data.length === 0 && (
           <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 11,
-            color: 'rgba(255,255,255,.2)' }}>no matches today</div>
+            color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)' }}>no matches today</div>
         )}
       </div>
     </div>
@@ -210,7 +210,7 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
       {/* Next occurrence */}
       <div>
         <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em',
-          color: 'rgba(255,255,255,.3)', marginBottom: 3 }}>Next occurrence</div>
+          color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', marginBottom: 3 }}>Next occurrence</div>
         {nextSignal
           ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -222,7 +222,7 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
               </span>
             </div>
           )
-          : <span style={{ fontSize: 11, color: 'rgba(255,255,255,.2)',
+          : <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
               fontFamily: 'var(--font-mono,monospace)' }}>none found</span>
         }
       </div>
@@ -273,12 +273,12 @@ function buildVaNiNote(result: CorrelationResult, itemA: string, itemB: string):
 }
 
 function ReturnBar({ value }: { value: number | null }) {
-  if (value == null) return <span style={{ color: 'rgba(255,255,255,.25)', fontSize: 9 }}>—</span>
+  if (value == null) return <span style={{ color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', fontSize: 9 }}>—</span>
   const color = value >= 0 ? '#10b981' : '#ef4444'
   const w = Math.min(Math.abs(value) * 10, 100)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <div style={{ width: 60, height: 4, borderRadius: 2, background: 'rgba(255,255,255,.08)', position: 'relative', flexShrink: 0 }}>
+      <div style={{ width: 60, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)', position: 'relative', flexShrink: 0 }}>
         <div style={{ position: 'absolute', [value >= 0 ? 'left' : 'right']: 0, width: `${w}%`, height: '100%', background: color, borderRadius: 2 }} />
       </div>
       <span style={{ fontSize: 9, color, fontFamily: 'var(--font-mono,monospace)', flexShrink: 0 }}>
@@ -292,10 +292,10 @@ function InstanceRow({ inst }: { inst: CorrelationInstance }) {
   const outcome = (inst.return_5d ?? 0) >= 0 ? 'bull' : 'bear'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0',
-      borderBottom: '1px solid rgba(255,255,255,.04)', fontSize: 10 }}>
-      <span style={{ color: 'rgba(255,255,255,.5)', fontFamily: 'var(--font-mono,monospace)',
+      borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)', fontSize: 10 }}>
+      <span style={{ color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)', fontFamily: 'var(--font-mono,monospace)',
         flexShrink: 0, width: 74 }}>{inst.start_date.slice(0, 10)}</span>
-      <span style={{ color: 'rgba(255,255,255,.3)', flexShrink: 0, width: 32 }}>{inst.duration_days}d</span>
+      <span style={{ color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', flexShrink: 0, width: 32 }}>{inst.duration_days}d</span>
       <div style={{ flex: 1 }}><ReturnBar value={inst.return_5d} /></div>
       <span style={{ fontSize: 8, padding: '1px 5px', borderRadius: 3, flexShrink: 0,
         background: outcome === 'bull' ? 'rgba(16,185,129,.12)' : 'rgba(239,68,68,.12)',
@@ -314,7 +314,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
 
   if (!result) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, color: 'rgba(255,255,255,.2)', fontFamily: 'var(--font-mono,monospace)' }}>
+      fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
       no correlation data
     </div>
   )
@@ -337,7 +337,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
               border: '1px solid rgba(139,92,246,.25)', fontFamily: 'var(--font-mono,monospace)' }}>
               {overlayName(id)}
             </span>
-            {i === 0 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,.3)' }}>∩</span>}
+            {i === 0 && <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)' }}>∩</span>}
           </React.Fragment>
         ))}
       </div>
@@ -355,7 +355,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
         ) : (
           <span style={{ fontSize: 10, color: '#f59e0b' }}>Approaching</span>
         )}
-        <span style={{ fontSize: 9, color: 'rgba(255,255,255,.25)',
+        <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)',
           fontFamily: 'var(--font-mono,monospace)' }}>
           {result.n_instances} instances · {result.shape}
         </span>
@@ -368,9 +368,9 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
           { label: '22D avg', val: `${result.avg_return_22d >= 0 ? '+' : ''}${result.avg_return_22d.toFixed(2)}%` },
           { label: 'Positive', val: `${result.bullish_count}/${result.n_instances}` },
         ].map(({ label, val }) => (
-          <div key={label} style={{ background: 'rgba(255,255,255,.04)', borderRadius: 6,
+          <div key={label} style={{ background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 6,
             padding: '4px 8px', flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 8, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase',
+            <div style={{ fontSize: 8, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', textTransform: 'uppercase',
               letterSpacing: '0.06em', marginBottom: 2 }}>{label}</div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
               fontFamily: 'var(--font-mono,monospace)' }}>{val}</div>
@@ -392,7 +392,7 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
 
       {/* 5. Instance list */}
       <div>
-        <div style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', marginBottom: 4,
+        <div style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', marginBottom: 4,
           textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recent instances</div>
         {displayInstances.map(inst => <InstanceRow key={inst.start_date} inst={inst} />)}
         {!showAll && hiddenCount > 0 && (
@@ -405,26 +405,26 @@ function VaNiCorrelationBlock({ block, onDismiss }: { block: FrameworkBlock; onD
       </div>
 
       {/* 6. VaNi inference note */}
-      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', lineHeight: 1.6,
+      <div style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 45%, transparent)', lineHeight: 1.6,
         borderLeft: '2px solid rgba(139,92,246,.35)', paddingLeft: 8,
         fontStyle: 'italic' }}>
         {note}
       </div>
 
       {/* 7. Action row */}
-      <div style={{ display: 'flex', gap: 8, paddingTop: 4, borderTop: '1px solid rgba(255,255,255,.06)' }}>
+      <div style={{ display: 'flex', gap: 8, paddingTop: 4, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         <button
           title="Coming in Phase 3"
           style={{ flex: 1, padding: '5px 0', fontSize: 9, borderRadius: 5,
-            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)',
-            color: 'rgba(255,255,255,.4)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
+            background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+            color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
           Mark on chart {/* TODO: Phase 3 chart markers */}
         </button>
         <button
           title="Coming in Phase 5"
           style={{ flex: 1, padding: '5px 0', fontSize: 9, borderRadius: 5,
-            background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)',
-            color: 'rgba(255,255,255,.4)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
+            background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+            color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', cursor: 'not-allowed', fontFamily: 'var(--font-mono,monospace)' }}>
           Save observation {/* TODO: Phase 5 persistence */}
         </button>
         <button onClick={onDismiss}
@@ -444,7 +444,7 @@ function ChartOnlyPlaceholder() {
   return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '8px 12px' }}>
-      <span style={{ fontSize: 10, color: 'rgba(255,255,255,.15)',
+      <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)',
         fontFamily: 'var(--font-mono,monospace)', textAlign: 'center' }}>
         renders on chart
       </span>
@@ -488,9 +488,9 @@ function BlockContent({ block, onRemove }: { block: FrameworkBlock; onRemove: (i
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '8px 12px' }}>
       {description
-        ? <span style={{ fontSize: 11, color: 'rgba(255,255,255,.2)', lineHeight: 1.5,
+        ? <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', lineHeight: 1.5,
             textAlign: 'center' }}>{description}</span>
-        : <span style={{ fontSize: 11, color: 'rgba(255,255,255,.12)',
+        : <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 12%, transparent)',
             fontFamily: 'var(--font-mono,monospace)' }}>{cid}</span>
       }
     </div>
@@ -560,7 +560,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
         position:        'relative',
         border:          isVaNi
           ? '1px solid rgba(124,106,247,.45)'
-          : '1px solid rgba(255,255,255,.08)',
+          : '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
         borderRadius: 10,
         background: 'rgba(13,17,23,.9)',
         boxShadow: editMode
@@ -589,11 +589,11 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
         {editMode && (
           <div
             {...listeners} {...attributes}
-            style={{ cursor: 'grab', color: 'rgba(255,255,255,.25)', fontSize: 14,
+            style={{ cursor: 'grab', color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', fontSize: 14,
               lineHeight: 1, userSelect: 'none', flexShrink: 0, padding: '2px 4px', borderRadius: 4,
               transition: 'color .15s', touchAction: 'none' }}
-            onMouseEnter={e => { (e.currentTarget).style.color = 'rgba(255,255,255,.6)' }}
-            onMouseLeave={e => { (e.currentTarget).style.color = 'rgba(255,255,255,.25)' }}
+            onMouseEnter={e => { (e.currentTarget).style.color = 'color-mix(in srgb, var(--text-primary) 60%, transparent)' }}
+            onMouseLeave={e => { (e.currentTarget).style.color = 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}
           >
             ⠿
           </div>
@@ -629,14 +629,14 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           onClick={() => onMaximize(isMaximized ? null : block.id)}
           title={isMaximized ? 'Restore' : 'Maximize'}
           style={{ width: 22, height: 22, borderRadius: 5, border: 'none',
-            background: isMaximized ? 'rgba(124,106,247,.2)' : 'rgba(255,255,255,.06)',
-            color: isMaximized ? 'var(--accent)' : 'rgba(255,255,255,.35)',
+            background: isMaximized ? 'rgba(124,106,247,.2)' : 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
+            color: isMaximized ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 35%, transparent)',
             cursor: 'pointer', fontSize: 12, flexShrink: 0, lineHeight: 1,
             transition: 'all .15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onMouseEnter={e => { (e.currentTarget).style.background = 'rgba(124,106,247,.25)'; (e.currentTarget).style.color = 'var(--accent)' }}
           onMouseLeave={e => {
-            (e.currentTarget).style.background = isMaximized ? 'rgba(124,106,247,.2)' : 'rgba(255,255,255,.06)'
-            ;(e.currentTarget).style.color = isMaximized ? 'var(--accent)' : 'rgba(255,255,255,.35)'
+            (e.currentTarget).style.background = isMaximized ? 'rgba(124,106,247,.2)' : 'color-mix(in srgb, var(--text-primary) 6%, transparent)'
+            ;(e.currentTarget).style.color = isMaximized ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 35%, transparent)'
           }}>
           {isMaximized ? '⊟' : '⊞'}
         </button>
@@ -674,7 +674,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.35)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
           >
-            <div style={{ width: 2, height: 20, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} />
+            <div style={{ width: 2, height: 20, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }} />
           </div>
 
           {/* Bottom-center: height only */}
@@ -689,7 +689,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(124,106,247,0.35)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
           >
-            <div style={{ height: 2, width: 20, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} />
+            <div style={{ height: 2, width: 20, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }} />
           </div>
 
           {/* Bottom-right corner: both */}
@@ -714,7 +714,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
       {menuOpen && (
         <div ref={menuRef}
           style={{ position: 'fixed', top: menuPos.y, left: menuPos.x, zIndex: 9999,
-            background: 'rgba(9,12,16,.97)', border: '1px solid rgba(255,255,255,.1)',
+            background: 'rgba(9,12,16,.97)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
             borderRadius: 8, padding: '4px 0', minWidth: 160,
             boxShadow: '0 8px 32px rgba(0,0,0,.6)', backdropFilter: 'blur(20px)' }}>
           {[
@@ -726,7 +726,7 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
                 background: 'transparent', textAlign: 'left', cursor: 'pointer',
                 fontSize: 12, color: danger ? 'var(--bear)' : 'var(--text-primary)',
                 transition: 'background .1s' }}
-              onMouseEnter={e => { (e.currentTarget).style.background = 'rgba(255,255,255,.05)' }}
+              onMouseEnter={e => { (e.currentTarget).style.background = 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}
               onMouseLeave={e => { (e.currentTarget).style.background = 'transparent' }}>
               {label}
             </button>

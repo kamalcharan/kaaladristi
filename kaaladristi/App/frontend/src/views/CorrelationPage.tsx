@@ -160,7 +160,7 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
           const r5        = inst.return_5d
           const bg = isActive
             ? 'var(--accent)'
-            : r5 == null ? 'rgba(255,255,255,0.1)'
+            : r5 == null ? 'color-mix(in srgb, var(--text-primary) 10%, transparent)'
             : r5 > 0 ? 'var(--bull)' : 'var(--bear)'
 
           return (
@@ -243,7 +243,7 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
               .filter(i => i.return_5d != null)
               .sort((a, b) => b.start_date.localeCompare(a.start_date))
               .map((inst, i) => (
-                <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                <tr key={i} style={{ borderTop: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
                   <td style={{ padding: '6px 10px', fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-secondary)' }}>
                     {fmtDate(inst.start_date)}
                   </td>
@@ -292,7 +292,7 @@ function GanttTimeline({ instances }: { instances: CorrelationInstance[] }) {
           const x2 = LABEL_W + ((endTs   - minTs) / range) * W
           const barW = Math.max(3, x2 - x1)
           const bull = (inst.return_5d ?? 0) > 0
-          const color = inst.return_5d == null ? 'rgba(255,255,255,0.25)' : bull ? 'var(--bull)' : 'var(--bear)'
+          const color = inst.return_5d == null ? 'color-mix(in srgb, var(--text-primary) 25%, transparent)' : bull ? 'var(--bull)' : 'var(--bear)'
 
           return (
             <g key={i}>
@@ -301,7 +301,7 @@ function GanttTimeline({ instances }: { instances: CorrelationInstance[] }) {
                 textAnchor="end"
                 fontSize={7.5}
                 fontFamily="monospace"
-                fill="rgba(255,255,255,0.3)"
+                fill="color-mix(in srgb, var(--text-primary) 30%, transparent)"
               >
                 {fmtDateShort(inst.start_date)}
               </text>
@@ -387,7 +387,7 @@ function InstanceTable({ instances }: { instances: CorrelationInstance[] }) {
     <div style={{ borderRadius: 8, border: '1px solid var(--border)', overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+          <tr style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)' }}>
             {['Start', 'Duration', '5D', '22D', 'Outcome'].map(col => (
               <th key={col} style={{
                 padding: '8px 10px', textAlign: 'left',
@@ -595,7 +595,7 @@ export default function CorrelationPage() {
             <span style={{
               fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
               color: 'var(--text-muted)', letterSpacing: '0.08em',
-              background: 'rgba(255,255,255,0.04)',
+              background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
               border: '1px solid var(--border)',
               padding: '1px 6px', borderRadius: 3,
             }}>
@@ -620,7 +620,7 @@ export default function CorrelationPage() {
             disabled={!prevCorr}
             onClick={() => prevCorr && navigate(`/correlation/${prevCorr.item_a}/${prevCorr.item_b}`)}
             style={{
-              background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
+              background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)',
               borderRadius: 5, padding: '4px 8px', cursor: prevCorr ? 'pointer' : 'not-allowed',
               color: prevCorr ? 'var(--text-secondary)' : 'var(--text-faint)',
               display: 'flex', alignItems: 'center',
@@ -632,7 +632,7 @@ export default function CorrelationPage() {
             disabled={!nextCorr}
             onClick={() => nextCorr && navigate(`/correlation/${nextCorr.item_a}/${nextCorr.item_b}`)}
             style={{
-              background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
+              background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)',
               borderRadius: 5, padding: '4px 8px', cursor: nextCorr ? 'pointer' : 'not-allowed',
               color: nextCorr ? 'var(--text-secondary)' : 'var(--text-faint)',
               display: 'flex', alignItems: 'center',
@@ -708,7 +708,7 @@ export default function CorrelationPage() {
                   { label: '22D Avg Return',  value: `${result.avg_return_22d >= 0 ? '+' : ''}${result.avg_return_22d.toFixed(2)}%` },
                 ].map(({ label, value }) => (
                   <div key={label} style={{
-                    background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)',
+                    background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)', border: '1px solid var(--border)',
                     borderRadius: 7, padding: '10px 12px',
                   }}>
                     <div style={{
@@ -836,7 +836,7 @@ export default function CorrelationPage() {
                 style={{
                   width: '100%', padding: '10px', borderRadius: 8, fontSize: 12,
                   border: '1px solid rgba(124,106,247,0.35)',
-                  background: canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)',
+                  background: canWalk ? 'rgba(124,106,247,0.10)' : 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
                   color: canWalk ? '#8b7af8' : 'var(--text-muted)',
                   cursor: 'pointer', fontFamily: 'inherit',
                   marginTop: 8, transition: 'all 0.15s',
@@ -848,7 +848,7 @@ export default function CorrelationPage() {
                   }
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.background = canWalk ? 'rgba(124,106,247,0.10)' : 'rgba(255,255,255,0.03)'
+                  (e.currentTarget as HTMLElement).style.background = canWalk ? 'rgba(124,106,247,0.10)' : 'color-mix(in srgb, var(--text-primary) 3%, transparent)'
                   ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(124,106,247,0.35)'
                 }}
               >
@@ -865,7 +865,7 @@ export default function CorrelationPage() {
                   color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit',
                   marginTop: 8,
                 }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--text-primary) 20%, transparent)')}
                 onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
               >
                 Dismiss correlation
@@ -911,7 +911,7 @@ export default function CorrelationPage() {
                           style={{
                             padding: '6px 12px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
                             border: `1px solid ${vizId === opt.id ? 'var(--accent)' : 'var(--border)'}`,
-                            background: vizId === opt.id ? 'var(--accent-glow)' : 'rgba(255,255,255,0.02)',
+                            background: vizId === opt.id ? 'var(--accent-glow)' : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
                             color: vizId === opt.id ? 'var(--accent)' : 'var(--text-muted)',
                             fontFamily: 'inherit',
                             transition: 'all 0.15s',

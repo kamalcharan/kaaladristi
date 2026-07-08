@@ -107,7 +107,7 @@ function CondCard({
       </div>
 
       {rows && rows.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
           {rows.map(r => (
             <div key={r.k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#475569' }}>{r.k}</span>
@@ -126,8 +126,8 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
   if (!pattern) {
     return (
       <div style={{
-        background: 'rgba(255,255,255,0.02)',
-        border: '1px dashed rgba(255,255,255,0.08)',
+        background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
+        border: '1px dashed color-mix(in srgb, var(--text-primary) 8%, transparent)',
         borderRadius: 10,
         padding: '24px',
         textAlign: 'center',
@@ -168,8 +168,8 @@ function PatternBlock({ pattern }: { pattern: ConfluencePattern | null }) {
               letterSpacing: '0.12em',
               padding: '3px 9px',
               borderRadius: 4,
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
               color: '#94a3b8',
             }}
           >
@@ -353,7 +353,7 @@ function HistoricalObservations() {
             {ins.n} of evidence
           </div>
 
-          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#94a3b8', lineHeight: 1.6, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 8 }}>
+          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#94a3b8', lineHeight: 1.6, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', paddingTop: 8 }}>
             {ins.verdict}
           </div>
         </div>
@@ -366,8 +366,8 @@ function HistoricalObservations() {
 
 function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{ padding: '13px 18px 11px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+    <div style={{ background: 'var(--card)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ padding: '13px 18px 11px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{title}</div>
         {sub && <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
       </div>
@@ -434,8 +434,8 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
         color: '#334155',
         lineHeight: 1.6,
         padding: '12px 16px',
-        background: 'rgba(255,255,255,0.02)',
-        border: '1px solid rgba(255,255,255,0.04)',
+        background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
         borderRadius: 8,
       }}>
         <strong style={{ color: '#475569' }}>Disclaimer:</strong> These patterns are historical observations derived from
@@ -493,7 +493,7 @@ export default function MarketStructureView() {
         gap: 2,
         padding: '3px',
         background: 'var(--card)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
         borderRadius: 10,
         width: 'fit-content',
         marginBottom: 24,

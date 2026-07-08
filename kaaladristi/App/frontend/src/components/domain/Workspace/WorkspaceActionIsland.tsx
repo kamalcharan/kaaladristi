@@ -101,7 +101,7 @@ export default function WorkspaceActionIsland({ onOpen, onMorningBrief, bottomOf
         borderRadius: 100,
         background: 'var(--card)',
         backdropFilter: 'blur(16px)',
-        border: `1px solid ${hasActive ? 'var(--caution)' : 'rgba(255,255,255,.15)'}`,
+        border: `1px solid ${hasActive ? 'var(--caution)' : 'color-mix(in srgb, var(--text-primary) 15%, transparent)'}`,
         boxShadow: hasActive
           ? '0 0 24px var(--caution-bg), 0 12px 40px rgba(0,0,0,.6)'
           : '0 12px 40px rgba(0,0,0,.5)',
@@ -137,8 +137,8 @@ export default function WorkspaceActionIsland({ onOpen, onMorningBrief, bottomOf
       <span style={{
         fontSize: 13,
         color: isWatching
-          ? 'rgba(255,255,255,.35)'
-          : hasActive ? 'var(--caution)' : 'rgba(255,255,255,.75)',
+          ? 'color-mix(in srgb, var(--text-primary) 35%, transparent)'
+          : hasActive ? 'var(--caution)' : 'color-mix(in srgb, var(--text-primary) 75%, transparent)',
         fontFamily: 'var(--font-display, serif)',
         fontStyle: 'italic',
         letterSpacing: '-0.01em',
@@ -164,7 +164,7 @@ export default function WorkspaceActionIsland({ onOpen, onMorningBrief, bottomOf
       ))}
 
       {/* Chevron */}
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginLeft: 2, flexShrink: 0 }}>
+      <span style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', marginLeft: 2, flexShrink: 0 }}>
         ›
       </span>
     </div>

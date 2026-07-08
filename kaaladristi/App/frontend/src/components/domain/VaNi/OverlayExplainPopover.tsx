@@ -141,7 +141,7 @@ export default function OverlayExplainPopover({
                   style={{
                     fontSize: 10, padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
                     background: isFocused ? 'rgba(157,143,249,0.15)' : 'transparent',
-                    border: `1px solid ${isFocused ? 'rgba(157,143,249,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                    border: `1px solid ${isFocused ? 'rgba(157,143,249,0.5)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)'}`,
                     color: isFocused ? 'var(--text-primary)' : 'var(--text-secondary)',
                   }}
                 >

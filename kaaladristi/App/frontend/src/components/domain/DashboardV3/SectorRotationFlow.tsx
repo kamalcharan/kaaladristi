@@ -108,7 +108,7 @@ function IndustryChip({ item, tradeDate, accentColor, badge }: ChipProps) {
         borderRadius: 8,
         padding: '8px 10px',
         cursor: 'pointer',
-        background: open ? 'rgba(255,255,255,0.02)' : 'transparent',
+        background: open ? 'color-mix(in srgb, var(--text-primary) 2%, transparent)' : 'transparent',
         transition: 'border-color 0.15s, background 0.15s',
       }}
       onClick={() => setOpen(v => !v)}
@@ -253,7 +253,7 @@ export default function SectorRotationFlow() {
               key={i}
               style={{
                 height: 180,
-                background: 'rgba(255,255,255,0.03)',
+                background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
                 borderRadius: 8,
                 border: '1px solid var(--border)',
               }}

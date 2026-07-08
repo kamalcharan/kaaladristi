@@ -320,8 +320,8 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
               <tr
                 key={row.equity_id}
                 style={{
-                  background: isEven ? 'transparent' : 'rgba(255,255,255,0.025)',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  background: isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)',
+                  borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
                 }}
               >
                 <td style={{ padding: '9px 12px', color: 'var(--text-faint)' }}>{i + 1}</td>
@@ -360,7 +360,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                         fontWeight: 500,
                         padding: '2px 6px',
                         borderRadius: 3,
-                        background: 'rgba(255,255,255,0.05)',
+                        background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                         color: `var(${flowColorVar}, var(--text-secondary))`,
                         whiteSpace: 'nowrap',
                       }}
@@ -417,9 +417,9 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
             style={{
               ...MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
               textTransform: 'uppercase', padding: '4px 10px', borderRadius: 4,
-              background: 'rgba(255,255,255,0.06)',
+              background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
               color: `var(${flowColorVar}, var(--text-secondary))`,
-              border: `1px solid rgba(255,255,255,0.1)`,
+              border: `1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)`,
             }}
           >
             {flowInfo.label}
@@ -970,7 +970,7 @@ export default function IndexDetailPage() {
                 fontSize: 9,
                 letterSpacing: '0.06em',
                 color: 'var(--text-faint)',
-                background: 'rgba(255,255,255,0.05)',
+                background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                 borderRadius: 3,
                 padding: '1px 6px',
               }}

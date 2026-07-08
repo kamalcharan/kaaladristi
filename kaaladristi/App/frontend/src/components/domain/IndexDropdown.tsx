@@ -43,7 +43,7 @@ function IndexDropdown({
         position: 'fixed', top: anchorY + 6, left: anchorX,
         width: 280, maxHeight: 340, zIndex: 600,
         background: 'var(--bg)',
-        border: '1px solid rgba(255,255,255,.1)',
+        border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
         borderRadius: 10,
         boxShadow: '0 12px 40px rgba(0,0,0,.7)',
         display: 'flex', flexDirection: 'column',
@@ -51,7 +51,7 @@ function IndexDropdown({
       }}
     >
       {/* Search */}
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,.07)', flexShrink: 0 }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)', flexShrink: 0 }}>
         <input
           autoFocus
           type="text"
@@ -61,9 +61,9 @@ function IndexDropdown({
           style={{
             width: '100%', boxSizing: 'border-box',
             padding: '6px 10px', borderRadius: 6,
-            border: '1px solid rgba(255,255,255,.1)',
-            background: 'rgba(255,255,255,.04)',
-            color: 'rgba(255,255,255,.8)', fontSize: 12,
+            border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+            background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
+            color: 'color-mix(in srgb, var(--text-primary) 80%, transparent)', fontSize: 12,
             outline: 'none', fontFamily: 'inherit',
           }}
         />
@@ -73,13 +73,13 @@ function IndexDropdown({
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
         {loading ? (
           <div style={{ padding: '20px 0', textAlign: 'center',
-            fontSize: 11, color: 'rgba(255,255,255,.25)',
+            fontSize: 11, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)',
             fontFamily: 'var(--font-mono, monospace)' }}>
             loading…
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: '20px 0', textAlign: 'center',
-            fontSize: 12, color: 'rgba(255,255,255,.2)' }}>
+            fontSize: 12, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)' }}>
             No results
           </div>
         ) : filtered.map(idx => {

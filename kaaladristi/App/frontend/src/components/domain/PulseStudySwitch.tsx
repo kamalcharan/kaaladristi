@@ -52,7 +52,7 @@ export default function PulseStudySwitch({ active, type, id, name }: PulseStudyS
           fontWeight: isActive ? 700 : 500,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
-          background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
+          background: isActive ? 'color-mix(in srgb, var(--text-primary) 10%, transparent)' : 'transparent',
           color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
           transition: 'all 0.15s',
         }}

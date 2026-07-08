@@ -144,7 +144,7 @@ function FlowChip({ flowType }: { flowType: string | null }) {
     fontWeight: 500,
     padding: '1px 5px',
     borderRadius: '3px',
-    background: 'var(--card-alt, rgba(255,255,255,0.05))',
+    background: 'var(--card-alt, color-mix(in srgb, var(--text-primary) 5%, transparent))',
     color: `var(${colorVar}, var(--text-secondary))`,
     whiteSpace: 'nowrap',
   };

@@ -129,7 +129,7 @@ export default function ScannersSection() {
         {SCAN_PRESETS.map(preset => {
           const icon   = ICONS[preset.id] ?? '◌'
           const accent = ACCENT[preset.id] ?? '#6b7280'
-          const bg     = ACCENT_BG[preset.id] ?? 'rgba(255,255,255,0.02)'
+          const bg     = ACCENT_BG[preset.id] ?? 'color-mix(in srgb, var(--text-primary) 2%, transparent)'
           const tags   = TAGS[preset.id] ?? []
 
           return (
@@ -139,7 +139,7 @@ export default function ScannersSection() {
               style={{
                 border: '1px solid var(--border)',
                 borderRadius: 10,
-                background: 'rgba(255,255,255,0.02)',
+                background: 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
                 padding: '16px 18px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
@@ -149,14 +149,14 @@ export default function ScannersSection() {
               }}
               onMouseEnter={e => {
                 const el = e.currentTarget as HTMLElement
-                el.style.borderColor = 'rgba(255,255,255,0.14)'
-                el.style.background = 'rgba(255,255,255,0.04)'
+                el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 14%, transparent)'
+                el.style.background = 'color-mix(in srgb, var(--text-primary) 4%, transparent)'
                 el.style.transform = 'translateX(3px)'
               }}
               onMouseLeave={e => {
                 const el = e.currentTarget as HTMLElement
                 el.style.borderColor = 'var(--border)'
-                el.style.background = 'rgba(255,255,255,0.02)'
+                el.style.background = 'color-mix(in srgb, var(--text-primary) 2%, transparent)'
                 el.style.transform = ''
               }}
             >
@@ -222,7 +222,7 @@ export default function ScannersSection() {
                     fontFamily: 'var(--font-mono, monospace)',
                     padding: '2px 7px',
                     borderRadius: 3,
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
                     color: 'var(--text-muted)',
                   }}>
                     {preset.universe === 'NSE_ONLY' ? 'NSE only' : 'NSE + BSE'}
@@ -266,7 +266,7 @@ export default function ScannersSection() {
         marginTop: 24,
         padding: '14px 18px',
         borderRadius: 10,
-        border: '1px dashed rgba(255,255,255,0.08)',
+        border: '1px dashed color-mix(in srgb, var(--text-primary) 8%, transparent)',
         fontSize: 12,
         color: 'var(--text-muted)',
         lineHeight: 1.6,

@@ -233,10 +233,10 @@ export default function WorkspacePage() {
                 }}
                 style={{
                   marginBottom: 10, padding: '5px 14px', borderRadius: 100,
-                  border: '1px dashed rgba(255,255,255,.15)',
+                  border: '1px dashed color-mix(in srgb, var(--text-primary) 15%, transparent)',
                   background: 'transparent', cursor: 'pointer',
                   fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                  color: 'rgba(255,255,255,.5)', transition: 'all .15s',
+                  color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)', transition: 'all .15s',
                 }}
                 onMouseEnter={e => {
                   const el = e.currentTarget as HTMLElement
@@ -246,8 +246,8 @@ export default function WorkspacePage() {
                 }}
                 onMouseLeave={e => {
                   const el = e.currentTarget as HTMLElement
-                  el.style.borderColor = 'rgba(255,255,255,.15)'
-                  el.style.color = 'rgba(255,255,255,.5)'
+                  el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 15%, transparent)'
+                  el.style.color = 'color-mix(in srgb, var(--text-primary) 50%, transparent)'
                   el.style.background = 'transparent'
                 }}
               >

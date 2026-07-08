@@ -26,13 +26,13 @@ const TYPE_STROKE: Record<string, string> = {
   indicator:  'rgba(45,212,191,0.6)',
   widget:     'rgba(124,106,247,0.6)',
   astro_rule: 'rgba(201,168,76,0.6)',
-  scanner:    'rgba(255,255,255,0.2)',
+  scanner:    'color-mix(in srgb, var(--text-primary) 20%, transparent)',
 }
 const TYPE_FILL: Record<string, string> = {
   indicator:  'rgba(45,212,191,0.08)',
   widget:     'rgba(124,106,247,0.10)',
   astro_rule: 'rgba(201,168,76,0.10)',
-  scanner:    'rgba(255,255,255,0.03)',
+  scanner:    'color-mix(in srgb, var(--text-primary) 3%, transparent)',
 }
 
 // Fake candlestick polyline — purely decorative, same across all cards
@@ -54,8 +54,8 @@ function MiniPreview({ template }: { template: FrameworkTemplate }) {
       <rect
         x={GAP / 2} y={GAP / 2}
         width={chartW} height={chartH}
-        rx={3} fill="rgba(255,255,255,0.03)"
-        stroke="rgba(255,255,255,0.06)" strokeWidth={0.5}
+        rx={3} fill="color-mix(in srgb, var(--text-primary) 3%, transparent)"
+        stroke="color-mix(in srgb, var(--text-primary) 6%, transparent)" strokeWidth={0.5}
       />
       {/* fake price line */}
       <polyline
@@ -103,7 +103,7 @@ const PILL_STYLE: Record<PillKind, React.CSSProperties> = {
   astro:   { borderColor: 'rgba(201,168,76,0.35)',  color: '#c9a84c', background: 'rgba(201,168,76,0.06)' },
   tech:    { borderColor: 'rgba(45,212,191,0.35)',  color: '#2dd4bf', background: 'rgba(45,212,191,0.06)' },
   widget:  { borderColor: 'rgba(124,106,247,0.35)', color: '#8b7af8', background: 'rgba(124,106,247,0.08)' },
-  scanner: { borderColor: 'rgba(255,255,255,0.12)', color: '#6b7280', background: 'rgba(255,255,255,0.03)' },
+  scanner: { borderColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', color: '#6b7280', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' },
   overlay: { borderColor: 'rgba(45,212,191,0.2)',   color: '#5dd8c8', background: 'rgba(45,212,191,0.04)' },
 }
 
@@ -176,7 +176,7 @@ export default function MasterFrameworksSection() {
               style={{
                 border: `1px solid ${isActive ? 'rgba(201,168,76,0.35)' : 'var(--border)'}`,
                 borderRadius: 14,
-                background: 'var(--bg-card, rgba(255,255,255,0.03))',
+                background: 'var(--bg-card, color-mix(in srgb, var(--text-primary) 3%, transparent))',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
                 cursor: 'default',
@@ -184,7 +184,7 @@ export default function MasterFrameworksSection() {
               onMouseEnter={e => {
                 if (!isActive) {
                   const el = e.currentTarget as HTMLElement
-                  el.style.borderColor = 'rgba(255,255,255,0.14)'
+                  el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 14%, transparent)'
                   el.style.transform = 'translateY(-2px)'
                   el.style.boxShadow = '0 12px 40px rgba(0,0,0,0.35)'
                 }

@@ -143,7 +143,7 @@ export default function CustomIndexPage() {
                 style={{
                   height: '60px',
                   borderRadius: '10px',
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
                   animation: 'pulse 1.5s ease-in-out infinite',
                 }}
               />
@@ -238,7 +238,7 @@ export default function CustomIndexPage() {
                       : computeState[idx.id]?.status === 'done' ? 'var(--risk-green)'
                       : 'var(--risk-green)'
                     }`,
-                    background: computeState[idx.id]?.status === 'loading' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                    background: computeState[idx.id]?.status === 'loading' ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'transparent',
                     color: computeState[idx.id]?.status === 'error' ? 'var(--risk-red)' : 'var(--risk-green)',
                     cursor: computeState[idx.id]?.status === 'loading' ? 'not-allowed' : 'pointer',
                     flexShrink: 0,

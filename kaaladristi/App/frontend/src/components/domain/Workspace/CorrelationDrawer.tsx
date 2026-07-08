@@ -15,7 +15,7 @@ function fmtRet(v: number | null): string {
 }
 
 function retColor(v: number | null): string {
-  if (v === null) return 'rgba(255,255,255,.25)'
+  if (v === null) return 'color-mix(in srgb, var(--text-primary) 25%, transparent)'
   return v >= 0 ? 'var(--bull)' : 'var(--bear)'
 }
 
@@ -38,7 +38,7 @@ function vaniOneLiner(corr: VaNiCorrelation): string {
 function StatBox({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ fontSize: 9, color: 'rgba(255,255,255,.3)', fontFamily: 'var(--font-mono,monospace)',
+      <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', fontFamily: 'var(--font-mono,monospace)',
         letterSpacing: '.05em', textTransform: 'uppercase' }}>
         {label}
       </span>
@@ -56,7 +56,7 @@ function OutcomeBar({ bullish, bearish }: { bullish: number; bearish: number }) 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 10,
-        color: 'rgba(255,255,255,.4)', fontFamily: 'var(--font-mono,monospace)' }}>
+        color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
         <span style={{ color: 'var(--bull)' }}>▲ {bullish} higher</span>
         <span style={{ color: 'var(--bear)' }}>{bearish} lower ▼</span>
       </div>
@@ -101,7 +101,7 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
               <span style={{ fontSize: 11, color: 'var(--caution)' }}>Approaching</span>
             </>
           )}
-          <span style={{ fontSize: 9, color: 'rgba(255,255,255,.2)',
+          <span style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)',
             fontFamily: 'var(--font-mono,monospace)', marginLeft: 2 }}>
             {corr.shape}
           </span>
@@ -111,8 +111,8 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
       {/* Stats 2×2 */}
       <div style={{ flexShrink: 0, padding: '0 16px 14px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12,
-          padding: 14, background: 'rgba(255,255,255,.03)', borderRadius: 8,
-          border: '1px solid rgba(255,255,255,.06)' }}>
+          padding: 14, background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', borderRadius: 8,
+          border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
           <StatBox label="Instances"  value={String(corr.n_instances)} />
           <StatBox label="Bull / Bear" value={`${corr.bullish_count} / ${corr.bearish_count}`} />
           <StatBox label="5D avg"
@@ -138,7 +138,7 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
           fontFamily: 'var(--font-mono,monospace)' }}>✦ VaNi · </span>
         <span style={{ fontSize: 12, fontStyle: 'italic',
           fontFamily: 'var(--font-display, serif)',
-          color: 'rgba(255,255,255,.65)' }}>
+          color: 'color-mix(in srgb, var(--text-primary) 65%, transparent)' }}>
           {vaniOneLiner(corr)}
         </span>
       </div>
@@ -173,11 +173,11 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
           style={{
             width: '100%', padding: '9px', borderRadius: 8, fontSize: 12,
             background: 'transparent',
-            border: '1px solid rgba(255,255,255,.08)',
-            color: 'rgba(255,255,255,.35)', cursor: 'pointer', fontFamily: 'inherit',
+            border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
+            color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)', cursor: 'pointer', fontFamily: 'inherit',
           }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.6)'}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.35)'}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'color-mix(in srgb, var(--text-primary) 60%, transparent)'}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'color-mix(in srgb, var(--text-primary) 35%, transparent)'}
         >
           Dismiss
         </button>
@@ -236,7 +236,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 16px 10px',
-          borderBottom: '1px solid rgba(255,255,255,.06)', flexShrink: 0 }}>
+          borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ fontSize: 12, color: '#a78bfa' }}>✦</span>
             <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
@@ -244,7 +244,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
             </span>
           </div>
           <button onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.4)',
+            style={{ background: 'none', border: 'none', color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)',
               cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
             <X size={14} />
           </button>
@@ -254,7 +254,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
         {correlations.length > 1 && (
           <div style={{
             display: 'flex', gap: 4, flexShrink: 0,
-            borderBottom: '1px solid rgba(255,255,255,.06)',
+            borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
             overflowX: 'auto',
             scrollbarWidth: 'none',
           }}>
@@ -269,7 +269,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
                     padding: '6px 8px', fontSize: 10, whiteSpace: 'nowrap', cursor: 'pointer',
                     background: 'none', border: 'none',
                     borderBottom: isActive ? '2px solid #a78bfa' : '2px solid transparent',
-                    color: isActive ? '#c4b5fd' : 'rgba(255,255,255,.3)',
+                    color: isActive ? '#c4b5fd' : 'color-mix(in srgb, var(--text-primary) 30%, transparent)',
                     fontFamily: 'var(--font-mono,monospace)',
                   }}>
                   {fmtId(c.item_a)} ∩ {fmtId(c.item_b)} · {c.n_instances}×

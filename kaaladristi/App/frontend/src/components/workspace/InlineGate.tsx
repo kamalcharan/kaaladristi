@@ -195,7 +195,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
         <button
           onClick={onDismiss}
           style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none',
-            cursor: 'pointer', color: 'rgba(255,255,255,.3)', padding: 4 }}>
+            cursor: 'pointer', color: 'color-mix(in srgb, var(--text-primary) 30%, transparent)', padding: 4 }}>
           <X size={16} />
         </button>
 
@@ -220,7 +220,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
         {/* Free tier remaining bar — only for free + has expiry */}
         {isFree && days !== null && (
           <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 8,
-            background: 'var(--surface-dim, rgba(255,255,255,.04))',
+            background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 4%, transparent))',
             border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
               fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -280,7 +280,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             disabled={paying || activating}
             style={{
               padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 500,
-              background: 'var(--surface-dim, rgba(255,255,255,.05))',
+              background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 5%, transparent))',
               border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
               color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
             }}>
@@ -292,7 +292,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             disabled={paying || activating}
             style={{
               padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 500,
-              background: 'var(--surface-dim, rgba(255,255,255,.05))',
+              background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 5%, transparent))',
               border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
               color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
             }}>
@@ -304,7 +304,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             style={{
               padding: '7px 16px', borderRadius: 10, fontSize: 12,
               background: 'none', border: 'none',
-              color: 'var(--text-faint, rgba(255,255,255,.3))', cursor: 'pointer',
+              color: 'var(--text-faint, color-mix(in srgb, var(--text-primary) 30%, transparent))', cursor: 'pointer',
             }}>
             Continue on free tier
           </button>

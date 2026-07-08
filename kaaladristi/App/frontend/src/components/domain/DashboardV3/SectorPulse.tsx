@@ -53,7 +53,7 @@ function PulseRow({ row, onClick }: { row: SectorPulseRow; onClick: () => void }
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '5px 6px', borderRadius: 6, cursor: 'pointer',
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 4%, transparent)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <span

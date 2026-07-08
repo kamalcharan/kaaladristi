@@ -47,7 +47,7 @@ export function DristiQLoader({ message = 'Scanning market…' }: DristiQLoaderP
             position: 'absolute', top: '-3px', left: '50%',
             transform: 'translateX(-50%)',
             width: '6px', height: '6px', borderRadius: '50%',
-            background: '#fff', boxShadow: '0 0 8px rgba(255,255,255,0.9)',
+            background: '#fff', boxShadow: '0 0 8px color-mix(in srgb, var(--text-primary) 90%, transparent)',
           }} />
         </div>
       </div>

@@ -79,7 +79,7 @@ function colorToBg(color: string): string {
   if (color === 'var(--bull)') return 'var(--bull-bg)';
   if (color === 'var(--bear)') return 'var(--bear-bg)';
   if (color === 'var(--gold)') return 'rgba(234,179,8,0.08)';
-  return 'rgba(255,255,255,0.04)';
+  return 'color-mix(in srgb, var(--text-primary) 4%, transparent)';
 }
 
 function colorToBorder(color: string): string {
@@ -110,7 +110,7 @@ function SigPill({ label, bull, bear }: { label: string; bull?: boolean; bear?: 
       padding: '3px 8px',
       fontFamily: 'var(--font-mono)', fontSize: '10.5px',
       borderRadius: '5px', fontWeight: 500,
-      background: bull ? 'var(--bull-bg)' : bear ? 'var(--bear-bg)' : 'rgba(255,255,255,0.04)',
+      background: bull ? 'var(--bull-bg)' : bear ? 'var(--bear-bg)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
       color: bull ? 'var(--bull)' : bear ? 'var(--bear)' : 'var(--text-muted)',
       border: `1px solid ${bull ? 'var(--bull-dim, rgba(16,185,129,0.2))' : bear ? 'var(--bear-dim, rgba(239,68,68,0.2))' : 'var(--border)'}`,
     }}>
@@ -142,7 +142,7 @@ function SignalTower({ score, label, tooltip, fieldKey }: { score: number; label
         padding: '3px 8px',
         fontFamily: 'var(--font-mono)', fontSize: '10.5px',
         borderRadius: '5px', fontWeight: 500,
-        background: 'rgba(255,255,255,0.04)',
+        background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
         border: '1px solid var(--border)',
         cursor: 'default',
       }}

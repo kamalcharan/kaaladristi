@@ -380,7 +380,7 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
           return (
             <g key={v}>
               <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
-                stroke={v === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.04)'}
+                stroke={v === 0 ? 'color-mix(in srgb, var(--text-primary) 18%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)'}
                 strokeWidth={v === 0 ? 0.9 : 0.5}
                 strokeDasharray={v === 0 ? undefined : '3 6'}
               />
@@ -421,7 +421,7 @@ function PerTransitBarChart({ transits, highlightId, onHighlight }: {
                 fill={
                   t.matched === true  ? 'var(--bull)' :
                   t.matched === false ? 'var(--bear)' :
-                  'rgba(255,255,255,0.12)'
+                  'color-mix(in srgb, var(--text-primary) 12%, transparent)'
                 }
                 opacity={dim ? 0.18 : 0.9}
               />
@@ -790,7 +790,7 @@ function DistributionChart({ transits }: { transits: RuleTransit[] }) {
           +40
         </text>
         <line x1={PAD.l} y1={chartBotY} x2={W - PAD.r} y2={chartBotY}
-          stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"/>
+          stroke="color-mix(in srgb, var(--text-primary) 8%, transparent)" strokeWidth="0.5"/>
         <line x1={avgLineX} y1={PAD.t} x2={avgLineX} y2={chartBotY}
           stroke="var(--gold)" strokeWidth="1.2" strokeDasharray="3 3" opacity="0.8"/>
         <text x={avgLineX + 3} y={PAD.t + 11}
@@ -856,7 +856,7 @@ function AlphaChart({ transits }: { transits: RuleTransit[] }) {
           return (
             <g key={v}>
               <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y}
-                stroke={v === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.04)'}
+                stroke={v === 0 ? 'color-mix(in srgb, var(--text-primary) 15%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)'}
                 strokeWidth={v === 0 ? 0.8 : 0.5} strokeDasharray={v === 0 ? undefined : '3 6'}/>
               <text x={PAD.l - 5} y={y + 3.5}
                 fill="rgba(148,163,184,0.4)" fontFamily="monospace" fontSize="8.5" textAnchor="end">
