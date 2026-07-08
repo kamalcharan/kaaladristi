@@ -6,7 +6,7 @@ import { evaluateInferences } from '@/services/dcInference';
 import type { InferenceEvalRow } from '@/services/dcInference';
 import { MARKET_STATUS_MAP, STATUS_COLOR_CLASSES } from '@/constants/marketStatus';
 import { MONTH_ABBR, fmtDate } from '@/lib/dateUtils';
-import { ErrorBoundary } from '@/components/ui';
+import { ErrorBoundary, PageHeader } from '@/components/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -434,14 +434,13 @@ export default function RuleEvalView() {
     <ErrorBoundary>
       <div className="animate-fade-in">
 
-        {/* Header */}
-        <header className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Rule Evaluation</h1>
-          <p className="text-secondary font-medium">
-            Did each DC inference rule work? Checked against real {index} price data.
-          </p>
-        </header>
+        <PageHeader
+          eyebrow="Rule Eval"
+          title="Rule Evaluation"
+          meta={`Did each DC inference rule work? Checked against real ${index} price data.`}
+        />
 
+        <div className="pt-6">
         {/* ── Controls panel ── */}
         <div className="glass-card rounded-2xl p-5 mb-4 space-y-4">
 
@@ -672,6 +671,7 @@ export default function RuleEvalView() {
             {allRows.length} total · {index} · minor {minor}% · major {major}%
           </p>
         )}
+        </div>
       </div>
     </ErrorBoundary>
   );

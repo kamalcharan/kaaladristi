@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, X, AlertCircle, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ErrorBoundary, KaalaLoader, ToastContainer, useToast } from '@/components/ui';
+import { ErrorBoundary, KaalaLoader, ToastContainer, useToast, PageHeader } from '@/components/ui';
 import { fetchInferences, createInference, updateInference, deleteInference } from '@/services/dcInference';
 import { fetchLookupByCategory } from '@/services/dcLookup';
 import type { DcInference, DcInferenceInput, DcLookupItem } from '@/types';
@@ -569,23 +569,22 @@ export default function InferenceView() {
     <ErrorBoundary>
       <div className="animate-fade-in">
 
-        {/* Header */}
-        <header className="mb-6 sm:mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">DC Inference</h1>
-            <p className="text-secondary font-medium">
-              Expert planetary event annotations — the seed data for correlation &amp; rule discovery
-            </p>
-          </div>
-          <button
-            onClick={() => { setShowForm(true); setEditRow(null); setSaveError(null); }}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-semibold text-accent-indigo hover:bg-accent-indigo/30 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            New Entry
-          </button>
-        </header>
+        <PageHeader
+          eyebrow="Inference"
+          title="DC Inference"
+          meta="Expert planetary event annotations — the seed data for correlation & rule discovery"
+          actions={
+            <button
+              onClick={() => { setShowForm(true); setEditRow(null); setSaveError(null); }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-sm font-semibold text-accent-indigo hover:bg-accent-indigo/30 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              New Entry
+            </button>
+          }
+        />
 
+        <div className="pt-6">
         {/* Stats strip */}
         {rows.length > 0 && (
           <div className="flex flex-wrap gap-3 mb-6">
@@ -740,6 +739,7 @@ export default function InferenceView() {
             {rows.length} entries &middot; Rule Engine correlation coming soon
           </p>
         )}
+        </div>
       </div>
 
       {/* Form Modal */}

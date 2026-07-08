@@ -8,6 +8,7 @@ import { dashboardDate } from '@/stores/appStore';
 import { useConfluenceHeatmap } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { ConfluenceConditions, ConfluencePattern } from '@/types';
+import { PageHeader } from '@/components/ui';
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
@@ -477,19 +478,14 @@ export default function MarketStructureView() {
   const date = dashboardDate();
 
   return (
-    <div style={{ padding: '20px 24px 40px', minHeight: '100vh' }}>
+    <div style={{ minHeight: '100%' }}>
+      <PageHeader
+        eyebrow="Market Intelligence"
+        title="Market Structure & Confluence"
+        meta="Astro × breadth × momentum — 30-year confluence analysis"
+      />
 
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 4 }}>
-          DristiQ · Market Intelligence
-        </div>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0 }}>
-          Market Structure &amp; Confluence
-        </h1>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
-          Astro × breadth × momentum — 30-year confluence analysis
-        </div>
-      </div>
+      <div style={{ padding: '20px 24px 40px' }}>
 
       {/* Tab bar */}
       <div style={{
@@ -528,6 +524,7 @@ export default function MarketStructureView() {
 
       {activeTab === 'today'      && <TodayStructureTab date={date} />}
       {activeTab === 'historical' && <HistoricalConfluenceTab date={date} />}
+      </div>
     </div>
   );
 }

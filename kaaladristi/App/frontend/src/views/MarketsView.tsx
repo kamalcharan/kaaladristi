@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown, BarChart3, AlertCircle, Database, RefreshCw }
 import { useAppStore } from '@/stores/appStore';
 import { useIndicatorChart } from '@/hooks';
 import TradingChart from '@/components/charts/TradingChart';
-import { Skeleton, ErrorBoundary } from '@/components/ui';
+import { Skeleton, ErrorBoundary, PageHeader } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { MarketSymbol, TimeRange } from '@/types';
 
@@ -45,10 +45,8 @@ export default function MarketsView() {
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
-        <header className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">Markets</h1>
-          <p className="text-secondary font-medium">Historical price data &amp; technical indicators</p>
-        </header>
+        <PageHeader eyebrow="Markets" title="Markets" meta="Historical price data & technical indicators" />
+        <div className="pt-6">
 
         {/* Stats bar */}
         {isLoading ? (
@@ -204,6 +202,7 @@ export default function MarketsView() {
             {rows.length} trading days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
           </p>
         )}
+        </div>
       </div>
     </ErrorBoundary>
   );
