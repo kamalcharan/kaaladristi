@@ -8,6 +8,7 @@ export default function ThemeSettings() {
   const { profile, setProfile } = useAuthStore()
   const [saving, setSaving] = useState(false)
   const darkOnly = isDarkOnly(activeTheme)
+  const activeLabel = THEMES.find(t => t.id === activeTheme)?.label ?? 'This theme'
 
   async function handleThemeChange(id: ThemeId) {
     setTheme(id)
@@ -90,7 +91,7 @@ export default function ThemeSettings() {
               key={m.id}
               disabled={disabled}
               onClick={() => !disabled && setMode(m.id)}
-              title={disabled ? 'DristiQ is dark-only for now — light palette coming' : undefined}
+              title={disabled ? `${activeLabel} is dark-only for now — light palette coming` : undefined}
               style={{
                 flex: 1, padding: '7px 0', borderRadius: 8,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -111,7 +112,7 @@ export default function ThemeSettings() {
       </div>
       {darkOnly && (
         <p style={{ fontSize: 10, color: 'var(--text-faint)', margin: '2px 0 0', lineHeight: 1.5 }}>
-          DristiQ is dark-only for now — switch to Tech AI or Jade Thorn to use light mode.
+          {activeLabel} is dark-only for now — switch to another theme to use light mode.
         </p>
       )}
     </div>

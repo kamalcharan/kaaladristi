@@ -1,43 +1,44 @@
 /* ── Kāla-Drishti Design Tokens — static defaults (overwritten by applyTheme at runtime) ─── */
 :root {
   /* Structural — never overwritten by applyTheme */
-  --card-deep: #0d1528;
+  --card-deep: #100d1a;
   --border-strong: rgba(255,255,255,0.14);
-  --indigo-strong: #a5b4fc;
-  --indigo-bg: rgba(129,140,248,0.12);
+  --indigo-strong: #c2b8ff;
+  --indigo-bg: rgba(155,140,255,0.12);
   --overlay: rgba(0,0,0,0.55);
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, sans-serif;
   --font-mono: 'Geist Mono', monospace;
 
   /* Fallback values — applyTheme() overwrites all of these on load.
-     These only apply during the brief flash before JS runs. */
-  --bg: #0b1120;
-  --card: #131c31;
-  --card-soft: #182340;
-  --border: rgba(255,255,255,0.07);
-  --border-gold: rgba(212,168,75,0.35);
-  --border-indigo: rgba(129,140,248,0.28);
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-faint: rgba(241,245,249,0.25);
-  --gold: #d4a84b;
-  --gold-soft: #e6c167;
-  --gold-bg: rgba(212,168,75,0.1);
-  --indigo: #818cf8;
-  --accent: #818cf8;
-  --accent-dim: rgba(129,140,248,0.35);
-  --accent-glow: rgba(129,140,248,0.15);
-  --accent-solid: rgba(129,140,248,0.9);
-  --surface-1: #0b1120;
-  --surface-2: #131c31;
-  --bull: #10b981;
-  --bull-bg: rgba(16,185,129,0.1);
-  --bear: #ef4444;
-  --bear-bg: rgba(239,68,68,0.1);
-  --caution: #f59e0b;
-  --caution-bg: rgba(245,158,11,0.1);
+     These only apply during the brief flash before JS runs.
+     Matches Vikuna Black dark (the default theme+mode). */
+  --bg: #0b0b12;
+  --card: #191626;
+  --card-soft: rgba(255,255,255,0.08);
+  --border: rgba(255,255,255,0.1);
+  --border-gold: rgba(201,178,140,0.35);
+  --border-indigo: rgba(155,140,255,0.28);
+  --text-primary: #ece9f5;
+  --text-secondary: #948fb0;
+  --text-muted: rgba(148,143,176,0.6);
+  --text-faint: rgba(236,233,245,0.25);
+  --gold: #c9b28c;
+  --gold-soft: #c9b28c;
+  --gold-bg: rgba(201,178,140,0.1);
+  --indigo: #9b8cff;
+  --accent: #9b8cff;
+  --accent-dim: rgba(155,140,255,0.35);
+  --accent-glow: rgba(155,140,255,0.15);
+  --accent-solid: rgba(155,140,255,0.9);
+  --surface-1: #0b0b12;
+  --surface-2: #191626;
+  --bull: #4ecb8a;
+  --bull-bg: rgba(78,203,138,0.1);
+  --bear: #e05555;
+  --bear-bg: rgba(224,85,85,0.1);
+  --caution: #e0a040;
+  --caution-bg: rgba(224,160,64,0.1);
 }
 
 body {
@@ -51,8 +52,8 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(212,168,75,0.04), transparent),
-              radial-gradient(ellipse 600px 400px at 10% 80%, rgba(99,102,241,0.03), transparent);
+  background: radial-gradient(ellipse 900px 500px at 50% -10%, var(--gold-bg), transparent),
+              radial-gradient(ellipse 600px 400px at 10% 80%, var(--accent-glow), transparent);
   pointer-events: none;
   z-index: 0;
 }
@@ -73,8 +74,8 @@ body::before {
 
     /* ── Accent aliases (theme JS overrides these inline) ── */
     --accent-indigo:  var(--indigo);
-    --accent-violet:  #8b5cf6;
-    --accent-cyan:    #06b6d4;
+    --accent-violet:  #6f5fc4;
+    --accent-cyan:    #5a8fd6;
     --accent-gold:    var(--gold);
 
     /* ── Risk aliases ── */
