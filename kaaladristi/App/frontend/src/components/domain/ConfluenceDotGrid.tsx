@@ -17,26 +17,26 @@ type PeriodLabel = typeof PERIODS[number]['label'];
 function nakvarColor(outcome: string | null): string {
   if (outcome === 'bullish') return 'var(--bull)';
   if (outcome === 'bearish') return 'var(--bear)';
-  return '#334155'; // dark grey = none
+  return 'var(--text-muted)'; // none
 }
 
 function breadthColor(score: number | null): string {
-  if (score == null) return '#1e293b';
+  if (score == null) return 'var(--text-muted)';
   if (score > 55) return 'var(--bull)';
   if (score > 35) return 'var(--caution)';
   return 'var(--bear)';
 }
 
 function rocColor(roc: number | null): string {
-  if (roc == null) return '#1e293b';
+  if (roc == null) return 'var(--text-muted)';
   if (roc > 1)  return 'var(--bull)';
-  if (roc > 0)  return '#14b8a6';
+  if (roc > 0)  return 'color-mix(in srgb, var(--bull) 70%, transparent)';
   if (roc > -1) return 'var(--caution)';
   return 'var(--bear)';
 }
 
 function niftyColor(ret: number | null): string {
-  if (ret == null) return '#1e293b';
+  if (ret == null) return 'var(--text-muted)';
   const abs = Math.abs(ret);
   if (ret > 0) {
     return abs > 1 ? 'var(--bull)' : abs > 0.5 ? 'var(--bull)' : 'var(--bull)';
@@ -113,16 +113,16 @@ function Legend() {
       {[
         { color: 'var(--bull)', label: 'Nak-Vara: Bullish' },
         { color: 'var(--bear)', label: 'Nak-Vara: Bearish' },
-        { color: '#334155', label: 'Nak-Vara: None' },
+        { color: 'var(--text-muted)', label: 'Nak-Vara: None' },
         { color: 'var(--caution)', label: 'Breadth: Moderate' },
-        { color: '#14b8a6', label: 'ROC: Positive (0–1)' },
+        { color: 'color-mix(in srgb, var(--bull) 70%, transparent)', label: 'ROC: Positive (0–1)' },
         { color: 'var(--caution)', label: 'ROC: Negative (-1–0)' },
         { color: 'var(--bull)', label: 'Nifty: Gain' },
         { color: 'var(--bear)', label: 'Nifty: Loss' },
       ].map(({ color, label }) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <div style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: '#475569' }}>{label}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>{label}</span>
         </div>
       ))}
     </div>
@@ -185,7 +185,7 @@ export default function ConfluenceDotGrid() {
                 cursor: 'pointer',
                 transition: 'all 0.15s',
                 background: period === p.label ? 'var(--accent)' : 'transparent',
-                color: period === p.label ? '#fff' : '#94a3b8',
+                color: period === p.label ? '#fff' : 'var(--text-muted)',
               }}
             >
               {p.label}
@@ -197,7 +197,7 @@ export default function ConfluenceDotGrid() {
       {/* Body */}
       <div style={{ padding: '14px 18px 16px' }}>
         {isLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0', color: '#475569' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0', color: 'var(--text-muted)' }}>
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading timeline…</span>
           </div>
@@ -207,7 +207,7 @@ export default function ConfluenceDotGrid() {
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Failed to load — backend may be offline</span>
           </div>
         ) : data.length === 0 ? (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#475569', padding: '24px 0', textAlign: 'center' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', padding: '24px 0', textAlign: 'center' }}>
             No timeline data available
           </div>
         ) : (
@@ -252,7 +252,7 @@ export default function ConfluenceDotGrid() {
                         <div style={{
                           fontFamily: 'var(--font-mono)',
                           fontSize: 9,
-                          color: '#64748b',
+                          color: 'var(--text-muted)',
                           transform: 'rotate(-45deg)',
                           transformOrigin: 'bottom center',
                           whiteSpace: 'nowrap',
@@ -333,7 +333,7 @@ export default function ConfluenceDotGrid() {
                     marginBottom: 2,
                     opacity: tooltip.rowIdx === i ? 1 : 0.55,
                   }}>
-                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: '#64748b' }}>{row.label}</span>
+                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-muted)' }}>{row.label}</span>
                     <span style={{
                       fontFamily: 'var(--font-mono)',
                       fontSize: 10,

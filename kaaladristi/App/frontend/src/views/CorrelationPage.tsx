@@ -107,8 +107,8 @@ function OutcomeBadge({ returnVal }: { returnVal: number | null }) {
     <span style={{
       fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
       color: bull ? 'var(--bull)' : 'var(--bear)',
-      background: bull ? 'rgba(45,212,191,0.08)' : 'rgba(239,68,68,0.08)',
-      border: `1px solid ${bull ? 'rgba(45,212,191,0.2)' : 'rgba(239,68,68,0.2)'}`,
+      background: bull ? 'var(--bull-bg)' : 'var(--bear-bg)',
+      border: `1px solid ${bull ? 'var(--bull-dim)' : 'var(--bear-dim)'}`,
       padding: '1px 6px', borderRadius: 3,
     }}>
       {returnVal > 0 ? '↑' : '↓'} {Math.abs(returnVal).toFixed(2)}%
@@ -808,10 +808,10 @@ export default function CorrelationPage() {
                           marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3,
                           background: 'none', border: 'none', cursor: 'pointer',
                           fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
-                          color: 'rgba(239,68,68,0.35)', padding: 0,
+                          color: 'color-mix(in srgb, var(--bear) 35%, transparent)', padding: 0,
                         }}
-                        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
-                        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 80%, transparent)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 35%, transparent)')}
                       >
                         <Trash2 style={{ width: 10, height: 10 }} />
                         <span>clear cache</span>
