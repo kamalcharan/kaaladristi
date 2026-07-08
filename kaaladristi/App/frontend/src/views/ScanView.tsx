@@ -132,7 +132,7 @@ function VaniFilterButton({ active, count, onToggle }: { active: boolean; count:
         borderRadius: '100px',
         fontSize: '11px', fontWeight: 600, cursor: 'pointer',
         fontFamily: 'var(--font-body)', transition: 'all 0.2s',
-        boxShadow: active ? '0 0 16px rgba(212,168,75,0.3)' : undefined,
+        boxShadow: active ? '0 0 16px color-mix(in srgb, var(--gold) 30%, transparent)' : undefined,
       }}
     >
       <span style={{ fontSize: '10px', lineHeight: 1 }}>✦</span>
@@ -328,7 +328,7 @@ function TradingViewExportButton({
       <button
         onClick={handleCopy}
         title={`Copy ${stocks.length} TradingView symbols to clipboard`}
-        style={{ ...btnBase, color: copied ? 'var(--bull)' : 'var(--text-muted)', borderColor: copied ? 'rgba(74,222,128,0.4)' : 'var(--border)' }}
+        style={{ ...btnBase, color: copied ? 'var(--bull)' : 'var(--text-muted)', borderColor: copied ? 'var(--bull-dim)' : 'var(--border)' }}
         onMouseEnter={(e) => {
           if (!copied) {
             (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
@@ -394,7 +394,7 @@ function VaniSectionHeader({
         }}>
           <span>✦</span> VaNi Highlight
           <span style={{
-            background: 'rgba(240,165,0,0.12)', color: 'var(--gold2, #ffd166)',
+            background: 'rgba(240,165,0,0.12)', color: '#ffd166',
             padding: '1px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
           }}>
             {vaniCount} stock{vaniCount !== 1 ? 's' : ''}
@@ -630,9 +630,9 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
           <button
             onClick={() => refetch()}
             style={{
-              padding: '6px 16px', background: 'rgba(59,130,246,0.1)',
-              border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px',
-              color: '#60a5fa', fontSize: '12px', cursor: 'pointer',
+              padding: '6px 16px', background: 'var(--accent-glow)',
+              border: '1px solid var(--accent-dim)', borderRadius: '6px',
+              color: 'var(--accent)', fontSize: '12px', cursor: 'pointer',
             }}
           >
             Retry
