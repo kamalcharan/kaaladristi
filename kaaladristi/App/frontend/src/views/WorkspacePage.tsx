@@ -282,8 +282,11 @@ export default function WorkspacePage() {
             {icpMode === 'astro' && (
               <>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-faint)', letterSpacing: '.06em',
-                    textTransform: 'uppercase', marginBottom: 12, fontFamily: 'var(--font-mono, monospace)' }}>
+                  <div style={{
+                    fontSize: 'var(--label-font-size)', fontWeight: 'var(--label-font-weight)',
+                    letterSpacing: 'var(--label-letter-spacing)', fontFamily: 'var(--label-font-family)',
+                    color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 12,
+                  }}>
                     Astro Context
                   </div>
                   <CurrentSkyRail date={today} />
