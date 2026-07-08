@@ -34,8 +34,16 @@ export const TechAITheme: ThemeConfig = {
       info:    '#2a7abf',
     },
     surface: {
-      glass:       'rgba(6,213,205,0.05)',
-      glassStrong: 'rgba(6,213,205,0.09)',
+      // Fully opaque, not translucent — a card here sits directly under the
+      // top-center ambient bloom (body::before's 900x500 ellipse, strongest
+      // right where PageHeader lives). Any partial opacity (originally a
+      // never-visible 5% cyan wash, then a 75% white pass) let that bloom
+      // bleed through the blur as an uneven tint ("muddy" patches, reported
+      // across all 3 themes). Light mode reads as a solid frosted card;
+      // true glass/translucency is reserved for dark mode, where the
+      // ambient glow is subtle enough not to look dirty underneath it.
+      glass:       '#ffffff',
+      glassStrong: '#ffffff',
       glassBorder: '#c2eeec',
       primaryDim:    'rgba(6,213,205,0.25)',
       primaryGlow:   'rgba(6,213,205,0.12)',
