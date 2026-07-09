@@ -36,5 +36,5 @@ export default function BreadthRotation({ indexId, title = 'How breadth is movin
     );
   }
 
-  return <RotationGraph points={points} variant="breadth" title={title} levelCenter={50} />;
+  return <RotationGraph points={points} variant="breadth" title={title} levelCenter={50} autoPlay playSeconds={7} />;
 }

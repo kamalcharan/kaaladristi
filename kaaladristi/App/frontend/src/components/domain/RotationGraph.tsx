@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * RotationGraph — RRG-style level × momentum rotation with a trailing tail,
@@ -28,6 +28,10 @@ interface RotationGraphProps {
   title?: string;
   /** Neutral value that divides the level axis (0 for Magic RS, ~50 for breadth score). */
   levelCenter?: number;
+  /** Trace the path once on mount (respects prefers-reduced-motion). */
+  autoPlay?: boolean;
+  /** Playback duration in seconds (default 7). */
+  playSeconds?: number;
 }
 
 const TEAL = '#2dd4bf';
@@ -96,9 +100,13 @@ export default function RotationGraph({
   benchmark = 'NIFTY 500',
   title = 'RS-Rotation',
   levelCenter = 0,
+  autoPlay = false,
+  playSeconds = 7,
 }: RotationGraphProps) {
   const cfg = VARIANTS[variant];
   const [hover, setHover] = useState<number | null>(null);
+  const [playhead, setPlayhead] = useState<number | null>(null);
+  const startedRef = useRef(false);
 
   const model = useMemo(() => {
     const win = points.filter(p => p.level != null && p.momentum != null).slice(-tail);
@@ -114,6 +122,24 @@ export default function RotationGraph({
     return { pts };
   }, [points, tail, levelCenter]);
 
+  const n = model?.pts.length ?? 0;
+  const reduceMotion = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const replay = useCallback(() => { if (!reduceMotion && n >= 3) setPlayhead(0); }, [reduceMotion, n]);
+
+  // Autoplay once on mount (opt-in)
+  useEffect(() => {
+    if (autoPlay && !startedRef.current && n >= 3 && !reduceMotion) { startedRef.current = true; setPlayhead(0); }
+  }, [autoPlay, n, reduceMotion]);
+
+  // Advance the playhead along the tail, then settle on the static view
+  useEffect(() => {
+    if (playhead == null || n === 0) return;
+    if (playhead >= n - 1) { const t = setTimeout(() => setPlayhead(null), 1000); return () => clearTimeout(t); }
+    const per = Math.max(140, (playSeconds * 1000) / n);
+    const t = setTimeout(() => setPlayhead(h => (h == null ? null : h + 1)), per);
+    return () => clearTimeout(t);
+  }, [playhead, n, playSeconds]);
+
   if (!model) {
     return (
       <div className="glass-card rounded-2xl p-4">
@@ -124,9 +150,12 @@ export default function RotationGraph({
   }
 
   const { pts } = model;
+  const upto = playhead != null ? Math.min(playhead, pts.length - 1) : pts.length - 1;
+  const visible = pts.slice(0, upto + 1);
+  const tipIndex = playhead != null ? upto : hover;   // auto-tooltip while playing
   const today = pts[pts.length - 1];
   const q = today.pos ? cfg.quad[today.pos] : null;
-  const trailPoints = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const trailPoints = visible.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const posWord = today.level != null && today.level >= levelCenter ? cfg.posPos : cfg.posNeg;
   const momWord = today.momentum != null && today.momentum >= 0 ? 'rising' : 'slowing';
 
@@ -150,6 +179,15 @@ export default function RotationGraph({
               style={{ color: q.color, border: `1px solid color-mix(in srgb, ${q.color} 40%, transparent)`, background: `color-mix(in srgb, ${q.color} 12%, transparent)` }}>
               {q.name}
             </span>
+          )}
+          {!reduceMotion && (
+            <button onClick={replay} title="Replay the rotation path"
+              className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
+              style={{ color: 'var(--vani, #9d8ff9)', cursor: 'pointer',
+                border: '1px solid color-mix(in srgb, var(--vani, #9d8ff9) 30%, transparent)',
+                background: 'color-mix(in srgb, var(--vani, #9d8ff9) 8%, transparent)' }}>
+              {playhead != null ? '▶ playing' : '▶ replay'}
+            </button>
           )}
         </div>
       </div>
@@ -184,19 +222,20 @@ export default function RotationGraph({
             <text x={P+S+8} y={C+3} textAnchor="start" fontSize="9" fontFamily="var(--font-mono, monospace)" fill="var(--text-muted)">momentum →</text>
             <text x={P-8} y={C+3} textAnchor="end" fontSize="9" fontFamily="var(--font-mono, monospace)" fill="var(--text-muted)">← slowing</text>
 
-            {/* trail */}
+            {/* trail (reveals up to the playhead while animating) */}
             <polyline points={trailPoints} fill="none" stroke="color-mix(in srgb, var(--text-primary) 28%, transparent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            {pts.map((p, i) => {
-              const isToday = i === pts.length - 1;
-              const t = i / (pts.length - 1);
+            {visible.map((p, i) => {
+              const isHead = i === upto;
+              const t = pts.length > 1 ? i / (pts.length - 1) : 1;
               const color = p.pos ? cfg.quad[p.pos].color : 'var(--text-muted)';
-              const on = hover === i;
-              if (isToday) {
+              const on = tipIndex === i;
+              if (isHead) {
+                const atToday = upto === pts.length - 1;
                 return (
                   <g key={p.date}>
                     <circle cx={p.x} cy={p.y} r={16} fill={color} opacity={0.14}/>
                     <circle cx={p.x} cy={p.y} r={9} fill={color} stroke="var(--kd-bg, #0a0e0c)" strokeWidth={on ? 3 : 2}/>
-                    <text x={p.x} y={p.y + 30} textAnchor="middle" fontSize="9" fontWeight="700" fontFamily="var(--font-mono, monospace)" fill={color}>LATEST</text>
+                    {atToday && <text x={p.x} y={p.y + 30} textAnchor="middle" fontSize="9" fontWeight="700" fontFamily="var(--font-mono, monospace)" fill={color}>LATEST</text>}
                   </g>
                 );
               }
@@ -204,14 +243,14 @@ export default function RotationGraph({
                 fill={color} opacity={(on ? 1 : 0.2 + t * 0.7).toFixed(2)}/>;
             })}
 
-            {/* hit targets + hover tooltip */}
-            {pts.map((p, i) => (
+            {/* hit targets (hover disabled while animating) + tooltip */}
+            {playhead == null && pts.map((p, i) => (
               <circle key={`hit-${p.date}`} cx={p.x} cy={p.y} r={10} fill="transparent"
                 style={{ cursor: 'pointer' }}
                 onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} />
             ))}
-            {hover != null && (() => {
-              const p = pts[hover];
+            {tipIndex != null && (() => {
+              const p = pts[tipIndex];
               const qc = p.pos ? cfg.quad[p.pos] : null;
               const w = 138, h = 66;
               let tx = p.x + 12, ty = p.y - h - 8;
