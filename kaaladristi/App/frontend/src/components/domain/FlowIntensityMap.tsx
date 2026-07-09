@@ -326,9 +326,11 @@ export default function FlowIntensityMap({
               {bseRows?.has(row) && (
                 <span
                   style={{
-                    fontSize: 8, fontWeight: 700, letterSpacing: '0.04em',
-                    color: 'var(--text-faint)', border: '1px solid var(--border)',
-                    borderRadius: 3, padding: '0 3px', marginLeft: 5, flexShrink: 0,
+                    fontSize: 8, fontWeight: 700, letterSpacing: '0.05em',
+                    color: 'var(--text-secondary)',
+                    background: 'color-mix(in srgb, var(--text-primary) 9%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--text-primary) 18%, transparent)',
+                    borderRadius: 3, padding: '1px 4px', marginLeft: 5, flexShrink: 0,
                   }}
                 >
                   BSE
