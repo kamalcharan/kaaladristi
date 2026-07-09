@@ -370,8 +370,10 @@ export default function FlowIntensityMap({
           ))}
         </div>
 
-        {/* Scrollable cell area */}
-        <div style={{ overflowX: 'auto', flex: 1 }}>
+        {/* Scrollable cell area — minWidth:0 is required so this flex item
+            actually scrolls horizontally instead of stretching its parent
+            (without it, a wide grid overflows the page to the right). */}
+        <div style={{ overflowX: 'auto', flex: 1, minWidth: 0 }}>
 
           {/* Date header row */}
           <div style={{ display: 'flex', gap: GAP, marginBottom: GAP, width: totalCellW }}>

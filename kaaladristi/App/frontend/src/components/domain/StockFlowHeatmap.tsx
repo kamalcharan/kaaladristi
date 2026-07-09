@@ -52,7 +52,7 @@ export default function StockFlowHeatmap({ label, rows }: { label: string; rows:
 
   return (
     <div className="mt-2">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
         <div style={{ display: 'inline-flex', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 6, padding: 2, gap: 2 }}>
           {WINDOWS.map((w) => (
             <button
@@ -76,6 +76,7 @@ export default function StockFlowHeatmap({ label, rows }: { label: string; rows:
         rows={[label]}
         dates={dates}
         cells={{ [label]: cells }}
+        cellWidth={46}
         title="Flow Heatmap"
         subtitle={`Last ${win} sessions · money-flow conviction`}
       />

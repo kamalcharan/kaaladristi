@@ -585,6 +585,9 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
+### 📋 FOR REVIEW (owner) — Pulse/Study UX rework
+`kaaladristi/docs/PulseUX.md` documents the equity **Study** page rework into a decision-first workbench (Read → Snapshot → Evidence → Chart), the two-layer Pulse/Study contract, every widget, and a before/after. Charan to review. Open/deferred items are listed there (Conviction latest-bar pipeline fix, selectable Magic RS benchmark, Conviction scrubber-awareness, Big Money threshold calibration, Correlation-for-indexes, Pulse-mode retirement).
+
 ### ⏳ PENDING (owner) — Sector Rotation Overview synthesis strip: astro window segment
 The Overview-tab synthesis strip (`IndexDetailPage.tsx` → `SynthesisStrip`) composes an auto line — "Money flowing into X/Y stocks · Breadth reads {Greed/Neutral/Fear} (score) · Momentum {expanding/contracting}". The spec's fourth segment — "Astro window [label]" — is **intentionally hidden** because the Overview tab has no astro data source wired in. Owner (Charan) to decide the source (DC inference / astro calendar for the trade date) before it's added. Re-enable by extending `SynthesisStrip` once a source exists.
 

@@ -522,17 +522,21 @@ export default function ChartView() {
             {/* Row A — Flow Heatmap 80% · Industry 20% */}
             {!isLoading && !isError && rows.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-[4fr_1fr] gap-3 mb-3">
-                {tf === 'daily' ? (
-                  <StockFlowHeatmap label={name} rows={rows} />
-                ) : (
-                  <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
-                    Flow heatmap is available on the daily timeframe.
-                  </div>
-                )}
-                <IndustryContextCard
-                  industry={equityPulse.meta?.industry ?? null}
-                  context={equityPulse.industryContext}
-                />
+                <div className="min-w-0">
+                  {tf === 'daily' ? (
+                    <StockFlowHeatmap label={name} rows={rows} />
+                  ) : (
+                    <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
+                      Flow heatmap is available on the daily timeframe.
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <IndustryContextCard
+                    industry={equityPulse.meta?.industry ?? null}
+                    context={equityPulse.industryContext}
+                  />
+                </div>
               </div>
             )}
 
