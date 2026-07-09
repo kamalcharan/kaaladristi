@@ -26,7 +26,24 @@ function fmtDay(d: string): string {
 }
 
 export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
-  if (events.length === 0) return null;
+  if (events.length === 0) {
+    return (
+      <div className="rounded-lg bg-kd-card border border-kd-border p-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Landmark className="w-3.5 h-3.5" style={{ color: 'var(--gold, #d4a84b)' }} />
+          <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+            Big Money Days
+          </span>
+        </div>
+        <p className="text-[9px] text-muted leading-snug">
+          No big-money days in this window — delivered value never reached
+          {' '}≥{BIG_MONEY_MIN_RATIO}× this stock's 66-day norm and ≥₹{BIG_MONEY_MIN_DELIV_CR} Cr.
+          These are structurally rare, and stocks without delivery data (most BSE-only scrips)
+          won't register any.
+        </p>
+      </div>
+    );
+  }
 
   const shown = [...events].reverse().slice(0, 6); // newest first
 

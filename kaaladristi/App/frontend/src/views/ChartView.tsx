@@ -186,6 +186,12 @@ export default function ChartView() {
   // Stats from latest row
   const latest = rows.length > 0 ? rows[rows.length - 1] : null;
   const prev = rows.length > 1 ? rows[rows.length - 2] : null;
+  // Most recent bar that actually carries scores — Conviction card fallback
+  // when the latest bar's scores haven't been computed yet (scoring lag).
+  const lastScoredRow = useMemo(() => {
+    for (let i = rows.length - 1; i >= 0; i--) if (rows[i].score_5d != null) return rows[i];
+    return null;
+  }, [rows]);
   const currentClose = latest?.close ?? 0;
   const prevClose = prev?.close ?? currentClose;
   const change = currentClose - prevClose;
@@ -360,6 +366,7 @@ export default function ChartView() {
             latest={latest}
             mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null}
             isEquity={isEquity}
+            scoredFallback={lastScoredRow ? { score_5d: lastScoredRow.score_5d ?? null, score_22d: lastScoredRow.score_22d ?? null, trade_date: lastScoredRow.trade_date } : null}
           />
         )}
 

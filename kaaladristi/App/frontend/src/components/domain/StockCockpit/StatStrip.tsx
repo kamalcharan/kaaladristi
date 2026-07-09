@@ -54,11 +54,14 @@ function Row({ label, value, valueClass }: { label: string; value: string; value
 }
 
 export default function StatStrip({
-  latest, mcapCr, isEquity,
+  latest, mcapCr, isEquity, scoredFallback,
 }: {
   latest: LatestRow | null;
   mcapCr?: number | null;
   isEquity: boolean;
+  /** Most-recent bar that actually has score_5d/22d, used when the latest bar's
+   *  scores haven't been computed yet (scoring lags price ingestion). */
+  scoredFallback?: { score_5d: number | null; score_22d: number | null; trade_date: string } | null;
 }) {
   if (!latest) return null;
 
@@ -75,8 +78,12 @@ export default function StatStrip({
   const rsiToneClass =
     rsi == null ? '' : rsi >= 60 ? 'text-risk-green bg-risk-green/10' : rsi <= 40 ? 'text-risk-red bg-risk-red/10' : 'text-risk-amber bg-risk-amber/10';
 
-  const s5 = latest.score_5d ?? null;
-  const s22 = latest.score_22d ?? null;
+  // Latest bar's scores lag price ingestion; fall back to the most recent
+  // scored bar so the card shows the real value instead of "—" (a blank here
+  // means NULL — a computed 0 would render as "0").
+  const usingScoreFallback = latest.score_5d == null && scoredFallback?.score_5d != null;
+  const s5 = latest.score_5d ?? scoredFallback?.score_5d ?? null;
+  const s22 = latest.score_22d ?? scoredFallback?.score_22d ?? null;
   const scoreTone = (v: number | null) =>
     v == null || v <= 0 ? 'text-muted' : v >= 25 ? 'text-risk-green' : 'text-[var(--gold,#d4a84b)]';
 
@@ -103,6 +110,9 @@ export default function StatStrip({
             value={latest.delivery_surge_x != null ? `${Number(latest.delivery_surge_x).toFixed(2)}×` : '—'}
             valueClass={latest.delivery_surge_x != null && Number(latest.delivery_surge_x) >= 1.2 ? 'text-risk-green' : undefined}
           />
+        )}
+        {usingScoreFallback && scoredFallback && (
+          <div className="text-[8px] text-muted mt-1">as of {scoredFallback.trade_date}</div>
         )}
       </CardShell>
 
