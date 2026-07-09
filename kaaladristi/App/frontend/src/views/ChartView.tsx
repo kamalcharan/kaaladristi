@@ -54,6 +54,7 @@ import { OrderFlowCard, SmartMoneyCard, DivergenceCard } from '@/components/doma
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 import TimelineSlider from '@/components/domain/VisualPulse/TimelineSlider';
 import MagicRsSubchart from '@/components/domain/VisualPulse/MagicRsSubchart';
+import RotationGraph, { type RotationPoint } from '@/components/domain/RotationGraph';
 import SignalFlipCard from '@/components/domain/StockCockpit/SignalFlipCard';
 import SignalLineChart from '@/components/domain/StockCockpit/SignalLineChart';
 
@@ -262,6 +263,16 @@ export default function ChartView() {
   const rsChange1d = useMemo(() => rsChangeLookback(pulseBars, effectiveIdx, 1), [pulseBars, effectiveIdx]);
   const rsChange5d = useMemo(() => rsChangeLookback(pulseBars, effectiveIdx, 5), [pulseBars, effectiveIdx]);
   const rsChange20d = useMemo(() => rsChangeLookback(pulseBars, effectiveIdx, 20), [pulseBars, effectiveIdx]);
+
+  // RS-Rotation (daily): level = Magic RS, momentum = its 5-bar change.
+  const rotationPoints = useMemo<RotationPoint[]>(
+    () => pulseBars.map((b, i) => ({
+      date: b.trade_date,
+      level: b.magic_rs ?? null,
+      momentum: rsChangeLookback(pulseBars, i, 5),
+    })),
+    [pulseBars],
+  );
 
   // Scan all bars for pump/dump signals (not just current bar)
   const pumpDumpResult = useMemo(() => {
@@ -516,6 +527,14 @@ export default function ChartView() {
               currentRs={pulseBars[effectiveIdx]?.magic_rs ?? null}
               benchmarkLabel="NIFTY 500"
             />
+          </div>
+        )}
+
+        {/* ═══ RS-Rotation (daily) — Magic RS × its momentum vs NIFTY 500 ═══ */}
+        {/* Layout is provisional — placed under the RS pills for now; realign later. */}
+        {isEquity && tf === 'daily' && hasRsData && (
+          <div className="mb-3">
+            <RotationGraph points={rotationPoints} benchmark="NIFTY 500" />
           </div>
         )}
 
