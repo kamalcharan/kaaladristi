@@ -59,8 +59,12 @@ export default function BreadthHeatmap({
   title = 'Breadth Heatmap',
   minMoverUniverse = 10,
 }: BreadthHeatmapProps) {
-  const { rows, maxUniverse } = useMemo(() => {
+  const { rows, cols, maxUniverse } = useMemo(() => {
     const maxU = data.reduce((mx, d) => Math.max(mx, d.universe_count ?? 0), 0);
+
+    // Newest → oldest so TODAY sits on the left — same orientation as the
+    // Sector Rotation / Flow Intensity heatmap.
+    const ordered = [...data].reverse();
 
     const active = ROWS
       .filter(r => {
@@ -70,12 +74,12 @@ export default function BreadthHeatmap({
         return data.some(d => r.value(d) != null);
       })
       .map(r => {
-        const vals = data.map(r.value);
+        const vals = ordered.map(r.value);
         const peak = vals.reduce<number>((mx, v) => (v != null && v > mx ? v : mx), 0);
         return { ...r, vals, peak: peak > 0 ? peak : 1 };
       });
 
-    return { rows: active, maxUniverse: maxU };
+    return { rows: active, cols: ordered, maxUniverse: maxU };
   }, [data, minMoverUniverse]);
 
   if (data.length === 0 || rows.length === 0) {
@@ -87,9 +91,9 @@ export default function BreadthHeatmap({
     );
   }
 
-  const first = data[0]?.trade_date;
-  const mid   = data[Math.floor(data.length / 2)]?.trade_date;
-  const last  = data[data.length - 1]?.trade_date;
+  const first = cols[0]?.trade_date;                        // today (left)
+  const mid   = cols[Math.floor(cols.length / 2)]?.trade_date;
+  const last  = cols[cols.length - 1]?.trade_date;          // oldest (right)
 
   return (
     <div className="glass-card rounded-2xl p-4">
@@ -115,22 +119,24 @@ export default function BreadthHeatmap({
                 color: 'var(--text-secondary)', paddingRight: 8 }}>
                 {row.label}
               </div>
-              <div style={{ display: 'flex', gap: 1, flex: 1 }}>
+              <div style={{ display: 'flex', gap: 2, flex: 1 }}>
                 {row.vals.map((v, i) => {
-                  const d = data[i];
-                  // Same tokens as the Sector Rotation heatmap (FlowIntensityMap):
-                  // --risk-green / --risk-red (identical values to --bull/--bear).
+                  const d = cols[i];
+                  // Solid cells blended over the SAME navy base FlowIntensityMap
+                  // uses (#1e293b) so the palette reads identically — vivid green/
+                  // red, not washed-out. --risk-green/--risk-red == --bull/--bear.
                   const baseColor = row.tone === 'bull' ? 'var(--risk-green)' : 'var(--risk-red)';
-                  let bg = 'color-mix(in srgb, var(--text-primary) 5%, transparent)';
+                  let bg = '#1e293b';
                   if (v != null) {
-                    const intensity = Math.max(0.10, Math.min(1, v / row.peak));
-                    bg = `color-mix(in srgb, ${baseColor} ${Math.round(intensity * 100)}%, transparent)`;
+                    const intensity = Math.max(0.06, Math.min(1, v / row.peak));
+                    bg = `color-mix(in srgb, ${baseColor} ${Math.round(intensity * 100)}%, #1e293b)`;
                   }
                   return (
                     <div
                       key={d.trade_date}
                       title={`${fmtDate(d.trade_date)} · ${row.label}: ${v != null ? v.toFixed(1) + '%' : 'n/a'}`}
-                      style={{ flex: 1, minWidth: 5, height: 18, borderRadius: 2, background: bg }}
+                      style={{ flex: 1, minWidth: 6, height: 20, borderRadius: 2, background: bg,
+                        border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)' }}
                     />
                   );
                 })}
