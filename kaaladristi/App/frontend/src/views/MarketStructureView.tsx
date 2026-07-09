@@ -2,10 +2,11 @@ import { useState } from 'react';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
+import BreadthRocHeatmap from '@/components/domain/BreadthRocHeatmap';
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard';
 import ConfluenceDotGrid from '@/components/domain/ConfluenceDotGrid';
 import { dashboardDate } from '@/stores/appStore';
-import { useConfluenceHeatmap, useMarketBreadth } from '@/hooks';
+import { useConfluenceHeatmap, useMarketBreadth, useBreadthRoc } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { ConfluenceConditions, ConfluencePattern } from '@/types';
 import { PageHeader } from '@/components/ui';
@@ -458,6 +459,7 @@ function TodayStructureTab({ date }: { date: string }) {
   // Query dedupes (no double request). Heatmap + raw table read it here.
   const breadth = useMarketBreadth(66);
   const breadthData = breadth.data ?? [];
+  const roc = useBreadthRoc(66);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -467,6 +469,7 @@ function TodayStructureTab({ date }: { date: string }) {
         <BreadthRocChart />
       </div>
       <BreadthHeatmap data={breadthData} />
+      <BreadthRocHeatmap data={roc.data ?? []} />
     </div>
   );
 }

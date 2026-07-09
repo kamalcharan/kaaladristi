@@ -23,6 +23,7 @@ import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRot
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 import MarketBreadthChart, { resolveRegime } from '@/components/domain/MarketBreadthChart';
 import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
+import BreadthRocHeatmap from '@/components/domain/BreadthRocHeatmap';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useSectorInsight } from '@/hooks/useDashboardExtras';
@@ -839,8 +840,9 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               fed this index's per-constituent breadth. Mover rows self-hide on
               thin indexes via the heatmap's minMoverUniverse gate. */}
           {!breadthLoading && breadthData != null && breadthData.data.length > 0 && (
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
               <BreadthHeatmap data={breadthData.data} />
+              <BreadthRocHeatmap data={breadthData.roc} />
             </div>
           )}
         </>
