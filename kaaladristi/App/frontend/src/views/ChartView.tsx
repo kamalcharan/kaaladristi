@@ -534,7 +534,7 @@ export default function ChartView() {
         {/* Layout is provisional — placed under the RS pills for now; realign later. */}
         {isEquity && tf === 'daily' && hasRsData && (
           <div className="mb-3">
-            <RotationGraph points={rotationPoints} benchmark="NIFTY 500" />
+            <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} />
           </div>
         )}
 
