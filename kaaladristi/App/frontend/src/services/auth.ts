@@ -175,8 +175,12 @@ export async function getProfile(): Promise<KmProfile | null> {
 }
 
 /** Update profile for current user.
- *  Uses upsert so it works whether or not the km_profiles row already exists
- *  (e.g. immediately after a fresh registration). */
+ *  Uses PATCH (not upsert): the km_profiles row is always created at
+ *  registration by kd_auth_register, so it exists by the time we update it.
+ *  Logged-in users run as DB role `authenticated`, which is granted only
+ *  SELECT + UPDATE on km_profiles (migration 003) — an upsert POSTs an INSERT
+ *  and gets permission-denied (403), which silently broke onboarding
+ *  persistence (`onboarded` never saved → user re-looped to /setup). */
 export async function updateProfile(
   updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded' | 'theme' | 'mode' | 'icp_mode'>>,
 ) {
@@ -184,7 +188,8 @@ export async function updateProfile(
   if (!user) throw new Error('Not authenticated');
 
   const { data, error } = await from('km_profiles')
-    .upsert({ id: user.id, email: user.email, ...updates })
+    .update(updates)
+    .eq('id', user.id)
     .select('*')
     .single()
     .execute();
