@@ -44,6 +44,7 @@ import PumpDumpBanner, { scanBarsForManipulation } from '@/components/domain/Vis
 import ScanPresenceCard from '@/components/domain/VisualPulse/equity/ScanPresenceCard';
 import IndustryContextCard from '@/components/domain/VisualPulse/equity/IndustryContextCard';
 import MultiTimeframePills from '@/components/domain/VisualPulse/equity/MultiTimeframePills';
+import StockFlowHeatmap from '@/components/domain/StockFlowHeatmap';
 // Pulse verdict/evidence cards + timeline player pulled into Study (the full
 // workbench). Study now carries the same signal widgets as Pulse, driven by a
 // scrubber, so it can stand alone when Pulse mode is retired.
@@ -506,6 +507,12 @@ export default function ChartView() {
               <p className="text-[9px] text-muted mt-1 text-right mono">
                 {rows.length} days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
               </p>
+            )}
+
+            {/* Single-stock flow heatmap — this stock's daily money-flow
+                conviction, same cells as the Sector Rotation heatmap */}
+            {!isLoading && !isError && isEquity && rows.length > 0 && tf === 'daily' && (
+              <StockFlowHeatmap label={name} rows={rows} />
             )}
 
             {/* Momentum / Smart Money / Magic RS evidence panels — replaced

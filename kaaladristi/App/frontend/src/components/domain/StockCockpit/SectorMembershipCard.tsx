@@ -16,12 +16,12 @@ import {
   type FlowSignal,
 } from '@/components/domain/FlowIntensityMap';
 
-const SIGNAL_DOT: Record<FlowSignal, { color: string; label: string }> = {
-  STRONG:   { color: '#166534',           label: 'Strong Conviction' },
-  BUILDING: { color: 'var(--risk-green)', label: 'Building' },
-  FADING:   { color: 'var(--risk-amber)', label: 'Fading' },
-  OUTFLOW:  { color: 'var(--risk-red)',   label: 'Outflow' },
-  QUIET:    { color: '#64748b',           label: 'Quiet' },
+const SIGNAL_DOT: Record<FlowSignal, { color: string; label: string; short: string }> = {
+  STRONG:   { color: '#166534',           label: 'Strong Conviction', short: 'Strong' },
+  BUILDING: { color: 'var(--risk-green)', label: 'Building',           short: 'Building' },
+  FADING:   { color: 'var(--risk-amber)', label: 'Fading',             short: 'Fading' },
+  OUTFLOW:  { color: 'var(--risk-red)',   label: 'Outflow',            short: 'Outflow' },
+  QUIET:    { color: '#64748b',           label: 'Quiet',              short: 'Quiet' },
 };
 
 export default function SectorMembershipCard({ equityId }: { equityId: number }) {
@@ -67,6 +67,14 @@ export default function SectorMembershipCard({ equityId }: { equityId: number })
               <span className="text-[10px] font-mono text-[var(--text-secondary)]">
                 {m.name.replace(/^NIFTY /, '')}
               </span>
+              {dot && (
+                <span
+                  className="text-[8px] font-mono font-bold uppercase tracking-wider"
+                  style={{ color: dot.color }}
+                >
+                  {dot.short}
+                </span>
+              )}
               {m.isCurated && (
                 <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[var(--gold,#d4a84b)]">
                   Curated
