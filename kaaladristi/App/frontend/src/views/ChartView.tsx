@@ -6,7 +6,6 @@ import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, r
 import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
-import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
@@ -411,12 +410,9 @@ export default function ChartView() {
             {isIndex ? 'INDEX' : 'EQUITY'}
           </span>
           <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
-          <PulseStudySwitch
-            active="study"
-            type={isEquity ? 'equity' : 'index'}
-            id={numId}
-            name={name}
-          />
+          {/* Pulse/Study toggle hidden (2026-07-09): Study is the single merged
+              stock view. Pulse route still exists but is no longer linked from
+              here. */}
           {/* Verdict chip — the ONLY decision-layer element allowed on Study
               (POA Phase 0.2): the Pulse verdict travels with the user. */}
           {snapshot && (
