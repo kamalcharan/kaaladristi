@@ -463,16 +463,16 @@ function TodayStructureTab({ date: _date }: { date: string }) {
 
   // Astro-Technical Alignment (MarketWeatherCard) is HIDDEN here pending owner
   // review — see CLAUDE.md "Known Issues". The Historical Confluence tab keeps
-  // the astro × breadth content. Breadth + ROC charts each pair with their
-  // heatmap; the rotation lives on Workspace → Today (not repeated here).
+  // the astro × breadth content. The rotation lives on Workspace → Today (not
+  // repeated here). Scope is market-wide (All NSE — km_market_breadth, ~1,330
+  // stocks), distinct from Today's NIFTY 50 constituent breadth.
+  // Layout: each full-width chart is followed directly by its own heatmap.
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <MarketBreadthChart />
-        <BreadthRocChart />
-      </div>
-      <BreadthHeatmap data={breadthData} />
-      <BreadthRocHeatmap data={roc.data ?? []} />
+      <MarketBreadthChart indexName="All NSE" />
+      <BreadthHeatmap data={breadthData} title="Breadth Heatmap · All NSE" />
+      <BreadthRocChart />
+      <BreadthRocHeatmap data={roc.data ?? []} title="Breadth Momentum (ROC) Heatmap · All NSE" />
     </div>
   );
 }
