@@ -818,7 +818,8 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               </span>
             </div>
           )}
-          <div style={{ marginBottom: 24 }}>
+          {/* Side by side on wide screens; auto-stack below ~440px each */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, marginBottom: 24, alignItems: 'start' }}>
             <MarketBreadthChart
               data={breadthData?.data}
               isLoading={breadthLoading}
@@ -826,8 +827,6 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               percentileRank={breadthData?.percentileRank ?? undefined}
               stockCount={breadthData?.stockCount}
             />
-          </div>
-          <div style={{ marginBottom: breadthData?.roc ? 8 : 24 }}>
             <BreadthRocChart
               data={breadthData?.roc}
               isLoading={breadthLoading}
