@@ -17,7 +17,7 @@ import type { ChartOverlay } from '@/types/framework';
 
 const EMPTY_OVERLAYS: ChartOverlay[] = [];
 import { useIndexConstituents } from '@/hooks/useMasterData';
-import { displaySymbol } from '@/lib/symbolUtils';
+import { displaySymbol, isNumericSymbol } from '@/lib/symbolUtils';
 import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow, type RocBadge } from '@/services/sectorRotation';
 import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
@@ -103,6 +103,31 @@ function scoreColor(v: number | null): string {
   if (v >= 20) return 'var(--bull)';
   if (v > 0) return 'var(--gold)';
   return 'var(--text-secondary)';
+}
+
+// ── BSE exception chip ────────────────────────────────────────────────────────
+// Constituents are NSE by default; BSE-only scrips (numeric symbol) get a small
+// chip. isNumericSymbol is the codebase's BSE heuristic (see lib/symbolUtils).
+function BseChip() {
+  return (
+    <span
+      style={{
+        ...MONO,
+        fontSize: 8,
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+        color: 'var(--text-faint)',
+        border: '1px solid var(--border)',
+        borderRadius: 3,
+        padding: '0 3px',
+        marginLeft: 5,
+        verticalAlign: 'middle',
+        flexShrink: 0,
+      }}
+    >
+      BSE
+    </span>
+  );
 }
 
 // ── MetricCell ────────────────────────────────────────────────────────────────
@@ -221,8 +246,7 @@ function ConstituentTable({
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 980 }}>
         <thead>
           <tr>
-            <th style={{ ...thBase, textAlign: 'left', width: 36 }}>#</th>
-            <th style={{ ...thBase, textAlign: 'left', width: 110 }}>Symbol</th>
+            <th style={{ ...thBase, textAlign: 'left', width: 150 }}>Symbol</th>
             <th style={{ ...thBase, textAlign: 'left' }}>Company</th>
             <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
             <th style={{ ...thSortable, textAlign: 'right', width: 76 }} onClick={() => handleSort('score_5d')}>
@@ -233,6 +257,16 @@ function ConstituentTable({
             <th style={{ ...thSortable, textAlign: 'right', width: 82 }} onClick={() => handleSort('score_22d')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 Score 22D<SortIcon col="score_22d" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 60 }} onClick={() => handleSort('rsi_14')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                RSI<SortIcon col="rsi_14" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 80 }} onClick={() => handleSort('magic_rs')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                Magic RS<SortIcon col="magic_rs" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('pct_chng')}>
@@ -256,16 +290,6 @@ function ConstituentTable({
               </span>
             </th>
             <th style={{ ...thBase, textAlign: 'left', width: 130 }}>Flow</th>
-            <th style={{ ...thSortable, textAlign: 'right', width: 60 }} onClick={() => handleSort('rsi_14')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                RSI<SortIcon col="rsi_14" sortKey={sortKey} sortDir={sortDir} />
-              </span>
-            </th>
-            <th style={{ ...thSortable, textAlign: 'right', width: 80 }} onClick={() => handleSort('magic_rs')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                Magic RS<SortIcon col="magic_rs" sortKey={sortKey} sortDir={sortDir} />
-              </span>
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -285,9 +309,9 @@ function ConstituentTable({
                 onMouseEnter={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--gold-soft) 10%, transparent)'; } : undefined}
                 onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)'; } : undefined}
               >
-                <td style={{ padding: '9px 12px', color: 'var(--text-faint)' }}>{i + 1}</td>
                 <td style={{ padding: '9px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                   {displaySymbol({ symbol: row.symbol, company_name: row.company_name })}
+                  {isNumericSymbol(row.symbol) && <BseChip />}
                 </td>
                 <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {row.company_name}
@@ -300,6 +324,12 @@ function ConstituentTable({
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: scoreColor(row.score_22d) }}>
                   {row.score_22d != null ? row.score_22d.toFixed(1) : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
+                  {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                  {row.magic_rs != null ? fmt(row.magic_rs, 1) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
                   {fmtPct(row.pct_chng)}
@@ -331,12 +361,6 @@ function ConstituentTable({
                   ) : (
                     <span style={{ color: 'var(--text-faint)' }}>—</span>
                   )}
-                </td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
-                  {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
-                </td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                  {row.magic_rs != null ? fmt(row.magic_rs, 1) : '—'}
                 </td>
               </tr>
             );
@@ -683,8 +707,9 @@ function HeroTiles({
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = 'none'; }}
             >
-              <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {name}
+              <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, ...MONO, fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                {isNumericSymbol(d.symbol) && <BseChip />}
               </span>
               <span style={{ ...MONO, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
                 {(d.score_5d ?? 0).toFixed(1)}
@@ -950,6 +975,14 @@ function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string
   const navigate = useNavigate();
   const { data, isLoading, error } = useConstituentFlowMap(indexId);
 
+  // BSE-only rows (numeric scrip) → BSE chip on the heatmap label.
+  const bseRows = useMemo(() => {
+    const s = new Set<string>();
+    const meta = data?.rowMeta;
+    if (meta) for (const [rowName, m] of Object.entries(meta)) if (isNumericSymbol(m.symbol)) s.add(rowName);
+    return s;
+  }, [data]);
+
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
@@ -975,6 +1008,7 @@ function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string
         cells={data?.cells ?? {}}
         title="Flow Intensity"
         subtitle={`${indexName} · Last 22 Sessions`}
+        bseRows={bseRows}
         onRowClick={(rowName) => {
           const meta = data?.rowMeta?.[rowName];
           if (meta) navigate(`/chart/equity/${meta.equity_id}?name=${encodeURIComponent(rowName)}`);

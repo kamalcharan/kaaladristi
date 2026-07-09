@@ -39,6 +39,7 @@ interface FlowIntensityMapProps {
   onDayWindowChange?: (d: 5 | 22 | 66) => void;
   cellWidth?: number;                   // default 92
   onRowClick?: (row: string) => void;   // row label click → drill-down
+  bseRows?: Set<string>;                // constituent mode: rows that are BSE-only scrips → show a BSE chip
 }
 
 // ── Color constants ────────────────────────────────────────────────────────────
@@ -215,6 +216,7 @@ export default function FlowIntensityMap({
   onDayWindowChange,
   cellWidth,
   onRowClick,
+  bseRows,
 }: FlowIntensityMapProps) {
   const cellW = cellWidth ?? 92;
   const labelW = mode === 'index' ? LABEL_W_IDX : LABEL_W_CON;
@@ -318,7 +320,20 @@ export default function FlowIntensityMap({
               onMouseEnter={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'; (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; } : undefined}
               onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; (e.currentTarget as HTMLElement).style.textDecoration = 'none'; } : undefined}
             >
-              {mode === 'index' ? trunc(row, 30) : trunc(row, 17)}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {mode === 'index' ? trunc(row, 30) : trunc(row, 17)}
+              </span>
+              {bseRows?.has(row) && (
+                <span
+                  style={{
+                    fontSize: 8, fontWeight: 700, letterSpacing: '0.04em',
+                    color: 'var(--text-faint)', border: '1px solid var(--border)',
+                    borderRadius: 3, padding: '0 3px', marginLeft: 5, flexShrink: 0,
+                  }}
+                >
+                  BSE
+                </span>
+              )}
             </div>
           ))}
         </div>
