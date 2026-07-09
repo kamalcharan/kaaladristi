@@ -66,24 +66,25 @@ function fmtDate(d: string): string {
   return `${+day} ${MONTHS[+m - 1]}`;
 }
 
-function mixNavy(color: string, i: number): string {
-  const p = Math.round(Math.max(0, Math.min(1, i)) * 100);
-  return `color-mix(in srgb, ${color} ${p}%, ${NAVY})`;
-}
+// Vivid, fully-saturated cells (like FlowIntensityMap) — navy is used ONLY for
+// empty/zero cells, never blended into a live value (that's what muddied them).
 
-/** Participation: low % = red, ~neutral = amber, high % = green (absolute). */
+/** Participation: absolute diverging bands — low % = red … high % = green. */
 function divergingBg(v: number | null): string {
   if (v == null) return NAVY;
-  if (v >= 55) return mixNavy('var(--risk-green)', 0.25 + ((v - 55) / 45) * 0.75);   // 55→.25 … 100→1
-  if (v <= 40) return mixNavy('var(--risk-red)',   0.30 + ((40 - v) / 40) * 0.70);   // 40→.30 … 0→1
-  return mixNavy('var(--risk-amber)', 0.45);                                          // 40–55 neutral
+  if (v >= 60) return 'var(--risk-green)';                                       // healthy
+  if (v >= 50) return 'color-mix(in srgb, var(--risk-green) 70%, var(--risk-amber))'; // yellow-green
+  if (v >= 42) return 'var(--risk-amber)';                                       // neutral
+  if (v >= 33) return 'color-mix(in srgb, var(--risk-red) 60%, var(--risk-amber))';   // orange
+  return 'var(--risk-red)';                                                      // weak
 }
 
-/** Mover: single-hue intensity relative to the window's row peak. */
+/** Mover: solid green/red — navy when zero, a brighter step on strong days. */
 function intensityBg(v: number | null, peak: number, scale: 'up' | 'down'): string {
-  if (v == null) return NAVY;
+  if (v == null || v <= 0) return NAVY;
   const color = scale === 'up' ? 'var(--risk-green)' : 'var(--risk-red)';
-  return mixNavy(color, Math.max(0.06, v / peak));
+  const level = Math.min(1, v / peak);
+  return level >= 0.6 ? `color-mix(in srgb, ${color} 70%, white)` : color;
 }
 
 export default function BreadthHeatmap({
