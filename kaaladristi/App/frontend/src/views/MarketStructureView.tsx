@@ -2,9 +2,7 @@ import { useState } from 'react';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
-import BreadthRawTable from '@/components/domain/BreadthRawTable';
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard';
-import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
 import ConfluenceDotGrid from '@/components/domain/ConfluenceDotGrid';
 import { dashboardDate } from '@/stores/appStore';
 import { useConfluenceHeatmap, useMarketBreadth } from '@/hooks';
@@ -469,8 +467,6 @@ function TodayStructureTab({ date }: { date: string }) {
         <BreadthRocChart />
       </div>
       <BreadthHeatmap data={breadthData} />
-      <BreadthRawTable data={breadthData} />
-      <NakVaraSignals date={date} />
     </div>
   );
 }

@@ -118,7 +118,9 @@ export default function BreadthHeatmap({
               <div style={{ display: 'flex', gap: 1, flex: 1 }}>
                 {row.vals.map((v, i) => {
                   const d = data[i];
-                  const baseColor = row.tone === 'bull' ? 'var(--bull)' : 'var(--bear)';
+                  // Same tokens as the Sector Rotation heatmap (FlowIntensityMap):
+                  // --risk-green / --risk-red (identical values to --bull/--bear).
+                  const baseColor = row.tone === 'bull' ? 'var(--risk-green)' : 'var(--risk-red)';
                   let bg = 'color-mix(in srgb, var(--text-primary) 5%, transparent)';
                   if (v != null) {
                     const intensity = Math.max(0.10, Math.min(1, v / row.peak));
