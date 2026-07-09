@@ -51,6 +51,10 @@ import StockFlowHeatmap from '@/components/domain/StockFlowHeatmap';
 import { CorrelationCard, OrderFlowCard, SmartMoneyCard, DivergenceCard } from '@/components/domain/VisualPulse';
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 import TimelineSlider from '@/components/domain/VisualPulse/TimelineSlider';
+import MagicRsSubchart from '@/components/domain/VisualPulse/MagicRsSubchart';
+import SignalFlipCard from '@/components/domain/StockCockpit/SignalFlipCard';
+import SignalLineChart from '@/components/domain/StockCockpit/SignalLineChart';
+import ConvictionWidget from '@/components/domain/StockCockpit/ConvictionWidget';
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
 
@@ -241,6 +245,12 @@ export default function ChartView() {
 
   const flowNarrative = snapshot ? buildFlowNarrative(snapshot) : '';
   const smNarrative = snapshot ? buildSmNarrative(snapshot) : '';
+
+  // Magic RS widget data (same shape EquityVisualPulsePage builds)
+  const magicRsData = useMemo(
+    () => pulseBars.map((b) => ({ trade_date: b.trade_date, magic_rs: b.magic_rs, magic_ma: b.magic_ma, magic_rs_zone: b.magic_rs_zone })),
+    [pulseBars],
+  );
 
   // ── Equity-specific computations ──
   const rsChange1d = useMemo(() => rsChangeLookback(pulseBars, effectiveIdx, 1), [pulseBars, effectiveIdx]);
@@ -555,18 +565,84 @@ export default function ChartView() {
                     selectedStyle={selectedStyle}
                     onStyleChange={setSelectedStyle}
                   />
+
+                  {/* Conviction — flip Widget ⇄ Chart (rows-based; pulseBars
+                      carries no scores). Replaces the header StatStrip card +
+                      the old Cockpit conviction panel. */}
+                  <SignalFlipCard
+                    title="Conviction"
+                    widget={
+                      <ConvictionWidget
+                        score5d={latest?.score_5d ?? null}
+                        score22d={latest?.score_22d ?? null}
+                        delivSurge={latest?.delivery_surge_x ?? null}
+                      />
+                    }
+                    chart={
+                      <SignalLineChart
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        data={rows as any}
+                        series={[
+                          { key: 'score_5d', color: 'var(--gold, #d4a84b)', label: 'Score 5D' },
+                          { key: 'score_22d', color: 'var(--text-faint, #64748b)', label: 'Score 22D', dashed: true },
+                        ]}
+                        domain={[0, 'auto']}
+                      />
+                    }
+                  />
+
                   <OrderFlowCard
                     bar={snapshot.bar}
                     rss={snapshot.rss}
                     rssHistory={rssHistory}
                     narrative={flowNarrative}
                   />
-                  <SmartMoneyCard
-                    smHistory={smHistory}
-                    sm={snapshot.sm}
-                    dots={[snapshot.dots]}
-                    narrative={smNarrative}
+
+                  {/* Smart Money — flip Widget ⇄ Chart (pulseBars, scrubber-aware) */}
+                  <SignalFlipCard
+                    title="Smart Money"
+                    widget={
+                      <SmartMoneyCard
+                        smHistory={smHistory}
+                        sm={snapshot.sm}
+                        dots={[snapshot.dots]}
+                        narrative={smNarrative}
+                      />
+                    }
+                    chart={
+                      <SignalLineChart
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        data={pulseBars as any}
+                        series={[
+                          { key: 'sniper_inst', color: 'var(--accent-indigo, #6366f1)', label: 'Institution' },
+                          { key: 'sniper_hot', color: 'var(--caution, #f59e0b)', label: 'Hot Money' },
+                        ]}
+                        refLines={[{ y: 35 }]}
+                        domain={[0, 50]}
+                      />
+                    }
                   />
+
+                  {/* Magic RS — flip Widget ⇄ Chart (pulseBars, scrubber-aware) */}
+                  <SignalFlipCard
+                    title="Magic RS"
+                    minHeight={180}
+                    widget={
+                      <MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />
+                    }
+                    chart={
+                      <SignalLineChart
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        data={pulseBars as any}
+                        series={[
+                          { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
+                          { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
+                        ]}
+                        refLines={[{ y: 0 }]}
+                      />
+                    }
+                  />
+
                   <DivergenceCard
                     divergence={snapshot.divergence}
                     rsiHistory={rsiHistory}
