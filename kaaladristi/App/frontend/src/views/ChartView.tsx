@@ -48,13 +48,14 @@ import StockFlowHeatmap from '@/components/domain/StockFlowHeatmap';
 // Pulse verdict/evidence cards + timeline player pulled into Study (the full
 // workbench). Study now carries the same signal widgets as Pulse, driven by a
 // scrubber, so it can stand alone when Pulse mode is retired.
-import { CorrelationCard, OrderFlowCard, SmartMoneyCard, DivergenceCard } from '@/components/domain/VisualPulse';
+// Correlation is intentionally not rendered on equity Study (owner 2026-07-09);
+// it returns for indexes later.
+import { OrderFlowCard, SmartMoneyCard, DivergenceCard } from '@/components/domain/VisualPulse';
 import type { SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard';
 import TimelineSlider from '@/components/domain/VisualPulse/TimelineSlider';
 import MagicRsSubchart from '@/components/domain/VisualPulse/MagicRsSubchart';
 import SignalFlipCard from '@/components/domain/StockCockpit/SignalFlipCard';
 import SignalLineChart from '@/components/domain/StockCockpit/SignalLineChart';
-import ConvictionWidget from '@/components/domain/StockCockpit/ConvictionWidget';
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
 
@@ -128,7 +129,7 @@ export default function ChartView() {
   const [range, setRange] = useState<TimeRange>('1Y');
   const [tf, setTf] = useState<EquityTimeframe>('daily');
   const [isFull, setIsFull] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState<TradingStyle>('Balanced');
+  const [selectedStyle] = useState<TradingStyle>('Balanced');
   // Timeline scrubber (the Player, pulled in from Pulse). null = pin to latest bar.
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -263,9 +264,6 @@ export default function ChartView() {
     return scanBarsForManipulation(pulseBars, 30);
   }, [isEquity, pulseBars]);
 
-  // Evidence rail renders for equities with data (index rail arrives with
-  // index-applicable cards in a later phase)
-  const showRail = isEquity && rows.length > 0;
 
   // Big Money days (Phase 3) — daily equity bars only
   const bigMoneyEvents = useMemo(
@@ -280,6 +278,111 @@ export default function ChartView() {
       color: ev.direction === 'entry' ? '#22c55e' : ev.direction === 'exit' ? '#ef4444' : '#d4a84b',
     })),
     [bigMoneyEvents],
+  );
+
+  // Chart block, extracted so the decision-first layout can place it in its own
+  // tier (equity: beside Magic RS / RSI / Divergence; index: full width).
+  const chartArea = (
+    <>
+      <div
+        className={cn('glass-card rounded-2xl p-3', isFull && 'fixed inset-2 z-[300] overflow-auto')}
+        style={isFull ? { background: 'var(--kd-bg, #0b0f17)' } : undefined}
+      >
+        {!isLoading && !isError && rows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
+            <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
+              {(['daily', 'weekly', 'monthly'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTf(t)}
+                  className={cn(
+                    'px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all',
+                    tf === t ? 'bg-accent-indigo/25 text-accent-indigo' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
+                  )}
+                >
+                  {t === 'daily' ? 'D' : t === 'weekly' ? 'W' : 'M'}
+                </button>
+              ))}
+            </div>
+            {tf === 'daily' ? (
+              TIME_RANGES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={cn(
+                    'px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all duration-200',
+                    range === r
+                      ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated',
+                  )}
+                >
+                  {r}
+                </button>
+              ))
+            ) : (
+              <span className="text-[9px] text-muted font-mono px-1">full history · {tf} bars</span>
+            )}
+            <button
+              onClick={() => setIsFull((f) => !f)}
+              title={isFull ? 'Exit fullscreen' : 'Fullscreen chart'}
+              className="ml-auto px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
+            >
+              {isFull ? '✕' : '⛶'}
+            </button>
+          </div>
+        )}
+
+        {!isLoading && !isError && rows.length > 0 && (
+          <CockpitOverlayStrip onAdd={() => setOverlayDrawerOpen(true)} />
+        )}
+
+        {isLoading ? (
+          <div className="space-y-4 p-2">
+            <Skeleton className="h-[400px] w-full rounded-2xl" />
+            <Skeleton className="h-[100px] w-full rounded-2xl" />
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-4">
+              <AlertCircle className="w-6 h-6 text-risk-red" />
+            </div>
+            <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Failed to Load</p>
+            <p className="text-xs text-secondary max-w-md mb-3">{errorMsg || 'Unexpected error.'}</p>
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-xs font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
+            >
+              <RefreshCw className="w-3 h-3" /> Retry
+            </button>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <BarChart3 className="w-8 h-8 text-[var(--text-muted)] mb-3" />
+            <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">No Price Data</p>
+            <p className="text-xs text-secondary">
+              <span className="text-[var(--text-primary)] font-medium">{name}</span> has no EOD data.
+            </p>
+          </div>
+        ) : (
+          <TradingChart
+            data={rows}
+            workspaceMode
+            height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
+            highlightDate={activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
+            overlays={frameworkOverlays}
+            astroBands={astroBands}
+            bigMoneyEvents={bigMoneyChartLines}
+            benchmarkIndexId={isIndex && id ? Number(id) : null}
+            benchmarkName={isIndex ? name : null}
+          />
+        )}
+      </div>
+      {rows.length > 0 && (
+        <p className="text-[9px] text-muted mt-1 text-right mono">
+          {rows.length} days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
+        </p>
+      )}
+    </>
   );
 
   return (
@@ -365,7 +468,28 @@ export default function ChartView() {
           )}
         </div>
 
-        {/* ═══ Stat strip — Price · Momentum · Liquidity · Returns (Phase 1.1) ═══ */}
+        {/* ═══ Decision Band — the read leads: VaNi narrative + verdict ═══ */}
+        {!isLoading && !isError && rows.length > 0 && (
+          <div
+            className="rounded-xl p-3 mb-3 flex flex-col lg:flex-row gap-4 lg:items-start"
+            style={{ borderLeft: '3px solid var(--accent-indigo)', background: 'color-mix(in srgb, var(--accent-indigo) 7%, transparent)' }}
+          >
+            <div className="flex-1 min-w-0">
+              <InstrumentIntelligence id={numId} type={type ?? 'index'} />
+            </div>
+            {snapshot && (
+              <div className="lg:text-right lg:w-48 shrink-0">
+                <div className="text-[9px] uppercase tracking-widest text-muted">Verdict</div>
+                <div className="text-lg font-mono font-bold mt-0.5" style={{ color: snapshot.corrState.color }}>
+                  ● {snapshot.corrState.state}
+                </div>
+                <div className="text-[9px] text-muted mt-0.5">{snapshot.corrState.tagline}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ Snapshot — Conviction · Momentum · Liquidity · Returns ═══ */}
         {!isLoading && latest && (
           <StatStrip
             latest={latest}
@@ -392,244 +516,84 @@ export default function ChartView() {
           </div>
         )}
 
-        {/* ═══ Main Grid: starts immediately after header ═══ */}
-        <div className={cn(
-          'gap-3',
-          showRail ? 'flex flex-col lg:grid lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]' : '',
-        )}>
-          {/* ── Left Panel: Intelligence + Chart ── */}
-          <div className="min-w-0">
-            {/* Chart area */}
-            <div
-              className={cn(
-                'glass-card rounded-2xl p-3 mt-2',
-                isFull && 'fixed inset-2 z-[300] overflow-auto',
-              )}
-              style={isFull ? { background: 'var(--kd-bg, #0b0f17)' } : undefined}
-            >
-              {/* Time range selector */}
-              {!isLoading && !isError && rows.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
-                  {/* D/W/M timeframe (Phase 2.3) — equity from DB aggregate
-                      tables, index resampled client-side (no aggregate tables
-                      exist; verified 2026-07-07) */}
-                  {(
-                    <div className="flex items-center gap-0.5 mr-2 p-0.5 rounded-lg border border-kd-border bg-kd-elevated">
-                      {(['daily', 'weekly', 'monthly'] as const).map((t) => (
-                        <button
-                          key={t}
-                          onClick={() => setTf(t)}
-                          className={cn(
-                            'px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all',
-                            tf === t
-                              ? 'bg-accent-indigo/25 text-accent-indigo'
-                              : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-                          )}
-                        >
-                          {t === 'daily' ? 'D' : t === 'weekly' ? 'W' : 'M'}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {tf === 'daily' ? (
-                    TIME_RANGES.map(r => (
-                      <button
-                        key={r}
-                        onClick={() => setRange(r)}
-                        className={cn(
-                          'px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all duration-200',
-                          range === r
-                            ? 'bg-accent-indigo/20 text-accent-indigo border border-accent-indigo/30'
-                            : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated'
-                        )}
-                      >
-                        {r}
-                      </button>
-                    ))
-                  ) : (
-                    <span className="text-[9px] text-muted font-mono px-1">
-                      full history · {tf} bars
-                    </span>
-                  )}
-                  <button
-                    onClick={() => setIsFull((f) => !f)}
-                    title={isFull ? 'Exit fullscreen' : 'Fullscreen chart'}
-                    className="ml-auto px-2.5 py-1 rounded-lg text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-kd-elevated border border-kd-border transition-all"
-                  >
-                    {isFull ? '✕' : '⛶'}
-                  </button>
-                </div>
-              )}
-
-              {/* Active overlays — visible + manageable (owner 2026-07-07:
-                  'we don't see what overlays were included') */}
-              {!isLoading && !isError && rows.length > 0 && (
-                <CockpitOverlayStrip onAdd={() => setOverlayDrawerOpen(true)} />
-              )}
-
-              {isLoading ? (
-                <div className="space-y-4 p-2">
-                  <Skeleton className="h-[400px] w-full rounded-2xl" />
-                  <Skeleton className="h-[100px] w-full rounded-2xl" />
-                </div>
-              ) : isError ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-risk-red/10 border border-risk-red/30 flex items-center justify-center mb-4">
-                    <AlertCircle className="w-6 h-6 text-risk-red" />
-                  </div>
-                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Failed to Load</p>
-                  <p className="text-xs text-secondary max-w-md mb-3">{errorMsg || 'Unexpected error.'}</p>
-                  <button
-                    onClick={() => refetch()}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent-indigo/20 border border-accent-indigo/40 rounded-xl text-xs font-medium text-accent-indigo hover:bg-accent-indigo/30 transition-all"
-                  >
-                    <RefreshCw className="w-3 h-3" /> Retry
-                  </button>
-                </div>
-              ) : rows.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <BarChart3 className="w-8 h-8 text-[var(--text-muted)] mb-3" />
-                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">No Price Data</p>
-                  <p className="text-xs text-secondary">
-                    <span className="text-[var(--text-primary)] font-medium">{name}</span> has no EOD data.
-                  </p>
-                </div>
-              ) : (
-                // workspaceMode = the ONE chart rendering path (owner
-                // 2026-07-07: no hardcoded lines; both Study surfaces work
-                // the same way). Lines come exclusively from framework
-                // overlays; RSI/Sniper/MagicRS live in the panels below.
-                <TradingChart
-                  data={rows}
-                  workspaceMode
-                  height={isFull ? Math.max(700, window.innerHeight - 120) : 480}
-                  highlightDate={activeIndex != null && pulseBars[effectiveIdx] ? pulseBars[effectiveIdx].trade_date : null}
-                  overlays={frameworkOverlays}
-                  astroBands={astroBands}
-                  bigMoneyEvents={bigMoneyChartLines}
-                  benchmarkIndexId={isIndex && id ? Number(id) : null}
-                  benchmarkName={isIndex ? name : null}
-                />
-              )}
-            </div>
-
-            {rows.length > 0 && (
-              <p className="text-[9px] text-muted mt-1 text-right mono">
-                {rows.length} days &middot; {rows[0].trade_date} to {rows[rows.length - 1].trade_date}
-              </p>
-            )}
-
-            {/* Single-stock flow heatmap — this stock's daily money-flow
-                conviction, same cells as the Sector Rotation heatmap */}
-            {!isLoading && !isError && isEquity && rows.length > 0 && tf === 'daily' && (
-              <StockFlowHeatmap label={name} rows={rows} />
-            )}
-
-            {/* Momentum / Smart Money / Magic RS evidence panels — replaced
-                the fused chart subpanes when the chart moved to the single
-                framework-driven rendering path */}
-            {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
-              <CockpitIndicatorPanels rows={rows} />
-            )}
-
-            {/* VaNi instrument insight — evidence narration below the chart
-                (Phase 1.6; indigo panel style comes from VaNiInsight itself) */}
+        {/* ═══ Evidence tiers (equity) · chart-centric (index) ═══ */}
+        {isEquity ? (
+          <>
+            {/* Row A — Flow Heatmap 80% · Industry 20% */}
             {!isLoading && !isError && rows.length > 0 && (
-              <div className="mt-2">
-                <InstrumentIntelligence id={numId} type={type ?? 'index'} />
+              <div className="grid grid-cols-1 lg:grid-cols-[4fr_1fr] gap-3 mb-3">
+                {tf === 'daily' ? (
+                  <StockFlowHeatmap label={name} rows={rows} />
+                ) : (
+                  <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
+                    Flow heatmap is available on the daily timeframe.
+                  </div>
+                )}
+                <IndustryContextCard
+                  industry={equityPulse.meta?.industry ?? null}
+                  context={equityPulse.industryContext}
+                />
               </div>
             )}
 
-          </div>
+            {/* Rows B/C — Order Flow · Smart Money · Big Money(spans) / Delivery(wide) */}
+            {snapshot && (
+              <div className="grid grid-cols-1 lg:grid-cols-[37fr_38fr_25fr] gap-3 mb-3">
+                <OrderFlowCard
+                  bar={snapshot.bar}
+                  rss={snapshot.rss}
+                  rssHistory={rssHistory}
+                  narrative={flowNarrative}
+                />
+                <SignalFlipCard
+                  title="Smart Money"
+                  widget={
+                    <SmartMoneyCard
+                      smHistory={smHistory}
+                      sm={snapshot.sm}
+                      dots={[snapshot.dots]}
+                      narrative={smNarrative}
+                    />
+                  }
+                  chart={
+                    <SignalLineChart
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      data={pulseBars as any}
+                      series={[
+                        { key: 'sniper_inst', color: 'var(--accent-indigo, #6366f1)', label: 'Institution' },
+                        { key: 'sniper_hot', color: 'var(--caution, #f59e0b)', label: 'Hot Money' },
+                      ]}
+                      refLines={[{ y: 35 }]}
+                      domain={[0, 50]}
+                    />
+                  }
+                />
+                <div className="lg:row-span-2">
+                  <BigMoneyCard events={bigMoneyEvents} />
+                </div>
+                <div className="lg:col-span-2">
+                  <DeliveryVsTraded rows={rows} />
+                </div>
+              </div>
+            )}
 
-          {/* ── Right Panel: evidence rail (Phase 1.2–1.4) — Study shows
-                evidence, never verdicts ── */}
-          {showRail && (
-            <div className="min-w-0 flex flex-col gap-2.5 overflow-y-auto pb-4 lg:max-h-[calc(100vh-80px)]"
-              style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--kd-border) transparent' }}
-            >
-              <ScanPresenceCard
-                stock={scanPresence.stock}
-                matchedScans={scanPresence.matchedScans}
-              />
+            {/* Scan Presence · Member Of */}
+            {!isLoading && !isError && rows.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+                <ScanPresenceCard stock={scanPresence.stock} matchedScans={scanPresence.matchedScans} />
+                <SectorMembershipCard equityId={numId} />
+              </div>
+            )}
 
-              {/* Pulse verdict + signal cards, pulled into Study. They reflect
-                  the scrubbed bar (the Player below), latest when not scrubbing. */}
-              {snapshot && (
-                <>
-                  <CorrelationCard
-                    astroScore={snapshot.astroScore}
-                    techScore={snapshot.techScore}
-                    smScore={snapshot.smScore}
-                    corrState={snapshot.corrState}
-                    selectedStyle={selectedStyle}
-                    onStyleChange={setSelectedStyle}
-                  />
-
-                  {/* Conviction — flip Widget ⇄ Chart (rows-based; pulseBars
-                      carries no scores). Replaces the header StatStrip card +
-                      the old Cockpit conviction panel. */}
-                  <SignalFlipCard
-                    title="Conviction"
-                    widget={
-                      <ConvictionWidget
-                        score5d={latest?.score_5d ?? null}
-                        score22d={latest?.score_22d ?? null}
-                        delivSurge={latest?.delivery_surge_x ?? null}
-                      />
-                    }
-                    chart={
-                      <SignalLineChart
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        data={rows as any}
-                        series={[
-                          { key: 'score_5d', color: 'var(--gold, #d4a84b)', label: 'Score 5D' },
-                          { key: 'score_22d', color: 'var(--text-faint, #64748b)', label: 'Score 22D', dashed: true },
-                        ]}
-                        domain={[0, 'auto']}
-                      />
-                    }
-                  />
-
-                  <OrderFlowCard
-                    bar={snapshot.bar}
-                    rss={snapshot.rss}
-                    rssHistory={rssHistory}
-                    narrative={flowNarrative}
-                  />
-
-                  {/* Smart Money — flip Widget ⇄ Chart (pulseBars, scrubber-aware) */}
-                  <SignalFlipCard
-                    title="Smart Money"
-                    widget={
-                      <SmartMoneyCard
-                        smHistory={smHistory}
-                        sm={snapshot.sm}
-                        dots={[snapshot.dots]}
-                        narrative={smNarrative}
-                      />
-                    }
-                    chart={
-                      <SignalLineChart
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        data={pulseBars as any}
-                        series={[
-                          { key: 'sniper_inst', color: 'var(--accent-indigo, #6366f1)', label: 'Institution' },
-                          { key: 'sniper_hot', color: 'var(--caution, #f59e0b)', label: 'Hot Money' },
-                        ]}
-                        refLines={[{ y: 35 }]}
-                        domain={[0, 50]}
-                      />
-                    }
-                  />
-
-                  {/* Magic RS — flip Widget ⇄ Chart (pulseBars, scrubber-aware) */}
+            {/* Chart tier — Chart 70% · (Magic RS / RSI-MFI / Divergence) 30% */}
+            <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
+              <div className="min-w-0">{chartArea}</div>
+              <div className="flex flex-col gap-3 min-w-0">
+                {snapshot && (
                   <SignalFlipCard
                     title="Magic RS"
                     minHeight={180}
-                    widget={
-                      <MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />
-                    }
+                    widget={<MagicRsSubchart data={magicRsData} activeIndex={effectiveIdx} benchmarkLabel="NIFTY 500" />}
                     chart={
                       <SignalLineChart
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -642,39 +606,36 @@ export default function ChartView() {
                       />
                     }
                   />
-
+                )}
+                {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
+                  <CockpitIndicatorPanels rows={rows} />
+                )}
+                {snapshot && (
                   <DivergenceCard
                     divergence={snapshot.divergence}
                     rsiHistory={rsiHistory}
                     priceHistory={priceHistory}
                   />
-                </>
-              )}
-
-              <SectorMembershipCard equityId={numId} />
-              <BigMoneyCard events={bigMoneyEvents} />
-              <DeliveryVsTraded rows={rows} />
-              <IndustryContextCard
-                industry={equityPulse.meta?.industry ?? null}
-                context={equityPulse.industryContext}
-              />
+                )}
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* Player — the Pulse timeline scrubber, now in Study. Scrubbing
-            recomputes the verdict + signal cards for the selected candle and
-            marks that bar on the chart. */}
-        {isEquity && pulseBars.length > 0 && (
-          <div className="mt-3">
-            <TimelineSlider
-              total={pulseBars.length}
-              activeIndex={effectiveIdx}
-              bars={pulseBars}
-              corrHistory={corrHistory}
-              onChange={setActiveIndex}
-            />
-          </div>
+            {/* Player — timeline scrubber (Smart Money / Magic RS follow it) */}
+            {pulseBars.length > 0 && (
+              <div className="mt-1">
+                <TimelineSlider
+                  total={pulseBars.length}
+                  activeIndex={effectiveIdx}
+                  bars={pulseBars}
+                  corrHistory={corrHistory}
+                  onChange={setActiveIndex}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          /* Index — chart-centric (equity evidence cards don't apply) */
+          <div className="min-w-0">{chartArea}</div>
         )}
 
       </div>

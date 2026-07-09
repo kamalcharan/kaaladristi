@@ -75,30 +75,37 @@ export default function StatStrip({
   const rsiToneClass =
     rsi == null ? '' : rsi >= 60 ? 'text-risk-green bg-risk-green/10' : rsi <= 40 ? 'text-risk-red bg-risk-red/10' : 'text-risk-amber bg-risk-amber/10';
 
-  // Conviction (Score 5D/22D + Deliv Surge) moved to the rail Conviction
-  // SignalFlipCard so it isn't rendered twice; header strip is now 4 cards.
+  // Current Price card dropped (price is in the header); Conviction leads the
+  // snapshot strip — the money-flow score that anchors the read (owner 2026-07-09).
+  const s5 = latest.score_5d ?? null;
+  const s22 = latest.score_22d ?? null;
+  const scoreTone = (v: number | null) =>
+    v == null || v <= 0 ? 'text-muted' : v >= 25 ? 'text-risk-green' : 'text-[var(--gold,#d4a84b)]';
+
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
-      {/* ── Current price + day range ── */}
-      <CardShell title="Current Price">
-        <div className="flex items-baseline gap-2 mb-2">
-          <span className="text-lg font-mono font-bold text-[var(--text-primary)]">
-            {isEquity ? '₹' : ''}{num(close)}
+      {/* ── Conviction — scores first (owner doctrine) ── */}
+      <CardShell title="Conviction">
+        <div className="flex items-baseline gap-2 mb-1.5">
+          <span className={cn('text-lg font-mono font-bold', scoreTone(s5))}>
+            {s5 != null ? Math.round(s5) : '—'}
           </span>
-          <span className={cn('text-xs font-mono font-semibold', pctColor(latest.pct_chng))}>
-            {pct(latest.pct_chng)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between text-[10px] font-mono text-muted mb-1">
-          <span>{num(dayLow, 0)}</span>
-          <span className="text-[9px] uppercase tracking-wider">Day Range</span>
-          <span>{num(dayHigh, 0)}</span>
-        </div>
-        <div className="h-1.5 rounded-full bg-kd-elevated overflow-hidden">
-          {rangePos != null && (
-            <div className="h-full rounded-full bg-risk-green" style={{ width: `${rangePos}%` }} />
+          <span className="text-[10px] text-muted">Score 5D</span>
+          {s5 != null && s22 != null && (
+            <span className={cn('ml-auto text-[9px] font-mono font-bold px-1.5 py-0.5 rounded',
+              s5 >= s22 ? 'text-risk-green bg-risk-green/10' : 'text-risk-amber bg-risk-amber/10')}>
+              {s5 >= s22 ? 'Accelerating' : 'Fading'}
+            </span>
           )}
         </div>
+        <Row label="Score 22D" value={s22 != null ? String(Math.round(s22)) : '—'} valueClass={scoreTone(s22)} />
+        {isEquity && (
+          <Row
+            label="Deliv Surge"
+            value={latest.delivery_surge_x != null ? `${Number(latest.delivery_surge_x).toFixed(2)}×` : '—'}
+            valueClass={latest.delivery_surge_x != null && Number(latest.delivery_surge_x) >= 1.2 ? 'text-risk-green' : undefined}
+          />
+        )}
       </CardShell>
 
       {/* ── Momentum ── */}
