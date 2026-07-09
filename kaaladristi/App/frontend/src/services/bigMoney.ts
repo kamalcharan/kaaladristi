@@ -13,9 +13,18 @@
  *    ₹40 Cr baseline = 6.0×. Liquid stocks carry big baselines, so high
  *    multiples are structurally rare — 8× would have missed the owner's own
  *    canonical event. Market-wide, ratio p97 ≈ 4.1, p99 ≈ 7.2.
- *  - MIN_DELIV_CR = 25 — absolute floor so microcap noise can't fire.
- *    PROVISIONAL pending the market-wide clean-units event count; adjust
- *    this one constant if the yearly event count runs hot.
+ *
+ * SELF-RELATIVE floor (owner decision 2026-07-09): the old flat ₹25 Cr floor
+ * was mcap-blind — it silenced Big Money on every mid/small cap. Since this is
+ * a PER-STOCK view, significance is judged against the stock's OWN history: a
+ * day fires only if its delivered value also lands in the stock's own top
+ * TOP_PCT of delivered days in the loaded window (plus a tiny absolute sanity
+ * floor so near-zero-delivery names can't produce noise). No mcap lookup, no
+ * fallback — a stock with no delivery data (most BSE scrips) simply produces
+ * zero events, shown as the card's honest empty state.
+ * TOP_PCT / ABS_SANITY_CR are PROVISIONAL — verify the per-stock event counts
+ * against live data before trusting them (see LESSONS_LEARNED: check the
+ * distribution before fixing a threshold).
  *
  * SEBI note: events are observations ("large money changed hands here"),
  * never support/resistance claims. The card reports the honest stat —
@@ -23,7 +32,11 @@
  */
 
 export const BIG_MONEY_MIN_RATIO = 5;
-export const BIG_MONEY_MIN_DELIV_CR = 25;
+/** Self-relative floor: delivered value must be in the stock's own top 2% of
+ *  delivered days in the loaded window. */
+export const BIG_MONEY_TOP_PCT = 0.02;
+/** Tiny absolute guard (₹ Cr) so near-zero-delivery stocks can't fire on noise. */
+const ABS_SANITY_CR = 1;
 const BASELINE_BARS = 66;
 const BASELINE_MIN_BARS = 22; // no detection until the baseline has substance
 
@@ -87,6 +100,14 @@ export function detectBigMoneyDays(rows: DayRow[]): BigMoneyEvent[] {
   const dv: (number | null)[] = rows.map(delivCrOf);
   const events: BigMoneyEvent[] = [];
 
+  // Self-relative floor: the stock's own top-TOP_PCT delivered value over the
+  // loaded window. Descriptive (whole-window) percentile, paired with the
+  // prior-only ratio gate below.
+  const validDv = dv.filter((v): v is number => v != null).sort((a, b) => a - b);
+  const selfFloor = validDv.length > 0
+    ? Math.max(ABS_SANITY_CR, validDv[Math.min(validDv.length - 1, Math.floor(validDv.length * (1 - BIG_MONEY_TOP_PCT)))])
+    : Infinity; // no delivery data → nothing can pass (honest empty state)
+
   // Rolling baseline: mean of the PRIOR up-to-66 valid delivered values.
   let windowSum = 0;
   const window: number[] = [];
@@ -98,7 +119,7 @@ export function detectBigMoneyDays(rows: DayRow[]): BigMoneyEvent[] {
     if (
       value != null && baseline != null && baseline > 0 &&
       value / baseline >= BIG_MONEY_MIN_RATIO &&
-      value >= BIG_MONEY_MIN_DELIV_CR
+      value >= selfFloor
     ) {
       const r = rows[i];
       if (r.low != null && r.high != null && r.close != null) {

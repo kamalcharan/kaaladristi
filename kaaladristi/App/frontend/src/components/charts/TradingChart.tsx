@@ -841,7 +841,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
           // band.color = user-picked hex (or tier default)
           // band.opacity = user-picked opacity (or tier default)
           const tier    = band.panchakTier ?? 'base'
-          const bias    = band.baseBias ?? ''
+          const bias    = ('baseBias' in band ? band.baseBias : null) ?? ''
           const userOpacity = band.opacity
 
           let fillColor: string
@@ -868,7 +868,7 @@ export default function TradingChart({ data, height = 900, compact = false, work
             } else {
               fillColor = hexToRgba(band.color, userOpacity)
             }
-            labelChar    = tier === 'vara' ? band.ruleCode.split('-')[1]?.slice(0, 3) ?? 'P' : 'P'
+            labelChar    = tier === 'vara' ? ('ruleCode' in band ? band.ruleCode : '').split('-')[1]?.slice(0, 3) ?? 'P' : 'P'
             labelOpacity = 0.4
             labelSize    = 9
           }

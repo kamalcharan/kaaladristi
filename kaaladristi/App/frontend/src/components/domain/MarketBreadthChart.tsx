@@ -59,7 +59,7 @@ function regimePercentile(pctRank: number, provisional: boolean): RegimeInfo {
   return                       { label: `Neutral${suffix}`, color: 'text-risk-amber', bg: 'bg-risk-amber/10', border: 'border-risk-amber/40' };
 }
 
-function resolveRegime(
+export function resolveRegime(
   score: number,
   zoneMode: MarketBreadthChartProps['zoneMode'],
   percentileRank: number | undefined,

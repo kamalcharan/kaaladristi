@@ -44,6 +44,10 @@ interface LiveJob {
   progress: string | null;
   progress_pct: number;
   error_msg: string | null;
+  // Backfill-job summary fields (present only for type === 'backfill')
+  total_dates?: number;
+  success?: number;
+  failed?: number;
 }
 
 interface LiveData {
@@ -332,9 +336,9 @@ export default function PipelineExecution() {
             {job.status === 'completed' && !isFixJob && (
               <span className={cn(
                 'font-bold uppercase',
-                job.failed > 0 ? 'text-risk-amber' : 'text-risk-green',
+                (job.failed ?? 0) > 0 ? 'text-risk-amber' : 'text-risk-green',
               )}>
-                {job.success} ok{job.failed > 0 ? ` · ${job.failed} failed` : ''}
+                {job.success ?? 0} ok{(job.failed ?? 0) > 0 ? ` · ${job.failed} failed` : ''}
               </span>
             )}
           </div>

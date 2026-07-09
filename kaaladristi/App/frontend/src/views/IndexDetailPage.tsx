@@ -5,7 +5,7 @@
  * Overview shows metrics + 22D sparkline + full constituent list.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUp, ArrowDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { DristiQLoader } from '@/components/ui';
@@ -17,10 +17,11 @@ import type { ChartOverlay } from '@/types/framework';
 
 const EMPTY_OVERLAYS: ChartOverlay[] = [];
 import { useIndexConstituents } from '@/hooks/useMasterData';
-import { displaySymbol } from '@/lib/symbolUtils';
-import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow } from '@/services/sectorRotation';
+import { displaySymbol, isNumericSymbol } from '@/lib/symbolUtils';
+import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow, type RocBadge } from '@/services/sectorRotation';
+import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
-import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
+import MarketBreadthChart, { resolveRegime } from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useSectorInsight } from '@/hooks/useDashboardExtras';
@@ -104,6 +105,32 @@ function scoreColor(v: number | null): string {
   return 'var(--text-secondary)';
 }
 
+// ── BSE exception chip ────────────────────────────────────────────────────────
+// Constituents are NSE by default; BSE-only scrips (numeric symbol) get a small
+// chip. isNumericSymbol is the codebase's BSE heuristic (see lib/symbolUtils).
+function BseChip() {
+  return (
+    <span
+      style={{
+        ...MONO,
+        fontSize: 8,
+        fontWeight: 700,
+        letterSpacing: '0.05em',
+        color: 'var(--text-secondary)',
+        background: 'color-mix(in srgb, var(--text-primary) 9%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--text-primary) 18%, transparent)',
+        borderRadius: 3,
+        padding: '1px 4px',
+        marginLeft: 5,
+        verticalAlign: 'middle',
+        flexShrink: 0,
+      }}
+    >
+      BSE
+    </span>
+  );
+}
+
 // ── MetricCell ────────────────────────────────────────────────────────────────
 
 function MetricCell({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -115,58 +142,6 @@ function MetricCell({ label, value, color }: { label: string; value: string; col
       <span style={{ ...MONO, fontSize: 14, fontWeight: 600, color: color ?? 'var(--text-primary)' }}>
         {value}
       </span>
-    </div>
-  );
-}
-
-// ── Signal explanation card ───────────────────────────────────────────────────
-
-function SignalCard({ row }: { row: SectorIndexRow }) {
-  const signal = computeSignal(row);
-  const signalStyle = signal ? SIGNAL_STYLE[signal] : null;
-  const signalLabel = signal ? (FLOW_LABELS[signal]?.label ?? signal) : null;
-  const conditions = signal ? SIGNAL_CONDITIONS[signal] : null;
-
-  return (
-    <div
-      style={{
-        border: `1px solid ${signal && signalStyle ? signalStyle.border : 'var(--border)'}`,
-        borderRadius: 8,
-        background: signal && signalStyle ? signalStyle.bg : 'var(--card)',
-        padding: '14px 16px',
-        marginBottom: 16,
-      }}
-    >
-      {signal && signalStyle ? (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <span
-              style={{
-                ...MONO,
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: '0.07em',
-                textTransform: 'uppercase',
-                color: signalStyle.color,
-              }}
-            >
-              {signalLabel}
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {conditions!.map((c) => (
-              <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: signalStyle.color, flexShrink: 0, opacity: 0.8 }} />
-                <span style={{ ...MONO, fontSize: 11, color: 'var(--text-secondary)' }}>{c}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <span style={{ ...MONO, fontSize: 12, color: 'var(--text-faint)' }}>
-          No confluence signal today
-        </span>
-      )}
     </div>
   );
 }
@@ -183,7 +158,15 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <ChevronUp size={10} style={{ opacity: 0.8, marginLeft: 2, color: 'var(--gold-soft)' }} />;
 }
 
-function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: string }) {
+function ConstituentTable({
+  indexId,
+  tradeDate,
+  onRowClick,
+}: {
+  indexId: number;
+  tradeDate: string;
+  onRowClick?: (equityId: number, name: string) => void;
+}) {
   const [sortKey, setSortKey] = useState<SortKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -264,8 +247,7 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 980 }}>
         <thead>
           <tr>
-            <th style={{ ...thBase, textAlign: 'left', width: 36 }}>#</th>
-            <th style={{ ...thBase, textAlign: 'left', width: 110 }}>Symbol</th>
+            <th style={{ ...thBase, textAlign: 'left', width: 150 }}>Symbol</th>
             <th style={{ ...thBase, textAlign: 'left' }}>Company</th>
             <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
             <th style={{ ...thSortable, textAlign: 'right', width: 76 }} onClick={() => handleSort('score_5d')}>
@@ -276,6 +258,16 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
             <th style={{ ...thSortable, textAlign: 'right', width: 82 }} onClick={() => handleSort('score_22d')}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                 Score 22D<SortIcon col="score_22d" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 60 }} onClick={() => handleSort('rsi_14')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                RSI<SortIcon col="rsi_14" sortKey={sortKey} sortDir={sortDir} />
+              </span>
+            </th>
+            <th style={{ ...thSortable, textAlign: 'right', width: 80 }} onClick={() => handleSort('magic_rs')}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                Magic RS<SortIcon col="magic_rs" sortKey={sortKey} sortDir={sortDir} />
               </span>
             </th>
             <th style={{ ...thSortable, textAlign: 'right', width: 72 }} onClick={() => handleSort('pct_chng')}>
@@ -299,16 +291,6 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
               </span>
             </th>
             <th style={{ ...thBase, textAlign: 'left', width: 130 }}>Flow</th>
-            <th style={{ ...thSortable, textAlign: 'right', width: 60 }} onClick={() => handleSort('rsi_14')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                RSI<SortIcon col="rsi_14" sortKey={sortKey} sortDir={sortDir} />
-              </span>
-            </th>
-            <th style={{ ...thSortable, textAlign: 'right', width: 80 }} onClick={() => handleSort('magic_rs')}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                Magic RS<SortIcon col="magic_rs" sortKey={sortKey} sortDir={sortDir} />
-              </span>
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -319,14 +301,18 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
             return (
               <tr
                 key={row.equity_id}
+                onClick={onRowClick ? () => onRowClick(row.equity_id, displaySymbol({ symbol: row.symbol, company_name: row.company_name })) : undefined}
                 style={{
                   background: isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)',
                   borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
+                  cursor: onRowClick ? 'pointer' : undefined,
                 }}
+                onMouseEnter={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--gold-soft) 10%, transparent)'; } : undefined}
+                onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)'; } : undefined}
               >
-                <td style={{ padding: '9px 12px', color: 'var(--text-faint)' }}>{i + 1}</td>
                 <td style={{ padding: '9px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                   {displaySymbol({ symbol: row.symbol, company_name: row.company_name })}
+                  {isNumericSymbol(row.symbol) && <BseChip />}
                 </td>
                 <td style={{ padding: '9px 12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {row.company_name}
@@ -339,6 +325,12 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: scoreColor(row.score_22d) }}>
                   {row.score_22d != null ? row.score_22d.toFixed(1) : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
+                  {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
+                </td>
+                <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                  {row.magic_rs != null ? fmt(row.magic_rs, 1) : '—'}
                 </td>
                 <td style={{ padding: '9px 12px', textAlign: 'right', color: pctColor(row.pct_chng) }}>
                   {fmtPct(row.pct_chng)}
@@ -371,12 +363,6 @@ function ConstituentTable({ indexId, tradeDate }: { indexId: number; tradeDate: 
                     <span style={{ color: 'var(--text-faint)' }}>—</span>
                   )}
                 </td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: rsiColor(row.rsi_14) }}>
-                  {row.rsi_14 != null ? row.rsi_14.toFixed(1) : '—'}
-                </td>
-                <td style={{ padding: '9px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                  {row.magic_rs != null ? fmt(row.magic_rs, 1) : '—'}
-                </td>
               </tr>
             );
           })}
@@ -407,7 +393,6 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
         border: '1px solid var(--border)',
         borderRadius: 8,
         padding: '16px 20px',
-        marginBottom: 16,
       }}
     >
       {/* Top row: flow + signal */}
@@ -532,7 +517,7 @@ function IndexScoreCard({ row }: { row: SectorIndexRow }) {
 // crosses above the 1-month line, flow into this index is accelerating. This
 // replaced a close-price sparkline that carried no rotation information (the
 // Chart tab has the full price chart).
-function FlowTrendCard({ indexId }: { indexId: number }) {
+function FlowTrendCard({ indexId, height = 110 }: { indexId: number; height?: number }) {
   const { data: sparkline = [], isLoading } = useIndexSparkline(indexId);
   const hasScores = sparkline.some((p) => p.score_5d != null);
 
@@ -543,7 +528,6 @@ function FlowTrendCard({ indexId }: { indexId: number }) {
         border: '1px solid var(--border)',
         borderRadius: 8,
         padding: '14px 16px',
-        marginBottom: 16,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -555,12 +539,12 @@ function FlowTrendCard({ indexId }: { indexId: number }) {
         </span>
       </div>
       {isLoading ? (
-        <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>Loading…</span>
         </div>
       ) : hasScores && sparkline.length > 1 ? (
         <>
-          <ResponsiveContainer width="100%" height={110}>
+          <ResponsiveContainer width="100%" height={height}>
             <LineChart data={sparkline} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
               <Tooltip
                 contentStyle={{
@@ -595,7 +579,7 @@ function FlowTrendCard({ indexId }: { indexId: number }) {
           </div>
         </>
       ) : (
-        <div style={{ height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ ...MONO, fontSize: 11, color: 'var(--text-faint)' }}>No flow-score history yet for this index</span>
         </div>
       )}
@@ -603,55 +587,205 @@ function FlowTrendCard({ indexId }: { indexId: number }) {
   );
 }
 
-// Layout (owner decision 2026-07-05): verdict + narrative + numbers in a
-// narrow left column, the constituent evidence beside them on the right —
-// verdict and evidence side-by-side instead of verdict-then-scroll. Breadth
-// context spans full width below. flexWrap collapses to a single stack on
-// narrow screens.
+// ── Synthesis strip (Overview) ─────────────────────────────────────────────────
+// Real confluence signal takes priority (owner doctrine); otherwise an
+// auto-composed one-liner reads the day — money flow, breadth regime, momentum.
+// The astro-window segment is intentionally hidden pending a data source
+// (tracked in CLAUDE.md: "Sector Rotation Overview — astro window pending").
+const ROC_STRIP: Record<RocBadge, { label: string; color: string }> = {
+  expanding:   { label: 'expanding',   color: 'var(--bull)' },
+  slowing:     { label: 'slowing',     color: 'var(--risk-amber)' },
+  turning:     { label: 'turning',     color: 'var(--risk-amber)' },
+  contracting: { label: 'contracting', color: 'var(--bear)' },
+  warming_up:  { label: 'warming up',  color: 'var(--text-muted)' },
+};
+
+function SynthesisStrip({
+  row,
+  breadth,
+  inflowCount,
+  totalCount,
+}: {
+  row: SectorIndexRow;
+  breadth: IndexBreadthResult | undefined;
+  inflowCount: number;
+  totalCount: number;
+}) {
+  const signal = computeSignal(row);
+
+  // Real confluence signal wins.
+  if (signal) {
+    const st = SIGNAL_STYLE[signal];
+    const label = FLOW_LABELS[signal]?.label ?? signal;
+    const conditions = SIGNAL_CONDITIONS[signal];
+    return (
+      <div
+        style={{
+          borderLeft: `2px solid ${st.color}`, background: st.bg, borderRadius: 6,
+          padding: '10px 14px', marginBottom: 16, ...MONO, fontSize: 12.5,
+          lineHeight: 1.6, color: 'var(--text-secondary)',
+        }}
+      >
+        <span style={{ color: st.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 8 }}>
+          {label}
+        </span>
+        {conditions.join('  ·  ')}
+      </div>
+    );
+  }
+
+  // Auto-composed read (breadth vocabulary matches MarketBreadthChart exactly).
+  const latestScore = breadth?.data?.at(-1)?.breadth_score ?? null;
+  const regime = latestScore != null ? resolveRegime(latestScore, breadth?.zoneMode, breadth?.percentileRank ?? undefined) : null;
+  const roc = breadth?.rocBadge ? ROC_STRIP[breadth.rocBadge] : null;
+
+  return (
+    <div
+      style={{
+        borderLeft: '2px solid var(--gold-soft)',
+        background: 'color-mix(in srgb, var(--gold-soft) 6%, transparent)',
+        borderRadius: 6, padding: '10px 14px', marginBottom: 16, ...MONO,
+        fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-secondary)',
+      }}
+    >
+      Money flowing into{' '}
+      <span style={{ color: 'var(--bull)', fontWeight: 600 }}>{inflowCount}/{totalCount}</span> stocks
+      {regime && latestScore != null && (
+        <>
+          {'  ·  '}Breadth reads{' '}
+          <span className={regime.color} style={{ fontWeight: 600 }}>{regime.label} ({latestScore.toFixed(1)})</span>
+        </>
+      )}
+      {roc && (
+        <>{'  ·  '}Momentum <span style={{ color: roc.color, fontWeight: 600 }}>{roc.label}</span></>
+      )}
+    </div>
+  );
+}
+
+// ── Hero tiles (Overview) — top movers by Score 5D ─────────────────────────────
+// Fixed top-8 by Score 5D (not reactive to table sort). Tile fill scales with
+// score. Click → the stock's chart.
+function HeroTiles({
+  details,
+  onPick,
+}: {
+  details: ConstituentDetail[] | undefined;
+  onPick: (equityId: number, name: string) => void;
+}) {
+  const top = useMemo(() => {
+    if (!details) return [];
+    return [...details]
+      .filter((d) => d.score_5d != null)
+      .sort((a, b) => (b.score_5d ?? -Infinity) - (a.score_5d ?? -Infinity))
+      .slice(0, 8);
+  }, [details]);
+
+  if (top.length === 0) return null;
+  const max = Math.max(1, ...top.map((d) => d.score_5d ?? 0));
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 8 }}>
+        Top Movers · Score 5D · click to open chart
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+        {top.map((d) => {
+          const t = Math.min(1, (d.score_5d ?? 0) / max);
+          const name = displaySymbol({ symbol: d.symbol, company_name: d.company_name });
+          return (
+            <button
+              key={d.equity_id}
+              onClick={() => onPick(d.equity_id, name)}
+              title={`${d.company_name} — open chart`}
+              style={{
+                display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left',
+                border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px',
+                cursor: 'pointer', font: 'inherit',
+                background: `color-mix(in srgb, var(--bull) ${(12 + t * 33).toFixed(0)}%, transparent)`,
+                transition: 'transform 0.1s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, ...MONO, fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                {isNumericSymbol(d.symbol) && <BseChip />}
+              </span>
+              <span style={{ ...MONO, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {(d.score_5d ?? 0).toFixed(1)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Layout (owner decision 2026-07-09): single stacked full-width flow — synthesis
+// strip → hero tiles → full-width VaNi → compact stats+trend row → full-width
+// constituents table → breadth. Giving the table the whole canvas removes the
+// old horizontal scroll (it was squeezed into a half-width column, not
+// column-count). Clicking a hero tile or a table row opens that stock's chart.
 function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
+  const navigate = useNavigate();
   const { data: breadthData, isLoading: breadthLoading } = useIndexBreadth(indexId, 66);
   const { data: sectorInsight, isLoading: insightLoading } = useSectorInsight(indexId, row.trade_date);
+
+  // Constituent details — deduped with ConstituentTable's identical React Query
+  // call (same queryKey). Feeds the hero tiles + the synthesis money-flow count.
+  const { data: constituents } = useIndexConstituents(indexId);
+  const equityIds = useMemo(() => (constituents ?? []).map((c) => c.equity_id), [constituents]);
+  const { data: details } = useConstituentDetails(equityIds, row.trade_date);
+
+  // "Flowing in" = positive Score 5D (the page's Score = money-flow framing).
+  const inflowCount = useMemo(() => (details ?? []).filter((d) => (d.score_5d ?? 0) > 0).length, [details]);
+  const totalCount = details?.length ?? equityIds.length;
+
+  const goToChart = useCallback(
+    (equityId: number, name: string) => navigate(`/chart/equity/${equityId}?name=${encodeURIComponent(name)}`),
+    [navigate],
+  );
 
   return (
     <div style={{ padding: '24px' }}>
 
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 8 }}>
+      {/* 1. Synthesis strip — verdict or auto-composed read */}
+      <SynthesisStrip row={row} breadth={breadthData} inflowCount={inflowCount} totalCount={totalCount} />
 
-        {/* ── Left column: verdict → narrative → numbers → flow trend ── */}
-        <div style={{ flex: '1 1 340px', minWidth: 320 }}>
+      {/* 2. Hero tiles — top movers by Score 5D → stock chart on click */}
+      <HeroTiles details={details} onPick={goToChart} />
 
-          {/* 1. Verdict — signal + why */}
-          <SignalCard row={row} />
-
-          {/* 2. VaNi sector narrative — the plain-language read */}
-          {(insightLoading || sectorInsight?.insight) && (
-            <div style={{ marginBottom: 16 }}>
-              <VaNiInsight
-                insight={sectorInsight?.insight}
-                isLoading={insightLoading}
-                className="mt-0"
-              />
-            </div>
-          )}
-
-          {/* 3. Numeric summary */}
-          <IndexScoreCard row={row} />
-
-          {/* 4. Money-flow trend */}
-          <FlowTrendCard indexId={indexId} />
+      {/* 3. VaNi narrative — full width, chip-highlighted */}
+      {(insightLoading || sectorInsight?.insight) && (
+        <div style={{ marginBottom: 16 }}>
+          <VaNiInsight
+            insight={sectorInsight?.insight}
+            isLoading={insightLoading}
+            className="mt-0"
+            highlightChips
+          />
         </div>
+      )}
 
-        {/* ── Right column: which stocks — ranked by Score 5D by default ── */}
-        <div style={{ flex: '2 1 520px', minWidth: 0 }}>
-          <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-            <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
-              <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
-                Constituents
-              </span>
-            </div>
-            <ConstituentTable indexId={indexId} tradeDate={row.trade_date} />
-          </div>
+      {/* 4. Compact row — numeric summary + money-flow trend side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 16, alignItems: 'stretch' }}>
+        <IndexScoreCard row={row} />
+        <FlowTrendCard indexId={indexId} height={80} />
+      </div>
+
+      {/* 5. Constituents — full width, all columns, click a row → the stock's chart */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ padding: '10px 14px', background: 'var(--card)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
+            Constituents
+          </span>
+          <span style={{ ...MONO, fontSize: 9, color: 'var(--text-faint)', opacity: 0.7 }}>
+            · click a row to open its chart
+          </span>
         </div>
+        <ConstituentTable indexId={indexId} tradeDate={row.trade_date} onRowClick={goToChart} />
       </div>
 
       {/* 6. Breadth context — needs a population: suppressed under 5
@@ -685,7 +819,8 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               </span>
             </div>
           )}
-          <div style={{ marginBottom: 24 }}>
+          {/* Side by side on wide screens; auto-stack below ~440px each */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: 16, marginBottom: 24, alignItems: 'start' }}>
             <MarketBreadthChart
               data={breadthData?.data}
               isLoading={breadthLoading}
@@ -693,8 +828,6 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               percentileRank={breadthData?.percentileRank ?? undefined}
               stockCount={breadthData?.stockCount}
             />
-          </div>
-          <div style={{ marginBottom: breadthData?.roc ? 8 : 24 }}>
             <BreadthRocChart
               data={breadthData?.roc}
               isLoading={breadthLoading}
@@ -839,7 +972,16 @@ function ChartTab({ row, indexId }: { row: SectorIndexRow; indexId: number }) {
 // ── FlowMap tab ───────────────────────────────────────────────────────────────
 
 function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string }) {
+  const navigate = useNavigate();
   const { data, isLoading, error } = useConstituentFlowMap(indexId);
+
+  // BSE-only rows (numeric scrip) → BSE chip on the heatmap label.
+  const bseRows = useMemo(() => {
+    const s = new Set<string>();
+    const meta = data?.rowMeta;
+    if (meta) for (const [rowName, m] of Object.entries(meta)) if (isNumericSymbol(m.symbol)) s.add(rowName);
+    return s;
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -866,6 +1008,11 @@ function FlowMapTab({ indexId, indexName }: { indexId: number; indexName: string
         cells={data?.cells ?? {}}
         title="Flow Intensity"
         subtitle={`${indexName} · Last 22 Sessions`}
+        bseRows={bseRows}
+        onRowClick={(rowName) => {
+          const meta = data?.rowMeta?.[rowName];
+          if (meta) navigate(`/chart/equity/${meta.equity_id}?name=${encodeURIComponent(rowName)}`);
+        }}
       />
     </div>
   );

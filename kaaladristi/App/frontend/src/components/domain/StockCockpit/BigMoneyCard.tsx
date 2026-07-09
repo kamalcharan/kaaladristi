@@ -8,7 +8,6 @@
 import { Landmark } from 'lucide-react';
 import {
   BIG_MONEY_MIN_RATIO,
-  BIG_MONEY_MIN_DELIV_CR,
   type BigMoneyEvent,
   type BigMoneyDirection,
 } from '@/services/bigMoney';
@@ -26,7 +25,23 @@ function fmtDay(d: string): string {
 }
 
 export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
-  if (events.length === 0) return null;
+  if (events.length === 0) {
+    return (
+      <div className="rounded-lg bg-kd-card border border-kd-border p-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Landmark className="w-3.5 h-3.5" style={{ color: 'var(--gold, #d4a84b)' }} />
+          <span className="text-[11px] font-serif font-semibold text-primary tracking-wide">
+            Big Money Days
+          </span>
+        </div>
+        <p className="text-[9px] text-muted leading-snug">
+          No big-money days in this window — no session had delivered value ≥{BIG_MONEY_MIN_RATIO}×
+          this stock's 66-day norm and in its own top delivered days. These are structurally rare,
+          and stocks without delivery data (most BSE-only scrips) won't register any.
+        </p>
+      </div>
+    );
+  }
 
   const shown = [...events].reverse().slice(0, 6); // newest first
 
@@ -40,9 +55,9 @@ export default function BigMoneyCard({ events }: { events: BigMoneyEvent[] }) {
         <span className="ml-auto text-[9px] font-mono text-muted">{events.length}</span>
       </div>
       <p className="text-[9px] text-muted leading-snug mb-2.5">
-        Delivered value ≥{BIG_MONEY_MIN_RATIO}× this stock's 66-day norm and ≥₹{BIG_MONEY_MIN_DELIV_CR} Cr —
-        price zones where large money changed hands. Marked ₹ on the chart. Footprint is inferred
-        from how price absorbed the handover (delivery itself is two-sided).
+        Delivered value ≥{BIG_MONEY_MIN_RATIO}× this stock's 66-day norm and among its own top
+        delivered days — price zones where large money changed hands. Marked ₹ on the chart.
+        Footprint is inferred from how price absorbed the handover (delivery itself is two-sided).
       </p>
 
       <div className="flex flex-col gap-2">

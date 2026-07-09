@@ -34,16 +34,9 @@ interface PanelDef {
   domain?: [number | 'auto', number | 'auto'];
 }
 
+// Conviction, Smart Money, and Magic RS moved into rail SignalFlipCards
+// (widget ⇄ chart) — only Momentum remains here, as it has no rich widget form.
 const PANELS: PanelDef[] = [
-  {
-    id: 'conviction',
-    title: 'Conviction · Score 5D vs 22D',
-    series: [
-      { key: 'score_5d', color: 'var(--gold, #d4a84b)', label: 'Score 5D' },
-      { key: 'score_22d', color: 'var(--text-faint, #64748b)', label: 'Score 22D', dashed: true },
-    ],
-    domain: [0, 'auto'],
-  },
   {
     id: 'momentum',
     title: 'Momentum · RSI / MFI',
@@ -54,30 +47,10 @@ const PANELS: PanelDef[] = [
     refLines: [{ y: 70 }, { y: 30 }],
     domain: [0, 100],
   },
-  {
-    id: 'smart_money',
-    title: 'Smart Money · Institution / Hot Money',
-    series: [
-      { key: 'sniper_inst', color: 'var(--accent-indigo, #6366f1)', label: 'Institution' },
-      { key: 'sniper_hot', color: 'var(--caution, #f59e0b)', label: 'Hot Money' },
-    ],
-    refLines: [{ y: 35 }],
-    domain: [0, 50],
-  },
-  {
-    id: 'magic_rs',
-    title: 'Magic RS · vs benchmark',
-    series: [
-      { key: 'magic_rs', color: 'var(--gold, #d4a84b)', label: 'Magic RS' },
-      { key: 'magic_ma', color: 'var(--text-faint, #64748b)', label: 'MA', dashed: true },
-    ],
-    refLines: [{ y: 0 }],
-    domain: ['auto', 'auto'],
-  },
 ];
 
 function Panel({ def, rows }: { def: PanelDef; rows: IndicatorRow[] }) {
-  const [open, setOpen] = useState(def.id === 'conviction');
+  const [open, setOpen] = useState(def.id === 'momentum');
 
   const data = rows.slice(-WINDOW).map((r) => {
     const point: Record<string, unknown> = { trade_date: r.trade_date };

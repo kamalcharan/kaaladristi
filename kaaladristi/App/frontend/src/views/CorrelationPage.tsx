@@ -797,7 +797,7 @@ export default function CorrelationPage() {
                         onClick={async () => {
                           const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? ''
                           try {
-                            await fetch(`${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA)}/${encodeURIComponent(itemB)}/${encodeURIComponent(result?.shape ?? '')}`, { method: 'DELETE' })
+                            await fetch(`${pipelineUrl}/api/vani/correlation-insight/${encodeURIComponent(itemA ?? '')}/${encodeURIComponent(itemB ?? '')}/${encodeURIComponent(result?.shape ?? '')}`, { method: 'DELETE' })
                           } catch {}
                           // Remove all cached versions of this query (any refreshCount)
                           queryClient.removeQueries({ queryKey: ['corr-insight', itemA, itemB, result?.shape] })
