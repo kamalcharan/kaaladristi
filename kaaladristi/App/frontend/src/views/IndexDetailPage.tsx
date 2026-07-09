@@ -23,7 +23,7 @@ import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRot
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 import MarketBreadthChart, { resolveRegime } from '@/components/domain/MarketBreadthChart';
 import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
-import BreadthRawTable from '@/components/domain/BreadthRawTable';
+import BreadthRocHeatmap from '@/components/domain/BreadthRocHeatmap';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useSectorInsight } from '@/hooks/useDashboardExtras';
@@ -842,7 +842,7 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
           {!breadthLoading && breadthData != null && breadthData.data.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
               <BreadthHeatmap data={breadthData.data} />
-              <BreadthRawTable data={breadthData.data} />
+              <BreadthRocHeatmap data={breadthData.roc} />
             </div>
           )}
         </>

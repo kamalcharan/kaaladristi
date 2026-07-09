@@ -2,12 +2,11 @@ import { useState } from 'react';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
-import BreadthRawTable from '@/components/domain/BreadthRawTable';
+import BreadthRocHeatmap from '@/components/domain/BreadthRocHeatmap';
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard';
-import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
 import ConfluenceDotGrid from '@/components/domain/ConfluenceDotGrid';
 import { dashboardDate } from '@/stores/appStore';
-import { useConfluenceHeatmap, useMarketBreadth } from '@/hooks';
+import { useConfluenceHeatmap, useMarketBreadth, useBreadthRoc } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { ConfluenceConditions, ConfluencePattern } from '@/types';
 import { PageHeader } from '@/components/ui';
@@ -455,22 +454,25 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
 
 // ── Tab 1 — Today's Structure ─────────────────────────────────────────────────
 
-function TodayStructureTab({ date }: { date: string }) {
+function TodayStructureTab({ date: _date }: { date: string }) {
   // Shared fetch — the chart uses its own hook with the same query key, so React
-  // Query dedupes (no double request). Heatmap + raw table read it here.
+  // Query dedupes (no double request). Heatmaps read it here.
   const breadth = useMarketBreadth(66);
   const breadthData = breadth.data ?? [];
+  const roc = useBreadthRoc(66);
 
+  // Astro-Technical Alignment (MarketWeatherCard) is HIDDEN here pending owner
+  // review — see CLAUDE.md "Known Issues". The Historical Confluence tab keeps
+  // the astro × breadth content. The rotation lives on Workspace → Today (not
+  // repeated here). Scope is market-wide (All NSE — km_market_breadth, ~1,330
+  // stocks), distinct from Today's NIFTY 50 constituent breadth.
+  // Layout: each full-width chart is followed directly by its own heatmap.
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <MarketWeatherCard date={date} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <MarketBreadthChart />
-        <BreadthRocChart />
-      </div>
-      <BreadthHeatmap data={breadthData} />
-      <BreadthRawTable data={breadthData} />
-      <NakVaraSignals date={date} />
+      <MarketBreadthChart indexName="All NSE" />
+      <BreadthHeatmap data={breadthData} title="Breadth Heatmap · All NSE" />
+      <BreadthRocChart />
+      <BreadthRocHeatmap data={roc.data ?? []} title="Breadth Momentum (ROC) Heatmap · All NSE" />
     </div>
   );
 }

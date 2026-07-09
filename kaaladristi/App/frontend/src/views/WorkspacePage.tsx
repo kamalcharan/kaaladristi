@@ -1,5 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { from } from '@/services/postgrest'
+import { useIndexBreadth } from '@/hooks/useSectorRotation'
+import TickerRail from '@/components/domain/DashboardV3/TickerRail'
+import PlanetRegimeStrip from '@/components/domain/DashboardV3/PlanetRegimeStrip'
+import BreadthRotation from '@/components/domain/BreadthRotation'
+import { DristiQLoader } from '@/components/ui'
 import { Loader2, X } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
@@ -51,6 +58,23 @@ export default function WorkspacePage() {
   const primarySymbol = (primaryInstrument as { symbol?: string } | undefined)?.symbol ?? 'Index'
 
   const [todayIndexDropdown, setTodayIndexDropdown] = useState<{ x: number; y: number } | null>(null)
+
+  // ── Today: one index selector drives breadth rotation + breadth + ROC ──
+  const navigate = useNavigate()
+  const TODAY_INDICES = ['NIFTY 50', 'NIFTY 500', 'NIFTY BANK'] as const
+  const [breadthIndex, setBreadthIndex] = useState<string>('NIFTY 50')
+  const { data: todayIdxIds } = useQuery({
+    queryKey: ['workspace-today-index-ids'],
+    queryFn: async () => {
+      const { data } = await from('km_index_symbols').select('id,name').in('name', ['NIFTY 50', 'NIFTY 500', 'NIFTY BANK']).execute()
+      const m: Record<string, number> = {}
+      ;(data ?? []).forEach((r: { id: number; name: string }) => { m[r.name] = r.id })
+      return m
+    },
+    staleTime: Infinity,
+  })
+  const breadthIndexId = todayIdxIds?.[breadthIndex] ?? null
+  const { data: todayBreadth, isLoading: todayBreadthLoading } = useIndexBreadth(breadthIndexId, 66)
 
   // Auto-switch to Today tab once per day
   useEffect(() => {
@@ -213,94 +237,76 @@ export default function WorkspacePage() {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-            {/* VaNi Morning Brief — pinned inline strip */}
+            {/* 1 · Index cards — NIFTY 50 / BANK / 500 / India VIX */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <VaNiMorningBrief pinned />
+              <TickerRail date={today} />
             </div>
 
-            {/* Market Weather Card */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <MarketWeatherCard date={today} />
-            </div>
-
-            {/* Index selector + Chart */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', position: 'relative' }}>
-              <button
-                onClick={e => {
-                  if (todayIndexDropdown) { setTodayIndexDropdown(null); return }
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                  setTodayIndexDropdown({ x: rect.left, y: rect.bottom })
-                }}
+            {/* Shared index selector (drives rotation + breadth + ROC) + Market Breadth nav */}
+            <div style={{
+              padding: '14px 20px', borderBottom: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-faint)', fontFamily: 'var(--font-mono, monospace)' }}>Breadth view:</span>
+                <div style={{ display: 'inline-flex', gap: 3, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 9, padding: 3 }}>
+                  {TODAY_INDICES.map(n => (
+                    <button key={n} onClick={() => setBreadthIndex(n)}
+                      style={{
+                        fontFamily: 'var(--font-mono, monospace)', fontSize: 11, fontWeight: 700,
+                        padding: '5px 12px', borderRadius: 6, border: 0, cursor: 'pointer', transition: 'all .15s',
+                        background: breadthIndex === n ? 'var(--accent)' : 'transparent',
+                        color: breadthIndex === n ? '#fff' : 'var(--text-muted)',
+                      }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => navigate('/market-structure')}
                 style={{
-                  marginBottom: 10, padding: '5px 14px', borderRadius: 100,
-                  border: '1px dashed color-mix(in srgb, var(--text-primary) 15%, transparent)',
-                  background: 'transparent', cursor: 'pointer',
-                  fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                  color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)', transition: 'all .15s',
-                }}
-                onMouseEnter={e => {
-                  const el = e.currentTarget as HTMLElement
-                  el.style.borderColor = 'var(--accent)'
-                  el.style.color = 'var(--accent)'
-                  el.style.background = 'var(--accent-glow)'
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget as HTMLElement
-                  el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 15%, transparent)'
-                  el.style.color = 'color-mix(in srgb, var(--text-primary) 50%, transparent)'
-                  el.style.background = 'transparent'
-                }}
-              >
-                {primarySymbol} ▾
-              </button>
-              {primaryInstrument && (
-                <div style={{ height: 340 }}>
-                  <WorkspaceChart instrument={primaryInstrument} />
-                </div>
-              )}
-              {todayIndexDropdown && (
-                <IndexDropdown
-                  anchorX={todayIndexDropdown.x}
-                  anchorY={todayIndexDropdown.y}
-                  framework={framework!}
-                  onClose={() => setTodayIndexDropdown(null)}
-                />
-              )}
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 11, cursor: 'pointer',
+                  color: 'var(--accent)', borderRadius: 100, padding: '5px 13px',
+                  border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+                  background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+                }}>Open Market Breadth →</button>
             </div>
 
-            {/* Market Breadth Chart */}
+            {/* 2 · How breadth is moving — rotation (VaNi read; no heatmap) */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <MarketBreadthChart />
+              <BreadthRotation indexId={breadthIndexId} title={`How breadth is moving · ${breadthIndex}`} />
             </div>
 
-            {/* Breadth ROC Chart */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <BreadthRocChart />
-            </div>
-
-            {/* Astro ICP only */}
+            {/* 3 · Panchangam (40%) + Sky Regime (60%) — one row, astro ICP */}
             {icpMode === 'astro' && (
-              <>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{
-                    fontSize: 'var(--label-font-size)', fontWeight: 'var(--label-font-weight)',
-                    letterSpacing: 'var(--label-letter-spacing)', fontFamily: 'var(--label-font-family)',
-                    color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 12,
-                  }}>
-                    Astro Context
-                  </div>
-                  <CurrentSkyRail date={today} />
-                </div>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <PanchangamCard date={today} />
-                </div>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <SixDayOutlookCompact date={today} />
-                </div>
-                <div style={{ padding: '16px 20px' }}>
-                  <NakVaraSignals date={today} />
-                </div>
-              </>
+              <div style={{
+                padding: '16px 20px', borderBottom: '1px solid var(--border)',
+                display: 'grid', gridTemplateColumns: 'minmax(0, 40fr) minmax(0, 60fr)', gap: 16, alignItems: 'start',
+              }}>
+                <PanchangamCard date={today} />
+                <PlanetRegimeStrip />
+              </div>
+            )}
+
+            {/* 4 · Market Breadth + ROC — driven by the same index selector */}
+            {todayBreadthLoading && !todayBreadth ? (
+              <div style={{ padding: '8px 20px' }}>
+                <DristiQLoader message="Loading breadth & momentum…" />
+              </div>
+            ) : (
+              <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <MarketBreadthChart
+                  data={todayBreadth?.data}
+                  isLoading={todayBreadthLoading}
+                  indexName={breadthIndex}
+                  zoneMode={todayBreadth?.zoneMode}
+                  percentileRank={todayBreadth?.percentileRank ?? undefined}
+                  stockCount={todayBreadth?.stockCount}
+                />
+                <BreadthRocChart
+                  data={todayBreadth?.roc}
+                  isLoading={todayBreadthLoading}
+                  rocBadge={todayBreadth?.rocBadge}
+                />
+              </div>
             )}
           </div>
         </div>
