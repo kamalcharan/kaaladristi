@@ -585,6 +585,9 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
+### ⏳ PENDING (owner) — Sector Rotation Overview synthesis strip: astro window segment
+The Overview-tab synthesis strip (`IndexDetailPage.tsx` → `SynthesisStrip`) composes an auto line — "Money flowing into X/Y stocks · Breadth reads {Greed/Neutral/Fear} (score) · Momentum {expanding/contracting}". The spec's fourth segment — "Astro window [label]" — is **intentionally hidden** because the Overview tab has no astro data source wired in. Owner (Charan) to decide the source (DC inference / astro calendar for the trade date) before it's added. Re-enable by extending `SynthesisStrip` once a source exists.
+
 ### ⚠ VaNi Correlation Cache + Delete Flow (CorrelationPage) — BROKEN, needs fresh debug session
 Admin "clear cache" DELETE + removeQueries doesn't evict — next "Ask VaNi" returns cached response with no LLM call. Suspected: React Query observer not destroyed / backend `_corr_insight_cache` key mismatch. Full trace notes + cache design: `docs/claude/known-issues.md`.
 

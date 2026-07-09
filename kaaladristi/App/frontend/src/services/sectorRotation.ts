@@ -372,6 +372,9 @@ export interface FlowMapData {
   rows: string[];
   dates: string[];
   cells: Record<string, FlowCellData[]>;
+  /** Constituent mode only: display-name → equity identity, for drill-down to
+   *  the stock's chart. Empty for index mode. */
+  rowMeta?: Record<string, { equity_id: number; symbol: string; company_name: string }>;
 }
 
 /**
@@ -409,9 +412,12 @@ export async function fetchConstituentFlowMap(
 
   // displaySymbol: BSE constituents have numeric scrip codes — render a
   // human-readable short name derived from company_name instead.
+  const symRows = (symData ?? []) as { id: number; symbol: string; company_name: string }[];
   const symMap = new Map<number, string>(
-    ((symData ?? []) as { id: number; symbol: string; company_name: string }[])
-      .map((s) => [s.id, displaySymbol({ symbol: s.symbol, company_name: s.company_name })]),
+    symRows.map((s) => [s.id, displaySymbol({ symbol: s.symbol, company_name: s.company_name })]),
+  );
+  const metaById = new Map<number, { symbol: string; company_name: string }>(
+    symRows.map((s) => [s.id, { symbol: s.symbol, company_name: s.company_name }]),
   );
 
   // Step 2: latest N trade dates from first equity's EOD
@@ -456,10 +462,13 @@ export async function fetchConstituentFlowMap(
   // Step 4: build cell arrays keyed by display name
   const cellMap: Record<string, FlowCellData[]> = {};
   const avgS5:   Record<string, number>          = {};
+  const rowMeta: Record<string, { equity_id: number; symbol: string; company_name: string }> = {};
 
   for (const equityId of equityIds) {
     const sym = symMap.get(equityId);
     if (!sym) continue;
+    const meta = metaById.get(equityId);
+    if (meta) rowMeta[sym] = { equity_id: equityId, symbol: meta.symbol, company_name: meta.company_name };
 
     const byDate = new Map<string, EodRow>();
     for (const r of allRows) {
@@ -494,7 +503,7 @@ export async function fetchConstituentFlowMap(
   for (const sym of Object.keys(cellMap)) {
     cellMap[sym] = [...cellMap[sym]].reverse();
   }
-  return { rows: sortedRows, dates: reversedDates, cells: cellMap };
+  return { rows: sortedRows, dates: reversedDates, cells: cellMap, rowMeta };
 }
 
 // ── Sector Pulse (Workspace · Discovery) ──────────────────────────────────────
