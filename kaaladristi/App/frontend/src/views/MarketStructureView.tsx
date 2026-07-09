@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
+import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
+import BreadthRawTable from '@/components/domain/BreadthRawTable';
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard';
 import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals';
 import ConfluenceDotGrid from '@/components/domain/ConfluenceDotGrid';
 import { dashboardDate } from '@/stores/appStore';
-import { useConfluenceHeatmap } from '@/hooks';
+import { useConfluenceHeatmap, useMarketBreadth } from '@/hooks';
 import { Loader2, AlertCircle } from 'lucide-react';
 import type { ConfluenceConditions, ConfluencePattern } from '@/types';
 import { PageHeader } from '@/components/ui';
@@ -454,6 +456,11 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
 // ── Tab 1 — Today's Structure ─────────────────────────────────────────────────
 
 function TodayStructureTab({ date }: { date: string }) {
+  // Shared fetch — the chart uses its own hook with the same query key, so React
+  // Query dedupes (no double request). Heatmap + raw table read it here.
+  const breadth = useMarketBreadth(66);
+  const breadthData = breadth.data ?? [];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <MarketWeatherCard date={date} />
@@ -461,6 +468,8 @@ function TodayStructureTab({ date }: { date: string }) {
         <MarketBreadthChart />
         <BreadthRocChart />
       </div>
+      <BreadthHeatmap data={breadthData} />
+      <BreadthRawTable data={breadthData} />
       <NakVaraSignals date={date} />
     </div>
   );

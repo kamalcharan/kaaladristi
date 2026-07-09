@@ -175,19 +175,21 @@ export async function getProfile(): Promise<KmProfile | null> {
 }
 
 /** Update profile for current user.
- *  Uses upsert so it works whether or not the km_profiles row already exists
- *  (e.g. immediately after a fresh registration). */
+ *  Goes through the kd_update_profile SECURITY DEFINER RPC (migration 143), NOT
+ *  a direct PostgREST PATCH/upsert. Logged-in users run as their PROFILE role
+ *  (kd_auth_login embeds km_profiles.role — e.g. 'user' — as the JWT role;
+ *  migrations 096/140), and the `user` role has SELECT but no UPDATE grant on
+ *  km_profiles, so a direct write 403s. That silently broke onboarding
+ *  persistence (`onboarded` never saved → user re-looped to /setup and could
+ *  never reach the dashboard). The RPC runs as its owner and scopes the write
+ *  to the caller's own row via the JWT `sub` claim. */
 export async function updateProfile(
   updates: Partial<Pick<KmProfile, 'full_name' | 'display_name' | 'phone' | 'avatar_url' | 'onboarded' | 'theme' | 'mode' | 'icp_mode'>>,
 ) {
   const user = getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { data, error } = await from('km_profiles')
-    .upsert({ id: user.id, email: user.email, ...updates })
-    .select('*')
-    .single()
-    .execute();
+  const { data, error } = await rpc('kd_update_profile', { p_updates: updates });
 
   if (error) throw new Error(error.message);
   return data as KmProfile;

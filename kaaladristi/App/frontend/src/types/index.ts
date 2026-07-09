@@ -279,6 +279,19 @@ export interface MarketBreadthDay {
   pct_above_150: number | null;
   breadth_score: number | null;
   stock_count:   number | null;
+
+  // ── Movers / thrust (migration 145 market-wide; per-index computed in
+  //    fetchIndexBreadth). OPTIONAL — feeders that don't supply them (or rows
+  //    predating the backfill) leave them undefined, and the heatmap/table gate
+  //    each row on presence. Counts are over the day's universe. ──
+  universe_count?: number | null;   // stocks with a valid 150-MA that day
+  above_20?:       number | null;
+  above_50?:       number | null;
+  above_150?:      number | null;
+  up_5pct?:        number | null;   // # up  > 5%  on the day
+  down_5pct?:      number | null;   // # down> 5%  on the day
+  up_20pct_5d?:    number | null;   // # up  > 20% over trailing 5 sessions
+  down_20pct_5d?:  number | null;   // # down> 20% over trailing 5 sessions
 }
 
 // ── Breadth ROC Oscillator (from km_breadth_roc) ──
