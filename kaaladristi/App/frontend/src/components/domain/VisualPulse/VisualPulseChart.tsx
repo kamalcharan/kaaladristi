@@ -148,7 +148,7 @@ export default function VisualPulseChart({ bars, activeIndex, corrHistory, dotsH
       ctx.fillStyle = colGold + '88';
       ctx.font = '7px monospace';
       ctx.textAlign = 'left';
-      const lastGL = visible.findLast((b) => b.sma_150 != null);
+      const lastGL = [...visible].reverse().find((b) => b.sma_150 != null);
       if (lastGL?.sma_150) {
         ctx.fillText('GL', PAD.l + 2, toY(lastGL.sma_150) - 4);
       }
