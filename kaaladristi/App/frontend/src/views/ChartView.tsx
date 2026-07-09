@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { fetchIndicatorDataById, fetchEquityEodById, fetchEquityTimeframeById, resampleRows, type EquityTimeframe } from '@/services/indicatorData';
 import TradingChart from '@/components/charts/TradingChart';
-import { InstrumentIntelligence } from '@/components/domain';
+import VaNiInsight from '@/components/domain/VaNiInsight';
+import { useInstrumentInsight } from '@/hooks';
 import PulseStudySwitch from '@/components/domain/PulseStudySwitch';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
@@ -172,6 +173,9 @@ export default function ChartView() {
   const equityPulse = useEquityVisualPulse(isEquity ? numId : null);
   const scanPresence = useScanPresence(isEquity ? numId : null);
 
+  // VaNi narrative for the Decision Band (slim read, not the full panel).
+  const { data: aiData, isLoading: aiLoading } = useInstrumentInsight(numId, type ?? 'index');
+
   // Unify pulse bars + dc inferences for shared signal computation
   const pulseBars: PulseBar[] = isIndex ? indexPulse.bars : (equityPulse.bars as PulseBar[]);
   const dcInferences = isIndex ? indexPulse.dcInferences : equityPulse.dcInferences;
@@ -252,6 +256,8 @@ export default function ChartView() {
     () => pulseBars.map((b) => ({ trade_date: b.trade_date, magic_rs: b.magic_rs, magic_ma: b.magic_ma, magic_rs_zone: b.magic_rs_zone })),
     [pulseBars],
   );
+  // Magic RS is a pipeline column vs CNX500 — null for many BSE/thin stocks.
+  const hasRsData = useMemo(() => pulseBars.some((b) => b.magic_rs != null), [pulseBars]);
 
   // ── Equity-specific computations ──
   const rsChange1d = useMemo(() => rsChangeLookback(pulseBars, effectiveIdx, 1), [pulseBars, effectiveIdx]);
@@ -469,16 +475,17 @@ export default function ChartView() {
         </div>
 
         {/* ═══ Decision Band — the read leads: VaNi narrative + verdict ═══ */}
-        {!isLoading && !isError && rows.length > 0 && (
-          <div
-            className="rounded-xl p-3 mb-3 flex flex-col lg:flex-row gap-4 lg:items-start"
-            style={{ borderLeft: '3px solid var(--accent-indigo)', background: 'color-mix(in srgb, var(--accent-indigo) 7%, transparent)' }}
-          >
+        {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight || snapshot) && (
+          <div className="flex flex-col lg:flex-row gap-3 lg:items-stretch mb-3">
             <div className="flex-1 min-w-0">
-              <InstrumentIntelligence id={numId} type={type ?? 'index'} />
+              {/* VaNiInsight brings its own indigo panel styling + chip highlights */}
+              <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips className="mt-0" />
             </div>
             {snapshot && (
-              <div className="lg:text-right lg:w-48 shrink-0">
+              <div
+                className="shrink-0 lg:w-52 rounded-md px-3 py-2.5 flex flex-col justify-center"
+                style={{ border: '1px solid var(--border)', background: 'var(--card)' }}
+              >
                 <div className="text-[9px] uppercase tracking-widest text-muted">Verdict</div>
                 <div className="text-lg font-mono font-bold mt-0.5" style={{ color: snapshot.corrState.color }}>
                   ● {snapshot.corrState.state}
@@ -504,7 +511,7 @@ export default function ChartView() {
             <PumpDumpBanner result={pumpDumpResult} />
           </div>
         )}
-        {isEquity && pulseBars.length > 0 && (
+        {isEquity && hasRsData && (
           <div className="mb-3">
             <MultiTimeframePills
               rsChange1d={rsChange1d}
@@ -593,7 +600,7 @@ export default function ChartView() {
             <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
               <div className="min-w-0">{chartArea}</div>
               <div className="flex flex-col gap-3 min-w-0">
-                {snapshot && (
+                {snapshot && (hasRsData ? (
                   <SignalFlipCard
                     title="Magic RS"
                     minHeight={180}
@@ -610,7 +617,12 @@ export default function ChartView() {
                       />
                     }
                   />
-                )}
+                ) : (
+                  <div className="rounded-lg bg-kd-card border border-kd-border p-3">
+                    <div className="text-[11px] font-serif font-semibold text-primary mb-1">Magic RS</div>
+                    <div className="text-[10px] text-muted leading-snug">Not computed for this stock (RS vs NIFTY 500 needs a benchmark series — absent for many BSE/thin names).</div>
+                  </div>
+                ))}
                 {!isLoading && !isError && rows.length > 0 && tf === 'daily' && (
                   <CockpitIndicatorPanels rows={rows} />
                 )}
