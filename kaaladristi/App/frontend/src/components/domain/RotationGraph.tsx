@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 /**
  * RotationGraph — Relative-Strength Rotation (RRG-style) for a single instrument.
@@ -83,6 +83,8 @@ export default function RotationGraph({
   const q = today.quad ? QUAD[today.quad] : null;
   const trailPoints = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
+  const [hover, setHover] = useState<number | null>(null);
+
   return (
     <div className="glass-card rounded-2xl p-4">
       {/* Header */}
@@ -142,19 +144,45 @@ export default function RotationGraph({
               const isToday = i === pts.length - 1;
               const t = i / (pts.length - 1);
               const color = p.quad ? QUAD[p.quad].color : 'var(--text-muted)';
+              const on = hover === i;
               if (isToday) {
                 return (
                   <g key={p.date}>
                     <circle cx={p.x} cy={p.y} r={16} fill={color} opacity={0.14}/>
-                    <circle cx={p.x} cy={p.y} r={9} fill={color} stroke="var(--kd-bg, #0a0e0c)" strokeWidth="2"/>
+                    <circle cx={p.x} cy={p.y} r={9} fill={color} stroke="var(--kd-bg, #0a0e0c)" strokeWidth={on ? 3 : 2}/>
                     <text x={p.x} y={p.y + 30} textAnchor="middle" fontSize="9" fontWeight="700" fontFamily="var(--font-mono, monospace)" fill={color}>LATEST</text>
                   </g>
                 );
               }
-              return <circle key={p.date} cx={p.x} cy={p.y} r={(2.4 + t * 3.6).toFixed(2)} fill={color} opacity={(0.2 + t * 0.7).toFixed(2)}>
-                <title>{`${fmtDate(p.date)} · RS ${p.level!.toFixed(2)} · momentum ${p.momentum!.toFixed(2)}`}</title>
-              </circle>;
+              return <circle key={p.date} cx={p.x} cy={p.y} r={(on ? 6.5 : 2.4 + t * 3.6).toFixed(2)}
+                fill={color} opacity={(on ? 1 : 0.2 + t * 0.7).toFixed(2)}/>;
             })}
+
+            {/* invisible hit targets + hover tooltip */}
+            {pts.map((p, i) => (
+              <circle key={`hit-${p.date}`} cx={p.x} cy={p.y} r={10} fill="transparent"
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} />
+            ))}
+            {hover != null && (() => {
+              const p = pts[hover];
+              const qc = p.quad ? QUAD[p.quad] : null;
+              const w = 138, h = 66;
+              let tx = p.x + 12, ty = p.y - h - 8;
+              if (tx + w > P + S) tx = p.x - w - 12;
+              if (ty < P) ty = p.y + 12;
+              const L = (n: number) => ty + 16 + n * 14;
+              return (
+                <g pointerEvents="none">
+                  <rect x={tx} y={ty} width={w} height={h} rx={6}
+                    fill="var(--card, #101613)" stroke="color-mix(in srgb, var(--text-primary) 18%, transparent)"/>
+                  <text x={tx + 10} y={L(0)} fontSize="10" fontWeight="700" fontFamily="var(--font-mono, monospace)" fill="var(--text-primary)">{fmtDate(p.date)}</text>
+                  <text x={tx + 10} y={L(1)} fontSize="9.5" fontWeight="700" fontFamily="var(--font-mono, monospace)" fill={qc?.color ?? 'var(--text-muted)'}>{qc?.name ?? '—'}</text>
+                  <text x={tx + 10} y={L(2)} fontSize="9.5" fontFamily="var(--font-mono, monospace)" fill="var(--text-secondary)">Magic RS  {p.level!.toFixed(2)}</text>
+                  <text x={tx + 10} y={L(3)} fontSize="9.5" fontFamily="var(--font-mono, monospace)" fill="var(--text-secondary)">Momentum  {p.momentum! >= 0 ? '+' : ''}{p.momentum!.toFixed(2)}</text>
+                </g>
+              );
+            })()}
           </svg>
         </div>
 
