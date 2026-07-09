@@ -134,6 +134,13 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   set('--surface-1', c.utility.primaryBackground);
   set('--surface-2', c.utility.secondaryBackground ?? c.utility.primaryBackground);
 
+  // ── Recessed panel fill (e.g. an expanded detail strip inside a card) ──
+  // A flat rgba(0,0,0,.15) reads as a subtle darkening on a dark card, but
+  // the same 15% black cut reads as a visibly muddy gray smudge on a white
+  // light-mode card — a much bigger relative jump off a light base. Light
+  // mode uses a far lower cut so the strip still looks recessed, not dirty.
+  set('--panel-recess', prefersDark ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.04)');
+
   // ── Text faint ──
   // A flat 25% of primaryText reads fine in dark mode (light text dimmed
   // over a near-black page still has presence) but is nearly invisible in

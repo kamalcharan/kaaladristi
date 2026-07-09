@@ -684,7 +684,7 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
                 style={{
                   padding: '14px 20px 16px',
                   borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
-                  background: 'rgba(0,0,0,0.15)',
+                  background: 'var(--panel-recess)',
                 }}
               >
                 <div

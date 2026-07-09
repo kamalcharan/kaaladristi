@@ -257,7 +257,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
         style={{
           borderTop: '1px solid var(--border)',
           padding: '12px 26px',
-          background: 'rgba(0,0,0,0.15)',
+          background: 'var(--panel-recess)',
           borderBottomLeftRadius: '1rem',
           borderBottomRightRadius: '1rem',
         }}

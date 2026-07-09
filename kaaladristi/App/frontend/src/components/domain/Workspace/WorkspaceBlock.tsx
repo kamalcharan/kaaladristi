@@ -562,7 +562,13 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           ? '1px solid rgba(124,106,247,.45)'
           : '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
         borderRadius: 10,
-        background: 'rgba(13,17,23,.9)',
+        // VaNi blocks keep their fixed dark identity (their pale purple
+        // accent text/badges are calibrated for a dark backdrop, matching
+        // VaNi's brand treatment elsewhere in the app). Every other block
+        // type — the vast majority on this canvas — was inheriting that
+        // same hardcoded near-black fill unconditionally, rendering every
+        // widget as a solid black box regardless of app theme/mode.
+        background: isVaNi ? 'rgba(13,17,23,.9)' : 'var(--card)',
         boxShadow: editMode
           ? '0 4px 20px rgba(0,0,0,.4)'
           : isVaNi
