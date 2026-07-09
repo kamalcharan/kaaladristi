@@ -454,16 +454,19 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
 
 // ── Tab 1 — Today's Structure ─────────────────────────────────────────────────
 
-function TodayStructureTab({ date }: { date: string }) {
+function TodayStructureTab({ date: _date }: { date: string }) {
   // Shared fetch — the chart uses its own hook with the same query key, so React
-  // Query dedupes (no double request). Heatmap + raw table read it here.
+  // Query dedupes (no double request). Heatmaps read it here.
   const breadth = useMarketBreadth(66);
   const breadthData = breadth.data ?? [];
   const roc = useBreadthRoc(66);
 
+  // Astro-Technical Alignment (MarketWeatherCard) is HIDDEN here pending owner
+  // review — see CLAUDE.md "Known Issues". The Historical Confluence tab keeps
+  // the astro × breadth content. Breadth + ROC charts each pair with their
+  // heatmap; the rotation lives on Workspace → Today (not repeated here).
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <MarketWeatherCard date={date} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <MarketBreadthChart />
         <BreadthRocChart />
