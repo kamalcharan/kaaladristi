@@ -6,6 +6,7 @@ import { useIndexBreadth } from '@/hooks/useSectorRotation'
 import TickerRail from '@/components/domain/DashboardV3/TickerRail'
 import PlanetRegimeStrip from '@/components/domain/DashboardV3/PlanetRegimeStrip'
 import BreadthRotation from '@/components/domain/BreadthRotation'
+import { DristiQLoader } from '@/components/ui'
 import { Loader2, X } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useFrameworkStore } from '@/stores/frameworkStore'
@@ -274,34 +275,39 @@ export default function WorkspacePage() {
               <BreadthRotation indexId={breadthIndexId} title={`How breadth is moving · ${breadthIndex}`} />
             </div>
 
-            {/* 3 · Sky Regime + Panchangam (astro ICP) */}
+            {/* 3 · Panchangam (40%) + Sky Regime (60%) — one row, astro ICP */}
             {icpMode === 'astro' && (
-              <>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <PlanetRegimeStrip />
-                </div>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <PanchangamCard date={today} />
-                </div>
-              </>
+              <div style={{
+                padding: '16px 20px', borderBottom: '1px solid var(--border)',
+                display: 'grid', gridTemplateColumns: 'minmax(0, 40fr) minmax(0, 60fr)', gap: 16, alignItems: 'start',
+              }}>
+                <PanchangamCard date={today} />
+                <PlanetRegimeStrip />
+              </div>
             )}
 
             {/* 4 · Market Breadth + ROC — driven by the same index selector */}
-            <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <MarketBreadthChart
-                data={todayBreadth?.data}
-                isLoading={todayBreadthLoading}
-                indexName={breadthIndex}
-                zoneMode={todayBreadth?.zoneMode}
-                percentileRank={todayBreadth?.percentileRank ?? undefined}
-                stockCount={todayBreadth?.stockCount}
-              />
-              <BreadthRocChart
-                data={todayBreadth?.roc}
-                isLoading={todayBreadthLoading}
-                rocBadge={todayBreadth?.rocBadge}
-              />
-            </div>
+            {todayBreadthLoading && !todayBreadth ? (
+              <div style={{ padding: '8px 20px' }}>
+                <DristiQLoader message="Loading breadth & momentum…" />
+              </div>
+            ) : (
+              <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <MarketBreadthChart
+                  data={todayBreadth?.data}
+                  isLoading={todayBreadthLoading}
+                  indexName={breadthIndex}
+                  zoneMode={todayBreadth?.zoneMode}
+                  percentileRank={todayBreadth?.percentileRank ?? undefined}
+                  stockCount={todayBreadth?.stockCount}
+                />
+                <BreadthRocChart
+                  data={todayBreadth?.roc}
+                  isLoading={todayBreadthLoading}
+                  rocBadge={todayBreadth?.rocBadge}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

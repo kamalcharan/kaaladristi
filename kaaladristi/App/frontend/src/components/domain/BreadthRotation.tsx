@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useIndexBreadth } from '@/hooks/useSectorRotation';
+import { DristiQLoader } from '@/components/ui';
 import RotationGraph, { type RotationPoint } from './RotationGraph';
 
 /**
@@ -30,7 +31,7 @@ export default function BreadthRotation({ indexId, title = 'How breadth is movin
     return (
       <div className="glass-card rounded-2xl p-4">
         <h3 className="text-[13px] font-bold text-[var(--text-primary)] mb-1">{title}</h3>
-        <p className="text-[11px] text-muted">Loading breadth rotation…</p>
+        <DristiQLoader message="Reading breadth…" />
       </div>
     );
   }
