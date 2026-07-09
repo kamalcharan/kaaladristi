@@ -717,7 +717,7 @@ export async function fetchIndexBreadth(
   const cutoff = cutoffDate.toISOString().split('T')[0];
 
   const { data: eodData, error: eodErr } = await from('v_equity_eod_deduped')
-    .select('equity_id,trade_date,close,ema_20,sma_50,sma_150')
+    .select('equity_id,trade_date,close,pct_chng,ema_20,sma_50,sma_150')
     .in('equity_id', equityIds)
     .gte('trade_date', cutoff)
     .order('trade_date', { ascending: true })
@@ -728,7 +728,8 @@ export async function fetchIndexBreadth(
   type EodRow = {
     equity_id: number;
     trade_date: string;
-    close:   number | null;
+    close:    number | null;
+    pct_chng: number | null;
     ema_20:  number | null;
     sma_50:  number | null;
     sma_150: number | null;
@@ -739,6 +740,25 @@ export async function fetchIndexBreadth(
   for (const row of rows) {
     if (!byDate.has(row.trade_date)) byDate.set(row.trade_date, []);
     byDate.get(row.trade_date)!.push(row);
+  }
+
+  // Per-equity trailing 5-session return (for the >20%/5D thrust rows). Rows are
+  // date-ascending, so grouping by equity preserves order. Warm-up (first 5
+  // sessions per stock) has no value → left undefined (honest blank, not 0).
+  const byEquity = new Map<number, EodRow[]>();
+  for (const row of rows) {
+    if (!byEquity.has(row.equity_id)) byEquity.set(row.equity_id, []);
+    byEquity.get(row.equity_id)!.push(row);
+  }
+  const ret5dKey = (eq: number, d: string) => `${eq}|${d}`;
+  const ret5d = new Map<string, number>();
+  for (const [eq, series] of byEquity) {
+    for (let i = 5; i < series.length; i++) {
+      const c = series[i].close, base = series[i - 5].close;
+      if (c != null && base != null && base > 0) {
+        ret5d.set(ret5dKey(eq, series[i].trade_date), (c / base - 1) * 100);
+      }
+    }
   }
 
   const allDates = [...byDate.keys()].sort();
@@ -762,6 +782,31 @@ export async function fetchIndexBreadth(
     const p150 = n150 > 0 ? a150 / n150 : 0;
     const anyValid = n20 > 0 || n50 > 0 || n150 > 0;
 
+    // ── Movers / thrust over a single universe = constituents with a valid
+    //    150-MA (mirrors the market-wide compute so above+below=universe). ──
+    let universe = 0, au20 = 0, au50 = 0, au150 = 0;
+    let up5 = 0, dn5 = 0, up20 = 0, dn20 = 0;
+    let any5d = false;
+    for (const r of dayRows) {
+      if (r.close == null) continue;
+      if (!(r.sma_150 != null && r.sma_150 > 0)) continue;   // universe gate
+      universe++;
+      if (r.ema_20 != null && r.ema_20 > 0 && r.close > r.ema_20) au20++;
+      if (r.sma_50 != null && r.sma_50 > 0 && r.close > r.sma_50) au50++;
+      if (r.close > r.sma_150) au150++;
+      if (r.pct_chng != null) {
+        if (r.pct_chng >  5) up5++;
+        else if (r.pct_chng < -5) dn5++;
+      }
+      const r5 = ret5d.get(ret5dKey(r.equity_id, date));
+      if (r5 != null) {
+        any5d = true;
+        if (r5 >  20) up20++;
+        else if (r5 < -20) dn20++;
+      }
+    }
+    const hasU = universe > 0;
+
     return {
       trade_date:    date,
       pct_above_20:  n20  > 0 ? Math.round(p20  * 1000) / 10 : null,
@@ -771,6 +816,14 @@ export async function fetchIndexBreadth(
         ? Math.round((100 * (0.50 * p20 + 0.30 * p50 + 0.20 * p150)) * 10) / 10
         : null,
       stock_count: dayRows.length,
+      universe_count: hasU ? universe : null,
+      above_20:  hasU ? au20  : null,
+      above_50:  hasU ? au50  : null,
+      above_150: hasU ? au150 : null,
+      up_5pct:   hasU ? up5 : null,
+      down_5pct: hasU ? dn5 : null,
+      up_20pct_5d:   any5d ? up20 : null,
+      down_20pct_5d: any5d ? dn20 : null,
     };
   });
 

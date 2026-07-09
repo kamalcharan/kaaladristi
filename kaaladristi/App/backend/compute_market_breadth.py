@@ -78,23 +78,34 @@ def load_closes(conn) -> pd.DataFrame:
 
 def compute_breadth(closes: pd.DataFrame) -> pd.DataFrame:
     """
-    For each date compute pct_above_20/50/150 and breadth_score.
-    Drops early dates where the 150-day EMA hasn't warmed up yet.
+    For each date compute pct_above_20/50/150 + breadth_score (the existing
+    MA-participation score, unchanged) PLUS the movers/thrust dimensions:
+    universe/above counts and daily/5-day extreme-mover counts.
+
+    The count columns share ONE daily universe = stocks with a valid 150-day MA
+    (the most conservative set), so above+below reconciles to universe and every
+    dimension uses the same denominator — matching the reference layout.
+
+    Drops early dates where the 150-day MA hasn't warmed up yet.
     """
     pct = {}
+    above_cnt = {}
+    ema_by_span = {}
     valid_mask = pd.DataFrame(index=closes.index, dtype=bool)
 
     for span in EMA_SPANS:
         ema   = closes.ewm(span=span, min_periods=span, adjust=False).mean()
-        above = (closes > ema).astype(float)
+        above = (closes > ema)
 
-        # Per-date: only count stocks that have a valid EMA
+        # Per-date: only count stocks that have a valid MA (per-span, for pct)
         has_ema = ema.notna()
         n_valid = has_ema.sum(axis=1).replace(0, np.nan)
-        n_above = (above * has_ema).sum(axis=1)
+        n_above = (above & has_ema).sum(axis=1)
 
         pct[span] = (n_above / n_valid * 100).round(2)
         valid_mask[span] = n_valid.notna()
+        ema_by_span[span] = ema
+        above_cnt[span] = above  # boolean frame; re-counted vs the 150-universe below
 
     out = pd.DataFrame(index=closes.index)
     out['pct_above_20']  = pct[20]
@@ -107,11 +118,25 @@ def compute_breadth(closes: pd.DataFrame) -> pd.DataFrame:
         out['pct_above_150'] * WEIGHTS[150]
     ).round(2)
 
-    # Stock count = number of stocks with a valid 150-EMA (most conservative)
-    ema150 = closes.ewm(span=150, min_periods=150, adjust=False).mean()
-    out['stock_count'] = ema150.notna().sum(axis=1).astype(int)
+    # ── Shared universe = stocks with a valid 150-MA that day ─────────────────
+    universe = ema_by_span[150].notna() & closes.notna()   # boolean frame
+    n_universe = universe.sum(axis=1)
+    out['stock_count']    = n_universe.astype(int)   # kept for back-compat
+    out['universe_count'] = n_universe.astype(int)
 
-    # Drop warmup rows (where 150 EMA hasn't kicked in)
+    # Above-counts recounted against the SINGLE 150-universe (above+below=universe)
+    for span in EMA_SPANS:
+        out[f'above_{span}'] = (above_cnt[span] & universe).sum(axis=1).astype(int)
+
+    # ── Movers / thrust — over the same 150-universe ──────────────────────────
+    ret_1d = closes.pct_change(1)  * 100
+    ret_5d = closes.pct_change(5)  * 100
+    out['up_5pct']       = ((ret_1d >  5) & universe).sum(axis=1).astype(int)
+    out['down_5pct']     = ((ret_1d < -5) & universe).sum(axis=1).astype(int)
+    out['up_20pct_5d']   = ((ret_5d >  20) & universe).sum(axis=1).astype(int)
+    out['down_20pct_5d'] = ((ret_5d < -20) & universe).sum(axis=1).astype(int)
+
+    # Drop warmup rows (where 150 MA hasn't kicked in)
     out = out[valid_mask[150]]
     out.index = out.index.date   # convert to date objects for DB insertion
     return out
@@ -120,14 +145,24 @@ def compute_breadth(closes: pd.DataFrame) -> pd.DataFrame:
 
 UPSERT_SQL = """
     INSERT INTO km_market_breadth
-        (trade_date, pct_above_20, pct_above_50, pct_above_150, breadth_score, stock_count)
-    VALUES (%s, %s, %s, %s, %s, %s)
+        (trade_date, pct_above_20, pct_above_50, pct_above_150, breadth_score, stock_count,
+         universe_count, above_20, above_50, above_150,
+         up_5pct, down_5pct, up_20pct_5d, down_20pct_5d)
+    VALUES (%s, %s, %s, %s, %s, %s,  %s, %s, %s, %s,  %s, %s, %s, %s)
     ON CONFLICT (trade_date) DO UPDATE SET
-        pct_above_20  = EXCLUDED.pct_above_20,
-        pct_above_50  = EXCLUDED.pct_above_50,
-        pct_above_150 = EXCLUDED.pct_above_150,
-        breadth_score = EXCLUDED.breadth_score,
-        stock_count   = EXCLUDED.stock_count
+        pct_above_20   = EXCLUDED.pct_above_20,
+        pct_above_50   = EXCLUDED.pct_above_50,
+        pct_above_150  = EXCLUDED.pct_above_150,
+        breadth_score  = EXCLUDED.breadth_score,
+        stock_count    = EXCLUDED.stock_count,
+        universe_count = EXCLUDED.universe_count,
+        above_20       = EXCLUDED.above_20,
+        above_50       = EXCLUDED.above_50,
+        above_150      = EXCLUDED.above_150,
+        up_5pct        = EXCLUDED.up_5pct,
+        down_5pct      = EXCLUDED.down_5pct,
+        up_20pct_5d    = EXCLUDED.up_20pct_5d,
+        down_20pct_5d  = EXCLUDED.down_20pct_5d
 """
 
 def upsert(conn, df: pd.DataFrame, dry_run: bool) -> int:
@@ -139,6 +174,14 @@ def upsert(conn, df: pd.DataFrame, dry_run: bool) -> int:
             float(row['pct_above_150']),
             float(row['breadth_score']),
             int(row['stock_count']),
+            int(row['universe_count']),
+            int(row['above_20']),
+            int(row['above_50']),
+            int(row['above_150']),
+            int(row['up_5pct']),
+            int(row['down_5pct']),
+            int(row['up_20pct_5d']),
+            int(row['down_20pct_5d']),
         )
         for date, row in df.iterrows()
     ]

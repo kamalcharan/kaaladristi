@@ -22,6 +22,8 @@ import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow, type RocBadge } fr
 import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 import MarketBreadthChart, { resolveRegime } from '@/components/domain/MarketBreadthChart';
+import BreadthHeatmap from '@/components/domain/BreadthHeatmap';
+import BreadthRawTable from '@/components/domain/BreadthRawTable';
 import BreadthRocChart from '@/components/domain/BreadthRocChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useSectorInsight } from '@/hooks/useDashboardExtras';
@@ -834,6 +836,15 @@ function OverviewTab({ row, indexId }: { row: SectorIndexRow; indexId: number })
               rocBadge={breadthData?.rocBadge}
             />
           </div>
+          {/* Heatmap + raw numbers — same components as the market-wide page,
+              fed this index's per-constituent breadth. Mover rows self-hide on
+              thin indexes via the heatmap's minMoverUniverse gate. */}
+          {!breadthLoading && breadthData != null && breadthData.data.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
+              <BreadthHeatmap data={breadthData.data} />
+              <BreadthRawTable data={breadthData.data} />
+            </div>
+          )}
         </>
       )}
     </div>
