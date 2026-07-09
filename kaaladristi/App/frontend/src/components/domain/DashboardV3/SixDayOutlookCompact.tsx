@@ -120,7 +120,7 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
       {/* Header */}
       <div style={{
         padding: '8px 12px 6px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
         fontFamily: 'var(--font-mono)',
         fontSize: 9,
         letterSpacing: '0.12em',
@@ -137,7 +137,7 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
           return (
             <div key={s.rule_id} style={{
               padding: '5px 12px',
-              borderBottom: i < signals.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+              borderBottom: i < signals.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'none',
             }}>
               {/* Rule name */}
               <div style={{
@@ -159,8 +159,8 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
                   letterSpacing: '0.1em',
                   textTransform: 'uppercase',
                   color: outcome.color,
-                  background: `${outcome.color}18`,
-                  border: `1px solid ${outcome.color}40`,
+                  background: `color-mix(in srgb, ${outcome.color} 9%, transparent)`,
+                  border: `1px solid color-mix(in srgb, ${outcome.color} 25%, transparent)`,
                   borderRadius: 3,
                   padding: '1px 5px',
                 }}>
@@ -210,7 +210,7 @@ function DayCell({ iso, week }: { iso: string; week: WeekDay | undefined }) {
           : '1px solid var(--border)',
         cursor: signals.length > 0 ? 'default' : 'default',
         transition: 'background 0.15s',
-        background: hovered && signals.length > 0 ? 'rgba(255,255,255,0.03)' : 'transparent',
+        background: hovered && signals.length > 0 ? 'color-mix(in srgb, var(--text-primary) 3%, transparent)' : 'transparent',
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}

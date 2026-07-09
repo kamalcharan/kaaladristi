@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, BarChart3 } from 'lucide-react';
 import { displaySymbol, displaySubName, navName as toNavName } from '@/lib/symbolUtils';
-import { Card } from '@/components/ui';
+import { Card, PageHeader } from '@/components/ui';
 import VaNiTrigger from '@/components/domain/VaNiTrigger';
 import { cn } from '@/lib/utils';
 import { useIndustryTransitionStocks } from '@/hooks/useIndustryRotation';
@@ -200,35 +200,36 @@ export default function IndustryTransitionView() {
 
   return (
     <div className="animate-fade-in">
-      {/* Header */}
-      <header className="mb-4">
-        <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-2">
-          Industry Transition
-        </h1>
-        <div className="flex items-center gap-3 flex-wrap">
-          {data?.nseAsOfDate && (
-            <span className="text-[10px] font-mono text-risk-green bg-risk-green/10 border border-risk-green/30 px-2 py-1 rounded">
-              NSE {data.nseAsOfDate}
-            </span>
-          )}
-          {data?.bseAsOfDate && (
-            <span className={cn(
-              'text-[10px] font-mono px-2 py-1 rounded border',
-              data.bseAsOfDate === data.nseAsOfDate
-                ? 'text-risk-green bg-risk-green/10 border-risk-green/30'
-                : 'text-risk-amber bg-risk-amber/10 border-risk-amber/30',
-            )}>
-              BSE {data.bseAsOfDate}{data.bseAsOfDate !== data.nseAsOfDate ? ' · delayed' : ''}
-            </span>
-          )}
-          {data && (
-            <span className="text-[10px] text-muted font-mono">
-              Stocks from {data.totalIndustries} qualifying industries · 5-day window
-            </span>
-          )}
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Industry Rotation"
+        title="Industry Transition"
+        meta={
+          <span className="flex items-center gap-3 flex-wrap">
+            {data?.nseAsOfDate && (
+              <span className="text-[10px] font-mono text-risk-green bg-risk-green/10 border border-risk-green/30 px-2 py-1 rounded">
+                NSE {data.nseAsOfDate}
+              </span>
+            )}
+            {data?.bseAsOfDate && (
+              <span className={cn(
+                'text-[10px] font-mono px-2 py-1 rounded border',
+                data.bseAsOfDate === data.nseAsOfDate
+                  ? 'text-risk-green bg-risk-green/10 border-risk-green/30'
+                  : 'text-risk-amber bg-risk-amber/10 border-risk-amber/30',
+              )}>
+                BSE {data.bseAsOfDate}{data.bseAsOfDate !== data.nseAsOfDate ? ' · delayed' : ''}
+              </span>
+            )}
+            {data && (
+              <span className="text-[10px] text-muted font-mono">
+                Stocks from {data.totalIndustries} qualifying industries · 5-day window
+              </span>
+            )}
+          </span>
+        }
+      />
 
+      <div className="pt-4">
       {/* Category filter tabs */}
       <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar mb-3">
         {CATEGORY_TABS.map((tab) => (
@@ -352,6 +353,7 @@ export default function IndustryTransitionView() {
           <p className="text-xs text-muted mt-1">Try relaxing the metric thresholds</p>
         </Card>
       )}
+      </div>
     </div>
   );
 }

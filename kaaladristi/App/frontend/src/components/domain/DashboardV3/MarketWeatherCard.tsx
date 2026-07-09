@@ -239,7 +239,7 @@ function HistoryPanel({ ctx }: { ctx: HistoricalContext }) {
         </>
       )}
 
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         <span style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
           Historical data only. Not a forecast.
         </span>
@@ -264,7 +264,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
     <div
       style={{
         padding: '16px 20px 14px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
       }}
     >
       {/* Title row */}
@@ -400,7 +400,7 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
         style={{
           height: 5,
           borderRadius: 3,
-          background: 'rgba(255,255,255,0.07)',
+          background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)',
           overflow: 'hidden',
         }}
       >
@@ -477,7 +477,7 @@ function BarsSection({ data }: { data: MarketWeatherProps }) {
   const bLabel = breadthLabel(breadth.breadth_score);
 
   return (
-    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+    <div style={{ borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
       <BarRow
         label="Astro Signals"
         normalized={astroNorm}
@@ -526,7 +526,7 @@ function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro
             <span
               style={{
                 marginRight: 6,
-                color: 'rgba(255,255,255,0.1)',
+                color: 'color-mix(in srgb, var(--text-primary) 10%, transparent)',
                 fontSize: 14,
               }}
             >
@@ -633,10 +633,10 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
             gap: 8,
             padding: '10px 20px',
             cursor: 'pointer',
-            borderTop: '1px solid rgba(255,255,255,0.06)',
+            borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
             userSelect: 'none',
           }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+          onMouseEnter={e => (e.currentTarget.style.background = 'color-mix(in srgb, var(--text-primary) 3%, transparent)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
           <span
@@ -683,8 +683,8 @@ function CardShell({ data, date }: { data: MarketWeatherProps; date: string }) {
               <div
                 style={{
                   padding: '14px 20px 16px',
-                  borderTop: '1px solid rgba(255,255,255,0.06)',
-                  background: 'rgba(0,0,0,0.15)',
+                  borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
+                  background: 'var(--panel-recess)',
                 }}
               >
                 <div

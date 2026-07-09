@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, LayoutGrid, AlignLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ErrorBoundary } from '@/components/ui';
+import { ErrorBoundary, PageHeader } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
 import {
   fetchMonthEvents, fetchMonthSignals, fetchKeyEvents,
@@ -21,7 +21,7 @@ const BIAS: Record<string, { fill: string; border: string; label: string }> = {
   strong_bullish: { fill: 'rgba(110,207,154,0.85)', border: 'var(--bull)',    label: 'Strong Uptrend'   },
   bullish:        { fill: 'rgba(110,207,154,0.55)', border: 'var(--bull)',    label: 'Positive'         },
   mild_bullish:   { fill: 'rgba(110,207,154,0.28)', border: 'var(--bull)',    label: 'Mild Uptrend'     },
-  neutral:        { fill: 'rgba(255,255,255,0.04)', border: 'transparent',   label: 'Neutral'          },
+  neutral:        { fill: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: 'transparent',   label: 'Neutral'          },
   turning:        { fill: 'rgba(212,168,75,0.45)',  border: 'var(--gold)',   label: 'Turning'          },
   mild_bearish:   { fill: 'rgba(200,130,50,0.28)',  border: 'var(--caution)',label: 'Mild Downtrend'   },
   bearish:        { fill: 'rgba(217,100,80,0.55)',  border: 'var(--caution)',label: 'Negative'         },
@@ -162,7 +162,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
               key={lbl}
               style={{
                 background: bias.fill,
-                borderBottom: bias.border !== 'transparent' ? `2px solid ${bias.border}` : '2px solid rgba(255,255,255,0.06)',
+                borderBottom: bias.border !== 'transparent' ? `2px solid ${bias.border}` : '2px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
                 borderRadius: 3,
                 display: 'flex',
                 alignItems: 'center',
@@ -172,7 +172,7 @@ function DayCell({ dayNum, weekday, events, signal, isToday, isWeekend, isSelect
               <span style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 7,
-                color: 'rgba(255,255,255,0.35)',
+                color: 'color-mix(in srgb, var(--text-primary) 35%, transparent)',
                 fontWeight: 700,
                 letterSpacing: '0.06em',
               }}>
@@ -271,7 +271,7 @@ function BiasLegend() {
               width: 14,
               height: 10,
               background: b.fill,
-              borderBottom: `2px solid ${b.border !== 'transparent' ? b.border : 'rgba(255,255,255,0.1)'}`,
+              borderBottom: `2px solid ${b.border !== 'transparent' ? b.border : 'color-mix(in srgb, var(--text-primary) 10%, transparent)'}`,
               borderRadius: 2,
             }} />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
@@ -357,9 +357,9 @@ function CountPill({ label, value, color }: { label: string; value: number; colo
     <div style={{
       display: 'flex', alignItems: 'center', gap: 3,
       padding: '3px 7px',
-      border: `1px solid ${color}40`,
+      border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
       borderRadius: 4,
-      background: `${color}10`,
+      background: `color-mix(in srgb, ${color} 6%, transparent)`,
     }}>
       <span style={{ fontSize: 8, color }}>{label}</span>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color }}>{value}</span>
@@ -514,7 +514,7 @@ function DayInspector({
           <>
             <div style={{
               background: bias.fill,
-              borderLeft: `3px solid ${bias.border !== 'transparent' ? bias.border : 'rgba(255,255,255,0.1)'}`,
+              borderLeft: `3px solid ${bias.border !== 'transparent' ? bias.border : 'color-mix(in srgb, var(--text-primary) 10%, transparent)'}`,
               borderRadius: '0 6px 6px 0',
               padding: '10px 14px', marginBottom: 10,
             }}>
@@ -571,7 +571,7 @@ function DayInspector({
             {signal.signals.map((s: SignalItem) => {
               const om = OUTCOME_MAP[s.outcome] ?? { label: s.outcome, color: 'var(--text-faint)' };
               return (
-                <div key={s.rule_id} style={{ borderLeft: `2px solid ${om.color}40`, paddingLeft: 10 }}>
+                <div key={s.rule_id} style={{ borderLeft: `2px solid color-mix(in srgb, ${om.color} 25%, transparent)`, paddingLeft: 10 }}>
                   <div style={{ fontSize: 11.5, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: 3 }}>
                     {s.rule_name}
                   </div>
@@ -580,8 +580,8 @@ function DayInspector({
                       fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
                       letterSpacing: '0.1em', textTransform: 'uppercase',
                       color: om.color,
-                      background: `${om.color}18`,
-                      border: `1px solid ${om.color}40`,
+                      background: `color-mix(in srgb, ${om.color} 9%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${om.color} 25%, transparent)`,
                       borderRadius: 3, padding: '1px 5px',
                     }}>
                       {om.label}
@@ -1402,18 +1402,11 @@ export default function DCCalendarView() {
     <ErrorBoundary>
       <div className="animate-fade-in">
 
-        {/* Page header */}
-        <header className="mb-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-[var(--text-primary)] mb-1">
-                Planetary Intelligence
-              </h1>
-              <p className="text-secondary font-medium">
-                Astrological event calendar for Indian equity markets
-              </p>
-            </div>
-
+        <PageHeader
+          eyebrow="Calendar"
+          title="Planetary Intelligence"
+          meta="Astrological event calendar for Indian equity markets"
+          actions={
             <div className="flex items-center gap-3">
               {/* View toggle */}
               <div className="flex bg-kd-elevated border border-kd-border rounded-xl p-1 gap-1">
@@ -1478,9 +1471,10 @@ export default function DCCalendarView() {
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        </header>
+          }
+        />
 
+        <div className="pt-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-32 gap-3">
             <Loader2 className="w-5 h-5 text-accent-indigo animate-spin" />
@@ -1578,6 +1572,7 @@ export default function DCCalendarView() {
 
           </>
         )}
+        </div>
       </div>
 
       {/* Top-level edit modal — triggered from day cell ✎ button */}

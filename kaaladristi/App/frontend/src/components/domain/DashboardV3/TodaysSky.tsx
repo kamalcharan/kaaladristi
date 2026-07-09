@@ -14,7 +14,7 @@ function Donut({ pct, size = 72 }: { pct: number; size?: number }) {
     <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
       <circle
         cx={size / 2} cy={size / 2} r={r}
-        fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={3.5}
+        fill="none" stroke="color-mix(in srgb, var(--text-primary) 6%, transparent)" strokeWidth={3.5}
       />
       <circle
         cx={size / 2} cy={size / 2} r={r}
@@ -257,7 +257,7 @@ export default function TodaysSky({ date }: TodaysSkyProps) {
         style={{
           borderTop: '1px solid var(--border)',
           padding: '12px 26px',
-          background: 'rgba(0,0,0,0.15)',
+          background: 'var(--panel-recess)',
           borderBottomLeftRadius: '1rem',
           borderBottomRightRadius: '1rem',
         }}

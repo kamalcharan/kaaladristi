@@ -39,7 +39,7 @@ function Pill({ label, active, activeColor }: PillProps) {
       fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
       padding: '2px 7px', borderRadius: 3,
       letterSpacing: '0.08em', fontWeight: 700,
-      background: active ? `${activeColor}20` : 'transparent',
+      background: active ? `color-mix(in srgb, ${activeColor} 13%, transparent)` : 'transparent',
       border: `1px solid ${active ? activeColor : 'var(--kd-border)'}`,
       color: active ? activeColor : 'var(--text-faint)',
     }}>{label}</span>

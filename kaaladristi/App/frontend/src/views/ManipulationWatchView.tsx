@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, ShieldAlert, AlertTriangle, BarChart3, BookOpen } from 'lucide-react';
-import { Card } from '@/components/ui';
+import { Card, PageHeader } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
 import { useManipulationWatch } from '@/hooks/useManipulationWatch';
@@ -166,24 +166,20 @@ export default function ManipulationWatchView() {
 
   return (
     <div className="animate-fade-in">
-      {/* Header */}
-      <header className="mb-4">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-9 h-9 rounded-xl bg-risk-amber/10 border border-risk-amber/30 flex items-center justify-center">
-            <ShieldAlert className="w-5 h-5 text-risk-amber" />
-          </div>
-          <div>
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-primary">
-              Manipulation Watch
-            </h1>
-          </div>
-        </div>
-        <p className="text-secondary font-medium text-sm mt-1">
-          Stocks showing artificial price movement signatures
-        </p>
-        <div className="mt-2 h-[2px] bg-gradient-to-r from-risk-amber/60 via-risk-red/40 to-transparent rounded-full" />
-      </header>
+      <PageHeader
+        eyebrow="Manipulation Watch"
+        title={
+          <span className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-risk-amber/10 border border-risk-amber/30 flex items-center justify-center">
+              <ShieldAlert className="w-5 h-5 text-risk-amber" />
+            </span>
+            Manipulation Watch
+          </span>
+        }
+        meta="Stocks showing artificial price movement signatures"
+      />
 
+      <div className="pt-4">
       {/* Controls: Tabs + Lookback */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         {/* Pump / Dump tabs */}
@@ -280,6 +276,7 @@ export default function ManipulationWatchView() {
           <EducationalFooter />
         </>
       )}
+      </div>
     </div>
   );
 }

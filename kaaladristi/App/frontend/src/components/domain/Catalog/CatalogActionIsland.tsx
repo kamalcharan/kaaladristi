@@ -23,7 +23,7 @@ export default function CatalogActionIsland() {
         background: 'var(--bg)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
-        border: '1px solid var(--border-strong, rgba(255,255,255,0.18))',
+        border: '1px solid var(--border-strong, color-mix(in srgb, var(--text-primary) 18%, transparent))',
         borderRadius: 100,
         padding: '10px 12px 10px 22px',
         display: 'flex',
@@ -66,7 +66,7 @@ export default function CatalogActionIsland() {
             </span>
           )}
           {blockCount > 0 && overlayCount > 0 && (
-            <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 6px' }}>·</span>
+            <span style={{ color: 'color-mix(in srgb, var(--text-primary) 20%, transparent)', margin: '0 6px' }}>·</span>
           )}
           {overlayCount > 0 && (
             <span style={{ color: 'var(--text-primary)' }}>
@@ -80,7 +80,7 @@ export default function CatalogActionIsland() {
       </div>
 
       {/* Divider */}
-      <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
+      <div style={{ width: 1, height: 18, background: 'color-mix(in srgb, var(--text-primary) 15%, transparent)', flexShrink: 0 }} />
 
       {/* CTA */}
       <button

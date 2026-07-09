@@ -16,12 +16,15 @@ const COLOR_VAR: Record<ConflictResult['color'], string> = {
 
 export default function ConflictEngineCard({ result }: Props) {
   const color = COLOR_VAR[result.color];
+  // color-mix, not a hex-alpha suffix — color is always var(--...), and
+  // appending a hex suffix like the old `${color}40` trick did produces
+  // invalid CSS for a var() input.
   return (
     <div style={{
-      border: `1px solid ${color}40`,
+      border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
       borderRadius: 4,
       padding: 12,
-      background: `${color}0C`,
+      background: `color-mix(in srgb, ${color} 5%, transparent)`,
     }}>
       <div style={{
         fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
@@ -33,8 +36,8 @@ export default function ConflictEngineCard({ result }: Props) {
       <div style={{
         textAlign: 'center',
         padding: '8px 6px',
-        background: `${color}18`,
-        border: `1px solid ${color}50`,
+        background: `color-mix(in srgb, ${color} 9%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 31%, transparent)`,
         borderRadius: 3,
       }}>
         <div style={{

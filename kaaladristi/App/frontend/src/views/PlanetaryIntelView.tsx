@@ -82,7 +82,7 @@ function EventRow({
 
   return (
     <div style={{
-      borderBottom: '1px solid rgba(255,255,255,0.04)',
+      borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)',
     }}>
       <div
         role={hasNarrative ? 'button' : undefined}
@@ -98,12 +98,12 @@ function EventRow({
           background: isToday
             ? 'rgba(212,168,75,0.04)'
             : open
-            ? 'rgba(255,255,255,0.02)'
+            ? 'color-mix(in srgb, var(--text-primary) 2%, transparent)'
             : 'transparent',
           transition: 'background 0.1s',
         }}
         onMouseEnter={e => {
-          if (hasNarrative) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.025)';
+          if (hasNarrative) (e.currentTarget as HTMLDivElement).style.background = 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)';
         }}
         onMouseLeave={e => {
           if (!open) (e.currentTarget as HTMLDivElement).style.background = isToday ? 'rgba(212,168,75,0.04)' : 'transparent';
@@ -169,7 +169,7 @@ function EventRow({
           fontSize: 12,
           color: 'var(--text-secondary)',
           lineHeight: 1.7,
-          borderLeft: '2px solid rgba(255,255,255,0.07)',
+          borderLeft: '2px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
           marginLeft: 14,
           marginBottom: 4,
         }}>
@@ -196,14 +196,14 @@ function Section({
   return (
     <div style={{
       background: 'var(--card)',
-      border: '1px solid rgba(255,255,255,0.06)',
+      border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
       borderRadius: 12,
       overflow: 'hidden',
     }}>
       {/* Section header */}
       <div style={{
         padding: '11px 14px 11px 38px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -220,7 +220,7 @@ function Section({
         <span style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 9,
-          color: 'rgba(255,255,255,0.15)',
+          color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)',
           letterSpacing: '0.08em',
         }}>
           {events.length} event{events.length !== 1 ? 's' : ''}
@@ -233,7 +233,7 @@ function Section({
           textAlign: 'center',
           fontFamily: 'var(--font-mono)',
           fontSize: 11,
-          color: 'rgba(255,255,255,0.15)',
+          color: 'color-mix(in srgb, var(--text-primary) 15%, transparent)',
           letterSpacing: '0.1em',
         }}>
           None this period
@@ -322,7 +322,7 @@ export default function PlanetaryIntelView() {
           gap: 2,
           padding: 3,
           background: 'rgba(0,0,0,0.3)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
           borderRadius: 8,
         }}>
           {monthOptions.map(opt => (
@@ -338,7 +338,7 @@ export default function PlanetaryIntelView() {
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.12s',
-                background: offset === opt.offset ? 'rgba(255,255,255,0.12)' : 'transparent',
+                background: offset === opt.offset ? 'color-mix(in srgb, var(--text-primary) 12%, transparent)' : 'transparent',
                 color: offset === opt.offset ? 'var(--text-primary)' : 'var(--text-faint)',
                 letterSpacing: '0.08em',
               }}

@@ -5,9 +5,9 @@ const THEME_KEY = 'kd-theme'
 const MODE_KEY = 'kd-theme-mode'
 
 export const THEMES = [
-  { id: 'kaaladristi', label: 'DristiQ',    dot: '#818cf8' },
-  { id: 'tech-ai',     label: 'Tech AI',    dot: '#06d5cd' },
-  { id: 'jade-thorn',  label: 'Jade Thorn', dot: '#3aad7e' },
+  { id: 'kaaladristi', label: 'Vikuna Black', dot: '#9b8cff' },
+  { id: 'tech-ai',     label: 'Tech AI',      dot: '#06d5cd' },
+  { id: 'jade-thorn',  label: 'Jade Thorn',   dot: '#3aad7e' },
 ] as const
 
 export type ThemeId = typeof THEMES[number]['id']
@@ -21,8 +21,10 @@ export const MODES: { id: ThemeMode; label: string; glyph: string }[] = [
 
 // Themes with no designed light palette yet (their darkMode mirrors colors).
 // The mode toggle is disabled for these — honest dark-only, not a broken flip.
-// Phase 3 of the theme audit (2026-07-07) designs DristiQ's light palette.
-export const DARK_ONLY_THEMES: readonly ThemeId[] = ['kaaladristi']
+// 2026-07-08: Vikuna Black (formerly "DristiQ") adopted the Glass UX & Theme
+// Standard reference's real light palette, so it's no longer dark-only. All
+// three themes currently ship a designed light mode.
+export const DARK_ONLY_THEMES: readonly ThemeId[] = []
 
 export function isDarkOnly(id: ThemeId): boolean {
   return DARK_ONLY_THEMES.includes(id)

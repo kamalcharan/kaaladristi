@@ -34,8 +34,8 @@ export const TechAITheme: ThemeConfig = {
       info:    '#2a7abf',
     },
     surface: {
-      glass:       'rgba(6,213,205,0.05)',
-      glassStrong: 'rgba(6,213,205,0.09)',
+      glass:       'rgba(255,255,255,0.75)', // Glass UX standard's literal value
+      glassStrong: '#ffffff',
       glassBorder: '#c2eeec',
       primaryDim:    'rgba(6,213,205,0.25)',
       primaryGlow:   'rgba(6,213,205,0.12)',

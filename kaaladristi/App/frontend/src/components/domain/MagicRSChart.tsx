@@ -187,7 +187,7 @@ export default function MagicRSChart({ data, latest, symbol, height = 320 }: Mag
           <span style={{
             background: signalStyle.bg,
             color: signalStyle.text,
-            border: `1px solid ${signalStyle.text}44`,
+            border: `1px solid color-mix(in srgb, ${signalStyle.text} 27%, transparent)`,
             borderRadius: 4,
             padding: '2px 8px',
             fontSize: 10,

@@ -44,7 +44,7 @@ function MagicSparkline({
 
     if (min < 0 && max > 0) {
       const zy = toY(0)
-      ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+      ctx.strokeStyle = 'color-mix(in srgb, var(--text-primary) 10%, transparent)'
       ctx.lineWidth = 1
       ctx.setLineDash([3, 3])
       ctx.beginPath(); ctx.moveTo(0, zy); ctx.lineTo(W, zy); ctx.stroke()
@@ -74,7 +74,7 @@ function MagicSparkline({
 
     if (activeIdx >= 0 && activeIdx < n) {
       const ax = toX(activeIdx)
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+      ctx.strokeStyle = 'color-mix(in srgb, var(--text-primary) 20%, transparent)'
       ctx.lineWidth = 1
       ctx.setLineDash([2, 3])
       ctx.beginPath(); ctx.moveTo(ax, 0); ctx.lineTo(ax, H); ctx.stroke()

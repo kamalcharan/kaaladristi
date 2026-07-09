@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
+import { PageHeader } from '@/components/ui';
 
 const PIPELINE_URL = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
@@ -90,74 +91,44 @@ export default function CustomIndexPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-      {/* Page header */}
-      <div
-        style={{
-          padding: '20px 24px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-          <h1
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '22px',
-              fontWeight: 500,
-              color: 'var(--text-primary)',
-              margin: 0,
-              letterSpacing: '-0.01em',
-            }}
-          >
-            Custom Index
-          </h1>
-          <span
-            style={{
-              fontSize: '11px',
-              color: 'var(--text-faint)',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            NSE Only
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => navigate('/custom-index/create')}
-            style={{
-              padding: '6px 14px',
-              fontSize: '13px',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              background: 'transparent',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-            }}
-          >
-            + Create Manually
-          </button>
-          <button
-            onClick={() => navigate('/custom-index/discover')}
-            style={{
-              padding: '6px 14px',
-              fontSize: '13px',
-              borderRadius: '8px',
-              border: '1px solid var(--accent-indigo)',
-              background: 'rgba(99,102,241,0.08)',
-              color: 'var(--accent-indigo)',
-              cursor: 'pointer',
-            }}
-          >
-            ✨ Discover with AI
-          </button>
-        </div>
+      <div style={{ flexShrink: 0 }}>
+        <PageHeader
+          eyebrow="Custom Index"
+          title="Custom Index"
+          meta="NSE Only"
+          actions={
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => navigate('/custom-index/create')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                + Create Manually
+              </button>
+              <button
+                onClick={() => navigate('/custom-index/discover')}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--accent-indigo)',
+                  background: 'rgba(99,102,241,0.08)',
+                  color: 'var(--accent-indigo)',
+                  cursor: 'pointer',
+                }}
+              >
+                ✨ Discover with AI
+              </button>
+            </div>
+          }
+        />
       </div>
 
       {/* Body */}
@@ -172,7 +143,7 @@ export default function CustomIndexPage() {
                 style={{
                   height: '60px',
                   borderRadius: '10px',
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
                   animation: 'pulse 1.5s ease-in-out infinite',
                 }}
               />
@@ -267,7 +238,7 @@ export default function CustomIndexPage() {
                       : computeState[idx.id]?.status === 'done' ? 'var(--risk-green)'
                       : 'var(--risk-green)'
                     }`,
-                    background: computeState[idx.id]?.status === 'loading' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                    background: computeState[idx.id]?.status === 'loading' ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'transparent',
                     color: computeState[idx.id]?.status === 'error' ? 'var(--risk-red)' : 'var(--risk-green)',
                     cursor: computeState[idx.id]?.status === 'loading' ? 'not-allowed' : 'pointer',
                     flexShrink: 0,

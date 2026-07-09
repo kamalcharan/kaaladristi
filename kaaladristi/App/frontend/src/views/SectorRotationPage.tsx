@@ -4,7 +4,7 @@ import { Flame, Table2 } from 'lucide-react';
 import { useSectorIndices, useIndexFlowMap, useVix, useIndexDateRange } from '@/hooks/useSectorRotation';
 import { SECTOR_TAB_LABELS, type SectorTab } from '@/services/sectorRotation';
 import SectorRotationTable from '@/components/domain/SectorRotationTable';
-import { DristiQLoader } from '@/components/ui';
+import { DristiQLoader, PageHeader } from '@/components/ui';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
 
 // All four tabs are visible to every user: 'custom' indices are admin-CURATED
@@ -42,9 +42,9 @@ function DayToggle({ days, onChange }: { days: 5 | 22 | 66; onChange: (d: 5 | 22
     fontSize: 11,
     fontWeight: active ? 600 : 400,
     color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-    background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+    background: active ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'transparent',
     border: '1px solid',
-    borderColor: active ? 'rgba(255,255,255,0.15)' : 'var(--border)',
+    borderColor: active ? 'color-mix(in srgb, var(--text-primary) 15%, transparent)' : 'var(--border)',
     borderRadius: 4,
     padding: '4px 9px',
     cursor: 'pointer',
@@ -280,9 +280,9 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
     fontSize: 11,
     fontWeight: active ? 600 : 400,
     color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-    background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+    background: active ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'transparent',
     border: '1px solid',
-    borderColor: active ? 'rgba(255,255,255,0.15)' : 'var(--border)',
+    borderColor: active ? 'color-mix(in srgb, var(--text-primary) 15%, transparent)' : 'var(--border)',
     borderRadius: 4,
     padding: '4px 10px',
     cursor: 'pointer',
@@ -364,32 +364,7 @@ export default function SectorRotationPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Page header */}
-      <div
-        style={{
-          padding: '20px 24px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: '12px',
-        }}
-      >
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '22px',
-            fontWeight: 500,
-            color: 'var(--text-primary)',
-            margin: 0,
-            letterSpacing: '-0.01em',
-          }}
-        >
-          Sector Rotation
-        </h1>
-        <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          NSE Index Flow
-        </span>
-      </div>
+      <PageHeader eyebrow="Sector Rotation" title="Sector Rotation" meta="NSE Index Flow" />
 
       {/* VIX band */}
       <VixBand />

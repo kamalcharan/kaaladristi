@@ -48,7 +48,7 @@ export default function DataFreshnessChip() {
           fontSize: '11px',
           color: 'var(--text-faint)',
           padding: '5px 11px',
-          background: 'rgba(255,255,255,0.04)',
+          background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
           borderRadius: '100px',
         }}
       >

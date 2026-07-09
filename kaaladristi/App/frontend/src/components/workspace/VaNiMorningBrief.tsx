@@ -234,8 +234,8 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             </div>
             <span style={{
               fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-              color: item.dot, background: `${item.dot}18`,
-              border: `1px solid ${item.dot}30`,
+              color: item.dot, background: `color-mix(in srgb, ${item.dot} 9%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${item.dot} 19%, transparent)`,
               padding: '1px 5px', borderRadius: 3, flexShrink: 0,
             }}>{item.badge}</span>
           </div>
@@ -355,8 +355,8 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
             </div>
             <span style={{
               fontSize: 9, fontFamily: 'var(--font-mono, monospace)',
-              color: item.dot, background: `${item.dot}18`,
-              border: `1px solid ${item.dot}30`,
+              color: item.dot, background: `color-mix(in srgb, ${item.dot} 9%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${item.dot} 19%, transparent)`,
               padding: '1px 5px', borderRadius: 3, flexShrink: 0,
             }}>
               {item.badge}
@@ -576,7 +576,7 @@ function MorningModal({ items, profile, onClose }: {
                   style={{
                     position: 'relative',
                     borderRadius: 8, padding: '12px 14px',
-                    background: 'rgba(255,255,255,0.025)',
+                    background: 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)',
                     border: `1px solid ${dotColor}22`,
                     borderLeft: `3px solid ${dotColor}`,
                   }}

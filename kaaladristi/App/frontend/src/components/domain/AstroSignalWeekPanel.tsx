@@ -190,7 +190,7 @@ function DayCard({ signal, isToday }: { signal: AstroSignal; isToday: boolean })
       style={{
         borderRadius: '12px',
         borderTop: topBorder,
-        border: isToday ? `2px solid ${color.bg}` : `1px solid rgba(255,255,255,0.07)`,
+        border: isToday ? `2px solid ${color.bg}` : `1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)`,
         borderTopWidth: '2px',
         borderTopColor: color.bg,
         boxShadow: glowShadow,
@@ -261,7 +261,7 @@ function DayCard({ signal, isToday }: { signal: AstroSignal; isToday: boolean })
           style={{
             marginTop: '8px',
             paddingTop: '8px',
-            borderTop: '1px solid rgba(255,255,255,0.07)',
+            borderTop: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
             width: '100%',
             textAlign: 'left',
           }}
@@ -321,11 +321,11 @@ export default function AstroSignalWeekPanel({ date }: { date: string }) {
       <div
         style={{
           backgroundColor: 'var(--bg)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
           borderRadius: '16px',
           backgroundImage: [
-            'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)',
-            'linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+            'linear-gradient(color-mix(in srgb, var(--text-primary) 3%, transparent) 1px, transparent 1px)',
+            'linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 3%, transparent) 1px, transparent 1px)',
           ].join(','),
           backgroundSize: '20px 20px',
           overflow: 'hidden',
@@ -364,7 +364,7 @@ export default function AstroSignalWeekPanel({ date }: { date: string }) {
           {isLoading ? (
             <div style={{ display: 'flex', gap: '12px' }}>
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} style={{ flex: 1, height: '96px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.04)' }} />
+                <div key={i} style={{ flex: 1, height: '96px', borderRadius: '12px', backgroundColor: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }} />
               ))}
             </div>
           ) : isError ? (

@@ -3,14 +3,22 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
-  'border backdrop-blur-xl transition-all',
+  // blur-lg = 16px, the Glass UX & Theme Standard's card blur scale (§5.4).
+  // Was blur-xl/2xl (24-40px) — over-blurring smeared far more of whatever
+  // sits behind a card than the recipe calls for, part of the light-mode
+  // "muddy" look reported across all 3 themes.
+  'border backdrop-blur-lg transition-all ease-[cubic-bezier(0.16,1,0.3,1)]',
   {
     variants: {
       variant: {
-        default:  'bg-kd-card border-kd-border',
-        elevated: 'bg-kd-elevated border-kd-border',
-        glass:    'bg-kd-card border-kd-border backdrop-blur-2xl',
-        accent:   'bg-kd-card border-kd-border-active',
+        // bg-[var(--kd-card)] (not the bg-kd-card Tailwind class, which maps
+        // to the solid --card) — --kd-card is the actual translucent
+        // surface.glass value applyTheme() sets. A backdrop-blur over a
+        // 100%-opaque background is a no-op; this is what makes it real.
+        default:  'bg-[var(--kd-card)] border-kd-border',
+        elevated: 'bg-[var(--kd-elevated)] border-kd-border',
+        glass:    'bg-[var(--kd-card)] border-kd-border',
+        accent:   'bg-[var(--kd-card)] border-kd-border-active',
       },
       rounded: {
         md:  'rounded-2xl',

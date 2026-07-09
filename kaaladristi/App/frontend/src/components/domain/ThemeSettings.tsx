@@ -1,4 +1,4 @@
-import { useThemeStore, THEMES, MODES, isDarkOnly, type ThemeId } from '@/stores/themeStore'
+import { useThemeStore, THEMES, MODES, isDarkOnly, type ThemeId, type ThemeMode } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile } from '@/services/auth'
 import { useState } from 'react'
@@ -8,6 +8,7 @@ export default function ThemeSettings() {
   const { profile, setProfile } = useAuthStore()
   const [saving, setSaving] = useState(false)
   const darkOnly = isDarkOnly(activeTheme)
+  const activeLabel = THEMES.find(t => t.id === activeTheme)?.label ?? 'This theme'
 
   async function handleThemeChange(id: ThemeId) {
     setTheme(id)
@@ -20,6 +21,17 @@ export default function ThemeSettings() {
     finally { setSaving(false) }
   }
 
+  async function handleModeChange(id: ThemeMode) {
+    setMode(id)
+    if (!profile) return
+    setSaving(true)
+    try {
+      const updated = await updateProfile({ mode: id })
+      setProfile({ ...profile, mode: id, ...updated })
+    } catch { /* local state already applied */ }
+    finally { setSaving(false) }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{
@@ -27,7 +39,8 @@ export default function ThemeSettings() {
         marginBottom: 4,
       }}>
         <span style={{
-          fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.1em',
+          fontSize: 'var(--label-font-size)', fontFamily: 'var(--label-font-family)',
+          fontWeight: 'var(--label-font-weight)', letterSpacing: 'var(--label-letter-spacing)',
           textTransform: 'uppercase', color: 'var(--text-faint)',
         }}>
           Theme
@@ -75,7 +88,8 @@ export default function ThemeSettings() {
         marginTop: 10, marginBottom: 4,
       }}>
         <span style={{
-          fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '.1em',
+          fontSize: 'var(--label-font-size)', fontFamily: 'var(--label-font-family)',
+          fontWeight: 'var(--label-font-weight)', letterSpacing: 'var(--label-letter-spacing)',
           textTransform: 'uppercase', color: 'var(--text-faint)',
         }}>
           Mode
@@ -89,8 +103,8 @@ export default function ThemeSettings() {
             <button
               key={m.id}
               disabled={disabled}
-              onClick={() => !disabled && setMode(m.id)}
-              title={disabled ? 'DristiQ is dark-only for now — light palette coming' : undefined}
+              onClick={() => !disabled && handleModeChange(m.id)}
+              title={disabled ? `${activeLabel} is dark-only for now — light palette coming` : undefined}
               style={{
                 flex: 1, padding: '7px 0', borderRadius: 8,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -111,7 +125,7 @@ export default function ThemeSettings() {
       </div>
       {darkOnly && (
         <p style={{ fontSize: 10, color: 'var(--text-faint)', margin: '2px 0 0', lineHeight: 1.5 }}>
-          DristiQ is dark-only for now — switch to Tech AI or Jade Thorn to use light mode.
+          {activeLabel} is dark-only for now — switch to another theme to use light mode.
         </p>
       )}
     </div>

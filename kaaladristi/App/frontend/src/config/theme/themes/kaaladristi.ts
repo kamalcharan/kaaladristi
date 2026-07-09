@@ -1,63 +1,82 @@
 import type { ThemeConfig } from '../types';
 
-// ── Kāla-Drishti (default dark theme) ──────────────────────────────────────
-// Colors match the dashboard-LOCKED.html mockup :root block.
+// ── Vikuna Black (formerly "DristiQ") ───────────────────────────────────────
+// Vikuna house palette — deep violet primary + brass secondary. Values taken
+// from the Glass UX & Theme Standard reference ('vikuna-black' theme, both
+// light and dark), mapped onto ThemeColorSet and extended with tertiary/
+// alternate/accent/semantic fields to match this repo's per-theme convention
+// (see jadeThorn.ts / techAI.ts for the same derivation pattern).
 
 export const KaalaDrishtiTheme: ThemeConfig = {
   id: 'kaaladristi',
-  name: 'DristiQ',
+  name: 'Vikuna Black',
   colors: {
     brand: {
-      primary:   '#818cf8',  // --indigo (was #6366f1)
-      secondary: '#d4a84b',  // --gold   (was #fbbf24)
-      tertiary:  '#8b5cf6',  // --accent-violet (unchanged)
-      alternate: '#06b6d4',  // --accent-cyan   (unchanged)
+      primary:   '#5b3fb0',  // --color-primary (light)
+      secondary: '#9a7b3c',  // --color-accent  (light)
+      tertiary:  '#7454b8',  // indigo-violet bridge
+      alternate: '#eeecf7',  // deeper violet-white surface
     },
     utility: {
-      primaryText:         '#f1f5f9',  // --text-primary  (was #f8fafc)
-      secondaryText:       '#cbd5e1',  // --text-secondary (was #94a3b8)
-      placeholder:         '#94a3b8',  // --text-muted    (was #64748b)
-      primaryBackground:   '#0b1120',  // --bg            (was #030712)
-      secondaryBackground: '#131c31',  // --card          (was #0f172a)
+      primaryText:         '#191627',  // --color-fg
+      secondaryText:       '#645f7c',  // --color-muted
+      primaryBackground:   '#f6f5fb',  // --color-bg
+      secondaryBackground: '#ffffff',  // --color-surface-2
+    },
+    accent: {
+      accent1: '#5b3fb0',
+      accent2: '#9a7b3c',
+      accent3: '#7454b8',
+      accent4: 'rgba(91,63,176,0.08)',
     },
     semantic: {
-      success: '#10b981',  // --bull    (unchanged)
-      warning: '#f59e0b',  // --caution (unchanged)
-      error:   '#ef4444',  // --bear    (unchanged)
-      info:    '#06b6d4',  // --accent-cyan (unchanged)
+      success: '#2d7a4f',
+      warning: '#c47e1a',
+      error:   '#b54034',
+      info:    '#3f6bb0',
     },
     surface: {
-      glass:       'rgba(19, 28, 49, 0.95)',    // --card
-      glassStrong: '#182340',                    // --card-soft
-      glassBorder: 'rgba(255, 255, 255, 0.07)', // --border
+      glass:         'rgba(255,255,255,0.75)', // --color-surface (light) — Glass UX standard's literal value
+      glassStrong:   '#ffffff',                 // --color-surface-2 (light)
+      glassBorder:   '#e3e0ee',            // --color-border (light)
+      primaryDim:    'rgba(91,63,176,.16)', // --color-primary-dim (light)
+      primaryGlow:   'rgba(91,63,176,.28)', // --color-primary-glow (light)
+      primarySubtle: 'rgba(91,63,176,.06)', // --color-primary-subtle (light)
     },
   },
-  // Dark-only theme — darkMode mirrors colors identically
   darkMode: {
     colors: {
       brand: {
-        primary:   '#818cf8',
-        secondary: '#d4a84b',
-        tertiary:  '#8b5cf6',
-        alternate: '#06b6d4',
+        primary:   '#9b8cff',  // --color-primary (dark)
+        secondary: '#c9b28c',  // --color-accent  (dark)
+        tertiary:  '#6f5fc4',  // indigo-violet bridge
+        alternate: '#191626',  // deep violet-black surface (= secondaryBackground)
       },
       utility: {
-        primaryText:         '#f1f5f9',
-        secondaryText:       '#cbd5e1',
-        placeholder:         '#94a3b8',
-        primaryBackground:   '#0b1120',
-        secondaryBackground: '#131c31',
+        primaryText:         '#ece9f5',  // --color-fg (dark)
+        secondaryText:       '#948fb0',  // --color-muted (dark)
+        primaryBackground:   '#0b0b12',  // --color-bg (dark)
+        secondaryBackground: '#191626',  // solid card — violet-tinted elevation of bg
+      },
+      accent: {
+        accent1: '#9b8cff',
+        accent2: '#c9b28c',
+        accent3: '#6f5fc4',
+        accent4: 'rgba(155,140,255,0.10)',
       },
       semantic: {
-        success: '#10b981',
-        warning: '#f59e0b',
-        error:   '#ef4444',
-        info:    '#06b6d4',
+        success: '#4ecb8a',
+        warning: '#e0a040',
+        error:   '#e05555',
+        info:    '#5a8fd6',
       },
       surface: {
-        glass:       'rgba(19, 28, 49, 0.95)',
-        glassStrong: '#182340',
-        glassBorder: 'rgba(255, 255, 255, 0.07)',
+        glass:         'rgba(255,255,255,0.04)', // --color-surface (dark)
+        glassStrong:   'rgba(255,255,255,0.08)', // --color-surface-2 (dark)
+        glassBorder:   'rgba(255,255,255,0.1)',  // --color-border (dark)
+        primaryDim:    'rgba(155,140,255,.22)',   // --color-primary-dim (dark)
+        primaryGlow:   'rgba(155,140,255,.4)',    // --color-primary-glow (dark)
+        primarySubtle: 'rgba(155,140,255,.08)',   // --color-primary-subtle (dark)
       },
     },
   },

@@ -86,7 +86,7 @@ function ScanChips({ scans }: { scans: string[] }) {
           style={{
             ...MONO, fontSize: 8.5, letterSpacing: '.04em',
             padding: '1px 5px', borderRadius: 3,
-            background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)',
+            background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-muted)',
             whiteSpace: 'nowrap',
           }}
         >
@@ -115,7 +115,7 @@ function HighlightRow({
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '5px 6px', borderRadius: 6, cursor: 'pointer',
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--text-primary) 4%, transparent)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <span style={{ fontSize: 10, color: 'var(--gold)', flexShrink: 0 }}>✦</span>

@@ -217,13 +217,13 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
           <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)}
             placeholder="What should I call you? (optional)"
             style={{ width:'100%', padding:'10px 16px', marginBottom:8,
-              background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.08)',
+              background:'color-mix(in srgb, var(--text-primary) 4%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
               borderRadius:10, fontSize:13, color:'var(--text-primary)',
               outline:'none', fontFamily:'inherit' }} />
           <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
             placeholder="Phone for alerts (optional)"
             style={{ width:'100%', padding:'10px 16px',
-              background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.08)',
+              background:'color-mix(in srgb, var(--text-primary) 4%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
               borderRadius:10, fontSize:13, color:'var(--text-primary)',
               outline:'none', fontFamily:'inherit' }} />
         </div>
@@ -232,7 +232,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
             fontSize:15, fontWeight:500, fontFamily:'inherit',
             background:'linear-gradient(135deg, #7c6af7, #5b4fd4)', color:'#fff',
             letterSpacing:'.01em',
-            boxShadow:`0 4px 24px ${V}.5), 0 1px 0 rgba(255,255,255,.1) inset`,
+            boxShadow:`0 4px 24px ${V}.5), 0 1px 0 color-mix(in srgb, var(--text-primary) 10%, transparent) inset`,
             transition:'all .2s ease', animation:'text-in .6s ease 1.3s both' }}
           onMouseEnter={e => { (e.currentTarget).style.transform='translateY(-2px)' }}
           onMouseLeave={e => { (e.currentTarget).style.transform='' }}>
@@ -275,14 +275,14 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, icpMode, setIcpMode, o
             display:'flex', alignItems:'center', justifyContent:'center',
             boxShadow:`0 3px 12px ${V}.4)`, fontSize:13, fontWeight:700,
             color:'#fff', fontFamily:'var(--font-mono, monospace)', marginTop:2 }}>V</div>
-          <div style={{ background:'var(--card)', border:'1px solid rgba(255,255,255,.14)',
+          <div style={{ background:'var(--card)', border:'1px solid color-mix(in srgb, var(--text-primary) 14%, transparent)',
             borderRadius:'3px 14px 14px 14px', padding:'14px 18px',
             fontSize:14, color:'var(--text-primary)', lineHeight:1.65, maxWidth:460 }}>
             {!typed ? (
               <span style={{ display:'flex', gap:5, alignItems:'center', padding:'6px 4px' }}>
                 {[0, 200, 400].map(delay => (
                   <span key={delay} style={{ width:7, height:7, borderRadius:'50%',
-                    background:'rgba(255,255,255,.15)', display:'inline-block',
+                    background:'color-mix(in srgb, var(--text-primary) 15%, transparent)', display:'inline-block',
                     animation:`typing-dot 1.2s ease-in-out ${delay}ms infinite` }} />
                 ))}
               </span>
@@ -308,10 +308,10 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, icpMode, setIcpMode, o
               <button key={val} onClick={() => onSelect(val)}
                 style={{ flex:1, padding:'18px 14px', cursor:'pointer', textAlign:'center',
                   borderRadius:12, transition:'all .2s ease',
-                  border:`1px solid ${icp === val ? 'var(--accent)' : 'rgba(255,255,255,.07)'}`,
+                  border:`1px solid ${icp === val ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)'}`,
                   background: icp === val ? 'var(--accent-glow)' : 'var(--card)' }}
-                onMouseEnter={e => { if (icp !== val) (e.currentTarget).style.borderColor='rgba(255,255,255,.14)' }}
-                onMouseLeave={e => { if (icp !== val) (e.currentTarget).style.borderColor='rgba(255,255,255,.07)' }}>
+                onMouseEnter={e => { if (icp !== val) (e.currentTarget).style.borderColor='color-mix(in srgb, var(--text-primary) 14%, transparent)' }}
+                onMouseLeave={e => { if (icp !== val) (e.currentTarget).style.borderColor='color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
                 <div style={{ fontSize:22, marginBottom:8 }}>{icon}</div>
                 <div style={{ fontSize:13, fontWeight:500, color:'var(--text-primary)', marginBottom:3 }}>{label}</div>
                 <div style={{ fontSize:11, color:'var(--text-muted)', lineHeight:1.4 }}>{sub}</div>
@@ -322,7 +322,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, icpMode, setIcpMode, o
         {/* Blend slider */}
         {typed && icp === 'both' && (
           <div style={{ maxWidth:520, width:'100%', marginTop:10, padding:'16px 20px',
-            border:'1px solid rgba(255,255,255,.07)', borderRadius:12,
+            border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)', borderRadius:12,
             background:'var(--card)', animation:'bubble-in .3s ease both' }}>
             <div style={{ textAlign:'center', fontFamily:'var(--font-mono, monospace)',
               fontSize:13, color:'var(--gold, #c9a84c)', marginBottom:12 }}>
@@ -442,7 +442,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
     <div className="fixed inset-0 flex flex-col" style={{ background:'var(--bg)', paddingTop:52 }}>
       {/* Top bar */}
       <div style={{ height:52, position:'absolute', top:0, left:0, right:0,
-        borderBottom:'1px solid rgba(255,255,255,.07)', display:'flex',
+        borderBottom:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)', display:'flex',
         alignItems:'center', padding:'0 24px', gap:10, zIndex:10 }}>
         <div style={{ width:22, height:22, borderRadius:6, flexShrink:0,
           background:'linear-gradient(135deg, #9d8ff9, #5b4fd4)',
@@ -458,10 +458,10 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
       {/* Main: canvas left + narration right */}
       <div style={{ flex:1, display:'grid', gridTemplateColumns:'1fr 360px', overflow:'hidden' }}>
         {/* Left — block list */}
-        <div style={{ borderRight:'1px solid rgba(255,255,255,.07)',
+        <div style={{ borderRight:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
           display:'flex', flexDirection:'column', padding:24, gap:12, overflowY:'auto' }}>
           <span style={{ fontFamily:'var(--font-mono, monospace)', fontSize:10,
-            letterSpacing:'.1em', textTransform:'uppercase', color:'rgba(255,255,255,.15)' }}>
+            letterSpacing:'.1em', textTransform:'uppercase', color:'color-mix(in srgb, var(--text-primary) 15%, transparent)' }}>
             Your Workspace
           </span>
           <h2 style={{ fontFamily:'var(--font-display)', fontSize:20, fontWeight:300,
@@ -473,7 +473,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
             const bc = badgeColor(block.badge)
             return (
               <div key={block.catalog_item_id}
-                style={{ border:`1px solid ${visible ? 'var(--accent-dim)' : 'rgba(255,255,255,.07)'}`,
+                style={{ border:`1px solid ${visible ? 'var(--accent-dim)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)'}`,
                   borderRadius:10, background:'var(--card)', padding:'14px 16px',
                   opacity: visible ? 1 : 0,
                   transform: visible ? 'none' : 'translateY(12px) scale(.97)',
@@ -482,7 +482,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                   <span style={{ fontSize:18, flexShrink:0 }}>{block.icon}</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontFamily:'var(--font-mono, monospace)', fontSize:9,
-                      color:'rgba(255,255,255,.2)', letterSpacing:'.1em',
+                      color:'color-mix(in srgb, var(--text-primary) 20%, transparent)', letterSpacing:'.1em',
                       textTransform:'uppercase', marginBottom:3 }}>{block.type_label}</div>
                     <div style={{ fontSize:13, fontWeight:500, color:'var(--text-primary)' }}>
                       {block.display_name}
@@ -515,7 +515,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                 </button>
                 <button onClick={onBrowse} disabled={isCommitting}
                   style={{ padding:'13px 24px', background:'transparent',
-                    border:'1px solid rgba(255,255,255,.07)', borderRadius:100,
+                    border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)', borderRadius:100,
                     fontSize:14, color:'var(--text-muted)', cursor:'pointer',
                     fontFamily:'inherit', transition:'all .2s ease' }}>
                   Customize in Catalog →
@@ -537,7 +537,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                 fontSize:10, fontWeight:700, color:'#fff',
                 fontFamily:'var(--font-mono, monospace)', marginTop:1 }}>V</div>
               <div style={{ background:'var(--card)',
-                border:'1px solid rgba(255,255,255,.07)',
+                border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
                 borderRadius:'3px 10px 10px 10px', padding:'10px 14px',
                 fontSize:12, color:'var(--text-muted)', lineHeight:1.6, flex:1 }}
                 dangerouslySetInnerHTML={{ __html: block.narration.replace(

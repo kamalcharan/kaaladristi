@@ -19,6 +19,7 @@ import NakVaraSignals    from '@/components/domain/DashboardV3/NakVaraSignals';
 import PanchangamCard    from '@/components/domain/PanchangamCard';
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart';
 import BreadthRocChart   from '@/components/domain/BreadthRocChart';
+import { PageHeader } from '@/components/ui';
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
@@ -34,34 +35,14 @@ export default function DashboardV3View() {
   return (
     <div className="animate-fade-in" style={{ paddingBottom: 100 }}>
 
-      {/* ── Sub-header: date + density toggle ── */}
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <div>
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.16em',
-            color: 'var(--text-faint)',
-            textTransform: 'uppercase',
-            marginBottom: 4,
-          }}>
-            {fmtDate(displayDate)} · End of Day
-          </div>
-          <h1 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 28,
-            fontWeight: 500,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.05,
-            color: 'var(--text-primary)',
-            margin: 0,
-          }}>
-            Today&apos;s{' '}
-            <em style={{ color: 'var(--gold)', fontStyle: 'italic', fontWeight: 400 }}>Read</em>
-          </h1>
-        </div>
-        <DensityToggle density={density} onChange={setDensity} />
-      </div>
+      <PageHeader
+        eyebrow={`${fmtDate(displayDate)} · End of Day`}
+        title="Today's"
+        titleEm="Read"
+        actions={<DensityToggle density={density} onChange={setDensity} />}
+      />
+
+      <div className="pt-6">
 
       {/* ── ROW 0: Ticker Rail — always visible ── */}
       <TickerRail date={displayDate} />
@@ -123,6 +104,7 @@ export default function DashboardV3View() {
 
       {/* ── Action Island ── */}
       <ActionIsland pingCount={pings.length} />
+      </div>
     </div>
   );
 }

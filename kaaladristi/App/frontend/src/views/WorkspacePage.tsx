@@ -233,10 +233,10 @@ export default function WorkspacePage() {
                 }}
                 style={{
                   marginBottom: 10, padding: '5px 14px', borderRadius: 100,
-                  border: '1px dashed rgba(255,255,255,.15)',
+                  border: '1px dashed color-mix(in srgb, var(--text-primary) 15%, transparent)',
                   background: 'transparent', cursor: 'pointer',
                   fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                  color: 'rgba(255,255,255,.5)', transition: 'all .15s',
+                  color: 'color-mix(in srgb, var(--text-primary) 50%, transparent)', transition: 'all .15s',
                 }}
                 onMouseEnter={e => {
                   const el = e.currentTarget as HTMLElement
@@ -246,8 +246,8 @@ export default function WorkspacePage() {
                 }}
                 onMouseLeave={e => {
                   const el = e.currentTarget as HTMLElement
-                  el.style.borderColor = 'rgba(255,255,255,.15)'
-                  el.style.color = 'rgba(255,255,255,.5)'
+                  el.style.borderColor = 'color-mix(in srgb, var(--text-primary) 15%, transparent)'
+                  el.style.color = 'color-mix(in srgb, var(--text-primary) 50%, transparent)'
                   el.style.background = 'transparent'
                 }}
               >
@@ -282,8 +282,11 @@ export default function WorkspacePage() {
             {icpMode === 'astro' && (
               <>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-faint)', letterSpacing: '.06em',
-                    textTransform: 'uppercase', marginBottom: 12, fontFamily: 'var(--font-mono, monospace)' }}>
+                  <div style={{
+                    fontSize: 'var(--label-font-size)', fontWeight: 'var(--label-font-weight)',
+                    letterSpacing: 'var(--label-letter-spacing)', fontFamily: 'var(--label-font-family)',
+                    color: 'var(--text-faint)', textTransform: 'uppercase', marginBottom: 12,
+                  }}>
                     Astro Context
                   </div>
                   <CurrentSkyRail date={today} />

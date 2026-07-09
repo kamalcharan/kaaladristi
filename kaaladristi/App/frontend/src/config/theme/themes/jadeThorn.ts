@@ -34,8 +34,8 @@ export const JadeThornTheme: ThemeConfig = {
       info:    '#2a5f8a',
     },
     surface: {
-      glass:       'rgba(15,76,58,0.04)',
-      glassStrong: 'rgba(15,76,58,0.07)',
+      glass:       'rgba(255,255,255,0.75)', // Glass UX standard's literal value
+      glassStrong: '#ffffff',
       glassBorder: '#e6e3d9',
       primaryDim:    'rgba(15,76,58,0.25)',
       primaryGlow:   'rgba(15,76,58,0.1)',

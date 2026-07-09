@@ -1,4 +1,15 @@
 export { Card, CardHeader, CardContent } from './Card';
+export { PageHeader } from './PageHeader';
+export type { PageHeaderProps } from './PageHeader';
+export { EmptyState } from './EmptyState';
+export type { EmptyStateProps } from './EmptyState';
+export { Modal } from './Modal';
+export type { ModalProps } from './Modal';
+export { Tabs } from './Tabs';
+export type { TabsProps, TabItem } from './Tabs';
+export { StatCard } from './StatCard';
+export type { StatCardProps } from './StatCard';
+export { NoiseOverlay } from './NoiseOverlay';
 export { Badge } from './Badge';
 export { Button } from './Button';
 export { Progress } from './Progress';

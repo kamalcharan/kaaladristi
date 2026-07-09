@@ -36,7 +36,9 @@ const navSections: NavSection[] = [
       { to: '/intraday/1',          glyph: '◐', label: 'Intraday',             adminOnly: true },
       { to: '/inference',           glyph: '✎', label: 'Inference DB',        adminOnly: true },
       { to: '/rule-eval',           glyph: '⊛', label: 'Rule Eval',           adminOnly: true },
-      { to: '/settings',            glyph: '◈', label: 'Settings',            adminOnly: true },
+      // Settings hidden from nav 2026-07-09: dark theme is fine, light theme
+      // still has open issues there — revisit once light mode is sorted.
+      // Route itself (SettingsView.tsx) is untouched, just not linked.
       { to: '/data-pipeline',       glyph: '▦', label: 'Data Pipeline',       adminOnly: true },
       { to: '/admin/panchang',      glyph: '⊟', label: 'Panchang Admin',      adminOnly: true },
       { to: '/rules',               glyph: '⊠', label: 'Rule Engine',         adminOnly: true },
@@ -271,7 +273,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     const el = e.currentTarget as HTMLElement;
                     el.style.background = section.adminHeading
                       ? 'var(--accent-glow)'
-                      : 'rgba(255,255,255,0.04)';
+                      : 'color-mix(in srgb, var(--text-primary) 4%, transparent)';
                     el.style.color = 'var(--text-secondary)';
                   }}
                   onMouseLeave={e => {
