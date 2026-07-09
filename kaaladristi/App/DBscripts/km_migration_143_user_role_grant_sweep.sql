@@ -1,6 +1,13 @@
 -- Migration 143: sweep — mirror 'authenticated' SELECT grants onto the
 -- profile roles "user" and admin, across every table/view in public.
 --
+-- ⚠ SUPERSEDED BY MIGRATION 144. This migration (and 137 / 142) assumed the
+-- "user" role EXISTED but merely lacked grants. It does NOT exist — no
+-- CREATE ROLE was ever run — so the GRANT loop below is guarded away to a
+-- no-op. Migration 144 is the real fix: it CREATES "user" as a member of
+-- 'authenticated', which makes it inherit every SELECT here automatically.
+-- This file is now a harmless redundant safety net; run 144, not this.
+--
 -- Context: migration 096 made PostgREST execute logged-in browser queries
 -- as the PROFILE DB role ('admin' / 'user') instead of 'authenticated'.
 -- Historically, table read access was granted with a blanket script that
