@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Search, Loader2, AlertCircle, Database, Plus, Lock } from 'lucide-react';
@@ -333,6 +333,8 @@ export default function RuleList() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [modalOpen, setModalOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const { data: rules = [], isLoading, isError, error } = useQuery({
     queryKey: ['rule-engine', 'rules'],
@@ -468,6 +470,15 @@ export default function RuleList() {
     return list;
   }, [rules, filters, confMap]);
 
+  // Client-side pagination — all rows are already fetched; page the filtered view.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { setPage(1); }, [filters]);           // any filter change → back to page 1
+  const safePage = Math.min(page, pageCount);            // clamp if the list shrank
+  const paged = useMemo(
+    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filtered, safePage],
+  );
+
   if (!isAdmin) return <AdminGuard />;
 
   if (isLoading) {
@@ -552,7 +563,7 @@ export default function RuleList() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((rule, i) => {
+                    {paged.map((rule, i) => {
                       const outcome = effectiveOutcome(rule);
                       const conf = confMap.get(rule.id);
                       const isAvailable = rule.data_source !== 'unavailable';
@@ -699,9 +710,32 @@ export default function RuleList() {
               </div>
             )}
 
-            <p className="text-[11px] text-muted text-right font-mono">
-              {filtered.length} of {rules.length} rules
-            </p>
+            <div className="flex items-center justify-between gap-3 pt-1">
+              {pageCount > 1 ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={safePage <= 1}
+                    className="text-xs px-2.5 py-1 rounded border border-kd-border hover:border-kd-border-active text-secondary disabled:opacity-40 disabled:cursor-default transition-colors"
+                  >
+                    ← Prev
+                  </button>
+                  <span className="text-[11px] text-muted font-mono">
+                    Page {safePage} / {pageCount}
+                  </span>
+                  <button
+                    onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+                    disabled={safePage >= pageCount}
+                    className="text-xs px-2.5 py-1 rounded border border-kd-border hover:border-kd-border-active text-secondary disabled:opacity-40 disabled:cursor-default transition-colors"
+                  >
+                    Next →
+                  </button>
+                </div>
+              ) : <span />}
+              <p className="text-[11px] text-muted text-right font-mono">
+                {filtered.length} of {rules.length} rules
+              </p>
+            </div>
           </>
         )}
 
