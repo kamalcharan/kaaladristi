@@ -69,43 +69,75 @@ SELECT has_table_privilege('kd_readonly','km_astro_rule_master','SELECT') AS can
 Repeat the `GRANT SELECT` block on **`vani_db`** too if VaNi tables should be
 inspectable (optional; a second MCP entry would be needed to point at it).
 
-## Step 2 — DNS + VPS service
+## Step 2 — DNS + VPS service (nginx variant — the actual stack)
 
-1. DNS: add an A record `mcp-db.dristiq.com` → VPS IP (same as `llm.dristiq.com`).
-2. Add this service to the VPS compose stack (or run standalone). Adjust the
-   Traefik network/certresolver names to whatever `llm.dristiq.com` uses:
+> Discovered 2026-07-10 on `187.127.136.65` (`srv1528480`): there is **no
+> Traefik** on this box — TLS is terminated by the `vikuna-nginx` container
+> (80/443), and Postgres runs as the `vikuna-postgres` container. `llm.dristiq.com`
+> resolves to a *different* server (72.60.222.136), so its setup is not the
+> pattern here.
 
-```yaml
-  kd-mcp-db:
-    image: crystaldba/postgres-mcp:latest
-    container_name: kd-mcp-db
-    restart: unless-stopped
-    command: ["--access-mode=restricted", "--transport=sse"]
-    environment:
-      # If postgres runs on the host: host.docker.internal (with extra_hosts below).
-      # If postgres is a container on the same docker network: use its service name.
-      - DATABASE_URI=postgresql://kd_readonly:${KD_READONLY_PASSWORD}@host.docker.internal:5432/kaala_dristi_db
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks: [vikuna-net]
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.kd-mcp-db.rule=Host(`mcp-db.dristiq.com`)
-      - traefik.http.routers.kd-mcp-db.entrypoints=websecure
-      - traefik.http.routers.kd-mcp-db.tls.certresolver=le
-      - traefik.http.services.kd-mcp-db.loadbalancer.server.port=8000
-      - traefik.http.routers.kd-mcp-db.middlewares=kd-mcp-auth
-      # htpasswd-format user:hash — generate with: htpasswd -nbB claude '<password>'
-      # (escape $ as $$ if inlining in compose; cleaner to keep in .env)
-      - traefik.http.middlewares.kd-mcp-auth.basicauth.users=${KD_MCP_HTPASSWD}
+1. **DNS**: A record — Name `mcp-db`, Value `187.127.136.65`.
+
+2. **MCP container** (same docker network as postgres):
+```bash
+NET=$(docker inspect vikuna-postgres --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
+docker run -d --name kd-mcp-db --restart unless-stopped --network "$NET" \
+  -e DATABASE_URI="postgresql://kd_readonly:<TEMP_PASSWORD>@vikuna-postgres:5432/kaala_dristi_db" \
+  crystaldba/postgres-mcp --access-mode=restricted --transport=sse --sse-host=0.0.0.0 --sse-port=8000
 ```
 
-Set in the VPS `.env` (never committed): `KD_READONLY_PASSWORD`, `KD_MCP_HTPASSWD`.
-Then `docker compose up -d kd-mcp-db`.
+3. **Certificate** (~10 s downtime; certbot standalone borrows port 80):
+```bash
+apt install -y certbot
+docker stop vikuna-nginx && certbot certonly --standalone -d mcp-db.dristiq.com && docker start vikuna-nginx
+# one-time renewal hooks:
+printf 'pre_hook = docker stop vikuna-nginx\npost_hook = docker start vikuna-nginx\n' \
+  >> /etc/letsencrypt/renewal/mcp-db.dristiq.com.conf
+```
+
+4. **Basic-auth file**:
+```bash
+printf "claude:$(openssl passwd -apr1 '<MCP_PASSWORD>')\n" > /root/mcp.htpasswd
+```
+
+5. **nginx vhost** — add to the config mounted into `vikuna-nginx`
+   (`docker inspect vikuna-nginx --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'`
+   shows where; ensure `/etc/letsencrypt` and `/root/mcp.htpasswd` are mounted
+   read-only into the container, and that `vikuna-nginx` shares a network with
+   `kd-mcp-db` — `docker network connect "$NET" vikuna-nginx` if not):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name mcp-db.dristiq.com;
+
+    ssl_certificate     /etc/letsencrypt/live/mcp-db.dristiq.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mcp-db.dristiq.com/privkey.pem;
+
+    auth_basic "kaala-mcp";
+    auth_basic_user_file /etc/nginx/mcp.htpasswd;
+
+    location / {
+        proxy_pass http://kd-mcp-db:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;        # required for SSE
+        proxy_cache off;
+        proxy_read_timeout 1h;
+    }
+}
+```
+
+```bash
+docker exec vikuna-nginx nginx -t && docker restart vikuna-nginx
+```
 
 Sanity check from any machine:
-`curl -u claude:<password> https://mcp-db.dristiq.com/sse` → should open an SSE
-stream (event: endpoint), not 401/404.
+`curl -u claude:<MCP_PASSWORD> https://mcp-db.dristiq.com/sse --max-time 5` →
+should open an SSE stream (`event: endpoint`), not 401/404/502 (502 = nginx
+can't reach `kd-mcp-db`; connect the networks as above).
 
 ## Step 3 — Claude Code environment settings (claude.ai)
 
