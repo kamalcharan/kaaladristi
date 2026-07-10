@@ -88,6 +88,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Native <select> option popups. Selects across the app carry a dark inline
+   background + light --text-secondary text, but the <option> elements inherit
+   neither reliably: the browser paints the popup with the OS default (light),
+   so light text lands on a light background and is invisible until the hover
+   highlight repaints a row. Setting an explicit background + color on <option>
+   fixes the contrast in every engine; theme vars keep it correct in light mode
+   too (both flip together). */
+option {
+  background-color: var(--kd-elevated, #0f1626);
+  color: var(--text-primary, #ece9f5);
+}
+
 /* Glass UX & Theme Standard §5.5 UxAtmosphere: 3 viewport-relative blooms,
    fed by each theme's own calibrated surface.primarySubtle (not a fresh
    10-15% cut off the raw brand hex, and not the --gold-bg/--accent-glow
