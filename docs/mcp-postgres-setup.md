@@ -1,47 +1,155 @@
-# Postgres MCP Connector — Setup
+# Postgres MCP Connector — Setup (v2, working architecture)
 
-`/.mcp.json` registers a read-only Postgres connector (`kaala-postgres`) so
-Claude Code can query `kaala_dristi_db` directly via SQL.
+Goal: give Claude Code **read-only SQL** access to `kaala_dristi_db` via the
+`kaala-postgres` MCP connector.
 
-Server: [`crystaldba/postgres-mcp`](https://github.com/crystaldba/postgres-mcp)
-(the official `@modelcontextprotocol/server-postgres` is deprecated). Runs in
-`--access-mode=restricted` — read-only transactions only, no writes.
+> **Why v1 never worked:** the previous plan ran the MCP server *inside* the
+> Claude Code container and dialed the VPS on `5432`. That is impossible in the
+> managed environment — outbound raw TCP is blocked (verified 2026-07-10:
+> `5432` unreachable, and even HTTPS to non-allowlisted hosts gets a `403`
+> policy denial from the environment proxy), and the VPS firewall only opens
+> `5432` to a fixed IP the cloud container doesn't have. The 2026-07-06
+> handover recorded it as "never successfully connected".
 
-## 1. Provide the connection string
+## v2 architecture
 
-The config reads the DSN from the `KD_DB_URL` environment variable — the URL is
-**never** committed. Set it in your environment (for Claude Code on the web, add
-it to the environment's env vars; locally, export it or add to your shell rc):
+Run the MCP server **on the VPS** (next to the DB), expose it over **HTTPS via
+Traefik** — same pattern as `llm.dristiq.io` — and let Claude Code connect as a
+remote SSE server through the environment proxy.
 
 ```
-KD_DB_URL=postgresql://kd_app:<password>@187.127.136.65:5432/kaala_dristi_db
+Claude Code container ──HTTPS (proxy-allowlisted)──▶ Traefik (mcp-db.dristiq.io, basic-auth, TLS)
+                                                        └─▶ postgres-mcp (--access-mode=restricted, SSE)
+                                                              └─▶ postgres :5432 (role kd_readonly, local only)
 ```
 
-Use a read-only role where possible. `kd_app` works (the server enforces
-read-only transactions regardless), but a dedicated `readonly` role is cleaner.
+**Read-only is enforced at three independent layers:**
+1. **DB role** — `kd_readonly` has SELECT-only grants and
+   `default_transaction_read_only = on` (SQL below).
+2. **MCP server** — [`crystaldba/postgres-mcp`](https://github.com/crystaldba/postgres-mcp)
+   in `--access-mode=restricted`: read-only transactions, statement limits.
+3. **No write path** — the connector never sees a writable credential; the
+   `kd_readonly` password can be rotated at any time without touching the repo
+   (it lives only in the VPS compose env).
 
-## 2. Open a network path (required)
+---
 
-The DB is not reachable by default from a Claude Code web container — two walls:
+## Step 1 — DB role hardening (run as superuser in psql/pgAdmin on the VPS)
 
-1. **Environment egress policy.** The managed proxy denies non-allowlisted hosts
-   (`403 CONNECT`). The environment's network policy must allow the DB host.
-   See https://code.claude.com/docs/en/claude-code-on-the-web
-2. **VPS firewall.** Port `5432` is open only to a fixed IP (see the infra doc,
-   §2.4). A cloud container has no stable egress IP to whitelist.
+```sql
+-- Create the role if it doesn't exist yet (temporary password — rotate in step 5)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'kd_readonly') THEN
+    CREATE ROLE kd_readonly LOGIN PASSWORD 'CHANGE_ME_TEMP';
+  END IF;
+END $$;
 
-**Recommended:** expose the DB behind an HTTPS domain via the existing Traefik
-(as done for `llm.dristiq.io`) — e.g. PostgREST at `db.dristiq.io` — and allow
-that host in the environment network policy. This is IP-independent and keeps
-raw `5432` closed to the internet. If you go the PostgREST route instead of raw
-Postgres, swap this connector for an HTTP-based one.
+-- Harden: no elevated capabilities, read-only by default, bounded queries
+ALTER ROLE kd_readonly LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+ALTER ROLE kd_readonly SET default_transaction_read_only = on;
+ALTER ROLE kd_readonly SET statement_timeout = '30s';
 
-## 3. Verify
+-- Grants: SELECT-only, everything, now and for future tables
+GRANT CONNECT ON DATABASE kaala_dristi_db TO kd_readonly;
+GRANT USAGE ON SCHEMA public TO kd_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO kd_readonly;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO kd_readonly;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO kd_readonly;
 
-Once the env var is set and a network path is open, restart the Claude Code
-session. The `kaala-postgres` tools appear automatically; ask Claude to run a
-trivial query (e.g. `SELECT count(*) FROM km_index_symbols`) to confirm.
+-- Belt-and-braces: strip any write grants that may exist from older scripts
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON ALL TABLES IN SCHEMA public FROM kd_readonly;
 
-> Security: rotate the DB passwords and the PostgREST JWT secret currently
-> printed in `docs/llm/Vikuna-Infrastructure-Documentation-v3.pdf` — that file
-> exposes live production credentials in the repo.
+-- Verify (expect t / t / f)
+SELECT has_table_privilege('kd_readonly','km_astro_rule_master','SELECT') AS can_read_rules,
+       has_table_privilege('kd_readonly','km_equity_eod','SELECT')        AS can_read_eod,
+       has_table_privilege('kd_readonly','km_equity_eod','INSERT')        AS can_write;
+```
+
+Repeat the `GRANT SELECT` block on **`vani_db`** too if VaNi tables should be
+inspectable (optional; a second MCP entry would be needed to point at it).
+
+## Step 2 — DNS + VPS service
+
+1. DNS: add an A record `mcp-db.dristiq.io` → VPS IP (same as `llm.dristiq.io`).
+2. Add this service to the VPS compose stack (or run standalone). Adjust the
+   Traefik network/certresolver names to whatever `llm.dristiq.io` uses:
+
+```yaml
+  kd-mcp-db:
+    image: crystaldba/postgres-mcp:latest
+    container_name: kd-mcp-db
+    restart: unless-stopped
+    command: ["--access-mode=restricted", "--transport=sse"]
+    environment:
+      # If postgres runs on the host: host.docker.internal (with extra_hosts below).
+      # If postgres is a container on the same docker network: use its service name.
+      - DATABASE_URI=postgresql://kd_readonly:${KD_READONLY_PASSWORD}@host.docker.internal:5432/kaala_dristi_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [vikuna-net]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.kd-mcp-db.rule=Host(`mcp-db.dristiq.io`)
+      - traefik.http.routers.kd-mcp-db.entrypoints=websecure
+      - traefik.http.routers.kd-mcp-db.tls.certresolver=le
+      - traefik.http.services.kd-mcp-db.loadbalancer.server.port=8000
+      - traefik.http.routers.kd-mcp-db.middlewares=kd-mcp-auth
+      # htpasswd-format user:hash — generate with: htpasswd -nbB claude '<password>'
+      # (escape $ as $$ if inlining in compose; cleaner to keep in .env)
+      - traefik.http.middlewares.kd-mcp-auth.basicauth.users=${KD_MCP_HTPASSWD}
+```
+
+Set in the VPS `.env` (never committed): `KD_READONLY_PASSWORD`, `KD_MCP_HTPASSWD`.
+Then `docker compose up -d kd-mcp-db`.
+
+Sanity check from any machine:
+`curl -u claude:<password> https://mcp-db.dristiq.io/sse` → should open an SSE
+stream (event: endpoint), not 401/404.
+
+## Step 3 — Claude Code environment settings (claude.ai)
+
+In the environment used for these sessions:
+1. **Network policy**: allow `mcp-db.dristiq.io` (this is the wall that
+   currently 403s everything — nothing works until this is added).
+2. **Environment variable**: `KD_MCP_BASIC` = `base64("claude:<password>")`,
+   e.g. `echo -n 'claude:<password>' | base64`.
+
+## Step 4 — Connect
+
+`/.mcp.json` (committed, no secrets) registers the connector:
+
+```json
+{
+  "mcpServers": {
+    "kaala-postgres": {
+      "type": "sse",
+      "url": "https://mcp-db.dristiq.io/sse",
+      "headers": { "Authorization": "Basic ${KD_MCP_BASIC}" }
+    }
+  }
+}
+```
+
+Start a **new session** (project-scoped MCP servers load at session start and
+may prompt for approval). Verify with a trivial query:
+`SELECT count(*) FROM km_index_symbols;` (expect 93).
+
+## Step 5 — Rotate credentials (after verifying it works)
+
+- Change the `kd_readonly` password:
+  `ALTER ROLE kd_readonly PASSWORD '<new>';` → update `KD_READONLY_PASSWORD`
+  in the VPS `.env` → `docker compose up -d kd-mcp-db`. Nothing in the repo or
+  the Claude environment changes (the basic-auth password is independent).
+- While at it: rotate the production DB passwords and PostgREST JWT secret
+  exposed in `docs/llm/Vikuna-Infrastructure-Documentation-v3.pdf`, and remove
+  that file from the repo/history.
+
+## Notes
+
+- `.mcp.json` lives on the current working branch; sessions started from `main`
+  won't pick it up until this lands in `main`.
+- If you'd rather not run a new container, the fallback is exposing PostgREST
+  (`db.dristiq.io`) and using an HTTP/PostgREST-based MCP — but that gives REST
+  filters, not real SQL (no `GROUP BY month` coverage queries), so the
+  postgres-mcp route above is strongly preferred for audit work.
