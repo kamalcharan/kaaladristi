@@ -505,7 +505,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           Group Overlays
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {ASTRO_GROUP_OVERLAYS.map(group => {
+          {ASTRO_GROUP_OVERLAYS.filter(group => allTags.includes(group.tag)).map(group => {
             const added = isOverlayActive(group.id)
             return (
               <div

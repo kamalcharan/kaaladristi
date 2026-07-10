@@ -96,7 +96,11 @@ body {
    fixes the contrast in every engine; theme vars keep it correct in light mode
    too (both flip together). */
 option {
-  background-color: var(--kd-elevated, #0f1626);
+  /* Must be a SOLID color: --kd-elevated resolves to --card-soft
+     (rgba(255,255,255,0.08)), which composites over the browser's light
+     default popup and stays light. --card is opaque (#191626 dark / flips in
+     light mode). */
+  background-color: var(--card, #191626);
   color: var(--text-primary, #ece9f5);
 }
 
