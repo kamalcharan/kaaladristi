@@ -45,7 +45,7 @@ COMMENT ON COLUMN km_rule_transits.end_ts          IS 'Exact event end (Swiss Ep
 COMMENT ON COLUMN km_rule_transits.sign            IS 'Sidereal zodiac sign of the planet during this window';
 COMMENT ON COLUMN km_rule_transits.motion          IS 'direct | retrograde (motion windows)';
 COMMENT ON COLUMN km_rule_transits.direction       IS 'east (evening, planet ahead of Sun) | west (morning, behind Sun)';
-COMMENT ON COLUMN km_rule_transits.combustion_type IS 'Deepest stage reached: 14° arc / 5 bands — prakruta 11.2-14, vimishra 8.4-11.2, sankshipta 5.6-8.4, tikshna 2.8-5.6, ghora 0-2.8';
+COMMENT ON COLUMN km_rule_transits.combustion_type IS 'Deepest stage reached: 15° arc / 5 bands — prakruta 12-15, vimishra 9-12, sankshipta 6-9, tikshna 3-6, ghora 0-3 (arc matches owner almanac; classified by min Sun separation)';
 COMMENT ON COLUMN km_rule_transits.sun_sep_min     IS 'Minimum Sun separation (deg) reached during a combust window';
 
 NOTIFY pgrst, 'reload schema';

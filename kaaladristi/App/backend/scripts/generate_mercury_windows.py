@@ -35,10 +35,11 @@ FIXES in v2:
     of the km_planetary_positions.combust flag, whose historical orb drifted
     between ephemeris regenerations (root cause of the duplicate windows).
 
-Combustion stages (owner spec 2026-07-10): the 14° combustion arc divided into
-five equal bands, a window classified by the DEEPEST separation reached:
-  ghora 0-2.8° · tikshna 2.8-5.6° · sankshipta 5.6-8.4° · vimishra 8.4-11.2° ·
-  prakruta 11.2-14°.
+Combustion stages (owner spec 2026-07-10): the combustion arc divided into five
+equal bands, a window classified by the DEEPEST separation reached. Arc set to
+15° (matches the owner's almanac; see COMBUST_LIMIT_DEG note below), so bands are
+3° each: ghora 0-3° · tikshna 3-6° · sankshipta 6-9° · vimishra 9-12° ·
+prakruta 12-15°.
 Direction: 'east' = Mercury ahead of the Sun in longitude (evening sky),
 'west' = behind (morning sky), evaluated at the moment of minimum separation.
 
@@ -74,7 +75,15 @@ SIGNS = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
 # see generate_ephemeris.py — so day-boundary brackets use the same hour.
 SAMPLE_HOUR_UT = 5.5
 
-COMBUST_LIMIT_DEG = 14.0          # Mercury combustion arc (owner spec)
+# Combustion arc. The classical example value is 14°, but the owner's almanac
+# boundaries reverse-engineer to ~15° (separation at the sheet's own entry/exit
+# times for Jul-2026 = 15.20° / 14.82°). 14° produced a window ~1 day narrow on
+# each side (the 20-day gap); 15° reproduces the sheet to within a few hours.
+COMBUST_LIMIT_DEG = 15.0
+# Stages = the arc split into 5 equal bands, classified by the DEEPEST
+# separation reached. At 15° each band is 3°: ghora 0-3 · tikshna 3-6 ·
+# sankshipta 6-9 · vimishra 9-12 · prakruta 12-15. (Fractions of the limit, so
+# they scale automatically if COMBUST_LIMIT_DEG changes.)
 COMBUST_STAGES = [                # (upper-bound fraction of limit, label)
     (0.2, 'ghora'),
     (0.4, 'tikshna'),
