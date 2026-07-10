@@ -2,7 +2,7 @@
   "mcpServers": {
     "kaala-postgres": {
       "type": "sse",
-      "url": "https://mcp-db.dristiq.io/sse",
+      "url": "https://mcp-db.dristiq.com/sse",
       "headers": {
         "Authorization": "Basic ${KD_MCP_BASIC}"
       }

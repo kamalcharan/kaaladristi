@@ -14,11 +14,11 @@ Goal: give Claude Code **read-only SQL** access to `kaala_dristi_db` via the
 ## v2 architecture
 
 Run the MCP server **on the VPS** (next to the DB), expose it over **HTTPS via
-Traefik** — same pattern as `llm.dristiq.io` — and let Claude Code connect as a
+Traefik** — same pattern as `llm.dristiq.com` — and let Claude Code connect as a
 remote SSE server through the environment proxy.
 
 ```
-Claude Code container ──HTTPS (proxy-allowlisted)──▶ Traefik (mcp-db.dristiq.io, basic-auth, TLS)
+Claude Code container ──HTTPS (proxy-allowlisted)──▶ Traefik (mcp-db.dristiq.com, basic-auth, TLS)
                                                         └─▶ postgres-mcp (--access-mode=restricted, SSE)
                                                               └─▶ postgres :5432 (role kd_readonly, local only)
 ```
@@ -71,9 +71,9 @@ inspectable (optional; a second MCP entry would be needed to point at it).
 
 ## Step 2 — DNS + VPS service
 
-1. DNS: add an A record `mcp-db.dristiq.io` → VPS IP (same as `llm.dristiq.io`).
+1. DNS: add an A record `mcp-db.dristiq.com` → VPS IP (same as `llm.dristiq.com`).
 2. Add this service to the VPS compose stack (or run standalone). Adjust the
-   Traefik network/certresolver names to whatever `llm.dristiq.io` uses:
+   Traefik network/certresolver names to whatever `llm.dristiq.com` uses:
 
 ```yaml
   kd-mcp-db:
@@ -90,7 +90,7 @@ inspectable (optional; a second MCP entry would be needed to point at it).
     networks: [vikuna-net]
     labels:
       - traefik.enable=true
-      - traefik.http.routers.kd-mcp-db.rule=Host(`mcp-db.dristiq.io`)
+      - traefik.http.routers.kd-mcp-db.rule=Host(`mcp-db.dristiq.com`)
       - traefik.http.routers.kd-mcp-db.entrypoints=websecure
       - traefik.http.routers.kd-mcp-db.tls.certresolver=le
       - traefik.http.services.kd-mcp-db.loadbalancer.server.port=8000
@@ -104,13 +104,13 @@ Set in the VPS `.env` (never committed): `KD_READONLY_PASSWORD`, `KD_MCP_HTPASSW
 Then `docker compose up -d kd-mcp-db`.
 
 Sanity check from any machine:
-`curl -u claude:<password> https://mcp-db.dristiq.io/sse` → should open an SSE
+`curl -u claude:<password> https://mcp-db.dristiq.com/sse` → should open an SSE
 stream (event: endpoint), not 401/404.
 
 ## Step 3 — Claude Code environment settings (claude.ai)
 
 In the environment used for these sessions:
-1. **Network policy**: allow `mcp-db.dristiq.io` (this is the wall that
+1. **Network policy**: allow `mcp-db.dristiq.com` (this is the wall that
    currently 403s everything — nothing works until this is added).
 2. **Environment variable**: `KD_MCP_BASIC` = `base64("claude:<password>")`,
    e.g. `echo -n 'claude:<password>' | base64`.
@@ -124,7 +124,7 @@ In the environment used for these sessions:
   "mcpServers": {
     "kaala-postgres": {
       "type": "sse",
-      "url": "https://mcp-db.dristiq.io/sse",
+      "url": "https://mcp-db.dristiq.com/sse",
       "headers": { "Authorization": "Basic ${KD_MCP_BASIC}" }
     }
   }
@@ -150,6 +150,6 @@ may prompt for approval). Verify with a trivial query:
 - `.mcp.json` lives on the current working branch; sessions started from `main`
   won't pick it up until this lands in `main`.
 - If you'd rather not run a new container, the fallback is exposing PostgREST
-  (`db.dristiq.io`) and using an HTTP/PostgREST-based MCP — but that gives REST
+  (`db.dristiq.com`) and using an HTTP/PostgREST-based MCP — but that gives REST
   filters, not real SQL (no `GROUP BY month` coverage queries), so the
   postgres-mcp route above is strongly preferred for audit work.
