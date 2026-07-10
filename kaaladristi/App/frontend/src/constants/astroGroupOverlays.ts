@@ -13,6 +13,16 @@ import type { CatalogItem } from './catalogItems'
 /** Id prefix that marks a ChartOverlay as a virtual group overlay. */
 export const ASTRO_GROUP_PREFIX = 'astro_group:'
 
+/**
+ * Launch scope — which astro group overlays are live for users right now.
+ * We ship one planet slice at a time (Mercury first) so the astro layer is
+ * provably correct end-to-end before the next group is turned on. Add a tag
+ * here (e.g. 'Venus') the moment that slice's rules are catalog_visible and
+ * its windows/confidence are verified. Empty check + this allowlist together
+ * gate the Group Overlays pill row in CatalogAstroSection.
+ */
+export const LAUNCH_ACTIVE_GROUP_TAGS: string[] = ['Mercury']
+
 /** A group overlay is a CatalogItem (so it flows through addOverlay) + its source tag. */
 export interface AstroGroupOverlay extends CatalogItem {
   tag: string

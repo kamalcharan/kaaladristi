@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import InlineGate from '@/components/workspace/InlineGate'
 import { useToast, ToastContainer } from '@/components/ui'
 import type { CatalogItem } from '@/constants/catalogItems'
-import { ASTRO_GROUP_OVERLAYS, type AstroGroupOverlay } from '@/constants/astroGroupOverlays'
+import { ASTRO_GROUP_OVERLAYS, LAUNCH_ACTIVE_GROUP_TAGS, type AstroGroupOverlay } from '@/constants/astroGroupOverlays'
 import type { DeepDiveItem } from './DeepDivePanel'
 import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
 
@@ -505,7 +505,9 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           Group Overlays
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {ASTRO_GROUP_OVERLAYS.filter(group => allTags.includes(group.tag)).map(group => {
+          {ASTRO_GROUP_OVERLAYS
+            .filter(group => LAUNCH_ACTIVE_GROUP_TAGS.includes(group.tag) && allTags.includes(group.tag))
+            .map(group => {
             const added = isOverlayActive(group.id)
             return (
               <div
