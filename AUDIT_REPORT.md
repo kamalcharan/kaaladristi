@@ -475,3 +475,15 @@ SELECT MAX(computed_at) FROM km_rule_confidence;
 ---
 
 *Read-only audit — no code was modified. All findings cite file:line as of branch state at commit `1913e5c`.*
+
+---
+
+## Addendum (2026-07-10) — Re-validation against current `main`
+
+`origin/main` is at `1913e5c` — **identical to the audit base; zero commits have landed since**. Nothing is "already fixed." Re-verification of the tree did surface three refinements:
+
+1. **W1 Dashboard-nav orphan — STILL VALID (re-verified).** `LoginPage.tsx:49,94` still navigate to `/dashboard`; no sidebar entry; no redirect.
+2. **W2 P0 aha / Today's Brief — STILL VALID, but the fix path is cheaper than reported.** An unmounted, near-complete **`components/workspace/VaNiMorningBrief.tsx`** exists (loader, per-day dismiss, feedback widget) wired to the live `POST /api/vani/daily` backend — the audit missed it because nothing renders it: the Workspace Action Island's "Morning Brief" button merely flips to the Today tab (`WorkspacePage.tsx:336`). Day 4 becomes *mount + extend with scanner/rotation stock picks* rather than build-from-scratch. The P0 substance stands — the component is astro/framework-oriented and still names no stocks.
+3. **W3 DB-role findings — framing confirmed/sharpened by migrations 143/144** (present on main; the audit listed them in the count but didn't analyze them). Migration 144 (`restore_authenticated_role`) definitively restores JWT role=`authenticated` for all users and documents that admin authorization = `is_admin()` + frontend gating; migration 143 adds a SECURITY DEFINER `kd_update_profile` RPC for self-updates. Consequences: verification query #7 targets the right role; the **route-level admin guard finding remains valid but is a UI-leak, not a data-leak** (grants + SECURITY DEFINER RPCs protect writes) — P1 stands. The `km_astro_calendar` **rename migration is still missing** and `compute_astro_daily_signals` is **still never called outside migrations** — both re-verified.
+
+Everything else spot-checked and unchanged: D39 labels in `signalScale.ts:25-72` (P0), density default `terminal`, onboarding plan screen, 500-caps on breakout_surge/stage_2_leaders, no scan hit-rate infra (the backend's only `hit_rate` at `pipeline2_api.py:4473` is the correlation-insight request model), `resolveConflict` still Intraday-only, `scanEngine.ts` still astro-blind (0 hits). **The full 7-day plan stands; only Day 4's effort shrinks.**
