@@ -1,6 +1,6 @@
 # Scanner Materialized View MVP — Implementation
 
-**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Phase 1c (real matview SQL) is **gated on the Part 2 guard-firing check** (⛔ needs live DB / MCP).
+**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Part 2 guard-firing check **run — 2 of 4 guards are DOMINANT (zone 47.5%, flow 77.4%)**, see §Part 2 RESULTS. Phase 1c (real matview SQL) **stays gated** on the Part 2b zone/flow distribution follow-ups before the invalid-zone coercion can be ported.
 **Branch:** `claude/ready-for-task-xh6bih`
 **Target migration:** `km_migration_147_scan_results_matview.sql` (next free number).
 **Scope:** the **7 Path A / bundle scanners** only. The 7 Path B (direct-query) scanners are out of scope and MUST NOT regress.
@@ -337,6 +337,67 @@ Note: `low_volume_flow` here is universe-wide; the guard only *fires* when a LOW
 would otherwise pass a bullish preset's other gates — so this count is an **upper bound** on
 `flow_guard_applied`. The real per-preset firing rate comes from the audit columns once the
 matview is built. Interpret this pre-build query as a magnitude check, not the final number.
+
+### Part 2 — RESULTS (latest trade date, 2026-07-11)
+
+```
+total_rows | null_ema20 | null_or_zero_atr | invalid_zone | low_volume_flow
+     5,340 |          2 |               45 |        2,538 |           4,133
+```
+
+| Guard | Rows | % of universe | Verdict |
+|---|---|---|---|
+| `ema_20 IS NULL` (full-row exclusion, line 600) | 2 | **0.04%** | ✅ Genuine edge case. Audit/exclusion-count is a safety net exactly as intended. |
+| `atr_14 IS NULL OR ≤ 0` (evaluateOpportunity guard, 487) | 45 | **0.84%** | ✅ Genuine edge case. Safety net as intended. |
+| `magic_rs_zone` invalid → coerced null (603–605) | 2,538 | **47.5%** | 🔴 **DOMINANT — not an edge case.** Nearly half the universe has a *non-null* zone that isn't one of the 5 canonical Title-Case values, so the scanner silently nulls it. Any zone-gated preset (power_buy, power_sell, distribution_warning) is filtering against a field that's blank for ~half the market. |
+| `flow_type = 'LOW_VOLUME'` (workaround, 501–503) | 4,133 | **77.4%** | 🔴 **DOMINANT — not an edge case.** The LOW_VOLUME bypass is not a rare safety net; it is the majority regime. On bullish VaNi evaluation the flow gate is effectively disabled for 3 of every 4 stocks. |
+
+**Plain statement (per the owner's ask):** two of the four guards are **dominant, not rare**.
+The audit-column framing ("safety net for edge cases") holds for `ema_20`/`atr_14` but is the
+**wrong mental model** for zone and flow — those are not edge cases being caught, they are
+structural data-quality conditions affecting most of the universe. This is exactly the
+"is the fallback rare or dominant" question the owner raised, and the answer for two guards
+is *dominant*.
+
+**Consequence for priorities:**
+- The deferred **flag-based backfill** (is_vani_* + CA-adjustment) moves from "post-launch
+  nice-to-have" toward **launch-relevant**, because 77% LOW_VOLUME means the current
+  flow-based signal is largely inert on the live universe — the flags would be measuring
+  something real where flow_type currently isn't.
+- The **47.5% invalid-zone** number is not yet explainable from code alone and **must not be
+  ported blind.** Faithfully replicating the coerce-to-null would reproduce a scanner that
+  blanks half the market's zone — correct as parity, but potentially papering over a real
+  data bug. **Phase 1c stays gated** until we see what those 2,538 values actually are.
+
+### Part 2b — Follow-up queries required before Phase 1c (⛔ still blocking)
+
+Need the actual value distributions to know whether invalid-zone / LOW_VOLUME are **data
+bugs** (wrong case/format, mis-scaled RVOL) or **genuine** conditions:
+
+```sql
+-- (1) What ARE the 2,538 "invalid" zone values? Case/format artifact, or garbage?
+SELECT magic_rs_zone, COUNT(*) AS n
+FROM km_equity_eod
+WHERE trade_date = (SELECT MAX(trade_date) FROM km_equity_eod)
+GROUP BY magic_rs_zone
+ORDER BY n DESC;
+
+-- (2) Full flow_type distribution — is LOW_VOLUME concentrated in BSE / low-history / a
+--     specific exchange, or truly universe-wide?
+SELECT exchange, flow_type, COUNT(*) AS n
+FROM km_equity_eod
+WHERE trade_date = (SELECT MAX(trade_date) FROM km_equity_eod)
+GROUP BY exchange, flow_type
+ORDER BY exchange, n DESC;
+```
+
+Hypotheses to confirm/reject with the above (not asserting either):
+- Zone: values may be stored UPPER_SNAKE (`STRONG_BULL`) or lowercase for a subset, or a 6th
+  computed label exists that isn't in `VALID_ZONES` — in which case the guard is masking a
+  format mismatch, not filtering garbage, and the SQL port should normalize case rather than
+  coerce-to-null (a **behavior fix**, owner decision, not a silent change).
+- Flow: if LOW_VOLUME is concentrated on BSE (no delivery/volume-scale issue documented), the
+  77% may be a known-exchange artifact rather than a market-wide condition.
 
 ---
 
