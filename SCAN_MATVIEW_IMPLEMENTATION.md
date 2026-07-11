@@ -1,6 +1,6 @@
 # Scanner Materialized View MVP — Implementation
 
-**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Part 2 guard-firing check **run — 2 of 4 guards DOMINANT (zone 47.5%, flow 77.4%)**; zone root-caused to **stale frontend vocabulary** (DB writes 7 bands, frontend knows 5), coercion confirmed a parity no-op → **Phase 1c is now UNGATED and ready to write.** Only open item (flow-by-exchange) is non-blocking. See §Part 2 RESULTS + §Part 2b.
+**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Part 2 guard-firing check **run — 2 of 4 guards DOMINANT (zone 47.5%, flow 77.4%)**; zone root-caused to **stale frontend vocabulary** (DB writes 7 bands, frontend knows 5), coercion confirmed a parity no-op → **Phase 1c is now UNGATED and ready to write.** Only open item (flow-by-exchange) is non-blocking. See §Part 2 RESULTS + §Part 2b. **vani_flag path resolved by code inspection** (6/7 presets already use flag-based `computeVaniOpportunity` today; the vani_path question was moot) — see §vani_flag DEFINITIVE. **Phase 1c SQL is fully specified from code + migrations; live DB needed only to verify, not to write.**
 **Branch:** `claude/ready-for-task-xh6bih`
 **Target migration:** `km_migration_147_scan_results_matview.sql` (next free number).
 **Scope:** the **7 Path A / bundle scanners** only. The 7 Path B (direct-query) scanners are out of scope and MUST NOT regress.
@@ -516,6 +516,60 @@ different quality signal). **Do not build a new sibling component** — that wou
 what `DataHealthGrid` already does well. The per-row audit columns get **no UI in this
 task** (out of scope) and wait for the VaNi per-row explainer. This wiring is a **fast-
 follow after the ship gate**, not part of it (see below).
+
+---
+
+## vani_flag — DEFINITIVE parity resolution (2026-07-11, supersedes the open "vani_path" question)
+
+The earlier "keep `evaluateOpportunity` vs switch to `computeVaniOpportunity`" question was
+based on the **stale code comment at scanEngine.ts:747–751**. Reading the actual call sites
+settles it — **no owner decision needed, and it is NOT a choice:**
+
+- The 7 bundle scan functions **do** pass `presetId` into `buildScanStock`
+  (`buildScanStock(id, bundle, 'power_buy')`, lines 816/853/889/913/…). `conviction_flow`
+  computes it inline (line 1048).
+- Line 720–724: `vaniRule = getPresetMeta(presetId)?.vani_rule` is checked **first**; only if
+  it's null does it fall back to `evaluateOpportunity`.
+- Per migration **106** (unchanged by 125/126 for in-scope presets), **6 of the 7 presets
+  have a `vani_rule`** → they already run `computeVaniOpportunity` (flag-based) in production
+  **today**. Only `smart_money` is `vani_rule = NULL`.
+- `smart_money` is listed in the **bullish** `kd_vani_opportunity_config.applies_to_presets`
+  (migration 045), and `oppConfigMap` is keyed by expanding that array (scanEngine.ts:125–127)
+  → `smart_money` falls to `evaluateOpportunity` with the **bullish** config (migration 044).
+
+**→ Exact-parity vani_flag per preset (this is what the matview MUST reproduce):**
+
+| Preset | vani_rule | `vani_flag` = | `vani_path` |
+|---|---|---|---|
+| `power_buy` | is_vani_s2 | `is_vani_s2` | computeVaniOpportunity |
+| `fresh_breakout` | is_vani_s2 | `is_vani_s2` | computeVaniOpportunity |
+| `quiet_accumulation` | is_vani_s2 | `is_vani_s2` | computeVaniOpportunity |
+| `power_sell` | is_vani_distrib_and_weakness | `is_vani_distrib OR is_vani_weakness` | computeVaniOpportunity |
+| `distribution_warning` | is_vani_distrib_and_weakness | `is_vani_distrib OR is_vani_weakness` | computeVaniOpportunity |
+| `conviction_flow` | is_vani_surge_or_breakout | `is_vani_surge OR is_vani_breakout` | computeVaniOpportunity |
+| `smart_money` | NULL | `evaluateOpportunity(bullish cfg)` — band+reward+zone+**LOW_VOLUME-guarded flow**+rvol | evaluateOpportunity |
+
+Bullish cfg (migration 044): `ema_atr_band=1.0, reward_min_atr_multiple=0.0,
+magic_rs_zones=[Strong Bull, Mild Bull], flow_types=[FRESH_LONGS, SHORT_COVERING],
+rvol_min=1.2`. → `smart_money.vani_flag` =
+`ema_20 IS NOT NULL AND atr_14>0 AND close BETWEEN ema_20-atr_14 AND ema_20+atr_14
+AND (ema_20+atr_14-close)>0 AND magic_rs_zone IN ('Strong Bull','Mild Bull')
+AND (flow_type='LOW_VOLUME' OR flow_type IN ('FRESH_LONGS','SHORT_COVERING'))
+AND rvol>=1.2`.
+
+**Two consequences:**
+1. **No flag backfill is needed for parity.** The frontend already reads `is_vani_*` straight
+   from `km_equity_eod` (they're in `EOD_COLS`). The matview reading the same columns yields
+   identical `vani_flag` — parity is exact *by construction*, whatever the flags' current
+   values. (Flag *correctness* — whether the flags themselves are right, tied to the 77%
+   LOW_VOLUME finding — is a **separate** concern from parity.)
+2. **`flow_guard_applied` (§1b.1) is meaningful ONLY for `smart_money`** — it's the sole
+   preset on the `evaluateOpportunity` path. All other presets' `vani_path='computeVaniOpportunity'`
+   and their `flow_guard_applied` is always false. Documented so the audit column isn't
+   misread as "never fires" for the other six.
+
+**→ Phase 1c is fully specified from code + migrations. No further live-DB input gates the
+SQL.** (Live DB is still needed to *verify* parity, not to *write* it.)
 
 ---
 
