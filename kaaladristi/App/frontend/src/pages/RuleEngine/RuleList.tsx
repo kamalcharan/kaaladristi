@@ -296,8 +296,8 @@ function StatsBar({ rules }: { rules: AstroRule[] }) {
     <div className="flex gap-5 flex-wrap">
       {[
         { label: 'Total',    value: counts.total,    color: 'text-secondary' },
-        { label: 'Bullish',  value: counts.bullish,  color: 'text-risk-green' },
-        { label: 'Bearish',  value: counts.bearish,  color: 'text-risk-red' },
+        { label: 'Positive', value: counts.bullish,  color: 'text-risk-green' },
+        { label: 'Negative', value: counts.bearish,  color: 'text-risk-red' },
         { label: 'Volatile', value: counts.volatile,  color: 'text-risk-amber' },
         { label: 'Turning',  value: counts.turning,  color: 'text-accent-indigo' },
       ].map(({ label, value, color }) => (

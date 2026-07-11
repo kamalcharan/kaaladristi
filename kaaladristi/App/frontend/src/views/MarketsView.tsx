@@ -5,6 +5,7 @@ import { useIndicatorChart } from '@/hooks';
 import TradingChart from '@/components/charts/TradingChart';
 import { Skeleton, ErrorBoundary, PageHeader } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { trendLabel, zoneLabel } from '@/constants/signalScale';
 import type { MarketSymbol, TimeRange } from '@/types';
 
 const TIME_RANGES: TimeRange[] = ['1M', '3M', '6M', '1Y', '5Y', 'MAX'];
@@ -86,10 +87,10 @@ export default function MarketsView() {
                 {latest.supertrend_dir != null && (
                   <StatPill
                     label="SuperTrend"
-                    value={latest.supertrend_dir === 1 ? 'Uptrend' : 'Downtrend'}
+                    value={trendLabel(latest.supertrend_dir)}
                   />
                 )}
-                {latest.magic_rs_zone && <StatPill label="MagicRS vs N500" value={latest.magic_rs_zone} />}
+                {latest.magic_rs_zone && <StatPill label="MagicRS vs N500" value={zoneLabel(latest.magic_rs_zone).label} />}
                 {latest.chartink_score != null && <StatPill label="Chartink" value={`${latest.chartink_score}/3`} />}
               </div>
             </div>

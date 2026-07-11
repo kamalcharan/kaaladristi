@@ -111,8 +111,8 @@ function Legend() {
   return (
     <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10 }}>
       {[
-        { color: 'var(--bull)', label: 'Nak-Vara: Bullish' },
-        { color: 'var(--bear)', label: 'Nak-Vara: Bearish' },
+        { color: 'var(--bull)', label: 'Nak-Vara: Positive' },
+        { color: 'var(--bear)', label: 'Nak-Vara: Negative' },
         { color: 'var(--text-muted)', label: 'Nak-Vara: None' },
         { color: 'var(--caution)', label: 'Breadth: Moderate' },
         { color: 'color-mix(in srgb, var(--bull) 70%, transparent)', label: 'ROC: Positive (0–1)' },

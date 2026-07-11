@@ -145,7 +145,7 @@ export default function AstroStrip({ dcInferences, activeDate }: AstroStripProps
             { label: 'Major+', color: 'var(--bull)' },
             { label: 'Minor+', color: 'var(--bull)' },
             { label: 'Minor−', color: 'var(--caution)' },
-            { label: 'Bearish', color: 'var(--bear)' },
+            { label: 'Major−', color: 'var(--bear)' },
           ].map((item) => (
             <span key={item.label} style={{
               display: 'flex', alignItems: 'center', gap: 3,

@@ -1,12 +1,18 @@
 /**
- * signalScale.ts — canonical signal vocabulary for Kāla-Drishti
+ * signalScale.ts — canonical signal vocabulary for Kāla-Drishti (SINGLE SOURCE)
  *
- * Three vocabularies, one source of truth:
+ * Vocabularies, one source of truth:
  *   1. MarketImpact  — astro event impact / daily net signal  (mild_* keys, DB: km_astro_calendar.market_impact)
  *   2. MagicRS zones — DB-computed Title Case strings         (DB: km_equity_eod.magic_rs_zone)
  *   3. Flow types    — DB-computed UPPER_SNAKE strings        (DB: km_equity_eod.flow_type)
+ *   4. RSI bands     — value → neutral band label
  *
- * All other files should import from here. Never define these labels inline.
+ * D39 (SEBI): displayed labels are NON-DIRECTIONAL — never "bull/bear/uptrend/
+ * downtrend" in any badge, label or tooltip. DB *keys* keep their names; only
+ * the shown text is neutral. Get every displayed label via the helpers below
+ * (impactLabel / zoneLabel / zoneLabelShort / rsiLabel / flowLabel) — NEVER
+ * hardcode a label string in a component. That is what prevents vocabulary
+ * drift (new components import a helper; there is no string to re-invent).
  */
 
 // ── 1. Market Impact (astro event scale) ─────────────────────────────────────
@@ -22,15 +28,20 @@ export type MarketImpact =
   | 'strong_bearish';
 
 export const SIGNAL_LABELS: Record<string, string> = {
-  strong_bullish: 'Strong Uptrend',
+  strong_bullish: 'Strong Positive',
   bullish:        'Positive',
-  mild_bullish:   'Mild Uptrend',
+  mild_bullish:   'Mild Positive',
   neutral:        'Neutral',
   turning:        'Turning',
-  mild_bearish:   'Mild Downtrend',
+  mild_bearish:   'Mild Negative',
   bearish:        'Negative',
-  strong_bearish: 'Strong Downtrend',
+  strong_bearish: 'Strong Negative',
 };
+
+/** Displayed market-impact label (D39-neutral). Never render the raw key. */
+export function impactLabel(impact: string | null | undefined): string {
+  return SIGNAL_LABELS[impact ?? ''] ?? (impact ?? '—');
+}
 
 export type SignalColor = 'green' | 'red' | 'amber' | 'slate';
 
@@ -60,17 +71,54 @@ export const IMPACT_OPTIONS: MarketImpact[] = [
   'strong_bearish',
 ];
 
-// ── 2. MagicRS Zones (Title Case — as stored in DB) ──────────────────────────
+// ── 2. MagicRS Zones (Title Case DB keys → D39-neutral relative-strength labels)
+// DB keeps 'Strong Bull' etc. in magic_rs_zone; only the SHOWN label is neutral.
 
 export const ZONE_LABELS: Record<string, { label: string; color: string }> = {
-  'Strong Bull':  { label: 'Strong Uptrend',   color: 'text-risk-green' },
-  'Mild Bull':    { label: 'Mild Uptrend',      color: 'text-risk-green/70' },
-  'Neutral Bull': { label: 'Neutral Uptrend',   color: 'text-risk-green/40' },
-  'Neutral':      { label: 'Neutral',           color: 'text-muted' },         // legacy
-  'Neutral Bear': { label: 'Neutral Downtrend', color: 'text-risk-red/40' },
-  'Mild Bear':    { label: 'Mild Downtrend',    color: 'text-risk-red/70' },
-  'Strong Bear':  { label: 'Strong Downtrend',  color: 'text-risk-red' },
+  'Strong Bull':  { label: 'Leading',    color: 'text-risk-green' },
+  'Mild Bull':    { label: 'Improving',  color: 'text-risk-green/70' },
+  'Neutral Bull': { label: 'Neutral',    color: 'text-risk-green/40' },
+  'Neutral':      { label: 'Neutral',    color: 'text-muted' },         // legacy
+  'Neutral Bear': { label: 'Neutral',    color: 'text-risk-red/40' },
+  'Mild Bear':    { label: 'Weakening',  color: 'text-risk-red/70' },
+  'Strong Bear':  { label: 'Lagging',    color: 'text-risk-red' },
 };
+
+/** Short zone label for tight UI (ticker rail etc.) — D39-neutral. */
+export const ZONE_LABELS_SHORT: Record<string, string> = {
+  'Strong Bull':  'Lead',
+  'Mild Bull':    'Firm',
+  'Neutral Bull': 'Neut',
+  'Neutral':      'Neut',
+  'Neutral Bear': 'Neut',
+  'Mild Bear':    'Soft',
+  'Strong Bear':  'Lag',
+};
+
+/** Displayed MagicRS zone label + color. Never render raw magic_rs_zone. */
+export function zoneLabel(zone: string | null | undefined): { label: string; color: string } {
+  return ZONE_LABELS[zone ?? ''] ?? { label: zone ?? '—', color: 'text-muted' };
+}
+export function zoneLabelShort(zone: string | null | undefined): string {
+  return ZONE_LABELS_SHORT[zone ?? ''] ?? '—';
+}
+
+// ── 4. RSI bands (value → neutral band label, D39-safe) ──────────────────────
+
+export function rsiLabel(value: number): string {
+  if (value >= 70) return 'Overbought';
+  if (value >= 55) return 'Strong';
+  if (value > 45)  return 'Neutral';
+  if (value >= 30) return 'Weak';
+  return 'Oversold';
+}
+
+// ── 5. SuperTrend direction (dir → neutral label, D39-safe) ──────────────────
+
+export function trendLabel(dir: number | null | undefined): string {
+  if (dir == null) return '—';
+  return dir === 1 ? 'Rising' : 'Falling';
+}
 
 // ── 3. Flow Types (UPPER_SNAKE — as stored in DB) ─────────────────────────────
 

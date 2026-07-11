@@ -679,9 +679,9 @@ function RegimeGrid({ transits }: { transits: RuleTransit[] }) {
   const maxCount = Math.max(...regimes.map(r => r.count), 1);
 
   const CFG = {
-    bull: { label: 'Bull Regime', accent: 'text-risk-green',  bar: 'bg-risk-green'  },
-    side: { label: 'Sideways',    accent: 'text-risk-amber',  bar: 'bg-risk-amber'  },
-    bear: { label: 'Bear Regime', accent: 'text-risk-red/80', bar: 'bg-risk-red'    },
+    bull: { label: 'Rising Regime',  accent: 'text-risk-green',  bar: 'bg-risk-green'  },
+    side: { label: 'Sideways',       accent: 'text-risk-amber',  bar: 'bg-risk-amber'  },
+    bear: { label: 'Falling Regime', accent: 'text-risk-red/80', bar: 'bg-risk-red'    },
   } as const;
 
   return (

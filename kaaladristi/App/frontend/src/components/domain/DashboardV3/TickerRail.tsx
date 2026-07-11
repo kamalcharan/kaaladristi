@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
+import { zoneLabelShort } from '@/constants/signalScale';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -126,17 +127,9 @@ function zoneColor(zone: string | null): string {
   }
 }
 
+// D39-neutral short label — vocabulary comes from signalScale (no inline strings).
 function zoneShort(zone: string | null): string {
-  switch (zone) {
-    case 'Strong Bull':  return 'S.Bull';
-    case 'Mild Bull':    return 'M.Bull';
-    case 'Neutral Bull': return 'N.Bull';
-    case 'Neutral':      return 'Neut';   // legacy
-    case 'Neutral Bear': return 'N.Bear';
-    case 'Mild Bear':    return 'M.Bear';
-    case 'Strong Bear':  return 'S.Bear';
-    default:             return '—';
-  }
+  return zoneLabelShort(zone);
 }
 
 // ── Single card ───────────────────────────────────────────────────────────────

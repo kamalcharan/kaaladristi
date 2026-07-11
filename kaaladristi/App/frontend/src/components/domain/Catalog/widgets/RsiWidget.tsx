@@ -1,18 +1,11 @@
 import { useRef, useEffect } from 'react'
 import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
+import { rsiLabel } from '@/constants/signalScale'
 
 function rsiColor(value: number): string {
   if (value >= 70) return 'var(--bear)'
   if (value <= 30) return 'var(--bull)'
   return 'var(--accent)'
-}
-
-function rsiZone(value: number): string {
-  if (value >= 70) return 'Overbought'
-  if (value <= 30) return 'Oversold'
-  if (value >= 55) return 'Bullish'
-  if (value <= 45) return 'Bearish'
-  return 'Neutral'
 }
 
 // Both RSI and MFI are 0-100 so we use a fixed scale
@@ -115,7 +108,7 @@ export default function RsiWidget() {
   const currentMfi = visibleData[activeBarIndex]?.mfi_14
 
   const color = rsiColor(currentRsi)
-  const zone  = rsiZone(currentRsi)
+  const zone  = rsiLabel(currentRsi)
 
   return (
     <div style={{ padding: '4px 12px 8px' }}>

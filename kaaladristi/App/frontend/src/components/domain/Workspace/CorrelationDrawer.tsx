@@ -114,7 +114,7 @@ function PairDetail({ corr, onDismiss, onOpenFull }: {
           padding: 14, background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', borderRadius: 8,
           border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
           <StatBox label="Instances"  value={String(corr.n_instances)} />
-          <StatBox label="Bull / Bear" value={`${corr.bullish_count} / ${corr.bearish_count}`} />
+          <StatBox label="Pos / Neg" value={`${corr.bullish_count} / ${corr.bearish_count}`} />
           <StatBox label="5D avg"
             value={fmtRet(corr.avg_return_5d)}
             color={retColor(corr.avg_return_5d)} />

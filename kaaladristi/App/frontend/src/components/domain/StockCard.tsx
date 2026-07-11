@@ -11,7 +11,7 @@ import { Card } from '@/components/ui';
 import { useNavigate } from 'react-router-dom';
 import type { ScanStock } from '@/types';
 import React from 'react';
-import { ZONE_LABELS, FLOW_LABELS } from '@/constants/signalScale';
+import { ZONE_LABELS, FLOW_LABELS, zoneLabel } from '@/constants/signalScale';
 import { ScanCardWrapper, VaniBadge, CardExchangeBadge } from './ScanCardShell';
 import { getColor, formatValue, getLabel, getTooltip } from '@/config/fieldConfig';
 import { Tooltip } from '@/components/ui';
@@ -420,7 +420,7 @@ export function StockCard({
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
         {stock.magic_rs_zone && (
           <span style={zonePillStyle(stock.magic_rs_zone, getColor('magic_rs', stock.magic_rs, stock))}>
-            {stock.magic_rs_zone}
+            {zoneLabel(stock.magic_rs_zone).label}
           </span>
         )}
         {stock.pctBelow52wHigh != null && (

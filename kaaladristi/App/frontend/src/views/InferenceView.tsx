@@ -589,8 +589,8 @@ export default function InferenceView() {
         {rows.length > 0 && (
           <div className="flex flex-wrap gap-3 mb-6">
             <StatPill label="Total Entries" value={String(rows.length)} />
-            <StatPill label="Bearish" value={String(rows.filter(r => r.market_impact === 'bearish').length)} />
-            <StatPill label="Bullish" value={String(rows.filter(r => r.market_impact === 'bullish').length)} />
+            <StatPill label="Negative" value={String(rows.filter(r => r.market_impact === 'bearish').length)} />
+            <StatPill label="Positive" value={String(rows.filter(r => r.market_impact === 'bullish').length)} />
             <StatPill label="Volatile" value={String(rows.filter(r => r.market_impact === 'volatile').length)} />
           </div>
         )}
