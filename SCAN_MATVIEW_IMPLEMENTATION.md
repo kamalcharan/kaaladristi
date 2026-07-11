@@ -1,6 +1,6 @@
 # Scanner Materialized View MVP — Implementation
 
-**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Part 2 guard-firing check **run — 2 of 4 guards are DOMINANT (zone 47.5%, flow 77.4%)**, see §Part 2 RESULTS. Phase 1c (real matview SQL) **stays gated** on the Part 2b zone/flow distribution follow-ups before the invalid-zone coercion can be ported.
+**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Part 2 guard-firing check **run — 2 of 4 guards DOMINANT (zone 47.5%, flow 77.4%)**; zone root-caused to **stale frontend vocabulary** (DB writes 7 bands, frontend knows 5), coercion confirmed a parity no-op → **Phase 1c is now UNGATED and ready to write.** Only open item (flow-by-exchange) is non-blocking. See §Part 2 RESULTS + §Part 2b.
 **Branch:** `claude/ready-for-task-xh6bih`
 **Target migration:** `km_migration_147_scan_results_matview.sql` (next free number).
 **Scope:** the **7 Path A / bundle scanners** only. The 7 Path B (direct-query) scanners are out of scope and MUST NOT regress.
@@ -398,6 +398,69 @@ Hypotheses to confirm/reject with the above (not asserting either):
   coerce-to-null (a **behavior fix**, owner decision, not a silent change).
 - Flow: if LOW_VOLUME is concentrated on BSE (no delivery/volume-scale issue documented), the
   77% may be a known-exchange artifact rather than a market-wide condition.
+
+### Part 2b — RESULTS (query 1, 2026-07-11) — 🔴 ROOT CAUSE: stale frontend zone vocabulary
+
+```
+magic_rs_zone | n         magic_rs_zone | n
+------------- | ----      ------------- | ----
+Neutral Bear  | 1,419     Strong Bear   |   759
+Neutral Bull  | 1,119     Mild Bear     |   452
+Strong Bull   |   862     (null)        |   420
+Strong Bear   |   759     Mild Bull     |   309
+```
+
+The 2,538 "invalid" rows are **exactly two values**: `Neutral Bear` (1,419) + `Neutral Bull`
+(1,119) = 2,538. **These are not garbage — they are legitimate computed zone labels the
+pipeline writes that the frontend's `VALID_ZONES` set (5 values, scanEngine.ts:86) does not
+know about.** The DB computes a **7-band scheme** — Strong Bull · Neutral Bull · Mild Bull ·
+(plain Neutral, apparently unused on this date) · Mild Bear · Neutral Bear · Strong Bear —
+while `VALID_ZONES` = {Strong Bull, Mild Bull, Neutral, Mild Bear, Strong Bear}. The zone
+guard is masking a **vocabulary drift between pipeline and frontend**, not filtering bad data.
+
+**Effect on the 3 zone-gated scanners — precisely nil for inclusion, non-nil for display:**
+- `power_buy` accepts zone ∈ {Strong Bull, Mild Bull}. `Neutral Bull` is neither → it fails
+  the zone check *whether or not* it's coerced to null. **Coercion is a no-op for inclusion.**
+- `power_sell` accepts {Strong Bear, Mild Bear}. `Neutral Bear` fails either way. **No-op.**
+- `distribution_warning` accepts current-zone ∈ {Mild Bull, Neutral, Mild Bear}. `Neutral
+  Bull`/`Neutral Bear` fail either way. **No-op for inclusion** — but see the product gap below.
+- **Display:** the coercion DOES change the *stored* `magic_rs_zone` for any Neutral-band
+  stock that gets into a result set via a non-zone branch (e.g. a `Neutral Bull` stock
+  entering `power_buy` through `accum_distrib='ACCUMULATION'`). Current JS shows its zone as
+  **blank**. → **The matview must coerce to null in the stored display column too, to match.**
+
+**→ Parity resolution (no owner decision needed for the port):** replicate the coercion
+verbatim — `CASE WHEN magic_rs_zone NOT IN ('Strong Bull','Mild Bull','Neutral','Mild Bear',
+'Strong Bear') THEN NULL ELSE magic_rs_zone END`. Confirmed safe: zero effect on which rows
+each scanner returns; matches current display exactly. **Phase 1c is UNGATED on the zone
+question** — I can port it faithfully now.
+
+**→ Separate product finding (NOT this task — flagged for owner):** the stale vocabulary
+means `distribution_warning` silently ignores a real candidate class. A stock that slid
+**Strong Bull → Neutral Bear** is a textbook distribution setup, but `Neutral Bear` isn't in
+its accepted current-zone set, so it's excluded. Fixing this = add `Neutral Bull`/`Neutral
+Bear` to `signalScale.ts` `ZONE_LABELS` + `VALID_ZONES` **and** decide their scanner semantics
+— a behavior change, D39-adjacent (the labels contain "Bull"/"Bear" and would need
+SEBI-neutral display strings like the existing zones). Do **not** fold into the matview task.
+
+### Part 2b — query (2) correction
+
+Query (2) errored: **`km_equity_eod` has no `exchange` column** (exchange lives on
+`km_equity_symbols`). Corrected — join to the symbol master:
+
+```sql
+SELECT s.exchange, e.flow_type, COUNT(*) AS n
+FROM km_equity_eod e
+JOIN km_equity_symbols s ON s.id = e.equity_id     -- adjust FK col if not equity_id
+WHERE e.trade_date = (SELECT MAX(trade_date) FROM km_equity_eod)
+GROUP BY s.exchange, e.flow_type
+ORDER BY s.exchange, n DESC;
+```
+
+This is the **only remaining open Part 2 question**: is the 77% LOW_VOLUME a BSE-concentrated
+artifact or genuinely market-wide? It does **not gate Phase 1c** (the LOW_VOLUME guard ports
+verbatim regardless — evaluateOpportunity 501–503), but the answer sets how urgent the
+flag/CA backfill is. Run when convenient; not blocking.
 
 ---
 
