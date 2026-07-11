@@ -46,7 +46,7 @@ export default function LoginPage() {
   const [inviteError, setInviteError] = useState('');
 
   useEffect(() => {
-    if (user) navigate('/dashboard', { replace: true });
+    if (user) navigate('/workspace', { replace: true });
   }, [user, navigate]);
 
   const reset = (mode: AuthMode) => { setAuthMode(mode); setError(''); setSuccess(''); };
@@ -91,7 +91,7 @@ export default function LoginPage() {
         await signIn(email, password);
         await useAuthStore.getState().refreshProfile();
         const prof = useAuthStore.getState().profile;
-        navigate(prof?.onboarded ? '/dashboard' : '/setup');
+        navigate(prof?.onboarded ? '/workspace' : '/setup');
       }
     } catch (err: any) {
       setError(err.message || 'Something went wrong');

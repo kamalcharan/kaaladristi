@@ -20,6 +20,7 @@ const navSections: NavSection[] = [
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
       { to: '/account',         glyph: '◯', label: 'Account' },
+      { to: '/settings',        glyph: '⚙', label: 'Settings' },
     ],
   },
   {
@@ -34,9 +35,6 @@ const navSections: NavSection[] = [
       { to: '/intraday/1',          glyph: '◐', label: 'Intraday',             adminOnly: true },
       { to: '/inference',           glyph: '✎', label: 'Inference DB',        adminOnly: true },
       { to: '/rule-eval',           glyph: '⊛', label: 'Rule Eval',           adminOnly: true },
-      // Settings hidden from nav 2026-07-09: dark theme is fine, light theme
-      // still has open issues there — revisit once light mode is sorted.
-      // Route itself (SettingsView.tsx) is untouched, just not linked.
       { to: '/data-pipeline',       glyph: '▦', label: 'Data Pipeline',       adminOnly: true },
       { to: '/admin/panchang',      glyph: '⊟', label: 'Panchang Admin',      adminOnly: true },
       { to: '/rules',               glyph: '⊠', label: 'Rule Engine',         adminOnly: true },

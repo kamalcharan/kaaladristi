@@ -10,7 +10,6 @@ import ProtectedRoute from '@/components/domain/ProtectedRoute';
 import LandingPage from '@/views/LandingPage';
 import LoginPage from '@/views/LoginPage';
 import ProfileSetup from '@/views/ProfileSetup';
-import DashboardV3Page from '@/views/DashboardV3Page';
 import MarketsView from '@/views/MarketsView';
 import SettingsView from '@/views/SettingsView';
 import InferenceView from '@/views/InferenceView';
@@ -115,7 +114,6 @@ function AppRoutes() {
           <Route path="/sector-rotation" element={<SectorRotationPage />} />
           <Route path="/sector-rotation/:indexId" element={<IndexDetailPage />} />
           <Route path="/correlation/:itemA/:itemB" element={<CorrelationPage />} />
-          <Route path="/dashboard" element={<DashboardV3Page />} />
           <Route path="/markets" element={<MarketsView />} />
           <Route path="/inference" element={<InferenceView />} />
           <Route path="/rule-eval" element={<RuleEvalView />} />
