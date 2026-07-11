@@ -1,6 +1,6 @@
 # Scanner Materialized View MVP — Implementation
 
-**Status:** Phase 1 (rule inventory + schema design) — **FOR REVIEW, not yet run.**
+**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Phase 1c (real matview SQL) is **gated on the Part 2 guard-firing check** (⛔ needs live DB / MCP).
 **Branch:** `claude/ready-for-task-xh6bih`
 **Target migration:** `km_migration_147_scan_results_matview.sql` (next free number).
 **Scope:** the **7 Path A / bundle scanners** only. The 7 Path B (direct-query) scanners are out of scope and MUST NOT regress.
@@ -216,6 +216,52 @@ distribution_warning). `magic_rs_trend` → store as `SMALLINT[]` or 5 bool cols
 
 **PK `(preset_id, equity_id)`** — a stock can appear in multiple presets, never twice in one.
 
+### Phase 1b.1 — Audit / provenance columns (addendum, 2026-07-11)
+
+**Owner concern:** *"fallbacks are riskier than wrong answers — a defaulted/guard-excluded
+row looks identical to a genuinely-computed one. I will never know if it is correctly
+calculated or defaulted."* Every guard in §1a (ema_20 exclusion, LOW_VOLUME workaround,
+zone coercion, atr_14≤0, history-insufficiency) is **correct as ported** but currently
+leaves **no trace**. These columns add that trace. **They change no scoring, filtering, or
+ranking** — the parity diff on every already-specified column must stay byte-for-byte
+identical. Additive only. Populated by the *same* pass that already makes the decision — not
+a second computation.
+
+| Column | Type | Set when |
+|---|---|---|
+| `vani_path` | TEXT | `'evaluateOpportunity'` \| `'computeVaniOpportunity'` — which path actually produced this row's `vani_flag`. Records the fallback-vs-flag decision per row and pre-positions data for the post-launch flag-based switch. |
+| `flow_guard_applied` | BOOLEAN | true when the LOW_VOLUME workaround (evaluateOpportunity 501–503) *specifically* is what let the row pass `flowOk` — i.e. `flow_type='LOW_VOLUME' && !isBearish`, rather than the actual flow matching the configured types. |
+| `zone_coerced` | BOOLEAN | true when `buildScanStock`'s zone guard (603–605) nulled an invalid `magic_rs_zone`, rather than the stock genuinely having no zone. |
+| `history_insufficient` | BOOLEAN | true when a history-length guard governed presence (only meaningfully recordable for the *included* case, e.g. `scanConvictionFlow`'s `history.length < 5` boundary). The `ema_20 == null` full-row exclusion (600) drops the row entirely → no row to flag → captured in the exclusion-counts table below, not here. |
+| `guard_notes` | TEXT[] (nullable) | free-form array of any other guard/magic-number boundary that fired for this row — e.g. `'rank_change_boundary'` (rotation landed exactly on ±5), `'d_pct_boundary'`, `'breakout_tie'`. Optional; include only if it doesn't materially complicate the UNION blocks. |
+
+### Phase 1b.2 — Exclusion companion table `km_scan_exclusion_counts` (addendum)
+
+Audit columns can only describe rows that made it in. The **riskiest** fallback behavior is
+the rows silently *dropped* (`ema_20 == null` never produces a row to flag). A per-(preset,
+date) aggregate answers *"how much of the universe did we silently drop today, and why"* —
+a question that should be visible **before** launch, not discovered when a user notices a
+scanner returns suspiciously few rows.
+
+```sql
+CREATE MATERIALIZED VIEW km_scan_exclusion_counts AS
+SELECT
+  preset_id, trade_date,
+  COUNT(*)                                             AS total_candidates,
+  COUNT(*) FILTER (WHERE ema_20 IS NULL)               AS excluded_null_ema20,
+  COUNT(*) FILTER (WHERE atr_14 IS NULL OR atr_14<=0)  AS excluded_null_atr,
+  COUNT(*) FILTER (WHERE history_insufficient)         AS excluded_insufficient_history,
+  COUNT(*) FILTER (WHERE included)                     AS included_count
+FROM <per-preset candidate CTE>   -- the pre-guard universe for each preset
+GROUP BY preset_id, trade_date
+WITH NO DATA;
+CREATE UNIQUE INDEX ux_km_scan_excl_pk ON km_scan_exclusion_counts (preset_id, trade_date);
+GRANT SELECT ON km_scan_exclusion_counts TO authenticated, anon, kd_app, admin, "user", kd_readonly;
+```
+
+Cheap `COUNT(*) FILTER (...)` computed alongside the main matview build; refreshed in the
+same step. Surfaced in Data Health (see Part 3).
+
 ---
 
 ## Phase 2 — Refresh paths (design)
@@ -240,6 +286,112 @@ functions in the tree (dead but referenced by the parity diff) until Phase 4 pas
 Run migration → parity diff clean on all 7 presets (staging/backup copy first) →
 perf before/after captured → Path B regression check → then repoint in prod.
 **Confirm backup dump name with owner before executing.**
+
+Ship-gate scope is unchanged by the addendum: the audit columns/exclusion table are
+**additive** and must not perturb the parity diff. Wiring the exclusion aggregate into
+`DataHealthGrid` (Part 3) is a **fast-follow after** the gate, not a gate item.
+
+---
+
+## Addendum plan deltas (2026-07-11)
+
+- Phase 1b schema gains 5 audit columns (§1b.1) + companion table `km_scan_exclusion_counts` (§1b.2).
+- **Before Phase 1c SQL is finalized:** run the Part 2 guard-firing check (⛔ blocking; MCP not live) and I state the finding plainly here.
+- Part 3 investigated — recommendation: extend `DataHealthGrid` with a `scan_results` dimension for the exclusion aggregate; do **not** reuse the correlation pill/bar; per-row audit columns get no UI here.
+- **No change to parity requirements** — audit columns are additive; every displayed column still matches JS exactly.
+- Per-row audit-column **UI is out of scope** (columns only) — folds into the VaNi per-row "why is this here" explainer later.
+- Part 3 wiring reports back **before Phase 4** so the owner can decide the fast-follow; it does not block schema/SQL.
+
+---
+
+## Part 2 — Guard-firing frequency check (⛔ BLOCKING on live DB)
+
+The schema was designed entirely from reading code — **zero visibility** into how often
+these guards actually fire on real data. That blind spot must be closed **before Phase 1c
+SQL is finalized**, because the answer changes priorities: if a guard fires on ~2% of rows
+it's a genuine edge case and the audit columns are a safety net; if it fires on 30–40% for
+any preset, a meaningful share of what looks like "signal" is actually fallback behavior —
+a finding the owner needs stated plainly, and one that would make the currently-deferred
+flag-based backfill **urgent, not post-launch**.
+
+**MCP connector `kaala-postgres` is NOT live in this environment → this is a BLOCKING
+UNKNOWN. I have not guessed the answer.** Run this manually (or via MCP once live) and
+paste results back; I will state the finding plainly in this doc regardless of direction:
+
+```sql
+-- Guard-firing frequency across the universe, latest trade date.
+SELECT
+  COUNT(*)                                              AS total_rows,
+  COUNT(*) FILTER (WHERE ema_20 IS NULL)                AS null_ema20,
+  COUNT(*) FILTER (WHERE atr_14 IS NULL OR atr_14 <= 0) AS null_or_zero_atr,
+  COUNT(*) FILTER (WHERE magic_rs_zone IS NOT NULL
+                    AND magic_rs_zone NOT IN
+                    ('Strong Bull','Mild Bull','Neutral','Mild Bear','Strong Bear'))
+                                                        AS invalid_zone,
+  COUNT(*) FILTER (WHERE flow_type = 'LOW_VOLUME')      AS low_volume_flow
+FROM km_equity_eod
+WHERE trade_date = (SELECT MAX(trade_date) FROM km_equity_eod);
+```
+
+Note: `low_volume_flow` here is universe-wide; the guard only *fires* when a LOW_VOLUME row
+would otherwise pass a bullish preset's other gates — so this count is an **upper bound** on
+`flow_guard_applied`. The real per-preset firing rate comes from the audit columns once the
+matview is built. Interpret this pre-build query as a magnitude check, not the final number.
+
+---
+
+## Part 3 — Reuse of the existing data-quality surface (investigated 2026-07-11)
+
+**Finding — there are three distinct things, not one "data-quality component":**
+
+1. **`DataHealthGrid`** (`components/domain/DataHealthGrid.tsx`, ~660 lines) — the real one.
+   A per-**dimension** × per-**day** pipeline health matrix: ok / missing / partial / holiday
+   / no_data squares over 60/90/120-day windows, **column-fill `coverage_pct`** in the
+   tooltip, a "last fix updated 0 rows = silent no-op" amber warning, per-day fix actions
+   (wrench → `POST /api/pipeline/fix`), and a VaNi health insight. Backed by
+   `GET /api/pipeline/health-checks` → `lib/health_checks.py` `DIMENSION_META`. Surfaced in
+   **PipelineDashboard** (admin/settings). Monitors *download* and *computation* layers.
+2. **`DataFreshnessChip`** (`components/domain/DataFreshnessChip.tsx`) — lightweight
+   user-facing "data as of <date>" staleness pill. Freshness only.
+3. **`DataQualityPill` / `DataQualityBar`** (`components/correlation/`) — a **coverage bar
+   for one correlation query**: `coverage_pct` over a date range, 95/80 threshold colors.
+   Built for date-range completeness of a single correlation, not logic-path provenance.
+
+Plus a **`dristiQ-data-quality` skill** (`mnt/skills/user/`) — documentation of the 3
+structural DB issues (volume discontinuity, SHANTHALA phantom, dual-listing dedup) + a safe-
+query checklist. A *doc*, not a component.
+
+**Fit assessment for the three reuse candidates:**
+
+- **(a) Surface this task's audit columns / exclusion counts.** ✅ for the *aggregate*
+  (`km_scan_exclusion_counts`) → **extend `DataHealthGrid`**: add a `scan_results` row to
+  `health_checks.DIMENSION_META` and surface excluded-count / included-count in the same
+  tooltip slot that already shows `coverage_pct` column-fill. It is already admin-facing,
+  already speaks "N of M rows populated / dropped", already has the fix-action affordance.
+  ❌ for the **correlation `DataQualityPill`/`Bar`** — wrong shape (single-query date-range
+  coverage, not per-preset logic provenance); reusing it would overload a component built
+  for something else. ❌ for the **per-row audit columns** (`vani_path`,
+  `flow_guard_applied`, `zone_coerced`) — those are per-row *provenance*, which belongs in
+  the eventual VaNi per-row "why is this here" explainer, **explicitly out of scope here**
+  (columns only). No existing component fits, and none should be stretched to.
+- **(b) Pipeline step health.** ✅ **strong, native fit** — `DataHealthGrid` *already does
+  exactly this* for every other dimension (did `vani_flags` / `stage_classification` run,
+  plausible row counts, coverage). Adding the `scan_results` dimension + its exclusion counts
+  is the low-cost, in-model extension. This is where the exclusion aggregate should land.
+- **(c) Astro CA-adjustment gaps / survivorship-coverage from the backfill scoping.** ❌
+  stretch for the UI components. That concern is documentation-shaped and already lives in
+  the `dristiQ-data-quality` **skill** (and the scanner-backfill scoping doc). The
+  correlation `DataQualityBar`'s "note N instances excluded, interpret with caution" pattern
+  is the closest analogue, but wiring CA-gap flags into it is a separate initiative, not
+  reuse. Keep CA-gap tracking in the skill/backfill track.
+
+**Recommendation (decisive):** For this task's aggregate audit data, **extend
+`DataHealthGrid` with a `scan_results` dimension** — it is purpose-built for pipeline-step
+provenance and already admin-scoped. **Do not reuse the correlation pill/bar** (built for a
+different quality signal). **Do not build a new sibling component** — that would duplicate
+what `DataHealthGrid` already does well. The per-row audit columns get **no UI in this
+task** (out of scope) and wait for the VaNi per-row explainer. This wiring is a **fast-
+follow after the ship gate**, not part of it (see below).
 
 ---
 
