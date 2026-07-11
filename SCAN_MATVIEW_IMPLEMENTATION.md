@@ -1,6 +1,6 @@
 # Scanner Materialized View MVP — Implementation
 
-**Status:** Phase 1 (rule inventory + schema design + audit/observability addendum) — **FOR REVIEW, not yet run.** Part 2 guard-firing check **run — 2 of 4 guards DOMINANT (zone 47.5%, flow 77.4%)**; zone root-caused to **stale frontend vocabulary** (DB writes 7 bands, frontend knows 5), coercion confirmed a parity no-op → **Phase 1c is now UNGATED and ready to write.** Only open item (flow-by-exchange) is non-blocking. See §Part 2 RESULTS + §Part 2b. **vani_flag path resolved by code inspection** (6/7 presets already use flag-based `computeVaniOpportunity` today; the vani_path question was moot) — see §vani_flag DEFINITIVE. **Phase 1c SQL is fully specified from code + migrations; live DB needed only to verify, not to write.**
+**Status:** Phase 1c **DONE** — migration 147 written + validated via the read-only MCP connector (see §"Phase 1c — DONE"). Ready for the Phase 4 row-for-row parity diff against the live JS engine (needs the running frontend). Phase 1 (rule inventory + schema design + audit/observability addendum) — Part 2 guard-firing check **run — 2 of 4 guards DOMINANT (zone 47.5%, flow 77.4%)**; zone root-caused to **stale frontend vocabulary** (DB writes 7 bands, frontend knows 5), coercion confirmed a parity no-op → **Phase 1c is now UNGATED and ready to write.** Only open item (flow-by-exchange) is non-blocking. See §Part 2 RESULTS + §Part 2b. **vani_flag path resolved by code inspection** (6/7 presets already use flag-based `computeVaniOpportunity` today; the vani_path question was moot) — see §vani_flag DEFINITIVE. **Phase 1c SQL is fully specified from code + migrations; live DB needed only to verify, not to write.**
 **Branch:** `claude/ready-for-task-xh6bih`
 **Target migration:** `km_migration_147_scan_results_matview.sql` (next free number).
 **Scope:** the **7 Path A / bundle scanners** only. The 7 Path B (direct-query) scanners are out of scope and MUST NOT regress.
@@ -539,7 +539,19 @@ settles it — **no owner decision needed, and it is NOT a choice:**
 
 **→ Exact-parity vani_flag per preset (this is what the matview MUST reproduce):**
 
-| Preset | vani_rule | `vani_flag` = | `vani_path` |
+> **⚠ CORRECTED 2026-07-11 (Phase 1c, via live-DB MCP query).** The row for
+> `smart_money` below was WRONG in the original handover — it claimed
+> `vani_rule = NULL` → `evaluateOpportunity`. The **live** `kd_scan_presets` row
+> has `vani_rule = 'is_vani_smart'` (and the static `SCAN_PRESETS` fallback agrees,
+> scanEngine.ts:35; `getPresetMeta` reads DB-first, scanEngine.ts:59). So **all 7
+> in-scope presets run `computeVaniOpportunity` (flag-based); NONE use
+> `evaluateOpportunity`.** Consequences: `vani_path` is `computeVaniOpportunity`
+> for all 7, and the LOW_VOLUME flow guard (evaluateOpportunity 501-503) is
+> **unreachable** for every in-scope scanner → `flow_guard_applied` is always
+> FALSE. The 77% LOW_VOLUME finding concerns evaluateOpportunity and does **not**
+> touch these 7 scanners' `vani_flag`.
+
+| Preset | vani_rule (LIVE) | `vani_flag` = | `vani_path` |
 |---|---|---|---|
 | `power_buy` | is_vani_s2 | `is_vani_s2` | computeVaniOpportunity |
 | `fresh_breakout` | is_vani_s2 | `is_vani_s2` | computeVaniOpportunity |
@@ -547,7 +559,7 @@ settles it — **no owner decision needed, and it is NOT a choice:**
 | `power_sell` | is_vani_distrib_and_weakness | `is_vani_distrib OR is_vani_weakness` | computeVaniOpportunity |
 | `distribution_warning` | is_vani_distrib_and_weakness | `is_vani_distrib OR is_vani_weakness` | computeVaniOpportunity |
 | `conviction_flow` | is_vani_surge_or_breakout | `is_vani_surge OR is_vani_breakout` | computeVaniOpportunity |
-| `smart_money` | NULL | `evaluateOpportunity(bullish cfg)` — band+reward+zone+**LOW_VOLUME-guarded flow**+rvol | evaluateOpportunity |
+| `smart_money` | **is_vani_smart** | `is_vani_smart` | computeVaniOpportunity |
 
 Bullish cfg (migration 044): `ema_atr_band=1.0, reward_min_atr_multiple=0.0,
 magic_rs_zones=[Strong Bull, Mild Bull], flow_types=[FRESH_LONGS, SHORT_COVERING],
@@ -572,6 +584,53 @@ AND rvol>=1.2`.
 SQL.** (Live DB is still needed to *verify* parity, not to *write* it.)
 
 ---
+
+## Phase 1c — DONE (2026-07-11): migration 147 written + validated via MCP
+
+**File:** `App/DBscripts/km_migration_147_scan_results_matview.sql` (on branch
+`claude/scanner-matview-phase-1c-rq59dx`). Creates `km_scan_results` (7 UNION-ALL
+preset blocks, each pre-sorted + `ROW_NUMBER()` ranked + `LIMIT`) and the
+`km_scan_exclusion_counts` companion, with the 5 audit columns, the full rule
+inventory as SQL comments, the unique/rank/vani indexes, and grants to
+`authenticated, anon, kd_app, admin, "user", kd_readonly`.
+
+**Validation (read-only MCP against `kaala_dristi_db`, latest_date = 2026-07-10):**
+The matview's defining `SELECT` was run in full via the connector. It parses,
+executes inside the 30s timeout, and returns:
+
+| preset | rows | rank range | vani=true |
+|---|---|---|---|
+| power_buy | 25 | 1–25 | 8 |
+| power_sell | 25 | 1–25 | 15 |
+| fresh_breakout | 25 | 1–25 | 2 |
+| quiet_accumulation | 25 | 1–25 | 0 |
+| distribution_warning | 19 | 1–19 | 0 |
+| conviction_flow | 5 | 1–5 | 0 |
+| **smart_money** | **0** | — | — |
+
+`smart_money` = 0 is **correct parity, not a bug**: its industry gate is
+`pct_accumulation > 60`, and on 2026-07-10 the max `pct_accumulation` across all
+157 industries is exactly `60.0` (nothing exceeds it), so the JS scanner returns
+0 too. Over 120 days only 11 industry-days exceed 60 → `smart_money` is a very
+sparse scanner, legitimately empty most days. (Product note, not a port defect.)
+Column expressions not exercised by the count query — `magic_rs_trend` (smallint[]),
+`reward`, `xamt`, `rel_*` — were spot-run separately and type-check/compute.
+
+**Three rule-inventory corrections found by reading the live source + live DB
+(all now baked into the SQL, see the migration header C1/C2/C3):**
+1. **[C1]** `fresh_breakout`'s 20-day breakout compares against prior-20 **closes**
+   (`h.close`, scanEngine.ts:920), not highs as §1a stated.
+2. **[C2]** `power_sell` Path-2 also requires `close < sma_150` **and** `rvol > 1.5`
+   (scanEngine.ts:864-867) — §1a omitted both.
+3. **[C3]** `smart_money.vani_rule` is live `'is_vani_smart'`, not NULL → all 7
+   presets use `computeVaniOpportunity`; `flow_guard_applied` is always FALSE.
+
+**Still gated on the running frontend (Phase 4):** the definitive row-for-row
+`(preset_id, equity_id, rank)` diff against the live JS engine. MCP proves the SQL
+runs and is internally sane; it cannot execute the browser scanner. Run the diff
+on a staging/backup copy after `REFRESH`, per Phase 4. Also note the flagged
+tie-order caveat (JS Map-insertion order among exact sort-key ties is not
+replicable; membership is identical, only intra-tie rank may differ).
 
 ## Quirks flagged (NOT fixed here — separate conversation)
 
