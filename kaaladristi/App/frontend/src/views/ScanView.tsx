@@ -12,7 +12,7 @@ import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
 import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
 import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
-import { ScanFilterBar, applyFilters, EMPTY_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
+import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 
 // ── Sort ──────────────────────────────────────────────────────
 
@@ -485,7 +485,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
   const [s2Sort, setS2Sort] = useState<S2SortKey>('magic_rs');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [vaniOnly, setVaniOnly] = useState(false);
-  const [filters, setFilters] = useState<ScanFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
   const { show: showToast, Toast } = useToast();
 
   const { data: fetchedStocks = [], isLoading, error, refetch } = useScan(preset.id, exchangeFilter, timeframe);
@@ -499,7 +499,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
     [fetchedStocks, hideVani],
   );
 
-  useEffect(() => { setFilters(EMPTY_FILTERS); }, [preset.id]);
+  useEffect(() => { setFilters(DEFAULT_FILTERS); }, [preset.id]);
 
   const filteredRaw = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
   const vaniStocks = useMemo(() => filteredRaw.filter((s) => s.vaniOpportunity), [filteredRaw]);
@@ -742,7 +742,7 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
 }) {
   const navigate = useNavigate();
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
-  const [filters, setFilters] = useState<ScanFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
   const [vaniOnly, setVaniOnly] = useState(false);
   const { data: rawStocks = [], isLoading, error } = useScan('conviction_flow', exchangeFilter, timeframe);
   const { show: showToast, Toast } = useToast();
@@ -866,7 +866,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [sortKey, setSortKey] = useState<SortKey>('score_5d');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [oppFilter, setOppFilter] = useState(false);
-  const [filters, setFilters] = useState<ScanFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useViewMode();
 
   const { data: presets = SCAN_PRESETS } = useScanPresets();
@@ -893,7 +893,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     [fetchedStocks, hideVani],
   );
 
-  useEffect(() => { setFilters(EMPTY_FILTERS); }, [presetId]);
+  useEffect(() => { setFilters(DEFAULT_FILTERS); }, [presetId]);
   useEffect(() => { if (typeof window !== 'undefined') (window as any).__scanResults = rawStocks; }, [rawStocks]);
 
   const stocks = useMemo(() => applyFilters(rawStocks ?? [], filters), [rawStocks, filters]);

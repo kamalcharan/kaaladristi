@@ -25,6 +25,12 @@ export interface ScanFilters {
 
 export const EMPTY_FILTERS: ScanFilters = {};
 
+// Applied on load / preset switch (owner request 2026-07-12): a gentle ₹100 Cr
+// market-cap floor. Note it only bites stocks with a KNOWN mcap (mostly NSE) —
+// BSE mcap is ~88% missing, so most BSE stocks have no mcap and still show
+// (see applyFilters: mcap filters skip unknown-mcap rows).
+export const DEFAULT_FILTERS: ScanFilters = { mcapMin: 100 };
+
 const STAGE_PRESETS = new Set([
   'stage_2_leaders', 'stage_2_watch', 'vani_opportunity',
   'stage_3_watch', 'stage_4_leaders', 'vani_exit_watch',
@@ -56,8 +62,10 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
   ) return stocks;
 
   return stocks.filter((s) => {
-    if (mcapMin != null && (s.mcap_cr ?? 0) < mcapMin) return false;
-    if (mcapMax != null && (s.mcap_cr ?? Infinity) > mcapMax) return false;
+    // mcap filters apply only to stocks with a KNOWN market cap. BSE mcap is
+    // ~88% missing; treating null as 0/∞ would wrongly hide most of BSE.
+    if (mcapMin != null && s.mcap_cr != null && s.mcap_cr < mcapMin) return false;
+    if (mcapMax != null && s.mcap_cr != null && s.mcap_cr > mcapMax) return false;
     if (industries && industries.length > 0 && !industries.includes(s.industry ?? '')) return false;
     if (move5dMax != null && s.ret_5d != null && Math.abs(s.ret_5d) > move5dMax) return false;
     if (move22dMax != null && s.ret_22d != null && Math.abs(s.ret_22d) > move22dMax) return false;
