@@ -86,15 +86,19 @@ function VixStat({ label, value, color }: { label: string; value: string; color?
 function VixBand() {
   const { data: vix, isLoading } = useVix();
 
+  // Contained stat card with a regime-colored accent edge (same signature as
+  // the Today tiles) instead of the old edge-to-edge flat band.
   const bandStyle: React.CSSProperties = {
     background: 'var(--card)',
-    borderBottom: '1px solid var(--border)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    margin: '14px 24px 0',
     display: 'flex',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: '0 20px',
-    padding: '6px 24px',
-    minHeight: '44px',
+    padding: '8px 18px',
+    minHeight: '46px',
   };
 
   if (isLoading) {
@@ -118,9 +122,9 @@ function VixBand() {
     'High Vol';
 
   return (
-    <div style={bandStyle}>
+    <div style={{ ...bandStyle, borderLeft: `3px solid ${closeColor}` }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-        <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-faint)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        <span style={{ ...MONO, fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
           India VIX
         </span>
         <span style={{ ...MONO, fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: closeColor, border: `1px solid ${closeColor}`, borderRadius: '3px', padding: '1px 5px', opacity: 0.85 }}>

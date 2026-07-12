@@ -192,7 +192,8 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
         width: '100%',
         WebkitOverflowScrolling: 'touch',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 12,
+        background: 'var(--card)',
       }}>
         <table style={{
           width: 'max-content',
@@ -221,7 +222,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                       padding: '0 10px',
                       textAlign: colKey === 'symbol' ? 'left' : 'right',
                       fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase',
-                      fontWeight: 600, fontFamily: 'var(--font-mono)',
+                      fontWeight: 600, fontFamily: 'var(--font-body)',
                       color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                       cursor: 'pointer', whiteSpace: 'nowrap',
                       userSelect: 'none',
@@ -274,7 +275,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                           background: 'var(--card)',
                           padding: '0 10px',
                           width: 130, minWidth: 130,
-                          borderBottom: '1px solid rgba(99,102,241,0.05)',
+                          borderBottom: '1px solid color-mix(in srgb, var(--border) 55%, transparent)',
                           borderRight: '1px solid var(--border)',
                         }}
                       >
@@ -347,7 +348,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                         color,
                         fontWeight: fontWeight ?? undefined,
                         whiteSpace: 'nowrap',
-                        borderBottom: '1px solid rgba(99,102,241,0.05)',
+                        borderBottom: '1px solid color-mix(in srgb, var(--border) 55%, transparent)',
                       }}
                     >
                       {isScore ? (
