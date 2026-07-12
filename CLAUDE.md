@@ -585,6 +585,20 @@ These are in `LESSONS_LEARNED.md` in full; summary for quick reference:
 
 ## Known Issues
 
+### 📋 FOR REVIEW (owner) — Data depth: enriched signals only ~1.5–2 yr deep
+`DATA_DEPTH_AUDIT.md` (2026-07-12, read-only MCP audit). Raw **prices** are complete
+~26 yr both exchanges (NSE 1996→, BSE 2000→), but the **enriched layer is shallow**:
+`delivery_pct` exists only ~2025+ for NSE and ~2024+ for BSE (BSE backfill in
+progress); `ema_20` is null before ~2025 on **both** exchanges (added late, computed
+forward only) — and since scanners drop `ema_20 IS NULL` rows, that single column caps
+scanner history. `delivery_surge_x`/score are 0 for BSE until the rolling-metrics
+recompute runs. **Decision flagged:** a full 26-yr BSE delivery backfill is low-value
+in isolation (NSE delivery is only ~1.5 yr; `ema_20` only ~2025+) — the 2-yr BSE
+backfill matches current depth and reaches NSE parity. True "deep history" is a
+separate post-launch initiative (ema_20 + NSE delivery + BSE delivery to the same
+depth + rolling recompute). Owner to decide target enriched-history depth. Details +
+per-year coverage tables in the audit doc.
+
 ### 📋 FOR REVIEW (owner) — Pulse/Study UX rework
 `kaaladristi/docs/PulseUX.md` documents the equity **Study** page rework into a decision-first workbench (Read → Snapshot → Evidence → Chart), the two-layer Pulse/Study contract, every widget, and a before/after. Charan to review. Open/deferred items are listed there (Conviction latest-bar pipeline fix, selectable Magic RS benchmark, Conviction scrubber-awareness, Big Money threshold calibration, Correlation-for-indexes, Pulse-mode retirement).
 
