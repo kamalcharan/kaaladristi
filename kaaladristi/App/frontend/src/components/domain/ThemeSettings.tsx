@@ -1,4 +1,4 @@
-import { useThemeStore, THEMES, MODES, isDarkOnly, type ThemeId, type ThemeMode } from '@/stores/themeStore'
+import { useThemeStore, THEMES, MODES, isDarkOnly, LIGHT_MODE_ENABLED, type ThemeId, type ThemeMode } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile } from '@/services/auth'
 import { useState } from 'react'
@@ -82,7 +82,10 @@ export default function ThemeSettings() {
         )
       })}
 
-      {/* ── Mode (Phase 1 of the theme audit, 2026-07-07) ── */}
+      {/* ── Mode (Phase 1 of the theme audit, 2026-07-07) ──
+          Hidden while LIGHT_MODE_ENABLED is false (dark-only launch lock,
+          owner decision 2026-07-12) — the whole section returns below. */}
+      {LIGHT_MODE_ENABLED && (<>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginTop: 10, marginBottom: 4,
@@ -128,6 +131,7 @@ export default function ThemeSettings() {
           {activeLabel} is dark-only for now — switch to another theme to use light mode.
         </p>
       )}
+      </>)}
     </div>
   )
 }
