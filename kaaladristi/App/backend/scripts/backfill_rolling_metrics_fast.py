@@ -67,7 +67,18 @@ def get_conn():
 # We filter in the outer UPDATE join, not inside the CTE.
 
 _SQL_TEMPLATE = """
-WITH base AS (
+WITH eod AS (
+    -- Attach exchange so the delivery-value scale can be made exchange-aware.
+    -- NSE `value_cr` is stored ~1e5x inflated vs true crores; BSE `value_cr` is
+    -- true crores. The deliv-value formula below is calibrated to NSE's scale, so
+    -- BSE value_cr is scaled to match (÷100 instead of ÷1e7 == ×1e5). LEFT JOIN
+    -- keeps every eod row; a NULL/NSE exchange takes the unchanged ÷1e7 path, so
+    -- NSE output is byte-identical to before.
+    SELECT e.*, s.exchange
+    FROM km_equity_eod e
+    LEFT JOIN km_equity_symbols s ON s.id = e.equity_id
+),
+base AS (
     SELECT
         id,
         equity_id,
@@ -90,19 +101,19 @@ WITH base AS (
         ) AS lth,
         -- delivery value rolling averages in Crores
         ROUND(AVG(ROUND(
-            (COALESCE(value_cr, 0) / 10000000.0 * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4)) OVER (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
         ), 4) AS amt5,
         ROUND(AVG(ROUND(
-            (COALESCE(value_cr, 0) / 10000000.0 * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4)) OVER (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 21 PRECEDING AND CURRENT ROW
         ), 4) AS amt22,
         ROUND(AVG(ROUND(
-            (COALESCE(value_cr, 0) / 10000000.0 * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4)) OVER (
             PARTITION BY equity_id ORDER BY trade_date
             ROWS BETWEEN 65 PRECEDING AND CURRENT ROW
@@ -154,9 +165,9 @@ WITH base AS (
         , 2) AS bklevel,
         -- delivery value in Crores for this bar
         ROUND(
-            (COALESCE(value_cr, 0) / 10000000.0 * COALESCE(delivery_pct, 0) / 100.0)::numeric
+            (COALESCE(value_cr, 0) / CASE WHEN exchange = 'BSE' THEN 100.0 ELSE 10000000.0 END * COALESCE(delivery_pct, 0) / 100.0)::numeric
         , 4) AS deliv_cr_bar
-    FROM km_equity_eod
+    FROM eod
 ), scored AS (
     SELECT
         id,
