@@ -35,7 +35,7 @@ function profileRow(theme, mode) {
     id: USER_ID, full_name: 'QA Harness', display_name: 'QA', email: 'qa@harness.local',
     phone: null, avatar_url: null, role: 'admin', onboarded: true,
     created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-    tier: 'pro', expires_at: null, theme, mode, icp_mode: 'technical',
+    tier: 'pro', expires_at: null, theme, mode, icp_mode: 'astro',
   };
 }
 
@@ -69,8 +69,17 @@ async function run() {
         }
         return route.fulfill({ status: 200, contentType: 'application/json', body: wantsObject ? 'null' : '[]' });
       });
-      await ctx.route('**/pipeline-api/**', route =>
-        route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+      await ctx.route('**/pipeline-api/**', route => {
+        const u = route.request().url();
+        if (u.includes('/api/framework/')) {
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+            id: 'fw-harness', user_id: USER_ID, name: 'My Framework',
+            created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+            version: 1, instruments: [], blocks: [], chart_overlays: [], tier_at_creation: 'pro',
+          }) });
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      });
 
       // ── seed auth + theme + welcome-ack before any page script runs ──
       await ctx.addInitScript(({ theme, mode, userId }) => {
