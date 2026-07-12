@@ -280,6 +280,17 @@ def handle_rolling_metrics(conn, trade_date: date, force: bool,
                           compute_rolling_metrics_for_date)
 
 
+def handle_rs_percentile(conn, trade_date: date, force: bool,
+                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    # rs_percentile ranks each equity by magic_rs within the day's universe.
+    # It lived only in the legacy daily_pipeline (gated by skip_indicators, which
+    # pipeline2 sets True), so it silently stopped when prod moved to pipeline2 —
+    # dead since 2026-06-19. Registered here so the nightly keeps it current.
+    from scripts.backfill_rs_percentile import compute_rs_percentile_for_date
+    return _handle_script('rs_percentile', conn, trade_date, force, on_progress,
+                          compute_rs_percentile_for_date)
+
+
 def handle_d365(conn, trade_date: date, force: bool,
                 exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     from scripts.backfill_d365 import compute_d365_for_date
@@ -618,6 +629,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_supertrend(conn, trade_date, force, exchange, on_progress)
     if dimension == 'rolling_metrics':
         return handle_rolling_metrics(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'rs_percentile':
+        return handle_rs_percentile(conn, trade_date, force, exchange, on_progress)
     if dimension == 'd365':
         return handle_d365(conn, trade_date, force, exchange, on_progress)
     if dimension == 'stage_classification':
@@ -648,6 +661,7 @@ KNOWN_DIMENSIONS = [
     'bse_flow',
     'nse_magic_rs',
     'bse_magic_rs',
+    'rs_percentile',
     'supertrend',
     'rolling_metrics',
     'd365',

@@ -43,6 +43,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('bse_flow',              'BSE'),
     ('nse_magic_rs',          'NSE'),
     ('bse_magic_rs',          'BSE'),
+    ('rs_percentile',         None),   # ranks by magic_rs — must run after magic_rs, before vani_flags
     ('supertrend',            None),
     ('rolling_metrics',       None),
     ('d365',                  None),
