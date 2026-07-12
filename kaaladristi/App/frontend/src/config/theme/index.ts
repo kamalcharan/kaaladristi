@@ -79,11 +79,13 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   };
 
   // ── Backgrounds ──
-  // Light mode: whisper 3% of the brand primary into solid surfaces so cards
-  // carry the theme's hue instead of reading as stark #fff over the tinted bg
-  // ("too monochrome" — owner calibration 2026-07-12). Dark untouched.
+  // Light mode: whisper 3% of the brand's ACCENT (secondary) into solid
+  // surfaces so cards carry the canvas temperature ("too monochrome" +
+  // warm-ivory owner picks, 2026-07-12). The accent, not the primary — the
+  // canvas commits to one temperature and the primary stays interactive-only.
+  // Dark untouched.
   const tintSurface = (v: string | undefined) =>
-    v !== undefined && !prefersDark ? mixHex(v, c.brand.primary, 0.03) : v;
+    v !== undefined && !prefersDark ? mixHex(v, c.brand.secondary, 0.03) : v;
   set('--bg',               c.utility.primaryBackground);
   set('--card',             tintSurface(c.utility.secondaryBackground ?? c.utility.primaryBackground));
   set('--card-soft',        tintSurface(c.surface.glassStrong));

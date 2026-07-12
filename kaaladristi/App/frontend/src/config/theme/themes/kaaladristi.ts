@@ -20,8 +20,11 @@ export const KaalaDrishtiTheme: ThemeConfig = {
     utility: {
       primaryText:         '#191627',  // --color-fg
       secondaryText:       '#645f7c',  // --color-muted
-      primaryBackground:   '#f6f5fb',  // --color-bg
-      secondaryBackground: '#ffffff',  // --color-surface-2
+      // Warm-ivory light canvas (owner pick "D", 2026-07-12): light mode
+      // commits to ONE temperature — the ProKey warm-ivory feel — instead of
+      // a cool violet base fighting warm gold blooms (the "muddy" clash).
+      primaryBackground:   '#f7f5f0',  // --color-bg — warm ivory
+      secondaryBackground: '#fdfcfa',  // --color-surface-2 — warm white
     },
     accent: {
       accent1: '#5b3fb0',
@@ -37,11 +40,13 @@ export const KaalaDrishtiTheme: ThemeConfig = {
     },
     surface: {
       glass:         'rgba(255,255,255,0.75)', // --color-surface (light) — Glass UX standard's literal value
-      glassStrong:   '#ffffff',                 // --color-surface-2 (light)
-      glassBorder:   '#e3e0ee',            // --color-border (light)
+      glassStrong:   '#fdfcfa',                 // --color-surface-2 (light) — warm white
+      glassBorder:   '#e7e2d8',            // --color-border (light) — warm hairline
       primaryDim:    'rgba(91,63,176,.16)', // --color-primary-dim (light)
       primaryGlow:   'rgba(91,63,176,.28)', // --color-primary-glow (light)
-      primarySubtle: 'rgba(91,63,176,.06)', // --color-primary-subtle (light)
+      // Warm gold atmosphere bloom (feeds --atmosphere-primary) — the canvas
+      // wash matches the ivory temperature; violet stays interactive-only.
+      primarySubtle: 'rgba(154,123,60,.05)',
     },
   },
   darkMode: {
