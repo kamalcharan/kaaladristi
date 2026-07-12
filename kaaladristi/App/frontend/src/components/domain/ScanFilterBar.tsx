@@ -254,8 +254,14 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
   // Open state persists across scans and reloads (owner request 2026-07-06);
   // active filters force it open so applied criteria are never hidden.
   const [open, setOpenState] = useState<boolean>(() => {
-    try { return localStorage.getItem(FILTERS_OPEN_KEY) === 'true' || hasActiveFilters(filters); }
-    catch { return hasActiveFilters(filters); }
+    // Open by default (owner request 2026-07-12). A user's explicit collapse is
+    // still remembered (stored 'false'); active filters always force it open.
+    try {
+      const stored = localStorage.getItem(FILTERS_OPEN_KEY);
+      if (stored === null) return true;
+      return stored === 'true' || hasActiveFilters(filters);
+    }
+    catch { return true; }
   });
   const setOpen = (updater: (o: boolean) => boolean) => {
     setOpenState((o) => {
