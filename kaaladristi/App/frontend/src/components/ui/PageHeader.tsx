@@ -28,8 +28,16 @@ export interface PageHeaderProps {
 export function PageHeader({ eyebrow, title, titleEm, meta, actions, lead }: PageHeaderProps) {
   return (
     <header
-      className="flex flex-wrap items-end gap-4 border-b border-[var(--border)] bg-[var(--kd-card)] px-8 py-5 backdrop-blur-[10px]"
+      className="relative flex flex-wrap items-end gap-4 bg-[var(--kd-card)] px-8 py-5 backdrop-blur-[10px]"
     >
+      {/* Gold-thread underline (Glass UX standard §5.5) — a brand-hued
+          gradient hairline instead of a flat border, so every page header
+          carries a hint of the theme instead of reading monochrome. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px"
+        style={{ background: 'linear-gradient(90deg, var(--border), var(--accent-dim) 30%, var(--gold-bg) 60%, var(--border))' }}
+      />
       <div>
         {eyebrow && (
           <div
