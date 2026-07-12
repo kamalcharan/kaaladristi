@@ -153,7 +153,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
         background:`radial-gradient(circle, ${V}.07) 0%, transparent 65%)`,
         top:-200, left:-200, filter:'blur(40px)', pointerEvents:'none' }} />
       <div style={{ position:'absolute', width:500, height:500, borderRadius:'50%',
-        background:'radial-gradient(circle, rgba(201,168,76,.04) 0%, transparent 65%)',
+        background:'radial-gradient(circle, color-mix(in srgb, var(--gold) 4%, transparent) 0%, transparent 65%)',
         bottom:-100, right:-100, filter:'blur(60px)', pointerEvents:'none' }} />
 
       {/* Orb system */}
@@ -203,7 +203,7 @@ function Screen1({ displayName, setDisplayName, phone, setPhone, onBegin }: S1Pr
           animation:'text-in .6s ease .8s both' }}>I'm</div>
         <div style={{ fontFamily:'var(--font-display)', fontSize:40, fontWeight:400,
           fontStyle:'italic', letterSpacing:'-0.03em',
-          background:'linear-gradient(135deg, #9d8ff9, var(--gold, #c9a84c))',
+          background:'linear-gradient(135deg, #9d8ff9, var(--gold, var(--gold)))',
           WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text',
           animation:'text-in .6s ease .95s both' }}>VaNi.</div>
         <p style={{ fontSize:15, color:'var(--text-muted)', marginTop:16, marginBottom:32,
@@ -289,7 +289,7 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, icpMode, setIcpMode, o
             ) : (
               <span style={{ animation:'bubble-in .4s cubic-bezier(.22,1,.36,1) both' }}>
                 One thing —{' '}
-                <span style={{ color:'var(--gold, #c9a84c)', fontFamily:'var(--font-display)',
+                <span style={{ color:'var(--gold, var(--gold))', fontFamily:'var(--font-display)',
                   fontStyle:'italic', fontSize:15 }}>
                   how do you participate in markets?
                 </span>
@@ -325,12 +325,12 @@ function Screen2({ typed, icp, onSelect, blend, setBlend, icpMode, setIcpMode, o
             border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)', borderRadius:12,
             background:'var(--card)', animation:'bubble-in .3s ease both' }}>
             <div style={{ textAlign:'center', fontFamily:'var(--font-mono, monospace)',
-              fontSize:13, color:'var(--gold, #c9a84c)', marginBottom:12 }}>
+              fontSize:13, color:'var(--gold, var(--gold))', marginBottom:12 }}>
               {blend}% Investor · {100 - blend}% Trader
             </div>
             <input type="range" min={10} max={90} value={blend}
               onChange={e => setBlend(Number(e.target.value))}
-              style={{ width:'100%', accentColor:'var(--gold, #c9a84c)' }} />
+              style={{ width:'100%', accentColor:'var(--gold, var(--gold))' }} />
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:10,
               color:'var(--text-muted)', marginTop:8,
               fontFamily:'var(--font-mono, monospace)' }}>
@@ -435,7 +435,7 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
   const badgeColor = (badge: string) => {
     if (badge.includes('Overlay')) return { bg: 'rgba(45,212,191,.1)',  color: '#2dd4bf' }
     if (badge.includes('Output'))  return { bg: 'var(--accent-glow)', color: 'var(--accent)' }
-    return                                { bg: 'rgba(201,168,76,.1)',   color: 'var(--gold, #c9a84c)' }
+    return                                { bg: 'color-mix(in srgb, var(--gold) 10%, transparent)',   color: 'var(--gold, var(--gold))' }
   }
 
   return (

@@ -25,9 +25,9 @@ const CELL_HEIGHT_REM = 3
 
 // Preset swatches for the color picker
 const COLOR_PRESETS = [
-  '#FFD700', '#FFA500', '#FF6347', '#ef4444',
-  '#10b981', '#2dd4bf', '#6366f1', '#8b7af8',
-  '#c9a84c', '#f59e0b', '#e879f9', '#ffffff',
+  '#FFD700', '#FFA500', '#FF6347', 'var(--bear)',
+  'var(--bull)', '#2dd4bf', '#6366f1', '#8b7af8',
+  'var(--gold)', 'var(--caution)', '#e879f9', '#ffffff',
 ]
 
 // ── Grid overlay (edit mode) ──────────────────────────────────────────────────
@@ -118,8 +118,8 @@ function GroupActiveIndicator({ tag }: { tag: string }) {
         <span style={{ fontSize: 10, color: 'color-mix(in srgb, var(--text-primary) 55%, transparent)', fontFamily: 'var(--font-mono,monospace)' }}>
           · {shortRuleName(active.display_name)}
         </span>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981',
-          boxShadow: '0 0 5px rgba(16,185,129,0.8)', flexShrink: 0 }} />
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bull)',
+          boxShadow: '0 0 5px color-mix(in srgb, var(--bull) 80%, transparent)', flexShrink: 0 }} />
       </span>
     )
   }
@@ -496,7 +496,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                         width: 20, height: 20, borderRadius: '0 100px 100px 0',
                         border: 'none', background: 'transparent', cursor: 'pointer',
                         fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', transition: 'color .15s' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--bear)' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}
                     >✕</button>
                   </div>
@@ -561,7 +561,7 @@ export default function WorkspaceCanvas({ framework, onOpenDrawer, onMorningBrie
                       width: 20, height: 20, borderRadius: '0 100px 100px 0',
                       border: 'none', background: 'transparent', cursor: 'pointer',
                       fontSize: 9, color: 'color-mix(in srgb, var(--text-primary) 25%, transparent)', transition: 'color .15s' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#f87171' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--bear)' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}
                   >✕</button>
                 </div>

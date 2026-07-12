@@ -14,8 +14,8 @@ const INDICATOR_DEFAULTS = INDICATOR_DEFAULT_COLORS
 
 const SWATCH_PALETTE = [
   '#7c6af7', '#a78bfa', '#c084fc', '#e879f9',
-  '#4ade80', '#2dd4bf', '#38bdf8', '#60a5fa',
-  '#fb923c', '#f59e0b', '#facc15', '#a3e635',
+  'var(--bull)', '#2dd4bf', '#38bdf8', '#60a5fa',
+  '#fb923c', 'var(--caution)', '#facc15', '#a3e635',
   '#f43f5e', '#fb7185', '#94a3b8', '#e2e8f0',
 ]
 
@@ -246,16 +246,16 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
               style={{
                 border: `1px solid ${
                   active   ? 'rgba(45,212,191,0.28)' :
-                  selected ? 'rgba(201,168,76,0.45)' :
+                  selected ? 'color-mix(in srgb, var(--gold) 45%, transparent)' :
                              'var(--border)'
                 }`,
                 borderRadius: 10,
                 background: active
                   ? 'rgba(45,212,191,0.04)'
                   : selected
-                    ? 'rgba(201,168,76,0.04)'
+                    ? 'color-mix(in srgb, var(--gold) 4%, transparent)'
                     : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
-                boxShadow: selected ? '0 0 0 1px rgba(201,168,76,0.15), inset 3px 0 0 rgba(201,168,76,0.5)' : 'none',
+                boxShadow: selected ? '0 0 0 1px color-mix(in srgb, var(--gold) 15%, transparent), inset 3px 0 0 color-mix(in srgb, var(--gold) 50%, transparent)' : 'none',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
                 position: 'relative',

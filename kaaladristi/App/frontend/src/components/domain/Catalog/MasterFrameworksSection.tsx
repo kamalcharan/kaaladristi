@@ -25,13 +25,13 @@ function blockToRect(pos: { col_start: number; col_end: number; row_start: numbe
 const TYPE_STROKE: Record<string, string> = {
   indicator:  'rgba(45,212,191,0.6)',
   widget:     'rgba(124,106,247,0.6)',
-  astro_rule: 'rgba(201,168,76,0.6)',
+  astro_rule: 'color-mix(in srgb, var(--gold) 60%, transparent)',
   scanner:    'color-mix(in srgb, var(--text-primary) 20%, transparent)',
 }
 const TYPE_FILL: Record<string, string> = {
   indicator:  'rgba(45,212,191,0.08)',
   widget:     'rgba(124,106,247,0.10)',
-  astro_rule: 'rgba(201,168,76,0.10)',
+  astro_rule: 'color-mix(in srgb, var(--gold) 10%, transparent)',
   scanner:    'color-mix(in srgb, var(--text-primary) 3%, transparent)',
 }
 
@@ -61,7 +61,7 @@ function MiniPreview({ template }: { template: FrameworkTemplate }) {
       <polyline
         points={CANDLE_PATH}
         fill="none"
-        stroke="rgba(201,168,76,0.35)"
+        stroke="color-mix(in srgb, var(--gold) 35%, transparent)"
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -100,10 +100,10 @@ function MiniPreview({ template }: { template: FrameworkTemplate }) {
 type PillKind = 'astro' | 'tech' | 'widget' | 'scanner' | 'overlay'
 
 const PILL_STYLE: Record<PillKind, React.CSSProperties> = {
-  astro:   { borderColor: 'rgba(201,168,76,0.35)',  color: '#c9a84c', background: 'rgba(201,168,76,0.06)' },
+  astro:   { borderColor: 'color-mix(in srgb, var(--gold) 35%, transparent)',  color: 'var(--gold)', background: 'color-mix(in srgb, var(--gold) 6%, transparent)' },
   tech:    { borderColor: 'rgba(45,212,191,0.35)',  color: '#2dd4bf', background: 'rgba(45,212,191,0.06)' },
   widget:  { borderColor: 'rgba(124,106,247,0.35)', color: '#8b7af8', background: 'rgba(124,106,247,0.08)' },
-  scanner: { borderColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', color: '#6b7280', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' },
+  scanner: { borderColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', color: 'var(--text-muted)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' },
   overlay: { borderColor: 'rgba(45,212,191,0.2)',   color: '#5dd8c8', background: 'rgba(45,212,191,0.04)' },
 }
 
@@ -174,7 +174,7 @@ export default function MasterFrameworksSection() {
             <div
               key={template.id}
               style={{
-                border: `1px solid ${isActive ? 'rgba(201,168,76,0.35)' : 'var(--border)'}`,
+                border: `1px solid ${isActive ? 'color-mix(in srgb, var(--gold) 35%, transparent)' : 'var(--border)'}`,
                 borderRadius: 14,
                 background: 'var(--card)',
                 overflow: 'hidden',
@@ -191,7 +191,7 @@ export default function MasterFrameworksSection() {
               }}
               onMouseLeave={e => {
                 const el = e.currentTarget as HTMLElement
-                el.style.borderColor = isActive ? 'rgba(201,168,76,0.35)' : 'var(--border)'
+                el.style.borderColor = isActive ? 'color-mix(in srgb, var(--gold) 35%, transparent)' : 'var(--border)'
                 el.style.transform = ''
                 el.style.boxShadow = ''
               }}
@@ -215,8 +215,8 @@ export default function MasterFrameworksSection() {
                     fontSize: 9,
                     fontFamily: 'var(--font-mono, monospace)',
                     letterSpacing: '0.06em',
-                    background: 'rgba(201,168,76,0.12)',
-                    border: '1px solid rgba(201,168,76,0.3)',
+                    background: 'color-mix(in srgb, var(--gold) 12%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)',
                     color: 'var(--gold)',
                   }}>
                     ACTIVE

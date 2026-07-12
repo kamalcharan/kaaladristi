@@ -14,7 +14,7 @@ const C = {
   ink3:  '#8a8372',
   ink4:  '#50493c',
   g1:    '#e2b96f',
-  g2:    '#c9a84c',
+  g2:    'var(--gold)',
   g3:    '#8a6f28',
   rule:  'rgba(226,185,111,.18)',
   rs:    'rgba(226,185,111,.08)',
@@ -153,14 +153,14 @@ export default function LoginPage() {
               </div>
 
               {inviteError && (
-                <div style={{ padding: '10px 12px', background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))', color: 'var(--bear)', fontFamily: SANS, fontSize: 12 }}>
+                <div style={{ padding: '10px 12px', background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, color-mix(in srgb, var(--bear) 30%, transparent))', color: 'var(--bear)', fontFamily: SANS, fontSize: 12 }}>
                   {inviteError}
                 </div>
               )}
 
               <button type="submit" style={{
                 padding: '13px 0', marginTop: 4,
-                background: `linear-gradient(180deg,rgba(226,185,111,.92),rgba(201,168,76,.92))`,
+                background: `linear-gradient(180deg,rgba(226,185,111,.92),color-mix(in srgb, var(--gold) 92%, transparent))`,
                 border: `1px solid ${C.g2}`,
                 color: '#0a0a12', fontFamily: SANS, fontSize: 13, letterSpacing: '.1em',
                 textTransform: 'uppercase', fontWeight: 600, cursor: 'pointer',
@@ -246,12 +246,12 @@ export default function LoginPage() {
 
             {/* Messages */}
             {error && (
-              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))', color: 'var(--bear)', fontFamily: SANS, fontSize: 13 }}>
+              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, color-mix(in srgb, var(--bear) 30%, transparent))', color: 'var(--bear)', fontFamily: SANS, fontSize: 13 }}>
                 {error}
               </div>
             )}
             {success && (
-              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'var(--bull-bg)', border: '1px solid var(--bull-dim, rgba(16,185,129,.3))', color: 'var(--bull)', fontFamily: SANS, fontSize: 13 }}>
+              <div style={{ marginBottom: 20, padding: '12px 14px', background: 'var(--bull-bg)', border: '1px solid var(--bull-dim, color-mix(in srgb, var(--bull) 30%, transparent))', color: 'var(--bull)', fontFamily: SANS, fontSize: 13 }}>
                 {success}
               </div>
             )}
@@ -311,7 +311,7 @@ export default function LoginPage() {
               <button type="submit" disabled={isSubmitting} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 padding: '14px 0', marginTop: 4,
-                background: isSubmitting ? 'rgba(226,185,111,.3)' : `linear-gradient(180deg,rgba(226,185,111,.92),rgba(201,168,76,.92))`,
+                background: isSubmitting ? 'rgba(226,185,111,.3)' : `linear-gradient(180deg,rgba(226,185,111,.92),color-mix(in srgb, var(--gold) 92%, transparent))`,
                 border: `1px solid ${C.g2}`,
                 color: '#0a0a12', fontFamily: SANS, fontSize: 13, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600,
                 cursor: isSubmitting ? 'not-allowed' : 'pointer', transition: 'all .25s ease',

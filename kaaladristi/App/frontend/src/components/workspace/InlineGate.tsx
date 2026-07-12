@@ -242,7 +242,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
 
         {payError && (
           <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 8, fontSize: 12,
-            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))',
+            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, color-mix(in srgb, var(--bear) 30%, transparent))',
             color: '#fca5a5' }}>
             {payError}
           </div>

@@ -50,7 +50,7 @@ const TYPE_ICON: Record<string, string> = {
 
 const PLACEMENT_BADGE: Record<string, { label: string; color: string; bg: string }> = {
   chart_overlay: { label: 'Chart Overlay', color: '#2dd4bf', bg: 'rgba(45,212,191,.1)'  },
-  panel_block:   { label: 'Panel Block',   color: 'var(--gold)', bg: 'rgba(201,168,76,.1)'  },
+  panel_block:   { label: 'Panel Block',   color: 'var(--gold)', bg: 'color-mix(in srgb, var(--gold) 10%, transparent)'  },
   output_panel:  { label: 'Output Panel',  color: '#7c6af7', bg: 'rgba(124,106,247,.1)' },
 }
 
@@ -652,11 +652,11 @@ export default function WorkspaceBlock({ block, editMode, isDraggable, effective
           <button onClick={() => onRemove(block.id)}
             title="Remove"
             style={{ width: 22, height: 22, borderRadius: 5, border: 'none',
-              background: 'rgba(248,113,113,.12)', color: 'rgba(248,113,113,.6)',
+              background: 'color-mix(in srgb, var(--bear) 12%, transparent)', color: 'color-mix(in srgb, var(--bear) 60%, transparent)',
               cursor: 'pointer', fontSize: 11, flexShrink: 0, lineHeight: 1,
               transition: 'all .15s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onMouseEnter={e => { (e.currentTarget).style.background = 'rgba(248,113,113,.22)'; (e.currentTarget).style.color = 'var(--bear)' }}
-            onMouseLeave={e => { (e.currentTarget).style.background = 'rgba(248,113,113,.12)'; (e.currentTarget).style.color = 'rgba(248,113,113,.6)' }}>
+            onMouseEnter={e => { (e.currentTarget).style.background = 'color-mix(in srgb, var(--bear) 22%, transparent)'; (e.currentTarget).style.color = 'var(--bear)' }}
+            onMouseLeave={e => { (e.currentTarget).style.background = 'color-mix(in srgb, var(--bear) 12%, transparent)'; (e.currentTarget).style.color = 'color-mix(in srgb, var(--bear) 60%, transparent)' }}>
             ✕
           </button>
         )}
