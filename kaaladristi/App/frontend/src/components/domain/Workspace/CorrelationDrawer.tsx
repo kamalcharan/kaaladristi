@@ -218,6 +218,7 @@ export default function CorrelationDrawer({ isOpen, activePairKey, onClose, onSe
       {/* Backdrop */}
       <div
         onClick={onClose}
+        /* theme-agnostic: light drawer scrim, black in both modes by design */
         style={{ position: 'fixed', inset: 0, zIndex: 190, background: 'rgba(0,0,0,.25)' }}
       />
 

@@ -143,7 +143,7 @@ export default function TopStrip({
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(9, 1fr)',
-      background: 'var(--kd-panel)',
+      background: 'var(--panel-recess)',
       borderBottom: '1px solid var(--kd-border)',
       flexShrink: 0,
     }}>

@@ -366,14 +366,14 @@ function AstroRuleBody({ item, onClose }: { item: DeepDiveAstroRule; onClose: ()
 
 const SWATCH_PALETTE_DP = [
   '#7c6af7', '#a78bfa', '#c084fc', '#e879f9',
-  '#4ade80', '#2dd4bf', '#38bdf8', '#60a5fa',
-  '#fb923c', '#f59e0b', '#facc15', '#a3e635',
+  'var(--bull)', '#2dd4bf', '#38bdf8', '#60a5fa',
+  '#fb923c', 'var(--caution)', '#facc15', '#a3e635',
   '#f43f5e', '#fb7185', '#94a3b8', '#e2e8f0',
 ]
 
 const INDICATOR_DEFAULTS_DP: Record<string, string> = {
-  ema_20: '#7c6af7', ema_60: '#4ade80', sma_50: '#fb923c',
-  sma_150: '#f59e0b', sma_200: '#f43f5e', supertrend: '#2dd4bf',
+  ema_20: '#7c6af7', ema_60: 'var(--bull)', sma_50: '#fb923c',
+  sma_150: 'var(--caution)', sma_200: '#f43f5e', supertrend: '#2dd4bf',
   pivot_levels: '#94a3b8', atr_14: '#c084fc', rsi_14: '#60a5fa',
 }
 
@@ -644,9 +644,9 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           top: 0,
           bottom: 0,
           width: 380,
-          background: 'var(--bg-card, #0d1117)',
-          borderLeft: '2px solid rgba(201,168,76,0.35)',
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.5), -2px 0 0 rgba(201,168,76,0.12)',
+          background: 'var(--card)',
+          borderLeft: '2px solid color-mix(in srgb, var(--gold) 35%, transparent)',
+          boxShadow: '-8px 0 32px rgba(0,0,0,0.5), -2px 0 0 color-mix(in srgb, var(--gold) 12%, transparent)',
           display: 'flex',
           flexDirection: 'column',
           zIndex: 300,

@@ -928,11 +928,11 @@ function TimelineView({ events, year, month }: { events: AstroCalendarEvent[]; y
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  background: 'rgba(0,0,0,0.3)',
+  background: 'var(--panel-recess)',
   border: '1px solid var(--border)',
   color: 'var(--text-primary)',
   padding: '8px 10px',
-  fontFamily: 'var(--font-sans)',
+  fontFamily: 'var(--font-body)',
   fontSize: 12.5,
   borderRadius: 6,
   outline: 'none',

@@ -2,7 +2,7 @@ import { useAstroSignal } from '@/hooks/useDashboardExtras'
 import { useLastTradingDate } from '@/hooks/useLastTradingDate'
 
 function atmosphericConfig(netScore: number): { color: string; label: string } {
-  if (netScore > 2)   return { color: 'var(--teal, #00c9a0)', label: 'Favorable'   }
+  if (netScore > 2)   return { color: 'var(--bull)', label: 'Favorable'   }
   if (netScore >= -1) return { color: 'var(--caution)',        label: 'Neutral'     }
   return                     { color: 'var(--bear)',           label: 'Unfavorable' }
 }

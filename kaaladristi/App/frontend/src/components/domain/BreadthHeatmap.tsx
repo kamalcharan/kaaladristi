@@ -164,7 +164,7 @@ export default function BreadthHeatmap({
 
           {rows.map(row => (
             <div key={row.key} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-              <div style={{ width: 150, flexShrink: 0, fontFamily: 'var(--font-sans)', fontSize: 10,
+              <div style={{ width: 150, flexShrink: 0, fontFamily: 'var(--font-body)', fontSize: 10,
                 color: 'var(--text-secondary)', paddingRight: 8 }}>
                 {row.label}
               </div>

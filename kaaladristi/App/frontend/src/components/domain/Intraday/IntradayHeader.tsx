@@ -60,18 +60,18 @@ export default function IntradayHeader({
       display: 'flex', alignItems: 'center', gap: 14,
       padding: '8px 16px',
       borderBottom: '1px solid var(--kd-border)',
-      background: 'var(--kd-panel)',
+      background: 'var(--panel-recess)',
       flexShrink: 0, minHeight: 44,
     }}>
       {/* Brand */}
       <span style={{
-        fontFamily: 'var(--font-serif, serif)', fontSize: 13, fontWeight: 700,
+        fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700,
         color: 'var(--text-primary)', letterSpacing: 2,
       }}>DristiQ</span>
 
       {/* Symbol + price */}
       <span style={{
-        fontFamily: 'var(--font-serif, serif)', fontSize: 15, fontWeight: 700,
+        fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700,
         color: 'var(--text-primary)',
       }}>{symbolName}</span>
       {lastClose !== null && (

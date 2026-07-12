@@ -280,7 +280,7 @@ export default function CustomIndexManagePage() {
       <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', padding: '20px 24px' }}>
 
         {/* Constituents */}
-        <div style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--surface)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--card)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
             Constituents
           </div>
@@ -304,7 +304,7 @@ export default function CustomIndexManagePage() {
         </div>
 
         {/* Manual add */}
-        <div style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--surface)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--card)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
             <input
               value={query}
@@ -336,7 +336,7 @@ export default function CustomIndexManagePage() {
         </div>
 
         {/* AI suggestions */}
-        <div style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--surface)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: '12px', background: 'var(--card)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
             AI Suggestions
           </div>

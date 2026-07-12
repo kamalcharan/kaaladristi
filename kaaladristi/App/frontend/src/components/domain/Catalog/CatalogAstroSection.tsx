@@ -15,19 +15,19 @@ import type { DeepDiveItem } from './DeepDivePanel'
 import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
 
 const ASTRO_PALETTE = [
-  '#6366f1', '#8b7af8', '#2dd4bf', '#22c55e',
-  '#ef4444', '#f59e0b', '#e879f9', '#ffffff',
+  '#6366f1', '#8b7af8', '#2dd4bf', 'var(--bull)',
+  'var(--bear)', 'var(--caution)', '#e879f9', '#ffffff',
 ]
 
 // Default overlay color per group tag
 const GROUP_DEFAULT_COLORS: Record<string, string> = {
   Panchak:    '#6366f1',
   Mercury:    '#3b82f6',
-  Retrograde: '#f59e0b',
+  Retrograde: 'var(--caution)',
   Conjunction:'#a855f7',
   Nakshatra:  '#2dd4bf',
-  Eclipse:    '#ef4444',
-  Yoga:       '#22c55e',
+  Eclipse:    'var(--bear)',
+  Yoga:       'var(--bull)',
   Transit:    '#fb7185',
 }
 
@@ -772,7 +772,7 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
                           <span style={{
                             fontSize: 11,
                             fontFamily: 'var(--font-mono, monospace)',
-                            color: urgent ? 'var(--risk-amber, #f59e0b)' : next ? 'var(--text-secondary)' : 'var(--text-muted)',
+                            color: urgent ? 'var(--risk-amber, var(--caution))' : next ? 'var(--text-secondary)' : 'var(--text-muted)',
                           }}>
                             {fmtTransitDate(next)}
                             {urgent && daysAway !== null && (

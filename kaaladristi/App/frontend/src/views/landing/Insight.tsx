@@ -45,6 +45,7 @@ export function InsightSection() {
 
           {/* NOT column */}
           <FadeUp>
+            {/* theme-agnostic: landing page is fixed-dark marketing */}
             <div style={{ padding:'40px 36px', border:'1px solid rgba(255,255,255,0.06)', background:'rgba(255,255,255,0.01)', height:'100%' }}>
               <div style={{ fontFamily:MONO, fontSize:11, letterSpacing:'.22em', color:C.ink4, marginBottom:18 }}>✗ WHAT WE ARE NOT</div>
               <ul style={{ listStyle:'none', padding:0, margin:0 }}>

@@ -183,9 +183,9 @@ export default function RotationGraph({
           {!reduceMotion && (
             <button onClick={replay} title="Replay the rotation path"
               className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full"
-              style={{ color: 'var(--vani, #9d8ff9)', cursor: 'pointer',
-                border: '1px solid color-mix(in srgb, var(--vani, #9d8ff9) 30%, transparent)',
-                background: 'color-mix(in srgb, var(--vani, #9d8ff9) 8%, transparent)' }}>
+              style={{ color: 'var(--vani)', cursor: 'pointer',
+                border: '1px solid color-mix(in srgb, var(--vani) 30%, transparent)',
+                background: 'color-mix(in srgb, var(--vani) 8%, transparent)' }}>
               {playhead != null ? '▶ playing' : '▶ replay'}
             </button>
           )}
@@ -275,12 +275,12 @@ export default function RotationGraph({
         <div className="flex-1 min-w-[190px] flex flex-col gap-2.5">
           {q && (
             <div className="rounded-lg p-3"
-              style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--vani, #9d8ff9) 9%, var(--card)) 0%, var(--card) 70%)',
-                       border: '1px solid color-mix(in srgb, var(--vani, #9d8ff9) 28%, transparent)' }}>
+              style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--vani) 9%, var(--card)) 0%, var(--card) 70%)',
+                       border: '1px solid color-mix(in srgb, var(--vani) 28%, transparent)' }}>
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-mono font-bold text-white shrink-0"
                   style={{ background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)', boxShadow: '0 2px 8px rgba(124,106,247,.4)' }}>V</span>
-                <span className="text-[8px] font-mono uppercase tracking-widest" style={{ color: 'var(--vani, #9d8ff9)' }}>VaNi · read</span>
+                <span className="text-[8px] font-mono uppercase tracking-widest" style={{ color: 'var(--vani)' }}>VaNi · read</span>
               </div>
               <div className="text-[15px] font-bold" style={{ color: q.color }}>{q.name}</div>
               <div className="text-[11px] text-muted mt-1 leading-snug">

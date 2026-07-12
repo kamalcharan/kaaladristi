@@ -22,9 +22,9 @@ function ZoneDot({ zone }: { zone: string | null }) {
   const normalized = zone?.toLowerCase().replace(/ /g, '_')
   const color =
     normalized === 'strong_bull' ? 'var(--bull)' :
-    normalized === 'mild_bull'   ? 'rgba(var(--bull-rgb, 34,197,94), .55)' :
+    normalized === 'mild_bull'   ? 'color-mix(in srgb, var(--bull) 55%, transparent)' :
     normalized === 'strong_bear' ? 'var(--bear)' :
-    normalized === 'mild_bear'   ? 'rgba(var(--bear-rgb, 239,68,68), .55)' :
+    normalized === 'mild_bear'   ? 'color-mix(in srgb, var(--bear) 55%, transparent)' :
     'var(--text-faint)'
   return (
     <span style={{

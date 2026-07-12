@@ -139,7 +139,7 @@ export default function CorrelationCard({
               marginBottom: 4,
             }}>Correlation Verdict</div>
             <div style={{
-              fontSize: 28, fontFamily: 'var(--font-serif, serif)', fontWeight: 900,
+              fontSize: 28, fontFamily: 'var(--font-display)', fontWeight: 900,
               lineHeight: 1, color: corrState.color,
               transition: 'color 0.4s ease',
             }}>{corrState.state}</div>

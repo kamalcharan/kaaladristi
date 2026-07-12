@@ -157,7 +157,7 @@ export default function ConfluenceDotGrid() {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>
             Day-by-Day Signal Grid
           </div>
-          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
             Nak-Vara · Breadth · ROC · NIFTY 50 return — each column = one trading day
           </div>
         </div>
@@ -167,7 +167,7 @@ export default function ConfluenceDotGrid() {
           display: 'flex',
           gap: 2,
           padding: '3px',
-          background: 'rgba(0,0,0,0.25)',
+          background: 'var(--panel-recess)',
           border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
           borderRadius: 8,
         }}>
@@ -199,12 +199,12 @@ export default function ConfluenceDotGrid() {
         {isLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0', color: 'var(--text-muted)' }}>
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />
-            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading timeline…</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 12 }}>Loading timeline…</span>
           </div>
         ) : isError ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '24px 0', color: 'var(--bear)' }}>
             <AlertCircle className="w-4 h-4" />
-            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Failed to load — backend may be offline</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 12 }}>Failed to load — backend may be offline</span>
           </div>
         ) : data.length === 0 ? (
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', padding: '24px 0', textAlign: 'center' }}>
@@ -313,7 +313,7 @@ export default function ConfluenceDotGrid() {
                   top: tooltip.y,
                   transform: 'translate(-50%, -100%)',
                   zIndex: 9999,
-                  background: '#0f172a',
+                  background: 'var(--card)',
                   border: '1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)',
                   borderRadius: 8,
                   padding: '10px 12px',
@@ -333,7 +333,7 @@ export default function ConfluenceDotGrid() {
                     marginBottom: 2,
                     opacity: tooltip.rowIdx === i ? 1 : 0.55,
                   }}>
-                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-muted)' }}>{row.label}</span>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-muted)' }}>{row.label}</span>
                     <span style={{
                       fontFamily: 'var(--font-mono)',
                       fontSize: 10,
