@@ -292,7 +292,9 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     thresholds: {
       low:     'var(--bear)',
       mid:     'var(--text-secondary)',
-      high:    'var(--accent)',
+      // caution, not accent: >80 = overbought heat. The violet accent is
+      // reserved for interactive elements — data signals must not wear it.
+      high:    'var(--caution)',
       lowMax:  20,
       highMin: 80,
     },
