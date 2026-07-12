@@ -147,6 +147,10 @@ export default function ChartView() {
   const frameworkOverlays = framework?.chart_overlays ?? NO_OVERLAYS;
   const astroBands = useAstroOverlayBands(frameworkOverlays);
   const [overlayDrawerOpen, setOverlayDrawerOpen] = useState(false);
+  // Study reorg (2026-07-12): decision-band prose collapsed by default;
+  // Member-Of pills demoted to a closed accordion.
+  const [readExpanded, setReadExpanded] = useState(false);
+  const [membershipOpen, setMembershipOpen] = useState(false);
 
   const numId = Number(id);
   const rawName = searchParams.get('name') ?? `${type} #${id}`;
@@ -404,8 +408,20 @@ export default function ChartView() {
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
-        {/* ═══ Compact Header Row: Back + Name + Price + Stats ═══ */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
+        {/* ═══ Sticky command header: Back + Name + Verdict + Price + Stats + jump rail ═══
+            Sticky below the Layout topbar (48px) so identity/verdict/navigation
+            stay visible on this long page (Study reorg, owner-approved wireframe). */}
+        <div
+          className="sticky z-30 -mx-1 px-1 mb-3"
+          style={{
+            top: 48,
+            background: 'color-mix(in srgb, var(--bg) 90%, transparent)',
+            backdropFilter: 'blur(10px)',
+            borderBottom: '1px solid var(--border)',
+            paddingBottom: 6,
+          }}
+        >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
@@ -481,24 +497,50 @@ export default function ChartView() {
           )}
         </div>
 
-        {/* ═══ Decision Band — the read leads: VaNi narrative + verdict ═══ */}
-        {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight || snapshot) && (
-          <div className="flex flex-col lg:flex-row gap-3 lg:items-stretch mb-3">
-            <div className="flex-1 min-w-0">
+        {/* Jump rail — anchors into the page's chapters (equity Study only) */}
+        {isEquity && !isLoading && rows.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            {([['read', 'Read'], ['strength', 'Strength'], ['flow', 'Money Flow'], ['chart', 'Chart']] as const).map(([anchor, label]) => (
+              <button
+                key={anchor}
+                onClick={() => document.getElementById(`study-${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider border border-kd-border text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        </div>
+
+        {/* ═══ Decision Band — 4-second read: verdict lives ONCE in the sticky
+            header chip; the VaNi prose is clamped behind an expander so the
+            band scans instead of walling (Study reorg 2026-07-12). ═══ */}
+        {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
+          <div id="study-read" style={{ scrollMarginTop: 118 }} className="mb-3">
+            {snapshot?.corrState.tagline && (
+              <div className="text-[11px] mb-1.5" style={{ color: snapshot.corrState.color }}>
+                ● <span className="font-semibold">{snapshot.corrState.state}</span>
+                <span className="text-muted"> — {snapshot.corrState.tagline}</span>
+              </div>
+            )}
+            <div className="relative overflow-hidden" style={!readExpanded ? { maxHeight: 96 } : undefined}>
               {/* VaNiInsight brings its own indigo panel styling + chip highlights */}
               <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips className="mt-0" />
+              {!readExpanded && !aiLoading && (
+                <div
+                  className="absolute inset-x-0 bottom-0 h-10 pointer-events-none"
+                  style={{ background: 'linear-gradient(transparent, var(--bg))' }}
+                />
+              )}
             </div>
-            {snapshot && (
-              <div
-                className="shrink-0 lg:w-52 rounded-md px-3 py-2.5 flex flex-col justify-center"
-                style={{ border: '1px solid var(--border)', background: 'var(--card)' }}
+            {!aiLoading && aiData?.insight && (
+              <button
+                onClick={() => setReadExpanded((e) => !e)}
+                className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
               >
-                <div className="text-[9px] uppercase tracking-widest text-muted">Verdict</div>
-                <div className="text-lg font-mono font-bold mt-0.5" style={{ color: snapshot.corrState.color }}>
-                  ● {snapshot.corrState.state}
-                </div>
-                <div className="text-[9px] text-muted mt-0.5">{snapshot.corrState.tagline}</div>
-              </div>
+                {readExpanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
+              </button>
             )}
           </div>
         )}
@@ -518,48 +560,59 @@ export default function ChartView() {
             <PumpDumpBanner result={pumpDumpResult} />
           </div>
         )}
-        {isEquity && hasRsData && (
-          <div className="mb-3">
-            <MultiTimeframePills
-              rsChange1d={rsChange1d}
-              rsChange5d={rsChange5d}
-              rsChange20d={rsChange20d}
-              currentRs={pulseBars[effectiveIdx]?.magic_rs ?? null}
-              benchmarkLabel="NIFTY 500"
-            />
-          </div>
-        )}
-
-        {/* ═══ RS-Rotation (daily) — Magic RS × its momentum vs NIFTY 500 ═══ */}
-        {/* Layout is provisional — placed under the RS pills for now; realign later. */}
-        {isEquity && tf === 'daily' && hasRsData && (
-          <div className="mb-3">
-            <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} />
-          </div>
+        {/* ═══ Chapter: Relative Strength — pills + rotation quadrant + industry
+            context together: everything answering "how strong vs market/peers?"
+            (RS-Rotation moved DOWN from its provisional prime spot.) ═══ */}
+        {isEquity && (hasRsData || equityPulse.industryContext) && (
+          <section id="study-strength" style={{ scrollMarginTop: 118 }} className="mb-3">
+            <SectionLabel>Relative Strength</SectionLabel>
+            {hasRsData && (
+              <div className="mb-2">
+                <MultiTimeframePills
+                  rsChange1d={rsChange1d}
+                  rsChange5d={rsChange5d}
+                  rsChange20d={rsChange20d}
+                  currentRs={pulseBars[effectiveIdx]?.magic_rs ?? null}
+                  benchmarkLabel="NIFTY 500"
+                />
+              </div>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-[4fr_1fr] gap-3">
+              <div className="min-w-0">
+                {tf === 'daily' && hasRsData ? (
+                  <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} />
+                ) : (
+                  <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
+                    RS-Rotation is available on the daily timeframe{hasRsData ? '' : ' (RS not computed for this stock)'}.
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <IndustryContextCard
+                  industry={equityPulse.meta?.industry ?? null}
+                  context={equityPulse.industryContext}
+                />
+              </div>
+            </div>
+          </section>
         )}
 
         {/* ═══ Evidence tiers (equity) · chart-centric (index) ═══ */}
         {isEquity ? (
           <>
-            {/* Row A — Flow Heatmap 80% · Industry 20% */}
+            {/* ═══ Chapter: Money Flow — one question ("is real money entering?"),
+                one frame: heatmap leads full-width, state cards beneath. ═══ */}
             {!isLoading && !isError && rows.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-[4fr_1fr] gap-3 mb-3">
-                <div className="min-w-0">
-                  {tf === 'daily' ? (
-                    <StockFlowHeatmap label={name} rows={rows} />
-                  ) : (
-                    <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
-                      Flow heatmap is available on the daily timeframe.
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <IndustryContextCard
-                    industry={equityPulse.meta?.industry ?? null}
-                    context={equityPulse.industryContext}
-                  />
-                </div>
-              </div>
+              <section id="study-flow" style={{ scrollMarginTop: 118 }} className="mb-3">
+                <SectionLabel>Money Flow</SectionLabel>
+                {tf === 'daily' ? (
+                  <StockFlowHeatmap label={name} rows={rows} />
+                ) : (
+                  <div className="glass-card rounded-xl p-3 text-[10px] text-muted">
+                    Flow heatmap is available on the daily timeframe.
+                  </div>
+                )}
+              </section>
             )}
 
             {/* Rows B/C — Order Flow · Smart Money · Big Money(spans) / Delivery(wide) */}
@@ -603,16 +656,41 @@ export default function ChartView() {
               </div>
             )}
 
-            {/* Scan Presence · Member Of */}
+            {/* ═══ RESERVED CHAPTERS (Study reorg 2026-07-12) — render nothing
+                until their data pipelines land; they have addresses so the next
+                data drop slots in without another page re-org:
+                · #study-fundamentals — revenue/EBITDA sparklines, D/E, promoter
+                  Δ + pledge, dividends (quarterly results / yfinance ingest —
+                  the Waking Giants Layer-0 fields reused per-stock)
+                · #study-events — filings timeline (results, SHP, corporate
+                  actions, concalls) + FPB setup/burst + WG phase markers with
+                  astro-window shading ═══ */}
+
+            {/* Signals today · index membership (reference, demoted to accordion) */}
             {!isLoading && !isError && rows.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
                 <ScanPresenceCard stock={scanPresence.stock} matchedScans={scanPresence.matchedScans} />
-                <SectorMembershipCard equityId={numId} />
+                <div className="glass-card rounded-xl self-start">
+                  <button
+                    onClick={() => setMembershipOpen((o) => !o)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+                  >
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                      Index membership
+                    </span>
+                    <span className="text-[10px] text-[var(--text-faint)]">{membershipOpen ? '▴' : '▾'}</span>
+                  </button>
+                  {membershipOpen && (
+                    <div className="px-1 pb-1">
+                      <SectorMembershipCard equityId={numId} />
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Chart tier — Chart 70% · (Magic RS / RSI-MFI / Divergence) 30% */}
-            <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
+            <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
               <div className="min-w-0">{chartArea}</div>
               <div className="flex flex-col gap-3 min-w-0">
                 {snapshot && (hasRsData ? (
@@ -682,6 +760,18 @@ export default function ChartView() {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
+
+/** Chapter label — small-caps eyebrow + fading hairline (Study reorg). */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      <span className="text-[9px] font-mono font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)] whitespace-nowrap">
+        {children}
+      </span>
+      <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, var(--border), transparent)' }} />
+    </div>
+  );
+}
 
 function StatPill({ label, value }: { label: string; value: string }) {
   return (
