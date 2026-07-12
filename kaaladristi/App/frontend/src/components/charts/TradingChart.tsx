@@ -842,7 +842,10 @@ export default function TradingChart({ data, height = 900, compact = false, work
           // band.opacity = user-picked opacity (or tier default)
           const tier    = band.panchakTier ?? 'base'
           const bias    = ('baseBias' in band ? band.baseBias : null) ?? ''
-          const userOpacity = band.opacity
+          // Zone opacities are calibrated for dark backgrounds; the same alpha
+          // over white reads ~2x stronger, so scale down in light mode.
+          const zoneModeScale = document.documentElement.dataset.mode === 'light' ? 0.55 : 1
+          const userOpacity = band.opacity * zoneModeScale
 
           let fillColor: string
           let labelChar: string
@@ -886,7 +889,9 @@ export default function TradingChart({ data, height = 900, compact = false, work
           // ── Non-Panchak: merged group band — single opacity, no stacking ───
           // band.opacity = group opacity (user-set or default 0.10)
           const isFuture = band.from > today
-          const op = (band as { opacity?: number }).opacity ?? 0.10
+          // Same dark-calibration note as the Panchak path above: soften in light mode.
+          const zoneModeScale = document.documentElement.dataset.mode === 'light' ? 0.55 : 1
+          const op = ((band as { opacity?: number }).opacity ?? 0.10) * zoneModeScale
           let fillColor: string
           let borderColor: string
           let dashed = false

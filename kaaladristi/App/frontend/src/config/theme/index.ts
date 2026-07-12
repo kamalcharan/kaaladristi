@@ -87,7 +87,13 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   // ── Text ──
   set('--text-primary',   c.utility.primaryText);
   set('--text-secondary', c.utility.secondaryText);
-  set('--text-muted', c.utility.placeholder ?? deriveTextMuted(c.utility.secondaryText));
+  // Dark mode: fade secondaryText further (dimmed light text over near-black
+  // still has presence). Light mode: use the theme's muted color AS-IS — the
+  // reference palettes' --color-muted values (#645f7c etc.) are already the
+  // calibrated muted role, and fading them to ~60% alpha over white was the
+  // systemic "washed out sidebar/nav" bug (≈2.3:1 contrast).
+  set('--text-muted', c.utility.placeholder ??
+    (prefersDark ? deriveTextMuted(c.utility.secondaryText) : c.utility.secondaryText));
 
   // ── Accents — new semantic vars ──
   set('--indigo',        c.brand.primary);
@@ -150,7 +156,7 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   // that use --text-faint (sidebar footer, PageHeader meta lines, table
   // captions, etc.), not a per-page bug. Light mode uses a much higher
   // alpha (~3:1 for small decorative text) to actually be legible.
-  set('--text-faint', hexToRgba(c.utility.primaryText, prefersDark ? 0.25 : 0.45));
+  set('--text-faint', hexToRgba(c.utility.primaryText, prefersDark ? 0.25 : 0.55));
 }
 
 /**
