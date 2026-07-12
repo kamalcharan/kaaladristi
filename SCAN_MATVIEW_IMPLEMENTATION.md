@@ -1,6 +1,6 @@
 # Scanner Materialized View MVP — Implementation
 
-**Status:** Phase 1c **DONE** — migration 147 written + validated via the read-only MCP connector (see §"Phase 1c — DONE"). Ready for the Phase 4 row-for-row parity diff against the live JS engine (needs the running frontend). Phase 1 (rule inventory + schema design + audit/observability addendum) — Part 2 guard-firing check **run — 2 of 4 guards DOMINANT (zone 47.5%, flow 77.4%)**; zone root-caused to **stale frontend vocabulary** (DB writes 7 bands, frontend knows 5), coercion confirmed a parity no-op → **Phase 1c is now UNGATED and ready to write.** Only open item (flow-by-exchange) is non-blocking. See §Part 2 RESULTS + §Part 2b. **vani_flag path resolved by code inspection** (6/7 presets already use flag-based `computeVaniOpportunity` today; the vani_path question was moot) — see §vani_flag DEFINITIVE. **Phase 1c SQL is fully specified from code + migrations; live DB needed only to verify, not to write.**
+**Status:** Phase 1c + **Phase 4 parity DONE** — migration 147 written, and the row-for-row parity diff against the **real JS scan engine** passed **EXACT on all 7 presets** (see §"Phase 4 — PARITY VERIFIED"). Phase 1 (rule inventory + schema design + audit/observability addendum) — Part 2 guard-firing check **run — 2 of 4 guards DOMINANT (zone 47.5%, flow 77.4%)**; zone root-caused to **stale frontend vocabulary** (DB writes 7 bands, frontend knows 5), coercion confirmed a parity no-op → **Phase 1c is now UNGATED and ready to write.** Only open item (flow-by-exchange) is non-blocking. See §Part 2 RESULTS + §Part 2b. **vani_flag path resolved by code inspection** (6/7 presets already use flag-based `computeVaniOpportunity` today; the vani_path question was moot) — see §vani_flag DEFINITIVE. **Phase 1c SQL is fully specified from code + migrations; live DB needed only to verify, not to write.**
 **Branch:** `claude/ready-for-task-xh6bih`
 **Target migration:** `km_migration_147_scan_results_matview.sql` (next free number).
 **Scope:** the **7 Path A / bundle scanners** only. The 7 Path B (direct-query) scanners are out of scope and MUST NOT regress.
@@ -625,12 +625,55 @@ Column expressions not exercised by the count query — `magic_rs_trend` (smalli
 3. **[C3]** `smart_money.vani_rule` is live `'is_vani_smart'`, not NULL → all 7
    presets use `computeVaniOpportunity`; `flow_guard_applied` is always FALSE.
 
-**Still gated on the running frontend (Phase 4):** the definitive row-for-row
-`(preset_id, equity_id, rank)` diff against the live JS engine. MCP proves the SQL
-runs and is internally sane; it cannot execute the browser scanner. Run the diff
-on a staging/backup copy after `REFRESH`, per Phase 4. Also note the flagged
-tie-order caveat (JS Map-insertion order among exact sort-key ties is not
-replicable; membership is identical, only intra-tie rank may differ).
+## Phase 4 — PARITY VERIFIED (2026-07-11): EXACT on all 7 presets ✓
+
+The definitive row-for-row diff was run **without a browser** by executing the
+**real production JS scan logic** against the **same live data the browser loads**,
+then comparing to the **actual migration-147 SQL** (the defining SELECT, extracted
+verbatim from the `.sql` file). Method:
+
+1. A Node harness opened the read-only `kaala-postgres` MCP endpoint directly (so
+   the ~160k-row dataset flowed DB→Node, never through chat) and replicated
+   `loadDailyBundle`'s exact queries: active symbols, 45-day equity EOD (chunked),
+   20-day industry EOD, live `kd_scan_presets.vani_rule`.
+2. `scanEngine.ts`'s pure functions (`buildScanStock`, `hasDotInHistory`,
+   `getIndustryClassifications`, `computeVaniOpportunity`, all 7 scan fns) were
+   transcribed **verbatim** (types stripped) and run on that bundle → the
+   "app truth" lists (raw, pre-exchange-filter — the layer the matview stores).
+3. The migration's defining SELECT was run over the same DB → the SQL lists.
+4. Diffed per preset on **membership + rank + vani_flag**.
+
+**Result (latest_date 2026-07-10; 159,668 EOD rows, 5,337 stocks w/ today's data,
+157 industries):**
+
+```
+✓ power_buy           js=25  sql=25
+✓ power_sell          js=25  sql=25
+✓ smart_money         js=0   sql=0
+✓ fresh_breakout      js=25  sql=25
+✓ quiet_accumulation  js=25  sql=25
+✓ distribution_warning js=19 sql=19
+✓ conviction_flow     js=5   sql=5
+================ ALL 7 PRESETS: EXACT PARITY ✓ ================
+```
+
+Zero membership differences, zero rank differences, zero vani_flag differences on
+every preset — including `smart_money`'s legitimately-empty result. The three C1/C2/C3
+corrections were necessary to reach this: an earlier pass with the doc's original
+(uncorrected) rules would **not** have matched.
+
+Tie-order caveat resolved in practice: both sides break exact-sort-key ties by
+`equity_id`, so ranks matched exactly (the harness builds `latestEod` in id-asc order
+to mirror the matview's `equity_id` tiebreaker).
+
+**Remaining Phase 4 items are operational, not correctness:** run the migration on a
+staging/backup copy → `REFRESH` → perf before/after → Path B regression check (the 7
+direct-query scanners are untouched — migration 147 only `CREATE`s two new matviews) →
+repoint the frontend → prod. Confirm the backup dump name with the owner before prod.
+Parity itself is proven.
+
+Verification harness (for re-runs): `scratchpad/{mcpclient,scans,parity}.mjs`
+(not committed — depends on the read-only MCP endpoint + `KD_MCP_BASIC`).
 
 ## Quirks flagged (NOT fixed here — separate conversation)
 
