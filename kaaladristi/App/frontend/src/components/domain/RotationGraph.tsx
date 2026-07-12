@@ -192,8 +192,11 @@ export default function RotationGraph({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-4 items-center">
-        <div className="flex-1 min-w-[280px]">
+      {/* items-start (not center): the read/legend column tops out beside the
+          plot instead of floating vertically centered in dead space; the plot
+          is width-capped so it can't balloon on wide screens. */}
+      <div className="flex flex-wrap gap-4 items-start">
+        <div className="flex-1 min-w-[280px] max-w-[520px]">
           <svg viewBox="0 0 480 480" width="100%" style={{ display: 'block', height: 'auto' }}
             role="img" aria-label={`Rotation graph. Latest reading in the ${q?.name ?? 'n/a'} quadrant.`}>
             {/* quadrant fills — corners: TR/TL/BL/BR = hi_up/hi_dn/lo_dn/lo_up */}

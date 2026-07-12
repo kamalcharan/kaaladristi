@@ -577,7 +577,10 @@ export default function ChartView() {
                 />
               </div>
             )}
-            <div className="grid grid-cols-1 lg:grid-cols-[4fr_1fr] gap-3">
+            {/* 2fr/1fr + a STACKED right column (industry + scan presence +
+                membership) so the tall quadrant doesn't leave a blank column
+                (owner QA 2026-07-12). */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">
               <div className="min-w-0">
                 {tf === 'daily' && hasRsData ? (
                   <RotationGraph points={rotationPoints} benchmark="NIFTY 500" autoPlay playSeconds={7} />
@@ -587,11 +590,28 @@ export default function ChartView() {
                   </div>
                 )}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex flex-col gap-3">
                 <IndustryContextCard
                   industry={equityPulse.meta?.industry ?? null}
                   context={equityPulse.industryContext}
                 />
+                <ScanPresenceCard stock={scanPresence.stock} matchedScans={scanPresence.matchedScans} />
+                <div className="glass-card rounded-xl">
+                  <button
+                    onClick={() => setMembershipOpen((o) => !o)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+                  >
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                      Index membership
+                    </span>
+                    <span className="text-[10px] text-[var(--text-faint)]">{membershipOpen ? '▴' : '▾'}</span>
+                  </button>
+                  {membershipOpen && (
+                    <div className="px-1 pb-1">
+                      <SectorMembershipCard equityId={numId} />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -666,28 +686,8 @@ export default function ChartView() {
                   actions, concalls) + FPB setup/burst + WG phase markers with
                   astro-window shading ═══ */}
 
-            {/* Signals today · index membership (reference, demoted to accordion) */}
-            {!isLoading && !isError && rows.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-                <ScanPresenceCard stock={scanPresence.stock} matchedScans={scanPresence.matchedScans} />
-                <div className="glass-card rounded-xl self-start">
-                  <button
-                    onClick={() => setMembershipOpen((o) => !o)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-left"
-                  >
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                      Index membership
-                    </span>
-                    <span className="text-[10px] text-[var(--text-faint)]">{membershipOpen ? '▴' : '▾'}</span>
-                  </button>
-                  {membershipOpen && (
-                    <div className="px-1 pb-1">
-                      <SectorMembershipCard equityId={numId} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* (Scan Presence + Index membership moved INTO the Strength
+                chapter's right-column stack — owner QA 2026-07-12.) */}
 
             {/* Chart tier — Chart 70% · (Magic RS / RSI-MFI / Divergence) 30% */}
             <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
