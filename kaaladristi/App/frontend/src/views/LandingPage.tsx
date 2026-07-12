@@ -66,6 +66,7 @@ const LANDING_CSS = `
   .dq-pillar-grid { display:grid; grid-template-columns:1fr 1fr; }
   @media(max-width:820px){ .dq-pillar-grid{ grid-template-columns:1fr !important; } }
 
+  /* theme-agnostic: landing page is fixed-dark marketing, independent of app theme */
   .dq-pillar-card { background:#0a0a12; transition:background .3s ease; }
   .dq-pillar-card:hover { background:linear-gradient(180deg,#0d0d1a,#0a0a12) !important; }
 

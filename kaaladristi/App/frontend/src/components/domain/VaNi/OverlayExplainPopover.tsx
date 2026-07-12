@@ -71,7 +71,7 @@ export default function OverlayExplainPopover({
       style={{
         position: 'fixed', left, top: anchorY + 6, zIndex: 500,
         width: 340, maxHeight: '70vh', overflowY: 'auto',
-        background: 'var(--bg-card, #0d1117)',
+        background: 'var(--card)',
         border: '1px solid rgba(157,143,249,0.25)', borderRadius: 12,
         boxShadow: '0 16px 48px rgba(0,0,0,0.5)', padding: 14,
       }}

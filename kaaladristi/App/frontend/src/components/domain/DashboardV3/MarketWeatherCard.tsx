@@ -344,7 +344,7 @@ function CardHeader({ data }: { data: MarketWeatherProps }) {
       <div style={{ textAlign: 'center' }}>
         <span
           style={{
-            fontFamily: 'var(--font-sans)',
+            fontFamily: 'var(--font-body)',
             fontSize: 11,
             color: 'var(--text-faint)',
           }}
@@ -429,7 +429,7 @@ function BarRow({ label, normalized, rightLabel, rightSub, arrowGlyph, arrowColo
         </span>
         <span
           style={{
-            fontFamily: 'var(--font-sans)',
+            fontFamily: 'var(--font-body)',
             fontSize: 10,
             color: 'var(--text-secondary)',
           }}
@@ -546,7 +546,7 @@ function FooterTally({ astro }: { astro: MarketWeatherProps['components']['astro
           </span>
           <span
             style={{
-              fontFamily: 'var(--font-sans)',
+              fontFamily: 'var(--font-body)',
               fontSize: 10,
               color: 'var(--text-faint)',
               textTransform: 'uppercase',
@@ -748,7 +748,7 @@ export default function MarketWeatherCard({ date }: MarketWeatherCardProps = {})
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--bear)', letterSpacing: '0.1em', marginBottom: 6 }}>
           API UNAVAILABLE
         </div>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-faint)' }}>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-faint)' }}>
           {(error as Error)?.message ?? 'Could not reach pipeline API'}
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', marginTop: 8, letterSpacing: '0.08em' }}>

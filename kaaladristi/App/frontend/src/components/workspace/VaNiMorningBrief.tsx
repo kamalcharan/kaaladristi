@@ -501,7 +501,7 @@ function MorningModal({ items, profile, onClose }: {
         onClick={onClose}
         style={{
           position: 'fixed', inset: 0, zIndex: 500,
-          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)',
+          background: 'var(--overlay)', backdropFilter: 'blur(2px)',
         }}
       />
 
@@ -511,7 +511,7 @@ function MorningModal({ items, profile, onClose }: {
         transform: 'translate(-50%, -50%)',
         zIndex: 501,
         width: 420, maxWidth: 'calc(100vw - 32px)',
-        background: 'var(--bg-card, #0d1117)',
+        background: 'var(--card)',
         border: '1px solid rgba(157,143,249,0.25)',
         borderRadius: 14,
         boxShadow: '0 24px 64px rgba(0,0,0,0.6)',

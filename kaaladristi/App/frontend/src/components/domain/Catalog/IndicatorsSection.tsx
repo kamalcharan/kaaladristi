@@ -346,7 +346,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                 <div style={{
                   borderRadius: 6,
                   overflow: 'hidden',
-                  background: 'rgba(0,0,0,0.2)',
+                  background: 'var(--panel-recess)',
                   marginBottom: 10,
                 }}>
                   <IndicatorPreview id={item.id} color={color} />

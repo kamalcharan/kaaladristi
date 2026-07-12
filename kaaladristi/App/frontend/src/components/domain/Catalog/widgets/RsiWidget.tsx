@@ -138,7 +138,7 @@ export default function RsiWidget() {
         <div style={{ position: 'absolute', left: '30%', right: '30%', top: 0,
           height: '100%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 2 }} />
         <div style={{ position: 'absolute', top: -3, width: 10, height: 10,
-          borderRadius: '50%', background: color, border: '2px solid rgba(0,0,0,0.5)',
+          borderRadius: '50%', background: color, border: '2px solid rgba(0,0,0,0.5)', // theme-agnostic: contrast ring on colored dot
           transform: 'translateX(-50%)', left: `${currentRsi}%` }} />
       </div>
 

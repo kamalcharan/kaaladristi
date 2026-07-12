@@ -133,7 +133,7 @@ function EventRow({
 
         {/* Name */}
         <span style={{
-          fontFamily: 'var(--font-sans)',
+          fontFamily: 'var(--font-body)',
           fontSize: 13,
           color: 'var(--text-primary)',
           flex: 1,
@@ -165,7 +165,7 @@ function EventRow({
       {open && text && (
         <div style={{
           padding: '0 14px 12px 38px',
-          fontFamily: 'var(--font-sans)',
+          fontFamily: 'var(--font-body)',
           fontSize: 12,
           color: 'var(--text-secondary)',
           lineHeight: 1.7,
@@ -321,7 +321,7 @@ export default function PlanetaryIntelView() {
           display: 'flex',
           gap: 2,
           padding: 3,
-          background: 'rgba(0,0,0,0.3)',
+          background: 'var(--panel-recess)',
           border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)',
           borderRadius: 8,
         }}>
@@ -352,14 +352,14 @@ export default function PlanetaryIntelView() {
       {isLoading ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '32px 0' }}>
           <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--text-faint)' }} />
-          <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-faint)' }}>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-faint)' }}>
             Loading…
           </span>
         </div>
       ) : isError ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '24px 0' }}>
           <AlertCircle style={{ width: 16, height: 16, color: 'var(--text-faint)' }} />
-          <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text-faint)' }}>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-faint)' }}>
             Failed to load — backend may be offline
           </span>
         </div>

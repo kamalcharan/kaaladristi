@@ -140,7 +140,7 @@ function VaniFilterButton({ active, count, onToggle }: { active: boolean; count:
       <span style={{
         fontFamily: 'var(--font-mono)', fontSize: '10px',
         padding: '1px 6px', borderRadius: '100px',
-        background: 'rgba(0,0,0,0.2)',
+        background: 'rgba(0,0,0,0.2)', // theme-agnostic: recess on the gold chip, not on the page surface
         color: active ? '#1a1410' : undefined,
       }}>
         {count}
@@ -1317,7 +1317,7 @@ export default function ScanView() {
       {/* Left sidebar — always visible */}
       <div style={{
         width: '220px', minWidth: '220px',
-        background: 'var(--sidebar-bg, var(--card))',
+        background: 'var(--card)',
         borderRight: '1px solid var(--border)',
         overflowY: 'auto', padding: '14px 0', flexShrink: 0,
       }}>
@@ -1358,7 +1358,7 @@ export default function ScanView() {
               <span style={{
                 fontFamily: 'var(--font-mono)', fontSize: '10px',
                 color: isActive ? 'var(--gold)' : 'var(--text-faint)',
-                background: isActive ? 'rgba(240,165,0,0.1)' : 'var(--bg3, color-mix(in srgb, var(--text-primary) 4%, transparent))',
+                background: isActive ? 'rgba(240,165,0,0.1)' : 'var(--panel-recess)',
                 padding: '1px 6px', borderRadius: '3px',
               }}>
                 {catCount > 0 ? catCount : '—'}
@@ -1383,7 +1383,7 @@ export default function ScanView() {
         <div style={{
           flexShrink: 0, padding: '7px 24px',
           borderTop: '1px solid var(--border)',
-          background: 'var(--sidebar-bg, var(--card))',
+          background: 'var(--card)',
           fontSize: '10.5px', lineHeight: 1.5, color: 'var(--text-faint)',
           textAlign: 'center',
         }}>

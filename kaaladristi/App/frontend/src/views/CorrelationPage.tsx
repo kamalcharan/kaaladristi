@@ -38,12 +38,12 @@ function VaNiModal() {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(0,0,0,0.65)',
+      background: 'var(--overlay)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <style>{`@keyframes vani-ring{0%,100%{transform:scale(1);opacity:.15}50%{transform:scale(1.35);opacity:.06}}`}</style>
       <div style={{
-        background: 'var(--bg-card, #111)', border: '1px solid var(--border)',
+        background: 'var(--card)', border: '1px solid var(--border)',
         borderRadius: 14, padding: '36px 48px',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18,
         minWidth: 260,
@@ -192,7 +192,7 @@ function InstanceGrid({ instances }: { instances: CorrelationInstance[] }) {
           left: tooltipPos.x + 24,
           top: tooltipPos.y - 8,
           zIndex: 500,
-          background: 'var(--bg-card, #111)',
+          background: 'var(--card)',
           border: '1px solid var(--border)',
           borderRadius: 6,
           padding: '7px 10px',

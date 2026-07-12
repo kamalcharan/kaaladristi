@@ -157,7 +157,7 @@ export default function OrderFlowCard({ bar, rss, rssHistory, narrative }: Order
       <div style={{ padding: '10px 14px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
-            fontSize: 16, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
+            fontSize: 16, fontFamily: 'var(--font-display)', fontWeight: 700,
             color: fc.color, transition: 'color 0.4s ease',
           }}>{ft.replace(/_/g, ' ')}</span>
           <span style={{

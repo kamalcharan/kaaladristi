@@ -166,7 +166,7 @@ export default function PricingCards({ onPaidSuccess, onFreeSelected }: PricingC
       {/* Feature comparison */}
       <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--card)', marginBottom: 32 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 80px',
-          padding: '12px 20px', background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 4%, transparent))',
+          padding: '12px 20px', background: 'var(--panel-recess)',
           borderBottom: '1px solid var(--border)', fontSize: 11,
           color: 'color-mix(in srgb, var(--text-primary) 40%, transparent)', fontFamily: 'var(--font-mono,monospace)',
           letterSpacing: '.04em', textAlign: 'center' }}>

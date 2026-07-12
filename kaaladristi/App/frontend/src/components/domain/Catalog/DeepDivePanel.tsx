@@ -644,7 +644,7 @@ export default function DeepDivePanel({ item, onClose }: DeepDivePanelProps) {
           top: 0,
           bottom: 0,
           width: 380,
-          background: 'var(--bg-card, #0d1117)',
+          background: 'var(--card)',
           borderLeft: '2px solid rgba(201,168,76,0.35)',
           boxShadow: '-8px 0 32px rgba(0,0,0,0.5), -2px 0 0 rgba(201,168,76,0.12)',
           display: 'flex',

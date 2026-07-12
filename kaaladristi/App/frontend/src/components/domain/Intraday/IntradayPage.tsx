@@ -96,7 +96,7 @@ function PlaceholderCard({ title, cycle }: { title: string; cycle: string }) {
       border: '1px dashed var(--kd-border)',
       borderRadius: 4,
       padding: '10px 12px',
-      background: 'var(--kd-panel, color-mix(in srgb, var(--text-primary) 2%, transparent))',
+      background: 'var(--panel-recess)',
     }}>
       <div style={{
         fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
@@ -475,7 +475,7 @@ export default function IntradayPage() {
             {isDev && planScore && (
               <div style={{
                 marginTop: 4, padding: '6px 8px',
-                background: 'var(--kd-panel, color-mix(in srgb, var(--text-primary) 2%, transparent))',
+                background: 'var(--panel-recess)',
                 border: '1px solid var(--kd-border)', borderRadius: 4,
                 fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
                 color: 'var(--text-muted)', letterSpacing: '0.05em',
@@ -504,7 +504,7 @@ export default function IntradayPage() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '6px 16px', flexWrap: 'wrap', gap: 8,
         borderTop: '1px solid var(--kd-border)',
-        background: 'var(--kd-panel, rgba(0,0,0,0.2))',
+        background: 'var(--panel-recess)',
         fontFamily: 'var(--font-mono, monospace)', fontSize: 9,
         color: 'var(--text-faint)', letterSpacing: '0.04em',
       }}>

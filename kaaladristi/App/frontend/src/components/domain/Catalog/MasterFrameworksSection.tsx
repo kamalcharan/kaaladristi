@@ -176,7 +176,7 @@ export default function MasterFrameworksSection() {
               style={{
                 border: `1px solid ${isActive ? 'rgba(201,168,76,0.35)' : 'var(--border)'}`,
                 borderRadius: 14,
-                background: 'var(--bg-card, color-mix(in srgb, var(--text-primary) 3%, transparent))',
+                background: 'var(--card)',
                 overflow: 'hidden',
                 transition: 'border-color 0.2s, transform 0.2s, box-shadow 0.2s',
                 cursor: 'default',

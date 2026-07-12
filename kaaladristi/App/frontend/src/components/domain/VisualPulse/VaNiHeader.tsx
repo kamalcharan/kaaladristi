@@ -14,12 +14,12 @@ export default function VaNiHeader({ date, barPosition, isThinking }: VaNiHeader
         width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
         background: 'linear-gradient(135deg, var(--accent-indigo), var(--accent-violet))',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
+        fontSize: 13, fontFamily: 'var(--font-display)', fontWeight: 700,
         color: '#fff',
       }}>V</div>
       <div style={{ flex: 1 }}>
         <div style={{
-          fontSize: 13, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
+          fontSize: 13, fontFamily: 'var(--font-display)', fontWeight: 700,
           color: 'var(--text-primary)',
         }}>
           VaNi &middot; <span style={{ fontWeight: 400 }}>वाणी</span>

@@ -286,7 +286,7 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
           padding: '5px 10px', borderRadius: '6px', fontSize: '11px',
           color: active ? 'var(--accent)' : 'var(--text-muted)',
           border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-          background: active ? 'rgba(var(--accent-rgb,99,102,241),0.07)' : 'var(--card)',
+          background: active ? 'color-mix(in srgb, var(--accent) 7%, transparent)' : 'var(--card)',
           cursor: 'pointer', fontFamily: 'var(--font-body)',
           transition: 'all 0.15s',
         }}
