@@ -235,6 +235,15 @@ DIMENSION_META: dict[str, dict] = {
                                 'coverage_cols': ['flow_type'],
                                 'ok_threshold': 0.95, 'partial_threshold': 0.5},
 
+    # BSE delivery (SCBSEALL feed). Delivery lands during the bse_eod_download
+    # step (step='delivery' in run_bse_pipeline); the wrench reuses the BSE-EOD
+    # fix, which re-runs download incl. delivery. Thresholds are intentionally
+    # looser than NSE's 0.95 — the BSE traded universe is messier and some
+    # scrips are absent from SCBSEALL; recalibrate once real fill is observed.
+    'bse_delivery':            {'step': 'delivery',              'exchange': 'BSE', 'fix': 'fix:bse_equities',
+                                'coverage_cols': ['delivery_pct'],
+                                'ok_threshold': 0.85, 'partial_threshold': 0.4},
+
     # Single-row-per-date aggregates — row-presence is the right semantic.
     'industry_composites':     {'step': 'industry_composites',   'exchange': 'NSE', 'fix': 'fix:industry_composites'},
     'market_breadth':          {'step': 'market_breadth',        'exchange': 'NSE', 'fix': 'fix:market_breadth'},
@@ -567,6 +576,15 @@ def check_bse_flow_intelligence(db, trading_days, skip_dates):
                          meta['ok_threshold'], meta['partial_threshold'])
 
 
+def check_bse_delivery(db, trading_days, skip_dates):
+    """BSE delivery (delivery_pct) column fill — from the SCBSEALL feed."""
+    meta = DIMENSION_META['bse_delivery']
+    return _coverage_row(db, 'bse_delivery', 'BSE Delivery',
+                         'km_equity_eod', meta['coverage_cols'], 'BSE',
+                         trading_days, skip_dates,
+                         meta['ok_threshold'], meta['partial_threshold'])
+
+
 def check_flow_intelligence(db, trading_days, skip_dates):
     """Index flow intelligence — km_index_eod column fill."""
     meta = DIMENSION_META['flow_intelligence']
@@ -633,6 +651,7 @@ HEALTH_CHECKS = [
     check_flow_intelligence,
     check_nse_flow_intelligence,
     check_bse_flow_intelligence,
+    check_bse_delivery,
     check_industry_composites,
     check_market_breadth,
     check_breadth_roc,

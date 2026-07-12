@@ -68,6 +68,19 @@ _NSE_DELIV_MAP = {
     '%DELTO': 'delivery_pct',
 }
 
+# BSE SCBSEALL delivery file (pipe-delimited .TXT). Real header (verified from a
+# live file, 2026-07-10):
+#   DATE|SCRIP CODE|DELIVERY QTY|DELIVERY VAL|DAY'S VOLUME|DAY'S TURNOVER|DELV. PER.
+# Unlike NSE, BSE ships the delivery percentage directly (DELV. PER.), so no
+# derivation from volume is needed — both exchanges store a source-provided pct.
+# Aliases cover BSE's history of renaming columns across formats.
+_BSE_DELIV_MAP = {
+    'SCRIP CODE': 'scrip_code', 'SC_CODE': 'scrip_code', 'SCRIP_CD': 'scrip_code',
+    'DELIVERY QTY': 'delivery_qty', 'DELIV_QTY': 'delivery_qty', 'DELV_QTY': 'delivery_qty',
+    "DELV. PER.": 'delivery_pct', 'DELV.PER.': 'delivery_pct', 'DELV_PER': 'delivery_pct',
+    'DELIVERY PER.': 'delivery_pct', 'DELIV_PER': 'delivery_pct',
+}
+
 
 def _normalize_row(raw_row: dict, col_map: dict) -> dict:
     """Map raw CSV column names to normalized names."""
@@ -258,3 +271,35 @@ def parse_bse_bhav(csv_path: str, trade_date: date) -> list[dict]:
             })
 
     return records
+
+
+def parse_bse_delivery(txt_path: str) -> dict[str, dict]:
+    """
+    Parse the BSE SCBSEALL delivery file (pipe-delimited .TXT extracted from
+    SCBSEALL{DDMM}.zip). Mirrors parse_nse_delivery.
+
+    Returns dict keyed by BSE scrip code:
+        {scrip_code: {delivery_qty, delivery_pct}}
+
+    The scrip code (e.g. '500002') equals km_equity_symbols.symbol WHERE
+    exchange='BSE', so a SymbolMatcher(exchange='BSE') resolves it to equity_id
+    exactly as the BSE bhavcopy ingest does. Numeric fields in the file are
+    zero-padded fixed-width (e.g. '0000000000002485') — _safe_int strips them.
+    """
+    result = {}
+
+    with open(txt_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f, delimiter='|')
+        for raw in reader:
+            row = _normalize_row(raw, _BSE_DELIV_MAP)
+
+            scrip = (row.get('scrip_code') or '').strip()
+            if not scrip:
+                continue
+
+            result[scrip] = {
+                'delivery_qty': _safe_int(row.get('delivery_qty')),
+                'delivery_pct': _safe_float(row.get('delivery_pct')),
+            }
+
+    return result

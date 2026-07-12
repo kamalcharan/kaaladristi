@@ -13,8 +13,8 @@ import time
 import requests
 from datetime import date
 
-from pipeline.config import DOWNLOAD_TIMEOUT, DOWNLOAD_MAX_RETRIES
-from pipeline.utils.file_manager import extract_zip, file_exists
+from pipeline.config import DOWNLOAD_TIMEOUT, DOWNLOAD_MAX_RETRIES, BSE_DELIVERY_URL_PATTERNS
+from pipeline.utils.file_manager import extract_zip, extract_zip_member, file_exists
 
 
 # BSE URL patterns to try (BSE changes formats periodically)
@@ -109,4 +109,79 @@ def download_bse_bhav(d: date) -> str | None:
                     break
 
     print(f'  [bse_bhav] All URL patterns failed for {d}')
+    return None
+
+
+def _delivery_urls(d: date) -> list[str]:
+    """Build all candidate BSE SCBSEALL delivery URLs for a date."""
+    return [
+        p.format(yyyy=d.strftime('%Y'), ddmm=d.strftime('%d%m'))
+        for p in BSE_DELIVERY_URL_PATTERNS
+    ]
+
+
+def download_bse_delivery(d: date) -> str | None:
+    """
+    Download BSE scrip-wise delivery (SCBSEALL) for a given date.
+
+    Mirrors download_bse_bhav's resilience: browser session/headers, 403 backoff,
+    multiple URL patterns. The payload is a ZIP containing a pipe-delimited '.TXT'
+    (SCBSEALL{DDMM}.TXT). Returns path to the extracted .TXT, or None if
+    unavailable for this date.
+    """
+    existing = file_exists(d, prefix='bse_deliv', ext='.txt')
+    if existing:
+        print(f'  [bse_deliv] Already exists: {existing}')
+        return existing
+
+    session = requests.Session()
+    session.headers.update(_BSE_HEADERS)
+
+    for url in _delivery_urls(d):
+        print(f'  [bse_deliv] Trying: {url}')
+
+        for attempt in range(DOWNLOAD_MAX_RETRIES):
+            try:
+                resp = session.get(url, timeout=DOWNLOAD_TIMEOUT)
+
+                if resp.status_code == 404:
+                    break  # Try next URL pattern
+
+                if resp.status_code == 403:
+                    wait = (attempt + 1) * 5
+                    print(f'  [bse_deliv] 403 — retrying in {wait}s')
+                    time.sleep(wait)
+                    continue
+
+                resp.raise_for_status()
+
+                if len(resp.content) < 200:
+                    print(f'  [bse_deliv] Response too small ({len(resp.content)} bytes), skipping')
+                    break
+
+                # SCBSEALL is always a ZIP; a non-ZIP 200 is a challenge/redirect page.
+                is_zip = (resp.content[:4] == b'PK\x03\x04' or
+                          'zip' in resp.headers.get('Content-Type', '').lower())
+                if not is_zip:
+                    ctype = resp.headers.get('Content-Type')
+                    print(f'  [bse_deliv] Not a ZIP (Content-Type={ctype}), skipping')
+                    break
+
+                txt_path = extract_zip_member(
+                    resp.content, d, prefix='bse_deliv',
+                    member_exts=('.txt', '.csv'), out_ext='.txt',
+                )
+                print(f'  [bse_deliv] Saved: {txt_path} ({len(resp.content):,} bytes)')
+                return txt_path
+
+            except requests.RequestException as e:
+                if attempt < DOWNLOAD_MAX_RETRIES - 1:
+                    wait = (attempt + 1) * 5
+                    print(f'  [bse_deliv] Error: {e}, retrying in {wait}s')
+                    time.sleep(wait)
+                else:
+                    print(f'  [bse_deliv] Failed on this URL: {e}')
+                    break
+
+    print(f'  [bse_deliv] All URL patterns failed for {d}')
     return None
