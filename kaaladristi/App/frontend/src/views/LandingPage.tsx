@@ -68,7 +68,7 @@ const LANDING_CSS = `
 
   /* theme-agnostic: landing page is fixed-dark marketing, independent of app theme */
   .dq-pillar-card { background:#0a0a12; transition:background .3s ease; }
-  .dq-pillar-card:hover { background:linear-gradient(180deg,#0d0d1a,#0a0a12) !important; }
+  .dq-pillar-card:hover { background:linear-gradient(180deg,#0d0d1a,#0a0a12) !important; } /* theme-agnostic: fixed-dark landing */
 
   .dq-vani-grid { display:grid; grid-template-columns:1fr 1fr; gap:80px; align-items:center; }
   @media(max-width:900px){ .dq-vani-grid{ grid-template-columns:1fr !important; gap:48px !important; } }
