@@ -141,7 +141,7 @@ function SignalTooltip({ signals, dow, dd, mon }: { signals: SignalItem[]; dow: 
             }}>
               {/* Rule name */}
               <div style={{
-                fontFamily: 'var(--font-sans)',
+                fontFamily: 'var(--font-body)',
                 fontSize: 10,
                 fontWeight: 600,
                 color: 'var(--text-primary)',

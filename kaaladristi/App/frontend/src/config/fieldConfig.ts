@@ -163,8 +163,8 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
       switch (zone) {
         case 'Strong Bull':  return 'var(--bull)'
         case 'Mild Bull':    return 'var(--bull-dim, rgba(34,197,94,0.55))'
-        case 'Neutral Bull': return 'var(--bull-faint, rgba(34,197,94,0.3))'
-        case 'Neutral Bear': return 'var(--bear-faint, rgba(239,68,68,0.3))'
+        case 'Neutral Bull': return 'color-mix(in srgb, var(--bull) 30%, transparent)'
+        case 'Neutral Bear': return 'color-mix(in srgb, var(--bear) 30%, transparent)'
         case 'Mild Bear':    return 'var(--bear-dim, rgba(239,68,68,0.55))'
         case 'Strong Bear':  return 'var(--bear)'
         default:             return 'var(--text-secondary)'
@@ -292,7 +292,9 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     thresholds: {
       low:     'var(--bear)',
       mid:     'var(--text-secondary)',
-      high:    'var(--accent)',
+      // caution, not accent: >80 = overbought heat. The violet accent is
+      // reserved for interactive elements — data signals must not wear it.
+      high:    'var(--caution)',
       lowMax:  20,
       highMin: 80,
     },

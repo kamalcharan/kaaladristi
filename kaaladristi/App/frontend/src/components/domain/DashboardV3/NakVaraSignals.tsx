@@ -119,7 +119,7 @@ function SignalRow({ sig }: { sig: RuleSignal }) {
       {/* Name */}
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontFamily: 'var(--font-sans)',
+          fontFamily: 'var(--font-body)',
           fontSize: 11,
           color: 'var(--text-primary)',
           overflow: 'hidden',
@@ -257,7 +257,7 @@ export default function NakVaraSignals({ date }: { date: string }) {
           </span>
           {data && (
             <span style={{
-              fontFamily: 'var(--font-sans)',
+              fontFamily: 'var(--font-body)',
               fontSize: 11,
               color: 'var(--text-secondary)',
               marginLeft: 8,

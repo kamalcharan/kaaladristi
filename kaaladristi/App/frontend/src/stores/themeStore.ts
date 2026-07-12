@@ -19,6 +19,16 @@ export const MODES: { id: ThemeMode; label: string; glyph: string }[] = [
   { id: 'system', label: 'System', glyph: '◐' },
 ]
 
+// ── LAUNCH GATE ─────────────────────────────────────────────────────────────
+// Light mode is fully built and owner-calibrated (warm ivory + warm charcoal
+// ink — see docs/claude/glass-ux-status.md §3) but NOT cleared for release
+// (owner decision 2026-07-12: "not confident with light theme, can't release
+// it"). This flag hard-locks the app to dark: resolveDark() always returns
+// true and the Settings mode toggle is hidden. index.html's FOUC script
+// carries its own copy of this flag — keep the two in sync.
+// Re-enabling light = flip both flags to true. Nothing else to change.
+export const LIGHT_MODE_ENABLED = false
+
 // Themes with no designed light palette yet (their darkMode mirrors colors).
 // The mode toggle is disabled for these — honest dark-only, not a broken flip.
 // 2026-07-08: Vikuna Black (formerly "DristiQ") adopted the Glass UX & Theme
@@ -37,6 +47,7 @@ function systemPrefersDark(): boolean {
 /** Resolve the effective dark/light for a theme+mode pair. Dark-only themes
  * always resolve dark regardless of the stored mode. */
 export function resolveDark(themeId: ThemeId, mode: ThemeMode): boolean {
+  if (!LIGHT_MODE_ENABLED) return true
   if (isDarkOnly(themeId)) return true
   if (mode === 'system') return systemPrefersDark()
   return mode === 'dark'

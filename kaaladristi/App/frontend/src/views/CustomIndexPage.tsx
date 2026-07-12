@@ -165,7 +165,7 @@ export default function CustomIndexPage() {
                   padding: '14px 18px',
                   border: '1px solid var(--border)',
                   borderRadius: '10px',
-                  background: 'var(--surface)',
+                  background: 'var(--card)',
                   cursor: 'pointer',
                   transition: 'border-color 0.15s',
                 }}
@@ -290,7 +290,7 @@ export default function CustomIndexPage() {
                 padding: '48px 32px',
                 border: '1px solid var(--border)',
                 borderRadius: '16px',
-                background: 'var(--surface)',
+                background: 'var(--card)',
                 maxWidth: '360px',
               }}
             >

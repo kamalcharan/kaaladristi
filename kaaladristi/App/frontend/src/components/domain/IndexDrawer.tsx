@@ -144,7 +144,7 @@ function FlowChip({ flowType }: { flowType: string | null }) {
     fontWeight: 500,
     padding: '1px 5px',
     borderRadius: '3px',
-    background: 'var(--card-alt, color-mix(in srgb, var(--text-primary) 5%, transparent))',
+    background: 'var(--panel-recess)',
     color: `var(${colorVar}, var(--text-secondary))`,
     whiteSpace: 'nowrap',
   };
@@ -276,7 +276,7 @@ export default function IndexDrawer({ indexId, row, onClose }: IndexDrawerProps)
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.35)',
+          background: 'rgba(0,0,0,0.35)', // theme-agnostic: drawer scrim, black in both modes by design
           zIndex: 190,
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'auto' : 'none',

@@ -88,7 +88,7 @@ function CondCard({
             {value}
           </div>
           {valueSub && (
-            <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
               {valueSub}
             </div>
           )}
@@ -114,7 +114,7 @@ function CondCard({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
           {rows.map(r => (
             <div key={r.k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-muted)' }}>{r.k}</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-muted)' }}>{r.k}</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: r.color ?? 'var(--text-secondary)', fontWeight: 600 }}>{r.v}</span>
             </div>
           ))}
@@ -337,7 +337,7 @@ function HistoricalObservations() {
           <div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 4 }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: ins.color, fontWeight: 700, lineHeight: 1.4 }}>{ins.icon}</span>
-              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.4 }}>{ins.title}</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.4 }}>{ins.title}</span>
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: ins.color }}>{ins.sub}</div>
           </div>
@@ -357,7 +357,7 @@ function HistoricalObservations() {
             {ins.n} of evidence
           </div>
 
-          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', paddingTop: 8 }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.6, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', paddingTop: 8 }}>
             {ins.verdict}
           </div>
         </div>
@@ -373,7 +373,7 @@ function Section({ title, sub, children }: { title: string; sub?: string; childr
     <div style={{ background: 'var(--card)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 12, overflow: 'hidden' }}>
       <div style={{ padding: '13px 18px 11px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-faint)' }}>{title}</div>
-        {sub && <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
+        {sub && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
       </div>
       <div style={{ padding: '16px 18px' }}>{children}</div>
     </div>
@@ -399,12 +399,12 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
         {isLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--text-muted)' }}>
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />
-            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading conditions…</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 12 }}>Loading conditions…</span>
           </div>
         ) : isError || !data ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--bear)' }}>
             <AlertCircle className="w-4 h-4" />
-            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Could not load conditions — backend may be offline</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 12 }}>Could not load conditions — backend may be offline</span>
           </div>
         ) : (
           <ConditionsPanel cond={data.conditions} />
@@ -419,7 +419,7 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
         {isLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--text-muted)' }}>
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--accent)' }} />
-            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>Loading pattern…</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 12 }}>Loading pattern…</span>
           </div>
         ) : (
           <PatternBlock pattern={data?.pattern ?? null} />
@@ -433,7 +433,7 @@ function HistoricalConfluenceTab({ date }: { date: string }) {
 
       {/* Footer disclaimer */}
       <div style={{
-        fontFamily: 'var(--font-sans)',
+        fontFamily: 'var(--font-body)',
         fontSize: 10,
         color: 'var(--text-secondary)',
         lineHeight: 1.6,

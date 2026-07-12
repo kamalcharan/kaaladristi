@@ -49,7 +49,7 @@ export default function PlanetsSidebar({ date }: Props) {
     <div style={{
       border: '1px solid var(--kd-border)', borderRadius: 4,
       padding: 12,
-      background: 'var(--kd-panel, color-mix(in srgb, var(--text-primary) 2%, transparent))',
+      background: 'var(--panel-recess)',
     }}>
       <div style={{
         fontFamily: 'var(--font-mono, monospace)', fontSize: 9,

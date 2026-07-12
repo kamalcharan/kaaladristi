@@ -6,6 +6,9 @@
   --indigo-strong: #c2b8ff;
   --indigo-bg: rgba(155,140,255,0.12);
   --overlay: rgba(0,0,0,0.55);
+  /* VaNi's fixed brand identity — intentionally the same pale purple in
+     every theme and mode (see theme-handover-2026-07-09.md #6). */
+  --vani: #9d8ff9;
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Inter', -apple-system, sans-serif;
   --font-mono: 'Geist Mono', monospace;

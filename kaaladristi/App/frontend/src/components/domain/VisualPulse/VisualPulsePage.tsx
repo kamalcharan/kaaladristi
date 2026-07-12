@@ -174,13 +174,13 @@ export default function VisualPulsePage() {
           display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8,
         }}>
           <span style={{
-            fontSize: 13, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
+            fontSize: 13, fontFamily: 'var(--font-display)', fontWeight: 700,
             color: 'var(--text-primary)', letterSpacing: 2,
           }}>
             DristiQ
           </span>
           <span style={{
-            fontSize: 15, fontFamily: 'var(--font-serif, serif)', fontWeight: 700,
+            fontSize: 15, fontFamily: 'var(--font-display)', fontWeight: 700,
             color: 'var(--text-primary)',
           }}>{indexMeta?.name ?? '…'}</span>
           <span style={{

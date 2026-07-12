@@ -71,8 +71,8 @@ export default function OverlayExplainPopover({
       style={{
         position: 'fixed', left, top: anchorY + 6, zIndex: 500,
         width: 340, maxHeight: '70vh', overflowY: 'auto',
-        background: 'var(--bg-card, #0d1117)',
-        border: '1px solid rgba(157,143,249,0.25)', borderRadius: 12,
+        background: 'var(--card)',
+        border: '1px solid color-mix(in srgb, var(--vani) 25%, transparent)', borderRadius: 12,
         boxShadow: '0 16px 48px rgba(0,0,0,0.5)', padding: 14,
       }}
     >
@@ -94,10 +94,10 @@ export default function OverlayExplainPopover({
         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Checking what's active…</div>
       ) : active ? (
         <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8,
-          background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+          background: 'color-mix(in srgb, var(--bull) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--bull) 20%, transparent)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981',
-              boxShadow: '0 0 5px rgba(16,185,129,0.8)', flexShrink: 0 }} />
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bull)',
+              boxShadow: '0 0 5px color-mix(in srgb, var(--bull) 80%, transparent)', flexShrink: 0 }} />
             <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
               {active.display_name}
             </span>
@@ -140,8 +140,8 @@ export default function OverlayExplainPopover({
                   onClick={() => setFocus({ id: c.ruleId, label: c.label })}
                   style={{
                     fontSize: 10, padding: '3px 8px', borderRadius: 8, cursor: 'pointer',
-                    background: isFocused ? 'rgba(157,143,249,0.15)' : 'transparent',
-                    border: `1px solid ${isFocused ? 'rgba(157,143,249,0.5)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)'}`,
+                    background: isFocused ? 'color-mix(in srgb, var(--vani) 15%, transparent)' : 'transparent',
+                    border: `1px solid ${isFocused ? 'color-mix(in srgb, var(--vani) 50%, transparent)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)'}`,
                     color: isFocused ? 'var(--text-primary)' : 'var(--text-secondary)',
                   }}
                 >

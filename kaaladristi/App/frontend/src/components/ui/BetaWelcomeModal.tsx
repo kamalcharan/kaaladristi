@@ -38,7 +38,7 @@ export default function BetaWelcomeModal() {
   return (
     <div
       className="fixed inset-0 z-[300] flex items-center justify-center px-4"
-      style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
+      style={{ background: 'var(--overlay)', backdropFilter: 'blur(6px)' }}
     >
       <div
         className="w-full max-w-[560px] rounded-2xl border border-kd-border bg-kd-elevated shadow-2xl"

@@ -220,7 +220,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
         {/* Free tier remaining bar — only for free + has expiry */}
         {isFree && days !== null && (
           <div style={{ marginBottom: 20, padding: '10px 12px', borderRadius: 8,
-            background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 4%, transparent))',
+            background: 'var(--panel-recess)',
             border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between',
               fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
@@ -242,7 +242,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
 
         {payError && (
           <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 8, fontSize: 12,
-            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, rgba(239,68,68,.3))',
+            background: 'var(--bear-bg)', border: '1px solid var(--bear-dim, color-mix(in srgb, var(--bear) 30%, transparent))',
             color: '#fca5a5' }}>
             {payError}
           </div>
@@ -280,7 +280,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             disabled={paying || activating}
             style={{
               padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 500,
-              background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 5%, transparent))',
+              background: 'var(--panel-recess)',
               border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
               color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
             }}>
@@ -292,7 +292,7 @@ export default function InlineGate({ context, isOpen, onDismiss }: InlineGatePro
             disabled={paying || activating}
             style={{
               padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 500,
-              background: 'var(--surface-dim, color-mix(in srgb, var(--text-primary) 5%, transparent))',
+              background: 'var(--panel-recess)',
               border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
               color: 'var(--text-secondary)', cursor: paying || activating ? 'wait' : 'pointer',
             }}>

@@ -361,7 +361,7 @@ export default function CustomIndexDiscoverPage() {
                 style={{
                   border: '1px solid var(--border)',
                   borderRadius: '12px',
-                  background: 'var(--surface)',
+                  background: 'var(--card)',
                   padding: '20px',
                   display: 'flex',
                   flexDirection: 'column',

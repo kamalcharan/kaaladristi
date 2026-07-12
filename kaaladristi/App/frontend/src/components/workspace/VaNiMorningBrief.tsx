@@ -49,13 +49,13 @@ function VaNiLoader() {
       <div style={{ position: 'relative', width: 48, height: 48 }}>
         <div style={{
           position: 'absolute', inset: 0, borderRadius: '50%',
-          background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+          background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
           opacity: 0.15,
           animation: 'vani-ring 1.8s ease-in-out infinite',
         }} />
         <div style={{
           position: 'absolute', inset: 6, borderRadius: '50%',
-          background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+          background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 13, fontWeight: 700, color: '#fff',
           fontFamily: 'var(--font-mono,monospace)',
@@ -170,7 +170,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
   if (pinned) {
     const orbStyle: React.CSSProperties = {
       width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-      background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+      background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: 9, fontWeight: 700, color: '#fff',
       fontFamily: 'var(--font-mono, monospace)',
@@ -179,7 +179,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
           <div style={orbStyle}>Vᴺ</div>
-          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'rgba(157,143,249,0.5)', fontFamily: 'var(--font-display)' }}>
+          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'color-mix(in srgb, var(--vani) 50%, transparent)', fontFamily: 'var(--font-display)' }}>
             VaNi · No active signals in framework
           </span>
         </div>
@@ -187,13 +187,13 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
     }
     return (
       <div style={{
-        border: '1px solid rgba(157,143,249,0.22)', borderRadius: 10,
-        background: 'linear-gradient(135deg, rgba(157,143,249,0.06) 0%, rgba(91,79,212,0.04) 100%)',
+        border: '1px solid color-mix(in srgb, var(--vani) 22%, transparent)', borderRadius: 10,
+        background: 'linear-gradient(135deg, color-mix(in srgb, var(--vani) 6%, transparent) 0%, rgba(91,79,212,0.04) 100%)',
         padding: '12px 16px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <div style={orbStyle}>Vᴺ</div>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontStyle: 'italic', color: 'rgba(157,143,249,0.9)' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontStyle: 'italic', color: 'color-mix(in srgb, var(--vani) 90%, transparent)' }}>
             VaNi · Today
           </span>
         </div>
@@ -218,10 +218,10 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
                   display: 'flex', alignItems: 'center', gap: 3,
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
-                  color: 'rgba(239,68,68,0.35)', padding: 0,
+                  color: 'color-mix(in srgb, var(--bear) 35%, transparent)', padding: 0,
                 }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
+                onMouseEnter={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 80%, transparent)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 35%, transparent)')}
               >
                 <Trash2 style={{ width: 10, height: 10 }} />
                 <span>clear cache</span>
@@ -258,9 +258,9 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
       <div
         onClick={onModalOpen}
         style={{
-          border: '1px solid rgba(157,143,249,0.22)',
+          border: '1px solid color-mix(in srgb, var(--vani) 22%, transparent)',
           borderRadius: 10,
-          background: 'linear-gradient(135deg, rgba(157,143,249,0.06) 0%, rgba(91,79,212,0.04) 100%)',
+          background: 'linear-gradient(135deg, color-mix(in srgb, var(--vani) 6%, transparent) 0%, rgba(91,79,212,0.04) 100%)',
           padding: '12px 16px',
           cursor: 'pointer',
           transition: 'border-color 0.2s',
@@ -268,8 +268,8 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
           position: 'relative',
           overflow: 'hidden',
         }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(157,143,249,0.4)')}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(157,143,249,0.22)')}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--vani) 40%, transparent)')}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--vani) 22%, transparent)')}
       >
         {/* VaNi orb */}
         <div style={{
@@ -277,7 +277,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
         }}>
           <div style={{
             width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-            background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+            background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 9, fontWeight: 700, color: '#fff',
             fontFamily: 'var(--font-mono, monospace)',
@@ -287,7 +287,7 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
           <span style={{
             fontFamily: 'var(--font-display)',
             fontSize: 12, fontStyle: 'italic',
-            color: 'rgba(157,143,249,0.9)',
+            color: 'color-mix(in srgb, var(--vani) 90%, transparent)',
           }}>
             VaNi
           </span>
@@ -322,11 +322,11 @@ export default function VaNiMorningBrief({ modalOpen, onModalOpen, onModalClose,
                   display: 'flex', alignItems: 'center', gap: 3,
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: 8, fontFamily: 'var(--font-mono,monospace)',
-                  color: 'rgba(239,68,68,0.35)',
+                  color: 'color-mix(in srgb, var(--bear) 35%, transparent)',
                   padding: 0,
                 }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.8)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.35)')}
+                onMouseEnter={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 80%, transparent)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 35%, transparent)')}
               >
                 <Trash2 style={{ width: 10, height: 10 }} />
                 <span>clear cache</span>
@@ -501,7 +501,7 @@ function MorningModal({ items, profile, onClose }: {
         onClick={onClose}
         style={{
           position: 'fixed', inset: 0, zIndex: 500,
-          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)',
+          background: 'var(--overlay)', backdropFilter: 'blur(2px)',
         }}
       />
 
@@ -511,8 +511,8 @@ function MorningModal({ items, profile, onClose }: {
         transform: 'translate(-50%, -50%)',
         zIndex: 501,
         width: 420, maxWidth: 'calc(100vw - 32px)',
-        background: 'var(--bg-card, #0d1117)',
-        border: '1px solid rgba(157,143,249,0.25)',
+        background: 'var(--card)',
+        border: '1px solid color-mix(in srgb, var(--vani) 25%, transparent)',
         borderRadius: 14,
         boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
         overflow: 'hidden',
@@ -521,7 +521,7 @@ function MorningModal({ items, profile, onClose }: {
         <div style={{
           padding: '18px 20px 14px',
           borderBottom: '1px solid var(--border)',
-          background: 'linear-gradient(135deg, rgba(157,143,249,0.06) 0%, transparent 60%)',
+          background: 'linear-gradient(135deg, color-mix(in srgb, var(--vani) 6%, transparent) 0%, transparent 60%)',
         }}>
           <button
             onClick={onClose}
@@ -536,7 +536,7 @@ function MorningModal({ items, profile, onClose }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <div style={{
               width: 28, height: 28, borderRadius: 8,
-              background: 'linear-gradient(135deg,#9d8ff9,#5b4fd4)',
+              background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11, fontWeight: 700, color: '#fff',
               fontFamily: 'var(--font-mono, monospace)',
@@ -545,7 +545,7 @@ function MorningModal({ items, profile, onClose }: {
             </div>
             <span style={{
               fontFamily: 'var(--font-display)', fontSize: 15, fontStyle: 'italic',
-              color: '#9d8ff9',
+              color: 'var(--vani)',
             }}>
               VaNi
             </span>
@@ -568,7 +568,7 @@ function MorningModal({ items, profile, onClose }: {
             <VaNiLoader />
           ) : liveObs.length > 0 ? (
             liveObs.map((obs, i) => {
-              const dotColor = obs.type === 'confluence' ? '#f59e0b' : obs.type === 'panchang' ? '#2dd4bf' : '#9d8ff9'
+              const dotColor = obs.type === 'confluence' ? 'var(--caution)' : obs.type === 'panchang' ? '#2dd4bf' : 'var(--vani)'
               return (
                 <div
                   key={obs.item_key ?? i}
@@ -603,7 +603,7 @@ function MorningModal({ items, profile, onClose }: {
                       style={{
                         fontSize: 11,
                         fontFamily: 'var(--font-mono, monospace)',
-                        color: 'var(--accent, #7c6af7)',
+                        color: 'var(--accent, var(--vani))',
                         cursor: obs.action_target ? 'pointer' : 'default',
                         opacity: obs.action_target ? 1 : 0.4,
                       }}
@@ -628,11 +628,11 @@ function MorningModal({ items, profile, onClose }: {
                             display: 'flex', alignItems: 'center', gap: 3,
                             background: 'none', border: 'none', cursor: 'pointer',
                             fontSize: 9, fontFamily: 'var(--font-mono,monospace)',
-                            color: 'rgba(239,68,68,0.6)',
+                            color: 'color-mix(in srgb, var(--bear) 60%, transparent)',
                             padding: 0,
                           }}
-                          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,1)')}
-                          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.6)')}
+                          onMouseEnter={e => (e.currentTarget.style.color = 'var(--bear)')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'color-mix(in srgb, var(--bear) 60%, transparent)')}
                         >
                           <Trash2 style={{ width: 11, height: 11 }} />
                           <span>clear</span>
@@ -680,7 +680,7 @@ function MorningModal({ items, profile, onClose }: {
             style={{
               padding: '8px 18px', borderRadius: 8, fontSize: 12,
               border: 'none',
-              background: 'linear-gradient(135deg,#7c6af7,#5b4fd4)',
+              background: 'linear-gradient(135deg,var(--vani),#5b4fd4)',
               color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
               fontWeight: 500,
             }}
@@ -722,7 +722,7 @@ function useComputeBriefItems({
         ? 'Astro rule group active as chart overlay in your framework.'
         : 'Astro rule active as chart overlay in your framework.',
       badge:       'Active overlay',
-      dot:         'var(--gold, #f59e0b)',
+      dot:         'var(--gold, var(--caution))',
       action:      () => navigate('/workspace'),
     })
   }
@@ -734,7 +734,7 @@ function useComputeBriefItems({
       title:       `${fmtId(corr.item_a)} ∩ ${fmtId(corr.item_b)}`,
       description: `${corr.n_instances} historical instances of this combination in your framework.`,
       badge:       `${corr.n_instances}×`,
-      dot:         'var(--accent, #7c6af7)',
+      dot:         'var(--accent, var(--vani))',
       action:      () => navigate(`/correlation/${corr.item_a}/${corr.item_b}`),
     })
   }
@@ -747,7 +747,7 @@ function useComputeBriefItems({
       title:       'Six-Day Outlook',
       description: 'Forward astro signal layer is active in your framework.',
       badge:       'In framework',
-      dot:         'var(--text-muted, #6b7280)',
+      dot:         'var(--text-muted, var(--text-muted))',
       action:      () => navigate('/workspace'),
     })
   }

@@ -37,6 +37,14 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** Blend `pct` (0–1) of hex color `tint` into hex color `base`. */
+function mixHex(base: string, tint: string, pct: number): string {
+  if (!base.startsWith('#') || !tint.startsWith('#') || base.length < 7 || tint.length < 7) return base;
+  const ch = (h: string, i: number) => parseInt(h.slice(i, i + 2), 16);
+  const mix = (i: number) => Math.round(ch(base, i) * (1 - pct) + ch(tint, i) * pct);
+  return `#${[1, 3, 5].map(i => mix(i).toString(16).padStart(2, '0')).join('')}`;
+}
+
 /**
  * Derive --text-muted from secondaryText when no explicit placeholder is given.
  * - rgba(…, a)  → reduce alpha by ~40 %
@@ -71,9 +79,16 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   };
 
   // ── Backgrounds ──
+  // Light mode: whisper 3% of the brand's ACCENT (secondary) into solid
+  // surfaces so cards carry the canvas temperature ("too monochrome" +
+  // warm-ivory owner picks, 2026-07-12). The accent, not the primary — the
+  // canvas commits to one temperature and the primary stays interactive-only.
+  // Dark untouched.
+  const tintSurface = (v: string | undefined) =>
+    v !== undefined && !prefersDark ? mixHex(v, c.brand.secondary, 0.03) : v;
   set('--bg',               c.utility.primaryBackground);
-  set('--card',             c.utility.secondaryBackground ?? c.utility.primaryBackground);
-  set('--card-soft',        c.surface.glassStrong);
+  set('--card',             tintSurface(c.utility.secondaryBackground ?? c.utility.primaryBackground));
+  set('--card-soft',        tintSurface(c.surface.glassStrong));
   set('--border',           c.surface.glassBorder);
   set('--kd-bg',            c.utility.primaryBackground);
   set('--kd-surface',       c.utility.secondaryBackground ?? c.utility.primaryBackground);
@@ -87,7 +102,13 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   // ── Text ──
   set('--text-primary',   c.utility.primaryText);
   set('--text-secondary', c.utility.secondaryText);
-  set('--text-muted', c.utility.placeholder ?? deriveTextMuted(c.utility.secondaryText));
+  // Dark mode: fade secondaryText further (dimmed light text over near-black
+  // still has presence). Light mode: 82% of the theme's muted color — owner-
+  // calibrated 2026-07-12 (A/B/C): the old ~60% derive was washed out
+  // (≈2.3:1), full strength competed with content text. 82% keeps hierarchy.
+  set('--text-muted', c.utility.placeholder ??
+    (prefersDark ? deriveTextMuted(c.utility.secondaryText)
+                 : hexToRgba(c.utility.secondaryText, 0.82)));
 
   // ── Accents — new semantic vars ──
   set('--indigo',        c.brand.primary);
@@ -150,7 +171,7 @@ export function applyTheme(config: ThemeConfig, prefersDark: boolean): void {
   // that use --text-faint (sidebar footer, PageHeader meta lines, table
   // captions, etc.), not a per-page bug. Light mode uses a much higher
   // alpha (~3:1 for small decorative text) to actually be legible.
-  set('--text-faint', hexToRgba(c.utility.primaryText, prefersDark ? 0.25 : 0.45));
+  set('--text-faint', hexToRgba(c.utility.primaryText, prefersDark ? 0.25 : 0.50));
 }
 
 /**

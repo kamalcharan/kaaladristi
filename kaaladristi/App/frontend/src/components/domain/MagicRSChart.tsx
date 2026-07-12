@@ -144,7 +144,7 @@ function RSTooltip({ active, payload, label }: {
 
   return (
     <div style={{
-      background: '#0f172a', border: '1px solid var(--bg)',
+      background: 'var(--card)', border: '1px solid var(--border)',
       borderRadius: 6, padding: '8px 12px', fontSize: 11,
       fontFamily: 'var(--font-mono)',
     }}>

@@ -34,6 +34,18 @@ function fmtDateChip(d: Date): string {
   return `${String(d.getDate()).padStart(2,'0')} ${_MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
 
+function fmtDateLong(d: Date): string {
+  return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+/** IST time-of-day greeting for the Today header. */
+function greetingWord(): string {
+  const istHour = (new Date().getUTCHours() + 5.5) % 24
+  if (istHour < 12) return 'Good morning'
+  if (istHour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 function fmtId(id: string): string {
   return id.replace('astro_rule:', '').replace(/_/g, ' ').toUpperCase()
 }
@@ -235,16 +247,40 @@ export default function WorkspacePage() {
 
       {activeTab === 'today' && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ maxWidth: 1400, margin: '0 auto', padding: '26px 32px 40px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* 0 · Greeting — the editorial moment (Glass UX §4: display serif + italic em) */}
+            <div>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 'var(--label-font-size)',
+                fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase',
+                color: 'var(--text-faint)', marginBottom: 6,
+              }}>
+                Today · Market Weather
+              </div>
+              <h1 style={{
+                fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 300,
+                letterSpacing: '-0.02em', lineHeight: 1.15, margin: 0,
+                color: 'var(--text-primary)',
+              }}>
+                {greetingWord()},{' '}
+                <em style={{ fontStyle: 'italic', fontWeight: 500, color: 'var(--gold)' }}>
+                  {profile?.display_name || profile?.full_name || 'there'}
+                </em>
+              </h1>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 12,
+                color: 'var(--text-muted)', marginTop: 5,
+              }}>
+                {fmtDateLong(new Date())}
+              </div>
+            </div>
 
             {/* 1 · Index cards — NIFTY 50 / BANK / 500 / India VIX */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <TickerRail date={today} />
-            </div>
+            <TickerRail date={today} />
 
             {/* Shared index selector (drives rotation + breadth + ROC) + Market Breadth nav */}
             <div style={{
-              padding: '14px 20px', borderBottom: '1px solid var(--border)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -271,15 +307,12 @@ export default function WorkspacePage() {
             </div>
 
             {/* 2 · How breadth is moving — rotation (VaNi read; no heatmap) */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <BreadthRotation indexId={breadthIndexId} title={`How breadth is moving · ${breadthIndex}`} />
-            </div>
+            <BreadthRotation indexId={breadthIndexId} title={`How breadth is moving · ${breadthIndex}`} />
 
             {/* 3 · Panchangam (40%) + Sky Regime (60%) — one row, astro ICP */}
             {icpMode === 'astro' && (
               <div style={{
-                padding: '16px 20px', borderBottom: '1px solid var(--border)',
-                display: 'grid', gridTemplateColumns: 'minmax(0, 40fr) minmax(0, 60fr)', gap: 16, alignItems: 'start',
+                display: 'grid', gridTemplateColumns: 'minmax(0, 40fr) minmax(0, 60fr)', gap: 20, alignItems: 'start',
               }}>
                 <PanchangamCard date={today} />
                 <PlanetRegimeStrip />
@@ -288,11 +321,9 @@ export default function WorkspacePage() {
 
             {/* 4 · Market Breadth + ROC — driven by the same index selector */}
             {todayBreadthLoading && !todayBreadth ? (
-              <div style={{ padding: '8px 20px' }}>
-                <DristiQLoader message="Loading breadth & momentum…" />
-              </div>
+              <DristiQLoader message="Loading breadth & momentum…" />
             ) : (
-              <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 <MarketBreadthChart
                   data={todayBreadth?.data}
                   isLoading={todayBreadthLoading}

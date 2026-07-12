@@ -23,9 +23,12 @@
       // utility.secondaryBackground, surface.glassBorder).
       (function () {
         try {
+          // LAUNCH GATE — mirror of LIGHT_MODE_ENABLED in src/stores/themeStore.ts.
+          // Keep the two flags in sync.
+          var LIGHT_MODE_ENABLED = false;
           var THEMES = {
             'kaaladristi': {
-              light: { bg: '#f6f5fb', fg: '#191627', primary: '#5b3fb0', card: '#ffffff', border: '#e3e0ee' },
+              light: { bg: '#f7f5f0', fg: '#211d16', primary: '#5b3fb0', card: '#fdfcfa', border: '#e7e2d8' },
               dark:  { bg: '#0b0b12', fg: '#ece9f5', primary: '#9b8cff', card: '#191626', border: 'rgba(255,255,255,0.1)' }
             },
             'tech-ai': {
@@ -41,9 +44,9 @@
           if (!THEMES[themeId]) themeId = 'kaaladristi';
           var mode = localStorage.getItem('kd-theme-mode');
           if (mode !== 'dark' && mode !== 'light' && mode !== 'system') mode = 'dark';
-          var dark = mode === 'system'
+          var dark = !LIGHT_MODE_ENABLED || (mode === 'system'
             ? window.matchMedia('(prefers-color-scheme: dark)').matches
-            : mode === 'dark';
+            : mode === 'dark');
           var c = THEMES[themeId][dark ? 'dark' : 'light'];
           var el = document.documentElement;
           el.style.setProperty('--bg', c.bg);

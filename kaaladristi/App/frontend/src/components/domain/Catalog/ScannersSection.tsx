@@ -21,37 +21,37 @@ const ICONS: Record<string, string> = {
 
 // Color per preset
 const ACCENT: Record<string, string> = {
-  power_buy:            '#4ade80',
-  power_sell:           '#f87171',
+  power_buy:            'var(--bull)',
+  power_sell:           'var(--bear)',
   smart_money:          '#2dd4bf',
   fresh_breakout:       '#7c6af7',
-  quiet_accumulation:   '#c9a84c',
-  distribution_warning: '#f87171',
+  quiet_accumulation:   'var(--gold)',
+  distribution_warning: 'var(--bear)',
   conviction_flow:      '#7c6af7',
-  breakout_surge:       '#4ade80',
-  stage_2_leaders:      '#f59e0b',
-  stage_2_watch:        '#f59e0b',
+  breakout_surge:       'var(--bull)',
+  stage_2_leaders:      'var(--caution)',
+  stage_2_watch:        'var(--caution)',
   vani_opportunity:     '#7c6af7',
-  stage_4_leaders:      '#f87171',
+  stage_4_leaders:      'var(--bear)',
   stage_3_watch:        '#f97316',
-  vani_exit_watch:      '#f87171',
+  vani_exit_watch:      'var(--bear)',
 }
 
 const ACCENT_BG: Record<string, string> = {
-  power_buy:            'rgba(74,222,128,0.06)',
-  power_sell:           'rgba(248,113,113,0.06)',
+  power_buy:            'color-mix(in srgb, var(--bull) 6%, transparent)',
+  power_sell:           'color-mix(in srgb, var(--bear) 6%, transparent)',
   smart_money:          'rgba(45,212,191,0.06)',
   fresh_breakout:       'rgba(124,106,247,0.06)',
-  quiet_accumulation:   'rgba(201,168,76,0.06)',
-  distribution_warning: 'rgba(248,113,113,0.06)',
+  quiet_accumulation:   'color-mix(in srgb, var(--gold) 6%, transparent)',
+  distribution_warning: 'color-mix(in srgb, var(--bear) 6%, transparent)',
   conviction_flow:      'rgba(124,106,247,0.06)',
-  breakout_surge:       'rgba(74,222,128,0.06)',
-  stage_2_leaders:      'rgba(245,158,11,0.06)',
-  stage_2_watch:        'rgba(245,158,11,0.06)',
+  breakout_surge:       'color-mix(in srgb, var(--bull) 6%, transparent)',
+  stage_2_leaders:      'color-mix(in srgb, var(--caution) 6%, transparent)',
+  stage_2_watch:        'color-mix(in srgb, var(--caution) 6%, transparent)',
   vani_opportunity:     'rgba(124,106,247,0.06)',
-  stage_4_leaders:      'rgba(248,113,113,0.06)',
+  stage_4_leaders:      'color-mix(in srgb, var(--bear) 6%, transparent)',
   stage_3_watch:        'rgba(249,115,22,0.06)',
-  vani_exit_watch:      'rgba(248,113,113,0.06)',
+  vani_exit_watch:      'color-mix(in srgb, var(--bear) 6%, transparent)',
 }
 
 // Tags per preset
@@ -75,30 +75,30 @@ const TAGS: Record<string, string[]> = {
 const TAG_COLOR: Record<string, { color: string; border: string }> = {
   'industry-aware':    { color: '#2dd4bf', border: 'rgba(45,212,191,0.3)' },
   'multi-signal':      { color: '#7c6af7', border: 'rgba(124,106,247,0.3)' },
-  'accumulation':      { color: '#c9a84c', border: 'rgba(201,168,76,0.3)' },
+  'accumulation':      { color: 'var(--gold)', border: 'color-mix(in srgb, var(--gold) 30%, transparent)' },
   'institutional':     { color: '#2dd4bf', border: 'rgba(45,212,191,0.3)' },
-  'momentum':          { color: '#4ade80', border: 'rgba(74,222,128,0.3)' },
+  'momentum':          { color: 'var(--bull)', border: 'color-mix(in srgb, var(--bull) 30%, transparent)' },
   'volume-confirmed':  { color: '#7c6af7', border: 'rgba(124,106,247,0.3)' },
-  'contrarian':        { color: '#c9a84c', border: 'rgba(201,168,76,0.3)' },
-  'under-radar':       { color: '#6b7280', border: 'rgba(107,114,128,0.3)' },
-  'risk':              { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
-  'exit-watch':        { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
-  'delivery':          { color: '#c9a84c', border: 'rgba(201,168,76,0.3)' },
-  'high-rvol':         { color: '#4ade80', border: 'rgba(74,222,128,0.3)' },
-  'trend-following':   { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-  'stage2':            { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-  'golden-cross':      { color: '#fbbf24', border: 'rgba(251,191,36,0.3)' },
-  'pre-breakout':      { color: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+  'contrarian':        { color: 'var(--gold)', border: 'color-mix(in srgb, var(--gold) 30%, transparent)' },
+  'under-radar':       { color: 'var(--text-muted)', border: 'color-mix(in srgb, var(--text-muted) 30%, transparent)' },
+  'risk':              { color: 'var(--bear)', border: 'color-mix(in srgb, var(--bear) 30%, transparent)' },
+  'exit-watch':        { color: 'var(--bear)', border: 'color-mix(in srgb, var(--bear) 30%, transparent)' },
+  'delivery':          { color: 'var(--gold)', border: 'color-mix(in srgb, var(--gold) 30%, transparent)' },
+  'high-rvol':         { color: 'var(--bull)', border: 'color-mix(in srgb, var(--bull) 30%, transparent)' },
+  'trend-following':   { color: 'var(--caution)', border: 'color-mix(in srgb, var(--caution) 30%, transparent)' },
+  'stage2':            { color: 'var(--caution)', border: 'color-mix(in srgb, var(--caution) 30%, transparent)' },
+  'golden-cross':      { color: 'var(--caution)', border: 'color-mix(in srgb, var(--caution) 30%, transparent)' },
+  'pre-breakout':      { color: 'var(--caution)', border: 'color-mix(in srgb, var(--caution) 30%, transparent)' },
   'vani':              { color: '#7c6af7', border: 'rgba(124,106,247,0.3)' },
   'alpha-edge':        { color: '#7c6af7', border: 'rgba(124,106,247,0.3)' },
   'rs-top20pct':       { color: '#2dd4bf', border: 'rgba(45,212,191,0.3)' },
-  'stage4':            { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
-  'death-cross':       { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
-  'risk-watch':        { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
+  'stage4':            { color: 'var(--bear)', border: 'color-mix(in srgb, var(--bear) 30%, transparent)' },
+  'death-cross':       { color: 'var(--bear)', border: 'color-mix(in srgb, var(--bear) 30%, transparent)' },
+  'risk-watch':        { color: 'var(--bear)', border: 'color-mix(in srgb, var(--bear) 30%, transparent)' },
   'stage3':            { color: '#f97316', border: 'rgba(249,115,22,0.3)' },
   'topping':           { color: '#f97316', border: 'rgba(249,115,22,0.3)' },
   'early-warning':     { color: '#f97316', border: 'rgba(249,115,22,0.3)' },
-  'rs-bottom20pct':    { color: '#f87171', border: 'rgba(248,113,113,0.3)' },
+  'rs-bottom20pct':    { color: 'var(--bear)', border: 'color-mix(in srgb, var(--bear) 30%, transparent)' },
 }
 
 export default function ScannersSection() {
@@ -128,7 +128,7 @@ export default function ScannersSection() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {SCAN_PRESETS.map(preset => {
           const icon   = ICONS[preset.id] ?? '◌'
-          const accent = ACCENT[preset.id] ?? '#6b7280'
+          const accent = ACCENT[preset.id] ?? 'var(--text-muted)'
           const bg     = ACCENT_BG[preset.id] ?? 'color-mix(in srgb, var(--text-primary) 2%, transparent)'
           const tags   = TAGS[preset.id] ?? []
 
@@ -200,7 +200,7 @@ export default function ScannersSection() {
                 {/* Tags */}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {tags.map(tag => {
-                    const tc = TAG_COLOR[tag] ?? { color: '#6b7280', border: 'rgba(107,114,128,0.3)' }
+                    const tc = TAG_COLOR[tag] ?? { color: 'var(--text-muted)', border: 'color-mix(in srgb, var(--text-muted) 30%, transparent)' }
                     return (
                       <span
                         key={tag}
