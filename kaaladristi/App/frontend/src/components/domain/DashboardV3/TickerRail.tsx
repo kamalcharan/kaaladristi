@@ -166,21 +166,25 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
     <div style={{
       background: 'var(--card)',
       border: '1px solid var(--border)',
-      borderRadius: 10,
-      padding: '10px 14px 8px',
+      // ProKey stat-tile signature: a colored accent edge keyed to the day's
+      // direction, so the row reads at a glance before any number is parsed.
+      borderLeft: `3px solid ${changeClr}`,
+      borderRadius: 12,
+      padding: '14px 16px 12px',
       display: 'flex',
       flexDirection: 'column',
-      gap: 2,
+      gap: 3,
       minWidth: 0,
       flex: 1,
     }}>
       {/* Label */}
       <span style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 9,
+        fontSize: 10,
         letterSpacing: '0.14em',
-        color: 'var(--text-faint)',
+        color: 'var(--text-muted)',
         textTransform: 'uppercase',
+        fontWeight: 600,
       }}>
         {ticker.label}
       </span>
@@ -188,10 +192,11 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
       {/* Close */}
       <span style={{
         fontFamily: 'var(--font-display)',
-        fontSize: 20,
+        fontSize: 27,
         fontWeight: 500,
         letterSpacing: '-0.02em',
         lineHeight: 1.1,
+        fontVariantNumeric: 'tabular-nums',
         color: close != null ? 'var(--text-primary)' : 'var(--text-faint)',
       }}>
         {close != null ? fmt(close) : '—'}
@@ -200,7 +205,7 @@ function Card({ ticker, entry }: { ticker: TickerConfig; entry?: TickerEntry }) 
       {/* Change */}
       <span style={{
         fontFamily: 'var(--font-mono)',
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: 600,
         color: changeClr,
       }}>
@@ -269,7 +274,7 @@ export default function TickerRail({ date }: { date: string }) {
   });
 
   return (
-    <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+    <div style={{ display: 'flex', gap: 14 }}>
       {TICKERS.map(ticker => (
         <Card
           key={ticker.name}
