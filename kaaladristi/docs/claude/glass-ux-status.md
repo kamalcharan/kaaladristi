@@ -60,6 +60,15 @@ inline vars on `documentElement`, light+dark per theme, no-FOUC script in
 `index.html`) matches the standard; only the names differ. Renaming is a
 ~300-site churn with zero user-visible value.
 
+**Light-mode composition rules (owner-calibrated 2026-07-12, do not regress):**
+the light canvas commits to ONE temperature — warm ivory (`#f7f5f0` bg,
+`#fdfcfa` cards, `#e7e2d8` borders, warm gold blooms) — and the INK matches
+the paper: warm charcoal `#211d16` / warm gray-brown `#6f6354`, never the old
+violet-toned text (warm paper + cold ink = the "eye strain" complaint).
+Violet is interactive-only (pills, buttons, links); data signals never wear
+the accent. Muted text = 82% strength in light (A/B'd; 60% was washed out,
+100% killed hierarchy).
+
 Known traps (also in `theme-handover-2026-07-09.md`):
 - Tailwind `bg-kd-card` → **solid** `--card`; translucent glass is `--kd-card`,
   reachable only via `bg-[var(--kd-card)]` or inline style.
