@@ -48,14 +48,14 @@ from pipeline.utils.step_tracker import StepTracker
 from pipeline.compute import compute_index_returns, aggregate_weekly_bars, aggregate_monthly_bars
 from pipeline.utils.nse_session import NseSession
 from pipeline.downloaders.nse_bhav import download_nse_bhav, download_nse_delivery
-from pipeline.downloaders.bse_bhav import download_bse_bhav
+from pipeline.downloaders.bse_bhav import download_bse_bhav, download_bse_delivery
 from pipeline.downloaders.nse_index_bhav import (
     download_nse_index_bhav, download_nse_tri,
     parse_nse_index_bhav, parse_nse_tri,
     IndexMatcher, upsert_index_eod,
 )
 from pipeline.downloaders.nse_fiidii import download_nse_fiidii, upsert_fii_dii
-from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav
+from pipeline.processors.parser import parse_nse_bhav, parse_nse_delivery, parse_bse_bhav, parse_bse_delivery
 from pipeline.processors.symbol_matcher import SymbolMatcher
 from pipeline.processors.inserter import upsert_equity_eod, update_delivery, sync_isin_from_bhav
 from pipeline.utils.coverage import get_step_coverage, count_active_symbols
@@ -567,6 +567,26 @@ def run_bse_pipeline(db, trade_date: date, dry_run: bool = False,
         tracker.fail('insert', str(e))
         mark_day_status(db, trade_date, 'BSE', 'failed')
         return False
+
+    # ── Step 4b: Download + apply BSE delivery data ──
+    # Mirrors the NSE delivery step in run_nse_pipeline. Best-effort: a delivery
+    # failure does NOT fail the BSE day (rows are already inserted). Runs AFTER
+    # insert (rows must exist to be updated) and BEFORE indicators / rolling
+    # metrics, so avg_amt_5d/22d, delivery_surge_x, score_5d/22d pick it up.
+    # Uses the BSE `matcher` (scrip code -> equity_id); update_delivery is
+    # exchange-agnostic via the injected matcher. BSE's SCBSEALL ships the
+    # delivery percentage directly, so no derivation is needed.
+    tracker.start('delivery')
+    try:
+        deliv_path = download_bse_delivery(trade_date)
+        if deliv_path:
+            deliv_map = parse_bse_delivery(deliv_path)
+            deliv_count = update_delivery(db, str(trade_date), deliv_map, matcher)
+            tracker.complete('delivery', rows=deliv_count)
+        else:
+            tracker.skip('delivery', 'No BSE delivery data available')
+    except Exception as e:
+        tracker.fail('delivery', str(e))
 
     # ── Step 5: Indicators (PostgreSQL RPC — fast) ──
     if not skip_indicators:
