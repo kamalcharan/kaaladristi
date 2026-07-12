@@ -7,8 +7,9 @@ parse_bse_delivery). BSE ships the delivery percentage directly, so no
 derivation is needed.
 
 Design (per Part B scoping):
-  * Resumable       — per-date status in bse_delivery_backfill_progress; a
-                      re-run skips dates already 'ok' and never restarts.
+  * Resumable       — per-date status in a JSON progress log under data/
+    (a docker volume, so it survives container restarts). A re-run skips dates
+    already 'ok' and never restarts. No DB DDL, so no CREATE-privilege risk.
   * Rate-limited    — polite delay between dates (default 3s) so BSE isn't
                       hammered over thousands of requests.
   * Format-drift    — a downloaded-but-unparseable file is logged as
@@ -21,19 +22,20 @@ Only dates that already have BSE EOD rows are processed (delivery UPDATEs
 existing rows; it never inserts partial rows).
 
 Usage (inside the backend container — has DB env + code):
-    cd App/backend
+    cd /app   # (container workdir)
     python scripts/backfill_bse_delivery.py --years 2          # last 2 years
     python scripts/backfill_bse_delivery.py --years 26         # full history
     python scripts/backfill_bse_delivery.py --from 2024-07-01 --to 2026-07-10
     python scripts/backfill_bse_delivery.py --years 2 --retry-failed
     python scripts/backfill_bse_delivery.py --status           # progress summary only
 
-From the container on the VPS:
+From the VPS host:
     docker exec kd-pipeline-api2 python scripts/backfill_bse_delivery.py --years 2
 """
 
 import sys
 import os
+import json
 import time
 import argparse
 from datetime import date, timedelta
@@ -43,20 +45,13 @@ import psycopg2.extras
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from lib.config import DATABASE_URL
+from pipeline.config import DATA_DIR
 from pipeline.downloaders.bse_bhav import download_bse_delivery
 from pipeline.processors.parser import parse_bse_delivery
 
-PROGRESS_DDL = """
-CREATE TABLE IF NOT EXISTS bse_delivery_backfill_progress (
-    trade_date    DATE PRIMARY KEY,
-    status        TEXT NOT NULL,
-    delivery_rows INTEGER,
-    error         TEXT,
-    attempted_at  TIMESTAMPTZ DEFAULT now()
-);
-"""
+PROGRESS_PATH = os.path.join(DATA_DIR, 'bse_delivery_backfill_progress.json')
 
-# Statuses that a plain re-run will retry (transient). 'ok' is always skipped;
+# Statuses a plain re-run retries (transient). 'ok' is always skipped;
 # 'not_found' / 'format_mismatch' are only retried with --retry-failed.
 RETRYABLE_DEFAULT = {'network_error'}
 RETRYABLE_ALL = {'network_error', 'not_found', 'format_mismatch', 'no_rows'}
@@ -64,37 +59,60 @@ RETRYABLE_ALL = {'network_error', 'not_found', 'format_mismatch', 'no_rows'}
 
 def get_conn():
     if not DATABASE_URL:
-        raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in .env')
+        raise RuntimeError('DATABASE_URL / DB_PRIMARY not set in env')
     return psycopg2.connect(DATABASE_URL, connect_timeout=30)
 
 
-def _ensure_progress_table(conn):
-    with conn.cursor() as cur:
-        cur.execute(PROGRESS_DDL)
-    conn.commit()
+# ── File-backed progress log (no DDL / privilege needed) ─────────────────────
+
+def _load_progress():
+    try:
+        with open(PROGRESS_PATH, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 
-def _load_progress(conn):
-    with conn.cursor() as cur:
-        cur.execute("SELECT trade_date, status FROM bse_delivery_backfill_progress")
-        return {str(r[0]): r[1] for r in cur.fetchall()}
+def _save_progress(prog):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = PROGRESS_PATH + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(prog, f)
+    os.replace(tmp, PROGRESS_PATH)  # atomic — never leaves a half-written file
 
 
-def _record(conn, trade_date, status, rows=None, error=None):
-    with conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO bse_delivery_backfill_progress
-                 (trade_date, status, delivery_rows, error, attempted_at)
-               VALUES (%s, %s, %s, %s, now())
-               ON CONFLICT (trade_date) DO UPDATE
-                 SET status = EXCLUDED.status,
-                     delivery_rows = EXCLUDED.delivery_rows,
-                     error = EXCLUDED.error,
-                     attempted_at = now()""",
-            (trade_date, status, rows, (error or '')[:500]),
-        )
-    conn.commit()
+def _record(prog, trade_date, status, rows=None, error=None):
+    prog[str(trade_date)] = {
+        'status': status,
+        'rows': rows,
+        'error': (error or '')[:300] or None,
+    }
+    _save_progress(prog)
 
+
+def print_status():
+    prog = _load_progress()
+    if not prog:
+        print('BSE delivery backfill: no runs yet.')
+        return
+    agg = {}
+    ok_dates = []
+    for d, rec in prog.items():
+        s = rec.get('status', '?')
+        agg.setdefault(s, [0, 0])
+        agg[s][0] += 1
+        agg[s][1] += (rec.get('rows') or 0)
+        if s == 'ok':
+            ok_dates.append(d)
+    print('BSE delivery backfill progress:')
+    for s in sorted(agg):
+        cnt, rowsum = agg[s]
+        print(f'  {s:16s} {cnt:6d} dates   {int(rowsum):>12,} rows updated')
+    if ok_dates:
+        print(f'  ok span: {min(ok_dates)} .. {max(ok_dates)}')
+
+
+# ── DB helpers (direct psycopg2, like the other backfill scripts) ────────────
 
 def _bse_scrip_to_id(conn):
     """Map BSE scrip code (== km_equity_symbols.symbol) -> equity_id."""
@@ -143,115 +161,94 @@ def _apply_delivery(conn, trade_date, deliv_map, scrip_to_id):
     return n
 
 
-def print_status(conn):
-    _ensure_progress_table(conn)
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT status, count(*), COALESCE(sum(delivery_rows), 0) "
-            "FROM bse_delivery_backfill_progress GROUP BY status ORDER BY status")
-        rows = cur.fetchall()
-        cur.execute("SELECT min(trade_date), max(trade_date) "
-                    "FROM bse_delivery_backfill_progress WHERE status = 'ok'")
-        span = cur.fetchone()
-    print("BSE delivery backfill progress:")
-    if not rows:
-        print("  (no runs yet)")
-        return
-    for status, cnt, rowsum in rows:
-        print(f"  {status:16s} {cnt:6d} dates   {int(rowsum):>12,} rows updated")
-    if span and span[0]:
-        print(f"  ok span: {span[0]} .. {span[1]}")
+def _parse_date(s):
+    y, m, d = (int(x) for x in s.split('-'))
+    return date(y, m, d)
 
 
 def run(args):
-    conn = get_conn()
-    _ensure_progress_table(conn)
-
     if args.status:
-        print_status(conn)
+        print_status()
         return
 
-    # Resolve window
+    conn = get_conn()
+
     with conn.cursor() as cur:
         cur.execute("SELECT max(trade_date) FROM km_equity_eod")
         latest = cur.fetchone()[0]
     to_d = _parse_date(args.to_date) if args.to_date else latest
-    if args.from_date:
-        from_d = _parse_date(args.from_date)
-    else:
-        from_d = to_d - timedelta(days=int(round(args.years * 365.25)))
+    from_d = _parse_date(args.from_date) if args.from_date \
+        else to_d - timedelta(days=int(round(args.years * 365.25)))
 
     scrip_to_id = _bse_scrip_to_id(conn)
-    print(f"[backfill] window {from_d} .. {to_d} | {len(scrip_to_id):,} BSE symbols in master")
+    print(f'[backfill] window {from_d} .. {to_d} | {len(scrip_to_id):,} BSE symbols in master')
 
     dates = _bse_trading_dates(conn, from_d, to_d)
-    progress = _load_progress(conn)
+    prog = _load_progress()
     retryable = RETRYABLE_ALL if args.retry_failed else RETRYABLE_DEFAULT
 
-    todo = [d for d in dates
-            if progress.get(str(d)) != 'ok' and (str(d) not in progress
-                                                 or progress[str(d)] in retryable)]
+    def _should_do(d):
+        rec = prog.get(str(d))
+        if rec is None:
+            return True
+        return rec.get('status') != 'ok' and rec.get('status') in retryable
+
+    todo = [d for d in dates if _should_do(d)]
     skipped = len(dates) - len(todo)
-    print(f"[backfill] {len(dates)} BSE trading dates in window; "
-          f"{skipped} already done/skipped; {len(todo)} to process "
-          f"(delay {args.delay}s between dates)")
+    print(f'[backfill] {len(dates)} BSE trading dates in window; '
+          f'{skipped} already done/skipped; {len(todo)} to process '
+          f'(delay {args.delay}s between dates)')
 
     n_ok = n_notfound = n_fmt = n_err = 0
     for i, d in enumerate(todo, 1):
         try:
             path = download_bse_delivery(d)
             if not path:
-                _record(conn, d, 'not_found')
+                _record(prog, d, 'not_found')
                 n_notfound += 1
             else:
                 deliv = parse_bse_delivery(path)
                 if not deliv:
-                    _record(conn, d, 'format_mismatch',
+                    _record(prog, d, 'format_mismatch',
                             error='downloaded but no rows parsed (schema drift?)')
                     n_fmt += 1
                 else:
                     updated = _apply_delivery(conn, d, deliv, scrip_to_id)
-                    _record(conn, d, 'ok' if updated else 'no_rows', rows=updated)
+                    _record(prog, d, 'ok' if updated else 'no_rows', rows=updated)
                     if updated:
                         n_ok += 1
                     else:
-                        n_fmt += 1  # parsed but nothing matched — treat as anomaly
+                        n_fmt += 1
         except KeyboardInterrupt:
-            print("\n[backfill] interrupted — progress saved, safe to resume.")
+            print('\n[backfill] interrupted — progress saved, safe to resume.')
             break
         except Exception as e:
             try:
                 conn.rollback()
             except Exception:
                 pass
-            _record(conn, d, 'network_error', error=str(e))
+            _record(prog, d, 'network_error', error=str(e))
             n_err += 1
-            print(f"  [{d}] error: {str(e)[:120]}")
+            print(f'  [{d}] error: {str(e)[:120]}')
 
         if i % 20 == 0 or i == len(todo):
-            print(f"  [{i}/{len(todo)}] {d} | ok={n_ok} not_found={n_notfound} "
-                  f"fmt/anom={n_fmt} err={n_err}")
+            print(f'  [{i}/{len(todo)}] {d} | ok={n_ok} not_found={n_notfound} '
+                  f'fmt/anom={n_fmt} err={n_err}')
         time.sleep(args.delay)
 
-    print(f"[backfill] done. ok={n_ok} not_found={n_notfound} "
-          f"fmt/anom={n_fmt} err={n_err}")
-    print_status(conn)
+    print(f'[backfill] done. ok={n_ok} not_found={n_notfound} fmt/anom={n_fmt} err={n_err}')
+    print_status()
     conn.close()
 
 
-def _parse_date(s):
-    y, m, d = (int(x) for x in s.split('-'))
-    return date(y, m, d)
-
-
 def main():
-    ap = argparse.ArgumentParser(description="Backfill BSE delivery (SCBSEALL).")
+    ap = argparse.ArgumentParser(description='Backfill BSE delivery (SCBSEALL).')
     ap.add_argument('--years', type=float, default=2.0,
                     help='How many years back from the latest date (default 2).')
     ap.add_argument('--from', dest='from_date', help='Start date YYYY-MM-DD (overrides --years).')
     ap.add_argument('--to', dest='to_date', help='End date YYYY-MM-DD (default = latest EOD date).')
     ap.add_argument('--delay', type=float, default=3.0,
-                    help='Seconds to wait between dates (default 3, be polite).')
+                    help='Seconds between dates (default 3, be polite).')
     ap.add_argument('--retry-failed', action='store_true',
                     help='Also retry not_found / format_mismatch dates.')
     ap.add_argument('--status', action='store_true', help='Print progress summary and exit.')
