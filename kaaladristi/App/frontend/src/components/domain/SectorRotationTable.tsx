@@ -428,13 +428,21 @@ export default function SectorRotationTable({ rows }: Props) {
   );
 
   return (
-    <div style={{ width: '100%' }}>
+    // Card containment (Glass UX §5.4): the table sits on a card surface,
+    // not naked on the canvas — the layering that makes data pages read deep.
+    <div style={{
+      width: '100%',
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
+      borderRadius: 14,
+      overflow: 'hidden',
+    }}>
       {/* ── Toolbar: column picker ── */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'flex-end',
-          padding: '8px 12px 4px',
+          padding: '10px 14px 6px',
         }}
       >
         <div ref={pickerRef} style={{ position: 'relative' }}>
@@ -557,7 +565,10 @@ export default function SectorRotationTable({ rows }: Props) {
             minWidth: '100%',
             borderCollapse: 'collapse',
             fontSize: 13,
-            fontFamily: 'var(--font-mono)',
+            // §4 type roles: text reads in the body face; numeric cells opt
+            // back into mono per-column below. All-mono was the "terminal"
+            // feel the owner flagged.
+            fontFamily: 'var(--font-body)',
           }}
         >
           {/* ── Header — main cols in constant order, then optional, then last ── */}
@@ -592,7 +603,10 @@ export default function SectorRotationTable({ rows }: Props) {
             {sorted.map((row, i) => {
               const isEven = i % 2 === 0;
               const rowBg = isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)';
-              const stickyBg = isEven ? 'var(--kd-bg, #0e1117)' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)';
+              // Sticky cell needs an OPAQUE fill matching its card container
+              // (was var(--kd-bg) — the page background — which reads wrong
+              // now that the table sits on a card surface).
+              const stickyBg = isEven ? 'var(--card)' : 'color-mix(in srgb, var(--text-primary) 2.5%, var(--card))';
 
               const renderTd = (col: ColDef) => (
                 <td
@@ -601,10 +615,14 @@ export default function SectorRotationTable({ rows }: Props) {
                   style={{
                     padding: '9px 10px',
                     textAlign: col.align,
+                    // numbers always mono + tabular (§4); left-aligned text stays body
+                    ...(col.align !== 'left'
+                      ? { fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' as const }
+                      : {}),
                     ...(col.key === 'name'
                       ? {
                           color: 'var(--text-primary)',
-                          fontWeight: 500,
+                          fontWeight: 600,
                           whiteSpace: 'nowrap',
                           maxWidth: 200,
                           overflow: 'hidden',
@@ -646,6 +664,9 @@ export default function SectorRotationTable({ rows }: Props) {
                         padding: '9px 10px',
                         textAlign: col.align,
                         color: col.color ? col.color(row) : 'var(--text-secondary)',
+                        ...(col.align !== 'left'
+                          ? { fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' as const }
+                          : {}),
                       }}
                     >
                       {col.render(row)}
