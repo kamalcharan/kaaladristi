@@ -449,13 +449,24 @@ Used for: `km_astro_calendar.market_impact`, `km_astro_daily_signal.net_signal`,
 
 Used for: `km_equity_eod.magic_rs_zone`, `km_index_eod.magic_rs_zone` (Title Case, DB-computed).
 
-| DB value | Display label | Color class |
+**The pipeline emits 6 bands** (migration 069, `magic_rs − magic_ma`), ordered
+bullish→bearish. Plain `Neutral` is a legacy value kept in the DB CHECK
+constraint but **no longer written**. On a typical day `Neutral Bull` +
+`Neutral Bear` are ~47% of the universe — any consumer that only knows the 5-band
+scheme (Strong/Mild Bull, Neutral, Mild/Strong Bear) blanks nearly half the
+market. **Every zone consumer must know all 7 keys** (the canonical
+`ZONE_LABELS` in `signalScale.ts` already does; `scanEngine.ts VALID_ZONES` was
+fixed 2026-07-13).
+
+| DB value | Display label (`signalScale.ts`) | Color class |
 |---|---|---|
-| `Strong Bull` | Strong Bull | `text-risk-green` |
-| `Mild Bull` | Mild Bull | `text-risk-green/70` |
-| `Neutral` | Neutral | `text-muted` |
-| `Mild Bear` | Mild Bear | `text-risk-red/70` |
-| `Strong Bear` | Strong Bear | `text-risk-red` |
+| `Strong Bull` | Leading | `text-risk-green` |
+| `Mild Bull` | Improving | `text-risk-green/70` |
+| `Neutral Bull` | Neutral | `text-risk-green/40` |
+| `Neutral` *(legacy, not emitted)* | Neutral | `text-muted` |
+| `Neutral Bear` | Neutral | `text-risk-red/40` |
+| `Mild Bear` | Weakening | `text-risk-red/70` |
+| `Strong Bear` | Lagging | `text-risk-red` |
 
 ### 3. Flow Types
 

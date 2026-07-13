@@ -102,11 +102,13 @@ async function fetchLeaderboard(): Promise<{ top: LeaderboardStock[]; bottom: Le
 // Labels are the D39-neutral vocabulary (see signalScale ZONE_LABELS); only the
 // badge color classes are component-local.
 const ZONE_BADGE: Record<string, { label: string; color: string }> = {
-  'Strong Bull': { label: 'LEADING',   color: 'text-risk-green bg-risk-green/15 border-risk-green/30' },
-  'Mild Bull':   { label: 'IMPROVING', color: 'text-risk-green/80 bg-risk-green/10 border-risk-green/20' },
-  'Neutral':     { label: 'NEUTRAL',   color: 'text-muted bg-kd-elevated border-kd-border' },
-  'Mild Bear':   { label: 'WEAKENING', color: 'text-risk-red/80 bg-risk-red/10 border-risk-red/20' },
-  'Strong Bear': { label: 'LAGGING',   color: 'text-risk-red bg-risk-red/15 border-risk-red/30' },
+  'Strong Bull':  { label: 'LEADING',   color: 'text-risk-green bg-risk-green/15 border-risk-green/30' },
+  'Mild Bull':    { label: 'IMPROVING', color: 'text-risk-green/80 bg-risk-green/10 border-risk-green/20' },
+  'Neutral Bull': { label: 'NEUTRAL',   color: 'text-risk-green/60 bg-risk-green/5 border-risk-green/15' },
+  'Neutral':      { label: 'NEUTRAL',   color: 'text-muted bg-kd-elevated border-kd-border' },
+  'Neutral Bear': { label: 'NEUTRAL',   color: 'text-risk-red/60 bg-risk-red/5 border-risk-red/15' },
+  'Mild Bear':    { label: 'WEAKENING', color: 'text-risk-red/80 bg-risk-red/10 border-risk-red/20' },
+  'Strong Bear':  { label: 'LAGGING',   color: 'text-risk-red bg-risk-red/15 border-risk-red/30' },
 };
 
 const FLOW_SHORT: Record<string, { label: string; color: string }> = {
