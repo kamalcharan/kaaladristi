@@ -83,7 +83,18 @@ interface IndexReturn {
   ret_66d: number | null;
 }
 
-const VALID_ZONES = new Set(['Strong Bull', 'Mild Bull', 'Neutral', 'Mild Bear', 'Strong Bear']);
+// Canonical magic_rs_zone bands the pipeline actually emits (migration 069),
+// ordered bullish→bearish: Strong Bull > Mild Bull > Neutral Bull >
+// Neutral Bear > Mild Bear > Strong Bear. Plain 'Neutral' is a legacy value
+// kept in the DB CHECK constraint but no longer written — retained here so
+// historical rows still validate. This set MUST match the zone keys in
+// constants/signalScale.ts (ZONE_LABELS). Previously this listed only 5 bands
+// and omitted Neutral Bull/Neutral Bear, which blanked ~47% of the universe to
+// null (their real zone was discarded on every scan).
+const VALID_ZONES = new Set([
+  'Strong Bull', 'Mild Bull', 'Neutral Bull',
+  'Neutral', 'Neutral Bear', 'Mild Bear', 'Strong Bear',
+]);
 
 interface ScanDataBundle {
   industries: IndustryEodRow[];
@@ -983,10 +994,14 @@ function scanDistributionWarning(bundle: ScanDataBundle): ScanStock[] {
     const stock = buildScanStock(id, bundle, 'distribution_warning');
     if (!stock) continue;
 
-    // Current zone NOT Strong Bull (degraded)
+    // Current zone is a degraded-from-Strong-Bull middle band: everything
+    // between Strong Bull and Strong Bear. Must include the two neutral bands
+    // (Neutral Bull / Neutral Bear) — a stock decaying out of Strong Bull lands
+    // there first, so omitting them (the old list only had phantom 'Neutral',
+    // which the pipeline never emits) hid this scanner's most natural candidates.
     const zone = stock.magic_rs_zone;
     if (!zone || zone === 'Strong Bull' || zone === 'Strong Bear') continue;
-    if (!['Mild Bull', 'Neutral', 'Mild Bear'].includes(zone)) continue;
+    if (!['Mild Bull', 'Neutral Bull', 'Neutral', 'Neutral Bear', 'Mild Bear'].includes(zone)) continue;
 
     // Was in Strong Bull 10 days ago
     const history = bundle.eodHistory.get(id) ?? [];
