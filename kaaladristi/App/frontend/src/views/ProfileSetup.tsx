@@ -408,9 +408,10 @@ interface S3Props {
   onAccept: () => Promise<void>
   onBrowse: () => void
   isCommitting: boolean
+  errorMsg: string | null
 }
 
-function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }: S3Props) {
+function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting, errorMsg }: S3Props) {
   const animBlocks = buildAnimBlocks(template)
   const total = animBlocks.length
 
@@ -521,6 +522,15 @@ function Screen3({ template, isFree: _isFree, onAccept, onBrowse, isCommitting }
                   Customize in Catalog →
                 </button>
               </div>
+              {errorMsg && (
+                <p role="alert" style={{ marginTop:14, fontSize:13, lineHeight:1.5,
+                  color:'var(--risk-red, #f87171)',
+                  background:'color-mix(in srgb, var(--risk-red, #f87171) 8%, transparent)',
+                  border:'1px solid color-mix(in srgb, var(--risk-red, #f87171) 25%, transparent)',
+                  borderRadius:10, padding:'10px 14px' }}>
+                  {errorMsg}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -592,6 +602,7 @@ export default function ProfileSetup() {
   const [phone,       setPhone]       = useState(profile?.phone ?? '')
   const [s2Typed,     setS2Typed]     = useState(false)
   const [committing,  setCommitting]  = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
 
   // Screen 2: typing animation — reveal question after 1.4s
   useEffect(() => {
@@ -624,20 +635,53 @@ export default function ProfileSetup() {
     if (val !== 'both') setTimeout(() => setStep(3), 280)
   }
 
+  function errMessage(e: unknown): string {
+    const raw = e instanceof Error ? e.message : String(e)
+    // Network / HTTP failures reaching the framework service (pipeline API) are
+    // the common cause — give the user something actionable instead of a stack.
+    if (/framework service|HTTP \d|Failed to fetch|NetworkError|load failed/i.test(raw)) {
+      return 'Couldn\'t reach the server to save your workspace. Check your connection and try again.'
+    }
+    return 'Something went wrong setting up your workspace. Please try again.'
+  }
+
+  // Ensure the starter framework is actually persisted BEFORE the caller marks
+  // the profile onboarded. Screen 3 kicks off loadFramework() asynchronously; if
+  // that fetch failed or is still in flight, the store's `framework` is null and
+  // both applyTemplate() and saveFramework() would silently no-op — stranding the
+  // user as onboarded=true with no framework row. Throws on any failure so the
+  // caller can surface an error and NOT advance.
+  async function commitFramework() {
+    if (!icp) throw new Error('No profile selected')
+
+    // Make sure a framework exists to write into (retry the load if it lagged/failed).
+    if (!useFrameworkStore.getState().framework && profile?.id) {
+      await loadFramework(profile.id)
+    }
+    if (!useFrameworkStore.getState().framework) {
+      throw new Error('framework service unavailable')
+    }
+
+    const template = getTemplateForICP(icp, blend)
+    applyTemplate(template)
+    const saved = await saveFramework()
+    if (!saved) throw new Error('framework service: save failed')
+  }
+
   // "Start here →" — apply template, mark onboarded, go to plan selection
   async function handleAccept() {
     if (!icp) return
     setCommitting(true)
+    setError(null)
     try {
-      const template = getTemplateForICP(icp, blend)
-      applyTemplate(template)
-      await saveFramework()
+      await commitFramework()
       await updateProfile({ onboarded: true, icp_mode: icpMode })
       try { await refreshProfile() } catch {
         if (profile) setProfile({ ...profile, onboarded: true, icp_mode: icpMode })
       }
       setStep(4)
-    } catch {
+    } catch (e) {
+      setError(errMessage(e))
       setCommitting(false)
     }
   }
@@ -654,16 +698,16 @@ export default function ProfileSetup() {
   async function handleBrowse() {
     if (!icp) { navigate('/catalog', { replace: true }); return }
     setCommitting(true)
+    setError(null)
     try {
-      const template = getTemplateForICP(icp, blend)
-      applyTemplate(template)
-      await saveFramework()
+      await commitFramework()
       await updateProfile({ onboarded: true, icp_mode: icpMode })
       try { await refreshProfile() } catch {
         if (profile) setProfile({ ...profile, onboarded: true, icp_mode: icpMode })
       }
       navigate('/catalog', { replace: true })
-    } catch {
+    } catch (e) {
+      setError(errMessage(e))
       setCommitting(false)
     }
   }
@@ -696,6 +740,7 @@ export default function ProfileSetup() {
           onAccept={handleAccept}
           onBrowse={handleBrowse}
           isCommitting={committing}
+          errorMsg={error}
         />
       )}
       {step === 4 && (

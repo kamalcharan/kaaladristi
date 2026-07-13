@@ -20,7 +20,7 @@ function authHeaders(): Record<string, string> {
 
 let _saveTimer: ReturnType<typeof setTimeout> | null = null
 
-function scheduleSave(saveFn: () => Promise<void>) {
+function scheduleSave(saveFn: () => Promise<unknown>) {
   if (_saveTimer) clearTimeout(_saveTimer)
   _saveTimer = setTimeout(() => { saveFn() }, 800)
 }
@@ -94,7 +94,7 @@ interface FrameworkStore {
   dismissVaNiCorrelation: (item_a: string, item_b: string) => void
 
   loadFramework: (userId: string) => Promise<void>
-  saveFramework: () => Promise<void>
+  saveFramework: () => Promise<boolean>
   addBlock: (item: CatalogItem, config?: Record<string, unknown>) => void
   removeBlock: (blockId: string) => void
   updateBlockPosition: (blockId: string, position: GridPosition) => void
@@ -247,9 +247,12 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
 
   // ── Save (called by debounce — never call directly from mutation actions) ──
 
-  saveFramework: async () => {
+  // Returns true only when the framework was persisted server-side. Callers that
+  // must not proceed on a failed save (e.g. the onboarding commit, which would
+  // otherwise mark the user `onboarded` with no framework row) check this.
+  saveFramework: async (): Promise<boolean> => {
     const { framework } = get()
-    if (!framework) return
+    if (!framework) return false
     set({ isSaving: true })
     try {
       const res = await fetch(`${pipelineUrl}/api/framework/${framework.user_id}`, {
@@ -264,8 +267,10 @@ export const useFrameworkStore = create<FrameworkStore>((set, get) => ({
         isSaving: false,
         framework: s.framework ? { ...s.framework, version: updated.version, updated_at: updated.updated_at } : null,
       }))
+      return true
     } catch (err) {
       set({ isSaving: false, error: String(err) })
+      return false
     }
   },
 
