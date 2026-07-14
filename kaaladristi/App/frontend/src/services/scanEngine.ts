@@ -2037,9 +2037,10 @@ function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanSto
     fpb_phase: phase,
     fpb_quality: fpbQuality != null ? Math.round(fpbQuality * 100) / 100 : null,
     fpb_compression_score: Math.round(compressionScore * 100) / 100,
-    fpb_vol_burst: Number.isFinite(volBurst) ? Math.round(volBurst * 10) / 10 : null,
-    fpb_range_exp: Number.isFinite(rangeExp) ? Math.round(rangeExp * 10) / 10 : null,
-    fpb_close_strength: Math.round(closeStrength * 100) / 100,
+    // Burst-only metrics — meaningful only on the release day; blank on coiling rows.
+    fpb_vol_burst: isBurst && Number.isFinite(volBurst) ? Math.round(volBurst * 10) / 10 : null,
+    fpb_range_exp: isBurst && Number.isFinite(rangeExp) ? Math.round(rangeExp * 10) / 10 : null,
+    fpb_close_strength: isBurst ? Math.round(closeStrength * 100) / 100 : null,
     fpb_atr_compression: atrComp != null ? Math.round(atrComp * 100) / 100 : null,
     fpb_vol_death: volDeath != null ? Math.round(volDeath * 100) / 100 : null,
     fpb_setup_days: setupDaysIn22,

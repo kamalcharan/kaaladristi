@@ -11,7 +11,17 @@ import { getFieldsForGroup } from '@/fieldAvailability'
 // ── Preset column overrides ─────────────────────────────────────────────────────
 
 // Per-preset column overrides for presets whose fetcher has a limited SELECT.
-const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {}
+const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
+  // Flower Pot Burst has its own metric surface — the price_action group's
+  // breakout/score columns are all null here. Lead with compression + burst
+  // fields (setup rows leave the burst-only columns blank, which is correct).
+  flower_pot_burst: [
+    'symbol', 'close', 'pct_chng', 'fpb_phase',
+    'fpb_compression_score', 'fpb_atr_compression', 'fpb_vol_death', 'fpb_setup_days',
+    'fpb_vol_burst', 'fpb_range_exp', 'fpb_close_strength', 'fpb_quality',
+    'delivery_pct', 'rvol', 'rsi_14', 'magic_rs',
+  ],
+}
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   stage_2_leaders:  { key: 'magic_rs',         dir: 'desc' },
