@@ -6431,6 +6431,34 @@ def _fetch_liquid_universe(cur) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
+# Strongest sectors right now, fed into Discover so the model can surface a
+# leading sector (or a tighter sub-theme within it) even when a broad sectoral
+# index already 'covers' it — a leader like IT was previously suppressed purely
+# because NIFTY IT exists. Ranked by 5-day momentum; magic_rs_short_zone flags an
+# early relative turn even when the long-window RS still lags.
+_SECTOR_STRENGTH_SQL = """
+    WITH latest AS (SELECT MAX(trade_date) AS dt FROM km_index_eod)
+    SELECT s.name,
+           round(e.ret_5d::numeric, 2)  AS ret_5d,
+           round(e.ret_22d::numeric, 2) AS ret_22d,
+           e.flow_type,
+           e.magic_rs_short_zone
+    FROM km_index_eod e
+    JOIN km_index_symbols s ON s.id = e.index_id
+    WHERE e.trade_date = (SELECT dt FROM latest)
+      AND s.is_active = true
+      AND s.category = 'sectoral index'
+      AND e.ret_5d IS NOT NULL
+    ORDER BY e.ret_5d DESC
+    LIMIT 8
+"""
+
+
+def _fetch_sector_strength(cur) -> list[dict]:
+    cur.execute(_SECTOR_STRENGTH_SQL)
+    return [dict(r) for r in cur.fetchall()]
+
+
 # ── Theme near-duplicate detection ───────────────────────────────────────────
 # The LLM ignores the soft "don't repeat" prompt and re-proposes the same theme
 # under a new name (e.g. "Organised Jewellery Retail Mid-Tier Accumulation" vs an
@@ -6491,6 +6519,7 @@ async def custom_index_discover(req: _DiscoverRequest):
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             stocks = _fetch_signal_universe(cur)
+            strong_sectors = _fetch_sector_strength(cur)
 
             # Themes to avoid re-proposing: every live custom index (permanent —
             # never re-propose something already built) plus anything staged in
@@ -6513,8 +6542,13 @@ async def custom_index_discover(req: _DiscoverRequest):
     system_prompt = (
         "You are a sector analyst reviewing Indian equities (NSE, plus liquid BSE-only listings). "
         "Identify cohesive sub-themes where 5+ companies share a common business model, "
-        "supply chain position, or structural tailwind — and where existing NSE sectoral "
-        "indices do not capture the group. Focus on themes with current accumulation signals. "
+        "supply chain position, or structural tailwind. Prefer groups that existing NSE sectoral "
+        "indices do NOT already capture. "
+        "EXCEPTION — do not ignore a leader: if a broad sector is showing notable current strength "
+        "(see the sector-strength context), surface it EVEN IF a sectoral index exists, but frame it "
+        "as a tighter, differentiated sub-theme that adds signal beyond the index (e.g. 'Midcap IT & "
+        "IT-Enabled Services' rather than plain 'IT', 'PSU Bank Re-rating' rather than 'Banks'). "
+        "Focus on themes with current accumulation signals. "
         "BSE scrips have numeric symbols — identify those companies by company_name, but "
         "always return the symbol field exactly as provided."
     )
@@ -6523,8 +6557,18 @@ async def custom_index_discover(req: _DiscoverRequest):
         f"propose them again, nor near-duplicates of them: {json.dumps(known_themes)}. "
         if known_themes else ""
     )
+    # (C) Feed the current sector leaders in so the model explicitly weighs them
+    # when clustering — magic_rs_short_zone flags an early relative turn.
+    sector_clause = (
+        f"Market context — the strongest sectors right now (by 5-day momentum, with money-flow "
+        f"and short-term relative-strength zone) are: {json.dumps(strong_sectors, default=str)}. "
+        f"When one of these leaders is strong, actively consider whether a tighter sub-theme within "
+        f"it belongs among your picks. "
+        if strong_sectors else ""
+    )
     user_prompt = (
         f"Here are active Indian stocks with recent signals: {json.dumps([dict(r) for r in stocks], default=str)}. "
+        f"{sector_clause}"
         f"{exclusion_clause}"
         "Identify 3–5 NEW emerging themes. For each theme return: theme_name, description, "
         "rationale, constituent_symbols[]. Use each stock's symbol exactly as given "
