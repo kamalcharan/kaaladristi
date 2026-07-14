@@ -32,7 +32,7 @@ export const EMPTY_FILTERS: ScanFilters = {};
 export const DEFAULT_FILTERS: ScanFilters = { mcapMin: 100 };
 
 const STAGE_PRESETS = new Set([
-  'stage_2_leaders', 'stage_2_watch', 'vani_opportunity',
+  'stage_2_leaders', 'stage_2_watch',
   'stage_3_watch', 'stage_4_leaders', 'vani_exit_watch',
 ]);
 

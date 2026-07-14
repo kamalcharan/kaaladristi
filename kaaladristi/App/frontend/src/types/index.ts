@@ -565,6 +565,16 @@ export interface ScanStock {
   is_vani_oversold?: boolean | null;
   is_vani_surge?: boolean | null;
   is_vani_breakout?: boolean | null;
+  // Flower Pot Burst fields (null for all other scans)
+  fpb_phase?: 'BURST' | 'SETUP' | null;
+  fpb_quality?: number | null;              // burst quality score (BURST rows)
+  fpb_compression_score?: number | null;    // compression tightness (higher = tighter)
+  fpb_vol_burst?: number | null;            // today volume / 22d avg
+  fpb_range_exp?: number | null;            // today range / 15d avg range
+  fpb_close_strength?: number | null;       // (close-low)/(high-low)
+  fpb_atr_compression?: number | null;      // ATR15 / ATR60
+  fpb_vol_death?: number | null;            // vol5 / vol22
+  fpb_setup_days?: number | null;           // compressed days in the last 22 sessions
 }
 
 export interface ScanDefinition {

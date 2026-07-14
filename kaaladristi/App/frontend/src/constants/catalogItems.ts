@@ -275,23 +275,10 @@ const WIDGETS: CatalogItem[] = [
     tier_required: 'free',
     vani_explanation: 'These stocks have completed the MA stacking pattern (price > SMA50 > SMA200) but SMA200 is not yet rising. VaNi watches these as Stage 2 launchpad candidates.',
   },
-  {
-    id: 'vani_opportunity',
-    display_name: 'VaNi Opportunity',
-    description: 'Highest conviction Stage 2 setups with top RS momentum',
-    block_type: 'scanner',
-    placement: 'output_panel',
-    data_source: 'api_endpoint',
-    applicable_to: ['equity'],
-    tier_required: 'paid',
-    vani_explanation: 'VaNi highest conviction list — confirmed Stage 2 structure with RS percentile >80. These stocks satisfy the full Alpha Edge formula and rank in the top 20% of relative strength.',
-    vani_tags: [
-      { text: 'Alpha Edge formula', type: 'works' },
-      { text: 'RS percentile >80', type: 'works' },
-      { text: 'Stage 2 confirmed', type: 'works' },
-      { text: 'Top 25 only', type: 'limit' },
-    ],
-  },
+  // vani_opportunity ('VaNi Opportunity' / VaNi Strength Watch) retired (B2, 2026-07-13):
+  // it was Stage 2 Leaders filtered to the top-conviction VaNi subset. Stage 2 Leaders
+  // already computes per-row vaniOpportunity and carries a "✦ VaNi Highlight" filter,
+  // so the same stocks surface there — no capability lost.
   {
     id: 'conviction_flow',
     display_name: 'Conviction Flow',
@@ -308,6 +295,25 @@ const WIDGETS: CatalogItem[] = [
       { text: 'Institutional detection', type: 'works' },
       { text: 'Pre-move signal', type: 'works' },
       { text: 'Equity only', type: 'limit' },
+    ],
+  },
+  {
+    id: 'flower_pot_burst',
+    display_name: 'Flower Pot Burst',
+    description: 'Energy compression → release. A watchlist of coiling stocks plus the rare session a coil bursts on explosive volume and range.',
+    block_type: 'scanner',
+    placement: 'output_panel',
+    data_source: 'computed_ts',
+    db_table: ['km_equity_eod'],
+    db_column: 'atr_14',  // also reads open/high/low/close/volume/magic_rs/delivery_pct/stage over 60d
+    applicable_to: ['equity'],
+    tier_required: 'paid',
+    vani_explanation: "Flower Pot Burst reads volatility compression: a stock whose ATR is contracting, whose 10-day range has tightened under 8%, whose volume is dying, and whose relative strength has gone flat — the coil. It surfaces those setups as a watchlist, and separately flags the rare session when a coil releases: a single candle with 3×+ volume, 2×+ range expansion, a strong close, breaking the 10-day range on real delivery. Thresholds are calibrated to the live NSE distribution.",
+    vani_tags: [
+      { text: 'Compression → release', type: 'works' },
+      { text: 'Calibrated thresholds', type: 'works' },
+      { text: 'Bursts are rare (~2×/month)', type: 'limit' },
+      { text: 'NSE equity only', type: 'limit' },
     ],
   },
   {

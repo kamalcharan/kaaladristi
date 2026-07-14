@@ -33,14 +33,13 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'power_buy',            name: 'Strength Confluence',   description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries', limit: 25,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'power_sell',           name: 'Weakness Confluence',   description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries', limit: 25,  universe: 'NSE_BSE',  category: '',              category_label: '',              category_color: '',        category_sort: 99, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
   { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_smart' },
-  { id: 'fresh_breakout',       name: 'Fresh Breakouts',       description: 'Stocks breaking above recent highs with strong volume in leading industries',              limit: 25,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'quiet_accumulation',   name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'distribution_warning', name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
   { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
+  { id: 'flower_pot_burst',     name: 'Flower Pot Burst',      description: 'Stocks coiling in tight compression — dying volume, contracting range — plus the rare session when a coil releases with an explosive volume-and-range expansion',  limit: 60,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: null },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_s2' },
-  { id: 'vani_opportunity',     name: 'VaNi Strength Watch',   description: 'Highest conviction setups — Stage 2 confirmed with top RS momentum. Alpha Edge formula + VaNi RS filter.', limit: 25, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
   { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
@@ -888,12 +887,27 @@ function scanPowerSell(bundle: ScanDataBundle): ScanStock[] {
 
 /** Scan 3: Smart Money Loading */
 function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
-  // Industries with pct_accumulation > 60
-  const accumulatingIndustries = new Set(
-    bundle.industries
-      .filter((i) => (i.pct_accumulation ?? 0) > 60)
-      .map((i) => i.industry)
-  );
+  // Industry gate — where accumulation is concentrated today.
+  //
+  // pct_accumulation is the share of an industry's stocks showing accumulation.
+  // Empirically its distribution is low-skewed: on a typical day the median
+  // industry sits ~15% and even the single most-accumulating one rarely clears
+  // 50-67%. The old absolute `> 60` gate therefore fired for 0-1 industries,
+  // leaving Smart Money chronically empty. We keep the absolute bar (so genuinely
+  // broad-accumulation industries always qualify) but OR it with a relative
+  // top-decile cutoff, so the scan reliably reflects the strongest-accumulating
+  // corner of the market instead of blanking. delivery_pct at the stock level
+  // keeps the list grounded in real delivery-based buying.
+  const ranked = bundle.industries
+    .filter((i) => (i.pct_accumulation ?? 0) > 0)
+    .sort((a, b) => (b.pct_accumulation ?? 0) - (a.pct_accumulation ?? 0));
+  const decileCount = Math.max(5, Math.ceil(ranked.length / 10));
+  const accumulatingIndustries = new Set<string>();
+  ranked.forEach((ind, i) => {
+    if ((ind.pct_accumulation ?? 0) > 55 || i < decileCount) {
+      accumulatingIndustries.add(ind.industry);
+    }
+  });
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
@@ -904,7 +918,7 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
 
     if ((stock.delivery_pct ?? 0) <= 60) continue;
 
-    // rss_value must be positive
+    // rss_value must be positive (guards degenerate rows; RSS is RSI-derived 0-100)
     if ((stock.rss_value ?? 0) <= 0) continue;
 
     results.push(stock);
@@ -915,36 +929,14 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
     .slice(0, 25);
 }
 
-/** Scan 4: Fresh Breakouts */
-function scanFreshBreakout(bundle: ScanDataBundle): ScanStock[] {
-  const { leading } = getIndustryClassifications(bundle);
-
-  const results: ScanStock[] = [];
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle, 'fresh_breakout');
-    if (!stock || !stock.industry) continue;
-    if (!leading.has(stock.industry)) continue;
-    if ((stock.rvol ?? 0) <= 2) continue;
-
-    // close > 20-day high
-    const history = bundle.eodHistory.get(id) ?? [];
-    const closesLast20 = history.slice(1, 21).map((h) => h.close);
-    const high20 = closesLast20.length > 0 ? Math.max(...closesLast20) : Infinity;
-    if (stock.close <= high20) continue;
-
-    // close > sma_150
-    const eod = bundle.latestEod.get(id);
-    if (eod && eod.sma_150 && stock.close <= eod.sma_150) continue;
-
-    results.push(stock);
-  }
-
-  const sorted = results
-    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
-    .slice(0, 25);
-
-  return sorted;
-}
+// Scan 4 "Fresh Breakouts" retired 2026-07-13 (B1): it was a near-duplicate of
+// Breakout Surge (both "closed above a breakout level"), with two extras —
+// a leading-industry gate and rvol>2. Breakout Surge is the robust superset
+// (DB-precomputed breakout levels, full universe, conviction-ranked by Score
+// 5D), and its sector scoping is available via the ScanFilterBar `industries`
+// filter + the rvol column. The kd_scan_presets row is deactivated in
+// migration 152; this handler + preset are removed so a stale DB row can't
+// dispatch to a missing function.
 
 /** Scan 5: Quiet Accumulation (contrarian) */
 function scanQuietAccumulation(bundle: ScanDataBundle): ScanStock[] {
@@ -1448,99 +1440,6 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
   });
 }
 
-/** Scan: VaNi Opportunity — S2 confirmed + RS percentile > 80 + Alpha Edge. Top 25. */
-async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const completedDates = await fetchRecentDates(1);
-  const latestDate: string | null = completedDates[0] ?? null;
-  if (!latestDate) return [];
-
-  const { data: rows } = await from('km_equity_eod')
-    .select([
-      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
-      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
-      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
-      'sma_50', 'sma_150', 'sma_200', 'sma200_rising', 'ema_20', 'atr_14',
-      'w52_high', 'w52_low', 'lifetime_high',
-      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
-      'sniper_inst', 'sniper_hot', 'accum_distrib',
-      'volume_divergence_flag', 'delivery_pct',
-      'dot_svd', 'dot_sbd', 'dot_syd',
-      'stage', 'rs_percentile', 'chartink_score',
-      'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
-      'score_5d', 'score_22d',
-      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
-    ].join(','))
-    .eq('trade_date', latestDate)
-    .is('is_vani_s2', 'true')
-    .order('rs_percentile', { ascending: false })
-    .limit(50)
-    .execute();
-
-  const filtered = (rows ?? []) as any[];
-
-  // ISIN dedup: prefer NSE
-  const isinMap = new Map<string, any>();
-  for (const row of filtered) {
-    const sym = row.km_equity_symbols;
-    if (!sym) continue;
-    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
-    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
-    const isin = sym.isin;
-    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
-    const existing = isinMap.get(isin);
-    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
-  }
-
-  return Array.from(isinMap.values()).map((row): ScanStock => {
-    const sym = row.km_equity_symbols;
-    const pctBelow52wHigh = row.w52_high && row.w52_high > 0
-      ? ((row.w52_high - row.close) / row.w52_high) * 100 : null;
-    const ema20 = row.ema_20 ?? null;
-    const atr14 = row.atr_14 ?? null;
-    return {
-      equity_id: row.equity_id, trade_date: row.trade_date,
-      symbol: sym?.symbol ?? String(row.equity_id),
-      company_name: sym?.company_name ?? null,
-      industry: sym?.industry ?? null,
-      exchange: sym?.exchange ?? null, mcap_cr: sym?.mcap_cr ?? null,
-      close: row.close, open: row.open ?? null, high: row.high ?? null, low: row.low ?? null,
-      pct_chng: row.pct_chng ?? null,
-      magic_rs: row.magic_rs ?? null, magic_rs_zone: row.magic_rs_zone ?? null,
-      rss_value: row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
-      rsi_14: row.rsi_14 ?? null, rvol: row.rvol ?? null,
-      flow_type: row.flow_type ?? null, sniper_inst: row.sniper_inst ?? null,
-      sniper_hot: row.sniper_hot ?? null,
-      accum_distrib: row.accum_distrib ?? null,
-      volume_divergence_flag: row.volume_divergence_flag ?? null,
-      sma_50: row.sma_50 ?? null, sma_150: row.sma_150 ?? null,
-      sma_200: row.sma_200 ?? null, ema_20: ema20, atr_14: atr14,
-      w52_high: row.w52_high ?? null, w52_low: row.w52_low ?? null,
-      lifetime_high: row.lifetime_high ?? null,
-      delivery_pct: row.delivery_pct ?? null, supertrend_dir: row.supertrend_dir ?? null,
-      has_recent_svd: !!row.dot_svd, has_recent_sbd: !!row.dot_sbd, has_recent_syd: !!row.dot_syd,
-      avg_amt_5d: row.avg_amt_5d ?? null, avg_amt_22d: row.avg_amt_22d ?? null,
-      delivery_surge_x: row.delivery_surge_x ?? null,
-      avg_amt_66d: null, xAmt: null,
-      rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
-      rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-      magicRsTrend: [],
-      score_5d:  row.score_5d  != null ? Number(row.score_5d)  : null,
-      score_22d: row.score_22d != null ? Number(row.score_22d) : null,
-      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
-      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
-      pctBelow52wHigh,
-      vaniOpportunity: computeVaniOpportunity(row, getPresetMeta('vani_opportunity')?.vani_rule),
-      rs_percentile: row.rs_percentile ?? null,
-      stage: row.stage ?? null,
-      sma200_rising: row.sma200_rising ?? null,
-      chartink_score: row.chartink_score ?? null,
-      is_vani_s2: row.is_vani_s2 ?? null,
-      is_vani_strength: row.is_vani_strength ?? null,
-      is_vani_rs: row.is_vani_rs ?? null,
-    };
-  });
-}
-
 /** Scan: Stage 4 Leaders — death cross confirmed, sorted weakest RS first. */
 async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
   const completedDates = await fetchRecentDates(1);
@@ -1900,7 +1799,6 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   power_buy: scanPowerBuy,
   power_sell: scanPowerSell,
   smart_money: scanSmartMoney,
-  fresh_breakout: scanFreshBreakout,
   quiet_accumulation: scanQuietAccumulation,
   distribution_warning: scanDistributionWarning,
   conviction_flow: scanConvictionFlow,
@@ -1952,6 +1850,268 @@ function deduplicateByIsin(stocks: ScanStock[], symbols: Map<number, EquitySymbo
 
 export type ExchangeFilter = 'combined' | 'NSE' | 'BSE';
 
+// ── Flower Pot Burst (energy compression → release) ────────────
+//
+// A precision, low-frequency scan. Two phases surface together:
+//   SETUP  — a stock coiling now: ATR contracting, range tightening, volume
+//            dying, relative strength flat (not trending). The watchlist.
+//   BURST  — the rare session (≈2×/month across NSE) when an active coil
+//            releases: volume + range expansion, strong close, breaks the
+//            10-day range on real delivery.
+//
+// Thresholds are CALIBRATED to the live NSE distribution (2026-07-13), not the
+// spec literals — the spec's ATR15/ATR60 < 0.5 fired for 12 of 1,232 stocks and
+// < 0.35 for zero (ATR15 is a subset of ATR60, so the ratio naturally sits ~0.96).
+// Calibrated compression gate → ~4 coiling today / 37 active over 22 sessions.
+// This needs ~60 sessions of history per stock, far deeper than the shared
+// scanner bundle (~30 sessions), so FPB runs its own on-demand fetch — it only
+// loads when its tab is opened and never taxes the other scanners' page load.
+const FPB = {
+  ATR_COMPRESSION_MAX: 0.8,   // ATR15 / ATR60 — recent vol below its 60d norm
+  RANGE_PCT_MAX: 0.08,        // 10-day (high-low) / close — price coiled
+  VOL_DEATH_MAX: 0.6,         // vol5 / vol22 — participation fading
+  RS_FLAT_MAX: 2,             // |MagicRS 5-day delta| — coiled, not trending
+  MIN_CLOSE: 20,              // avoid sub-₹20 illiquids
+  MIN_BARS: 60,               // need a full 60d ATR window
+  SETUP_LOOKBACK: 10,         // "coiling now" = compressed within last N sessions
+  BURST_PRIOR_LOOKBACK: 22,   // burst requires a setup active in the prior N sessions
+  VOL_BURST_MIN: 3.0,         // today volume / 22d avg
+  RANGE_EXP_MIN: 2.0,         // today range / 15d avg range
+  CLOSE_STRENGTH_MIN: 0.70,   // close in top 30% of day's range
+  DELIVERY_MIN: 45,           // real buyers, not intraday churn
+} as const;
+
+function fpbMean(arr: number[], end: number, len: number): number {
+  const start = Math.max(0, end - len + 1);
+  let sum = 0, n = 0;
+  for (let i = start; i <= end; i++) {
+    const v = arr[i];
+    if (v != null && !Number.isNaN(v)) { sum += v; n++; }
+  }
+  return n ? sum / n : NaN;
+}
+function fpbMax(arr: number[], start: number, end: number): number {
+  let m = -Infinity;
+  for (let i = Math.max(0, start); i <= end; i++) if (arr[i] > m) m = arr[i];
+  return m;
+}
+function fpbMin(arr: number[], start: number, end: number): number {
+  let m = Infinity;
+  for (let i = Math.max(0, start); i <= end; i++) if (arr[i] < m) m = arr[i];
+  return m;
+}
+
+/** Build the FPB ScanStock for one equity from its ascending-date history,
+ *  or null if it is neither coiling nor bursting. */
+function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanStock | null {
+  const n = bars.length;
+  if (n < FPB.MIN_BARS + 1) return null;
+  const L = n - 1;
+
+  const high = bars.map((b) => Number(b.high));
+  const low = bars.map((b) => Number(b.low));
+  const close = bars.map((b) => Number(b.close));
+  const open = bars.map((b) => Number(b.open));
+  const vol = bars.map((b) => Number(b.volume));
+  const mrs = bars.map((b) => (b.magic_rs != null ? Number(b.magic_rs) : NaN));
+  const rangeArr = bars.map((b) => Number(b.high) - Number(b.low));
+  const tr = bars.map((b, i) => {
+    const pc = b.prev_close != null ? Number(b.prev_close) : (i > 0 ? close[i - 1] : close[i]);
+    return Math.max(high[i] - low[i], Math.abs(high[i] - pc), Math.abs(low[i] - pc));
+  });
+
+  // Compression gate evaluated ending at bar `idx` (needs >= MIN_BARS history).
+  const compressedAt = (idx: number): boolean => {
+    if (idx < FPB.MIN_BARS - 1) return false;
+    if (close[idx] <= FPB.MIN_CLOSE) return false;
+    const stg = bars[idx].stage;
+    if (stg === 'S3' || stg === 'S4') return false;
+    const atr15 = fpbMean(tr, idx, 15), atr60 = fpbMean(tr, idx, 60);
+    if (!(atr60 > 0) || atr15 / atr60 >= FPB.ATR_COMPRESSION_MAX) return false;
+    const hi10 = fpbMax(high, idx - 9, idx), lo10 = fpbMin(low, idx - 9, idx);
+    if ((hi10 - lo10) / close[idx] >= FPB.RANGE_PCT_MAX) return false;
+    const vol5 = fpbMean(vol, idx, 5), vol22 = fpbMean(vol, idx, 22);
+    if (!(vol22 > 0) || vol5 / vol22 >= FPB.VOL_DEATH_MAX) return false;
+    const rsNow = mrs[idx], rsPrev = mrs[idx - 5];
+    if (Number.isNaN(rsNow) || Number.isNaN(rsPrev) || Math.abs(rsNow - rsPrev) >= FPB.RS_FLAT_MAX) return false;
+    return true;
+  };
+
+  // Setup activity windows.
+  let setupDaysIn22 = 0;
+  for (let i = Math.max(0, L - FPB.BURST_PRIOR_LOOKBACK + 1); i <= L; i++) if (compressedAt(i)) setupDaysIn22++;
+  let setupActiveRecent = false;
+  for (let i = Math.max(0, L - FPB.SETUP_LOOKBACK + 1); i <= L; i++) { if (compressedAt(i)) { setupActiveRecent = true; break; } }
+  let setupActivePrior = false;
+  for (let i = Math.max(0, L - FPB.BURST_PRIOR_LOOKBACK); i <= L - 1; i++) { if (compressedAt(i)) { setupActivePrior = true; break; } }
+
+  // Burst metrics for today (L), measured against pre-burst (ending yesterday) norms.
+  const vol22Prior = fpbMean(vol, L - 1, 22);
+  const volBurst = vol22Prior > 0 ? vol[L] / vol22Prior : NaN;
+  const avgRange15Prior = fpbMean(rangeArr, L - 1, 15);
+  const rangeExp = avgRange15Prior > 0 ? rangeArr[L] / avgRange15Prior : NaN;
+  const dayRange = high[L] - low[L];
+  const closeStrength = dayRange > 0 ? (close[L] - low[L]) / dayRange : 0;
+  const hi10Prior = fpbMax(high, L - 10, L - 1);
+  const delivToday = bars[L].delivery_pct != null ? Number(bars[L].delivery_pct) : null;
+
+  const isBurst =
+    setupActivePrior &&
+    close[L] > FPB.MIN_CLOSE &&
+    volBurst >= FPB.VOL_BURST_MIN &&
+    rangeExp >= FPB.RANGE_EXP_MIN &&
+    closeStrength >= FPB.CLOSE_STRENGTH_MIN &&
+    close[L] > hi10Prior &&
+    (delivToday ?? 0) > FPB.DELIVERY_MIN;
+
+  const phase: 'BURST' | 'SETUP' | null = isBurst ? 'BURST' : (setupActiveRecent ? 'SETUP' : null);
+  if (!phase) return null;
+
+  // Display-side compression metrics (as of the latest bar) for scoring/UI.
+  const atr15L = fpbMean(tr, L, 15), atr60L = fpbMean(tr, L, 60);
+  const atrComp = atr60L > 0 ? atr15L / atr60L : null;
+  const vol5L = fpbMean(vol, L, 5), vol22L = fpbMean(vol, L, 22);
+  const volDeath = vol22L > 0 ? vol5L / vol22L : null;
+  const hi10L = fpbMax(high, L - 9, L), lo10L = fpbMin(low, L - 9, L);
+  const rangePctL = close[L] > 0 ? (hi10L - lo10L) / close[L] : null;
+  const compressionScore =
+    (atrComp != null ? 1 - atrComp : 0) +
+    (volDeath != null ? 1 - volDeath : 0) +
+    (rangePctL != null ? 1 - rangePctL / FPB.RANGE_PCT_MAX : 0);
+  const fpbQuality = isBurst
+    ? (volBurst / FPB.VOL_BURST_MIN) * (rangeExp / FPB.RANGE_EXP_MIN) * closeStrength * ((delivToday ?? 50) / 50)
+    : null;
+
+  const b = bars[L];
+  const ema20 = b.ema_20 != null ? Number(b.ema_20) : null;
+  const atr14 = b.atr_14 != null ? Number(b.atr_14) : null;
+  return {
+    equity_id: b.equity_id,
+    symbol: sym?.symbol ?? String(b.equity_id),
+    company_name: sym?.company_name ?? null,
+    industry: sym?.industry ?? null,
+    exchange: sym?.exchange ?? null,
+    mcap_cr: sym?.mcap_cr ?? null,
+    trade_date: b.trade_date,
+    close: close[L],
+    open: open[L] ?? null,
+    high: high[L] ?? null,
+    low: low[L] ?? null,
+    pct_chng: b.pct_chng ?? null,
+    magic_rs: b.magic_rs ?? null,
+    magic_rs_zone: b.magic_rs_zone ?? null,
+    rss_value: null, rss_spread: null,
+    rsi_14: b.rsi_14 ?? null,
+    rvol: b.rvol ?? null,
+    flow_type: b.flow_type ?? null,
+    supertrend_dir: null,
+    sma_50: b.sma_50 ?? null,
+    sma_150: b.sma_150 ?? null,
+    sma_200: b.sma_200 ?? null,
+    ema_20: ema20,
+    atr_14: atr14,
+    w52_high: b.w52_high ?? null,
+    w52_low: b.w52_low ?? null,
+    lifetime_high: null,
+    avg_amt_5d: null, avg_amt_22d: null, avg_amt_66d: null, delivery_surge_x: null,
+    sniper_inst: b.sniper_inst ?? null,
+    sniper_hot: b.sniper_hot ?? null,
+    accum_distrib: b.accum_distrib ?? null,
+    volume_divergence_flag: null,
+    delivery_pct: delivToday,
+    deliv_value_cr: b.deliv_value_cr ?? null,
+    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
+    pctBelow52wHigh: null,
+    reward: ema20 && atr14 ? (ema20 + atr14) - close[L] : null,
+    rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - close[L]) / atr14 : null,
+    magicRsTrend: [],
+    score_5d: b.score_5d != null ? Number(b.score_5d) : null,
+    score_22d: null,
+    xAmt: null,
+    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
+    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+    // BURST rows are the ✦ highlight — the rare, high-conviction event.
+    vaniOpportunity: isBurst,
+    stage: b.stage ?? null,
+    d_pct: b.pct_chng != null ? Math.round(Number(b.pct_chng) * 100) / 100 : null,
+    fpb_phase: phase,
+    fpb_quality: fpbQuality != null ? Math.round(fpbQuality * 100) / 100 : null,
+    fpb_compression_score: Math.round(compressionScore * 100) / 100,
+    fpb_vol_burst: Number.isFinite(volBurst) ? Math.round(volBurst * 10) / 10 : null,
+    fpb_range_exp: Number.isFinite(rangeExp) ? Math.round(rangeExp * 10) / 10 : null,
+    fpb_close_strength: Math.round(closeStrength * 100) / 100,
+    fpb_atr_compression: atrComp != null ? Math.round(atrComp * 100) / 100 : null,
+    fpb_vol_death: volDeath != null ? Math.round(volDeath * 100) / 100 : null,
+    fpb_setup_days: setupDaysIn22,
+  };
+}
+
+async function fetchFlowerPotBurst(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  // FPB is an NSE-universe scan — compression + delivery need NSE bhav depth.
+  // BSE has no delivery data and shallower history, so BSE-only returns nothing.
+  if (exchangeFilter === 'BSE') return [];
+
+  const dates = await fetchRecentDates(FPB.MIN_BARS + 12); // ~72 sessions
+  if (dates.length < FPB.MIN_BARS + 1) return [];
+  const latestDate = dates[0];
+  const cutoff = dates[dates.length - 1];
+
+  const symRes = await from('km_equity_symbols')
+    .select('id,symbol,company_name,industry,exchange,isin,mcap_cr')
+    .is('is_active', 'true')
+    .eq('exchange', 'NSE')
+    .limit(8000)
+    .execute();
+  const syms = (symRes.data ?? []) as EquitySymbolRow[];
+  const symMap = new Map<number, EquitySymbolRow>();
+  const ids: number[] = [];
+  for (const s of syms) { symMap.set(s.id, s); ids.push(s.id); }
+  if (ids.length === 0) return [];
+
+  const COLS = 'equity_id,trade_date,open,high,low,close,prev_close,volume,magic_rs,magic_rs_zone,delivery_pct,rsi_14,rvol,ema_20,atr_14,sma_50,sma_150,sma_200,w52_high,w52_low,stage,score_5d,flow_type,sniper_inst,sniper_hot,pct_chng,accum_distrib,deliv_value_cr';
+  const CHUNK = 400;
+  const idChunks: number[][] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) idChunks.push(ids.slice(i, i + CHUNK));
+
+  const chunkRes = await Promise.all(idChunks.map((chunk) =>
+    from('km_equity_eod')
+      .select(COLS)
+      .in('equity_id', chunk)
+      .gte('trade_date', cutoff)
+      .lte('trade_date', latestDate)
+      .order('trade_date', { ascending: true })
+      .limit(60000)
+      .execute()
+  ));
+  const rows = chunkRes.flatMap((r) => (r.data ?? [])) as any[];
+
+  const hist = new Map<number, any[]>();
+  for (const r of rows) {
+    const arr = hist.get(r.equity_id) ?? [];
+    arr.push(r);
+    hist.set(r.equity_id, arr);
+  }
+
+  const out: ScanStock[] = [];
+  for (const [id, bars] of hist) {
+    bars.sort((a, b) => (a.trade_date < b.trade_date ? -1 : a.trade_date > b.trade_date ? 1 : 0));
+    const stock = computeFpbStock(bars, symMap.get(id));
+    if (stock) out.push(stock);
+  }
+
+  // BURST first (by quality), then SETUP (by compression tightness).
+  out.sort((a, b) => {
+    const pa = a.fpb_phase === 'BURST' ? 0 : 1;
+    const pb = b.fpb_phase === 'BURST' ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    if (pa === 0) return (b.fpb_quality ?? 0) - (a.fpb_quality ?? 0);
+    return (b.fpb_compression_score ?? 0) - (a.fpb_compression_score ?? 0);
+  });
+
+  const lim = getPresetMeta('flower_pot_burst')?.limit ?? 60;
+  return out.slice(0, lim);
+}
+
 export async function executeScan(
   scanId: string,
   exchangeFilter: ExchangeFilter = 'combined',
@@ -1959,9 +2119,9 @@ export async function executeScan(
   date: string = '',
 ): Promise<ScanStock[]> {
   // Direct DB query scans — skip bundle entirely
+  if (scanId === 'flower_pot_burst')     return fetchFlowerPotBurst(exchangeFilter);
   if (scanId === 'stage_2_leaders')      return fetchStage2Leaders(exchangeFilter);
   if (scanId === 'stage_2_watch')        return fetchStage2Watch(exchangeFilter);
-  if (scanId === 'vani_opportunity')     return fetchVaNiOpportunity(exchangeFilter);
   if (scanId === 'stage_4_leaders')      return fetchStage4Leaders(exchangeFilter);
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
@@ -2010,13 +2170,13 @@ export interface VaniHighlights {
 const HIGHLIGHT_SOURCES: { id: string; side: 'strength' | 'caution'; label: string; cap?: number }[] = [
   { id: 'power_buy',            side: 'strength', label: 'Confluence' },
   { id: 'smart_money',          side: 'strength', label: 'Smart Money' },
-  { id: 'fresh_breakout',       side: 'strength', label: 'Breakout' },
+  // fresh_breakout retired (B1) · vani_opportunity retired (B2) — removed from
+  // the highlights union; their stocks still surface via breakout_surge / S2.
   { id: 'quiet_accumulation',   side: 'strength', label: 'Quiet Acc' },
   { id: 'conviction_flow',      side: 'strength', label: 'Flow' },
   { id: 'breakout_surge',       side: 'strength', label: 'Surge' },
   { id: 'stage_2_leaders',      side: 'strength', label: 'S2' },
   { id: 'stage_2_watch',        side: 'strength', label: 'S2 Watch' },
-  { id: 'vani_opportunity',     side: 'strength', label: 'VaNi', cap: 3 },
   { id: 'power_sell',           side: 'caution',  label: 'Weakness' },
   { id: 'distribution_warning', side: 'caution',  label: 'Distribution' },
   { id: 'stage_3_watch',        side: 'caution',  label: 'S3' },
