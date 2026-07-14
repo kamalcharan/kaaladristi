@@ -2255,6 +2255,7 @@ const HIGHLIGHT_SOURCES: { id: string; side: 'strength' | 'caution'; label: stri
   { id: 'quiet_accumulation',   side: 'strength', label: 'Quiet Acc' },
   { id: 'conviction_flow',      side: 'strength', label: 'Flow' },
   { id: 'breakout_surge',       side: 'strength', label: 'Surge' },
+  { id: 'flower_pot_burst',     side: 'strength', label: 'Burst' },  // ✦ = a coil that released today
   { id: 'stage_2_leaders',      side: 'strength', label: 'S2' },
   { id: 'stage_2_watch',        side: 'strength', label: 'S2 Watch' },
   { id: 'power_sell',           side: 'caution',  label: 'Weakness' },

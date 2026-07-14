@@ -838,10 +838,17 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
   const navigate = useNavigate();
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
   const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
+  const [vaniOnly, setVaniOnly] = useState(false);
   const { data: rawStocks = [], isLoading, error } = useScan('flower_pot_burst', exchangeFilter, timeframe);
   const filtered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
-  const bursts = useMemo(() => filtered.filter((s) => s.fpb_phase === 'BURST'), [filtered]);
-  const setups = useMemo(() => filtered.filter((s) => s.fpb_phase === 'SETUP'), [filtered]);
+  const allBursts = useMemo(() => filtered.filter((s) => s.fpb_phase === 'BURST'), [filtered]);
+  // ✦ VaNi Highlight for FPB = the Burst — the actionable trigger. Toggling it
+  // isolates "act today" from the coiling watchlist.
+  const bursts = allBursts;
+  const setups = useMemo(
+    () => (vaniOnly ? [] : filtered.filter((s) => s.fpb_phase === 'SETUP')),
+    [filtered, vaniOnly],
+  );
 
   return (
     <>
@@ -851,6 +858,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       }}>
         {/* FPB is NSE-only — BSE has no delivery/compression depth. */}
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={['BSE']} />
+        <VaniFilterButton active={vaniOnly} count={allBursts.length} onToggle={() => setVaniOnly((f) => !f)} />
         <ScanFilterBar
           presetId="flower_pot_burst"
           stocks={rawStocks}
@@ -902,28 +910,33 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
             </div>
           )}
 
-          <ScanSectionLabel>
-            Coiling Setups · {setups.length} watching
-          </ScanSectionLabel>
-          {setups.length === 0 ? (
-            <div style={{
-              padding: '20px 24px', textAlign: 'center',
-              background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
-            }}>
-              <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                No stocks are tightly coiled right now. Genuine compression — ATR halving, range under 8%,
-                volume dying, relative strength flat — is uncommon; check back after the next few sessions.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {setups.map((stock) => (
-                <div key={stock.equity_id}>
-                  <StockCard stock={stock} />
-                  <FpbMetricLine stock={stock} />
+          {/* ✦ active isolates the actionable Bursts — hide the coiling watchlist. */}
+          {!vaniOnly && (
+            <>
+              <ScanSectionLabel>
+                Coiling Setups · {setups.length} watching
+              </ScanSectionLabel>
+              {setups.length === 0 ? (
+                <div style={{
+                  padding: '20px 24px', textAlign: 'center',
+                  background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
+                }}>
+                  <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                    No stocks are tightly coiled right now. Genuine compression — ATR halving, range under 8%,
+                    volume dying, relative strength flat — is uncommon; check back after the next few sessions.
+                  </p>
                 </div>
-              ))}
-            </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {setups.map((stock) => (
+                    <div key={stock.equity_id}>
+                      <StockCard stock={stock} />
+                      <FpbMetricLine stock={stock} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
