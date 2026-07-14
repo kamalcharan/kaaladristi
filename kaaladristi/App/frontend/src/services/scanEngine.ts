@@ -2131,7 +2131,9 @@ export interface FpbActiveRow {
 /** Recent Flower Pot releases + their day-2 hold/crack verdict and stop/target.
  *  Returns [] gracefully if km_fpb_active isn't deployed yet. */
 export async function fetchFpbActive(): Promise<FpbActiveRow[]> {
-  const cutoff = new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // 60d so the Day-2 strip doubles as a recent release track-record (once
+  // km_fpb_active is backfilled), not just the last few live sessions.
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   try {
     const { data, error } = await from('km_fpb_active')
       .select('equity_id,symbol,direction,release_date,release_close,release_midpoint,sl_level,target_level,quality,status,last_eval_date,last_close')
