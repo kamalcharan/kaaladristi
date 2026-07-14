@@ -234,7 +234,7 @@ class VaNiAskRequest(BaseModel):
 
 
 # Dependency order for the 'all' backfill — downloads first (so EOD data
-# exists before any compute), then the compute DAG. 14 jobs total.
+# exists before any compute), then the compute DAG. 15 jobs total.
 BACKFILL_ALL_ORDER = [
     'index_eod_download',
     'nse_eod_download',
@@ -245,6 +245,7 @@ BACKFILL_ALL_ORDER = [
     'index_flow',
     'nse_flow',
     'bse_flow',
+    'index_magic_rs',
     'nse_magic_rs',
     'bse_magic_rs',
     'industry_composites',
