@@ -2,6 +2,7 @@ import { useState } from 'react';
 import HealthGrid from './HealthGrid';
 import JobQueue from './JobQueue';
 import RunPanel from './RunPanel';
+import LastRunBanner from './LastRunBanner';
 
 export interface CellSelection {
   dimension: string;
@@ -26,6 +27,8 @@ export default function DataPipelinePage() {
           legacy <span className="mono">/settings → Data Pipeline</span>.
         </p>
       </header>
+
+      <LastRunBanner />
 
       <section>
         <h2 className="text-sm font-medium text-secondary mb-2">Health · 30 trading days</h2>

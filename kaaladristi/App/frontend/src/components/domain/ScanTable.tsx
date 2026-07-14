@@ -188,7 +188,11 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       <div style={{
         overflowX: 'auto',
         overflowY: 'auto',
-        maxHeight: 'calc(100vh - 310px)',
+        // Grows to fit the data up to this cap, then scrolls (sticky header/first
+        // column anchor to this box). Cap raised 2026-07-12 (was 100vh-310px, which
+        // stopped at ~19 rows) so more rows show before the inner scroll kicks in;
+        // the outer panel scrolls for any remainder. Tunable — just this number.
+        maxHeight: 'calc(100vh - 160px)',
         width: '100%',
         WebkitOverflowScrolling: 'touch',
         border: '1px solid var(--border)',

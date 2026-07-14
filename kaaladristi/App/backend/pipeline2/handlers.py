@@ -42,9 +42,10 @@ FIXABLE_DIMENSIONS = frozenset({
     'index_eod_download', 'nse_eod_download', 'bse_eod_download',
     'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
     'index_flow', 'nse_flow', 'bse_flow',
-    'nse_magic_rs', 'bse_magic_rs',
+    'index_magic_rs', 'nse_magic_rs', 'bse_magic_rs', 'rs_percentile',
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
+    'scan_refresh',
 })
 
 
@@ -280,6 +281,17 @@ def handle_rolling_metrics(conn, trade_date: date, force: bool,
                           compute_rolling_metrics_for_date)
 
 
+def handle_rs_percentile(conn, trade_date: date, force: bool,
+                         exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    # rs_percentile ranks each equity by magic_rs within the day's universe.
+    # It lived only in the legacy daily_pipeline (gated by skip_indicators, which
+    # pipeline2 sets True), so it silently stopped when prod moved to pipeline2 —
+    # dead since 2026-06-19. Registered here so the nightly keeps it current.
+    from scripts.backfill_rs_percentile import compute_rs_percentile_for_date
+    return _handle_script('rs_percentile', conn, trade_date, force, on_progress,
+                          compute_rs_percentile_for_date)
+
+
 def handle_d365(conn, trade_date: date, force: bool,
                 exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     from scripts.backfill_d365 import compute_d365_for_date
@@ -439,6 +451,73 @@ def handle_breadth_roc(conn, trade_date: date, force: bool,
     after = fill_rate(conn, 'breadth_roc', trade_date)
     status = 'completed' if after >= 100.0 else 'failed'
     return HandlerResult(status, before, after, n)
+
+
+# ── Scanner materialized-view refresh (migration 147) ────────────────────
+
+def handle_scan_refresh(conn, trade_date: date, force: bool,
+                        exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
+    """Refresh the scanner materialized views (km_scan_results + companion
+    km_scan_exclusion_counts, migration 147).
+
+    This is the LAST daily step: the matview reads magic_rs, flows, rolling
+    metrics, vani flags, and industry composites, so every one of those compute
+    steps must finish first. It reads the same 'latest complete date' logic the
+    live scan engine uses (>=4000 equity rows), so it always reflects the newest
+    fully-loaded trade date — not `trade_date` per se.
+
+    Uses REFRESH ... CONCURRENTLY so scanner reads never block during the rebuild
+    (the unique indexes migration 147 creates make this legal). Falls back to a
+    plain refresh the first time a matview is refreshed while still unpopulated
+    (CONCURRENTLY requires pre-existing data). REFRESH cannot run inside a txn
+    block, so we flip the connection to autocommit for the duration.
+
+    Order matters: km_scan_results FIRST — km_scan_exclusion_counts.included_count
+    reads from it.
+    """
+    on_progress('checking scan matviews exist', 5)
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.km_scan_results')::text, "
+                    "to_regclass('public.km_scan_exclusion_counts')::text")
+        results_reg, excl_reg = cur.fetchone()
+    conn.commit()
+
+    if results_reg is None:
+        # Migration 147 not applied in this environment — skip, don't fail the run.
+        return HandlerResult('partial', 0.0, 0.0, 0,
+                             error_msg='km_scan_results absent (migration 147 not applied)')
+
+    views = [('km_scan_results', results_reg)]
+    if excl_reg is not None:
+        views.append(('km_scan_exclusion_counts', excl_reg))
+
+    prev_autocommit = conn.autocommit
+    conn.autocommit = True
+    try:
+        for i, (view, _reg) in enumerate(views):
+            on_progress(f'refreshing {view}', 30 + i * 40)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(f'REFRESH MATERIALIZED VIEW CONCURRENTLY {view}')
+            except psycopg2.Error:
+                # First-ever refresh of an unpopulated matview: CONCURRENTLY is
+                # illegal, so do a plain (briefly-locking) refresh instead.
+                with conn.cursor() as cur:
+                    cur.execute(f'REFRESH MATERIALIZED VIEW {view}')
+    except Exception as e:
+        conn.autocommit = prev_autocommit
+        return HandlerResult('failed', 0.0, 0.0, 0, error_msg=str(e)[:500])
+    finally:
+        conn.autocommit = prev_autocommit
+
+    on_progress('measuring refreshed row count', 90)
+    with conn.cursor() as cur:
+        cur.execute('SELECT count(*) FROM km_scan_results')
+        n = cur.fetchone()[0] or 0
+    conn.commit()
+
+    status = 'completed' if n > 0 else 'partial'
+    return HandlerResult(status, 0.0, 100.0 if n > 0 else 0.0, n)
 
 
 # ── Download handlers ───────────────────────────────────────────────────
@@ -611,13 +690,15 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
     if dimension in (
         'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
         'index_flow', 'nse_flow', 'bse_flow',
-        'nse_magic_rs', 'bse_magic_rs',
+        'index_magic_rs', 'nse_magic_rs', 'bse_magic_rs',
     ):
         return _handle_columnfill(conn, dimension, trade_date, force, on_progress)
     if dimension == 'supertrend':
         return handle_supertrend(conn, trade_date, force, exchange, on_progress)
     if dimension == 'rolling_metrics':
         return handle_rolling_metrics(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'rs_percentile':
+        return handle_rs_percentile(conn, trade_date, force, exchange, on_progress)
     if dimension == 'd365':
         return handle_d365(conn, trade_date, force, exchange, on_progress)
     if dimension == 'stage_classification':
@@ -632,6 +713,8 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
         return handle_market_breadth(conn, trade_date, force, exchange, on_progress)
     if dimension == 'breadth_roc':
         return handle_breadth_roc(conn, trade_date, force, exchange, on_progress)
+    if dimension == 'scan_refresh':
+        return handle_scan_refresh(conn, trade_date, force, exchange, on_progress)
     raise ValueError(f'Unknown dimension: {dimension}')
 
 
@@ -646,8 +729,10 @@ KNOWN_DIMENSIONS = [
     'index_flow',
     'nse_flow',
     'bse_flow',
+    'index_magic_rs',
     'nse_magic_rs',
     'bse_magic_rs',
+    'rs_percentile',
     'supertrend',
     'rolling_metrics',
     'd365',
@@ -657,4 +742,5 @@ KNOWN_DIMENSIONS = [
     'industry_composites',
     'market_breadth',
     'breadth_roc',
+    'scan_refresh',
 ]

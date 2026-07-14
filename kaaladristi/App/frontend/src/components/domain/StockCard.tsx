@@ -381,7 +381,9 @@ export function StockCard({
           fontFamily: 'var(--font-mono)', fontSize: '16px', fontWeight: 500,
           color: 'var(--text-primary)', letterSpacing: '-0.01em',
         }}>
-          {stock.close >= 1000
+          {stock.close == null
+            ? '—'
+            : stock.close >= 1000
             ? stock.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })
             : stock.close.toFixed(2)}
         </div>

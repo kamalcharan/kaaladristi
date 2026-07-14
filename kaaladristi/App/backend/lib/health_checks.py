@@ -225,6 +225,13 @@ DIMENSION_META: dict[str, dict] = {
                                 'coverage_cols': ['magic_rs_zone', 'magic_rs'],
                                 'ok_threshold': 0.95, 'partial_threshold': 0.5},
 
+    # rs_percentile: ranked by magic_rs over the day's universe. Went dark
+    # 2026-06-19 (stranded in legacy pipeline; not in pipeline2) — this dimension
+    # makes a repeat visible. Measured on NSE rows (compute is universe-wide).
+    'rs_percentile':           {'step': 'rs_percentile',         'exchange': 'NSE', 'fix': 'fix:rs_percentile',
+                                'coverage_cols': ['rs_percentile'],
+                                'ok_threshold': 0.90, 'partial_threshold': 0.5},
+
     'flow_intelligence':       {'step': 'index_flow_intelligence','exchange': 'NSE', 'fix': 'fix:flow_intelligence',
                                 'coverage_cols': ['flow_type'],
                                 'ok_threshold': 0.95, 'partial_threshold': 0.5},
@@ -234,6 +241,15 @@ DIMENSION_META: dict[str, dict] = {
     'bse_flow_intelligence':   {'step': 'flow_intelligence',     'exchange': 'BSE', 'fix': 'fix:flow_intelligence',
                                 'coverage_cols': ['flow_type'],
                                 'ok_threshold': 0.95, 'partial_threshold': 0.5},
+
+    # BSE delivery (SCBSEALL feed). Delivery lands during the bse_eod_download
+    # step (step='delivery' in run_bse_pipeline); the wrench reuses the BSE-EOD
+    # fix, which re-runs download incl. delivery. Thresholds are intentionally
+    # looser than NSE's 0.95 — the BSE traded universe is messier and some
+    # scrips are absent from SCBSEALL; recalibrate once real fill is observed.
+    'bse_delivery':            {'step': 'delivery',              'exchange': 'BSE', 'fix': 'fix:bse_equities',
+                                'coverage_cols': ['delivery_pct'],
+                                'ok_threshold': 0.85, 'partial_threshold': 0.4},
 
     # Single-row-per-date aggregates — row-presence is the right semantic.
     'industry_composites':     {'step': 'industry_composites',   'exchange': 'NSE', 'fix': 'fix:industry_composites'},
@@ -567,6 +583,24 @@ def check_bse_flow_intelligence(db, trading_days, skip_dates):
                          meta['ok_threshold'], meta['partial_threshold'])
 
 
+def check_rs_percentile(db, trading_days, skip_dates):
+    """rs_percentile column fill (ranked by magic_rs). Measured on NSE rows."""
+    meta = DIMENSION_META['rs_percentile']
+    return _coverage_row(db, 'rs_percentile', 'RS Percentile',
+                         'km_equity_eod', meta['coverage_cols'], 'NSE',
+                         trading_days, skip_dates,
+                         meta['ok_threshold'], meta['partial_threshold'])
+
+
+def check_bse_delivery(db, trading_days, skip_dates):
+    """BSE delivery (delivery_pct) column fill — from the SCBSEALL feed."""
+    meta = DIMENSION_META['bse_delivery']
+    return _coverage_row(db, 'bse_delivery', 'BSE Delivery',
+                         'km_equity_eod', meta['coverage_cols'], 'BSE',
+                         trading_days, skip_dates,
+                         meta['ok_threshold'], meta['partial_threshold'])
+
+
 def check_flow_intelligence(db, trading_days, skip_dates):
     """Index flow intelligence — km_index_eod column fill."""
     meta = DIMENSION_META['flow_intelligence']
@@ -633,6 +667,8 @@ HEALTH_CHECKS = [
     check_flow_intelligence,
     check_nse_flow_intelligence,
     check_bse_flow_intelligence,
+    check_bse_delivery,
+    check_rs_percentile,
     check_industry_composites,
     check_market_breadth,
     check_breadth_roc,

@@ -64,6 +64,17 @@ BSE_BHAV_URL = (
     'BhavCopy_BSE_CM_0_0_0_{date}_F_0000.CSV.zip'
 )
 
+# BSE scrip-wise delivery (SCBSEALL) — a separate daily ZIP containing a
+# pipe-delimited .TXT, in per-year folders. Verified live 2026-07-10:
+#   https://www.bseindia.com/BSEDATA/gross/2026/SCBSEALL1007.zip
+# {yyyy} = 4-digit year, {ddmm} = day+month (e.g. 1007 for 10 July).
+# BSE changes URL layouts periodically (the bhavcopy downloader already carries
+# multiple fallbacks) — keep this as a pattern list so a new location can be
+# added without touching the downloader.
+BSE_DELIVERY_URL_PATTERNS = [
+    'https://www.bseindia.com/BSEDATA/gross/{yyyy}/SCBSEALL{ddmm}.zip',
+]
+
 # ── Browser Headers (anti-bot) ────────────────────────────────────────────────
 
 BROWSER_HEADERS = {

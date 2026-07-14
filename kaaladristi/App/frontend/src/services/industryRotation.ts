@@ -524,6 +524,7 @@ export async function fetchIndustryTransitionStocks(): Promise<IndustryTransitio
 
     const indCtx = industryMap.get(sym.industry);
     if (!indCtx) continue; // skip stocks in non-qualifying industries
+    if (eod.close == null) continue; // no close price that day (didn't trade) — nothing to render, and it crashes .toFixed()
 
     stocks.push({
       equity_id: eod.equity_id,

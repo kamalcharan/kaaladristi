@@ -14,6 +14,7 @@ import type { InstrumentRef } from '@/types/framework'
 import WorkspaceCanvas from '@/components/domain/Workspace/WorkspaceCanvas'
 import CorrelationDrawer from '@/components/domain/Workspace/CorrelationDrawer'
 import VaNiMorningBrief from '@/components/workspace/VaNiMorningBrief'
+import PipelineHealthBar from '@/components/workspace/PipelineHealthBar'
 import MarketWeatherCard from '@/components/domain/DashboardV3/MarketWeatherCard'
 import MarketBreadthChart from '@/components/domain/MarketBreadthChart'
 import BreadthRocChart from '@/components/domain/BreadthRocChart'
@@ -137,6 +138,8 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+      {/* Admin-only: surfaces a failed pipeline step (run no longer fails wholesale) */}
+      <PipelineHealthBar />
       {/* Page header */}
       <div style={{ padding: '14px 20px 10px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

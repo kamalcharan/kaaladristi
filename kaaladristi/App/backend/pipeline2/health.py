@@ -49,6 +49,16 @@ DIMENSION_HEALTH: dict[str, tuple[str, str | None, list[str] | None, float | Non
     'bse_flow':              ('km_equity_eod',    'equity_id', ['flow_type'],                                              0.95),
     'nse_magic_rs':          ('km_equity_eod',    'equity_id', ['magic_rs_zone'],                                          0.95),
     'bse_magic_rs':          ('km_equity_eod',    'equity_id', ['magic_rs_zone'],                                          0.95),
+    # index_magic_rs: relative strength of each index vs NIFTY 500 (both live in
+    # km_index_eod — compute_all_magic_rs routes the benchmark on-table for the
+    # index case). Needs ~144 bars of history; ~96% of indices qualify (the few
+    # brand-new custom indices legitimately can't yet), so threshold 0.90.
+    'index_magic_rs':        ('km_index_eod',     'index_id',  ['magic_rs_zone'],                                          0.90),
+    # rs_percentile ranks each equity by magic_rs within the day's universe, so
+    # its max coverage equals magic_rs coverage (both exchanges, no exchange
+    # split). Threshold 0.90 leaves margin below that ~95% ceiling while still
+    # catching the 0% regression that occurred when this step went unwired.
+    'rs_percentile':         ('km_equity_eod',    'equity_id', ['rs_percentile'],                                          0.90),
     'supertrend':            ('km_equity_eod',    'equity_id', ['supertrend_dir'],                                         0.90),
     'rolling_metrics':       ('km_equity_eod',    'equity_id', ['w52_high', 'w52_low', 'lifetime_high'],                   0.95),
     'd365':                  ('km_equity_eod',    'equity_id', ['d365_pct_chng'],                                          0.85),
@@ -91,8 +101,10 @@ LABELS: dict[str, str] = {
     'index_flow':            'Index Flow',
     'nse_flow':              'NSE Flow',
     'bse_flow':              'BSE Flow',
+    'index_magic_rs':        'Index Magic RS',
     'nse_magic_rs':          'NSE Magic RS',
     'bse_magic_rs':          'BSE Magic RS',
+    'rs_percentile':         'RS Percentile',
     'supertrend':            'SuperTrend',
     'rolling_metrics':       'Rolling Metrics',
     'd365':                  'D365 % Change',
@@ -487,8 +499,10 @@ DIMENSION_ORDER = [
     'index_flow',
     'nse_flow',
     'bse_flow',
+    'index_magic_rs',
     'nse_magic_rs',
     'bse_magic_rs',
+    'rs_percentile',
     'supertrend',
     'rolling_metrics',
     'd365',

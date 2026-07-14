@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import os
 import subprocess
 import sys
@@ -233,7 +234,7 @@ class VaNiAskRequest(BaseModel):
 
 
 # Dependency order for the 'all' backfill — downloads first (so EOD data
-# exists before any compute), then the compute DAG. 14 jobs total.
+# exists before any compute), then the compute DAG. 15 jobs total.
 BACKFILL_ALL_ORDER = [
     'index_eod_download',
     'nse_eod_download',
@@ -244,6 +245,7 @@ BACKFILL_ALL_ORDER = [
     'index_flow',
     'nse_flow',
     'bse_flow',
+    'index_magic_rs',
     'nse_magic_rs',
     'bse_magic_rs',
     'industry_composites',
@@ -629,6 +631,41 @@ def list_dimensions():
             for dim in KNOWN_DIMENSIONS
         ],
     }
+
+
+@app.get('/api/pipeline2/last-run')
+def last_daily_run():
+    """Latest daily_run summary — feeds the admin-only pipeline-health bar.
+
+    `has_error` is true only when a step actually errored (a partial from a low
+    fill-rate sets no error_msg), so the UI can surface a failed step without
+    firing on every routine partial.
+    """
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, trade_date, status, error_msg, progress_text, "
+                "       rows_affected, completed_at "
+                "FROM km_jobs WHERE job_type = 'daily_run' "
+                "ORDER BY created_at DESC, id DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+        if not row:
+            return {'exists': False}
+        return {
+            'exists': True,
+            'id': row['id'],
+            'trade_date': str(row['trade_date']) if row['trade_date'] else None,
+            'status': row['status'],
+            'error_msg': row['error_msg'],
+            'progress_text': row['progress_text'],
+            'rows_affected': row['rows_affected'],
+            'completed_at': row['completed_at'].isoformat() if row['completed_at'] else None,
+            'has_error': bool(row['error_msg']),
+        }
+    finally:
+        conn.close()
 
 
 @app.get('/api/pipeline2/scheduler')
@@ -6429,6 +6466,74 @@ def _fetch_liquid_universe(cur) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
+# Strongest sectors right now, fed into Discover so the model can surface a
+# leading sector (or a tighter sub-theme within it) even when a broad sectoral
+# index already 'covers' it — a leader like IT was previously suppressed purely
+# because NIFTY IT exists. Ranked by 5-day momentum; magic_rs_short_zone flags an
+# early relative turn even when the long-window RS still lags.
+_SECTOR_STRENGTH_SQL = """
+    WITH latest AS (SELECT MAX(trade_date) AS dt FROM km_index_eod)
+    SELECT s.name,
+           round(e.ret_5d::numeric, 2)  AS ret_5d,
+           round(e.ret_22d::numeric, 2) AS ret_22d,
+           e.flow_type,
+           e.magic_rs_short_zone
+    FROM km_index_eod e
+    JOIN km_index_symbols s ON s.id = e.index_id
+    WHERE e.trade_date = (SELECT dt FROM latest)
+      AND s.is_active = true
+      AND s.category = 'sectoral index'
+      AND e.ret_5d IS NOT NULL
+    ORDER BY e.ret_5d DESC
+    LIMIT 8
+"""
+
+
+def _fetch_sector_strength(cur) -> list[dict]:
+    cur.execute(_SECTOR_STRENGTH_SQL)
+    return [dict(r) for r in cur.fetchall()]
+
+
+# ── Theme near-duplicate detection ───────────────────────────────────────────
+# The LLM ignores the soft "don't repeat" prompt and re-proposes the same theme
+# under a new name (e.g. "Organised Jewellery Retail Mid-Tier Accumulation" vs an
+# existing "Organised Jewellery Retail & Gold Financing Ecosystem"). We enforce
+# de-duplication server-side on the returned themes instead of trusting the model.
+
+# Generic theme-name filler stripped before comparison, so only distinctive
+# business tokens (jewellery, retail, fintech, …) drive the match.
+_THEME_STOPWORDS = frozenset({
+    'accumulation', 'play', 'plays', 'ecosystem', 'story', 'stories', 'theme',
+    'themes', 'mid', 'tier', 'cap', 'caps', 'midcap', 'smallcap', 'largecap',
+    'large', 'small', 'and', 'or', 'the', 'of', 'in', 'for', 'with', 'amp',
+    'domestic', 'india', 'indian', 'sector', 'sectoral', 'structural', 'emerging',
+    'niche', 'upcycle', 'recovery', 'distressed', 'players', 'companies', 'stocks',
+    'basket', 'group', 'focused', 'oriented', 'pure', 'leaders', 'leadership',
+})
+
+
+def _theme_tokens(name: str) -> set:
+    """Distinctive lowercase tokens of a theme name (filler + short words dropped)."""
+    words = re.split(r'[^a-z0-9]+', (name or '').lower())
+    return {w for w in words if len(w) > 2 and w not in _THEME_STOPWORDS}
+
+
+def _is_near_duplicate(tokens: set, avoid_token_sets: list) -> bool:
+    """True if `tokens` substantially overlaps any set in `avoid_token_sets`.
+    Requires ≥2 shared distinctive tokens AND overlap coefficient ≥ 0.5, so
+    "Jewellery Retail …" collides with another jewellery-retail theme but two
+    unrelated single-word overlaps do not."""
+    if not tokens:
+        return False
+    for avoid in avoid_token_sets:
+        if not avoid:
+            continue
+        shared = tokens & avoid
+        if len(shared) >= 2 and len(shared) / min(len(tokens), len(avoid)) >= 0.5:
+            return True
+    return False
+
+
 class _DiscoverRequest(BaseModel):
     llm: str = 'claude'  # 'claude' | 'qwen'
 
@@ -6449,15 +6554,18 @@ async def custom_index_discover(req: _DiscoverRequest):
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             stocks = _fetch_signal_universe(cur)
+            strong_sectors = _fetch_sector_strength(cur)
 
-            # Themes the admin already has (created indices) or has already
-            # seen (staged — any status). Passed to the LLM as exclusions so
-            # a re-run doesn't burn tokens re-proposing the same ideas.
+            # Themes to avoid re-proposing: every live custom index (permanent —
+            # never re-propose something already built) plus anything staged in
+            # the LAST 7 DAYS (recent proposals the admin has already seen).
+            # Older staged themes are allowed to resurface after a week.
             cur.execute(
                 "SELECT name AS t FROM km_index_symbols "
                 "WHERE category = 'custom' AND is_active = true "
                 "UNION "
-                "SELECT theme_name AS t FROM km_discovered_themes"
+                "SELECT theme_name AS t FROM km_discovered_themes "
+                "WHERE discovered_at >= now() - interval '7 days'"
             )
             known_themes = sorted({r['t'] for r in cur.fetchall() if r['t']})
     finally:
@@ -6469,8 +6577,13 @@ async def custom_index_discover(req: _DiscoverRequest):
     system_prompt = (
         "You are a sector analyst reviewing Indian equities (NSE, plus liquid BSE-only listings). "
         "Identify cohesive sub-themes where 5+ companies share a common business model, "
-        "supply chain position, or structural tailwind — and where existing NSE sectoral "
-        "indices do not capture the group. Focus on themes with current accumulation signals. "
+        "supply chain position, or structural tailwind. Prefer groups that existing NSE sectoral "
+        "indices do NOT already capture. "
+        "EXCEPTION — do not ignore a leader: if a broad sector is showing notable current strength "
+        "(see the sector-strength context), surface it EVEN IF a sectoral index exists, but frame it "
+        "as a tighter, differentiated sub-theme that adds signal beyond the index (e.g. 'Midcap IT & "
+        "IT-Enabled Services' rather than plain 'IT', 'PSU Bank Re-rating' rather than 'Banks'). "
+        "Focus on themes with current accumulation signals. "
         "BSE scrips have numeric symbols — identify those companies by company_name, but "
         "always return the symbol field exactly as provided."
     )
@@ -6479,8 +6592,18 @@ async def custom_index_discover(req: _DiscoverRequest):
         f"propose them again, nor near-duplicates of them: {json.dumps(known_themes)}. "
         if known_themes else ""
     )
+    # (C) Feed the current sector leaders in so the model explicitly weighs them
+    # when clustering — magic_rs_short_zone flags an early relative turn.
+    sector_clause = (
+        f"Market context — the strongest sectors right now (by 5-day momentum, with money-flow "
+        f"and short-term relative-strength zone) are: {json.dumps(strong_sectors, default=str)}. "
+        f"When one of these leaders is strong, actively consider whether a tighter sub-theme within "
+        f"it belongs among your picks. "
+        if strong_sectors else ""
+    )
     user_prompt = (
         f"Here are active Indian stocks with recent signals: {json.dumps([dict(r) for r in stocks], default=str)}. "
+        f"{sector_clause}"
         f"{exclusion_clause}"
         "Identify 3–5 NEW emerging themes. For each theme return: theme_name, description, "
         "rationale, constituent_symbols[]. Use each stock's symbol exactly as given "
@@ -6504,6 +6627,22 @@ async def custom_index_discover(req: _DiscoverRequest):
             raise ValueError('expected JSON array')
     except Exception:
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
+
+    # Enforce de-duplication server-side — the model routinely re-proposes an
+    # excluded theme under a new name, so drop any returned theme that overlaps a
+    # known (created / recently-staged) theme, and drop repeats within this batch.
+    avoid_token_sets = [_theme_tokens(n) for n in known_themes]
+    deduped_themes = []
+    for t in themes:
+        tokens = _theme_tokens(str(t.get('theme_name', '')))
+        if _is_near_duplicate(tokens, avoid_token_sets):
+            continue
+        deduped_themes.append(t)
+        avoid_token_sets.append(tokens)  # so the rest of THIS batch dedups too
+    dropped = len(themes) - len(deduped_themes)
+    if dropped:
+        log.info(f'custom-index discover: dropped {dropped} near-duplicate theme(s)')
+    themes = deduped_themes
 
     # Persist to the staging table (migration 120) so recommendations survive
     # navigation and don't require re-invoking the LLM. Each theme gets its

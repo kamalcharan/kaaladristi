@@ -57,6 +57,38 @@ def extract_zip(zip_bytes: bytes, d: date, prefix: str = 'nse_cm') -> str:
     return csv_path
 
 
+def extract_zip_member(zip_bytes: bytes, d: date, prefix: str = 'bse_deliv',
+                       member_exts: tuple[str, ...] = ('.txt', '.csv'),
+                       out_ext: str = '.txt') -> str:
+    """
+    Extract the first member matching one of member_exts from an in-memory ZIP,
+    saving both the ZIP and the extracted member to data/bhav/YYYY/.
+    Returns the path to the extracted file.
+
+    Generalises extract_zip() (which only handles '.csv' members) for feeds like
+    BSE's SCBSEALL delivery file, whose payload is a pipe-delimited '.TXT'.
+    """
+    date_str = d.strftime('%Y%m%d')
+    year_dir = ensure_year_dir(d)
+
+    zip_path = os.path.join(year_dir, f'{prefix}_{date_str}.zip')
+    with open(zip_path, 'wb') as f:
+        f.write(zip_bytes)
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = [n for n in zf.namelist()
+                 if n.lower().endswith(tuple(e.lower() for e in member_exts))]
+        if not names:
+            raise ValueError(f'No {member_exts} member found in ZIP: {zf.namelist()}')
+        content = zf.read(names[0])
+
+    out_path = os.path.join(year_dir, f'{prefix}_{date_str}{out_ext}')
+    with open(out_path, 'wb') as f:
+        f.write(content)
+
+    return out_path
+
+
 def save_csv(content: bytes, d: date, prefix: str = 'nse_deliv') -> str:
     """Save a CSV file directly (not zipped). Returns path."""
     date_str = d.strftime('%Y%m%d')

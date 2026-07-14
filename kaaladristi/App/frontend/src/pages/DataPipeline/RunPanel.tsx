@@ -106,6 +106,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
     'index_eod_download',
     'index_indicators',
     'index_flow',
+    'index_magic_rs',
     'industry_composites',
     'market_breadth',
     'breadth_roc',
@@ -184,7 +185,7 @@ export default function RunPanel({ selection, onEnqueued }: Props) {
             className="w-full mt-0.5 px-2 py-1.5 text-xs bg-kd-bg rounded border border-kd-border/50 text-secondary"
           >
             {mode === 'backfill' && (
-              <option value="all">All dimensions (14 jobs, dependency order)</option>
+              <option value="all">All dimensions (15 jobs, dependency order)</option>
             )}
             {dims?.dimensions.map(d => (
               <option key={d.key} value={d.key} disabled={!d.fixable}>
