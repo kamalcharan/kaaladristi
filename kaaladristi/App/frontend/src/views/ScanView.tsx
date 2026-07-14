@@ -12,7 +12,7 @@ import BreakoutSurgeCards from '@/components/domain/BreakoutSurgeTable';
 import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
 import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
-import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
+import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 
 // ── Sort ──────────────────────────────────────────────────────
 
@@ -905,7 +905,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
 }) {
   const navigate = useNavigate();
   const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
-  const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<ScanFilters>(FPB_DEFAULT_FILTERS);
   const [vaniOnly, setVaniOnly] = useState(false);
   const { data: rawStocks = [], isLoading, error } = useScan('flower_pot_burst', exchangeFilter, timeframe);
   const filtered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);

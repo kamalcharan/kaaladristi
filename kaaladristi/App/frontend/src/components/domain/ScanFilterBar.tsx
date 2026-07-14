@@ -21,9 +21,21 @@ export interface ScanFilters {
   score22dMin?: number;
   /** Doctrine filter: Score 5D > 0 AND Score 5D ≥ Score 22D (conviction building). */
   accelerating?: boolean;
+  // ── Flower Pot Burst-specific ──
+  /** Release direction / phase: all | burst (up) | shatter (down) | coiling (watchlist). */
+  fpbPhase?: 'all' | 'burst' | 'shatter' | 'coiling';
+  /** Minimum compression tightness (fpb_compression_score). */
+  tightnessMin?: number;
+  /** Minimum consecutive coiled days in the last 22 sessions (fpb_setup_days). */
+  coiledDaysMin?: number;
 }
 
 export const EMPTY_FILTERS: ScanFilters = {};
+
+// Flower Pot Burst starts with NO market-cap floor — genuine coils are common in
+// small caps, and the compression gate already enforces a ₹20 price floor. The
+// generic ₹100 Cr default silently dropped them (the "no data" report).
+export const FPB_DEFAULT_FILTERS: ScanFilters = {};
 
 // Applied on load / preset switch (owner request 2026-07-12): a gentle ₹100 Cr
 // market-cap floor. Note it only bites stocks with a KNOWN mcap (mostly NSE) —
@@ -36,12 +48,13 @@ const STAGE_PRESETS = new Set([
   'stage_3_watch', 'stage_4_leaders', 'vani_exit_watch',
 ]);
 
-type FilterGroup = 'stage' | 'conviction' | 'breakout' | 'standard';
+type FilterGroup = 'stage' | 'conviction' | 'breakout' | 'fpb' | 'standard';
 
 function getFilterGroup(presetId: string): FilterGroup {
   if (STAGE_PRESETS.has(presetId)) return 'stage';
   if (presetId === 'conviction_flow') return 'conviction';
   if (presetId === 'breakout_surge') return 'breakout';
+  if (presetId === 'flower_pot_burst') return 'fpb';
   return 'standard';
 }
 
@@ -50,7 +63,8 @@ function getFilterGroup(presetId: string): FilterGroup {
 export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanStock[] {
   const { mcapMin, mcapMax, industries, move5dMax, move22dMax, move66dMax,
     surgeMin, deliveryPctMin, rvolMin, pctFromBreakoutMin, pctFromBreakoutMax,
-    score5dMin, score22dMin, accelerating } = filters;
+    score5dMin, score22dMin, accelerating,
+    fpbPhase, tightnessMin, coiledDaysMin } = filters;
 
   if (
     mcapMin == null && mcapMax == null &&
@@ -58,7 +72,8 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     move5dMax == null && move22dMax == null && move66dMax == null &&
     surgeMin == null && deliveryPctMin == null && rvolMin == null &&
     pctFromBreakoutMin == null && pctFromBreakoutMax == null &&
-    score5dMin == null && score22dMin == null && !accelerating
+    score5dMin == null && score22dMin == null && !accelerating &&
+    (!fpbPhase || fpbPhase === 'all') && tightnessMin == null && coiledDaysMin == null
   ) return stocks;
 
   return stocks.filter((s) => {
@@ -78,6 +93,12 @@ export function applyFilters(stocks: ScanStock[], filters: ScanFilters): ScanSto
     if (score5dMin  != null && (s.score_5d  ?? -1) < score5dMin)  return false;
     if (score22dMin != null && (s.score_22d ?? -1) < score22dMin) return false;
     if (accelerating && !((s.score_5d ?? 0) > 0 && (s.score_5d ?? 0) >= (s.score_22d ?? 0))) return false;
+    if (tightnessMin != null && (s.fpb_compression_score ?? 0) < tightnessMin) return false;
+    if (coiledDaysMin != null && (s.fpb_setup_days ?? 0) < coiledDaysMin) return false;
+    if (fpbPhase && fpbPhase !== 'all') {
+      const want = fpbPhase === 'burst' ? 'BURST' : fpbPhase === 'shatter' ? 'SHATTER' : 'SETUP';
+      if (s.fpb_phase !== want) return false;
+    }
     return true;
   });
 }
@@ -89,7 +110,8 @@ export function hasActiveFilters(f: ScanFilters): boolean {
     f.move5dMax != null || f.move22dMax != null || f.move66dMax != null ||
     f.surgeMin != null || f.deliveryPctMin != null || f.rvolMin != null ||
     f.pctFromBreakoutMin != null || f.pctFromBreakoutMax != null ||
-    f.score5dMin != null || f.score22dMin != null || !!f.accelerating
+    f.score5dMin != null || f.score22dMin != null || !!f.accelerating ||
+    (f.fpbPhase != null && f.fpbPhase !== 'all') || f.tightnessMin != null || f.coiledDaysMin != null
   );
 }
 
@@ -349,29 +371,33 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
             onChange={(v) => set('industries', v.length > 0 ? v : undefined)}
           />
 
-          {/* Scores — all groups (owner doctrine: scores are the leading signal).
-              Placeholders carry the calibrated equity-scale landmarks so users
-              don't guess the range (median ≈ 5, top decile ≈ 28). */}
-          <NumInput label="Score 5D Min" value={filters.score5dMin} onChange={(v) => set('score5dMin', v)} placeholder="p90≈28" />
-          <NumInput label="Score 22D Min" value={filters.score22dMin} onChange={(v) => set('score22dMin', v)} placeholder="—" />
-          <div style={fieldStyle}>
-            <span style={labelStyle}>Accelerating</span>
-            <label style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px', height: '26px',
-              fontSize: '11px', color: filters.accelerating ? 'var(--text-primary)' : 'var(--text-muted)',
-              cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
-            }}>
-              <input
-                type="checkbox"
-                checked={!!filters.accelerating}
-                onChange={(e) => set('accelerating', e.target.checked || undefined)}
-                style={{ accentColor: 'var(--accent)' }}
-              />
-              5D ≥ 22D
-            </label>
-          </div>
+          {/* Scores — momentum groups only (owner doctrine: scores lead). Hidden
+              for FPB, where a coil deliberately has low scores. Placeholders carry
+              the calibrated equity-scale landmarks (median ≈ 5, top decile ≈ 28). */}
+          {group !== 'fpb' && (
+            <>
+              <NumInput label="Score 5D Min" value={filters.score5dMin} onChange={(v) => set('score5dMin', v)} placeholder="p90≈28" />
+              <NumInput label="Score 22D Min" value={filters.score22dMin} onChange={(v) => set('score22dMin', v)} placeholder="—" />
+              <div style={fieldStyle}>
+                <span style={labelStyle}>Accelerating</span>
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px', height: '26px',
+                  fontSize: '11px', color: filters.accelerating ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: 'pointer', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={!!filters.accelerating}
+                    onChange={(e) => set('accelerating', e.target.checked || undefined)}
+                    style={{ accentColor: 'var(--accent)' }}
+                  />
+                  5D ≥ 22D
+                </label>
+              </div>
 
-          <div style={{ width: '1px', height: '36px', background: 'var(--border)', flexShrink: 0 }} />
+              <div style={{ width: '1px', height: '36px', background: 'var(--border)', flexShrink: 0 }} />
+            </>
+          )}
 
           {/* Group-specific filters */}
           {(group === 'stage' || group === 'standard') && (
@@ -399,6 +425,27 @@ export function ScanFilterBar({ presetId, stocks, filters, onFiltersChange }: Sc
                 <NumInput label="% From Brk Max" value={filters.pctFromBreakoutMax} onChange={(v) => set('pctFromBreakoutMax', v)} placeholder="%" />
               </div>
               <NumInput label="5D Move <" value={filters.move5dMax} onChange={(v) => set('move5dMax', v)} placeholder="%" />
+            </>
+          )}
+
+          {group === 'fpb' && (
+            <>
+              <div style={fieldStyle}>
+                <span style={labelStyle}>Phase</span>
+                <select
+                  value={filters.fpbPhase ?? 'all'}
+                  onChange={(e) => set('fpbPhase', e.target.value === 'all' ? undefined : (e.target.value as ScanFilters['fpbPhase']))}
+                  style={{ ...inputStyle, width: '108px', height: '26px', cursor: 'pointer' }}
+                >
+                  <option value="all">All</option>
+                  <option value="burst">🌸 Bursts</option>
+                  <option value="shatter">💥 Shatters</option>
+                  <option value="coiling">Coiling</option>
+                </select>
+              </div>
+              <NumInput label="Tightness Min" value={filters.tightnessMin} onChange={(v) => set('tightnessMin', v)} placeholder="1.0" />
+              <NumInput label="Coiled Days Min" value={filters.coiledDaysMin} onChange={(v) => set('coiledDaysMin', v)} placeholder="d" />
+              <NumInput label="Delivery% Min" value={filters.deliveryPctMin} onChange={(v) => set('deliveryPctMin', v)} placeholder="%" />
             </>
           )}
 
@@ -439,5 +486,8 @@ function countActive(f: ScanFilters): number {
   if (f.score5dMin != null) n++;
   if (f.score22dMin != null) n++;
   if (f.accelerating) n++;
+  if (f.fpbPhase != null && f.fpbPhase !== 'all') n++;
+  if (f.tightnessMin != null) n++;
+  if (f.coiledDaysMin != null) n++;
   return n;
 }
