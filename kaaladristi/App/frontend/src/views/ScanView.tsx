@@ -983,21 +983,30 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
             </div>
           )}
 
-          {/* Pot Shatter — the downward release. Only rendered when one fires. */}
-          {shatters.length > 0 && (
-            <>
-              <ScanSectionLabel>
-                💥 Flower Pot Shatter · {shatters.length} today
-              </ScanSectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
-                {shatters.map((stock) => (
-                  <div key={stock.equity_id}>
-                    <StockCard stock={stock} />
-                    <FpbMetricLine stock={stock} />
-                  </div>
-                ))}
-              </div>
-            </>
+          {/* Flower Pot Shatter — the downward release. Always shown (parallel to
+              Bursts) so the section is visible even on the common no-shatter day. */}
+          <ScanSectionLabel>
+            💥 Flower Pot Shatter · {shatters.length} today
+          </ScanSectionLabel>
+          {shatters.length === 0 ? (
+            <div style={{
+              padding: '20px 24px', textAlign: 'center', marginBottom: 20,
+              background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
+            }}>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                No coil released downward today. Shatters are rarer than bursts — the compression gate
+                screens out already-declining (Stage 3/4) stocks, so a healthy coil cracking down hard is uncommon.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
+              {shatters.map((stock) => (
+                <div key={stock.equity_id}>
+                  <StockCard stock={stock} />
+                  <FpbMetricLine stock={stock} />
+                </div>
+              ))}
+            </div>
           )}
 
           {/* ✦ active isolates the actionable releases — hide the coiling watchlist. */}
