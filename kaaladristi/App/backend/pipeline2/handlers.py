@@ -510,6 +510,18 @@ def handle_scan_refresh(conn, trade_date: date, force: bool,
     finally:
         conn.autocommit = prev_autocommit
 
+    # Flower Pot Burst day-2 state: record today's releases + judge yesterday's.
+    # Runs AFTER the matview refresh (it reads today's releases from it). Best-
+    # effort — a missing function (migration 156 not applied) must not fail the
+    # scan refresh.
+    on_progress('maintaining fpb day-2 state', 85)
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT maintain_fpb_active(CURRENT_DATE)')
+        conn.commit()
+    except psycopg2.Error:
+        conn.rollback()  # km_fpb_active / maintain_fpb_active absent — skip silently
+
     on_progress('measuring refreshed row count', 90)
     with conn.cursor() as cur:
         cur.execute('SELECT count(*) FROM km_scan_results')

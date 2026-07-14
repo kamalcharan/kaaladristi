@@ -2112,6 +2112,40 @@ function fpbRowToScanStock(r: any): ScanStock {
   };
 }
 
+// ── Flower Pot — Day-2 position state (km_fpb_active, migration 156) ──────────
+export interface FpbActiveRow {
+  equity_id: number;
+  symbol: string;
+  direction: 'UP' | 'DOWN';
+  release_date: string;
+  release_close: number | null;
+  release_midpoint: number | null;
+  sl_level: number | null;
+  target_level: number | null;
+  quality: number | null;
+  status: string; // ACTIVE | HOLDING | CRACKED | TARGET_HIT | STOPPED | EXPIRED
+  last_eval_date: string | null;
+  last_close: number | null;
+}
+
+/** Recent Flower Pot releases + their day-2 hold/crack verdict and stop/target.
+ *  Returns [] gracefully if km_fpb_active isn't deployed yet. */
+export async function fetchFpbActive(): Promise<FpbActiveRow[]> {
+  const cutoff = new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  try {
+    const { data, error } = await from('km_fpb_active')
+      .select('equity_id,symbol,direction,release_date,release_close,release_midpoint,sl_level,target_level,quality,status,last_eval_date,last_close')
+      .gte('release_date', cutoff)
+      .order('release_date', { ascending: false })
+      .limit(100)
+      .execute();
+    if (error || !Array.isArray(data)) return [];
+    return data as FpbActiveRow[];
+  } catch {
+    return [];
+  }
+}
+
 async function fetchFlowerPotBurst(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
   // FPB is an NSE-universe scan; BSE-only returns nothing.
   if (exchangeFilter === 'BSE') return [];
