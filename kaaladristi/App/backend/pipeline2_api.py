@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import os
 import subprocess
 import sys
@@ -6429,6 +6430,46 @@ def _fetch_liquid_universe(cur) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
+# ── Theme near-duplicate detection ───────────────────────────────────────────
+# The LLM ignores the soft "don't repeat" prompt and re-proposes the same theme
+# under a new name (e.g. "Organised Jewellery Retail Mid-Tier Accumulation" vs an
+# existing "Organised Jewellery Retail & Gold Financing Ecosystem"). We enforce
+# de-duplication server-side on the returned themes instead of trusting the model.
+
+# Generic theme-name filler stripped before comparison, so only distinctive
+# business tokens (jewellery, retail, fintech, …) drive the match.
+_THEME_STOPWORDS = frozenset({
+    'accumulation', 'play', 'plays', 'ecosystem', 'story', 'stories', 'theme',
+    'themes', 'mid', 'tier', 'cap', 'caps', 'midcap', 'smallcap', 'largecap',
+    'large', 'small', 'and', 'or', 'the', 'of', 'in', 'for', 'with', 'amp',
+    'domestic', 'india', 'indian', 'sector', 'sectoral', 'structural', 'emerging',
+    'niche', 'upcycle', 'recovery', 'distressed', 'players', 'companies', 'stocks',
+    'basket', 'group', 'focused', 'oriented', 'pure', 'leaders', 'leadership',
+})
+
+
+def _theme_tokens(name: str) -> set:
+    """Distinctive lowercase tokens of a theme name (filler + short words dropped)."""
+    words = re.split(r'[^a-z0-9]+', (name or '').lower())
+    return {w for w in words if len(w) > 2 and w not in _THEME_STOPWORDS}
+
+
+def _is_near_duplicate(tokens: set, avoid_token_sets: list) -> bool:
+    """True if `tokens` substantially overlaps any set in `avoid_token_sets`.
+    Requires ≥2 shared distinctive tokens AND overlap coefficient ≥ 0.5, so
+    "Jewellery Retail …" collides with another jewellery-retail theme but two
+    unrelated single-word overlaps do not."""
+    if not tokens:
+        return False
+    for avoid in avoid_token_sets:
+        if not avoid:
+            continue
+        shared = tokens & avoid
+        if len(shared) >= 2 and len(shared) / min(len(tokens), len(avoid)) >= 0.5:
+            return True
+    return False
+
+
 class _DiscoverRequest(BaseModel):
     llm: str = 'claude'  # 'claude' | 'qwen'
 
@@ -6450,14 +6491,16 @@ async def custom_index_discover(req: _DiscoverRequest):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             stocks = _fetch_signal_universe(cur)
 
-            # Themes the admin already has (created indices) or has already
-            # seen (staged — any status). Passed to the LLM as exclusions so
-            # a re-run doesn't burn tokens re-proposing the same ideas.
+            # Themes to avoid re-proposing: every live custom index (permanent —
+            # never re-propose something already built) plus anything staged in
+            # the LAST 7 DAYS (recent proposals the admin has already seen).
+            # Older staged themes are allowed to resurface after a week.
             cur.execute(
                 "SELECT name AS t FROM km_index_symbols "
                 "WHERE category = 'custom' AND is_active = true "
                 "UNION "
-                "SELECT theme_name AS t FROM km_discovered_themes"
+                "SELECT theme_name AS t FROM km_discovered_themes "
+                "WHERE discovered_at >= now() - interval '7 days'"
             )
             known_themes = sorted({r['t'] for r in cur.fetchall() if r['t']})
     finally:
@@ -6504,6 +6547,22 @@ async def custom_index_discover(req: _DiscoverRequest):
             raise ValueError('expected JSON array')
     except Exception:
         raise HTTPException(status_code=502, detail=f'LLM returned unparseable JSON: {raw[:200]}')
+
+    # Enforce de-duplication server-side — the model routinely re-proposes an
+    # excluded theme under a new name, so drop any returned theme that overlaps a
+    # known (created / recently-staged) theme, and drop repeats within this batch.
+    avoid_token_sets = [_theme_tokens(n) for n in known_themes]
+    deduped_themes = []
+    for t in themes:
+        tokens = _theme_tokens(str(t.get('theme_name', '')))
+        if _is_near_duplicate(tokens, avoid_token_sets):
+            continue
+        deduped_themes.append(t)
+        avoid_token_sets.append(tokens)  # so the rest of THIS batch dedups too
+    dropped = len(themes) - len(deduped_themes)
+    if dropped:
+        log.info(f'custom-index discover: dropped {dropped} near-duplicate theme(s)')
+    themes = deduped_themes
 
     # Persist to the staging table (migration 120) so recommendations survive
     # navigation and don't require re-invoking the LLM. Each theme gets its
