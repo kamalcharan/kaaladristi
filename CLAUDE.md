@@ -382,7 +382,7 @@ AI_MODEL=claude-haiku-4-5      # any model the provider supports
 
 New migrations go in `App/DBscripts/km_migration_NNN_description.sql`.
 Run them directly in pgAdmin, DBeaver, or `psql` — **no Python wrapper scripts**.
-Next migration number: **151**.
+Next migration number: **152**.
 
 **Target database**: most migrations target `kaala_dristi_db`. Migrations that target `vani_db` must say so explicitly in the file header (example: migration 092).
 
@@ -611,6 +611,9 @@ backfill matches current depth and reaches NSE parity. True "deep history" is a
 separate post-launch initiative (ema_20 + NSE delivery + BSE delivery to the same
 depth + rolling recompute). Owner to decide target enriched-history depth. Details +
 per-year coverage tables in the audit doc.
+
+### 📋 FOR REVIEW (owner) — Industry Rotation spec (ranking basis + peer RS)
+`industryrotation.md` (repo root, 2026-07-14) — implementation-review spec for `/industry-transition`. Documents that `industry_rank` is ranked **purely by `avg_magic_rs`** (single line in `compute_all_industry_composites`; all other aggregate columns are display-only), that this behaves like a ~22-day/structural clock and diverges from the house **5D/22D** language by 80–150 rank positions (live evidence table included), and the resulting UX inconsistency vs Sector Rotation (return-momentum clock). Proposes: add `avg_ret_5d/avg_ret_22d` to `km_industry_eod`, lead ranking with a return clock (keep Magic RS as a cross-check/sort), and a layered benchmark model. **Owner decision captured: peer-relative Magic RS will be a selectable benchmark on BOTH single-stock and index views** (default NIFTY 500) — `compute_magic_rs_batch` already supports equity-vs-index and index-vs-index; blocker is a curated `industry → sector-index` mapping table (`index_names[]` is too sparse). Phased plan + open questions in the doc. Charan to review before build.
 
 ### 📋 FOR REVIEW (owner) — Pulse/Study UX rework
 `kaaladristi/docs/PulseUX.md` documents the equity **Study** page rework into a decision-first workbench (Read → Snapshot → Evidence → Chart), the two-layer Pulse/Study contract, every widget, and a before/after. Charan to review. Open/deferred items are listed there (Conviction latest-bar pipeline fix, selectable Magic RS benchmark, Conviction scrubber-awareness, Big Money threshold calibration, Correlation-for-indexes, Pulse-mode retirement).

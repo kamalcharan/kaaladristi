@@ -79,6 +79,18 @@ class StepOutcome:
         }
 
 
+# Only these steps failing means the run genuinely failed — without fresh EOD
+# rows the day has no usable data. Every other step is enrichment layered on top;
+# if one of those fails the day is still usable, so the run is 'partial' (not
+# 'failed') and the failing step can be re-run on its own via a fix job. This is
+# what stops a single non-critical step (e.g. scan_refresh) from marking the whole
+# daily_run failed — and keeps the day from being withheld from the frontend
+# (a 'failed' run is not written to km_trading_calendar).
+CRITICAL_STEPS = frozenset({
+    'index_eod_download', 'nse_eod_download', 'bse_eod_download',
+})
+
+
 @dataclass
 class RunOutcome:
     trade_date: str
@@ -86,11 +98,16 @@ class RunOutcome:
 
     @property
     def overall_status(self) -> str:
-        if any(s.status == 'failed' for s in self.steps):
+        if any(s.status == 'failed' and s.dimension in CRITICAL_STEPS for s in self.steps):
             return 'failed'
-        if any(s.status == 'partial' for s in self.steps):
+        if any(s.status in ('failed', 'partial') for s in self.steps):
             return 'partial'
         return 'completed'
+
+    @property
+    def failed_steps(self) -> list[str]:
+        """Dimensions that hard-failed this run (any severity)."""
+        return [s.dimension for s in self.steps if s.status == 'failed']
 
     def to_dict(self) -> dict:
         return {

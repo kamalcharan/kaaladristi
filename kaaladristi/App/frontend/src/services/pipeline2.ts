@@ -185,3 +185,18 @@ export interface SchedulerInfo {
 
 export const fetchSchedulerInfo = () =>
   apiGet<SchedulerInfo>('/api/pipeline2/scheduler');
+
+export interface LastRun {
+  exists: boolean;
+  id?: number;
+  trade_date?: string | null;
+  status?: JobStatus;
+  error_msg?: string | null;
+  progress_text?: string | null;
+  rows_affected?: number | null;
+  completed_at?: string | null;
+  has_error?: boolean;
+}
+
+export const fetchLastRun = () =>
+  apiGet<LastRun>('/api/pipeline2/last-run');
