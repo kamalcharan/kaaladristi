@@ -886,12 +886,27 @@ function scanPowerSell(bundle: ScanDataBundle): ScanStock[] {
 
 /** Scan 3: Smart Money Loading */
 function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
-  // Industries with pct_accumulation > 60
-  const accumulatingIndustries = new Set(
-    bundle.industries
-      .filter((i) => (i.pct_accumulation ?? 0) > 60)
-      .map((i) => i.industry)
-  );
+  // Industry gate — where accumulation is concentrated today.
+  //
+  // pct_accumulation is the share of an industry's stocks showing accumulation.
+  // Empirically its distribution is low-skewed: on a typical day the median
+  // industry sits ~15% and even the single most-accumulating one rarely clears
+  // 50-67%. The old absolute `> 60` gate therefore fired for 0-1 industries,
+  // leaving Smart Money chronically empty. We keep the absolute bar (so genuinely
+  // broad-accumulation industries always qualify) but OR it with a relative
+  // top-decile cutoff, so the scan reliably reflects the strongest-accumulating
+  // corner of the market instead of blanking. delivery_pct at the stock level
+  // keeps the list grounded in real delivery-based buying.
+  const ranked = bundle.industries
+    .filter((i) => (i.pct_accumulation ?? 0) > 0)
+    .sort((a, b) => (b.pct_accumulation ?? 0) - (a.pct_accumulation ?? 0));
+  const decileCount = Math.max(5, Math.ceil(ranked.length / 10));
+  const accumulatingIndustries = new Set<string>();
+  ranked.forEach((ind, i) => {
+    if ((ind.pct_accumulation ?? 0) > 55 || i < decileCount) {
+      accumulatingIndustries.add(ind.industry);
+    }
+  });
 
   const results: ScanStock[] = [];
   for (const [id] of bundle.latestEod) {
@@ -902,7 +917,7 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
 
     if ((stock.delivery_pct ?? 0) <= 60) continue;
 
-    // rss_value must be positive
+    // rss_value must be positive (guards degenerate rows; RSS is RSI-derived 0-100)
     if ((stock.rss_value ?? 0) <= 0) continue;
 
     results.push(stock);
