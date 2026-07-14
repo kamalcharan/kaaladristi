@@ -93,7 +93,7 @@ function EnrichedStockCard({ stock }: { stock: IndustryEnrichedStock }) {
         <div className="flex items-start gap-2 shrink-0 ml-3">
           <div className="text-right">
             <p className="text-sm font-bold font-mono text-[var(--text-primary)] leading-tight">
-              {stock.close.toFixed(2)}
+              {stock.close != null ? stock.close.toFixed(2) : '—'}
             </p>
             <p className={cn(
               'text-[11px] font-bold font-mono',
