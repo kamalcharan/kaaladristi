@@ -33,7 +33,6 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'power_buy',            name: 'Strength Confluence',   description: 'Stocks where multiple bullish conditions converge in leading or rotating-in industries', limit: 25,  universe: 'NSE_BSE',  category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'power_sell',           name: 'Weakness Confluence',   description: 'Stocks where multiple bearish conditions converge in lagging or rotating-out industries', limit: 25,  universe: 'NSE_BSE',  category: '',              category_label: '',              category_color: '',        category_sort: 99, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
   { id: 'smart_money',          name: 'Smart Money Loading',   description: 'Industries with heavy accumulation and rising institutional presence',                     limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_smart' },
-  { id: 'fresh_breakout',       name: 'Fresh Breakouts',       description: 'Stocks breaking above recent highs with strong volume in leading industries',              limit: 25,  universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'quiet_accumulation',   name: 'Quiet Accumulation',    description: 'Under-the-radar industries where smart money is quietly building positions',               limit: 25,  universe: 'NSE_ONLY', category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'distribution_warning', name: 'Distribution Warnings', description: 'Previously strong stocks showing signs of institutional exit',                             limit: 25,  universe: 'NSE_BSE',  category: 'market',        category_label: 'Market',        category_color: '#8b5cf6', category_sort: 4, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_distrib_and_weakness' },
   { id: 'conviction_flow',      name: 'Conviction Flow',       description: 'Stocks where 5-day delivery value is outpacing the 22-day norm',                          limit: 50,  universe: 'NSE_ONLY', category: 'flow',          category_label: 'Flow',          category_color: '#3b82f6', category_sort: 3, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
@@ -915,36 +914,14 @@ function scanSmartMoney(bundle: ScanDataBundle): ScanStock[] {
     .slice(0, 25);
 }
 
-/** Scan 4: Fresh Breakouts */
-function scanFreshBreakout(bundle: ScanDataBundle): ScanStock[] {
-  const { leading } = getIndustryClassifications(bundle);
-
-  const results: ScanStock[] = [];
-  for (const [id] of bundle.latestEod) {
-    const stock = buildScanStock(id, bundle, 'fresh_breakout');
-    if (!stock || !stock.industry) continue;
-    if (!leading.has(stock.industry)) continue;
-    if ((stock.rvol ?? 0) <= 2) continue;
-
-    // close > 20-day high
-    const history = bundle.eodHistory.get(id) ?? [];
-    const closesLast20 = history.slice(1, 21).map((h) => h.close);
-    const high20 = closesLast20.length > 0 ? Math.max(...closesLast20) : Infinity;
-    if (stock.close <= high20) continue;
-
-    // close > sma_150
-    const eod = bundle.latestEod.get(id);
-    if (eod && eod.sma_150 && stock.close <= eod.sma_150) continue;
-
-    results.push(stock);
-  }
-
-  const sorted = results
-    .sort((a, b) => (b.rvol ?? 0) - (a.rvol ?? 0))
-    .slice(0, 25);
-
-  return sorted;
-}
+// Scan 4 "Fresh Breakouts" retired 2026-07-13 (B1): it was a near-duplicate of
+// Breakout Surge (both "closed above a breakout level"), with two extras —
+// a leading-industry gate and rvol>2. Breakout Surge is the robust superset
+// (DB-precomputed breakout levels, full universe, conviction-ranked by Score
+// 5D), and its sector scoping is available via the ScanFilterBar `industries`
+// filter + the rvol column. The kd_scan_presets row is deactivated in
+// migration 152; this handler + preset are removed so a stale DB row can't
+// dispatch to a missing function.
 
 /** Scan 5: Quiet Accumulation (contrarian) */
 function scanQuietAccumulation(bundle: ScanDataBundle): ScanStock[] {
@@ -1900,7 +1877,6 @@ const SCAN_FUNCTIONS: Record<string, (bundle: ScanDataBundle) => ScanStock[]> = 
   power_buy: scanPowerBuy,
   power_sell: scanPowerSell,
   smart_money: scanSmartMoney,
-  fresh_breakout: scanFreshBreakout,
   quiet_accumulation: scanQuietAccumulation,
   distribution_warning: scanDistributionWarning,
   conviction_flow: scanConvictionFlow,
