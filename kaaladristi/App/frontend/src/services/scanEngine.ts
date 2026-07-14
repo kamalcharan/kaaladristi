@@ -39,7 +39,6 @@ export const SCAN_PRESETS: ScanDefinition[] = [
   { id: 'breakout_surge',       name: 'Breakout Surge',        description: 'NSE stocks closing above their 20-day high on a green day — ranked by Score 5D',        limit: 500, universe: 'NSE_ONLY', category: 'price_action',  category_label: 'Price Action',  category_color: '#f59e0b', category_sort: 1, is_default_tab: true,  timeframe: 'daily', vani_rule: 'is_vani_surge_or_breakout' },
   { id: 'stage_2_leaders',      name: 'Stage 2 Leaders',       description: 'Stocks in confirmed Weinstein Stage 2 — SMA200 rising, proper 52-week position',          limit: 500, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_s2' },
   { id: 'stage_2_watch',        name: 'Stage 2 Watch',         description: 'Stocks approaching Stage 2 — MA stacking confirmed, SMA200 not yet rising. Watch for Stage 2 breakout.', limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: true, timeframe: 'daily', vani_rule: 'is_vani_s2' },
-  { id: 'vani_opportunity',     name: 'VaNi Strength Watch',   description: 'Highest conviction setups — Stage 2 confirmed with top RS momentum. Alpha Edge formula + VaNi RS filter.', limit: 25, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
   { id: 'stage_4_leaders',      name: 'Stage 4 Leaders',       description: 'Confirmed downtrend — death cross, below both MAs',                                        limit: 200, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'stage_3_watch',        name: 'Stage 3 Watch',         description: 'Entering weakness — SMA50 converging toward SMA200',                                       limit: 100, universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'is_vani_weakness' },
   { id: 'vani_exit_watch',      name: 'VaNi Weakness Watch',   description: 'Highest conviction weakness — lowest RS, death cross confirmed',                            limit: 25,  universe: 'NSE_ONLY', category: 'stage_analysis', category_label: 'Stage Analysis', category_color: '#22c55e', category_sort: 2, is_default_tab: false, timeframe: 'daily', vani_rule: 'always_true' },
@@ -1425,99 +1424,6 @@ async function fetchStage2Watch(exchangeFilter: ExchangeFilter): Promise<ScanSto
   });
 }
 
-/** Scan: VaNi Opportunity — S2 confirmed + RS percentile > 80 + Alpha Edge. Top 25. */
-async function fetchVaNiOpportunity(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  const completedDates = await fetchRecentDates(1);
-  const latestDate: string | null = completedDates[0] ?? null;
-  if (!latestDate) return [];
-
-  const { data: rows } = await from('km_equity_eod')
-    .select([
-      'equity_id', 'trade_date', 'close', 'open', 'high', 'low',
-      'pct_chng', 'magic_rs', 'magic_rs_zone', 'rss_value', 'rss_spread',
-      'rsi_14', 'rvol', 'flow_type', 'supertrend_dir',
-      'sma_50', 'sma_150', 'sma_200', 'sma200_rising', 'ema_20', 'atr_14',
-      'w52_high', 'w52_low', 'lifetime_high',
-      'avg_amt_5d', 'avg_amt_22d', 'delivery_surge_x',
-      'sniper_inst', 'sniper_hot', 'accum_distrib',
-      'volume_divergence_flag', 'delivery_pct',
-      'dot_svd', 'dot_sbd', 'dot_syd',
-      'stage', 'rs_percentile', 'chartink_score',
-      'is_vani_s2', 'is_vani_strength', 'is_vani_rs',
-      'score_5d', 'score_22d',
-      'km_equity_symbols(id,symbol,company_name,exchange,industry,mcap_cr,isin)',
-    ].join(','))
-    .eq('trade_date', latestDate)
-    .is('is_vani_s2', 'true')
-    .order('rs_percentile', { ascending: false })
-    .limit(50)
-    .execute();
-
-  const filtered = (rows ?? []) as any[];
-
-  // ISIN dedup: prefer NSE
-  const isinMap = new Map<string, any>();
-  for (const row of filtered) {
-    const sym = row.km_equity_symbols;
-    if (!sym) continue;
-    if (exchangeFilter === 'NSE' && sym.exchange !== 'NSE') continue;
-    if (exchangeFilter === 'BSE' && sym.exchange !== 'BSE') continue;
-    const isin = sym.isin;
-    if (!isin) { isinMap.set(`noisin:${row.equity_id}`, row); continue; }
-    const existing = isinMap.get(isin);
-    if (!existing || sym.exchange === 'NSE') isinMap.set(isin, row);
-  }
-
-  return Array.from(isinMap.values()).map((row): ScanStock => {
-    const sym = row.km_equity_symbols;
-    const pctBelow52wHigh = row.w52_high && row.w52_high > 0
-      ? ((row.w52_high - row.close) / row.w52_high) * 100 : null;
-    const ema20 = row.ema_20 ?? null;
-    const atr14 = row.atr_14 ?? null;
-    return {
-      equity_id: row.equity_id, trade_date: row.trade_date,
-      symbol: sym?.symbol ?? String(row.equity_id),
-      company_name: sym?.company_name ?? null,
-      industry: sym?.industry ?? null,
-      exchange: sym?.exchange ?? null, mcap_cr: sym?.mcap_cr ?? null,
-      close: row.close, open: row.open ?? null, high: row.high ?? null, low: row.low ?? null,
-      pct_chng: row.pct_chng ?? null,
-      magic_rs: row.magic_rs ?? null, magic_rs_zone: row.magic_rs_zone ?? null,
-      rss_value: row.rss_value ?? null, rss_spread: row.rss_spread ?? null,
-      rsi_14: row.rsi_14 ?? null, rvol: row.rvol ?? null,
-      flow_type: row.flow_type ?? null, sniper_inst: row.sniper_inst ?? null,
-      sniper_hot: row.sniper_hot ?? null,
-      accum_distrib: row.accum_distrib ?? null,
-      volume_divergence_flag: row.volume_divergence_flag ?? null,
-      sma_50: row.sma_50 ?? null, sma_150: row.sma_150 ?? null,
-      sma_200: row.sma_200 ?? null, ema_20: ema20, atr_14: atr14,
-      w52_high: row.w52_high ?? null, w52_low: row.w52_low ?? null,
-      lifetime_high: row.lifetime_high ?? null,
-      delivery_pct: row.delivery_pct ?? null, supertrend_dir: row.supertrend_dir ?? null,
-      has_recent_svd: !!row.dot_svd, has_recent_sbd: !!row.dot_sbd, has_recent_syd: !!row.dot_syd,
-      avg_amt_5d: row.avg_amt_5d ?? null, avg_amt_22d: row.avg_amt_22d ?? null,
-      delivery_surge_x: row.delivery_surge_x ?? null,
-      avg_amt_66d: null, xAmt: null,
-      rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
-      rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-      magicRsTrend: [],
-      score_5d:  row.score_5d  != null ? Number(row.score_5d)  : null,
-      score_22d: row.score_22d != null ? Number(row.score_22d) : null,
-      reward: ema20 && atr14 ? (ema20 + atr14) - row.close : null,
-      rewardPct: ema20 && atr14 && atr14 > 0 ? ((ema20 + atr14) - row.close) / atr14 : null,
-      pctBelow52wHigh,
-      vaniOpportunity: computeVaniOpportunity(row, getPresetMeta('vani_opportunity')?.vani_rule),
-      rs_percentile: row.rs_percentile ?? null,
-      stage: row.stage ?? null,
-      sma200_rising: row.sma200_rising ?? null,
-      chartink_score: row.chartink_score ?? null,
-      is_vani_s2: row.is_vani_s2 ?? null,
-      is_vani_strength: row.is_vani_strength ?? null,
-      is_vani_rs: row.is_vani_rs ?? null,
-    };
-  });
-}
-
 /** Scan: Stage 4 Leaders — death cross confirmed, sorted weakest RS first. */
 async function fetchStage4Leaders(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
   const completedDates = await fetchRecentDates(1);
@@ -1937,7 +1843,6 @@ export async function executeScan(
   // Direct DB query scans — skip bundle entirely
   if (scanId === 'stage_2_leaders')      return fetchStage2Leaders(exchangeFilter);
   if (scanId === 'stage_2_watch')        return fetchStage2Watch(exchangeFilter);
-  if (scanId === 'vani_opportunity')     return fetchVaNiOpportunity(exchangeFilter);
   if (scanId === 'stage_4_leaders')      return fetchStage4Leaders(exchangeFilter);
   if (scanId === 'stage_3_watch')        return fetchStage3Watch(exchangeFilter);
   if (scanId === 'vani_exit_watch')      return fetchVaNiExitWatch(exchangeFilter);
@@ -1986,13 +1891,13 @@ export interface VaniHighlights {
 const HIGHLIGHT_SOURCES: { id: string; side: 'strength' | 'caution'; label: string; cap?: number }[] = [
   { id: 'power_buy',            side: 'strength', label: 'Confluence' },
   { id: 'smart_money',          side: 'strength', label: 'Smart Money' },
-  { id: 'fresh_breakout',       side: 'strength', label: 'Breakout' },
+  // fresh_breakout retired (B1) · vani_opportunity retired (B2) — removed from
+  // the highlights union; their stocks still surface via breakout_surge / S2.
   { id: 'quiet_accumulation',   side: 'strength', label: 'Quiet Acc' },
   { id: 'conviction_flow',      side: 'strength', label: 'Flow' },
   { id: 'breakout_surge',       side: 'strength', label: 'Surge' },
   { id: 'stage_2_leaders',      side: 'strength', label: 'S2' },
   { id: 'stage_2_watch',        side: 'strength', label: 'S2 Watch' },
-  { id: 'vani_opportunity',     side: 'strength', label: 'VaNi', cap: 3 },
   { id: 'power_sell',           side: 'caution',  label: 'Weakness' },
   { id: 'distribution_warning', side: 'caution',  label: 'Distribution' },
   { id: 'stage_3_watch',        side: 'caution',  label: 'S3' },

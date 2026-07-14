@@ -1024,7 +1024,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   );
 
   // Stage 2 family — v2 card layout with S2 badge + % ATH
-  if (presetId === 'stage_2_leaders' || presetId === 'stage_2_watch' || presetId === 'vani_opportunity') {
+  if (presetId === 'stage_2_leaders' || presetId === 'stage_2_watch') {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}

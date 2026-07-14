@@ -275,23 +275,10 @@ const WIDGETS: CatalogItem[] = [
     tier_required: 'free',
     vani_explanation: 'These stocks have completed the MA stacking pattern (price > SMA50 > SMA200) but SMA200 is not yet rising. VaNi watches these as Stage 2 launchpad candidates.',
   },
-  {
-    id: 'vani_opportunity',
-    display_name: 'VaNi Opportunity',
-    description: 'Highest conviction Stage 2 setups with top RS momentum',
-    block_type: 'scanner',
-    placement: 'output_panel',
-    data_source: 'api_endpoint',
-    applicable_to: ['equity'],
-    tier_required: 'paid',
-    vani_explanation: 'VaNi highest conviction list — confirmed Stage 2 structure with RS percentile >80. These stocks satisfy the full Alpha Edge formula and rank in the top 20% of relative strength.',
-    vani_tags: [
-      { text: 'Alpha Edge formula', type: 'works' },
-      { text: 'RS percentile >80', type: 'works' },
-      { text: 'Stage 2 confirmed', type: 'works' },
-      { text: 'Top 25 only', type: 'limit' },
-    ],
-  },
+  // vani_opportunity ('VaNi Opportunity' / VaNi Strength Watch) retired (B2, 2026-07-13):
+  // it was Stage 2 Leaders filtered to the top-conviction VaNi subset. Stage 2 Leaders
+  // already computes per-row vaniOpportunity and carries a "✦ VaNi Highlight" filter,
+  // so the same stocks surface there — no capability lost.
   {
     id: 'conviction_flow',
     display_name: 'Conviction Flow',
