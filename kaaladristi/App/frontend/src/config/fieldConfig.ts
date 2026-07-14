@@ -243,7 +243,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     type: 'category',
     width: 86,
     formatFn: (val: any) =>
-      val === 'BURST' ? '🌸 Burst' : val === 'SHATTER' ? '💥 Shatter' : val === 'SETUP' ? 'Coiling' : '—',
+      val === 'BURST' ? '🌸 Burst' : val === 'SHATTER' ? '💥 Shatter' : val === 'SETUP' ? '🪴 Coiling' : '—',
     colorFn: (val: any) =>
       val === 'BURST' ? 'var(--bull)' : val === 'SHATTER' ? 'var(--bear)' : 'var(--text-secondary)',
   },
