@@ -129,6 +129,10 @@ export default function CustomIndexCreatePage() {
   const saveIndex = useCallback(async () => {
     setSaving(true);
     setSaveError(null);
+    // Track the index row so we can roll it back if the constituents write fails —
+    // otherwise a failed second insert leaves an empty custom index orphaned in
+    // km_index_symbols (it shows up in Sector Rotation with no members).
+    let createdIndexId: number | null = null;
     try {
       const { data: idxData, error: idxErr } = await from('km_index_symbols')
         .insert({ name: name.trim(), category: 'custom', exchange: 'NSE', is_active: true })
@@ -136,6 +140,7 @@ export default function CustomIndexCreatePage() {
       if (idxErr) throw new Error(idxErr.message);
       const newIndex = Array.isArray(idxData) ? idxData[0] : idxData;
       if (!newIndex?.id) throw new Error('Insert succeeded but returned no id');
+      createdIndexId = newIndex.id;
 
       const today = new Date().toISOString().split('T')[0];
       const rows = basket.map((r) => ({
@@ -150,6 +155,12 @@ export default function CustomIndexCreatePage() {
 
       navigate('/custom-index');
     } catch (err) {
+      if (createdIndexId != null) {
+        // Best-effort cleanup — don't mask the original error if this also fails.
+        try {
+          await from('km_index_symbols').delete().eq('id', createdIndexId).execute();
+        } catch { /* leave the original error to the user */ }
+      }
       setSaveError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
