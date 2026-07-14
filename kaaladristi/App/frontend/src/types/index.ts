@@ -566,7 +566,7 @@ export interface ScanStock {
   is_vani_surge?: boolean | null;
   is_vani_breakout?: boolean | null;
   // Flower Pot Burst fields (null for all other scans)
-  fpb_phase?: 'BURST' | 'SETUP' | null;
+  fpb_phase?: 'BURST' | 'SETUP' | 'SHATTER' | null;
   fpb_quality?: number | null;              // burst quality score (BURST rows)
   fpb_compression_score?: number | null;    // compression tightness (higher = tighter)
   fpb_vol_burst?: number | null;            // today volume / 22d avg

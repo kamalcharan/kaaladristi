@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights } from '@/services/scanEngine';
+import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, fetchFpbActive, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights, type FpbActiveRow } from '@/services/scanEngine';
 import type { ScanStock, ScanDefinition } from '@/types';
 
 const PIPELINE_URL = import.meta.env.VITE_PIPELINE_API_URL ?? '';
@@ -108,6 +108,16 @@ export function useVaniHighlights() {
     queryFn: fetchVaniHighlights,
     staleTime: 3 * 60 * 1000,
     retry: 1,
+  });
+}
+
+/** Recent Flower Pot releases + day-2 hold/crack verdict + stop/target. */
+export function useFpbActive() {
+  return useQuery<FpbActiveRow[]>({
+    queryKey: ['fpb_active'],
+    queryFn: fetchFpbActive,
+    staleTime: 3 * 60 * 1000,
+    retry: 0,
   });
 }
 

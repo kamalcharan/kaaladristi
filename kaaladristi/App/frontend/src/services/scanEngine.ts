@@ -1953,18 +1953,27 @@ function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanSto
   const dayRange = high[L] - low[L];
   const closeStrength = dayRange > 0 ? (close[L] - low[L]) / dayRange : 0;
   const hi10Prior = fpbMax(high, L - 10, L - 1);
+  const lo10Prior = fpbMin(low, L - 10, L - 1);
   const delivToday = bars[L].delivery_pct != null ? Number(bars[L].delivery_pct) : null;
 
-  const isBurst =
+  // Burst = coil releases UP: wide/high-volume candle closing near its high,
+  // above the 10-day range. Shatter = the mirror DOWN release: closes near its
+  // low, below the 10-day range. Same energy gate (vol/range/delivery), opposite
+  // resolution. Mutually exclusive (close can't be both >hi10 and <lo10).
+  const releaseEnergy =
     setupActivePrior &&
     close[L] > FPB.MIN_CLOSE &&
     volBurst >= FPB.VOL_BURST_MIN &&
     rangeExp >= FPB.RANGE_EXP_MIN &&
-    closeStrength >= FPB.CLOSE_STRENGTH_MIN &&
-    close[L] > hi10Prior &&
     (delivToday ?? 0) > FPB.DELIVERY_MIN;
+  const isBurst =
+    releaseEnergy && closeStrength >= FPB.CLOSE_STRENGTH_MIN && close[L] > hi10Prior;
+  const isShatter =
+    releaseEnergy && closeStrength <= (1 - FPB.CLOSE_STRENGTH_MIN) && close[L] < lo10Prior;
+  const isRelease = isBurst || isShatter;
 
-  const phase: 'BURST' | 'SETUP' | null = isBurst ? 'BURST' : (setupActiveRecent ? 'SETUP' : null);
+  const phase: 'BURST' | 'SHATTER' | 'SETUP' | null =
+    isBurst ? 'BURST' : isShatter ? 'SHATTER' : (setupActiveRecent ? 'SETUP' : null);
   if (!phase) return null;
 
   // Display-side compression metrics (as of the latest bar) for scoring/UI.
@@ -1978,8 +1987,12 @@ function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanSto
     (atrComp != null ? 1 - atrComp : 0) +
     (volDeath != null ? 1 - volDeath : 0) +
     (rangePctL != null ? 1 - rangePctL / FPB.RANGE_PCT_MAX : 0);
+  // Release quality — burst rewards a strong close (near high), shatter rewards a
+  // weak close (near low). Same volume/range/delivery magnitude either way.
   const fpbQuality = isBurst
     ? (volBurst / FPB.VOL_BURST_MIN) * (rangeExp / FPB.RANGE_EXP_MIN) * closeStrength * ((delivToday ?? 50) / 50)
+    : isShatter
+    ? (volBurst / FPB.VOL_BURST_MIN) * (rangeExp / FPB.RANGE_EXP_MIN) * (1 - closeStrength) * ((delivToday ?? 50) / 50)
     : null;
 
   const b = bars[L];
@@ -2030,17 +2043,17 @@ function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanSto
     xAmt: null,
     rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
     rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
-    // BURST rows are the ✦ highlight — the rare, high-conviction event.
+    // BURST (upward release) is the ✦ highlight for the cross-scan strength board.
     vaniOpportunity: isBurst,
     stage: b.stage ?? null,
     d_pct: b.pct_chng != null ? Math.round(Number(b.pct_chng) * 100) / 100 : null,
     fpb_phase: phase,
     fpb_quality: fpbQuality != null ? Math.round(fpbQuality * 100) / 100 : null,
     fpb_compression_score: Math.round(compressionScore * 100) / 100,
-    // Burst-only metrics — meaningful only on the release day; blank on coiling rows.
-    fpb_vol_burst: isBurst && Number.isFinite(volBurst) ? Math.round(volBurst * 10) / 10 : null,
-    fpb_range_exp: isBurst && Number.isFinite(rangeExp) ? Math.round(rangeExp * 10) / 10 : null,
-    fpb_close_strength: isBurst ? Math.round(closeStrength * 100) / 100 : null,
+    // Release-only metrics (burst or shatter) — blank on coiling rows.
+    fpb_vol_burst: isRelease && Number.isFinite(volBurst) ? Math.round(volBurst * 10) / 10 : null,
+    fpb_range_exp: isRelease && Number.isFinite(rangeExp) ? Math.round(rangeExp * 10) / 10 : null,
+    fpb_close_strength: isRelease ? Math.round(closeStrength * 100) / 100 : null,
     fpb_atr_compression: atrComp != null ? Math.round(atrComp * 100) / 100 : null,
     fpb_vol_death: volDeath != null ? Math.round(volDeath * 100) / 100 : null,
     fpb_setup_days: setupDaysIn22,
@@ -2097,6 +2110,40 @@ function fpbRowToScanStock(r: any): ScanStock {
     fpb_vol_death: num(r.fpb_vol_death),
     fpb_setup_days: num(r.fpb_setup_days),
   };
+}
+
+// ── Flower Pot — Day-2 position state (km_fpb_active, migration 156) ──────────
+export interface FpbActiveRow {
+  equity_id: number;
+  symbol: string;
+  direction: 'UP' | 'DOWN';
+  release_date: string;
+  release_close: number | null;
+  release_midpoint: number | null;
+  sl_level: number | null;
+  target_level: number | null;
+  quality: number | null;
+  status: string; // ACTIVE | HOLDING | CRACKED | TARGET_HIT | STOPPED | EXPIRED
+  last_eval_date: string | null;
+  last_close: number | null;
+}
+
+/** Recent Flower Pot releases + their day-2 hold/crack verdict and stop/target.
+ *  Returns [] gracefully if km_fpb_active isn't deployed yet. */
+export async function fetchFpbActive(): Promise<FpbActiveRow[]> {
+  const cutoff = new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  try {
+    const { data, error } = await from('km_fpb_active')
+      .select('equity_id,symbol,direction,release_date,release_close,release_midpoint,sl_level,target_level,quality,status,last_eval_date,last_close')
+      .gte('release_date', cutoff)
+      .order('release_date', { ascending: false })
+      .limit(100)
+      .execute();
+    if (error || !Array.isArray(data)) return [];
+    return data as FpbActiveRow[];
+  } catch {
+    return [];
+  }
 }
 
 async function fetchFlowerPotBurst(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
@@ -2179,10 +2226,11 @@ async function fetchFlowerPotBurstClientSide(exchangeFilter: ExchangeFilter): Pr
     if (stock) out.push(stock);
   }
 
-  // BURST first (by quality), then SETUP (by compression tightness).
+  // Releases first (burst/shatter, by quality), then coiling setups (by tightness).
+  const isRel = (s: ScanStock) => s.fpb_phase === 'BURST' || s.fpb_phase === 'SHATTER';
   out.sort((a, b) => {
-    const pa = a.fpb_phase === 'BURST' ? 0 : 1;
-    const pb = b.fpb_phase === 'BURST' ? 0 : 1;
+    const pa = isRel(a) ? 0 : 1;
+    const pb = isRel(b) ? 0 : 1;
     if (pa !== pb) return pa - pb;
     if (pa === 0) return (b.fpb_quality ?? 0) - (a.fpb_quality ?? 0);
     return (b.fpb_compression_score ?? 0) - (a.fpb_compression_score ?? 0);

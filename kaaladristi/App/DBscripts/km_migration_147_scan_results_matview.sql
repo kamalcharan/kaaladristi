@@ -515,6 +515,7 @@ fpb_sig AS (
     max(compressed) OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 22 PRECEDING AND 1 PRECEDING) AS setup_prior22,
     sum(compressed) OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) AS setup_days22,
     lag(hi10,1)     OVER (PARTITION BY equity_id ORDER BY trade_date) AS hi10_prior,
+    lag(lo10,1)     OVER (PARTITION BY equity_id ORDER BY trade_date) AS lo10_prior,
     volume       / NULLIF(lag(vol22,1)    OVER (PARTITION BY equity_id ORDER BY trade_date), 0) AS vol_burst_raw,
     (high - low) / NULLIF(lag(avgrng15,1) OVER (PARTITION BY equity_id ORDER BY trade_date), 0) AS range_exp_raw,
     (close - low)/ NULLIF(high - low, 0) AS close_str_raw
@@ -525,6 +526,9 @@ fpb_scored AS (
     (setup_prior22 = 1
       AND vol_burst_raw >= 3 AND range_exp_raw >= 2 AND close_str_raw >= 0.7
       AND close > hi10_prior AND delivery_pct > 45) AS is_burst,
+    (setup_prior22 = 1
+      AND vol_burst_raw >= 3 AND range_exp_raw >= 2 AND close_str_raw <= 0.3
+      AND close < lo10_prior AND delivery_pct > 45) AS is_shatter,
     atr15/NULLIF(atr60,0) AS atr_comp,
     vol5/NULLIF(vol22,0)  AS vol_death_x,
     (hi10 - lo10)/NULLIF(close,0) AS range_pct
@@ -536,25 +540,29 @@ fpb AS (
     equity_id, trade_date, symbol, company_name, industry, exchange, isin, mcap_cr,
     close, pct_chng, magic_rs, magic_rs_zone, rvol, delivery_pct,
     is_burst,
-    CASE WHEN is_burst THEN 'BURST' ELSE 'SETUP' END AS fpb_phase,
+    CASE WHEN is_burst THEN 'BURST' WHEN is_shatter THEN 'SHATTER' ELSE 'SETUP' END AS fpb_phase,
     round((GREATEST(0, 1 - atr_comp)
          + GREATEST(0, 1 - vol_death_x)
          + GREATEST(0, 1 - range_pct/0.08))::numeric, 2) AS fpb_compression_score,
     round(atr_comp::numeric, 2)   AS fpb_atr_compression,
     round(vol_death_x::numeric, 2) AS fpb_vol_death,
     setup_days22::int             AS fpb_setup_days,
-    CASE WHEN is_burst THEN round(vol_burst_raw::numeric, 1) END AS fpb_vol_burst,
-    CASE WHEN is_burst THEN round(range_exp_raw::numeric, 1) END AS fpb_range_exp,
-    CASE WHEN is_burst THEN round(close_str_raw::numeric, 2) END AS fpb_close_strength,
+    -- Release-only metrics (burst or shatter); blank on coiling rows.
+    CASE WHEN is_burst OR is_shatter THEN round(vol_burst_raw::numeric, 1) END AS fpb_vol_burst,
+    CASE WHEN is_burst OR is_shatter THEN round(range_exp_raw::numeric, 1) END AS fpb_range_exp,
+    CASE WHEN is_burst OR is_shatter THEN round(close_str_raw::numeric, 2) END AS fpb_close_strength,
+    -- Burst rewards a strong close (near high); shatter rewards a weak close (near low).
     CASE WHEN is_burst THEN
       round(((vol_burst_raw/3.0) * (range_exp_raw/2.0) * close_str_raw * (delivery_pct/50.0))::numeric, 2)
+         WHEN is_shatter THEN
+      round(((vol_burst_raw/3.0) * (range_exp_raw/2.0) * (1 - close_str_raw) * (delivery_pct/50.0))::numeric, 2)
     END AS fpb_quality,
     row_number() OVER (
-      ORDER BY is_burst DESC,
+      ORDER BY (is_burst OR is_shatter) DESC,
         round((GREATEST(0,1-atr_comp)+GREATEST(0,1-vol_death_x)+GREATEST(0,1-range_pct/0.08))::numeric,2) DESC,
         equity_id) AS rnk
   FROM fpb_scored
-  WHERE is_burst OR setup_recent10 = 1
+  WHERE is_burst OR is_shatter OR setup_recent10 = 1
 )
 
 -- ── UNION of the 8 pre-ranked, pre-limited preset blocks ────────────────────
