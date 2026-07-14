@@ -633,6 +633,41 @@ def list_dimensions():
     }
 
 
+@app.get('/api/pipeline2/last-run')
+def last_daily_run():
+    """Latest daily_run summary — feeds the admin-only pipeline-health bar.
+
+    `has_error` is true only when a step actually errored (a partial from a low
+    fill-rate sets no error_msg), so the UI can surface a failed step without
+    firing on every routine partial.
+    """
+    conn = _conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, trade_date, status, error_msg, progress_text, "
+                "       rows_affected, completed_at "
+                "FROM km_jobs WHERE job_type = 'daily_run' "
+                "ORDER BY created_at DESC, id DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+        if not row:
+            return {'exists': False}
+        return {
+            'exists': True,
+            'id': row['id'],
+            'trade_date': str(row['trade_date']) if row['trade_date'] else None,
+            'status': row['status'],
+            'error_msg': row['error_msg'],
+            'progress_text': row['progress_text'],
+            'rows_affected': row['rows_affected'],
+            'completed_at': row['completed_at'].isoformat() if row['completed_at'] else None,
+            'has_error': bool(row['error_msg']),
+        }
+    finally:
+        conn.close()
+
+
 @app.get('/api/pipeline2/scheduler')
 def scheduler_info():
     """Next scheduled runs for both APScheduler jobs."""

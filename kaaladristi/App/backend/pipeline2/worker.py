@@ -212,7 +212,14 @@ def _run_daily(conn, job: dict) -> None:
     before_vals = [s.fill_rate_before for s in outcome.steps]
     after_avg = round(sum(after_vals) / max(len(after_vals), 1), 2)
     before_avg = round(sum(before_vals) / max(len(before_vals), 1), 2)
-    errors = [s.error_msg for s in outcome.steps if s.error_msg]
+    # Label each error with its step, and lead with the hard-failed step names,
+    # so the admin pipeline-health bar can say exactly which step failed.
+    errors = [f'{s.dimension}: {s.error_msg}' for s in outcome.steps if s.error_msg]
+    failed = outcome.failed_steps
+    err_summary = None
+    if errors:
+        prefix = f'failed steps: {", ".join(failed)}. ' if failed else ''
+        err_summary = (prefix + '; '.join(errors))[:500]
 
     _update_job(
         conn, job_id,
@@ -220,7 +227,7 @@ def _run_daily(conn, job: dict) -> None:
         fill_rate_before=before_avg,
         fill_rate_after=after_avg,
         rows_affected=rows,
-        error_msg='; '.join(errors)[:500] if errors else None,
+        error_msg=err_summary,
         progress_text=f'daily_run {outcome.overall_status} '
                       f'({len(outcome.steps)} steps, {rows} rows)',
         progress_pct=100,
