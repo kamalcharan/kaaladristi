@@ -5,12 +5,22 @@
 -- frontend reads one indexed table instead of client-computing over a large EOD
 -- bundle. Companion `km_scan_exclusion_counts` records silently-dropped rows.
 --
--- SCOPE — 7 in-scope (Path A, bundle) scanners ONLY:
+-- SCOPE — 7 Path A bundle scanners + Flower Pot Burst (8th preset):
 --   power_buy, power_sell, smart_money, fresh_breakout,
---   quiet_accumulation, distribution_warning, conviction_flow
+--   quiet_accumulation, distribution_warning, conviction_flow, flower_pot_burst
 -- OUT OF SCOPE (Path B direct-query, MUST NOT regress — not touched here):
 --   stage_2_leaders, stage_2_watch, breakout_surge, stage_4_leaders,
 --   stage_3_watch, vani_opportunity, vani_exit_watch
+--
+-- 2026-07-14: added flower_pot_burst as the 8th preset. It carries 9 FPB-only
+-- columns (fpb_phase, fpb_compression_score, fpb_atr_compression, fpb_vol_death,
+-- fpb_setup_days, fpb_vol_burst, fpb_range_exp, fpb_close_strength, fpb_quality),
+-- NULL for the other 7 presets — the same NULL-per-preset pattern already used
+-- for d_pct/score. FPB needs 60 trading bars so it reads its own deep-history
+-- CTEs (fpb_base/_w/_flag/_sig/_scored/fpb, NSE-only, 140 calendar days),
+-- independent of the 45-day eq_hist the other 7 share. This migration was still
+-- an undeployed DRAFT when FPB was folded in (km_scan_results verified absent in
+-- the live DB), so it is edited in place rather than superseded.
 --
 -- Rule source of truth: App/frontend/src/services/scanEngine.ts (line #s cited
 -- as SQL comments below). Working doc: SCAN_MATVIEW_IMPLEMENTATION.md.
@@ -454,9 +464,100 @@ conviction_flow AS (
     AND s.d_pct BETWEEN -8 AND 8                                            -- MAGIC: ±8 band
     AND COALESCE(s.avg_amt_22d,0) > 1.5                                     -- MAGIC: 1.5
     AND COALESCE(s.delivery_surge_x,0) > 1.5                               -- MAGIC: 1.5
+),
+
+-- ══ Flower Pot Burst source (deep-history, NSE-only) ═════════════════════════
+-- Independent of the 45-day eq_hist above: compression needs 60 trading bars,
+-- so this chain reads its own 140-calendar-day window. Latest = max NSE date
+-- (FPB is NSE-only, so it is not gated on the >=4000 both-exchange `latest`).
+-- Calibrated thresholds (scanEngine.ts FPB block): ATR15/ATR60<0.8, 10d range
+-- <8%, vol5/vol22<0.6, |MagicRS 5d delta|<2, close>20, stage NOT IN (S3,S4),
+-- >=60 bars. SETUP = compressed within last 10 sessions; BURST = a setup active
+-- in the prior 22 sessions plus today's release (vol>=3x, range>=2x, close>=70%
+-- of range, close>10d-high, delivery>45%).
+fpb_base AS (
+  SELECT e.equity_id, e.trade_date, e.open, e.high, e.low, e.close, e.prev_close, e.volume,
+         e.magic_rs, e.magic_rs_zone, e.stage, e.delivery_pct, e.rvol, e.pct_chng,
+         a.symbol, a.company_name, a.industry, a.exchange, a.isin, a.mcap_cr,
+         GREATEST(e.high - e.low, abs(e.high - e.prev_close), abs(e.low - e.prev_close)) AS tr,
+         (e.high - e.low) AS rng
+  FROM km_equity_eod e
+  JOIN active a USING (equity_id)
+  WHERE a.exchange = 'NSE'
+    AND e.trade_date > CURRENT_DATE - INTERVAL '140 days'
+),
+fpb_w AS (
+  SELECT b.*,
+    avg(tr)     OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS atr15,
+    avg(tr)     OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS atr60,
+    avg(volume) OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 4  PRECEDING AND CURRENT ROW) AS vol5,
+    avg(volume) OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) AS vol22,
+    max(high)   OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 9  PRECEDING AND CURRENT ROW) AS hi10,
+    min(low)    OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 9  PRECEDING AND CURRENT ROW) AS lo10,
+    avg(rng)    OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 14 PRECEDING AND CURRENT ROW) AS avgrng15,
+    lag(magic_rs,5) OVER (PARTITION BY equity_id ORDER BY trade_date) AS rs5,
+    count(*)    OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS nbars
+  FROM fpb_base b
+),
+fpb_flag AS (
+  SELECT w.*,
+    CASE WHEN atr15/NULLIF(atr60,0) < 0.8
+          AND (hi10 - lo10)/NULLIF(close,0) < 0.08
+          AND vol5/NULLIF(vol22,0) < 0.6
+          AND abs(magic_rs - rs5) < 2
+          AND nbars >= 60 AND close > 20
+          AND stage NOT IN ('S3','S4') THEN 1 ELSE 0 END AS compressed
+  FROM fpb_w w
+),
+fpb_sig AS (
+  SELECT f.*,
+    max(compressed) OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 9  PRECEDING AND CURRENT ROW) AS setup_recent10,
+    max(compressed) OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 22 PRECEDING AND 1 PRECEDING) AS setup_prior22,
+    sum(compressed) OVER (PARTITION BY equity_id ORDER BY trade_date ROWS BETWEEN 21 PRECEDING AND CURRENT ROW) AS setup_days22,
+    lag(hi10,1)     OVER (PARTITION BY equity_id ORDER BY trade_date) AS hi10_prior,
+    volume       / NULLIF(lag(vol22,1)    OVER (PARTITION BY equity_id ORDER BY trade_date), 0) AS vol_burst_raw,
+    (high - low) / NULLIF(lag(avgrng15,1) OVER (PARTITION BY equity_id ORDER BY trade_date), 0) AS range_exp_raw,
+    (close - low)/ NULLIF(high - low, 0) AS close_str_raw
+  FROM fpb_flag f
+),
+fpb_scored AS (
+  SELECT l.*,
+    (setup_prior22 = 1
+      AND vol_burst_raw >= 3 AND range_exp_raw >= 2 AND close_str_raw >= 0.7
+      AND close > hi10_prior AND delivery_pct > 45) AS is_burst,
+    atr15/NULLIF(atr60,0) AS atr_comp,
+    vol5/NULLIF(vol22,0)  AS vol_death_x,
+    (hi10 - lo10)/NULLIF(close,0) AS range_pct
+  FROM fpb_sig l
+  WHERE trade_date = (SELECT max(trade_date) FROM fpb_base)
+),
+fpb AS (
+  SELECT
+    equity_id, trade_date, symbol, company_name, industry, exchange, isin, mcap_cr,
+    close, pct_chng, magic_rs, magic_rs_zone, rvol, delivery_pct,
+    is_burst,
+    CASE WHEN is_burst THEN 'BURST' ELSE 'SETUP' END AS fpb_phase,
+    round((GREATEST(0, 1 - atr_comp)
+         + GREATEST(0, 1 - vol_death_x)
+         + GREATEST(0, 1 - range_pct/0.08))::numeric, 2) AS fpb_compression_score,
+    round(atr_comp::numeric, 2)   AS fpb_atr_compression,
+    round(vol_death_x::numeric, 2) AS fpb_vol_death,
+    setup_days22::int             AS fpb_setup_days,
+    CASE WHEN is_burst THEN round(vol_burst_raw::numeric, 1) END AS fpb_vol_burst,
+    CASE WHEN is_burst THEN round(range_exp_raw::numeric, 1) END AS fpb_range_exp,
+    CASE WHEN is_burst THEN round(close_str_raw::numeric, 2) END AS fpb_close_strength,
+    CASE WHEN is_burst THEN
+      round(((vol_burst_raw/3.0) * (range_exp_raw/2.0) * close_str_raw * (delivery_pct/50.0))::numeric, 2)
+    END AS fpb_quality,
+    row_number() OVER (
+      ORDER BY is_burst DESC,
+        round((GREATEST(0,1-atr_comp)+GREATEST(0,1-vol_death_x)+GREATEST(0,1-range_pct/0.08))::numeric,2) DESC,
+        equity_id) AS rnk
+  FROM fpb_scored
+  WHERE is_burst OR setup_recent10 = 1
 )
 
--- ── UNION of the 7 pre-ranked, pre-limited preset blocks ────────────────────
+-- ── UNION of the 8 pre-ranked, pre-limited preset blocks ────────────────────
 -- Column order is identical across all blocks (required by UNION ALL).
 SELECT 'power_buy'::text AS preset_id, rnk::int AS rank, is_vani_s2 AS vani_flag,
        'computeVaniOpportunity'::text AS vani_path, FALSE AS flow_guard_applied,
@@ -469,7 +570,13 @@ SELECT 'power_buy'::text AS preset_id, rnk::int AS rank, is_vani_s2 AS vani_flag
        rel_5d_n500, rel_22d_n500, rel_66d_n500, has_recent_svd, has_recent_sbd,
        has_recent_syd, magic_rs_trend,
        db_ret_5d AS ret_5d, db_ret_22d AS ret_22d, db_ret_66d AS ret_66d,
-       NULL::numeric AS d_pct, db_deliv_value_cr AS deliv_value_cr, NULL::numeric AS score
+       NULL::numeric AS d_pct, db_deliv_value_cr AS deliv_value_cr, NULL::numeric AS score,
+       -- Flower Pot Burst columns (populated only by the flower_pot_burst block below)
+       NULL::text AS fpb_phase, NULL::numeric AS fpb_compression_score,
+       NULL::numeric AS fpb_atr_compression, NULL::numeric AS fpb_vol_death,
+       NULL::int AS fpb_setup_days, NULL::numeric AS fpb_vol_burst,
+       NULL::numeric AS fpb_range_exp, NULL::numeric AS fpb_close_strength,
+       NULL::numeric AS fpb_quality
 FROM power_buy WHERE rnk <= 25
 
 UNION ALL
@@ -482,7 +589,8 @@ SELECT 'power_sell', rnk::int, (is_vani_distrib OR is_vani_weakness),
        pct_below_52w_high, xamt, rel_5d_n50, rel_22d_n50, rel_66d_n50,
        rel_5d_n500, rel_22d_n500, rel_66d_n500, has_recent_svd, has_recent_sbd,
        has_recent_syd, magic_rs_trend,
-       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric
+       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric,
+       NULL::text, NULL::numeric, NULL::numeric, NULL::numeric, NULL::int, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric
 FROM power_sell WHERE rnk <= 25
 
 UNION ALL
@@ -495,7 +603,8 @@ SELECT 'smart_money', rnk::int, is_vani_smart,
        pct_below_52w_high, xamt, rel_5d_n50, rel_22d_n50, rel_66d_n50,
        rel_5d_n500, rel_22d_n500, rel_66d_n500, has_recent_svd, has_recent_sbd,
        has_recent_syd, magic_rs_trend,
-       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric
+       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric,
+       NULL::text, NULL::numeric, NULL::numeric, NULL::numeric, NULL::int, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric
 FROM smart_money WHERE rnk <= 25
 
 UNION ALL
@@ -508,7 +617,8 @@ SELECT 'fresh_breakout', rnk::int, is_vani_s2,
        pct_below_52w_high, xamt, rel_5d_n50, rel_22d_n50, rel_66d_n50,
        rel_5d_n500, rel_22d_n500, rel_66d_n500, has_recent_svd, has_recent_sbd,
        has_recent_syd, magic_rs_trend,
-       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric
+       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric,
+       NULL::text, NULL::numeric, NULL::numeric, NULL::numeric, NULL::int, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric
 FROM fresh_breakout WHERE rnk <= 25
 
 UNION ALL
@@ -521,7 +631,8 @@ SELECT 'quiet_accumulation', rnk::int, is_vani_s2,
        pct_below_52w_high, xamt, rel_5d_n50, rel_22d_n50, rel_66d_n50,
        rel_5d_n500, rel_22d_n500, rel_66d_n500, has_recent_svd, has_recent_sbd,
        has_recent_syd, magic_rs_trend,
-       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric
+       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, NULL::numeric,
+       NULL::text, NULL::numeric, NULL::numeric, NULL::numeric, NULL::int, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric
 FROM quiet_accumulation WHERE rnk <= 25
 
 UNION ALL
@@ -534,7 +645,8 @@ SELECT 'distribution_warning', rnk::int, (is_vani_distrib OR is_vani_weakness),
        pct_below_52w_high, xamt, rel_5d_n50, rel_22d_n50, rel_66d_n50,
        rel_5d_n500, rel_22d_n500, rel_66d_n500, has_recent_svd, has_recent_sbd,
        has_recent_syd, magic_rs_trend,
-       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, dist_score
+       db_ret_5d, db_ret_22d, db_ret_66d, NULL::numeric, db_deliv_value_cr, dist_score,
+       NULL::text, NULL::numeric, NULL::numeric, NULL::numeric, NULL::int, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric
 FROM distribution_warning WHERE rnk <= 25
 
 UNION ALL
@@ -548,8 +660,37 @@ SELECT 'conviction_flow', rnk::int, (is_vani_surge OR is_vani_breakout),
        rel_5d_n500, rel_22d_n500, rel_66d_n500, has_recent_svd, has_recent_sbd,
        has_recent_syd, magic_rs_trend,
        walk_ret_5d AS ret_5d, walk_ret_22d AS ret_22d, walk_ret_66d AS ret_66d,
-       d_pct, conv_deliv_value_cr AS deliv_value_cr, NULL::numeric AS score
+       d_pct, conv_deliv_value_cr AS deliv_value_cr, NULL::numeric AS score,
+       NULL::text, NULL::numeric, NULL::numeric, NULL::numeric, NULL::int, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric
 FROM conviction_flow WHERE rnk <= 50
+
+-- ══ Preset 8: flower_pot_burst → Flower Pot Burst ════════════════════════════
+-- Compression -> release. Two phases surface together: SETUP (coiling now,
+-- watchlist) and BURST (the rare coil that released today). NSE-only; needs 60
+-- trading bars so it uses its own deep-history CTEs (fpb_* above), independent
+-- of the 45-day eq_hist the other 7 presets share. Thresholds are the CALIBRATED
+-- live-NSE values (scanEngine.ts FPB block), not the spec literals. Ranked burst-
+-- first, then by compression tightness. No hard row cap (universe is naturally
+-- tiny — a few dozen).
+UNION ALL
+SELECT 'flower_pot_burst', rnk::int, is_burst AS vani_flag,
+       'flowerPotBurst'::text AS vani_path, FALSE AS flow_guard_applied,
+       FALSE AS zone_coerced, FALSE AS history_insufficient, NULL::text[] AS guard_notes,
+       equity_id, trade_date, symbol, company_name, industry, exchange, isin, mcap_cr,
+       close, pct_chng, magic_rs, magic_rs_zone, NULL::text AS flow_type, rvol,
+       NULL::numeric AS sniper_inst, NULL::text AS accum_distrib, NULL::numeric AS rss_value,
+       delivery_pct, NULL::numeric AS delivery_surge_x, NULL::numeric AS avg_amt_22d,
+       NULL::numeric AS sma_150, NULL::numeric AS ema_20, NULL::double precision AS atr_14,
+       NULL::numeric AS w52_high, NULL::text AS volume_divergence_flag,
+       NULL::numeric AS reward, NULL::numeric AS reward_pct, NULL::numeric AS pct_below_52w_high,
+       NULL::numeric AS xamt,
+       NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric,
+       FALSE, FALSE, FALSE, NULL::smallint[],
+       NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric, NULL::numeric,
+       fpb_compression_score AS score,
+       fpb_phase, fpb_compression_score, fpb_atr_compression, fpb_vol_death,
+       fpb_setup_days, fpb_vol_burst, fpb_range_exp, fpb_close_strength, fpb_quality
+FROM fpb
 
 WITH NO DATA;
 

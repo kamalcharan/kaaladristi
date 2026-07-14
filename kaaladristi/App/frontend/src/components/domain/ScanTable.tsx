@@ -11,7 +11,19 @@ import { getFieldsForGroup } from '@/fieldAvailability'
 // ── Preset column overrides ─────────────────────────────────────────────────────
 
 // Per-preset column overrides for presets whose fetcher has a limited SELECT.
-const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {}
+const PRESET_COL_OVERRIDES: Partial<Record<string, string[]>> = {
+  // Flower Pot Burst has its own metric surface — the price_action group's
+  // breakout/score columns are all null here. Lead with the always-populated
+  // compression fields; burst-only metrics (Vol Burst / Range Exp / Close Str /
+  // Quality) are NOT default columns because on the common no-burst day every
+  // row would blank them — the card view shows them when a burst fires, and the
+  // Phase column marks bursts inline.
+  flower_pot_burst: [
+    'symbol', 'close', 'pct_chng', 'fpb_phase',
+    'fpb_compression_score', 'fpb_atr_compression', 'fpb_vol_death', 'fpb_setup_days',
+    'delivery_pct', 'rvol', 'magic_rs',
+  ],
+}
 
 const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   stage_2_leaders:  { key: 'magic_rs',         dir: 'desc' },
