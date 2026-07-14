@@ -1,5 +1,36 @@
 # Scanner Audit — 2026-07-12 (current state · improvements · new-scanner roadmap)
 
+> **Implementation log — 2026-07-14 (branch `claude/session-init-kbwxau`).**
+> Consolidation + first new scanner shipped. Each item pushed with its migration:
+> - **B1 — Fresh Breakouts retired** → merged into Breakout Surge (superset; its
+>   only extras, an industry-leader gate + rvol>2, are recoverable via the
+>   ScanFilterBar `industries` filter + rvol column). Handler/preset removed;
+>   `migration 152` deactivates the `kd_scan_presets` row.
+> - **B2 — VaNi Strength Watch retired** → it was Stage 2 Leaders filtered to the
+>   top-conviction VaNi subset; Stage 2 Leaders already computes per-row
+>   `vaniOpportunity` and carries a ✦ VaNi Highlight filter, so no capability lost.
+>   Function/catalog/stage-family layout entries removed; `migration 153`.
+> - **B3 — Smart Money gate softened.** `pct_accumulation` is low-skewed (median
+>   industry ~15%, max ~67%), so the absolute `>60` gate fired for 0–1 industries
+>   and left the tab chronically empty. Now `>55 OR top-decile by accumulation`;
+>   on 2026-07-13 that yields 43 candidates → top 25 (was ~0). Frontend-only.
+> - **C1 — Flower Pot Burst BUILT** (owner priority #1). Compression→release scan,
+>   two phases (Coiling Setups watchlist + rare Bursts). Pure client-side TS with
+>   its own on-demand 60-session fetch (no shared-bundle bloat, no pipeline/backfill
+>   deploy). Thresholds **calibrated to live NSE data** — the spec's ATR15/ATR60<0.5
+>   gate fired for 12/1,232 stocks (<0.35 → zero); calibrated 0.8 gate → ~4 coiling
+>   today / 26 over 10 sessions / 37 over 22; bursts ~2×/month. `migration 154`
+>   registers the tab. Deferred to a possible v2: DB-side `km_fpb_active` state
+>   table for a persistent SETUP watchlist + Day-2 CRACKED/HOLDING tracking.
+>
+> **Owner deploy required on the VPS**: run migrations **152, 153, 154** (all target
+> `kaala_dristi_db`) — until then the retired tabs stay visible and the FPB tab
+> only flickers in from the static fallback before the DB preset list replaces it.
+> The zone-vocabulary fix (§2.2) and the `rs_percentile` regression (§2.1) were
+> resolved earlier this session.
+
+
+
 Read-only audit of the scanner system. Grounded in: exact code conditions for
 all 14 scans (`src/services/scanEngine.ts`), **live DB state as of trade date
 2026-07-10** (via the read-only MCP connector), the matview parity work
