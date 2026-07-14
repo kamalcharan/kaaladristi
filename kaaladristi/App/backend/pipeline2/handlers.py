@@ -42,7 +42,7 @@ FIXABLE_DIMENSIONS = frozenset({
     'index_eod_download', 'nse_eod_download', 'bse_eod_download',
     'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
     'index_flow', 'nse_flow', 'bse_flow',
-    'nse_magic_rs', 'bse_magic_rs', 'rs_percentile',
+    'index_magic_rs', 'nse_magic_rs', 'bse_magic_rs', 'rs_percentile',
     'supertrend', 'rolling_metrics', 'd365', 'stage_classification', 'vani_flags',
     'index_returns', 'industry_composites', 'market_breadth', 'breadth_roc',
     'scan_refresh',
@@ -690,7 +690,7 @@ def handle(dimension: str, conn, trade_date: date, force: bool,
     if dimension in (
         'index_indicators', 'nse_equity_indicators', 'bse_equity_indicators',
         'index_flow', 'nse_flow', 'bse_flow',
-        'nse_magic_rs', 'bse_magic_rs',
+        'index_magic_rs', 'nse_magic_rs', 'bse_magic_rs',
     ):
         return _handle_columnfill(conn, dimension, trade_date, force, on_progress)
     if dimension == 'supertrend':
@@ -729,6 +729,7 @@ KNOWN_DIMENSIONS = [
     'index_flow',
     'nse_flow',
     'bse_flow',
+    'index_magic_rs',
     'nse_magic_rs',
     'bse_magic_rs',
     'rs_percentile',

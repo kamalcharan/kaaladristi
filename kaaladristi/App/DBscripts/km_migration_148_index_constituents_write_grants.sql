@@ -30,30 +30,26 @@
 -- nextval('km_index_constituents_id_seq'), and 'authenticated' had no grant on
 -- that sequence (nextval would fail with "permission denied for sequence").
 --
--- The loops are idempotent and guarded on role existence. NOTIFY reloads
--- PostgREST's schema cache.
+-- Plain GRANTs (no DO/LOOP) so this runs in any client, including ones that
+-- naively split on ';' and can't parse a dollar-quoted block. Roles
+-- authenticated/admin/kd_app all exist on this deployment, so no existence
+-- guard is needed; GRANT is idempotent. NOTIFY reloads PostgREST's cache.
+--
+-- Table-level write. RLS (idx_const_write USING is_admin()) remains the real
+-- authorization gate — these grants only let the role ATTEMPT the command.
+-- Sequence USAGE is required because the id column defaults to nextval().
 --
 -- Target database: kaala_dristi_db
 
 BEGIN;
 
-DO $$
-DECLARE
-  r text;
-BEGIN
-  FOREACH r IN ARRAY ARRAY['authenticated', 'admin', 'kd_app']
-  LOOP
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
-      -- Table-level write. RLS (idx_const_write USING is_admin()) remains the
-      -- real authorization gate; this only lets the role attempt the command.
-      EXECUTE format(
-        'GRANT INSERT, UPDATE, DELETE ON km_index_constituents TO %I', r);
-      -- Sequence USAGE so nextval() on the id default works during INSERT.
-      EXECUTE format(
-        'GRANT USAGE, SELECT ON SEQUENCE km_index_constituents_id_seq TO %I', r);
-    END IF;
-  END LOOP;
-END $$;
+GRANT INSERT, UPDATE, DELETE ON km_index_constituents TO authenticated;
+GRANT INSERT, UPDATE, DELETE ON km_index_constituents TO admin;
+GRANT INSERT, UPDATE, DELETE ON km_index_constituents TO kd_app;
+
+GRANT USAGE, SELECT ON SEQUENCE km_index_constituents_id_seq TO authenticated;
+GRANT USAGE, SELECT ON SEQUENCE km_index_constituents_id_seq TO admin;
+GRANT USAGE, SELECT ON SEQUENCE km_index_constituents_id_seq TO kd_app;
 
 NOTIFY pgrst, 'reload schema';
 

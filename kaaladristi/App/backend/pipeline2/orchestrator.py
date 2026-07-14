@@ -42,6 +42,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('index_flow',            None),
     ('nse_flow',              'NSE'),
     ('bse_flow',              'BSE'),
+    ('index_magic_rs',        None),   # index RS vs NIFTY 500 (both in km_index_eod)
     ('nse_magic_rs',          'NSE'),
     ('bse_magic_rs',          'BSE'),
     ('rs_percentile',         None),   # ranks by magic_rs — must run after magic_rs, before vani_flags

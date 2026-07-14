@@ -53,28 +53,31 @@ BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS auth;
 
+-- Bodies contain NO internal ';' so this also survives clients that naively
+-- split on ';' and mishandle dollar-quoted blocks.
+
 -- Caller's user id (JWT `sub`). NULL when unauthenticated.
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
 LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true)::json ->> 'sub', '')::uuid;
+  SELECT NULLIF(current_setting('request.jwt.claims', true)::json ->> 'sub', '')::uuid
 $$;
 
 -- Caller's JWT role claim (always 'authenticated' on this deployment).
 CREATE OR REPLACE FUNCTION auth.role() RETURNS text
 LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true)::json ->> 'role', '');
+  SELECT NULLIF(current_setting('request.jwt.claims', true)::json ->> 'role', '')
 $$;
 
 -- Caller's email claim.
 CREATE OR REPLACE FUNCTION auth.email() RETURNS text
 LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true)::json ->> 'email', '');
+  SELECT NULLIF(current_setting('request.jwt.claims', true)::json ->> 'email', '')
 $$;
 
 -- Full claims object. Empty object when unauthenticated.
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb
 LANGUAGE sql STABLE AS $$
-  SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb);
+  SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
 $$;
 
 -- Every DB role that runs PostgREST requests must be able to call these from
