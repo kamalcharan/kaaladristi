@@ -239,11 +239,13 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
   fpb_phase: {
     key: 'fpb_phase',
     label: 'Phase',
-    tooltip: 'Coiling = compression forming (watchlist). Burst = the coil released today on explosive volume and range.',
+    tooltip: 'Coiling = compression forming (watchlist). Burst = the coil released UP today (near high, above the range). Shatter = released DOWN (near low, below the range). Both fire on explosive volume + range.',
     type: 'category',
-    width: 78,
-    formatFn: (val: any) => (val === 'BURST' ? '🌸 Burst' : val === 'SETUP' ? 'Coiling' : '—'),
-    colorFn: (val: any) => (val === 'BURST' ? 'var(--bull)' : 'var(--text-secondary)'),
+    width: 86,
+    formatFn: (val: any) =>
+      val === 'BURST' ? '🌸 Burst' : val === 'SHATTER' ? '💥 Shatter' : val === 'SETUP' ? 'Coiling' : '—',
+    colorFn: (val: any) =>
+      val === 'BURST' ? 'var(--bull)' : val === 'SHATTER' ? 'var(--bear)' : 'var(--text-secondary)',
   },
   fpb_compression_score: {
     key: 'fpb_compression_score',

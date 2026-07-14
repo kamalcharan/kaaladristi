@@ -807,13 +807,16 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
 }
 
 
-// ── Flower Pot Burst — two-phase (Bursts / Coiling Setups) layout ──
+// ── Flower Pot Burst — phased (Bursts / Shatters / Coiling Setups) layout ──
 function FpbMetricLine({ stock }: { stock: ScanStock }) {
   const parts: string[] = [];
-  if (stock.fpb_phase === 'BURST') {
+  if (stock.fpb_phase === 'BURST' || stock.fpb_phase === 'SHATTER') {
     if (stock.fpb_vol_burst != null) parts.push(`${stock.fpb_vol_burst}× volume`);
     if (stock.fpb_range_exp != null) parts.push(`${stock.fpb_range_exp}× range`);
-    if (stock.fpb_close_strength != null) parts.push(`close ${Math.round(stock.fpb_close_strength * 100)}% of range`);
+    if (stock.fpb_close_strength != null) {
+      const pct = Math.round(stock.fpb_close_strength * 100);
+      parts.push(`closed ${pct}% up the range`);  // ~100% = at the high (burst), ~0% = at the low (shatter)
+    }
     if (stock.fpb_quality != null) parts.push(`quality ${stock.fpb_quality}`);
   } else {
     if (stock.fpb_atr_compression != null) parts.push(`ATR ${stock.fpb_atr_compression}× of 60d`);
@@ -841,10 +844,11 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
   const [vaniOnly, setVaniOnly] = useState(false);
   const { data: rawStocks = [], isLoading, error } = useScan('flower_pot_burst', exchangeFilter, timeframe);
   const filtered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
-  const allBursts = useMemo(() => filtered.filter((s) => s.fpb_phase === 'BURST'), [filtered]);
-  // ✦ VaNi Highlight for FPB = the Burst — the actionable trigger. Toggling it
-  // isolates "act today" from the coiling watchlist.
-  const bursts = allBursts;
+  const bursts = useMemo(() => filtered.filter((s) => s.fpb_phase === 'BURST'), [filtered]);
+  const shatters = useMemo(() => filtered.filter((s) => s.fpb_phase === 'SHATTER'), [filtered]);
+  // ✦ VaNi Highlight for FPB = the releases (Burst up / Shatter down) — the
+  // actionable events. Toggling it isolates "acted today" from the coiling watchlist.
+  const releaseCount = bursts.length + shatters.length;
   const setups = useMemo(
     () => (vaniOnly ? [] : filtered.filter((s) => s.fpb_phase === 'SETUP')),
     [filtered, vaniOnly],
@@ -858,7 +862,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
       }}>
         {/* FPB is NSE-only — BSE has no delivery/compression depth. */}
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={['BSE']} />
-        <VaniFilterButton active={vaniOnly} count={allBursts.length} onToggle={() => setVaniOnly((f) => !f)} />
+        <VaniFilterButton active={vaniOnly} count={releaseCount} onToggle={() => setVaniOnly((f) => !f)} />
         <ScanFilterBar
           presetId="flower_pot_burst"
           stocks={rawStocks}
@@ -880,7 +884,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         </Card>
       ) : viewMode === 'table' ? (
         <ScanTable
-          stocks={[...bursts, ...setups]}
+          stocks={[...bursts, ...shatters, ...setups]}
           presetId="flower_pot_burst"
           onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
         />
@@ -895,8 +899,8 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
               background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
             }}>
               <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                No coil released today. Bursts are rare — historically about twice a month across the NSE universe.
-                The coiling setups below are where the next one may come from.
+                No coil released upward today. Bursts are rare — historically about twice a month across the NSE
+                universe. The coiling setups below are where the next one may come from.
               </p>
             </div>
           ) : (
@@ -910,7 +914,24 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
             </div>
           )}
 
-          {/* ✦ active isolates the actionable Bursts — hide the coiling watchlist. */}
+          {/* Pot Shatter — the downward release. Only rendered when one fires. */}
+          {shatters.length > 0 && (
+            <>
+              <ScanSectionLabel>
+                💥 Pot Shatter · {shatters.length} today
+              </ScanSectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
+                {shatters.map((stock) => (
+                  <div key={stock.equity_id}>
+                    <StockCard stock={stock} />
+                    <FpbMetricLine stock={stock} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ✦ active isolates the actionable releases — hide the coiling watchlist. */}
           {!vaniOnly && (
             <>
               <ScanSectionLabel>
