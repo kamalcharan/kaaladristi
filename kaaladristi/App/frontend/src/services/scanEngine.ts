@@ -2047,9 +2047,88 @@ function computeFpbStock(bars: any[], sym: EquitySymbolRow | undefined): ScanSto
   };
 }
 
+/** Map a km_scan_results row (preset_id='flower_pot_burst') to a ScanStock. */
+function fpbRowToScanStock(r: any): ScanStock {
+  const num = (v: any) => (v == null ? null : Number(v));
+  return {
+    equity_id: r.equity_id,
+    symbol: r.symbol ?? String(r.equity_id),
+    company_name: r.company_name ?? null,
+    industry: r.industry ?? null,
+    exchange: r.exchange ?? null,
+    mcap_cr: num(r.mcap_cr),
+    trade_date: r.trade_date,
+    close: Number(r.close),
+    open: null, high: null, low: null,
+    pct_chng: num(r.pct_chng),
+    magic_rs: num(r.magic_rs),
+    magic_rs_zone: r.magic_rs_zone ?? null,
+    rss_value: null, rss_spread: null,
+    rsi_14: null,
+    rvol: num(r.rvol),
+    flow_type: null,
+    supertrend_dir: null,
+    sma_50: null, sma_150: null, sma_200: null,
+    ema_20: null, atr_14: null,
+    w52_high: null, w52_low: null, lifetime_high: null,
+    avg_amt_5d: null, avg_amt_22d: null, avg_amt_66d: null, delivery_surge_x: null,
+    sniper_inst: null, sniper_hot: null,
+    accum_distrib: null, volume_divergence_flag: null,
+    delivery_pct: num(r.delivery_pct),
+    deliv_value_cr: null,
+    has_recent_svd: false, has_recent_sbd: false, has_recent_syd: false,
+    pctBelow52wHigh: null,
+    reward: null, rewardPct: null,
+    magicRsTrend: [],
+    score_5d: null, score_22d: null,
+    xAmt: null,
+    rel_5d_n50: null, rel_22d_n50: null, rel_66d_n50: null,
+    rel_5d_n500: null, rel_22d_n500: null, rel_66d_n500: null,
+    vaniOpportunity: r.fpb_phase === 'BURST',
+    stage: r.stage ?? null,
+    d_pct: r.pct_chng != null ? Math.round(Number(r.pct_chng) * 100) / 100 : null,
+    fpb_phase: r.fpb_phase ?? null,
+    fpb_quality: num(r.fpb_quality),
+    fpb_compression_score: num(r.fpb_compression_score),
+    fpb_vol_burst: num(r.fpb_vol_burst),
+    fpb_range_exp: num(r.fpb_range_exp),
+    fpb_close_strength: num(r.fpb_close_strength),
+    fpb_atr_compression: num(r.fpb_atr_compression),
+    fpb_vol_death: num(r.fpb_vol_death),
+    fpb_setup_days: num(r.fpb_setup_days),
+  };
+}
+
 async function fetchFlowerPotBurst(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
-  // FPB is an NSE-universe scan — compression + delivery need NSE bhav depth.
-  // BSE has no delivery data and shallower history, so BSE-only returns nothing.
+  // FPB is an NSE-universe scan; BSE-only returns nothing.
+  if (exchangeFilter === 'BSE') return [];
+
+  // Primary path: read the DB matview km_scan_results (migration 147, preset
+  // 'flower_pot_burst'). The DB does the compression/burst compute and the
+  // pipeline's scan_refresh step keeps it current, so the browser transfers only
+  // the signal rows. Falls back to the client-side compute below ONLY when the
+  // matview isn't deployed yet (transitional — remove once 147 is live).
+  try {
+    const { data, error } = await from('km_scan_results')
+      .select('*')
+      .eq('preset_id', 'flower_pot_burst')
+      .order('rank', { ascending: true })
+      .limit(500)
+      .execute();
+    if (!error && Array.isArray(data)) {
+      return (data as any[]).map(fpbRowToScanStock);
+    }
+    console.warn('[flower_pot_burst] km_scan_results unavailable — using client-side fallback', error);
+  } catch (e) {
+    console.warn('[flower_pot_burst] km_scan_results read failed — using client-side fallback', e);
+  }
+  return fetchFlowerPotBurstClientSide(exchangeFilter);
+}
+
+async function fetchFlowerPotBurstClientSide(exchangeFilter: ExchangeFilter): Promise<ScanStock[]> {
+  // Transitional fallback — only runs if km_scan_results (migration 147) is not
+  // deployed. Fetches ~72 sessions of NSE EOD and computes compression/burst in
+  // the browser. Slower; the matview path above supersedes it.
   if (exchangeFilter === 'BSE') return [];
 
   const dates = await fetchRecentDates(FPB.MIN_BARS + 12); // ~72 sessions
