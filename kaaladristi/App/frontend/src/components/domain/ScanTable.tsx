@@ -23,6 +23,8 @@ const DEFAULT_SORT: Record<string, { key: string; dir: 'asc' | 'desc' }> = {
   conviction_flow:  { key: 'delivery_surge_x',  dir: 'desc' },
   // Score first (owner doctrine) — matches the merged scan's engine ranking.
   breakout_surge:   { key: 'score_5d',          dir: 'desc' },
+  // Tightest compression first — bursts (high quality) still sort near the top.
+  flower_pot_burst: { key: 'fpb_compression_score', dir: 'desc' },
 }
 
 function getDefaultSort(presetId: string) {

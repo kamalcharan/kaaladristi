@@ -807,6 +807,131 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
 }
 
 
+// ── Flower Pot Burst — two-phase (Bursts / Coiling Setups) layout ──
+function FpbMetricLine({ stock }: { stock: ScanStock }) {
+  const parts: string[] = [];
+  if (stock.fpb_phase === 'BURST') {
+    if (stock.fpb_vol_burst != null) parts.push(`${stock.fpb_vol_burst}× volume`);
+    if (stock.fpb_range_exp != null) parts.push(`${stock.fpb_range_exp}× range`);
+    if (stock.fpb_close_strength != null) parts.push(`close ${Math.round(stock.fpb_close_strength * 100)}% of range`);
+    if (stock.fpb_quality != null) parts.push(`quality ${stock.fpb_quality}`);
+  } else {
+    if (stock.fpb_atr_compression != null) parts.push(`ATR ${stock.fpb_atr_compression}× of 60d`);
+    if (stock.fpb_vol_death != null) parts.push(`volume ${Math.round(stock.fpb_vol_death * 100)}% of norm`);
+    if (stock.fpb_setup_days != null) parts.push(`coiled ${stock.fpb_setup_days}d/22`);
+    if (stock.fpb_compression_score != null) parts.push(`tightness ${stock.fpb_compression_score}`);
+  }
+  if (parts.length === 0) return null;
+  return (
+    <div style={{ fontSize: 11, color: 'var(--text-faint)', margin: '-4px 4px 8px', letterSpacing: '0.01em' }}>
+      {parts.join(' · ')}
+    </div>
+  );
+}
+
+function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
+  preset: ScanDefinition;
+  timeframe: ScanTimeframe;
+  viewMode: ViewMode;
+  onViewModeChange: (v: ViewMode) => void;
+}) {
+  const navigate = useNavigate();
+  const [exchangeFilter, setExchangeFilter] = useState<ExchangeFilter>('combined');
+  const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
+  const { data: rawStocks = [], isLoading, error } = useScan('flower_pot_burst', exchangeFilter, timeframe);
+  const filtered = useMemo(() => applyFilters(rawStocks, filters), [rawStocks, filters]);
+  const bursts = useMemo(() => filtered.filter((s) => s.fpb_phase === 'BURST'), [filtered]);
+  const setups = useMemo(() => filtered.filter((s) => s.fpb_phase === 'SETUP'), [filtered]);
+
+  return (
+    <>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '10px 0', flexWrap: 'wrap', marginBottom: '4px',
+      }}>
+        {/* FPB is NSE-only — BSE has no delivery/compression depth. */}
+        <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={['BSE']} />
+        <ScanFilterBar
+          presetId="flower_pot_burst"
+          stocks={rawStocks}
+          filters={filters}
+          onFiltersChange={setFilters}
+        />
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <DownloadXlsButton stocks={filtered} scanName={preset.name} />
+          <TradingViewExportButton stocks={filtered} scanName={preset.name} />
+          <ViewToggle value={viewMode} onChange={onViewModeChange} />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <DristiQLoader />
+      ) : error ? (
+        <Card rounded="xxl" className="py-12 text-center">
+          <p style={{ fontSize: '13px', color: 'var(--bear)' }}>Failed to run scan.</p>
+        </Card>
+      ) : viewMode === 'table' ? (
+        <ScanTable
+          stocks={[...bursts, ...setups]}
+          presetId="flower_pot_burst"
+          onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+        />
+      ) : (
+        <>
+          <ScanSectionLabel>
+            🌸 Bursts · {bursts.length} today
+          </ScanSectionLabel>
+          {bursts.length === 0 ? (
+            <div style={{
+              padding: '20px 24px', textAlign: 'center', marginBottom: 20,
+              background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
+            }}>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                No coil released today. Bursts are rare — historically about twice a month across the NSE universe.
+                The coiling setups below are where the next one may come from.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
+              {bursts.map((stock) => (
+                <div key={stock.equity_id}>
+                  <StockCard stock={stock} />
+                  <FpbMetricLine stock={stock} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <ScanSectionLabel>
+            Coiling Setups · {setups.length} watching
+          </ScanSectionLabel>
+          {setups.length === 0 ? (
+            <div style={{
+              padding: '20px 24px', textAlign: 'center',
+              background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
+            }}>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                No stocks are tightly coiled right now. Genuine compression — ATR halving, range under 8%,
+                volume dying, relative strength flat — is uncommon; check back after the next few sessions.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {setups.map((stock) => (
+                <div key={stock.equity_id}>
+                  <StockCard stock={stock} />
+                  <FpbMetricLine stock={stock} />
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+
 // ── Screen 2: Results ──────────────────────────────────────────
 
 // First-visit orientation: 14 presets with no guidance was a documented
@@ -1039,6 +1164,16 @@ function ScannerResults({ presetId }: { presetId: string }) {
       <div style={{ paddingBottom: '100px' }}>
         {header}
         <ConvictionFlowResults preset={preset} timeframe={timeframe} viewMode={viewMode} onViewModeChange={setViewMode} />
+      </div>
+    );
+  }
+
+  // Flower Pot Burst — two-phase (Bursts / Coiling Setups) layout
+  if (presetId === 'flower_pot_burst') {
+    return (
+      <div style={{ paddingBottom: '100px' }}>
+        {header}
+        <FpbResults preset={preset} timeframe={timeframe} viewMode={viewMode} onViewModeChange={setViewMode} />
       </div>
     );
   }

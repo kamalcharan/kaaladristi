@@ -298,6 +298,25 @@ const WIDGETS: CatalogItem[] = [
     ],
   },
   {
+    id: 'flower_pot_burst',
+    display_name: 'Flower Pot Burst',
+    description: 'Energy compression → release. A watchlist of coiling stocks plus the rare session a coil bursts on explosive volume and range.',
+    block_type: 'scanner',
+    placement: 'output_panel',
+    data_source: 'computed_ts',
+    db_table: ['km_equity_eod'],
+    db_column: 'atr_14',  // also reads open/high/low/close/volume/magic_rs/delivery_pct/stage over 60d
+    applicable_to: ['equity'],
+    tier_required: 'paid',
+    vani_explanation: "Flower Pot Burst reads volatility compression: a stock whose ATR is contracting, whose 10-day range has tightened under 8%, whose volume is dying, and whose relative strength has gone flat — the coil. It surfaces those setups as a watchlist, and separately flags the rare session when a coil releases: a single candle with 3×+ volume, 2×+ range expansion, a strong close, breaking the 10-day range on real delivery. Thresholds are calibrated to the live NSE distribution.",
+    vani_tags: [
+      { text: 'Compression → release', type: 'works' },
+      { text: 'Calibrated thresholds', type: 'works' },
+      { text: 'Bursts are rare (~2×/month)', type: 'limit' },
+      { text: 'NSE equity only', type: 'limit' },
+    ],
+  },
+  {
     id: 'order_flow',
     display_name: 'Order Flow',
     description: 'Flow intelligence: flow_type, RVOL, vacuum detection, accum/distrib state.',
