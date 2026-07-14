@@ -1,11 +1,12 @@
 """Execution order for pipeline v2 daily runs.
 
-The daily run is a sequence of 20 steps:
+The daily run is a sequence of 22 steps:
   Steps 1-3:  Download index bhav + NSE equity bhav + BSE equity bhav.
-  Steps 4-20: Compute indicators, flow, magic_rs, supertrend, rolling metrics,
-              d365, stage classification, VaNi flags, index returns + custom
-              index EOD + scores, industry composites, market breadth, and
-              breadth ROC.
+  Steps 4-22: Compute indicators, flow, magic_rs, rs_percentile, supertrend,
+              rolling metrics, d365, stage classification, VaNi flags, index
+              returns + custom index EOD + scores, industry composites, market
+              breadth, breadth ROC, and finally refresh the scanner
+              materialized views (km_scan_results).
 
 Each step:
   1. Runs its dimension handler (download/compute + fill-rate read).
@@ -43,6 +44,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('bse_flow',              'BSE'),
     ('nse_magic_rs',          'NSE'),
     ('bse_magic_rs',          'BSE'),
+    ('rs_percentile',         None),   # ranks by magic_rs — must run after magic_rs, before vani_flags
     ('supertrend',            None),
     ('rolling_metrics',       None),
     ('d365',                  None),
@@ -52,6 +54,7 @@ DAILY_STEPS: list[tuple[str, Optional[str]]] = [
     ('industry_composites',   None),
     ('market_breadth',        None),
     ('breadth_roc',           None),
+    ('scan_refresh',          None),   # LAST — matview reads all equity/industry compute above
 ]
 
 
@@ -106,10 +109,11 @@ def run_daily(conn: 'psycopg2.extensions.connection',
     """Run the full daily pipeline for `trade_date`: download then compute.
 
     Steps 1-3 fetch NSE index bhav, NSE equity bhav, and BSE equity bhav.
-    Steps 4-19 compute indicators, flow, magic_rs, supertrend, rolling metrics,
-    d365, stage classification, VaNi flags, industry composites, market breadth,
-    and breadth ROC. A failed download step does not abort
-    compute — downstream steps run against whatever rows are already present.
+    Steps 4-22 compute indicators, flow, magic_rs, rs_percentile, supertrend,
+    rolling metrics, d365, stage classification, VaNi flags, index returns,
+    industry composites, market breadth, breadth ROC, and refresh the scanner
+    matviews. A failed download step does not abort compute — downstream steps
+    run against whatever rows are already present.
     """
     outcome = RunOutcome(trade_date=str(trade_date))
     total_steps = len(DAILY_STEPS)

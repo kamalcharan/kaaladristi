@@ -91,9 +91,12 @@ function MomentumDots({ rsi, mfi, alignment }: { rsi: number | null; mfi: number
 // ── RS spectrum bar ──────────────────────────────────────────────────────────
 
 function RSBar({ zone }: { zone: string | null }) {
-  const zones = ['Strong Bear', 'Mild Bear', 'Neutral', 'Mild Bull', 'Strong Bull'];
+  // 7-point spectrum matching the pipeline's emitted bands (migration 069).
+  // Neutral Bull/Bear are ~47% of the universe — a 5-point scale snapped both
+  // to dead-center, erasing their bull/bear tilt.
+  const zones = ['Strong Bear', 'Mild Bear', 'Neutral Bear', 'Neutral', 'Neutral Bull', 'Mild Bull', 'Strong Bull'];
   const idx = zones.indexOf(zone ?? 'Neutral');
-  const pos = idx >= 0 ? idx : 2;
+  const pos = idx >= 0 ? idx : 3;
   const pct = (pos / (zones.length - 1)) * 100;
 
   return (
