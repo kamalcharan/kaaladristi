@@ -1013,7 +1013,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
           {!vaniOnly && (
             <>
               <ScanSectionLabel>
-                Coiling Setups · {setups.length} watching
+                🪴 Coiling Setups · {setups.length} watching
               </ScanSectionLabel>
               {setups.length === 0 ? (
                 <div style={{
