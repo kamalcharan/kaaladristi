@@ -60,13 +60,17 @@ WITH computed AS (
             ELSE NULL
         END AS rising,
 
-        -- w52_high / w52_low / lifetime_high (252-bar rolling)
-        MAX(high) OVER (PARTITION BY equity_id ORDER BY trade_date
-                        ROWS BETWEEN 251 PRECEDING AND CURRENT ROW) AS w52h,
-        MIN(low)  OVER (PARTITION BY equity_id ORDER BY trade_date
-                        ROWS BETWEEN 251 PRECEDING AND CURRENT ROW) AS w52l,
-        MAX(high) OVER (PARTITION BY equity_id ORDER BY trade_date
-                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS lth,
+        -- w52_high / w52_low / lifetime_high — READ, not recomputed.
+        -- rolling_metrics (an earlier DAILY_STEPS step, always run first for
+        -- this same trade_date) already computes these exact 252-bar/
+        -- unbounded window aggregates and writes them to these columns.
+        -- Recomputing them here via a second set of window functions over
+        -- full history was pure redundant work — the single biggest cost
+        -- in this query, since the UNBOUNDED lifetime-high window in
+        -- particular forces a full-partition scan per symbol on every run.
+        w52_high      AS w52h,
+        w52_low       AS w52l,
+        lifetime_high AS lth,
 
         -- raw columns needed for CASE logic below
         close, sma_50, sma_200,
@@ -217,20 +221,32 @@ def run_full(conn):
 
 
 def run_date(conn, target_date: str):
-    """Reprocess a single trade date (e.g. after nightly pipeline)."""
-    where = "WHERE trade_date <= %s"
-    # We must still pass all history for the window functions, but only
-    # UPDATE the target date rows.
+    """Reprocess a single trade date (e.g. after nightly pipeline).
+
+    ⚠ History: this used to scan the FULL km_equity_eod table (every symbol,
+    entire history — years of data, ~5M+ rows) on EVERY daily run, per the
+    old comment "we must still pass all history for the window functions".
+    That was true only for the w52/lifetime-high windows, which are now read
+    directly from rolling_metrics's output instead of recomputed (see
+    _BASE_CTE) — the only window function left is LAG(sma_200, 20), which
+    needs at most ~20 TRADING days of lookback per symbol. A 120-CALENDAR-day
+    bound comfortably covers that (even through holiday clusters) while
+    cutting the scan from the entire table down to a small recent slice —
+    this was the dominant cost of the daily stage_classification step.
+    """
+    # bound is computed IN SQL (target_date - 120 days), not passed as a
+    # separate param — avoids relying on target_date's Python type (str vs
+    # date) for arithmetic.
+    where = "WHERE trade_date >= %(dt)s::date - INTERVAL '120 days' AND trade_date <= %(dt)s"
     sql = _BASE_CTE.format(
-        where_clause="",  # full history needed for window functions
+        where_clause=where,
         update_filter="AND e.trade_date = %(dt)s"
     )
-    # Replace generic placeholder — use named params
     t0 = time.time()
-    print(f"\n[date={target_date}] Single-pass SQL UPDATE for one date...")
+    print(f"\n[date={target_date}] Single-pass SQL UPDATE for one date (120-day bounded scan)...")
     with conn.cursor() as cur:
         cur.execute("SET statement_timeout = 600000")
-        cur.execute(sql.replace("%(dt)s", "%s"), [target_date])
+        cur.execute(sql, {'dt': target_date})
         updated = cur.rowcount
     conn.commit()
     elapsed = time.time() - t0
