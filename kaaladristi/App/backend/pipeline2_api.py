@@ -4824,14 +4824,15 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': 'No data available for this date',
         }
 
-    # Call LLM. Scanner intents carry their own carefully-structured system
-    # prompt (date anchor, lens framing, no-superlatives, never-reveal-formula)
-    # — the generic _VANI_ASK_SYSTEM is written for the astro/macro intents
-    # and actively wrong for scanner narration ("atmospheric conditions",
-    # "macro backdrop", 3-4 sentence cap). Both paths keep the grounding
-    # wrapper so the model can't drift outside the provided data.
+    # Call LLM. Scanner AND equity intents carry their own carefully-
+    # structured system prompts — the generic _VANI_ASK_SYSTEM is written
+    # for the astro/macro intents and actively wrong for signal narration
+    # ("atmospheric conditions", "macro backdrop", 3-4 sentence cap).
+    # Dashboard/astro/industry intents keep _VANI_ASK_SYSTEM unchanged.
+    # Both paths keep the grounding wrapper so the model can't drift
+    # outside the provided data.
     provider = os.getenv('AI_PROVIDER', 'local')
-    if _is_scanner:
+    if _is_scanner or intent_id.startswith('equity.'):
         _ask_system = intent.system_prompt + (
             "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
             "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
@@ -4842,45 +4843,58 @@ def vani_ask(req: VaNiAskRequest):
     else:
         _ask_system = _VANI_ASK_SYSTEM
     _wrapped_msg = _wrap_vani_user_msg(user_msg)
+
+    # Up to 2 attempts: a compliance reject or empty generation retries once
+    # at a nudged temperature instead of dead-ending the user.
     _t0 = time.monotonic()
-    response_text = _ai_complete(
-        system=_ask_system,
-        user=_wrapped_msg,
-        max_tokens=intent.max_tokens,
-        temperature=0.4,
-        no_think=True,
-    )
-    _latency = int((time.monotonic() - _t0) * 1000)
-
-    if not response_text:
-        return {
-            'intent_id': intent_id, 'date': date_str,
-            'response': None, 'ai': False, 'cached': False,
-            'provider': None, 'error': 'LLM unavailable',
-        }
-
-    # SEBI post-filter — substitute forbidden phrases per the sweep table;
-    # reject outright (never serve, never cache) if recommendation language
-    # survives substitution.
-    response_text, _sebi_rejected = _sebi_post_filter(response_text)
-    if _sebi_rejected or not response_text:
-        log.warning(f'vani_ask [{intent_id}] response rejected by SEBI post-filter')
-        return {
-            'intent_id': intent_id, 'date': date_str,
-            'response': None, 'ai': False, 'cached': False,
-            'provider': provider, 'error': 'Response did not pass the language compliance check — please retry',
-        }
-    if _is_scanner:
+    response_text = None
+    _sebi_rejected = False
+    _llm_returned = False
+    for _attempt in range(2):
+        raw = _ai_complete(
+            system=_ask_system,
+            user=_wrapped_msg,
+            max_tokens=intent.max_tokens,
+            temperature=0.4 if _attempt == 0 else 0.6,
+            no_think=True,
+        )
+        if not raw:
+            continue
+        _llm_returned = True
+        # SEBI post-filter — substitute forbidden phrases per the sweep
+        # table; reject (never serve, never cache) if recommendation
+        # language survives substitution.
+        clean, rejected = _sebi_post_filter(raw)
+        if rejected or not clean:
+            log.warning(f'vani_ask [{intent_id}] attempt {_attempt + 1} rejected by SEBI post-filter')
+            _sebi_rejected = True
+            continue
         # explain_preset must never reveal thresholds/formula values — the
         # inputs are number-masked, and any digit that still appears in the
         # output is a leak: reject before serving or caching.
-        if intent_id == 'scanner.explain_preset' and re.search(r'\d', response_text):
-            log.warning(f'vani_ask [{intent_id}] rejected: numeric value in explainer')
-            return {
-                'intent_id': intent_id, 'date': date_str,
-                'response': None, 'ai': False, 'cached': False,
-                'provider': provider, 'error': 'Response did not pass the language compliance check — please retry',
-            }
+        if intent_id == 'scanner.explain_preset' and re.search(r'\d', clean):
+            log.warning(f'vani_ask [{intent_id}] attempt {_attempt + 1} rejected: numeric value in explainer')
+            _sebi_rejected = True
+            continue
+        response_text = clean
+        _sebi_rejected = False
+        break
+    _latency = int((time.monotonic() - _t0) * 1000)
+
+    if not response_text:
+        if _sebi_rejected:
+            err = 'The generated text did not pass the language compliance check. Please ask again.'
+        elif _llm_returned:
+            err = 'The AI returned an empty response. Please ask again.'
+        else:
+            err = 'The AI service is unavailable right now. Please try again shortly.'
+        return {
+            'intent_id': intent_id, 'date': date_str,
+            'response': None, 'ai': False, 'cached': False,
+            'provider': provider, 'error': err,
+        }
+
+    if _is_scanner:
         response_text = _append_disclaimer(response_text)
 
     log_id = _log_interaction(
