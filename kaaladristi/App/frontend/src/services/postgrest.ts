@@ -190,16 +190,25 @@ class QueryBuilder {
     return this;
   }
 
-  /** GROUP BY clause — PostgREST v12+ aggregate queries */
-  group(column: string): this {
-    this.state.params.set('group', column);
-    return this;
+  // group()/having() USED TO set `group`/`having` URL params — but PostgREST
+  // has no such params: GROUP BY is implicit (non-aggregated select columns
+  // group automatically) and there is no HAVING equivalent at all. The one
+  // call site (scanEngine.ts's daily-bundle date resolver) silently 400'd on
+  // every call for the life of that code; the catch swallowed the error and
+  // fell through to an unbounded query, causing scanners to serve
+  // indicator-incomplete rows during the daily pipeline window. Fixed in
+  // that call site by gating on a column's NOT NULL instead (see
+  // resolveConfirmedLatestDate in scanEngine.ts). These now throw
+  // immediately so a future caller fails loudly instead of silently.
+
+  /** @deprecated Not a real PostgREST capability — always throws. See comment above. */
+  group(_column: string): never {
+    throw new Error('QueryBuilder.group() is not supported by PostgREST — see comment in postgrest.ts');
   }
 
-  /** HAVING clause — PostgREST v12+ aggregate queries, e.g. 'count().gte.4000' */
-  having(expr: string): this {
-    this.state.params.set('having', expr);
-    return this;
+  /** @deprecated Not a real PostgREST capability — always throws. See comment above. */
+  having(_expr: string): never {
+    throw new Error('QueryBuilder.having() is not supported by PostgREST — see comment in postgrest.ts');
   }
 
   range(from: number, to: number): this {

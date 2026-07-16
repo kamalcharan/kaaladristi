@@ -110,6 +110,40 @@ interface ScanDataBundle {
 
 const _bundleCache = new Map<ScanTimeframe, { data: ScanDataBundle; fetchedAt: number }>();
 const CACHE_TTL = 3 * 60 * 1000; // 3 min
+
+// Last successfully-confirmed indicator-complete date per timeframe. Used to
+// fail CLOSED (reuse the last known-good bound) when a resolver query itself
+// errors — the alternative (treat "unknown" as "no bound") is exactly the
+// shape of the mid-pipeline blackout bug: an unbounded query during the
+// ingest window picks up indicator-incomplete rows as "latest".
+const _lastConfirmedDate = new Map<ScanTimeframe, string>();
+
+/** Resolve the latest date with a populated indicator column — the signal
+ *  that a row is post-compute, not just post-ingest. On any query failure,
+ *  falls back to the last confirmed value for this timeframe (never to
+ *  "no bound"). Shared by the daily and weekly/monthly resolvers. */
+async function resolveConfirmedLatestDate(
+  table: string, dateCol: string, tf: ScanTimeframe,
+): Promise<string | null> {
+  try {
+    const { data, error } = await from(table)
+      .select(dateCol)
+      .notNull('ema_20')
+      .order(dateCol, { ascending: false })
+      .limit(1)
+      .execute();
+    if (!error) {
+      const d = (data as Record<string, string>[] | null)?.[0]?.[dateCol] ?? null;
+      if (d) {
+        _lastConfirmedDate.set(tf, d);
+        return d;
+      }
+    }
+  } catch {
+    /* fall through to last-known-good below */
+  }
+  return _lastConfirmedDate.get(tf) ?? null;
+}
 let _buildScanStockDebugCount = 0;
 
 // Session-level config cache — presetId → OppConfig, fetched once per page load.
@@ -197,21 +231,10 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   // The gate must be indicator completion, not row count: prices landing is
   // not "data ready". compute_all_pending_indicators writes ema_20 in one
   // transaction per date, so the newest date with any non-null ema_20 flips
-  // atomically at commit — a single cheap, version-proof query.
-  const confirmedLatestDate: string | null = await (async () => {
-    try {
-      const { data, error } = await from('km_equity_eod')
-        .select('trade_date')
-        .notNull('ema_20')
-        .order('trade_date', { ascending: false })
-        .limit(1)
-        .execute();
-      if (error) return null;
-      return (data as { trade_date: string }[] | null)?.[0]?.trade_date ?? null;
-    } catch {
-      return null;
-    }
-  })();
+  // atomically at commit — a single cheap, version-proof query. On ANY
+  // resolver failure (not just the specific 400 above) this now fails
+  // CLOSED to the last confirmed date rather than falling through unbounded.
+  const confirmedLatestDate = await resolveConfirmedLatestDate('km_equity_eod', 'trade_date', 'daily');
 
   // Phase 2: fetch everything else in parallel.
   // EOD is chunked into batches of 400 IDs to stay within nginx's 8k URL limit.
@@ -260,13 +283,14 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
   const eodChunkRes    = rest.slice(0, rest.length - 3) as Array<{ data: any }>;
   const eodRes         = { data: eodChunkRes.flatMap((r) => r.data ?? []) };
 
-  // Use the confirmed latest complete date from km_trading_calendar.
-  // Falls back to max of loaded chunk heads only if km_trading_calendar returned no rows.
+  // latestDate is ONLY ever the indicator-confirmed date (or the last known-
+  // good one on a transient resolver failure) — never a max-of-loaded-chunks
+  // fallback. That fallback used to be the silent unbounded-date bug's twin:
+  // on a genuinely fresh cold start with a failed resolver AND no prior
+  // confirmed date, we now show the safe "no data" state below instead of
+  // guessing from possibly indicator-incomplete chunk heads.
   const allEodRows = (eodRes.data ?? []) as EquityEodSnapshot[];
-  const latestDate: string | null = confirmedLatestDate ?? eodChunkRes.reduce((max: string | null, chunk: any) => {
-    const d: string | undefined = chunk.data?.[0]?.trade_date;
-    return d && (!max || d > max) ? d : max;
-  }, null);
+  const latestDate: string | null = confirmedLatestDate;
 
   if (!latestDate) {
     return {
@@ -354,6 +378,14 @@ async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<Scan
   const last10days = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const industryCutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+  // Indicator-complete period gate — same fix as the daily bundle. The
+  // weekly/monthly aggregators upsert raw OHLCV for a period first, and only
+  // run the indicator chain (ema_20 etc.) afterward, so without this gate a
+  // Friday-evening or month-end backfill window would surface a period whose
+  // ema_20 is still null as "latest", and every ema_20-null row gets dropped
+  // downstream — the same blackout the daily bundle had, on this table.
+  const confirmedLatestPeriod = await resolveConfirmedLatestDate(table, periodCol, tf);
+
   const [industryRes, symbolRes, periodRes, idxSymbolRes, idxEodRes, oppConfigMap] = await Promise.all([
     from('km_industry_eod')
       .select('*')
@@ -368,20 +400,23 @@ async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<Scan
       .limit(8000)
       .execute(),
 
-    from(table)
-      .select([
-        'equity_id', periodCol, 'trade_date',
-        'open', 'high', 'low', 'close', 'volume', 'total_value',
-        'rvol', 'tvol', 'rsi_14', 'magic_rs', 'magic_rs_zone',
-        'flow_type', 'accum_distrib', 'sniper_inst', 'sniper_hot',
-        'volume_divergence_flag', 'ema_20', 'atr_14',
-        'avg_deliv_pct', 'deliv_qty', 'w52_high', 'w52_low',
-        'deliv_value_cr',
-      ].join(','))
-      .gte(periodCol, cutoff)
-      .order(periodCol, { ascending: false })
-      .limit(110000)
-      .execute(),
+    (() => {
+      let q = from(table)
+        .select([
+          'equity_id', periodCol, 'trade_date',
+          'open', 'high', 'low', 'close', 'volume', 'total_value',
+          'rvol', 'tvol', 'rsi_14', 'magic_rs', 'magic_rs_zone',
+          'flow_type', 'accum_distrib', 'sniper_inst', 'sniper_hot',
+          'volume_divergence_flag', 'ema_20', 'atr_14',
+          'avg_deliv_pct', 'deliv_qty', 'w52_high', 'w52_low',
+          'deliv_value_cr',
+        ].join(','))
+        .gte(periodCol, cutoff)
+        .order(periodCol, { ascending: false })
+        .limit(110000);
+      if (confirmedLatestPeriod) q = (q as any).lte(periodCol, confirmedLatestPeriod);
+      return (q as any).execute();
+    })(),
 
     from('km_index_symbols').select('id,name').execute(),
 
@@ -396,7 +431,11 @@ async function loadWeeklyOrMonthlyBundle(tf: 'weekly' | 'monthly'): Promise<Scan
   ]);
 
   const allPeriodRows = (periodRes.data ?? []) as any[];
-  const latestDate: string | null = allPeriodRows.length > 0 ? allPeriodRows[0][periodCol] : null;
+  // latestDate is the CONFIRMED (indicator-complete) period, never just
+  // "whatever sorted first" — the query above is already bounded by it, but
+  // pin it explicitly rather than re-deriving from the (possibly empty on a
+  // no-op period) result rows.
+  const latestDate: string | null = confirmedLatestPeriod;
 
   if (!latestDate) {
     return {

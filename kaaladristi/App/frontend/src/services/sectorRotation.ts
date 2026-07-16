@@ -75,10 +75,14 @@ export const SECTOR_TAB_LABELS: Record<SectorTab, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Fetch the latest available trade_date in km_index_eod */
+/** Fetch the latest INDICATOR-complete trade_date in km_index_eod. Gated on
+ *  ema_20 (not just latest row) — index_eod_download lands raw rows before
+ *  index_indicators/index_magic_rs compute, so an ungated latest date can
+ *  surface a row set with sector indices still mid-calculation. */
 export async function fetchLatestIndexDate(): Promise<string | null> {
   const { data, error } = await from('km_index_eod')
     .select('trade_date')
+    .notNull('ema_20')
     .order('trade_date', { ascending: false })
     .limit(1)
     .execute();

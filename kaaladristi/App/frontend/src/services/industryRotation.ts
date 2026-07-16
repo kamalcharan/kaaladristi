@@ -35,7 +35,15 @@ async function fetchIndustryEodForDate(date: string): Promise<IndustryEodRow[]> 
   return (data ?? []) as IndustryEodRow[];
 }
 
-/** Fetch the latest N distinct trade dates from km_industry_eod */
+/** Fetch the latest N distinct trade dates from km_industry_eod.
+ *
+ *  No explicit indicator-completeness gate here — none is needed as long as
+ *  an invariant holds: `industry_composites` is the LAST step in
+ *  pipeline2/orchestrator.py's DAILY_STEPS, running after nse/bse equity
+ *  indicators and magic_rs — so a km_industry_eod row existing for a date
+ *  already implies equity indicators are committed for it. If that step
+ *  order ever changes, this silently regresses to the same mid-pipeline
+ *  blackout bug fixed elsewhere (see scanEngine.ts's resolveConfirmedLatestDate). */
 async function fetchRecentTradeDates(limit: number): Promise<string[]> {
   const { data, error } = await from('km_industry_eod')
     .select('trade_date')

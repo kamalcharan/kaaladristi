@@ -43,7 +43,13 @@ function isWeekend(date: Date): boolean {
   return day === 0 || day === 6;
 }
 
-/** Fetch the most recent trade_date from km_industry_eod */
+/** Fetch the most recent trade_date from km_industry_eod.
+ *
+ *  No explicit indicator-completeness gate — none is needed as long as
+ *  `industry_composites` stays the LAST step in DAILY_STEPS (see the same
+ *  note in industryRotation.ts). This is also why the app-wide "data
+ *  current/pending" pill is correctly conservative: it only flips to
+ *  current once this final step's output lands. */
 async function fetchLatestDataDate(): Promise<string | null> {
   const { data, error } = await from('km_industry_eod')
     .select('trade_date')

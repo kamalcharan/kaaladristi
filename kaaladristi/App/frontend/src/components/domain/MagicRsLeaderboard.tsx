@@ -32,9 +32,13 @@ interface LeaderboardStock {
 // ── Data fetching ──
 
 async function fetchLeaderboard(): Promise<{ top: LeaderboardStock[]; bottom: LeaderboardStock[] }> {
-  // Get latest trade date
+  // Gate on ema_20 (indicator-complete), not just latest row — during the
+  // daily pipeline window the raw-latest trade_date has prices but magic_rs
+  // still computing for most stocks; ranking that date produces a partial,
+  // arrival-order-biased leaderboard rather than an empty/stale-safe one.
   const { data: dateData } = await from('km_equity_eod')
     .select('trade_date')
+    .notNull('ema_20')
     .order('trade_date', { ascending: false })
     .limit(1)
     .execute();
