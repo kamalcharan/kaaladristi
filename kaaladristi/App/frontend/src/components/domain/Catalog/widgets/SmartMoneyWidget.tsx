@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { usePipelineStatus } from '@/hooks/usePipelineStatus'
 import { useWorkspaceEod } from '@/hooks/useWorkspaceEod'
 import { fetchIndicatorDataById } from '@/services/indicatorData'
 import SmartMoneyCard, { type SmartMoneyBar } from '@/components/domain/VisualPulse/SmartMoneyCard'
@@ -13,8 +14,11 @@ interface Props {
 }
 
 export default function SmartMoneyWidget({ symbolId }: Props) {
+  // Catalog widgets are commonly left open on a canvas/deep-dive panel
+  // for hours — same fix as hooks/useScan.ts.
+  const { latestDataDate } = usePipelineStatus()
   const { data: catalogData = [], isLoading: catalogLoading } = useQuery({
-    queryKey: ['widget-catalog-eod', symbolId],
+    queryKey: ['widget-catalog-eod', symbolId, latestDataDate ?? 'unknown'],
     queryFn:  () => fetchIndicatorDataById(symbolId!, '1Y'),
     staleTime: 120_000,
     enabled:  symbolId != null,

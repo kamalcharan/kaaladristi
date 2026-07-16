@@ -3,6 +3,7 @@ import { fetchPanchang, fetchMarketBreadth, fetchBreadthRoc, fetchConfluenceHist
 import { fetchAstroSignal, fetchAstroWeek, fetchAstroTransits } from '@/services/astro';
 import { fetchInferencesForRange } from '@/services/dcInference';
 import { from } from '@/services/postgrest';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { IndexCatalogItem } from '@/types';
 
 function shiftDate(dateStr: string, days: number): string {
@@ -20,17 +21,22 @@ export function usePanchang(date: string) {
   });
 }
 
+// Dashboard breadth widgets commonly stay mounted for hours — keyed on the
+// pipeline-confirmed date (same fix as hooks/useScan.ts) so a day change
+// refetches automatically instead of relying on focus/mount timing.
 export function useMarketBreadth(days = 66) {
+  const { latestDataDate } = usePipelineStatus();
   return useQuery({
-    queryKey: ['market_breadth', days],
+    queryKey: ['market_breadth', days, latestDataDate ?? 'unknown'],
     queryFn: () => fetchMarketBreadth(days),
     staleTime: 5 * 60 * 1000,
   });
 }
 
 export function useBreadthRoc(days = 66) {
+  const { latestDataDate } = usePipelineStatus();
   return useQuery({
-    queryKey: ['breadth_roc', days],
+    queryKey: ['breadth_roc', days, latestDataDate ?? 'unknown'],
     queryFn: () => fetchBreadthRoc(days),
     staleTime: 5 * 60 * 1000,
   });
