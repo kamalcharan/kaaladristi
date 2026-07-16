@@ -4824,13 +4824,27 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': 'No data available for this date',
         }
 
-    # Call LLM — use the single anti-hallucination system prompt for all intents;
-    # wrap user_msg with grounding delimiters so the model can't drift outside the data.
+    # Call LLM. Scanner intents carry their own carefully-structured system
+    # prompt (date anchor, lens framing, no-superlatives, never-reveal-formula)
+    # — the generic _VANI_ASK_SYSTEM is written for the astro/macro intents
+    # and actively wrong for scanner narration ("atmospheric conditions",
+    # "macro backdrop", 3-4 sentence cap). Both paths keep the grounding
+    # wrapper so the model can't drift outside the provided data.
     provider = os.getenv('AI_PROVIDER', 'local')
+    if _is_scanner:
+        _ask_system = intent.system_prompt + (
+            "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
+            "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
+            "stock names, numbers, industries, or dates not explicitly stated. "
+            "Refer to fields by their plain names (e.g. 'delivery surge', "
+            "'relative volume') — never echo raw field labels."
+        )
+    else:
+        _ask_system = _VANI_ASK_SYSTEM
     _wrapped_msg = _wrap_vani_user_msg(user_msg)
     _t0 = time.monotonic()
     response_text = _ai_complete(
-        system=_VANI_ASK_SYSTEM,
+        system=_ask_system,
         user=_wrapped_msg,
         max_tokens=intent.max_tokens,
         temperature=0.4,
@@ -4864,7 +4878,7 @@ def vani_ask(req: VaNiAskRequest):
         endpoint="/api/vani/ask",
         user_input=_wrapped_msg,
         llm_response=response_text,
-        system_prompt=_VANI_ASK_SYSTEM,
+        system_prompt=_ask_system,
         context_payload=ctx if isinstance(ctx, dict) else None,
         model_version=_AI_MODEL,
         latency_ms=_latency,
