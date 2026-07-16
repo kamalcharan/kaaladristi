@@ -8,6 +8,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import { from } from '@/services/postgrest';
 import { getDaysInMonth, toIso } from '@/lib/dateUtils';
 import type { PulseBar, DcInferenceEvent } from '@/services/visualPulseEngine';
@@ -242,6 +243,11 @@ async function fetchStockRankInIndustry(
 // ── Combined Hook ──────────────────────────────────────────────
 
 export function useEquityVisualPulse(equityId: number | null) {
+  // Equity Visual Pulse pages are commonly left open through a session —
+  // same fix as hooks/useScan.ts, so a day change refetches automatically.
+  const { latestDataDate } = usePipelineStatus();
+  const dateKey = latestDataDate ?? 'unknown';
+
   const metaQuery = useQuery({
     queryKey: ['equity-vp-meta', equityId],
     queryFn: () => fetchEquityMeta(equityId!),
@@ -250,7 +256,7 @@ export function useEquityVisualPulse(equityId: number | null) {
   });
 
   const barsQuery = useQuery({
-    queryKey: ['equity-vp-bars', equityId],
+    queryKey: ['equity-vp-bars', equityId, dateKey],
     queryFn: () => fetchEquityBars(equityId!),
     staleTime: 5 * 60 * 1000,
     enabled: !!equityId,
@@ -265,14 +271,14 @@ export function useEquityVisualPulse(equityId: number | null) {
   const industry = metaQuery.data?.industry ?? null;
 
   const industryQuery = useQuery({
-    queryKey: ['equity-vp-industry', industry],
+    queryKey: ['equity-vp-industry', industry, dateKey],
     queryFn: () => fetchIndustryContext(industry),
     staleTime: 5 * 60 * 1000,
     enabled: !!industry,
   });
 
   const rankQuery = useQuery({
-    queryKey: ['equity-vp-rank', equityId, industry],
+    queryKey: ['equity-vp-rank', equityId, industry, dateKey],
     queryFn: () => fetchStockRankInIndustry(equityId!, industry),
     staleTime: 5 * 60 * 1000,
     enabled: !!equityId && !!industry,

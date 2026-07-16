@@ -28,6 +28,7 @@ import type { TimeRange } from '@/types';
 import { useVisualPulse } from '@/hooks/useVisualPulse';
 import { useEquityVisualPulse } from '@/hooks/useEquityVisualPulse';
 import { useScanPresence } from '@/hooks/useScanPresence';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import {
   computePulseSnapshot,
   computeCorrHistory,
@@ -158,8 +159,11 @@ export default function ChartView() {
   const isEquity = type === 'equity';
 
   // ── Chart data (full history for TradingChart) ──
+  // dateKey: the main chart page is commonly left open through a session —
+  // same fix as hooks/useScan.ts, so a day change refetches automatically.
+  const { latestDataDate: chartDateKey } = usePipelineStatus();
   const { data: rows = [], isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['chart', type, numId, range, tf],
+    queryKey: ['chart', type, numId, range, tf, chartDateKey ?? 'unknown'],
     queryFn: () =>
       isEquity
         ? (tf === 'daily' ? fetchEquityEodById(numId, range) : fetchEquityTimeframeById(numId, tf))

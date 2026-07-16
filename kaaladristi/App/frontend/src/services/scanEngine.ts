@@ -182,10 +182,25 @@ async function fetchOpportunityConfig(): Promise<Map<string, OppConfig>> {
 }
 
 // 3b: Fetch trading dates from km_trading_calendar — exchange-aware, exact count
+//
+// ⚠ History: this filtered status='completed' ONLY. The backend's own
+// orchestrator (pipeline2/orchestrator.py) explicitly designs 'partial' as
+// a USABLE outcome — CRITICAL_STEPS is only the 3 eod_download steps; every
+// other step (magic_rs, rolling_metrics, stage_classification, ...) failing
+// downgrades the run to 'partial', by design, specifically so "the day is
+// still usable" and "keeps the day from being withheld from the frontend"
+// (see that file's own comment). This filter contradicted that design: a
+// transient failure in ANY non-critical step (e.g. a magic_rs deadlock)
+// permanently capped every scan using this resolver at the last fully-
+// completed day — confirmed live, NSE stuck 'partial' for 3 of 4 days
+// running, every fetchRecentDates() consumer silently frozen days behind
+// while prices/ema_20/etc were already correct and current. 'failed' is
+// still excluded — that status means eod_download itself didn't happen,
+// so there's genuinely nothing usable for that date.
 async function fetchRecentDates(limit: number): Promise<string[]> {
   const { data } = await from('km_trading_calendar')
     .select('trade_date')
-    .eq('status', 'completed')
+    .in('status', ['completed', 'partial'])
     .eq('exchange', 'NSE')
     .order('trade_date', { ascending: false })
     .limit(limit)

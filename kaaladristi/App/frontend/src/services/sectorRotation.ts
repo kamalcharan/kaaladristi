@@ -323,6 +323,9 @@ export async function fetchIndexDetail(indexId: number): Promise<SectorIndexRow 
       .eq('id', indexId)
       .limit(1)
       .execute(),
+    // Gated on ema_20 — see the note on fetchLatestIndexDate above; without
+    // it, a mid-pipeline ask can surface a row with prices but null
+    // flow_type/magic_rs/sniper_inst for this one index.
     from('km_index_eod')
       .select(
         'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
@@ -330,6 +333,7 @@ export async function fetchIndexDetail(indexId: number): Promise<SectorIndexRow 
         'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d',
       )
       .eq('index_id', indexId)
+      .notNull('ema_20')
       .order('trade_date', { ascending: false })
       .limit(1)
       .execute(),
@@ -351,6 +355,7 @@ export async function fetchVix(): Promise<VixRow | null> {
   const { data, error } = await from('km_index_eod')
     .select('trade_date,open,high,low,close,pct_chng,ret_5d,ret_22d,ret_66d')
     .eq('index_id', 94)
+    .notNull('ema_20')
     .order('trade_date', { ascending: false })
     .limit(1)
     .execute();

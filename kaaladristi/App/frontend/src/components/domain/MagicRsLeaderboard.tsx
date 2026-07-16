@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { displaySymbol, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
 import { Card } from '@/components/ui';
 import { from } from '@/services/postgrest';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 
 // ── Types ──
 
@@ -206,8 +207,11 @@ function LeaderboardPanel({
 // ── Main ──
 
 export default function MagicRsLeaderboard() {
+  // Dashboard widget, commonly mounted for hours — same fix as
+  // hooks/useScan.ts, so a day change refetches automatically.
+  const { latestDataDate } = usePipelineStatus();
   const { data, isLoading } = useQuery({
-    queryKey: ['magic-rs-leaderboard'],
+    queryKey: ['magic-rs-leaderboard', latestDataDate ?? 'unknown'],
     queryFn: fetchLeaderboard,
     staleTime: 5 * 60 * 1000,
   });

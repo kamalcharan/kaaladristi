@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useFrameworkStore } from '@/stores/frameworkStore'
 import { useChartSyncStore } from '@/stores/chartSyncStore'
 import { fetchIndicatorDataById, fetchEquityEodById } from '@/services/indicatorData'
+import { usePipelineStatus } from '@/hooks/usePipelineStatus'
 import type { InstrumentRef } from '@/types/framework'
 
 /**
@@ -20,8 +21,12 @@ export function useWorkspaceEod() {
     return chartBlock ? (chartBlock.config.instrument as InstrumentRef) : null
   })
 
+  // Workspace canvas is meant to stay open all day — same fix as
+  // hooks/useScan.ts, so a day change refetches automatically instead of
+  // this (and every widget sharing this key) freezing on old bars.
+  const { latestDataDate } = usePipelineStatus()
   const { data = [], isLoading } = useQuery({
-    queryKey: ['workspace-chart', instrument?.id ?? null, instrument?.type ?? null],
+    queryKey: ['workspace-chart', instrument?.id ?? null, instrument?.type ?? null, latestDataDate ?? 'unknown'],
     queryFn:  () =>
       instrument!.type === 'equity'
         ? fetchEquityEodById(instrument!.id, '1Y')

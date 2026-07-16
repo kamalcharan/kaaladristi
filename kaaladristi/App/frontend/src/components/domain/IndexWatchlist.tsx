@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui';
 import { from } from '@/services/postgrest';
 import { computeRssSignals, computePulseSnapshot, computeAstroScore, getCorrelationState, type PulseBar, type CorrelationState } from '@/services/visualPulseEngine';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 
 // ── Config ──
 
@@ -219,8 +220,11 @@ function IndexTile({ tile }: { tile: IndexTileData }) {
 // ── Main Component ──
 
 export default function IndexWatchlist() {
+  // Dashboard widget, commonly mounted for hours — same fix as
+  // hooks/useScan.ts, so a day change refetches automatically.
+  const { latestDataDate } = usePipelineStatus();
   const { data: tiles, isLoading } = useQuery({
-    queryKey: ['index-watchlist'],
+    queryKey: ['index-watchlist', latestDataDate ?? 'unknown'],
     queryFn: fetchWatchlistData,
     staleTime: 5 * 60 * 1000,
   });

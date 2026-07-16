@@ -17,8 +17,16 @@ import WorkspaceChart from '@/components/workspace/WorkspaceChart'
 import { executeScan } from '@/services/scanEngine'
 import { from } from '@/services/postgrest'
 import { ZONE_LABELS } from '@/constants/signalScale'
+import { usePipelineStatus } from '@/hooks/usePipelineStatus'
+import { dashboardDate } from '@/stores/appStore'
 
-const TODAY = new Date().toISOString().slice(0, 10)
+// ⚠ History: this used to be `const TODAY = new Date().toISOString().slice(0, 10)`
+// — a MODULE-LEVEL constant, evaluated once when the JS bundle first loads and
+// never again. Workspace is meant to stay open all day (it's a persistent
+// dashboard canvas) — a tab left open across midnight kept every block that
+// referenced TODAY (six_day_outlook, the astro-rule "next signal" query)
+// silently anchored to the PREVIOUS day, indefinitely. dashboardDate() is
+// IST-aware and called fresh at each point of use below instead.
 
 const CHART_DISPLAY: Record<string, string> = {
   NIFTY50:   'NIFTY 50',
@@ -63,15 +71,21 @@ const WIDGET_COMPONENT_MAP: Record<string, () => React.ReactElement> = {
   rsi_14:          () => <RsiWidget />,
   chart_player:    () => <WorkspaceTimelineWidget />,
   breadth_roc:     () => <BreadthRocChart />,
-  six_day_outlook: () => <SixDayOutlookCompact date={TODAY} />,
+  six_day_outlook: () => <SixDayOutlookCompact date={dashboardDate()} />,
   planet_regime:   () => <PlanetRegimeStrip />,
 }
 
 // ── Scanner block content ─────────────────────────────────────
 
 function ScannerBlockContent({ catalogItemId }: { catalogItemId: string }) {
+  // Keyed on the pipeline-confirmed data date — same fix as hooks/useScan.ts.
+  // Workspace is meant to stay open all day, making it the highest-risk
+  // surface for this bug: without the date in the key, a tab left open
+  // across a day boundary keeps serving whatever scan results were cached
+  // when the tab was last focused, indefinitely.
+  const { latestDataDate } = usePipelineStatus()
   const { data, isLoading, error } = useQuery({
-    queryKey: ['scan', catalogItemId, 'combined', 'daily'],
+    queryKey: ['scan', catalogItemId, 'combined', 'daily', latestDataDate ?? 'unknown'],
     queryFn:  () => executeScan(catalogItemId, 'combined', 'daily'),
     staleTime: 3 * 60_000,
     retry: 1,
@@ -169,14 +183,18 @@ function AstroRuleBlockContent({ ruleCode }: { ruleCode: string }) {
   })
 
   const ruleId = ruleData?.id
+  const today = dashboardDate()
   const { data: nextSignal } = useQuery({
-    queryKey: ['astro-rule-next', ruleId],
+    // today in the key — without it, a tab open across midnight never
+    // refetches, so a stale-but-cached "next signal" keeps citing a date
+    // that's now in the past.
+    queryKey: ['astro-rule-next', ruleId, today],
     enabled: ruleId != null,
     queryFn: async () => {
       const { data } = await from('km_rule_signals')
         .select('date,signal')
         .eq('rule_id', String(ruleId!))
-        .gte('date', TODAY)
+        .gte('date', today)
         .order('date', { ascending: true })
         .limit(1)
         .execute()

@@ -9,6 +9,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import { from } from '@/services/postgrest';
 import { getDaysInMonth, toIso } from '@/lib/dateUtils';
 import type { PulseBar, DcInferenceEvent } from '@/services/visualPulseEngine';
@@ -79,8 +80,11 @@ export interface VisualPulseData {
 }
 
 export function useVisualPulse(indexId: number | null) {
+  // Visual Pulse pages are commonly left open through a session — same fix
+  // as hooks/useScan.ts, so a day change refetches automatically.
+  const { latestDataDate } = usePipelineStatus();
   const barsQuery = useQuery({
-    queryKey: ['visual-pulse-bars', indexId],
+    queryKey: ['visual-pulse-bars', indexId, latestDataDate ?? 'unknown'],
     queryFn: () => fetchPulseBars(indexId!),
     staleTime: 5 * 60 * 1000, // 5 min
     enabled: !!indexId,
