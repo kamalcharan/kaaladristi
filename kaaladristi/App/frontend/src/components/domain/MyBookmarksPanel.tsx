@@ -69,30 +69,33 @@ function BookmarkCard({
   };
 
   return (
-    <Card rounded="xxl" className="p-4">
-      {/* ── Identity row ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+    <Card rounded="xl" className="px-4 py-2.5">
+      {/* Single horizontal line: identity → price → sector → scanner → 5D heatmap */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <button
           onClick={onRemove}
           title="Remove bookmark"
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+            width: 24, height: 24, borderRadius: 7, flexShrink: 0,
             background: 'color-mix(in srgb, var(--gold) 12%, transparent)',
             border: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)',
           }}
         >
-          <Star className="w-3.5 h-3.5" style={{ color: 'var(--gold)', fill: 'var(--gold)' }} />
+          <Star className="w-3 h-3" style={{ color: 'var(--gold)', fill: 'var(--gold)' }} />
         </button>
 
         {/* Name + exchange */}
         <div
-          style={{ minWidth: 0, width: 170, flexShrink: 0, cursor: 'pointer' }}
+          style={{ minWidth: 0, width: 160, flexShrink: 0, cursor: 'pointer' }}
           title={tooltip ?? undefined}
           onClick={openChart}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
               {heroName}
             </span>
             <ExchangeBadge exchange={bookmark.exchange} />
@@ -105,20 +108,20 @@ function BookmarkCard({
         </div>
 
         {/* Price */}
-        <div style={{ width: 100, flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-primary)' }}>
+        <div style={{ width: 92, flexShrink: 0 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
             {market?.close != null ? `₹${market.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
           </div>
           {pct != null && (
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: pct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)' }}>
+            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: pct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)' }}>
               {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
             </div>
           )}
         </div>
 
         {/* Sector + rotation status */}
-        <div style={{ width: 150, flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ width: 130, flexShrink: 0 }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {bookmark.industry ?? '—'}
           </div>
           {sectorStatus && (
@@ -129,9 +132,9 @@ function BookmarkCard({
         </div>
 
         {/* Scanner membership */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <div style={{ width: 150, flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {scanTags.length === 0 ? (
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>No active scanner match</span>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>No scanner match</span>
           ) : scanTags.map((t) => (
             <span key={t} style={{
               fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 100,
@@ -142,27 +145,25 @@ function BookmarkCard({
             </span>
           ))}
         </div>
-      </div>
 
-      {/* ── 5D heatmap strip (inside this card) ── */}
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>5D Money Flow</span>
-          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>conviction · last 5 sessions</span>
+        {/* 5D money-flow heatmap — compact, inline on the right */}
+        <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+          {last5.length > 0 ? (
+            <FlowIntensityMap
+              bare
+              hideRowLabels
+              hideTrend
+              mode="constituent"
+              rows={[heroName]}
+              dates={dates}
+              cells={cells}
+              cellWidth={40}
+              cellHeight={30}
+            />
+          ) : (
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>No flow data</span>
+          )}
         </div>
-        {last5.length > 0 ? (
-          <FlowIntensityMap
-            bare
-            hideRowLabels
-            mode="constituent"
-            rows={[heroName]}
-            dates={dates}
-            cells={cells}
-            cellWidth={52}
-          />
-        ) : (
-          <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>No recent flow data.</span>
-        )}
       </div>
     </Card>
   );
