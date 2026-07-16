@@ -805,7 +805,7 @@ def scan_presets():
             cur.execute(
                 "SELECT id,name,description,tooltip,sort_order,result_limit,is_active,"
                 "       category,category_label,category_color,category_sort,universe,timeframe,is_default_tab,"
-                "       vani_rule "
+                "       vani_rule,vani_side,vani_short_label,vani_cap "
                 "FROM kd_scan_presets WHERE is_active = true "
                 "ORDER BY category_sort, sort_order"
             )
