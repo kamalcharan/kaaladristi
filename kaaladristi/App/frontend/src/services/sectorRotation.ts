@@ -316,33 +316,56 @@ export async function fetchConstituentDetails(
  * Fetch a single index's latest EOD row plus its symbol metadata.
  * Returns null if no data found.
  */
+const INDEX_DETAIL_COLS =
+  'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
+  'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
+  'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d';
+
 export async function fetchIndexDetail(indexId: number): Promise<SectorIndexRow | null> {
-  const [symRes, eodRes] = await Promise.all([
-    from('km_index_symbols')
-      .select('id,name,category')
-      .eq('id', indexId)
-      .limit(1)
-      .execute(),
-    // Gated on ema_20 — see the note on fetchLatestIndexDate above; without
-    // it, a mid-pipeline ask can surface a row with prices but null
-    // flow_type/magic_rs/sniper_inst for this one index.
-    from('km_index_eod')
-      .select(
-        'index_id,trade_date,open,high,low,close,chng,pct_chng,volume,value_cr,' +
-        'ret_5d,ret_22d,ret_66d,rsi_14,magic_rs,magic_rs_zone,flow_type,sniper_inst,' +
-        'avg_amt_5d,avg_amt_22d,avg_amt_66d,score_5d,score_22d',
-      )
-      .eq('index_id', indexId)
-      .notNull('ema_20')
-      .order('trade_date', { ascending: false })
-      .limit(1)
-      .execute(),
+  // Resolve the latest INDICATOR-complete date globally (ema_20-gated, anchored
+  // by standard indices), then read THIS index's row at that date. Do NOT gate
+  // the per-row read on ema_20: custom (category='custom') indices synthesize
+  // close/returns/score but do not reliably compute ema_20 (B78) — a per-row
+  // ema_20 gate silently drops every row of such an index and 404s the page
+  // (hit on CPaaS / other thinly-synthesized curated indices, 2026-07-16).
+  // This mirrors fetchSectorIndices, which gates the DATE, not each row.
+  const [symRes, latestDate] = await Promise.all([
+    from('km_index_symbols').select('id,name,category').eq('id', indexId).limit(1).execute(),
+    fetchLatestIndexDate(),
   ]);
 
-  if (symRes.error || eodRes.error) return null;
+  if (symRes.error) return null;
   const sym = ((symRes.data ?? []) as SectorIndexSymbol[])[0];
-  const eod = ((eodRes.data ?? []) as Omit<SectorIndexRow, 'name' | 'category' | 'stock_count'>[])[0];
-  if (!sym || !eod) return null;
+  if (!sym) return null;
+
+  type EodOnly = Omit<SectorIndexRow, 'name' | 'category' | 'stock_count'>;
+  let eod: EodOnly | undefined;
+
+  if (latestDate) {
+    const r = await from('km_index_eod')
+      .select(INDEX_DETAIL_COLS)
+      .eq('index_id', indexId)
+      .eq('trade_date', latestDate)
+      .limit(1)
+      .execute();
+    if (r.error) return null;
+    eod = ((r.data ?? []) as EodOnly[])[0];
+  }
+
+  // Fallback: this index has no row on the global latest date (e.g. a custom
+  // index synthesized on a slightly different calendar) — take its own latest.
+  if (!eod) {
+    const r = await from('km_index_eod')
+      .select(INDEX_DETAIL_COLS)
+      .eq('index_id', indexId)
+      .order('trade_date', { ascending: false })
+      .limit(1)
+      .execute();
+    if (r.error) return null;
+    eod = ((r.data ?? []) as EodOnly[])[0];
+  }
+
+  if (!eod) return null;
 
   return { ...eod, name: sym.name, category: sym.category, stock_count: null };
 }
