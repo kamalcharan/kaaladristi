@@ -2360,40 +2360,39 @@ export interface VaniHighlights {
   asOf: string | null;
 }
 
-// The Watch lists are always_true (pre-filtered shortlists) — cap their
-// contribution so they don't flood the union (owner decision 2026-07-06).
-const HIGHLIGHT_SOURCES: { id: string; side: 'strength' | 'caution'; label: string; cap?: number }[] = [
-  { id: 'power_buy',            side: 'strength', label: 'Confluence' },
-  { id: 'smart_money',          side: 'strength', label: 'Smart Money' },
-  // fresh_breakout retired (B1) · vani_opportunity retired (B2) — removed from
-  // the highlights union; their stocks still surface via breakout_surge / S2.
-  { id: 'quiet_accumulation',   side: 'strength', label: 'Quiet Acc' },
-  { id: 'conviction_flow',      side: 'strength', label: 'Flow' },
-  { id: 'breakout_surge',       side: 'strength', label: 'Surge' },
-  { id: 'flower_pot_burst',     side: 'strength', label: 'Burst' },  // ✦ = a coil that released today
-  { id: 'stage_2_leaders',      side: 'strength', label: 'S2' },
-  { id: 'stage_2_watch',        side: 'strength', label: 'S2 Watch' },
-  { id: 'power_sell',           side: 'caution',  label: 'Weakness' },
-  { id: 'distribution_warning', side: 'caution',  label: 'Distribution' },
-  { id: 'stage_3_watch',        side: 'caution',  label: 'S3' },
-  { id: 'stage_4_leaders',      side: 'caution',  label: 'S4' },
-  { id: 'vani_exit_watch',      side: 'caution',  label: 'VaNi', cap: 3 },
-];
-
 /**
  * Union of ✦ VaNi Highlights across all scanners, deduped per side.
  * A stock flagged by multiple scans carries all their labels — cross-scan
  * confluence is the strongest observation this board makes, so both sides
  * rank by flag count first, then by conviction (strength) / weakness (caution).
+ *
+ * The scanner list is DB-driven (kd_scan_presets.vani_side/vani_short_label/
+ * vani_cap — migration 161), not hardcoded here. Owner instruction: new
+ * scanners get added and old ones retired over time, and a hardcoded array
+ * silently drifts (this file used to carry a comment documenting two
+ * presets someone had to remember to manually remove). Opting a preset into
+ * Discovery — or pulling one out — is now a DB update, not a code deploy.
+ * vani_side IS NULL means "not on Discovery" (opt-in default for new
+ * presets); is_active = false (already enforced by fetchScanPresets'
+ * WHERE clause) removes a retired preset automatically too.
  */
 export async function fetchVaniHighlights(): Promise<VaniHighlights> {
+  const allPresets = await fetchScanPresets();
+  const sources = allPresets.filter(
+    (p): p is ScanDefinition & { vani_side: 'strength' | 'caution' } => p.vani_side != null,
+  );
+
+  if (sources.length === 0) {
+    return { strength: [], caution: [], strengthTotal: 0, cautionTotal: 0, asOf: null };
+  }
+
   // Prime the shared bundle once — firing all bundle-based scans in parallel
   // before the cache is warm would trigger concurrent full-market downloads.
-  await executeScan(HIGHLIGHT_SOURCES[0].id);
+  await executeScan(sources[0].id);
   const bundle = await loadScanData('daily');  // cache hit — just for latestDate
 
   const settled = await Promise.allSettled(
-    HIGHLIGHT_SOURCES.map((src) => executeScan(src.id)),
+    sources.map((src) => executeScan(src.id)),
   );
 
   const buckets: Record<'strength' | 'caution', Map<number, VaniHighlightRow>> = {
@@ -2403,14 +2402,15 @@ export async function fetchVaniHighlights(): Promise<VaniHighlights> {
 
   settled.forEach((res, i) => {
     if (res.status !== 'fulfilled') return;
-    const src = HIGHLIGHT_SOURCES[i];
+    const src = sources[i];
+    const label = src.vani_short_label ?? src.name;
     let rows = res.value.filter((s) => s.vaniOpportunity);
-    if (src.cap != null) rows = rows.slice(0, src.cap);
-    const bucket = buckets[src.side];
+    if (src.vani_cap != null) rows = rows.slice(0, src.vani_cap);
+    const bucket = buckets[src.vani_side];
     for (const s of rows) {
       const existing = bucket.get(s.equity_id);
       if (existing) {
-        if (!existing.scans.includes(src.label)) existing.scans.push(src.label);
+        if (!existing.scans.includes(label)) existing.scans.push(label);
         if (existing.score_5d == null && s.score_5d != null) existing.score_5d = s.score_5d;
         if (existing.rs_percentile == null && s.rs_percentile != null) existing.rs_percentile = s.rs_percentile;
       } else {
@@ -2420,7 +2420,7 @@ export async function fetchVaniHighlights(): Promise<VaniHighlights> {
           company_name: s.company_name ?? null,
           score_5d: s.score_5d ?? null,
           rs_percentile: s.rs_percentile ?? null,
-          scans: [src.label],
+          scans: [label],
         });
       }
     }
@@ -2468,6 +2468,9 @@ export async function fetchScanPresets(): Promise<ScanDefinition[]> {
     is_default_tab: boolean | null;
     timeframe: string;
     vani_rule: string | null;
+    vani_side: 'strength' | 'caution' | null;
+    vani_short_label: string | null;
+    vani_cap: number | null;
   }>;
   const presets = rows.map((r) => ({
     id: r.id,
@@ -2483,6 +2486,9 @@ export async function fetchScanPresets(): Promise<ScanDefinition[]> {
     is_default_tab: r.is_default_tab ?? false,
     timeframe: (r.timeframe === 'weekly' || r.timeframe === 'monthly') ? r.timeframe : 'daily',
     vani_rule: r.vani_rule ?? null,
+    vani_side: r.vani_side ?? null,
+    vani_short_label: r.vani_short_label ?? null,
+    vani_cap: r.vani_cap ?? null,
   })) as ScanDefinition[];
   // Refresh the engine-wide metadata cache — getPresetMeta() serves these.
   _dbPresetMeta.clear();

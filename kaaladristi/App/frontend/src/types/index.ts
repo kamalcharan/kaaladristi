@@ -591,6 +591,12 @@ export interface ScanDefinition {
   is_default_tab: boolean;
   timeframe: 'daily' | 'weekly' | 'monthly';
   vani_rule?: string | null;
+  /** Workspace Discovery board bucket. NULL/undefined = not shown on Discovery. */
+  vani_side?: 'strength' | 'caution' | null;
+  /** Short label shown on Discovery cards; falls back to `name` when unset. */
+  vani_short_label?: string | null;
+  /** Optional cap on how many of this preset's flagged rows enter the Discovery union. */
+  vani_cap?: number | null;
 }
 
 export interface VaniOpportunityConfig {
