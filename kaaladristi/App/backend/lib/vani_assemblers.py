@@ -1260,9 +1260,12 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     screener's name/description/tooltip changes (the 'no change of state,
     no LLM invoke' rule). read_results hashes the visible result identity.
     """
+    # 'v' is a prompt-version marker: bump it whenever the scanner prompt or
+    # message format changes so stale cached responses can never be served.
     if intent_id == 'scanner.explain_preset':
-        return {'preset_id': ctx['preset_id'], **ctx['preset']}
+        return {'v': 2, 'preset_id': ctx['preset_id'], **ctx['preset']}
     return {
+        'v': 2,
         'preset_id': ctx['preset_id'],
         'date': ctx['data_date'],
         'timeframe': ctx['timeframe'],
@@ -1282,20 +1285,26 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
             f"Description: {p['description']}\n"
             f"Matching criteria (do NOT repeat thresholds or exact values): "
             f"{p['tooltip'] or 'not documented'}\n"
-            f"\nExplain what this screener shows."
+            f"\nInstructions: Explain what this screener shows in 2 short "
+            f"paragraphs — first the concept (what market behavior it catches, "
+            f"what it means when a stock appears here), then how to read the "
+            f"list responsibly (an observation of current conditions, not a "
+            f"prediction). Never repeat numeric thresholds, lookback windows, "
+            f"or exact rule values. Do not name specific stocks."
         )
 
-    # scanner.read_results
+    # scanner.read_results — plain-English field labels so the model never
+    # echoes raw shorthand ("DelSurge") back at the user.
     lines = []
     for r in ctx['rows']:
         parts = [f"  {r['symbol']} ({r['industry']})"]
-        if r['pct_chng'] is not None: parts.append(f"{r['pct_chng']:+.2f}%")
-        parts.append(f"Zone: {r['zone']}")
-        parts.append(f"Flow: {r['flow']}")
-        if r['rsi'] is not None: parts.append(f"RSI: {r['rsi']:.0f}")
-        if r['rvol'] is not None: parts.append(f"RVOL: {r['rvol']:.1f}x")
-        if r['surge'] is not None: parts.append(f"DelSurge: {r['surge']:.2f}x")
-        if r['vani']: parts.append("VaNi highlight")
+        if r['pct_chng'] is not None: parts.append(f"day change {r['pct_chng']:+.2f}%")
+        parts.append(f"relative-strength zone: {r['zone']}")
+        parts.append(f"flow: {r['flow']}")
+        if r['rsi'] is not None: parts.append(f"RSI {r['rsi']:.0f}")
+        if r['rvol'] is not None: parts.append(f"volume {r['rvol']:.1f}x normal")
+        if r['surge'] is not None: parts.append(f"delivery surge {r['surge']:.2f}x its monthly norm")
+        if r['vani']: parts.append("carries the VaNi highlight")
         lines.append(', '.join(parts))
     rows_str = '\n'.join(lines) if lines else '  (no stocks meet the conditions today)'
     vani_count = sum(1 for r in ctx['rows'] if r['vani'])
@@ -1307,5 +1316,11 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
         f"Total results: {ctx['total_count']} "
         f"(showing top {len(ctx['rows'])}, VaNi highlights: {vani_count})\n"
         f"\n--- Results ---\n{rows_str}\n"
-        f"\nRead these results as of the data date."
+        f"\nInstructions: Begin your response with the exact words "
+        f"'As of the {ctx['data_date']} close'. Write 2 short paragraphs: "
+        f"first the shape of the result set (count, industry concentration, "
+        f"common signal profile, 2-4 names with their factual signals), then "
+        f"the character read through the '{ctx['lens']}' lens. Mention the "
+        f"VaNi-highlight count only if greater than zero. Use only the stocks "
+        f"and numbers listed above."
     )
