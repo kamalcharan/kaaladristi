@@ -65,7 +65,7 @@ export default function VaNiChatPanel() {
   } = useVaNiStore();
   const { page, entityType, entityId } = usePageContext();
   const { isAdmin } = useAuthStore();
-  const { latestDataDate } = usePipelineStatus();
+  const { latestDataDate, latestDataDateFormatted, isPendingToday, status: pipelineStatus } = usePipelineStatus();
   const askMutation = useVaNiAsk();
   const navigate = useNavigate();
 
@@ -114,6 +114,27 @@ export default function VaNiChatPanel() {
 
   const handleAsk = (intentId: string, label: string, overrideEntity?: VaNiEntity) => {
     if (askMutation.isPending) return;
+
+    // Empty result set → answer deterministically, never via the LLM.
+    // Narrating emptiness wastes a call, and while the pipeline is still
+    // processing an empty scan means "data not loaded yet", not "no stocks
+    // qualify" — VaNi must not present the first as the second.
+    if (intentId === 'scanner.read_results' && scanContext && scanContext.rows.length === 0) {
+      const dataInFlux = isPendingToday || pipelineStatus === 'delayed' || pipelineStatus === 'stale';
+      setMessages(prev => [...prev,
+        { id: `q-${Date.now()}`, type: 'intent', intentId, text: label, timestamp: Date.now() },
+        {
+          id: `r-${Date.now()}`,
+          type: 'response',
+          intentId,
+          text: dataInFlux
+            ? `Today's data is still processing, so ${scanContext.presetName} has no results to read yet — an empty list right now means "data not loaded", not "no stocks qualify". Fresh data usually lands by ~6:30 PM IST on trading days; ask again once the data pill shows current.`
+            : `As of the ${latestDataDateFormatted || latestDataDate} close, no stocks meet ${scanContext.presetName}'s conditions. That can be normal — some conditions only line up a few days a month.`,
+          timestamp: Date.now(),
+        },
+      ]);
+      return;
+    }
 
     setMessages(prev => [...prev, {
       id: `q-${Date.now()}`,

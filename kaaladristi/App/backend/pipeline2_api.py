@@ -4812,6 +4812,21 @@ def vani_ask(req: VaNiAskRequest):
                     'response': None, 'ai': False, 'cached': False,
                     'provider': None, 'error': f'Unknown scan preset: {req.preset_id}',
                 }
+            # Empty result set → deterministic reply, never the LLM: an empty
+            # scan during a pipeline run means "data not loaded", not "no
+            # stocks qualify", and narrating emptiness is a wasted call.
+            if intent_id == 'scanner.read_results' and not ctx['rows']:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': _append_disclaimer(
+                        f"As of the {ctx['data_date']} close, no stocks meet "
+                        f"{ctx['preset']['name']}'s conditions. That can be normal — "
+                        f"some conditions only line up a few days a month. If the "
+                        f"daily pipeline is still running, results will appear once "
+                        f"fresh data lands."
+                    ),
+                    'ai': False, 'cached': False, 'provider': 'rule',
+                }
             # Persistent cache (km_vani_cache): explain_preset's hash derives
             # from the preset copy alone — no change of state, no LLM invoke.
             _pcache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))

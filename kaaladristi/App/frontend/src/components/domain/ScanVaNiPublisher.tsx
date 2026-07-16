@@ -39,16 +39,24 @@ export default function ScanVaNiPublisher({
   timeframe,
   exchange,
   stocks,
+  isLoading = false,
 }: {
   preset: ScanDefinition;
   timeframe: string;
   exchange: string;
   stocks: ScanStock[];
+  /** While the scan query is in flight, no context is published — an
+   *  unsettled list must never be narrated as "today's results". */
+  isLoading?: boolean;
 }) {
   const setScanContext = useVaNiStore((s) => s.setScanContext);
   const clearScanContext = useVaNiStore((s) => s.clearScanContext);
 
   useEffect(() => {
+    if (isLoading) {
+      clearScanContext();
+      return;
+    }
     const hideVani = preset.vani_rule === 'always_true';
     setScanContext({
       presetId: preset.id,
@@ -59,7 +67,7 @@ export default function ScanVaNiPublisher({
       rows: toVaNiScanRows(stocks, hideVani),
     });
     return () => clearScanContext();
-  }, [preset.id, preset.name, preset.vani_rule, timeframe, exchange, stocks, setScanContext, clearScanContext]);
+  }, [preset.id, preset.name, preset.vani_rule, timeframe, exchange, stocks, isLoading, setScanContext, clearScanContext]);
 
   return null;
 }

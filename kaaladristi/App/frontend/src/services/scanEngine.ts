@@ -184,19 +184,30 @@ async function loadDailyBundle(): Promise<ScanDataBundle> {
 
   const activeIds = (symbolRes.data ?? []).map((s: any) => s.id as number);
 
-  // Phase 1b: resolve the latest fully-complete trading date.
-  // Uses GROUP BY + HAVING COUNT >= 4000 on km_equity_eod directly — immune to
-  // mid-pipeline partial ingestion where a partial date would have fewer rows.
+  // Phase 1b: resolve the latest INDICATOR-complete trading date.
+  //
+  // ⚠ History: this used GROUP BY + HAVING — but PostgREST has no `having`
+  // param, so the request 400'd, the catch returned null, and the bundle ran
+  // with NO upper date bound. During the daily pipeline run, freshly-ingested
+  // rows (prices present, ema_20 still null) became each stock's latest bar,
+  // buildScanStock dropped every ema_20-null row, and ALL bundle scans went
+  // dark for the ingest→indicators window (~the whole run). Root cause of
+  // "scanners show nothing while the pipeline is running".
+  //
+  // The gate must be indicator completion, not row count: prices landing is
+  // not "data ready". compute_all_pending_indicators writes ema_20 in one
+  // transaction per date, so the newest date with any non-null ema_20 flips
+  // atomically at commit — a single cheap, version-proof query.
   const confirmedLatestDate: string | null = await (async () => {
     try {
-      const { data } = await (from('km_equity_eod') as any)
-        .select('trade_date,count()')
-        .group('trade_date')
-        .having('count().gte.4000')
+      const { data, error } = await from('km_equity_eod')
+        .select('trade_date')
+        .notNull('ema_20')
         .order('trade_date', { ascending: false })
         .limit(1)
         .execute();
-      return (data as any)?.[0]?.trade_date ?? null;
+      if (error) return null;
+      return (data as { trade_date: string }[] | null)?.[0]?.trade_date ?? null;
     } catch {
       return null;
     }
