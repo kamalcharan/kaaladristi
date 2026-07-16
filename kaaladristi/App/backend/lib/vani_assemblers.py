@@ -1275,6 +1275,21 @@ def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
     }
 
 
+def _mask_numbers(text: str) -> str:
+    """Strip numeric values from preset copy before it reaches the LLM —
+    the explainer must never reveal thresholds, and a model can't echo a
+    number it never saw. '20 sessions' → 'a set number of sessions',
+    '₹50' / '1.5×' / '60%' → dropped."""
+    import re
+    out = re.sub(r'[₹]\s*\d+(?:\.\d+)?\s*(Cr)?', 'a set level', text)
+    out = re.sub(r'\d+(?:\.\d+)?\s*[x×]', 'a set multiple of', out)
+    out = re.sub(r'\d+(?:\.\d+)?\s*%', 'a set share', out)
+    out = re.sub(r'\d+(?:\.\d+)?[-\s]*(day|session|week|month|bar)s?\b',
+                 r'a set number of \1s', out)
+    out = re.sub(r'\d+(?:\.\d+)?', 'a set value', out)
+    return re.sub(r'\s{2,}', ' ', out)
+
+
 def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
     """Format scanner context into the LLM user message."""
     p = ctx['preset']
@@ -1282,15 +1297,15 @@ def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
     if intent_id == 'scanner.explain_preset':
         return (
             f"Screener: {p['name']}\n"
-            f"Description: {p['description']}\n"
+            f"Description: {_mask_numbers(p['description'])}\n"
             f"Matching criteria (do NOT repeat thresholds or exact values): "
-            f"{p['tooltip'] or 'not documented'}\n"
+            f"{_mask_numbers(p['tooltip']) if p['tooltip'] else 'not documented'}\n"
             f"\nInstructions: Explain what this screener shows in 2 short "
             f"paragraphs — first the concept (what market behavior it catches, "
             f"what it means when a stock appears here), then how to read the "
             f"list responsibly (an observation of current conditions, not a "
-            f"prediction). Never repeat numeric thresholds, lookback windows, "
-            f"or exact rule values. Do not name specific stocks."
+            f"prediction). Never mention any number, price level, percentage, "
+            f"or lookback length. Do not name specific stocks."
         )
 
     # scanner.read_results — plain-English field labels so the model never

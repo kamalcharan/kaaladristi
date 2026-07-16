@@ -4870,7 +4870,17 @@ def vani_ask(req: VaNiAskRequest):
             'response': None, 'ai': False, 'cached': False,
             'provider': provider, 'error': 'Response did not pass the language compliance check — please retry',
         }
-    if intent_id.startswith('scanner.'):
+    if _is_scanner:
+        # explain_preset must never reveal thresholds/formula values — the
+        # inputs are number-masked, and any digit that still appears in the
+        # output is a leak: reject before serving or caching.
+        if intent_id == 'scanner.explain_preset' and re.search(r'\d', response_text):
+            log.warning(f'vani_ask [{intent_id}] rejected: numeric value in explainer')
+            return {
+                'intent_id': intent_id, 'date': date_str,
+                'response': None, 'ai': False, 'cached': False,
+                'provider': provider, 'error': 'Response did not pass the language compliance check — please retry',
+            }
         response_text = _append_disclaimer(response_text)
 
     log_id = _log_interaction(
@@ -4932,6 +4942,65 @@ def vani_cache_clear(intent_id: str):
     except Exception as e:
         log.warning(f'vani_cache_clear persistent layer failed for {intent_id}: {e}')
     return {'cleared': len(removed) + persistent, 'intent_id': intent_id}
+
+
+@app.post('/api/vani/warm-scanner-explainers')
+def vani_warm_scanner_explainers(_uid: str = Depends(_get_current_user_id)):
+    """Admin: pre-seed the persistent explainer cache for every active scan
+    preset, so 'What does this screener show?' is answered from km_vani_cache
+    and the LLM is never invoked at user time. Idempotent — presets whose
+    copy hasn't changed hit the existing cache entry and are skipped.
+    Re-run after editing a preset's name/description/tooltip."""
+    db = _db()
+    generated, skipped, failed = [], [], []
+    intent_id = 'scanner.explain_preset'
+    intent = _VANI_INTENTS.get(intent_id)
+    if not intent:
+        raise HTTPException(status_code=500, detail='scanner intents not registered')
+
+    # house lesson: PostgREST boolean filters are finicky — filter in Python
+    presets = db.select('kd_scan_presets', 'id,is_active', limit=100) or []
+    for row in presets:
+        if not row.get('is_active'):
+            continue
+        pid = row['id']
+        try:
+            ctx = assemble_scanner_context(db, preset_id=pid)
+            if not ctx:
+                failed.append({'preset': pid, 'reason': 'context assembly failed'})
+                continue
+            key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
+            if key and _vani_pcache_get(db, key):
+                skipped.append(pid)
+                continue
+            system = intent.system_prompt + (
+                "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
+                "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
+                "stock names, numbers, industries, or dates not explicitly stated."
+            )
+            text = _ai_complete(
+                system=system,
+                user=_wrap_vani_user_msg(format_scanner_user_message(intent_id, ctx)),
+                max_tokens=intent.max_tokens,
+                temperature=0.4,
+                no_think=True,
+            )
+            text, rejected = _sebi_post_filter(text)
+            if rejected or not text or re.search(r'\d', text):
+                failed.append({'preset': pid, 'reason': 'compliance filter rejected output'})
+                continue
+            text = _append_disclaimer(text)
+            _vani_pcache_set(
+                db, key, intent_id, key.rsplit(':', 1)[-1],
+                text, intent.cache_ttl_hours,
+                llm_provider=os.getenv('AI_PROVIDER', 'local'), llm_model=_AI_MODEL,
+            )
+            generated.append(pid)
+        except Exception as e:
+            log.error(f'warm explainer failed for {pid}: {e}')
+            failed.append({'preset': pid, 'reason': str(e)[:120]})
+
+    return {'generated': generated, 'skipped': skipped, 'failed': failed}
 
 
 @app.post('/api/vani/feedback')

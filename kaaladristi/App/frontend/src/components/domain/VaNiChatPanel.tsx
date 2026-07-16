@@ -184,11 +184,13 @@ export default function VaNiChatPanel() {
   };
 
   // Auto-fire a pre-selected intent (e.g. the "✦ VaNi explains" link beside
-  // a scanner heading opens the panel with this intent pending).
+  // a scanner heading opens the panel with this intent pending). Guarded so
+  // repeat clicks / StrictMode replays never fire the same intent twice —
+  // if it's already in the conversation, consuming the pending id is enough.
   useEffect(() => {
     if (!open || !pendingIntentId || askMutation.isPending) return;
     const id = consumePendingIntent();
-    if (!id) return;
+    if (!id || askedIntents.has(id)) return;
     const def = allIntents.find((i) => i.intentId === id);
     handleAsk(id, def?.label ?? 'VaNi explains');
     // eslint-disable-next-line react-hooks/exhaustive-deps
