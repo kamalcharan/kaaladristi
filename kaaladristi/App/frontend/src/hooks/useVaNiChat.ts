@@ -25,6 +25,23 @@ export interface VaNiAskRequest {
   entity_type?: 'equity' | 'index';
   entity_id?: number;
   page_context?: string;
+  // Scanner intents (scanner.*) — display context: the exact filtered
+  // result view the user sees. Rows use on-screen vocabulary only.
+  preset_id?: string;
+  rows?: Array<{
+    symbol: string;
+    industry: string | null;
+    zone: string | null;
+    flow: string | null;
+    rsi: number | null;
+    rvol: number | null;
+    pct_chng: number | null;
+    surge: number | null;
+    vani: boolean;
+  }>;
+  data_date?: string;
+  timeframe?: string;
+  exchange?: string;
 }
 
 export interface VaNiAskResponse {

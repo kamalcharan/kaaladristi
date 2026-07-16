@@ -131,7 +131,7 @@ export const ALL_FIELDS: Record<string, FieldConfig> = {
     label: 'Symbol',
     tooltip: 'Stock symbol and company name. ✦ dot indicates a VaNi Highlight (best of this list).',
     type: 'category',
-    width: 130,
+    width: 158,
     sticky: true,
   },
 

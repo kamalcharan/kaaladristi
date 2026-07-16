@@ -12,6 +12,8 @@
  */
 
 import React from 'react';
+import VaNiTrigger from './VaNiTrigger';
+import type { VaNiEntity } from '@/stores/vaniStore';
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 
@@ -102,9 +104,11 @@ interface ScanCardWrapperProps {
   symbol: string;
   onClick?: () => void;
   children: React.ReactNode;
+  /** When set, renders the ✦ Ask-VaNi trigger at the card's right edge. */
+  vaniEntity?: VaNiEntity;
 }
 
-export function ScanCardWrapper({ isVani, symbol, onClick, children }: ScanCardWrapperProps) {
+export function ScanCardWrapper({ isVani, symbol, onClick, children, vaniEntity }: ScanCardWrapperProps) {
   return (
     <div
       role={onClick ? 'button' : undefined}
@@ -128,6 +132,7 @@ export function ScanCardWrapper({ isVani, symbol, onClick, children }: ScanCardW
     >
       <Avatar symbol={symbol} isVani={isVani} />
       {children}
+      {vaniEntity && <VaNiTrigger entity={vaniEntity} />}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { MiniTower } from '@/components/ui'
 import type React from 'react'
 import { getPresetMeta } from '@/services/scanEngine'
 import { getFieldsForGroup } from '@/fieldAvailability'
+import VaNiTrigger from '@/components/domain/VaNiTrigger'
 
 // ── Preset column overrides ─────────────────────────────────────────────────────
 
@@ -292,7 +293,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                           position: 'sticky', left: 0, zIndex: 2,
                           background: 'var(--card)',
                           padding: '0 10px',
-                          width: 130, minWidth: 130,
+                          width: 158, minWidth: 158,
                           borderBottom: '1px solid color-mix(in srgb, var(--border) 55%, transparent)',
                           borderRight: '1px solid var(--border)',
                         }}
@@ -334,6 +335,15 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                               </div>
                             )}
                           </div>
+                          <VaNiTrigger
+                            entity={{
+                              type: 'equity',
+                              id: stock.equity_id,
+                              symbol: sym,
+                              pageContext: `Scanner / ${preset?.name ?? presetId}`,
+                            }}
+                            className="ml-auto"
+                          />
                         </div>
                       </td>
                     )
