@@ -8,6 +8,7 @@ import type React from 'react'
 import { getPresetMeta } from '@/services/scanEngine'
 import { getFieldsForGroup } from '@/fieldAvailability'
 import VaNiTrigger from '@/components/domain/VaNiTrigger'
+import BookmarkToggle from '@/components/domain/BookmarkToggle'
 
 // ── Preset column overrides ─────────────────────────────────────────────────────
 
@@ -335,6 +336,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                               </div>
                             )}
                           </div>
+                          <BookmarkToggle equityId={stock.equity_id} size={12} className="ml-auto" />
                           <VaNiTrigger
                             entity={{
                               type: 'equity',
@@ -342,7 +344,6 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
                               symbol: sym,
                               pageContext: `Scanner / ${preset?.name ?? presetId}`,
                             }}
-                            className="ml-auto"
                           />
                         </div>
                       </td>

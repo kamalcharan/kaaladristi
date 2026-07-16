@@ -5288,6 +5288,121 @@ def update_framework(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# /api/bookmarks — "My Bookmarks" (per-user saved stock list)
+# Mirrors the /api/framework/{user_id} pattern exactly: caller_id==user_id
+# check, _framework_conn (plain psycopg2, no PostgREST involved), and
+# _set_user_context for RLS (migration 162 gives km_user_bookmarks the same
+# RLS shape as user_frameworks). Intentionally minimal — just identity
+# (equity_id, symbol, company_name, industry, exchange). Price, scanner
+# membership, sector rotation status, and the 5D heatmap are composed
+# client-side from equity_ids using the SAME batch-fetch/scan-presence
+# functions the rest of the app already uses for lists of stocks, rather
+# than re-implementing that assembly here.
+# ──────────────────────────────────────────────────────────────────────────────
+
+class BookmarkAddRequest(BaseModel):
+    equity_id: int
+
+
+@app.get('/api/bookmarks/{user_id}')
+def list_bookmarks(user_id: str, caller_id: str = Depends(_get_current_user_id)):
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _set_user_context(cur, user_id)
+            cur.execute(
+                """
+                SELECT b.id, b.equity_id, b.created_at,
+                       s.symbol, s.company_name, s.industry, s.exchange
+                FROM km_user_bookmarks b
+                JOIN km_equity_symbols s ON s.id = b.equity_id
+                WHERE b.user_id = %s::uuid
+                ORDER BY b.created_at DESC
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        log.error(f'list_bookmarks error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.post('/api/bookmarks/{user_id}')
+def add_bookmark(
+    user_id: str,
+    req: BookmarkAddRequest,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            _set_user_context(cur, user_id)
+            cur.execute(
+                """
+                INSERT INTO km_user_bookmarks (user_id, equity_id)
+                VALUES (%s::uuid, %s)
+                ON CONFLICT (user_id, equity_id) DO NOTHING
+                RETURNING id, equity_id, created_at
+                """,
+                (user_id, req.equity_id),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            if row is None:
+                # Already bookmarked — idempotent, return the existing row.
+                cur.execute(
+                    "SELECT id, equity_id, created_at FROM km_user_bookmarks "
+                    "WHERE user_id = %s::uuid AND equity_id = %s",
+                    (user_id, req.equity_id),
+                )
+                row = cur.fetchone()
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f'add_bookmark error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.delete('/api/bookmarks/{user_id}/{equity_id}')
+def remove_bookmark(
+    user_id: str,
+    equity_id: int,
+    caller_id: str = Depends(_get_current_user_id),
+):
+    if caller_id != user_id:
+        raise HTTPException(status_code=403, detail='Forbidden')
+
+    conn = _framework_conn()
+    try:
+        with conn.cursor() as cur:
+            _set_user_context(cur, user_id)
+            cur.execute(
+                "DELETE FROM km_user_bookmarks WHERE user_id = %s::uuid AND equity_id = %s",
+                (user_id, equity_id),
+            )
+            deleted = cur.rowcount
+            conn.commit()
+        return {'deleted': deleted}
+    except Exception as exc:
+        log.error(f'remove_bookmark error: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # /api/correlation/compute
 # ──────────────────────────────────────────────────────────────────────────────
 

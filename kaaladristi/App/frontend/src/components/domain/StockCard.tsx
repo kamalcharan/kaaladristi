@@ -15,6 +15,7 @@ import { ZONE_LABELS, FLOW_LABELS, zoneLabel } from '@/constants/signalScale';
 import { ScanCardWrapper, VaniBadge, CardExchangeBadge } from './ScanCardShell';
 import { getColor, formatValue, getLabel, getTooltip } from '@/config/fieldConfig';
 import { Tooltip } from '@/components/ui';
+import BookmarkToggle from './BookmarkToggle';
 
 export { ZONE_LABELS, FLOW_LABELS };
 
@@ -295,6 +296,7 @@ export function StockCard({
           )}
           {stageBadge && <StageBadge stage={stageBadge} />}
           {stock.vaniOpportunity && <VaniBadge />}
+          <BookmarkToggle equityId={stock.equity_id} size={13} className="ml-auto" />
         </div>
 
         {/* Company + industry */}

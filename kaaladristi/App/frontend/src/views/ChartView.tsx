@@ -43,6 +43,7 @@ import {
 // Equity-specific pulse components
 import PumpDumpBanner, { scanBarsForManipulation } from '@/components/domain/VisualPulse/equity/PumpDumpBanner';
 import ScanPresenceCard from '@/components/domain/VisualPulse/equity/ScanPresenceCard';
+import BookmarkToggle from '@/components/domain/BookmarkToggle';
 import IndustryContextCard from '@/components/domain/VisualPulse/equity/IndustryContextCard';
 import MultiTimeframePills from '@/components/domain/VisualPulse/equity/MultiTimeframePills';
 import StockFlowHeatmap from '@/components/domain/StockFlowHeatmap';
@@ -441,6 +442,7 @@ export default function ChartView() {
             {isIndex ? 'INDEX' : 'EQUITY'}
           </span>
           <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
+          {isEquity && <BookmarkToggle equityId={numId} size={16} />}
           {/* Pulse/Study toggle hidden (2026-07-09): Study is the single merged
               stock view. Pulse route still exists but is no longer linked from
               here. */}
