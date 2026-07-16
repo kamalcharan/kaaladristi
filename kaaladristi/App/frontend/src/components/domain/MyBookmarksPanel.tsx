@@ -10,7 +10,7 @@ import { useBookmarkMarketData } from '@/hooks/useBookmarks';
 import { useScanPresenceForMany } from '@/hooks/useScanPresence';
 import { useIndustryTransition } from '@/hooks/useIndustryRotation';
 import type { TransitionCategory } from '@/services/industryRotation';
-import type { BookmarkRow } from '@/services/bookmarks';
+import type { BookmarkRow, BookmarkMarketData } from '@/services/bookmarks';
 
 const SECTOR_STATUS_LABEL: Record<TransitionCategory, { label: string; color: string }> = {
   rotating_in:  { label: 'Rotating In',  color: 'var(--risk-green)' },
@@ -25,7 +25,14 @@ function fmtDate(d: string): string {
   return `${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
 }
 
-function BookmarkListRow({
+/**
+ * One bookmark = one self-contained card: identity (price / sector status /
+ * scanner membership) on top, this stock's 5D money-flow heatmap embedded
+ * directly below it — NOT a detached grid. The heatmap reuses the shared
+ * FlowIntensityMap (bare + no row-label column, since the card header already
+ * names the stock).
+ */
+function BookmarkCard({
   bookmark,
   sectorStatus,
   scanTags,
@@ -35,7 +42,7 @@ function BookmarkListRow({
   bookmark: BookmarkRow;
   sectorStatus: { label: string; color: string } | null;
   scanTags: string[];
-  market: { close: number | null; pct_chng: number | null } | undefined;
+  market: BookmarkMarketData | undefined;
   onRemove: () => void;
 }) {
   const navigate = useNavigate();
@@ -44,17 +51,29 @@ function BookmarkListRow({
   const tooltip = bseTooltip({ symbol: bookmark.symbol, exchange: bookmark.exchange, isin: null });
   const pct = market?.pct_chng ?? null;
 
+  const openChart = () =>
+    navigate(`/chart/equity/${bookmark.equity_id}?name=${encodeURIComponent(toNavName(bookmark))}`);
+
+  // Last 5 sessions, newest-first — matches FlowIntensityMap's column order.
+  const last5 = market?.last5 ?? [];
+  const dates = last5.map((r) => fmtDate(r.trade_date));
+  const cells: Record<string, CellData[]> = {
+    [heroName]: last5.map((r) => ({
+      d1: r.pct_chng ?? 0,
+      amt: r.value_cr ?? 0,
+      ret_5d: r.ret_5d ?? undefined,
+      ret_22d: r.ret_22d ?? undefined,
+      s5: r.score_5d ?? undefined,
+      s22: r.score_22d ?? undefined,
+    })),
+  };
+
   return (
-    <Card
-      rounded="xxl"
-      hover="lift"
-      className="p-3 sm:p-4 cursor-pointer"
-      title={tooltip ?? undefined}
-      onClick={() => navigate(`/chart/equity/${bookmark.equity_id}?name=${encodeURIComponent(toNavName(bookmark))}`)}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+    <Card rounded="xxl" className="p-4">
+      {/* ── Identity row ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
         <button
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          onClick={onRemove}
           title="Remove bookmark"
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -66,9 +85,14 @@ function BookmarkListRow({
           <Star className="w-3.5 h-3.5" style={{ color: 'var(--gold)', fill: 'var(--gold)' }} />
         </button>
 
-        <div style={{ minWidth: 0, width: 150, flexShrink: 0 }}>
+        {/* Name + exchange */}
+        <div
+          style={{ minWidth: 0, width: 170, flexShrink: 0, cursor: 'pointer' }}
+          title={tooltip ?? undefined}
+          onClick={openChart}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
               {heroName}
             </span>
             <ExchangeBadge exchange={bookmark.exchange} />
@@ -80,8 +104,9 @@ function BookmarkListRow({
           )}
         </div>
 
+        {/* Price */}
         <div style={{ width: 100, flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-primary)' }}>
             {market?.close != null ? `₹${market.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
           </div>
           {pct != null && (
@@ -91,7 +116,8 @@ function BookmarkListRow({
           )}
         </div>
 
-        <div style={{ width: 130, flexShrink: 0 }}>
+        {/* Sector + rotation status */}
+        <div style={{ width: 150, flexShrink: 0 }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {bookmark.industry ?? '—'}
           </div>
@@ -102,6 +128,7 @@ function BookmarkListRow({
           )}
         </div>
 
+        {/* Scanner membership */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {scanTags.length === 0 ? (
             <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>No active scanner match</span>
@@ -116,6 +143,27 @@ function BookmarkListRow({
           ))}
         </div>
       </div>
+
+      {/* ── 5D heatmap strip (inside this card) ── */}
+      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>5D Money Flow</span>
+          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>conviction · last 5 sessions</span>
+        </div>
+        {last5.length > 0 ? (
+          <FlowIntensityMap
+            bare
+            hideRowLabels
+            mode="constituent"
+            rows={[heroName]}
+            dates={dates}
+            cells={cells}
+            cellWidth={52}
+          />
+        ) : (
+          <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>No recent flow data.</span>
+        )}
+      </div>
     </Card>
   );
 }
@@ -125,7 +173,6 @@ function BookmarkListRow({
  * Also reused standalone by views/MyBookmarksPage.tsx (deep-link route).
  */
 export default function MyBookmarksPanel() {
-  const navigate = useNavigate();
   const { bookmarks, isLoading, hasLoaded, load, toggle } = useBookmarkStore();
 
   useEffect(() => {
@@ -148,30 +195,6 @@ export default function MyBookmarksPanel() {
     return map;
   }, [transition]);
 
-  // Reuse FlowIntensityMap (same component used on IndexDetailPage's Flow
-  // Map tab / SectorRotationPage's Heat toggle) for the 5D heatmap — one
-  // grid across all bookmarks, not a bespoke per-row widget.
-  const heatmapLabels: string[] = [];
-  const heatmapCells: Record<string, CellData[]> = {};
-  let heatmapDates: string[] = [];
-  for (const b of bookmarks) {
-    const market = dataByEquity.get(b.equity_id);
-    if (!market || market.last5.length === 0) continue;
-    const label = displaySymbol({ symbol: b.symbol, company_name: b.company_name });
-    heatmapLabels.push(label);
-    if (heatmapDates.length < market.last5.length) {
-      heatmapDates = market.last5.map((r) => fmtDate(r.trade_date));
-    }
-    heatmapCells[label] = market.last5.map((r) => ({
-      d1: r.pct_chng ?? 0,
-      amt: r.value_cr ?? 0,
-      ret_5d: r.ret_5d ?? undefined,
-      ret_22d: r.ret_22d ?? undefined,
-      s5: r.score_5d ?? undefined,
-      s22: r.score_22d ?? undefined,
-    }));
-  }
-
   if (isLoading && !hasLoaded) {
     return <DristiQLoader message="Loading bookmarks…" />;
   }
@@ -192,46 +215,26 @@ export default function MyBookmarksPanel() {
   }
 
   return (
-    <>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-        {marketLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-faint)', marginBottom: 4 }}>
-            <Loader2 className="w-3 h-3 animate-spin" /> Loading prices…
-          </div>
-        )}
-        {bookmarks.map((b) => (
-          <BookmarkListRow
-            key={b.id}
-            bookmark={b}
-            market={dataByEquity.get(b.equity_id)}
-            scanTags={(matchedByEquity.get(b.equity_id) ?? []).map((m) => m.name)}
-            sectorStatus={
-              b.industry && industryStatus.has(b.industry)
-                ? SECTOR_STATUS_LABEL[industryStatus.get(b.industry)!]
-                : null
-            }
-            onRemove={() => toggle(b.equity_id)}
-          />
-        ))}
-      </div>
-
-      {heatmapLabels.length > 0 && (
-        <FlowIntensityMap
-          mode="constituent"
-          rows={heatmapLabels}
-          dates={heatmapDates}
-          cells={heatmapCells}
-          cellWidth={56}
-          title="5D Heatmap"
-          subtitle="Last 5 sessions · money-flow conviction"
-          onRowClick={(label) => {
-            const b = bookmarks.find(
-              (bm) => displaySymbol({ symbol: bm.symbol, company_name: bm.company_name }) === label,
-            );
-            if (b) navigate(`/chart/equity/${b.equity_id}?name=${encodeURIComponent(toNavName(b))}`);
-          }}
-        />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {marketLoading && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-faint)' }}>
+          <Loader2 className="w-3 h-3 animate-spin" /> Loading prices…
+        </div>
       )}
-    </>
+      {bookmarks.map((b) => (
+        <BookmarkCard
+          key={b.id}
+          bookmark={b}
+          market={dataByEquity.get(b.equity_id)}
+          scanTags={(matchedByEquity.get(b.equity_id) ?? []).map((m) => m.name)}
+          sectorStatus={
+            b.industry && industryStatus.has(b.industry)
+              ? SECTOR_STATUS_LABEL[industryStatus.get(b.industry)!]
+              : null
+          }
+          onRemove={() => toggle(b.equity_id)}
+        />
+      ))}
+    </div>
   );
 }

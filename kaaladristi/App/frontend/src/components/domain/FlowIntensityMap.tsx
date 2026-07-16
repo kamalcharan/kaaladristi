@@ -40,6 +40,8 @@ interface FlowIntensityMapProps {
   cellWidth?: number;                   // default 92
   onRowClick?: (row: string) => void;   // row label click → drill-down
   bseRows?: Set<string>;                // constituent mode: rows that are BSE-only scrips → show a BSE chip
+  bare?: boolean;                       // embed inside another card: drop the Card wrapper + header + footer
+  hideRowLabels?: boolean;              // drop the left name column (caller already shows the identity)
 }
 
 // ── Color constants ────────────────────────────────────────────────────────────
@@ -218,6 +220,8 @@ export default function FlowIntensityMap({
   cellWidth,
   onRowClick,
   bseRows,
+  bare = false,
+  hideRowLabels = false,
 }: FlowIntensityMapProps) {
   const cellW = cellWidth ?? 92;
   const labelW = mode === 'index' ? LABEL_W_IDX : LABEL_W_CON;
@@ -264,38 +268,41 @@ export default function FlowIntensityMap({
 
   const totalCellW = dates.length * (cellW + GAP) - GAP;
 
-  return (
-    <Card variant="default" className="p-5">
+  const inner = (
+    <>
 
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div>
-          <span style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600 }}>
-            {title}
-          </span>
-          {subtitle && (
-            <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 8 }}>
-              {subtitle}
+      {/* ── Header (chrome only — hidden when embedded bare) ── */}
+      {!bare && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <span style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600 }}>
+              {title}
             </span>
+            {subtitle && (
+              <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 8 }}>
+                {subtitle}
+              </span>
+            )}
+          </div>
+
+          {/* Index toggle: 5D | 22D | 66D */}
+          {mode === 'index' && onDayWindowChange && (
+            <div style={{ display: 'inline-flex', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 6, padding: 2, gap: 2 }}>
+              {([5, 22, 66] as const).map((d) => (
+                <button key={d} style={toggleBtnStyle(dayWindow === d)} onClick={() => onDayWindowChange(d)}>
+                  {d}D
+                </button>
+              ))}
+            </div>
           )}
         </div>
-
-        {/* Index toggle: 5D | 22D | 66D */}
-        {mode === 'index' && onDayWindowChange && (
-          <div style={{ display: 'inline-flex', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 6, padding: 2, gap: 2 }}>
-            {([5, 22, 66] as const).map((d) => (
-              <button key={d} style={toggleBtnStyle(dayWindow === d)} onClick={() => onDayWindowChange(d)}>
-                {d}D
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ── Grid ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
         {/* Label column */}
+        {!hideRowLabels && (
         <div style={{ flexShrink: 0, width: labelW }}>
           {/* Spacer for date header row */}
           <div style={{ height: HEADER_ROW_H + GAP }} />
@@ -340,6 +347,7 @@ export default function FlowIntensityMap({
             </div>
           ))}
         </div>
+        )}
 
         {/* Micro-trend column */}
         <div style={{ flexShrink: 0, width: TREND_W, paddingRight: 8 }}>
@@ -464,11 +472,13 @@ export default function FlowIntensityMap({
         </div>
       </div>
 
-      {/* ── Footer ── */}
-      <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
-        Cell fill = money-flow conviction (Score 5D vs its 1-month pace). Cell number = Score 5D. Top edge = price direction that session.
-        {onRowClick && (mode === 'index' ? ' Click an index name to open its detail.' : ' Click a symbol to open its detail.')}
-      </div>
+      {/* ── Footer (chrome only — hidden when embedded bare) ── */}
+      {!bare && (
+        <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 10, lineHeight: 1.5 }}>
+          Cell fill = money-flow conviction (Score 5D vs its 1-month pace). Cell number = Score 5D. Top edge = price direction that session.
+          {onRowClick && (mode === 'index' ? ' Click an index name to open its detail.' : ' Click a symbol to open its detail.')}
+        </div>
+      )}
 
       {/* ── Cell tooltip ──
           Anchored immediately ABOVE the hovered cell (falls below it only
@@ -555,6 +565,13 @@ export default function FlowIntensityMap({
         </div>
         );
       })(), document.body)}
+    </>
+  );
+
+  if (bare) return inner;
+  return (
+    <Card variant="default" className="p-5">
+      {inner}
     </Card>
   );
 }
