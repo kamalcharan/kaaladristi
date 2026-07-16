@@ -4718,12 +4718,16 @@ def vani_ask(req: VaNiAskRequest):
         }
 
     # Cache check — key includes entity so different stocks don't collide.
-    # Scanner intents skip this in-memory layer: they use the persistent
-    # km_vani_cache (context-hash keyed), checked after context assembly.
+    # Scanner AND equity intents skip this in-memory layer: they use the
+    # persistent km_vani_cache instead (restart-proof, shared across
+    # processes — the entity fan-out is the platform's biggest LLM cost, so
+    # a restart during market hours must not re-bill every popular stock).
+    # Dashboard/astro/industry intents (small, page-level) stay in-memory.
     _is_scanner = intent_id.startswith('scanner.')
-    _scan_cache_key = None
+    _is_equity = intent_id.startswith('equity.')
+    _pcache_key = None
     cache_key = f'{intent_id}:{date_str}:{req.entity_id or ""}'
-    if not _is_scanner:
+    if not (_is_scanner or _is_equity):
         cached_entry = _intent_cache.get(cache_key)
         if cached_entry:
             age_h = (datetime.now() - cached_entry['cached_at']).total_seconds() / 3600
@@ -4759,6 +4763,24 @@ def vani_ask(req: VaNiAskRequest):
                     'response': None, 'ai': False, 'cached': False,
                     'provider': None, 'error': 'entity_id required for equity intents',
                 }
+            # Persistent cache — keyed by stock + date (signals are per trade
+            # date, so date keying is equivalent to signal-hash keying and
+            # skips context assembly entirely on a hit). page_context shapes
+            # the answer only for why_in_context, so only that intent keys
+            # on it — the others share one entry across pages.
+            _pcache_key = _vani_pcache_key(intent_id, {
+                'date': date_str,
+                'entity_type': req.entity_type or 'equity',
+                'entity_id': req.entity_id,
+                'page_ctx': (req.page_context or '') if intent_id == 'equity.why_in_context' else '',
+            })
+            _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
+            if _cached_text:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': _cached_text,
+                    'ai': True, 'cached': True, 'provider': 'cache',
+                }
             ctx = assemble_equity_context(
                 db,
                 entity_id=req.entity_id,
@@ -4792,8 +4814,8 @@ def vani_ask(req: VaNiAskRequest):
                 }
             # Persistent cache (km_vani_cache): explain_preset's hash derives
             # from the preset copy alone — no change of state, no LLM invoke.
-            _scan_cache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
-            _cached_text = _vani_pcache_get(db, _scan_cache_key) if _scan_cache_key else None
+            _pcache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
+            _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
             if _cached_text:
                 return {
                     'intent_id': intent_id, 'date': date_str,
@@ -4908,11 +4930,11 @@ def vani_ask(req: VaNiAskRequest):
         latency_ms=_latency,
     )
 
-    if _is_scanner:
-        if _scan_cache_key:
+    if _is_scanner or _is_equity:
+        if _pcache_key:
             _vani_pcache_set(
-                db, _scan_cache_key, intent_id,
-                _scan_cache_key.rsplit(':', 1)[-1],
+                db, _pcache_key, intent_id,
+                _pcache_key.rsplit(':', 1)[-1],
                 response_text, intent.cache_ttl_hours,
                 llm_provider=provider, llm_model=_AI_MODEL,
             )
