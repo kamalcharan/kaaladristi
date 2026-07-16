@@ -42,6 +42,8 @@ interface FlowIntensityMapProps {
   bseRows?: Set<string>;                // constituent mode: rows that are BSE-only scrips → show a BSE chip
   bare?: boolean;                       // embed inside another card: drop the Card wrapper + header + footer
   hideRowLabels?: boolean;              // drop the left name column (caller already shows the identity)
+  hideTrend?: boolean;                  // drop the micro-trend column (compact inline strips)
+  cellHeight?: number;                  // override cell height (default 56); shrinks the score font to match
 }
 
 // ── Color constants ────────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ interface TooltipState {
 // ── Fixed sizing ──────────────────────────────────────────────────────────────
 
 const HEADER_ROW_H = 28;  // date header row
-const CELL_H       = 56;  // sized for glanceability — one score line per cell
+const CELL_H_DEFAULT = 56;  // default cell height — glanceable; overridable via cellHeight prop
 const GAP          = 2;
 const LABEL_W_CON  = 130;  // constituent mode — symbols / short BSE display names
 const LABEL_W_IDX  = 220;  // index mode — full index names, no harsh truncation
@@ -222,8 +224,12 @@ export default function FlowIntensityMap({
   bseRows,
   bare = false,
   hideRowLabels = false,
+  hideTrend = false,
+  cellHeight,
 }: FlowIntensityMapProps) {
   const cellW = cellWidth ?? 92;
+  const CELL_H = cellHeight ?? CELL_H_DEFAULT;
+  const scoreFont = CELL_H <= 34 ? 11 : 13;
   const labelW = mode === 'index' ? LABEL_W_IDX : LABEL_W_CON;
   const strongCut = mode === 'index' ? STRONG_SCORE_CUT_INDEX : STRONG_SCORE_CUT_EQUITY;
 
@@ -350,6 +356,7 @@ export default function FlowIntensityMap({
         )}
 
         {/* Micro-trend column */}
+        {!hideTrend && (
         <div style={{ flexShrink: 0, width: TREND_W, paddingRight: 8 }}>
           <div style={{
             height: HEADER_ROW_H + GAP,
@@ -378,6 +385,7 @@ export default function FlowIntensityMap({
             </div>
           ))}
         </div>
+        )}
 
         {/* Scrollable cell area — minWidth:0 is required so this flex item
             actually scrolls horizontally instead of stretching its parent
@@ -454,7 +462,7 @@ export default function FlowIntensityMap({
                       }}
                     >
                       <div style={{
-                        fontSize: 13,
+                        fontSize: scoreFont,
                         fontWeight: 600,
                         fontFamily: 'monospace',
                         lineHeight: 1.2,
