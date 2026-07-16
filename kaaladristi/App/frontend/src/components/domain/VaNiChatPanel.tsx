@@ -162,7 +162,8 @@ export default function VaNiChatPanel() {
             id: `r-${Date.now()}`,
             type: 'response',
             intentId,
-            text: data.response || 'VaNi could not generate a response right now.',
+            text: data.response
+              || (data.error ? `VaNi: ${data.error}` : 'VaNi could not generate a response right now.'),
             cached: data.cached,
             logId: data.log_id ?? undefined,
             timestamp: Date.now(),

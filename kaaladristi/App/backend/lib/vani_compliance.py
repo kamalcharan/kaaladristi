@@ -82,6 +82,10 @@ _SUBSTITUTIONS: list[tuple[str, str]] = [
     ('bull',          'uptrend'),
     ('bear',          'downtrend'),
     # Flow / activity words (skill table)
+    ('sell-off',      'broad outflow'),
+    ('selloff',       'broad outflow'),
+    ('buy-side',      'inflow-side'),
+    ('sell-side',     'outflow-side'),
     ('white-hot',     'peak flow'),
     ('accumulation',  'rising flow'),
     ('accumulating',  'flow increasing'),

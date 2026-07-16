@@ -4718,12 +4718,16 @@ def vani_ask(req: VaNiAskRequest):
         }
 
     # Cache check — key includes entity so different stocks don't collide.
-    # Scanner intents skip this in-memory layer: they use the persistent
-    # km_vani_cache (context-hash keyed), checked after context assembly.
+    # Scanner AND equity intents skip this in-memory layer: they use the
+    # persistent km_vani_cache instead (restart-proof, shared across
+    # processes — the entity fan-out is the platform's biggest LLM cost, so
+    # a restart during market hours must not re-bill every popular stock).
+    # Dashboard/astro/industry intents (small, page-level) stay in-memory.
     _is_scanner = intent_id.startswith('scanner.')
-    _scan_cache_key = None
+    _is_equity = intent_id.startswith('equity.')
+    _pcache_key = None
     cache_key = f'{intent_id}:{date_str}:{req.entity_id or ""}'
-    if not _is_scanner:
+    if not (_is_scanner or _is_equity):
         cached_entry = _intent_cache.get(cache_key)
         if cached_entry:
             age_h = (datetime.now() - cached_entry['cached_at']).total_seconds() / 3600
@@ -4759,6 +4763,24 @@ def vani_ask(req: VaNiAskRequest):
                     'response': None, 'ai': False, 'cached': False,
                     'provider': None, 'error': 'entity_id required for equity intents',
                 }
+            # Persistent cache — keyed by stock + date (signals are per trade
+            # date, so date keying is equivalent to signal-hash keying and
+            # skips context assembly entirely on a hit). page_context shapes
+            # the answer only for why_in_context, so only that intent keys
+            # on it — the others share one entry across pages.
+            _pcache_key = _vani_pcache_key(intent_id, {
+                'date': date_str,
+                'entity_type': req.entity_type or 'equity',
+                'entity_id': req.entity_id,
+                'page_ctx': (req.page_context or '') if intent_id == 'equity.why_in_context' else '',
+            })
+            _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
+            if _cached_text:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': _cached_text,
+                    'ai': True, 'cached': True, 'provider': 'cache',
+                }
             ctx = assemble_equity_context(
                 db,
                 entity_id=req.entity_id,
@@ -4792,8 +4814,8 @@ def vani_ask(req: VaNiAskRequest):
                 }
             # Persistent cache (km_vani_cache): explain_preset's hash derives
             # from the preset copy alone — no change of state, no LLM invoke.
-            _scan_cache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
-            _cached_text = _vani_pcache_get(db, _scan_cache_key) if _scan_cache_key else None
+            _pcache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
+            _cached_text = _vani_pcache_get(db, _pcache_key) if _pcache_key else None
             if _cached_text:
                 return {
                     'intent_id': intent_id, 'date': date_str,
@@ -4824,14 +4846,15 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': 'No data available for this date',
         }
 
-    # Call LLM. Scanner intents carry their own carefully-structured system
-    # prompt (date anchor, lens framing, no-superlatives, never-reveal-formula)
-    # — the generic _VANI_ASK_SYSTEM is written for the astro/macro intents
-    # and actively wrong for scanner narration ("atmospheric conditions",
-    # "macro backdrop", 3-4 sentence cap). Both paths keep the grounding
-    # wrapper so the model can't drift outside the provided data.
+    # Call LLM. Scanner AND equity intents carry their own carefully-
+    # structured system prompts — the generic _VANI_ASK_SYSTEM is written
+    # for the astro/macro intents and actively wrong for signal narration
+    # ("atmospheric conditions", "macro backdrop", 3-4 sentence cap).
+    # Dashboard/astro/industry intents keep _VANI_ASK_SYSTEM unchanged.
+    # Both paths keep the grounding wrapper so the model can't drift
+    # outside the provided data.
     provider = os.getenv('AI_PROVIDER', 'local')
-    if _is_scanner:
+    if _is_scanner or intent_id.startswith('equity.'):
         _ask_system = intent.system_prompt + (
             "\n\nABSOLUTE GROUNDING RULES: Use ONLY the data provided between "
             "[DATA START] and [DATA END]. Never invent, assume, or extrapolate "
@@ -4842,45 +4865,58 @@ def vani_ask(req: VaNiAskRequest):
     else:
         _ask_system = _VANI_ASK_SYSTEM
     _wrapped_msg = _wrap_vani_user_msg(user_msg)
+
+    # Up to 2 attempts: a compliance reject or empty generation retries once
+    # at a nudged temperature instead of dead-ending the user.
     _t0 = time.monotonic()
-    response_text = _ai_complete(
-        system=_ask_system,
-        user=_wrapped_msg,
-        max_tokens=intent.max_tokens,
-        temperature=0.4,
-        no_think=True,
-    )
-    _latency = int((time.monotonic() - _t0) * 1000)
-
-    if not response_text:
-        return {
-            'intent_id': intent_id, 'date': date_str,
-            'response': None, 'ai': False, 'cached': False,
-            'provider': None, 'error': 'LLM unavailable',
-        }
-
-    # SEBI post-filter — substitute forbidden phrases per the sweep table;
-    # reject outright (never serve, never cache) if recommendation language
-    # survives substitution.
-    response_text, _sebi_rejected = _sebi_post_filter(response_text)
-    if _sebi_rejected or not response_text:
-        log.warning(f'vani_ask [{intent_id}] response rejected by SEBI post-filter')
-        return {
-            'intent_id': intent_id, 'date': date_str,
-            'response': None, 'ai': False, 'cached': False,
-            'provider': provider, 'error': 'Response did not pass the language compliance check — please retry',
-        }
-    if _is_scanner:
+    response_text = None
+    _sebi_rejected = False
+    _llm_returned = False
+    for _attempt in range(2):
+        raw = _ai_complete(
+            system=_ask_system,
+            user=_wrapped_msg,
+            max_tokens=intent.max_tokens,
+            temperature=0.4 if _attempt == 0 else 0.6,
+            no_think=True,
+        )
+        if not raw:
+            continue
+        _llm_returned = True
+        # SEBI post-filter — substitute forbidden phrases per the sweep
+        # table; reject (never serve, never cache) if recommendation
+        # language survives substitution.
+        clean, rejected = _sebi_post_filter(raw)
+        if rejected or not clean:
+            log.warning(f'vani_ask [{intent_id}] attempt {_attempt + 1} rejected by SEBI post-filter')
+            _sebi_rejected = True
+            continue
         # explain_preset must never reveal thresholds/formula values — the
         # inputs are number-masked, and any digit that still appears in the
         # output is a leak: reject before serving or caching.
-        if intent_id == 'scanner.explain_preset' and re.search(r'\d', response_text):
-            log.warning(f'vani_ask [{intent_id}] rejected: numeric value in explainer')
-            return {
-                'intent_id': intent_id, 'date': date_str,
-                'response': None, 'ai': False, 'cached': False,
-                'provider': provider, 'error': 'Response did not pass the language compliance check — please retry',
-            }
+        if intent_id == 'scanner.explain_preset' and re.search(r'\d', clean):
+            log.warning(f'vani_ask [{intent_id}] attempt {_attempt + 1} rejected: numeric value in explainer')
+            _sebi_rejected = True
+            continue
+        response_text = clean
+        _sebi_rejected = False
+        break
+    _latency = int((time.monotonic() - _t0) * 1000)
+
+    if not response_text:
+        if _sebi_rejected:
+            err = 'The generated text did not pass the language compliance check. Please ask again.'
+        elif _llm_returned:
+            err = 'The AI returned an empty response. Please ask again.'
+        else:
+            err = 'The AI service is unavailable right now. Please try again shortly.'
+        return {
+            'intent_id': intent_id, 'date': date_str,
+            'response': None, 'ai': False, 'cached': False,
+            'provider': provider, 'error': err,
+        }
+
+    if _is_scanner:
         response_text = _append_disclaimer(response_text)
 
     log_id = _log_interaction(
@@ -4894,11 +4930,11 @@ def vani_ask(req: VaNiAskRequest):
         latency_ms=_latency,
     )
 
-    if _is_scanner:
-        if _scan_cache_key:
+    if _is_scanner or _is_equity:
+        if _pcache_key:
             _vani_pcache_set(
-                db, _scan_cache_key, intent_id,
-                _scan_cache_key.rsplit(':', 1)[-1],
+                db, _pcache_key, intent_id,
+                _pcache_key.rsplit(':', 1)[-1],
                 response_text, intent.cache_ttl_hours,
                 llm_provider=provider, llm_model=_AI_MODEL,
             )
