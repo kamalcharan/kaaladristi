@@ -20,6 +20,7 @@ import { VisualPulsePage } from '@/components/domain/VisualPulse';
 import { EquityVisualPulsePage } from '@/components/domain/VisualPulse/equity';
 import { IntradayPage } from '@/components/domain/Intraday';
 import ScanView from '@/views/ScanView';
+import MyBookmarksPage from '@/views/MyBookmarksPage';
 import ManipulationWatchView from '@/views/ManipulationWatchView';
 import IndustryTransitionView from '@/views/IndustryTransitionView';
 import DataPipelinePage from '@/pages/DataPipeline';
@@ -126,6 +127,7 @@ function AppRoutes() {
           <Route path="/scanners" element={<Navigate to="/scanner" replace />} />
           <Route path="/scanners/:presetId" element={<ScanView />} />
           <Route path="/scanner" element={<ScanView />} />
+          <Route path="/bookmarks" element={<MyBookmarksPage />} />
           <Route path="/scanner/:presetId" element={<ScanView />} />
           <Route path="/manipulation-watch" element={<ManipulationWatchView />} />
           <Route path="/industry-transition" element={<IndustryTransitionView />} />

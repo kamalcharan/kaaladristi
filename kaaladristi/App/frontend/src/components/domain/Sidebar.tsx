@@ -18,6 +18,7 @@ const navSections: NavSection[] = [
       { to: '/catalog',          glyph: '⊟', label: 'Catalog' },
       { to: '/sector-rotation',  glyph: '⇌', label: 'Sector Rotation' },
       { to: '/scanner',        glyph: '⊙', label: 'Scanner' },
+      { to: '/bookmarks',      glyph: '☆', label: 'My Bookmarks' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
       { to: '/account',         glyph: '◯', label: 'Account' },
       { to: '/settings',        glyph: '⚙', label: 'Settings' },

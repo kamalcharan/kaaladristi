@@ -77,3 +77,54 @@ export function useScanPresence(equityId: number | null): ScanPresenceResult {
     isLoading: query.isLoading,
   };
 }
+
+// ── Batched — for lists of stocks (e.g. My Bookmarks) ──────────────────────
+// Same underlying scan data, checked against every id in the list in one
+// pass per preset — NOT computeScanPresence() called once per stock, which
+// would re-run all ~16 presets N times for N bookmarked stocks.
+
+export async function computeScanPresenceForMany(
+  equityIds: number[],
+): Promise<Map<number, MatchedScan[]>> {
+  const result = new Map<number, MatchedScan[]>(equityIds.map((id) => [id, []]));
+  if (equityIds.length === 0) return result;
+
+  const idSet = new Set(equityIds);
+  const presets = await fetchScanPresets().catch(() => SCAN_PRESETS);
+  if (presets.length > 0) await executeScan(presets[0].id, 'combined');
+
+  const settled = await Promise.allSettled(
+    presets.map((preset) => executeScan(preset.id, 'combined').then((stocks) => ({ preset, stocks }))),
+  );
+
+  for (const res of settled) {
+    if (res.status !== 'fulfilled') continue;
+    const { preset, stocks } = res.value;
+    for (const s of stocks) {
+      if (!idSet.has(s.equity_id)) continue;
+      const vani = preset.vani_rule === 'always_true' ? false : !!s.vaniOpportunity;
+      result.get(s.equity_id)!.push({ id: preset.id, name: preset.name, vani });
+    }
+  }
+
+  for (const matched of result.values()) {
+    matched.sort((a, b) => Number(b.vani) - Number(a.vani) || a.name.localeCompare(b.name));
+  }
+
+  return result;
+}
+
+export function useScanPresenceForMany(equityIds: number[]) {
+  const key = [...equityIds].sort((a, b) => a - b).join(',');
+  const query = useQuery({
+    queryKey: ['scan-presence-many', key],
+    queryFn: () => computeScanPresenceForMany(equityIds),
+    staleTime: 3 * 60 * 1000,
+    enabled: equityIds.length > 0,
+  });
+
+  return {
+    matchedByEquity: query.data ?? new Map<number, MatchedScan[]>(),
+    isLoading: query.isLoading,
+  };
+}
