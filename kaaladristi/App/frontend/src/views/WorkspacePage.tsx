@@ -27,8 +27,9 @@ import NakVaraSignals from '@/components/domain/DashboardV3/NakVaraSignals'
 import SectorPulse from '@/components/domain/DashboardV3/SectorPulse'
 import VaNiHighlightsBoard from '@/components/domain/VaNiHighlightsBoard'
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge'
+import MyBookmarksPanel from '@/components/domain/MyBookmarksPanel'
 
-type ActiveTab = 'today' | 'discovery' | 'myspace'
+type ActiveTab = 'today' | 'discovery' | 'myspace' | 'bookmarks'
 
 const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function fmtDateChip(d: Date): string {
@@ -209,9 +210,9 @@ export default function WorkspacePage() {
         background: 'var(--card-soft)', borderBottom: '1px solid var(--border)',
         padding: '0 20px', position: 'sticky', top: 48, zIndex: 39,
       }}>
-        {(['today', 'discovery', 'myspace'] as const).map((tab) => {
-          const labels: Record<ActiveTab, string> = { today: 'Today', discovery: 'Discovery', myspace: 'My Space' }
-          const icons:  Record<ActiveTab, string> = { today: '◐', discovery: '⊙', myspace: '⊞' }
+        {(['today', 'discovery', 'myspace', 'bookmarks'] as const).map((tab) => {
+          const labels: Record<ActiveTab, string> = { today: 'Today', discovery: 'Discovery', myspace: 'My Space', bookmarks: 'My Bookmarks' }
+          const icons:  Record<ActiveTab, string> = { today: '◐', discovery: '⊙', myspace: '⊞', bookmarks: '☆' }
           const active = activeTab === tab
           return (
             <button
@@ -370,6 +371,14 @@ export default function WorkspacePage() {
             onMorningBrief={() => setActiveTab('today')}
             islandOffset={isBeta && !betaBarDismissed ? 36 : 0}
           />
+        </div>
+      )}
+
+      {activeTab === 'bookmarks' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ padding: '16px 20px' }}>
+            <MyBookmarksPanel />
+          </div>
         </div>
       )}
 
