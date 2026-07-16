@@ -262,7 +262,7 @@ export default function VaNiChatPanel() {
           id: `r-${Date.now()}`,
           type: 'response',
           text: `${match.symbol} isn't part of today's ${scanContext.presetName} results, so VaNi can't read it in this scan's context. You can explore it on its stock dashboard.`,
-          link: { href: `/pulse/equity/${match.id}`, label: `Open ${match.symbol} dashboard` },
+          link: { href: `/chart/equity/${match.id}?name=${encodeURIComponent(match.symbol)}`, label: `Open ${match.symbol} dashboard` },
         }]);
       } else {
         pushLocal([{

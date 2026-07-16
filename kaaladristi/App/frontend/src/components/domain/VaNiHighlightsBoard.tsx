@@ -15,7 +15,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVaniHighlights } from '@/hooks/useScan';
-import { displaySymbol } from '@/lib/symbolUtils';
+import { displaySymbol, navName } from '@/lib/symbolUtils';
 import type { VaniHighlightRow, VaniHighlights } from '@/services/scanEngine';
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono, monospace)' };
@@ -205,7 +205,7 @@ function HighlightCard({
             row={row}
             metric={metricOf(row)}
             isNew={newIds.has(row.equity_id)}
-            onClick={() => navigate(`/pulse/equity/${row.equity_id}`)}
+            onClick={() => navigate(`/chart/equity/${row.equity_id}?name=${encodeURIComponent(navName(row))}`)}
           />
         ))
       )}

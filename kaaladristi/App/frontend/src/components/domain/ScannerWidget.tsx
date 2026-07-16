@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useScan } from '@/hooks/useScan'
 import type { ScanStock } from '@/types'
-import { displaySymbol } from '@/lib/symbolUtils'
+import { displaySymbol, navName } from '@/lib/symbolUtils'
 
 type ColumnVariant = 'default' | 'stage'
 
@@ -191,7 +191,7 @@ export default function ScannerWidget({ presetId, title, maxRows = 4, variant = 
           <StockRow
             key={stock.equity_id}
             stock={stock}
-            onClick={() => navigate(`/pulse/equity/${stock.equity_id}`)}
+            onClick={() => navigate(`/chart/equity/${stock.equity_id}?name=${encodeURIComponent(navName(stock))}`)}
             variant={variant}
           />
         ))

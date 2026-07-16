@@ -15,6 +15,7 @@ import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
 import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
+import { navName } from '@/lib/symbolUtils';
 import { useVaNiStore } from '@/stores/vaniStore';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -600,7 +601,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
         <ScanTable
           stocks={displayStocks}
           presetId={preset.id}
-          onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
         />
       )}
 
@@ -789,7 +790,7 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
           <ScanTable
             stocks={stocks}
             presetId="conviction_flow"
-            onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
           />
         )
       ) : (
@@ -872,7 +873,7 @@ function FpbActiveSection() {
           return (
             <div
               key={`${r.equity_id}-${r.release_date}`}
-              onClick={() => navigate(`/pulse/equity/${r.equity_id}`)}
+              onClick={() => navigate(`/chart/equity/${r.equity_id}?name=${encodeURIComponent(navName({ symbol: r.symbol, company_name: null }))}`)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
                 padding: '10px 14px', borderRadius: 12,
@@ -965,7 +966,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         <ScanTable
           stocks={[...bursts, ...shatters, ...setups]}
           presetId="flower_pot_burst"
-          onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+          onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
         />
       ) : (
         <>
@@ -1350,7 +1351,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
           <ScanTable
             stocks={exportStocks}
             presetId={presetId}
-            onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
           />
         ) : (
           <BreakoutSurgeCards stocks={oppFilter ? exportStocks : sorted} />
@@ -1434,7 +1435,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
             key={presetId}
             stocks={sorted}
             presetId={presetId}
-            onRowClick={(s) => navigate(`/pulse/equity/${s.equity_id}`)}
+            onRowClick={(s) => navigate(`/chart/equity/${s.equity_id}?name=${encodeURIComponent(navName(s))}`)}
           />
         ) : (
           <div style={{
