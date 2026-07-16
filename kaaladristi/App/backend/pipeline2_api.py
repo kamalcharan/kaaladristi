@@ -5351,20 +5351,30 @@ def add_bookmark(
                 INSERT INTO km_user_bookmarks (user_id, equity_id)
                 VALUES (%s::uuid, %s)
                 ON CONFLICT (user_id, equity_id) DO NOTHING
-                RETURNING id, equity_id, created_at
+                RETURNING id
+                """,
+                (user_id, req.equity_id),
+            )
+            cur.fetchone()
+            conn.commit()
+            # Re-select joined with km_equity_symbols either way (new insert or
+            # already-bookmarked) — the caller needs symbol/company_name/
+            # industry/exchange, not just the bare km_user_bookmarks columns,
+            # since this row is pushed straight into the frontend bookmark
+            # list (bookmarkStore.toggle) without a follow-up list refetch.
+            cur.execute(
+                """
+                SELECT b.id, b.equity_id, b.created_at,
+                       s.symbol, s.company_name, s.industry, s.exchange
+                FROM km_user_bookmarks b
+                JOIN km_equity_symbols s ON s.id = b.equity_id
+                WHERE b.user_id = %s::uuid AND b.equity_id = %s
                 """,
                 (user_id, req.equity_id),
             )
             row = cur.fetchone()
-            conn.commit()
             if row is None:
-                # Already bookmarked — idempotent, return the existing row.
-                cur.execute(
-                    "SELECT id, equity_id, created_at FROM km_user_bookmarks "
-                    "WHERE user_id = %s::uuid AND equity_id = %s",
-                    (user_id, req.equity_id),
-                )
-                row = cur.fetchone()
+                raise HTTPException(status_code=500, detail='Bookmark insert failed')
         return dict(row)
     except HTTPException:
         raise

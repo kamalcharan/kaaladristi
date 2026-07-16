@@ -129,6 +129,7 @@ const TREND_W      = 72;   // micro-trend bars between name and cells
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function trunc(s: string, n: number) {
+  if (!s) return s;
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
