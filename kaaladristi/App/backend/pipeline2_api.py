@@ -45,6 +45,7 @@ try:
     from lib.data_assemblers import (                         # noqa: E402
         assemble_instrument_context,
         assemble_market_pulse_context,
+        latest_confirmed_date,
     )
     from lib.vani_intents import INTENTS as _VANI_INTENTS, get_intents_for_page as _get_intents_for_page  # noqa: E402
     from lib.vani_assemblers import (                         # noqa: E402
@@ -2735,23 +2736,23 @@ def sector_insight(index_id: int, date: str = None):
             'km_index_symbols', 'name,category',
             filters={'id': index_id}, limit=1
         )
-        if date:
-            eod_rows = _db().select(
-                'km_index_eod',
-                'trade_date,flow_type,rsi_14,magic_rs,magic_rs_zone,sniper_inst,'
-                'ret_5d,ret_22d,ret_66d,score_5d,score_22d,avg_amt_5d,avg_amt_22d',
-                filters={'index_id': index_id, 'trade_date': date},
-                limit=1,
-            )
-        else:
-            eod_rows = _db().select(
-                'km_index_eod',
-                'trade_date,flow_type,rsi_14,magic_rs,magic_rs_zone,sniper_inst,'
-                'ret_5d,ret_22d,ret_66d,score_5d,score_22d,avg_amt_5d,avg_amt_22d',
-                filters={'index_id': index_id},
-                order='trade_date.desc',
-                limit=1,
-            )
+        # When no date given, resolve the latest INDICATOR-complete date for
+        # THIS index (gated on ema_20) rather than its raw latest trade_date
+        # — the ungated version fed a partially-computed row (flow_type,
+        # magic_rs, sniper_inst still null mid-pipeline) directly into the
+        # LLM prompt below, so VaNi could narrate an incomplete sector state
+        # as fact with no cue anything was missing. See
+        # data_assemblers.latest_confirmed_date for the shared rationale.
+        resolved_date = date or latest_confirmed_date(_db(), 'km_index_eod', filters={'index_id': index_id})
+        if not resolved_date:
+            return {"index_id": index_id, "date": date, "insight": None, "ai": False}
+        eod_rows = _db().select(
+            'km_index_eod',
+            'trade_date,flow_type,rsi_14,magic_rs,magic_rs_zone,sniper_inst,'
+            'ret_5d,ret_22d,ret_66d,score_5d,score_22d,avg_amt_5d,avg_amt_22d',
+            filters={'index_id': index_id, 'trade_date': resolved_date},
+            limit=1,
+        )
     except Exception as e:
         log.error(f'sector_insight fetch error: {e}')
         return {"index_id": index_id, "date": date, "insight": None, "ai": False}
@@ -4811,6 +4812,21 @@ def vani_ask(req: VaNiAskRequest):
                     'intent_id': intent_id, 'date': date_str,
                     'response': None, 'ai': False, 'cached': False,
                     'provider': None, 'error': f'Unknown scan preset: {req.preset_id}',
+                }
+            # Empty result set → deterministic reply, never the LLM: an empty
+            # scan during a pipeline run means "data not loaded", not "no
+            # stocks qualify", and narrating emptiness is a wasted call.
+            if intent_id == 'scanner.read_results' and not ctx['rows']:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': _append_disclaimer(
+                        f"As of the {ctx['data_date']} close, no stocks meet "
+                        f"{ctx['preset']['name']}'s conditions. That can be normal — "
+                        f"some conditions only line up a few days a month. If the "
+                        f"daily pipeline is still running, results will appear once "
+                        f"fresh data lands."
+                    ),
+                    'ai': False, 'cached': False, 'provider': 'rule',
                 }
             # Persistent cache (km_vani_cache): explain_preset's hash derives
             # from the preset copy alone — no change of state, no LLM invoke.

@@ -49,6 +49,42 @@ def _safe_float(val, default=None):
         return default
 
 
+def latest_confirmed_date(db, table: str, filters: dict | None = None) -> str | None:
+    """Resolve the latest INDICATOR-complete trade_date for a table, gated on
+    ema_20 IS NOT NULL rather than just the max trade_date.
+
+    Root cause this guards against: the daily pipeline ingests raw
+    OHLCV/prices first and computes indicators (ema_20, magic_rs, flow_type,
+    sniper_inst, ...) in a later step. A plain "max(trade_date)" resolved
+    during that window returns a date whose row has prices but null
+    indicator columns — and every VaNi assembler that reads those columns
+    from "the latest row" would silently narrate an incomplete state as
+    today's real numbers (worse than a blank scanner page, since there's no
+    visual loading cue). Mirrors the frontend fix in
+    scanEngine.ts's resolveConfirmedLatestDate — same column, same reasoning.
+
+    Falls back to None (never to an unbounded/ungated date) on any failure —
+    callers must treat None as "we don't know", not "no bound needed".
+
+    Note: db_client only supports equality filters, no IS NOT NULL — so this
+    fetches a small recent window ordered by trade_date desc and picks the
+    first row (in Python) whose ema_20 is populated, rather than relying on
+    a query-level NOT NULL filter.
+    """
+    try:
+        rows = db.select(
+            table, 'trade_date,ema_20',
+            filters=dict(filters or {}),
+            order='trade_date.desc', limit=15,
+        )
+        for r in (rows or []):
+            if r.get('ema_20') is not None:
+                return str(r['trade_date'])
+        return None
+    except Exception:
+        return None
+
+
 # ── Instrument Context ──────────────────────────────────────────────────────
 
 def assemble_instrument_context(
@@ -111,8 +147,18 @@ def assemble_instrument_context(
     if not eod_rows:
         return None
 
-    latest = eod_rows[0]
-    prev = eod_rows[1] if len(eod_rows) > 1 else None
+    # target_date is usually "today" (vani_ask defaults it to the current IST
+    # date, independent of whether today's pipeline run has finished) — so
+    # eod_rows[0] can be today's row with prices landed but ema_20/magic_rs/
+    # flow_type/rsi_14 still computing. Prefer the newest row that's actually
+    # indicator-complete within the fetched window, so a mid-pipeline ask
+    # shows yesterday's real signal profile instead of today's mostly-null
+    # one (translate_zone/translate_flow degrade None to '—', which reads as
+    # "no signal" rather than "not computed yet" — a worse user experience,
+    # not a compliance risk, but still worth avoiding).
+    complete_idx = next((i for i, r in enumerate(eod_rows) if r.get('ema_20') is not None), 0)
+    latest = eod_rows[complete_idx]
+    prev = eod_rows[complete_idx + 1] if len(eod_rows) > complete_idx + 1 else None
     actual_date = str(latest.get('trade_date', target_date or ''))
 
     # ── Price ──
@@ -373,13 +419,16 @@ def assemble_market_pulse_context(
     """
 
     # ── Resolve target date ──
+    # Gated on ema_20 (see latest_confirmed_date) — a plain max(trade_date)
+    # during the pipeline window returns a date whose indicator columns
+    # (sniper_inst, flow_type, magic_rs_zone, ...) are still computing, and
+    # this context feeds VaNi's market_pulse_insight LLM prompt directly:
+    # an ungated date meant VaNi could confidently narrate a half-computed
+    # market state as today's real numbers, with no cue that anything was
+    # incomplete. The per-index loop below adds a second, per-index gate on
+    # top of this, since one populated index doesn't guarantee all are.
     if not target_date:
-        try:
-            rows = db.select('km_index_eod', 'trade_date',
-                             order='trade_date.desc', limit=1)
-            target_date = str(rows[0]['trade_date']) if rows else str(date.today())
-        except Exception:
-            target_date = str(date.today())
+        target_date = latest_confirmed_date(db, 'km_index_eod') or str(date.today())
 
     # ── Fetch index IDs for pulse indexes ──
     try:
@@ -400,7 +449,7 @@ def assemble_market_pulse_context(
             eod_rows = db.select(
                 'km_index_eod', '*',
                 filters={'index_id': idx_id},
-                order='trade_date.desc', limit=2,
+                order='trade_date.desc', limit=5,
             )
             eod_rows = [r for r in eod_rows if str(r.get('trade_date', '')) <= target_date]
         except Exception:
@@ -409,8 +458,14 @@ def assemble_market_pulse_context(
         if not eod_rows:
             continue
 
-        latest = eod_rows[0]
-        prev = eod_rows[1] if len(eod_rows) > 1 else None
+        # target_date's global gate doesn't guarantee THIS index's row is
+        # indicator-complete (one populated index proved the date exists,
+        # not that every index is done) — prefer the newest row with ema_20
+        # populated within the fetched window; fall back to the raw newest
+        # only if none qualifies, so the index doesn't just vanish.
+        complete_idx = next((i for i, r in enumerate(eod_rows) if r.get('ema_20') is not None), 0)
+        latest = eod_rows[complete_idx]
+        prev = eod_rows[complete_idx + 1] if len(eod_rows) > complete_idx + 1 else None
         close = _safe_float(latest.get('close'), 0)
         prev_close = _safe_float(prev.get('close'), close) if prev else close
         change_pct = ((close - prev_close) / prev_close * 100) if prev_close else 0

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { executeScan, getAllScanCounts, fetchScanPresets, fetchVaniHighlights, fetchFpbActive, SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type ScanCountsResult, type VaniHighlights, type FpbActiveRow } from '@/services/scanEngine';
 import type { ScanStock, ScanDefinition } from '@/types';
+import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 
 const PIPELINE_URL = import.meta.env.VITE_PIPELINE_API_URL ?? '';
 
@@ -79,13 +80,39 @@ export function useStage2Scan(filters: Stage2Filters) {
   });
 }
 
+// Scan queries key on the PIPELINE-CONFIRMED data date (usePipelineStatus,
+// polled every 60s), not just wall-clock staleTime.
+//
+// ⚠ History: the query key used to be ['scan', scanId, exchangeFilter,
+// timeframe] — no date. React Query only refetches stale data when
+// something TRIGGERS a check (mount, window focus, reconnect); it never
+// refetches purely because time passed while a tab sat open and in focus.
+// useMidnightDateRefresh (App.tsx) only updates a date-picker default — it
+// invalidates nothing. Net effect: a tab left open through a day boundary
+// (or several) could silently keep serving the previous day's — or older
+// — scan results forever, with the header's data-date pill correctly
+// showing today while the table underneath was frozen on a stale date, no
+// visual cue anything was wrong. (Confirmed live: Breakout Surge showed a
+// stock's 2-day-old close/1D%/breakout-level row verbatim while its actual
+// latest EOD row already reflected the real current price.)
+//
+// Including latestDataDate in the key makes a pipeline-confirmed date
+// change produce a genuinely NEW query — it fetches immediately on the
+// next poll tick, no reliance on focus/mount timing at all. staleTime stays
+// short as a secondary guard for exchange/timeframe/filter changes.
+function useScanDateKey(): string {
+  const { latestDataDate } = usePipelineStatus();
+  return latestDataDate ?? 'unknown';
+}
+
 export function useScan(
   scanId: string,
   exchangeFilter: ExchangeFilter = 'combined',
   timeframe: ScanTimeframe = 'daily',
 ) {
+  const dateKey = useScanDateKey();
   return useQuery<ScanStock[]>({
-    queryKey: ['scan', scanId, exchangeFilter, timeframe],
+    queryKey: ['scan', scanId, exchangeFilter, timeframe, dateKey],
     queryFn: () => executeScan(scanId, exchangeFilter, timeframe),
     staleTime: 3 * 60 * 1000,
     retry: 1,
@@ -93,8 +120,9 @@ export function useScan(
 }
 
 export function useAllScanCounts(exchangeFilter: ExchangeFilter = 'combined') {
+  const dateKey = useScanDateKey();
   return useQuery<ScanCountsResult>({
-    queryKey: ['scan_counts', exchangeFilter],
+    queryKey: ['scan_counts', exchangeFilter, dateKey],
     queryFn: () => getAllScanCounts(exchangeFilter, 'daily'), // landing always daily
     staleTime: 3 * 60 * 1000,
     retry: 1,
@@ -103,8 +131,9 @@ export function useAllScanCounts(exchangeFilter: ExchangeFilter = 'combined') {
 
 /** Union of ✦ VaNi Highlights across all scanners (Workspace Discovery board). */
 export function useVaniHighlights() {
+  const dateKey = useScanDateKey();
   return useQuery<VaniHighlights>({
-    queryKey: ['vani_highlights'],
+    queryKey: ['vani_highlights', dateKey],
     queryFn: fetchVaniHighlights,
     staleTime: 3 * 60 * 1000,
     retry: 1,
@@ -113,8 +142,9 @@ export function useVaniHighlights() {
 
 /** Recent Flower Pot releases + day-2 hold/crack verdict + stop/target. */
 export function useFpbActive() {
+  const dateKey = useScanDateKey();
   return useQuery<FpbActiveRow[]>({
-    queryKey: ['fpb_active'],
+    queryKey: ['fpb_active', dateKey],
     queryFn: fetchFpbActive,
     staleTime: 3 * 60 * 1000,
     retry: 0,

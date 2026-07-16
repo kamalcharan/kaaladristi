@@ -209,10 +209,13 @@ async function fetchStockRankInIndustry(
   if (!symData || symData.length === 0) return null;
   const ids = (symData as { id: number }[]).map((s) => s.id);
 
-  // Get latest date
+  // Get latest indicator-complete date for this stock — gating on ema_20
+  // avoids ranking against peers whose magic_rs hasn't computed yet during
+  // the daily pipeline window, which would silently shuffle the rank.
   const { data: dateData } = await from('km_equity_eod')
     .select('trade_date')
     .eq('equity_id', equityId)
+    .notNull('ema_20')
     .order('trade_date', { ascending: false })
     .limit(1)
     .execute();

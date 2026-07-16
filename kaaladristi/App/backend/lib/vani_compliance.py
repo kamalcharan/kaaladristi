@@ -112,6 +112,7 @@ _REJECT_PATTERNS: list[re.Pattern] = [re.compile(p, re.IGNORECASE) for p in (
     r'\bguaranteed\b',
     r'\brecommend\b',
     r'\bmust (buy|sell|enter|exit)\b',
+    r'\bpotential (for )?(further )?(gains?|upside|losses?|downside)\b',
 )]
 
 _WORD_CHARS = re.compile(r'\w')

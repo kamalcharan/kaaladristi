@@ -14,6 +14,7 @@ import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
 import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
+import ScanStalenessBanner from '@/components/domain/ScanStalenessBanner';
 import { useVaNiStore } from '@/stores/vaniStore';
 
 // ── Sort ──────────────────────────────────────────────────────
@@ -539,7 +540,8 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
   return (
     <>
       {Toast}
-      <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={displayStocks} />
+      <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={displayStocks} isLoading={isLoading} />
+      <ScanStalenessBanner stocks={displayStocks} />
 
       {/* Filters bar */}
       <div style={{
@@ -763,7 +765,8 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
       }}>
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={[]} />
         <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
-        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={stocks} />
+        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={stocks} isLoading={isLoading} />
+        <ScanStalenessBanner stocks={stocks} />
         <ScanFilterBar
           presetId="conviction_flow"
           stocks={rawStocks}
@@ -933,7 +936,8 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         {/* FPB is NSE-only — BSE has no delivery/compression depth. */}
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={['BSE']} />
         <VaniFilterButton active={vaniOnly} count={releaseCount} onToggle={() => setVaniOnly((f) => !f)} />
-        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={[...bursts, ...shatters, ...setups]} />
+        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={[...bursts, ...shatters, ...setups]} isLoading={isLoading} />
+        <ScanStalenessBanner stocks={[...bursts, ...shatters, ...setups]} />
         <ScanFilterBar
           presetId="flower_pot_burst"
           stocks={rawStocks}
@@ -1316,7 +1320,8 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
-        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={oppFilter ? exportStocks : sorted} />
+        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={oppFilter ? exportStocks : sorted} isLoading={isLoading} />
+        <ScanStalenessBanner stocks={oppFilter ? exportStocks : sorted} />
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
           marginBottom: '12px', flexWrap: 'wrap',
@@ -1357,7 +1362,8 @@ function ScannerResults({ presetId }: { presetId: string }) {
   return (
     <div style={{ paddingBottom: '100px' }}>
       {header}
-      <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={sorted} />
+      <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={sorted} isLoading={isLoading} />
+      <ScanStalenessBanner stocks={sorted} />
 
       {/* Sub-bar: exchange tabs + opp filter + sort */}
       <div style={{

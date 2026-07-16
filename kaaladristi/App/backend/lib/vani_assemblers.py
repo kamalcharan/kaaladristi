@@ -864,7 +864,18 @@ def _fmt_astro_risk_days(ctx: dict) -> str:
 
 def assemble_industry_transition_context(db, target_date: str = None) -> dict | None:
     """Assemble context for industry transition intents."""
-    # Always resolve to latest available date in km_industry_eod
+    # Always resolve to latest available date in km_industry_eod.
+    #
+    # No explicit indicator-completeness gate here — none is needed as long
+    # as an invariant holds: `industry_composites` (which WRITES
+    # km_industry_eod) is the LAST step in pipeline2/orchestrator.py's
+    # DAILY_STEPS, running after nse/bse equity indicators and magic_rs. So a
+    # km_industry_eod row existing for a date already implies the
+    # km_equity_eod rows _fetch_top_stocks_in_leading() reads below (magic_rs
+    # etc.) are committed for that date too. If that step order ever
+    # changes, this — and the equity-level query downstream — silently
+    # regresses to feeding VaNi's industry_transition intents partial data.
+    # Mirrors the same note in the frontend's industryRotation.ts.
     try:
         rows = db.select('km_industry_eod', 'trade_date',
                          order='trade_date.desc', limit=1)
