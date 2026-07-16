@@ -313,6 +313,72 @@ def handle_vani_flags(conn, trade_date: date, force: bool,
                           compute_vani_flags_for_date)
 
 
+def compute_custom_index_indicators(
+    conn,
+    from_date: Optional[date] = None,
+    index_ids: Optional[list[int]] = None,
+    refresh: bool = False,
+) -> int:
+    """Fill the indicator layer for custom (category='custom') indices.
+
+    Custom indices are synthesised (compute_custom_index_eod) as an equal-weight
+    OHLC/returns basket AFTER the standard index_indicators/index_flow/
+    index_magic_rs dimensions have already run for the date, so their rows never
+    get ema_20/rsi_14/magic_rs/flow_type computed — every zone/flow/technical
+    widget on the custom-index detail page reads blank. This runs the SAME
+    generic per-symbol RPCs standard indices use, scoped to each custom index.
+
+    Order matters: compute_flow_intelligence reads magic_rs + rsi_14 + sma_150,
+    so it runs AFTER indicators (ema/sma/rsi/sniper) and magic_rs.
+
+      from_date : NULL = full history (backfill); a date = incremental from there
+                  (daily run passes the trade_date — cheap, one bar per index).
+      refresh   : re-null indicators_computed_at first so an edited index
+                  recomputes (compute_indicators_batch only fills NULL-stamped
+                  rows). Not needed for the daily incremental path (new bar is
+                  already NULL-stamped).
+    """
+    if index_ids is None:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM km_index_symbols "
+                "WHERE category = 'custom' AND is_active = true ORDER BY id")
+            index_ids = [r[0] for r in cur.fetchall()]
+    if not index_ids:
+        return 0
+
+    bench = _nifty500_id(conn)
+    p_from = str(from_date) if from_date else None
+    total = 0
+    for cid in index_ids:
+        with conn.cursor() as cur:
+            if refresh:
+                if p_from:
+                    cur.execute(
+                        "UPDATE km_index_eod SET indicators_computed_at = NULL "
+                        "WHERE index_id = %s AND trade_date >= %s", [cid, p_from])
+                else:
+                    cur.execute(
+                        "UPDATE km_index_eod SET indicators_computed_at = NULL "
+                        "WHERE index_id = %s", [cid])
+            # 1. ema/sma/rsi/sniper/rvol — needed by magic_rs + flow below
+            cur.execute(
+                "SELECT compute_indicators_batch('km_index_eod','index_id',%s,%s)",
+                [cid, p_from])
+            total += cur.fetchone()[0] or 0
+            # 2. magic_rs vs NIFTY 500 (same benchmark as standard indices)
+            if bench is not None:
+                cur.execute(
+                    "SELECT compute_magic_rs_batch('km_index_eod','index_id',%s,%s,%s)",
+                    [cid, bench, p_from])
+            # 3. flow_type / accum_distrib — reads magic_rs + rsi_14 + sma_150
+            cur.execute(
+                "SELECT compute_flow_intelligence('km_index_eod','index_id',%s,%s)",
+                [cid, p_from])
+        conn.commit()
+    return total
+
+
 def handle_index_returns(conn, trade_date: date, force: bool,
                          exchange: Optional[str], on_progress: ProgressFn) -> HandlerResult:
     """Index returns (ret_5d/22d/66d) + custom-index synthetic EOD + scores.
@@ -352,6 +418,19 @@ def handle_index_returns(conn, trade_date: date, force: bool,
 
         on_progress('running compute_all_index_scores', 75)
         _rpc(conn, 'compute_all_index_scores', {'p_from_date': str(trade_date)})
+
+        # Custom indices are synthesised above, AFTER the standard
+        # index_indicators/flow/magic_rs dimensions already ran for this date —
+        # so fill their indicator layer here (ema/rsi/magic_rs/flow_type) for
+        # the newly-synthesised bar. Incremental (from=trade_date), no refresh
+        # needed: the new bar is NULL-stamped. Non-fatal — a failure here must
+        # not fail the returns/scores that already committed.
+        on_progress('running custom-index indicators', 88)
+        try:
+            compute_custom_index_indicators(conn, from_date=trade_date)
+        except Exception as ie:
+            conn.rollback()
+            on_progress(f'custom-index indicators skipped: {str(ie)[:120]}', 89)
     except Exception as e:
         conn.rollback()
         return HandlerResult('failed', before, before, 0, error_msg=str(e)[:500])

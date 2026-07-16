@@ -66,6 +66,18 @@ def run(conn, from_date=None, to_date=None):
     else:
         print("  No indices updated by compute_all_index_scores() — check constituents.")
 
+    # Indicator layer (ema/rsi/magic_rs/flow_type) for custom indices — the
+    # synthesis RPC only builds OHLC/returns, so without this the custom-index
+    # detail page renders blank zone/flow/technical widgets. Same generic
+    # per-symbol RPCs standard indices use. refresh=True re-nulls
+    # indicators_computed_at so a re-run recomputes instead of no-oping.
+    from pipeline2.handlers import compute_custom_index_indicators
+    from datetime import date as _date
+    print(f"\nFilling indicator layer (ema/rsi/magic_rs/flow) ({scope}) ...")
+    ind_from = _date.fromisoformat(from_date) if from_date else None
+    n = compute_custom_index_indicators(conn, from_date=ind_from, refresh=True)
+    print(f"  Done — {n} indicator rows computed.")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Compute synthetic EOD for custom indices')

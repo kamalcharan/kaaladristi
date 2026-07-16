@@ -96,7 +96,9 @@ from lib.vani_compliance import (  # noqa: E402
 
 from pipeline2 import health as v2_health  # noqa: E402
 from pipeline2 import scheduler as v2_scheduler  # noqa: E402
-from pipeline2.handlers import KNOWN_DIMENSIONS, FIXABLE_DIMENSIONS  # noqa: E402
+from pipeline2.handlers import (  # noqa: E402
+    KNOWN_DIMENSIONS, FIXABLE_DIMENSIONS, compute_custom_index_indicators,
+)
 from pipeline2.health import label_for as _label_for, DOWNLOAD_DIMENSIONS  # noqa: E402
 
 
@@ -7116,7 +7118,9 @@ async def custom_index_compute(index_id: int):
     """
     start = time.time()
     scores_from = (date.today() - timedelta(days=100)).isoformat()
-    conn = _conn(statement_timeout_ms=30_000)
+    # Full-history indicator backfill (ema/rsi/magic_rs/flow over all bars) is
+    # heavier than the returns/scores recompute — give it headroom.
+    conn = _conn(statement_timeout_ms=180_000)
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -7140,6 +7144,14 @@ async def custom_index_compute(index_id: int):
             cur.execute("SELECT * FROM compute_all_index_scores(%s)", [scores_from])
             score_rows = cur.fetchall()
         conn.commit()
+
+        # Fill the indicator layer for this index over its FULL history so the
+        # detail page's zone/flow/technical widgets populate (ema_20, rsi_14,
+        # magic_rs, flow_type). refresh=True re-nulls indicators_computed_at so
+        # an edited index (add/remove constituents) recomputes, not just first
+        # run. Same generic per-symbol RPCs standard indices use.
+        indicator_rows = compute_custom_index_indicators(
+            conn, from_date=None, index_ids=[index_id], refresh=True)
     except HTTPException:
         conn.rollback()
         raise
@@ -7154,6 +7166,7 @@ async def custom_index_compute(index_id: int):
         'index_id': index_id,
         'index_name': idx['name'],
         'rows_computed': rows_computed,
+        'indicator_rows': indicator_rows,
         'indices_scored': sum(1 for r in score_rows if (r.get('rows_updated') or 0) > 0),
         'elapsed_ms': int((time.time() - start) * 1000),
     }
