@@ -74,6 +74,19 @@ export const VANI_INTENTS: Record<string, VaNiIntentDef> = {
     icon: 'zap',
     displayOrder: 8,
   },
+  // ── Scanner (parameterized by preset — same set for every scan) ──────────
+  'scanner.explain_preset': {
+    label: 'What does this screener show?',
+    page: 'scanner',
+    icon: 'book-open',
+    displayOrder: 1,
+  },
+  'scanner.read_results': {
+    label: "Read today's results",
+    page: 'scanner',
+    icon: 'list',
+    displayOrder: 2,
+  },
   // ── Astro Calendar ────────────────────────────────────────────────────────
   'astro_calendar.month_outlook': {
     label: "What's the planetary outlook this month?",

@@ -13,6 +13,8 @@ import { downloadScanXls, type ScanVariant } from '@/utils/downloadXls';
 import type { ScanDefinition, ScanStock } from '@/types';
 import AtmosphericBadge from '@/components/domain/AtmosphericBadge';
 import { ScanFilterBar, applyFilters, DEFAULT_FILTERS, FPB_DEFAULT_FILTERS, type ScanFilters } from '@/components/domain/ScanFilterBar';
+import ScanVaNiPublisher from '@/components/domain/ScanVaNiPublisher';
+import { useVaNiStore } from '@/stores/vaniStore';
 
 // ── Sort ──────────────────────────────────────────────────────
 
@@ -520,6 +522,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
       key={stock.equity_id}
       stock={stock}
       stageBadge="S2"
+      vaniContext={`Scanner / ${preset.name}`}
     />
   );
 
@@ -536,6 +539,7 @@ function Stage2Results({ preset, timeframe, viewMode, onViewModeChange }: {
   return (
     <>
       {Toast}
+      <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={displayStocks} />
 
       {/* Filters bar */}
       <div style={{
@@ -759,6 +763,7 @@ function ConvictionFlowResults({ preset, timeframe, viewMode, onViewModeChange }
       }}>
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={[]} />
         <VaniFilterButton active={vaniOnly} count={vaniCount} onToggle={() => setVaniOnly((f) => !f)} />
+        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={stocks} />
         <ScanFilterBar
           presetId="conviction_flow"
           stocks={rawStocks}
@@ -928,6 +933,7 @@ function FpbResults({ preset, timeframe, viewMode, onViewModeChange }: {
         {/* FPB is NSE-only — BSE has no delivery/compression depth. */}
         <ExchangeTabs value={exchangeFilter} onChange={setExchangeFilter} disabledOptions={['BSE']} />
         <VaniFilterButton active={vaniOnly} count={releaseCount} onToggle={() => setVaniOnly((f) => !f)} />
+        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={[...bursts, ...shatters, ...setups]} />
         <ScanFilterBar
           presetId="flower_pot_burst"
           stocks={rawStocks}
@@ -1106,6 +1112,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   const [filters, setFilters] = useState<ScanFilters>(DEFAULT_FILTERS);
   const [viewMode, setViewMode] = useViewMode();
 
+  const openVaNiWithIntent = useVaNiStore((s) => s.openWithIntent);
   const { data: presets = SCAN_PRESETS } = useScanPresets();
   const preset = presets.find((p) => p.id === presetId) ?? SCAN_PRESETS.find((p) => p.id === presetId);
   const { data: allCountsData } = useAllScanCounts('combined');
@@ -1255,6 +1262,20 @@ function ScannerResults({ presetId }: { presetId: string }) {
             {preset.tooltip}
           </p>
         )}
+        <button
+          onClick={() => openVaNiWithIntent('scanner.explain_preset')}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            marginTop: 10, padding: '5px 12px', borderRadius: 8,
+            border: '1px solid var(--accent-indigo)',
+            background: 'color-mix(in srgb, var(--accent-indigo) 8%, transparent)',
+            color: 'var(--accent-indigo)', fontSize: 12, fontWeight: 500,
+            cursor: 'pointer', fontFamily: 'var(--font-body)',
+            transition: 'all 0.15s',
+          }}
+        >
+          <span style={{ fontSize: 12 }}>✦</span> VaNi explains this screener
+        </button>
         <ScanStartHereHint currentPresetId={presetId} />
       </div>
     </div>
@@ -1295,6 +1316,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
     return (
       <div style={{ paddingBottom: '100px' }}>
         {header}
+        <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={oppFilter ? exportStocks : sorted} />
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
           marginBottom: '12px', flexWrap: 'wrap',
@@ -1335,6 +1357,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
   return (
     <div style={{ paddingBottom: '100px' }}>
       {header}
+      <ScanVaNiPublisher preset={preset} timeframe={timeframe} exchange={exchangeFilter} stocks={sorted} />
 
       {/* Sub-bar: exchange tabs + opp filter + sort */}
       <div style={{
@@ -1437,7 +1460,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
                     </ScanSectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
                       {vaniStocks.map((stock) => (
-                        <StockCard key={stock.equity_id} stock={stock} />
+                        <StockCard key={stock.equity_id} stock={stock} vaniContext={`Scanner / ${preset.name}`} />
                       ))}
                     </div>
                   </>
@@ -1449,7 +1472,7 @@ function ScannerResults({ presetId }: { presetId: string }) {
                     </ScanSectionLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {restStocks.map((stock) => (
-                        <StockCard key={stock.equity_id} stock={stock} />
+                        <StockCard key={stock.equity_id} stock={stock} vaniContext={`Scanner / ${preset.name}`} />
                       ))}
                     </div>
                   </>

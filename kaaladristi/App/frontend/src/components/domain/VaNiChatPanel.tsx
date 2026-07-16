@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Loader2, Sparkles, ChevronRight, MessageCircle, RotateCcw, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Loader2, Sparkles, ChevronRight, MessageCircle, RotateCcw, Trash2, Search, ArrowRight } from 'lucide-react';
 import VaNiFeedback from './VaNi/VaNiFeedback';
 import { cn } from '@/lib/utils';
 import { usePageContext } from '@/hooks/usePageContext';
@@ -10,6 +11,8 @@ import type { VaNiEntity } from '@/stores/vaniStore';
 import { useAuthStore } from '@/stores/authStore';
 import { usePipelineStatus } from '@/hooks/usePipelineStatus';
 import type { VaNiAskResponse } from '@/hooks/useVaNiChat';
+import { from } from '@/services/postgrest';
+import { displaySymbol } from '@/lib/symbolUtils';
 
 const pipelineUrl =
   (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
@@ -22,14 +25,49 @@ interface ChatMessage {
   cached?: boolean;
   logId?: string;
   timestamp: number;
+  /** Optional deep link rendered under the message (stock-lookup flow). */
+  link?: { href: string; label: string };
+}
+
+/** Resolve free text against the equity master (symbol first, then company
+ *  name). Used ONLY for the canned not-in-this-scan reply — the typed text
+ *  never reaches the LLM. Prefers NSE listings for dual-listed stocks. */
+async function resolveEquity(q: string): Promise<{ id: number; symbol: string } | null> {
+  const attempts: Array<[string, string]> = [
+    ['symbol', q],
+    ['symbol', `${q}*`],
+    ['company_name', `*${q}*`],
+  ];
+  for (const [col, pattern] of attempts) {
+    try {
+      const { data } = await from('km_equity_symbols')
+        .select('id,symbol,company_name,exchange')
+        .ilike(col, pattern)
+        .is('is_active', 'true')
+        .limit(10)
+        .execute();
+      const rows = (data ?? []) as Array<{ id: number; symbol: string; company_name: string | null; exchange: string | null }>;
+      if (rows.length) {
+        const best = rows.find((r) => r.exchange === 'NSE') ?? rows[0];
+        return { id: best.id, symbol: displaySymbol(best) };
+      }
+    } catch {
+      /* try next pattern */
+    }
+  }
+  return null;
 }
 
 export default function VaNiChatPanel() {
-  const { open, entity: storeEntity, close, clearEntity } = useVaNiStore();
+  const {
+    open, entity: storeEntity, close, clearEntity,
+    scanContext, pendingIntentId, consumePendingIntent,
+  } = useVaNiStore();
   const { page, entityType, entityId } = usePageContext();
   const { isAdmin } = useAuthStore();
   const { latestDataDate } = usePipelineStatus();
   const askMutation = useVaNiAsk();
+  const navigate = useNavigate();
 
   // Auto-detect entity from URL on chart/pulse pages
   const urlEntity: VaNiEntity | null = (entityType && entityId) ? {
@@ -41,7 +79,11 @@ export default function VaNiChatPanel() {
 
   const entity = storeEntity || urlEntity;
 
-  const pageIntents = getIntentsForPage(page);
+  // Scanner intents need the published scan context (preset + visible rows);
+  // hide them until a results view has published one.
+  const pageIntents = getIntentsForPage(page).filter(
+    (i) => !i.intentId.startsWith('scanner.') || !!scanContext,
+  );
   const equityIntents = entity ? getEquityIntents(entity.symbol) : [];
   const allIntents = [
     ...equityIntents.map(i => ({ intentId: i.intentId, label: i.label })),
@@ -70,7 +112,7 @@ export default function VaNiChatPanel() {
   const askedIntents = new Set(messages.filter(m => m.type === 'intent').map(m => m.intentId));
   const remainingIntents = allIntents.filter(i => !askedIntents.has(i.intentId));
 
-  const handleAsk = (intentId: string, label: string) => {
+  const handleAsk = (intentId: string, label: string, overrideEntity?: VaNiEntity) => {
     if (askMutation.isPending) return;
 
     setMessages(prev => [...prev, {
@@ -82,15 +124,36 @@ export default function VaNiChatPanel() {
     }]);
     setActiveIntentId(intentId);
 
+    const askEntity = overrideEntity ?? entity;
     const dataDate = latestDataDate || new Date().toISOString().slice(0, 10);
     askMutation.mutate(
       {
         intent_id: intentId,
         date: dataDate,
-        ...(entity && intentId.startsWith('equity.') ? {
-          entity_type: entity.type,
-          entity_id: entity.id,
-          page_context: entity.pageContext,
+        ...(askEntity && intentId.startsWith('equity.') ? {
+          entity_type: askEntity.type,
+          entity_id: askEntity.id,
+          page_context: askEntity.pageContext,
+        } : {}),
+        ...(intentId.startsWith('scanner.') && scanContext ? {
+          preset_id: scanContext.presetId,
+          data_date: dataDate,
+          timeframe: scanContext.timeframe,
+          exchange: scanContext.exchange,
+          ...(intentId === 'scanner.read_results' ? {
+            total_count: scanContext.totalCount,
+            rows: scanContext.rows.map((r) => ({
+              symbol: r.symbol,
+              industry: r.industry,
+              zone: r.zone,
+              flow: r.flow,
+              rsi: r.rsi,
+              rvol: r.rvol,
+              pct_chng: r.pctChng,
+              surge: r.surge,
+              vani: r.vani,
+            })),
+          } : {}),
         } : {}),
       },
       {
@@ -119,6 +182,77 @@ export default function VaNiChatPanel() {
       },
     );
   };
+
+  // Auto-fire a pre-selected intent (e.g. the "✦ VaNi explains" link beside
+  // a scanner heading opens the panel with this intent pending).
+  useEffect(() => {
+    if (!open || !pendingIntentId || askMutation.isPending) return;
+    const id = consumePendingIntent();
+    if (!id) return;
+    const def = allIntents.find((i) => i.intentId === id);
+    handleAsk(id, def?.label ?? 'VaNi explains');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pendingIntentId]);
+
+  // ── Gated stock lookup (scanner pages only) ──────────────────────────────
+  // Free text is a SEARCH box, not a chat box: it resolves to a stock and,
+  // only if that stock is in the current results, fires a canned intent.
+  // Text never reaches the LLM.
+  const [lookupOpen, setLookupOpen] = useState(false);
+  const [lookupText, setLookupText] = useState('');
+  const [lookupBusy, setLookupBusy] = useState(false);
+
+  const pushLocal = (entries: Array<Omit<ChatMessage, 'timestamp'>>) => {
+    setMessages(prev => [...prev, ...entries.map(e => ({ ...e, timestamp: Date.now() }))]);
+  };
+
+  const handleStockLookup = async () => {
+    const q = lookupText.trim();
+    if (!q || !scanContext || lookupBusy) return;
+    setLookupText('');
+    setLookupOpen(false);
+
+    // Membership check first — LLM is invoked ONLY for stocks in this scan.
+    const norm = q.toUpperCase();
+    const hit = scanContext.rows.find(
+      (r) => r.symbol.toUpperCase() === norm
+        || (r.company ?? '').toUpperCase().includes(norm),
+    );
+    if (hit) {
+      handleAsk('equity.why_in_context', `Tell me about ${hit.symbol}`, {
+        type: 'equity',
+        id: hit.equityId,
+        symbol: hit.symbol,
+        pageContext: `Scanner / ${scanContext.presetName}`,
+      });
+      return;
+    }
+
+    // Not in this scan → canned reply + deep link. No LLM call.
+    setLookupBusy(true);
+    pushLocal([{ id: `q-${Date.now()}`, type: 'intent', text: `Tell me about ${q}` }]);
+    try {
+      const match = await resolveEquity(q);
+      if (match) {
+        pushLocal([{
+          id: `r-${Date.now()}`,
+          type: 'response',
+          text: `${match.symbol} isn't part of today's ${scanContext.presetName} results, so VaNi can't read it in this scan's context. You can explore it on its stock dashboard.`,
+          link: { href: `/pulse/equity/${match.id}`, label: `Open ${match.symbol} dashboard` },
+        }]);
+      } else {
+        pushLocal([{
+          id: `r-${Date.now()}`,
+          type: 'response',
+          text: `VaNi couldn't find a stock matching "${q}". Try the exact NSE symbol or a distinctive part of the company name.`,
+        }]);
+      }
+    } finally {
+      setLookupBusy(false);
+    }
+  };
+
+  const showStockLookup = page === 'scanner' && !!scanContext;
 
   const lastMessage = messages[messages.length - 1];
   const showFollowUp = lastMessage?.type === 'response' && !askMutation.isPending && remainingIntents.length > 0;
@@ -153,6 +287,58 @@ export default function VaNiChatPanel() {
       </span>
       <ChevronRight className="w-3.5 h-3.5 ml-auto shrink-0 text-[var(--accent-indigo)]/30 group-hover:text-[var(--accent-indigo)]/60 transition-colors" />
     </button>
+  );
+
+  // The ONLY text input in the panel — appears solely inside the scanner
+  // stock-lookup flow. It's a search box (symbol/company resolution), never
+  // an open chat: the typed text is resolved locally and only membership-
+  // confirmed stocks trigger a canned intent.
+  const StockLookupAffordance = ({ variant }: { variant: 'primary' | 'secondary' }) => (
+    <div>
+      {!lookupOpen ? (
+        <button
+          onClick={() => setLookupOpen(true)}
+          disabled={askMutation.isPending || lookupBusy}
+          className={cn(
+            'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all group',
+            variant === 'primary'
+              ? 'bg-[var(--bg)]/60 border-2 border-[var(--accent-indigo)]/20 hover:border-[var(--accent-indigo)]/50 hover:bg-[var(--bg)]/80'
+              : 'bg-[var(--bg)]/30 border border-[var(--accent-indigo)]/10 hover:border-[var(--accent-indigo)]/30 hover:bg-[var(--bg)]/50',
+            (askMutation.isPending || lookupBusy) && 'opacity-40 cursor-not-allowed',
+          )}
+        >
+          <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 bg-[var(--accent-indigo)]/20 group-hover:bg-[var(--accent-indigo)]/30 transition-colors">
+            <Search className="w-3 h-3 text-[var(--accent-indigo)]" />
+          </div>
+          <span className="text-xs font-medium leading-snug text-[var(--text-secondary)] group-hover:text-[var(--accent-indigo)] transition-colors">
+            Want to know about a stock in this scan?
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 ml-auto shrink-0 text-[var(--accent-indigo)]/30 group-hover:text-[var(--accent-indigo)]/60 transition-colors" />
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--bg)]/70 border-2 border-[var(--accent-indigo)]/40">
+          <Search className="w-3.5 h-3.5 shrink-0 text-[var(--accent-indigo)]/60" />
+          <input
+            autoFocus
+            value={lookupText}
+            onChange={(e) => setLookupText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleStockLookup();
+              if (e.key === 'Escape') { setLookupOpen(false); setLookupText(''); }
+            }}
+            placeholder="tell me about RELIANCE…"
+            className="flex-1 bg-transparent text-xs text-white/85 placeholder:text-white/25 outline-none min-w-0"
+          />
+          <button
+            onClick={handleStockLookup}
+            disabled={!lookupText.trim()}
+            className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 bg-[var(--accent-indigo)]/25 hover:bg-[var(--accent-indigo)]/40 text-[var(--accent-indigo)] disabled:opacity-30 transition-colors"
+          >
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -248,6 +434,7 @@ export default function VaNiChatPanel() {
                     variant="primary"
                   />
                 ))}
+                {showStockLookup && <StockLookupAffordance variant="primary" />}
               </div>
             </div>
           )}
@@ -271,6 +458,15 @@ export default function VaNiChatPanel() {
                       <p className="text-[12px] text-white/80 leading-[1.7] whitespace-pre-wrap">
                         {msg.text}
                       </p>
+                      {msg.link && (
+                        <button
+                          onClick={() => { close(); navigate(msg.link!.href); }}
+                          className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent-indigo)]/15 border border-[var(--accent-indigo)]/30 text-[11px] font-medium text-[var(--accent-indigo)] hover:bg-[var(--accent-indigo)]/25 transition-colors"
+                        >
+                          {msg.link.label}
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1.5 px-2">
                       {msg.logId && !msg.cached && (
@@ -335,6 +531,7 @@ export default function VaNiChatPanel() {
                     variant="secondary"
                   />
                 ))}
+                {showStockLookup && <StockLookupAffordance variant="secondary" />}
               </div>
             </div>
           )}
@@ -349,6 +546,11 @@ export default function VaNiChatPanel() {
                 </span>
                 <div className="flex-1 h-px bg-[var(--accent-indigo)]/10" />
               </div>
+              {showStockLookup && (
+                <div className="mt-3">
+                  <StockLookupAffordance variant="secondary" />
+                </div>
+              )}
             </div>
           )}
         </div>

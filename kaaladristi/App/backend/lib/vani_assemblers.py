@@ -17,6 +17,7 @@ from .data_assemblers import (
     _safe_float,
     _day_score,
 )
+from .vani_compliance import translate_zone, translate_flow
 
 
 # ── Bucketing helpers ─────────────────────────────────────────────────────────
@@ -371,9 +372,9 @@ def _fmt_market_summary(ctx: dict) -> str:
     for idx in ctx.get('indexes', []):
         idx_lines.append(
             f"  {idx['name']}: {idx['close']} ({idx['change_pct']:+.2f}%), "
-            f"Flow={idx['flow_type'] or 'N/A'}, "
+            f"Flow={translate_flow(idx['flow_type'])}, "
             f"Participation={idx['participation']}, "
-            f"MagicRS={idx['magic_rs_zone'] or 'N/A'}"
+            f"MagicRS={translate_zone(idx['magic_rs_zone'])}"
         )
     idx_str = '\n'.join(idx_lines) if idx_lines else '  No data'
 
@@ -456,7 +457,7 @@ def _fmt_rotation_overview(ctx: dict) -> str:
                 f"  {e['industry']} (Rank #{e['rank']}, "
                 f"AvgRS: {e['avg_magic_rs']}, "
                 f"Stocks: {e['stock_count']}, "
-                f"Flow: {e['dominant_flow']})"
+                f"Flow: {translate_flow(e['dominant_flow'])})"
             )
         return '\n'.join(lines)
 
@@ -1013,7 +1014,7 @@ def _fmt_industry_list(items: list[dict]) -> str:
             f"  {e['industry']} — Rank #{e['rank']}, "
             f"Avg Magic RS: {e['avg_magic_rs']}, "
             f"Stocks: {e['stock_count']}, "
-            f"Dominant Flow: {e['dominant_flow']}"
+            f"Dominant Flow: {translate_flow(e['dominant_flow'])}"
         )
     return '\n'.join(lines)
 
@@ -1062,11 +1063,11 @@ def _fmt_ind_strongest(ctx: dict) -> str:
         stock_lines.append(
             f"  {s['symbol']} ({s['industry']}) — "
             f"Close: {s['close']:.2f} ({s['pct_chng']:+.2f}%), "
-            f"RS Zone: {s.get('magic_rs_zone', 'N/A')}, "
+            f"RS Zone: {translate_zone(s.get('magic_rs_zone'))}, "
             f"RSI: {s.get('rsi_14', 'N/A')}, "
             f"RSS: {s.get('rss_value', 'N/A')}, "
             f"RVOL: {s.get('rvol', 'N/A')}, "
-            f"Flow: {s.get('flow_type', 'N/A')}, "
+            f"Flow: {translate_flow(s.get('flow_type'))}, "
             f"Dots: {dots_str}"
         )
     stocks_str = '\n'.join(stock_lines) if stock_lines else '  No stocks found'
@@ -1103,6 +1104,13 @@ def build_equity_cache_context(intent_id: str, ctx: dict) -> dict:
     }
 
 
+# accum_distrib DB values → SEBI-safe display (sebi-sweep skill table)
+_FLOW_SIG_DISPLAY = {
+    'ACCUMULATION': 'Rising Flow',
+    'DISTRIBUTION': 'Falling Flow',
+}
+
+
 def format_equity_user_message(intent_id: str, ctx: dict) -> str:
     """Format equity context into user message."""
     inst = ctx.get('instrument', {})
@@ -1119,9 +1127,9 @@ def format_equity_user_message(intent_id: str, ctx: dict) -> str:
     page_ctx = ctx.get('page_context', '')
 
     dot_events = []
-    if dots.get('svd_recent'): dot_events.append('SVD (institutional accumulation)')
-    if dots.get('sbd_recent'): dot_events.append('SBD (strong accumulation)')
-    if dots.get('syd_recent'): dot_events.append('SYD (distribution)')
+    if dots.get('svd_recent'): dot_events.append('SVD (institutional volume drive)')
+    if dots.get('sbd_recent'): dot_events.append('SBD (rising-flow signature)')
+    if dots.get('syd_recent'): dot_events.append('SYD (falling-flow signal)')
     dot_str = ', '.join(dot_events) if dot_events else 'None'
 
     astro_str = 'None active'
@@ -1133,14 +1141,14 @@ def format_equity_user_message(intent_id: str, ctx: dict) -> str:
         f"Date: {ctx.get('date', '')}\n"
         f"Price: {p.get('close', 0)} ({p.get('change_pct', 0):+.2f}%)\n"
         f"\n--- Signals ---\n"
-        f"Flow: {f.get('type', 'N/A')}\n"
+        f"Flow: {translate_flow(f.get('type'))}\n"
         f"Vacuum: {f.get('vacuum', 'None')}\n"
-        f"Accum/Distrib: {f.get('accum_distrib', 'None')}\n"
+        f"Flow Signature: {_FLOW_SIG_DISPLAY.get(f.get('accum_distrib'), 'None')}\n"
         f"Participation: {part.get('profile', 'unknown')} "
         f"(Inst: {part.get('institution')}, Hot$: {part.get('hot_money')})\n"
         f"RSI: {mom.get('rsi_14')}, MFI: {mom.get('mfi_14')}, "
         f"Momentum: {mom.get('alignment')}\n"
-        f"Magic RS Zone: {rs.get('zone', 'N/A')} "
+        f"Magic RS Zone: {translate_zone(rs.get('zone'))} "
         f"(RS={rs.get('magic_rs')}, MA={rs.get('magic_ma')})\n"
         f"Volume: RVOL={vol.get('rvol')}, TVOL={vol.get('tvol')}, "
         f"Character={vol.get('character')}\n"
@@ -1158,3 +1166,146 @@ def format_equity_user_message(intent_id: str, ctx: dict) -> str:
         base_msg += f"\nExplain {symbol}'s signals."
 
     return base_msg
+
+
+# ── Scanner Intents (parameterized by preset_id) ──────────────────────────────
+# Context rows arrive from the FRONTEND payload — the exact filtered view the
+# user sees (exchange filter, timeframe, VaNi-only toggle applied). They are
+# display context only, never re-stored as truth. Preset copy (name/
+# description/tooltip) is fetched server-side from kd_scan_presets so the
+# explainer can't be spoofed and its cache hash derives from the DB copy.
+
+# Per-preset narrative lens — how scanner.read_results frames the cohort.
+SCANNER_LENS: dict[str, str] = {
+    'power_buy':            'strength',
+    'smart_money':          'strength',
+    'quiet_accumulation':   'strength',
+    'conviction_flow':      'strength',
+    'stage_2_leaders':      'strength',
+    'power_sell':           'warning',
+    'distribution_warning': 'warning',
+    'stage_3_watch':        'warning',
+    'stage_4_leaders':      'warning',
+    'vani_exit_watch':      'warning',
+    'breakout_surge':       'setup',
+    'flower_pot_burst':     'setup',
+    'stage_2_watch':        'setup',
+}
+
+_SCANNER_MAX_ROWS = 25
+
+
+def _clean_scanner_rows(rows: list, hide_vani: bool) -> list[dict]:
+    """Cap + sanitize payload rows; re-translate vocabulary defensively."""
+    out = []
+    for r in (rows or [])[:_SCANNER_MAX_ROWS]:
+        if not isinstance(r, dict) or not r.get('symbol'):
+            continue
+        out.append({
+            'symbol': str(r.get('symbol', ''))[:40],
+            'industry': str(r.get('industry') or '—')[:60],
+            'zone': translate_zone(r.get('zone')),
+            'flow': translate_flow(r.get('flow')),
+            'rsi': _safe_float(r.get('rsi')),
+            'rvol': _safe_float(r.get('rvol')),
+            'pct_chng': _safe_float(r.get('pct_chng')),
+            'surge': _safe_float(r.get('surge')),
+            'vani': False if hide_vani else bool(r.get('vani')),
+        })
+    return out
+
+
+def assemble_scanner_context(
+    db,
+    preset_id: str,
+    rows: list | None = None,
+    data_date: str | None = None,
+    timeframe: str = 'daily',
+    exchange: str = 'combined',
+    total_count: int | None = None,
+) -> dict | None:
+    """Build scanner intent context. Returns None if the preset is unknown."""
+    try:
+        preset_rows = db.select(
+            'kd_scan_presets', 'id,name,description,tooltip,vani_rule,is_active',
+            filters={'id': preset_id}, limit=1,
+        )
+    except Exception:
+        preset_rows = None
+    if not preset_rows:
+        return None
+    preset = preset_rows[0]
+
+    hide_vani = (preset.get('vani_rule') == 'always_true')
+    return {
+        'preset_id': preset_id,
+        'preset': {
+            'name': preset.get('name', preset_id),
+            'description': preset.get('description') or '',
+            'tooltip': preset.get('tooltip') or '',
+        },
+        'lens': SCANNER_LENS.get(preset_id, 'strength'),
+        'data_date': data_date or '',
+        'timeframe': timeframe,
+        'exchange': exchange,
+        'rows': _clean_scanner_rows(rows or [], hide_vani),
+        'total_count': total_count if total_count is not None else len(rows or []),
+    }
+
+
+def build_scanner_cache_context(intent_id: str, ctx: dict) -> dict:
+    """Bucketed values for km_vani_cache context hashing.
+
+    explain_preset hashes ONLY the preset copy — the entry lives until the
+    screener's name/description/tooltip changes (the 'no change of state,
+    no LLM invoke' rule). read_results hashes the visible result identity.
+    """
+    if intent_id == 'scanner.explain_preset':
+        return {'preset_id': ctx['preset_id'], **ctx['preset']}
+    return {
+        'preset_id': ctx['preset_id'],
+        'date': ctx['data_date'],
+        'timeframe': ctx['timeframe'],
+        'exchange': ctx['exchange'],
+        'symbols': [r['symbol'] for r in ctx['rows']],
+        'vani_count': sum(1 for r in ctx['rows'] if r['vani']),
+    }
+
+
+def format_scanner_user_message(intent_id: str, ctx: dict) -> str:
+    """Format scanner context into the LLM user message."""
+    p = ctx['preset']
+
+    if intent_id == 'scanner.explain_preset':
+        return (
+            f"Screener: {p['name']}\n"
+            f"Description: {p['description']}\n"
+            f"Matching criteria (do NOT repeat thresholds or exact values): "
+            f"{p['tooltip'] or 'not documented'}\n"
+            f"\nExplain what this screener shows."
+        )
+
+    # scanner.read_results
+    lines = []
+    for r in ctx['rows']:
+        parts = [f"  {r['symbol']} ({r['industry']})"]
+        if r['pct_chng'] is not None: parts.append(f"{r['pct_chng']:+.2f}%")
+        parts.append(f"Zone: {r['zone']}")
+        parts.append(f"Flow: {r['flow']}")
+        if r['rsi'] is not None: parts.append(f"RSI: {r['rsi']:.0f}")
+        if r['rvol'] is not None: parts.append(f"RVOL: {r['rvol']:.1f}x")
+        if r['surge'] is not None: parts.append(f"DelSurge: {r['surge']:.2f}x")
+        if r['vani']: parts.append("VaNi highlight")
+        lines.append(', '.join(parts))
+    rows_str = '\n'.join(lines) if lines else '  (no stocks meet the conditions today)'
+    vani_count = sum(1 for r in ctx['rows'] if r['vani'])
+
+    return (
+        f"Screener: {p['name']} (lens: {ctx['lens']})\n"
+        f"Data date: {ctx['data_date']}\n"
+        f"Timeframe: {ctx['timeframe']}, Exchange filter: {ctx['exchange']}\n"
+        f"Total results: {ctx['total_count']} "
+        f"(showing top {len(ctx['rows'])}, VaNi highlights: {vani_count})\n"
+        f"\n--- Results ---\n{rows_str}\n"
+        f"\nRead these results as of the data date."
+    )

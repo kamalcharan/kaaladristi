@@ -225,10 +225,13 @@ export function StockCard({
   stock,
   stageBadge,
   extraRight,
+  vaniContext,
 }: {
   stock: ScanStock;
   stageBadge?: string;
   extraRight?: React.ReactNode;
+  /** Page context for the ✦ Ask-VaNi trigger, e.g. "Scanner / Stage 2 Leaders". */
+  vaniContext?: string;
 }) {
   const navigate = useNavigate();
   const heroName = displaySymbol(stock);
@@ -258,7 +261,12 @@ export function StockCard({
   );
 
   return (
-    <ScanCardWrapper isVani={!!stock.vaniOpportunity} symbol={stock.symbol} onClick={handleClick}>
+    <ScanCardWrapper
+      isVani={!!stock.vaniOpportunity}
+      symbol={stock.symbol}
+      onClick={handleClick}
+      vaniEntity={{ type: 'equity', id: stock.equity_id, symbol: heroName, pageContext: vaniContext ?? 'Scanner' }}
+    >
       <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '1fr 120px 100px', gap: '18px', alignItems: 'center' }}>
       {/* Zone 1: Identity + Evidence strip */}
       <div style={{ minWidth: 0 }}>

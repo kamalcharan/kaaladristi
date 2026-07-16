@@ -56,6 +56,14 @@ try:
         format_industry_user_message,
         assemble_equity_context,
         format_equity_user_message,
+        assemble_scanner_context,
+        build_scanner_cache_context,
+        format_scanner_user_message,
+    )
+    from lib.vani_cache import (                              # noqa: E402
+        make_cache_key as _vani_pcache_key,
+        get_cached as _vani_pcache_get,
+        set_cached as _vani_pcache_set,
     )
     _AI_OPTIONAL_OK = True
 except ImportError:
@@ -67,11 +75,23 @@ except ImportError:
     _AI_ENABLED = False
     _AI_MODEL = ""
     _AI_OPTIONAL_OK = False
+    _vani_pcache_key = lambda intent_id, ctx: None   # noqa: E731
+    _vani_pcache_get = lambda db, key: None          # noqa: E731
+    _vani_pcache_set = lambda *a, **k: False         # noqa: E731
 
 try:
     from app.middleware.interaction_logger import log_llm_interaction as _log_interaction  # noqa: E402
 except ImportError:
     _log_interaction = lambda **_: None  # noqa: E731
+
+# SEBI compliance layer — single source of truth for banned/replacement
+# vocabulary in AI-generated text (see App/mnt/skills/user/sebi-sweep/SKILL.md).
+from lib.vani_compliance import (  # noqa: E402
+    post_filter as _sebi_post_filter,
+    append_disclaimer as _append_disclaimer,
+    MORNING_BRIEF_BLOCKLIST as _VANI_FORBIDDEN_WORDS,
+    CORRELATION_REJECT_PHRASES as _CORR_REJECT_PHRASES,
+)
 
 from pipeline2 import health as v2_health  # noqa: E402
 from pipeline2 import scheduler as v2_scheduler  # noqa: E402
@@ -231,6 +251,14 @@ class VaNiAskRequest(BaseModel):
     entity_type: Optional[str] = None   # 'equity' | 'index'
     entity_id: Optional[int] = None
     page_context: Optional[str] = None
+    # Scanner intents (scanner.*) — display context from the frontend: the
+    # exact filtered result view the user is looking at. Never re-stored as truth.
+    preset_id: Optional[str] = None
+    rows: Optional[list] = None         # compact rows, capped server-side
+    total_count: Optional[int] = None   # real result count (rows are capped)
+    data_date: Optional[str] = None     # trade date of the data (not calendar date)
+    timeframe: Optional[str] = None     # daily | weekly | monthly
+    exchange: Optional[str] = None      # combined | NSE | BSE
 
 
 # Dependency order for the 'all' backfill — downloads first (so EOD data
@@ -2040,13 +2068,7 @@ _insight_cache: dict[str, object] = {}
 _intent_cache: dict[str, dict] = {}   # key: "{intent_id}:{date}:{entity_id}"
 
 
-_VANI_FORBIDDEN_WORDS = frozenset({
-    'buy', 'sell', 'recommend', 'predict', 'forecast',
-    # 'watch' intentionally allowed — the morning-brief prompt uses "watch for reversal"
-    'monitor', 'assess', 'develop', 'potential',
-    'could indicate', 'may impact', 'heightened', 'significant',
-    'dynamics', 'interplay', 'intellectual', 'recalibration',
-})
+# _VANI_FORBIDDEN_WORDS now imported from lib.vani_compliance (MORNING_BRIEF_BLOCKLIST).
 
 # In-memory morning brief cache — keyed by stable fingerprint, cleared on restart
 _vani_cache: dict = {}
@@ -4577,17 +4599,7 @@ def vani_correlation_insight(
         log.warning(f'corr_insight parse failed: {raw[:100]}')
         return {'insight': None, 'cached': False}
 
-    _forbidden_phrases = [
-        'buy ', 'sell ', 'bullish', 'bearish',
-        'price will', 'market will', 'expect',
-        'rise ', 'fall ', 'rally', 'correction',
-        'predict', 'forecast', 'recommend',
-        'potential rise', 'potential fall',
-        'potential gain', 'potential loss',
-        'potential upside', 'potential downside',
-        'could rise', 'could fall', 'may rise', 'may fall',
-        'likely to', 'expected to',
-    ]
+    _forbidden_phrases = _CORR_REJECT_PHRASES
     insight_lower = insight.lower()
     for phrase in _forbidden_phrases:
         if phrase in insight_lower:
@@ -4705,18 +4717,23 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': f'Unknown intent: {intent_id}',
         }
 
-    # Cache check — key includes entity so different stocks don't collide
+    # Cache check — key includes entity so different stocks don't collide.
+    # Scanner intents skip this in-memory layer: they use the persistent
+    # km_vani_cache (context-hash keyed), checked after context assembly.
+    _is_scanner = intent_id.startswith('scanner.')
+    _scan_cache_key = None
     cache_key = f'{intent_id}:{date_str}:{req.entity_id or ""}'
-    cached_entry = _intent_cache.get(cache_key)
-    if cached_entry:
-        age_h = (datetime.now() - cached_entry['cached_at']).total_seconds() / 3600
-        if age_h < intent.cache_ttl_hours:
-            return {
-                'intent_id': intent_id, 'date': date_str,
-                'response': cached_entry['text'],
-                'ai': True, 'cached': True,
-                'provider': cached_entry.get('provider'),
-            }
+    if not _is_scanner:
+        cached_entry = _intent_cache.get(cache_key)
+        if cached_entry:
+            age_h = (datetime.now() - cached_entry['cached_at']).total_seconds() / 3600
+            if age_h < intent.cache_ttl_hours:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': cached_entry['text'],
+                    'ai': True, 'cached': True,
+                    'provider': cached_entry.get('provider'),
+                }
 
     # Assemble context + format user message based on intent page group
     db = _db()
@@ -4750,6 +4767,40 @@ def vani_ask(req: VaNiAskRequest):
                 entity_type=req.entity_type or 'equity',
             )
             user_msg = format_equity_user_message(intent_id, ctx) if ctx else None
+
+        elif prefix == 'scanner':
+            if not req.preset_id:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': None, 'ai': False, 'cached': False,
+                    'provider': None, 'error': 'preset_id required for scanner intents',
+                }
+            ctx = assemble_scanner_context(
+                db,
+                preset_id=req.preset_id,
+                rows=req.rows,
+                data_date=req.data_date or date_str,
+                timeframe=req.timeframe or 'daily',
+                exchange=req.exchange or 'combined',
+                total_count=req.total_count,
+            )
+            if not ctx:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': None, 'ai': False, 'cached': False,
+                    'provider': None, 'error': f'Unknown scan preset: {req.preset_id}',
+                }
+            # Persistent cache (km_vani_cache): explain_preset's hash derives
+            # from the preset copy alone — no change of state, no LLM invoke.
+            _scan_cache_key = _vani_pcache_key(intent_id, build_scanner_cache_context(intent_id, ctx))
+            _cached_text = _vani_pcache_get(db, _scan_cache_key) if _scan_cache_key else None
+            if _cached_text:
+                return {
+                    'intent_id': intent_id, 'date': date_str,
+                    'response': _cached_text,
+                    'ai': True, 'cached': True, 'provider': 'cache',
+                }
+            user_msg = format_scanner_user_message(intent_id, ctx)
 
         else:
             return {
@@ -4794,6 +4845,20 @@ def vani_ask(req: VaNiAskRequest):
             'provider': None, 'error': 'LLM unavailable',
         }
 
+    # SEBI post-filter — substitute forbidden phrases per the sweep table;
+    # reject outright (never serve, never cache) if recommendation language
+    # survives substitution.
+    response_text, _sebi_rejected = _sebi_post_filter(response_text)
+    if _sebi_rejected or not response_text:
+        log.warning(f'vani_ask [{intent_id}] response rejected by SEBI post-filter')
+        return {
+            'intent_id': intent_id, 'date': date_str,
+            'response': None, 'ai': False, 'cached': False,
+            'provider': provider, 'error': 'Response did not pass the language compliance check — please retry',
+        }
+    if intent_id.startswith('scanner.'):
+        response_text = _append_disclaimer(response_text)
+
     log_id = _log_interaction(
         product="dristiq",
         endpoint="/api/vani/ask",
@@ -4805,11 +4870,20 @@ def vani_ask(req: VaNiAskRequest):
         latency_ms=_latency,
     )
 
-    _intent_cache[cache_key] = {
-        'text': response_text,
-        'cached_at': datetime.now(),
-        'provider': provider,
-    }
+    if _is_scanner:
+        if _scan_cache_key:
+            _vani_pcache_set(
+                db, _scan_cache_key, intent_id,
+                _scan_cache_key.rsplit(':', 1)[-1],
+                response_text, intent.cache_ttl_hours,
+                llm_provider=provider, llm_model=_AI_MODEL,
+            )
+    else:
+        _intent_cache[cache_key] = {
+            'text': response_text,
+            'cached_at': datetime.now(),
+            'provider': provider,
+        }
     return {
         'intent_id': intent_id, 'date': date_str,
         'response': response_text,
@@ -4821,11 +4895,29 @@ def vani_ask(req: VaNiAskRequest):
 
 @app.delete('/api/vani/cache')
 def vani_cache_clear(intent_id: str):
-    """Admin: clear cached response for a specific intent (all dates/entities)."""
+    """Admin: clear cached response for a specific intent (all dates/entities).
+
+    Clears both the in-memory layer and, for the same intent_id, the
+    persistent km_vani_cache rows (expired in place — get_cached treats
+    expired as a miss), so scanner intents regenerate on next ask.
+    """
     removed = [k for k in list(_intent_cache.keys()) if k.startswith(f'{intent_id}:')]
     for k in removed:
         del _intent_cache[k]
-    return {'cleared': len(removed), 'intent_id': intent_id}
+    persistent = 0
+    try:
+        db = _db()
+        rows = db.select('km_vani_cache', 'cache_key', filters={'intent_id': intent_id}, limit=500)
+        if rows:
+            db.patch(
+                'km_vani_cache',
+                filters={'intent_id': intent_id},
+                data={'expires_at': '1970-01-01T00:00:00Z'},
+            )
+            persistent = len(rows)
+    except Exception as e:
+        log.warning(f'vani_cache_clear persistent layer failed for {intent_id}: {e}')
+    return {'cleared': len(removed) + persistent, 'intent_id': intent_id}
 
 
 @app.post('/api/vani/feedback')

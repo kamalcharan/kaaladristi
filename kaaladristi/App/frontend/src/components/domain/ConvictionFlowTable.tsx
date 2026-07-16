@@ -97,7 +97,11 @@ function FlowCard({ stock }: { stock: ScanStock }) {
   const surge  = stock.delivery_surge_x ?? null;
 
   return (
-    <ScanCardWrapper isVani={isVani} symbol={stock.symbol}>
+    <ScanCardWrapper
+      isVani={isVani}
+      symbol={stock.symbol}
+      vaniEntity={{ type: 'equity', id: stock.equity_id, symbol: displaySymbol(stock), pageContext: 'Scanner / Conviction Flow' }}
+    >
       {/* Info — 4 rows */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' as const, gap: '5px' }}>
 
