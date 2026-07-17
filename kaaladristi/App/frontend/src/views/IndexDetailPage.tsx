@@ -18,6 +18,7 @@ import type { ChartOverlay } from '@/types/framework';
 const EMPTY_OVERLAYS: ChartOverlay[] = [];
 import { useIndexConstituents } from '@/hooks/useMasterData';
 import { displaySymbol, isNumericSymbol } from '@/lib/symbolUtils';
+import BookmarkToggle from '@/components/domain/BookmarkToggle';
 import { BREADTH_MIN_N, BREADTH_SMALL_N, type SectorIndexRow, type RocBadge } from '@/services/sectorRotation';
 import type { IndexBreadthResult, ConstituentDetail } from '@/services/sectorRotation';
 import FlowIntensityMap from '@/components/domain/FlowIntensityMap';
@@ -249,6 +250,7 @@ function ConstituentTable({
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 980 }}>
         <thead>
           <tr>
+            <th style={{ ...thBase, textAlign: 'center', width: 30 }} />
             <th style={{ ...thBase, textAlign: 'left', width: 150 }}>Symbol</th>
             <th style={{ ...thBase, textAlign: 'left' }}>Company</th>
             <th style={{ ...thBase, textAlign: 'right', width: 80 }}>Close</th>
@@ -312,6 +314,9 @@ function ConstituentTable({
                 onMouseEnter={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--gold-soft) 10%, transparent)'; } : undefined}
                 onMouseLeave={onRowClick ? (e) => { (e.currentTarget as HTMLElement).style.background = isEven ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 2.5%, transparent)'; } : undefined}
               >
+                <td style={{ padding: '9px 6px 9px 12px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  <BookmarkToggle equityId={row.equity_id} size={13} />
+                </td>
                 <td style={{ padding: '9px 12px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                   {displaySymbol({ symbol: row.symbol, company_name: row.company_name })}
                   {isNumericSymbol(row.symbol) && <BseChip />}

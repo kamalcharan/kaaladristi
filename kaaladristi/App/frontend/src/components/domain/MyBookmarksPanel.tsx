@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import { Star, Loader2 } from 'lucide-react';
 import { Card, DristiQLoader } from '@/components/ui';
 import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from '@/lib/symbolUtils';
 import { ExchangeBadge } from '@/components/domain/StockCard';
@@ -83,11 +83,12 @@ interface SectorChip extends BookmarkSector {
 }
 
 function BookmarkRowCard({
-  bookmark, sectors, scanTags, market, onRemove,
+  bookmark, sectors, scanTags, scanLoading, market, onRemove,
 }: {
   bookmark: BookmarkRow;
   sectors: SectorChip[];
   scanTags: MatchedScan[];
+  scanLoading: boolean;
   market: BookmarkMarketData | undefined;
   onRemove: () => void;
 }) {
@@ -204,9 +205,14 @@ function BookmarkRowCard({
           {num(market?.score_22d, 0)}
         </div>
 
-        {/* Scanners */}
-        <div style={{ width: W.scanners, flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {scanTags.length === 0 ? (
+        {/* Scanners — loaded off the critical path (full-market scan), so this
+            fills in a moment after prices/sectors rather than blocking them. */}
+        <div style={{ width: W.scanners, flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+          {scanLoading ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text-faint)' }}>
+              <Loader2 className="w-3 h-3 animate-spin" /> checking…
+            </span>
+          ) : scanTags.length === 0 ? (
             <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>No scanner match</span>
           ) : scanTags.map((t) => (
             <span key={t.id} title={t.vani ? 'VaNi highlight in this scanner' : undefined} style={{
@@ -300,11 +306,15 @@ export default function MyBookmarksPanel() {
     );
   }
 
-  // Wait for prices + scanner membership before rendering, so the row shows the
-  // complete picture at once (scanner membership runs every preset — a few
-  // seconds — and would otherwise flash "No scanner match" until it resolves).
-  if (marketLoading || scanLoading || sectorLoading) {
-    return <DristiQLoader message="Loading prices, sector & scanner membership…" />;
+  // Gate only on the FAST, indexed queries (prices + sector membership) so the
+  // page paints in well under a second. Scanner membership is deliberately NOT
+  // gated: it runs every preset over the full market (one shared ~8k-row bundle
+  // download), which dominated load time and is the same fixed cost per user —
+  // so it streams in behind a per-row "checking…" indicator instead of blocking
+  // the whole page. (A server-side membership table is the real scale fix —
+  // see docs/claude/scannerenhancement.md.)
+  if (marketLoading || sectorLoading) {
+    return <DristiQLoader message="Loading bookmarks…" />;
   }
 
   return (
@@ -321,6 +331,7 @@ export default function MyBookmarksPanel() {
               bookmark={b}
               market={dataByEquity.get(b.equity_id)}
               scanTags={matchedByEquity.get(b.equity_id) ?? []}
+              scanLoading={scanLoading}
               sectors={sectors}
               onRemove={() => toggle(b.equity_id)}
             />
