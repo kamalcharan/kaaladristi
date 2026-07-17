@@ -153,6 +153,8 @@ export default function ChartView() {
   // Study reorg (2026-07-12): decision-band prose collapsed by default;
   // Member-Of pills demoted to a closed accordion.
   const [readExpanded, setReadExpanded] = useState(false);
+  // Stock DeepDive tabs (Slice 3): Analysis | Chart & Replay.
+  const [dvTab, setDvTab] = useState<'analysis' | 'chart'>('analysis');
   const [membershipOpen, setMembershipOpen] = useState(false);
 
   const numId = Number(id);
@@ -521,21 +523,30 @@ export default function ChartView() {
             )}
           </div>
 
-          {/* Jump rail — chapter anchors (temporary until Slice 3 tabs) */}
-          {isEquity && !isLoading && rows.length > 0 && (
-            <div className="flex items-center gap-1.5 mt-3">
-              {([['read', 'Read'], ['strength', 'Strength'], ['flow', 'Money Flow'], ['chart', 'Chart']] as const).map(([anchor, label]) => (
-                <button
-                  key={anchor}
-                  onClick={() => document.getElementById(`study-${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider border border-kd-border text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
+
+        {/* ═══ Tabs — Analysis · Chart & Replay · Data · Results (Stock DeepDive
+            Slice 3). Data/Results are placeholders. ═══ */}
+        {isEquity && !isLoading && rows.length > 0 && (
+          <div className="flex items-center gap-1 mb-3 border-b border-kd-border">
+            {([['analysis', 'Analysis'], ['chart', 'Chart & Replay']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setDvTab(id)}
+                className={cn(
+                  'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                  dvTab === id
+                    ? 'border-[var(--accent)] text-[var(--text-primary)]'
+                    : 'border-transparent text-muted hover:text-[var(--text-primary)]',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Data · soon</span>
+            <span className="px-3 py-2 text-sm text-[var(--text-faint)] cursor-default">Results · soon</span>
+          </div>
+        )}
 
         {/* ═══ Snapshot — index only. For equities the Conviction · Momentum ·
             Liquidity · Returns detail (StatStrip) moves into the Strength chapter
@@ -548,8 +559,8 @@ export default function ChartView() {
           />
         )}
 
-        {/* ═══ Equity: Pump/Dump Banner + Magic RS Pills ═══ */}
-        {isEquity && pumpDumpResult && (
+        {/* ═══ Equity: Pump/Dump Banner + Magic RS Pills (Analysis tab) ═══ */}
+        {isEquity && dvTab === 'analysis' && pumpDumpResult && (
           <div className="mb-2">
             <PumpDumpBanner result={pumpDumpResult} />
           </div>
@@ -557,7 +568,7 @@ export default function ChartView() {
         {/* ═══ Chapter: Relative Strength — pills + rotation quadrant + industry
             context together: everything answering "how strong vs market/peers?"
             (RS-Rotation moved DOWN from its provisional prime spot.) ═══ */}
-        {isEquity && !isLoading && latest && (
+        {isEquity && dvTab === 'analysis' && !isLoading && latest && (
           <section id="study-strength" style={{ scrollMarginTop: 118 }} className="mb-3">
             <SectionLabel>Strength</SectionLabel>
             {hasRsData && (
@@ -626,7 +637,7 @@ export default function ChartView() {
           <>
             {/* ═══ Chapter: Money Flow — one question ("is real money entering?"),
                 one frame: heatmap leads full-width, state cards beneath. ═══ */}
-            {!isLoading && !isError && rows.length > 0 && (
+            {dvTab === 'analysis' && !isLoading && !isError && rows.length > 0 && (
               <section id="study-flow" style={{ scrollMarginTop: 118 }} className="mb-3">
                 <SectionLabel>Money Flow</SectionLabel>
                 {tf === 'daily' ? (
@@ -640,7 +651,7 @@ export default function ChartView() {
             )}
 
             {/* Rows B/C — Order Flow · Smart Money · Big Money(spans) / Delivery(wide) */}
-            {snapshot && (
+            {dvTab === 'analysis' && snapshot && (
               <div className="grid grid-cols-1 lg:grid-cols-[37fr_38fr_25fr] gap-3 mb-3">
                 <OrderFlowCard
                   bar={snapshot.bar}
@@ -693,7 +704,8 @@ export default function ChartView() {
             {/* (Scan Presence + Index membership moved INTO the Strength
                 chapter's right-column stack — owner QA 2026-07-12.) */}
 
-            {/* Chart tier — Chart 70% · (Magic RS / RSI-MFI / Divergence) 30% */}
+            {/* Chart & Replay tab — chart tier + the replay scrubber together. */}
+            {dvTab === 'chart' && (<>
             <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
               <div className="min-w-0">{chartArea}</div>
               <div className="flex flex-col gap-3 min-w-0">
@@ -745,6 +757,7 @@ export default function ChartView() {
                 />
               </div>
             )}
+            </>)}
           </>
         ) : (
           /* Index — chart-centric (equity evidence cards don't apply) */
