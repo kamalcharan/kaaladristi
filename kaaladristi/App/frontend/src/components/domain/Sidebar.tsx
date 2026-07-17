@@ -32,7 +32,9 @@ const navSections: NavSection[] = [
       { to: '/bookmarks',      glyph: '☆', label: 'My Bookmarks' },
       { to: '/market-structure', glyph: '⊞', label: 'Market Structure' },
       { to: '/account',         glyph: '◯', label: 'Account' },
-      { to: '/settings',        glyph: '⚙', label: 'Settings' },
+      // Settings is hidden from the nav (theme selection moved to Account →
+      // Appearance). The /settings route still resolves by URL for the admin
+      // data cards (Sector Lords / Market Data / Data Pipeline).
     ],
   },
   {
