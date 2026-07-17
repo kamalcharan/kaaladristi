@@ -319,7 +319,7 @@ export async function fetchEquityEodById(
   // Equity-only extras (NOT in shared INDICATOR_COLS — km_index_eod lacks the
   // delivery columns): the Study cockpit's stat strip + Delivery-vs-Traded
   // widget read these.
-  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x';
+  const EQUITY_EXTRA_COLS = 'pct_chng,value_cr,delivery_pct,delivery_qty,deliv_value_cr,ret_5d,ret_22d,ret_66d,w52_high,w52_low,delivery_surge_x,stage,is_vani_s2,is_vani_smart,is_vani_breakout,is_vani_surge,is_vani_distrib,is_vani_weakness,is_vani_oversold';
   const cols = `trade_date,open,high,low,close,volume,${INDICATOR_COLS},${EQUITY_EXTRA_COLS}`;
 
   let query = from('km_equity_eod')
