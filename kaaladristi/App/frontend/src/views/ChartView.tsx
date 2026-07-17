@@ -7,6 +7,7 @@ import TradingChart from '@/components/charts/TradingChart';
 import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
+import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
@@ -518,6 +519,14 @@ export default function ChartView() {
           </div>
         )}
         </div>
+
+        {/* ═══ Verdict Hero — the decision-first anchor (Stock DeepDive Slice 1):
+            verdict + pillars-aligned + one headline per pillar. Equity only. ═══ */}
+        {isEquity && !isLoading && latest && (
+          <div className="mb-3">
+            <VerdictHero latest={latest} snapshot={snapshot} />
+          </div>
+        )}
 
         {/* ═══ Decision Band — 4-second read: verdict lives ONCE in the sticky
             header chip; the VaNi prose is clamped behind an expander so the
