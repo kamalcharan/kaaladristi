@@ -18,8 +18,11 @@ export const JadeThornTheme: ThemeConfig = {
     utility: {
       primaryText:         '#1a1a1a',
       secondaryText:       '#8a8884',
-      primaryBackground:   '#f6f4ef',  // warm parchment
-      secondaryBackground: '#ffffff',
+      // Deeper parchment canvas so the white cards clearly separate (matches
+      // the "white depth" tuned into Vikuna Black light); stays warm parchment,
+      // not greige — keeps Jade Thorn's identity.
+      primaryBackground:   '#eeeadd',  // deeper warm parchment canvas
+      secondaryBackground: '#ffffff',  // white cards — the bright, raised layer
     },
     accent: {
       accent1: '#0f4c3a',
@@ -34,9 +37,9 @@ export const JadeThornTheme: ThemeConfig = {
       info:    '#2a5f8a',
     },
     surface: {
-      glass:       'rgba(255,255,255,0.75)', // Glass UX standard's literal value
+      glass:       'rgba(255,255,255,0.92)', // near-solid white card — crisp on parchment
       glassStrong: '#ffffff',
-      glassBorder: '#e6e3d9',
+      glassBorder: '#ddd7c7',                // firmer warm-parchment hairline
       primaryDim:    'rgba(15,76,58,0.25)',
       primaryGlow:   'rgba(15,76,58,0.1)',
       primarySubtle: 'rgba(15,76,58,0.04)',
