@@ -8,6 +8,7 @@ import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
+import StoryMode from '@/components/domain/StockCockpit/StoryMode';
 import { buildStoryEvents, type StoryEvent } from '@/services/storyEvents';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
@@ -310,11 +311,11 @@ export default function ChartView() {
   );
 
   // ── Story mode (Chart & Replay) — timed price-vs-signal events ──
+  const [storyOpen, setStoryOpen] = useState(false);
+  const bigMoneyDates = useMemo(() => new Set(bigMoneyEvents.map((e) => e.trade_date)), [bigMoneyEvents]);
   const storyEvents = useMemo(
-    () => (isEquity && tf === 'daily'
-      ? buildStoryEvents(rows, new Set(bigMoneyEvents.map((e) => e.trade_date)))
-      : []),
-    [isEquity, tf, rows, bigMoneyEvents],
+    () => (isEquity && tf === 'daily' ? buildStoryEvents(rows, bigMoneyDates) : []),
+    [isEquity, tf, rows, bigMoneyDates],
   );
   // Events are indexed against `rows` (the chart's data) but the playhead
   // indexes `pulseBars` — different arrays. Bridge them by DATE, not index.
@@ -771,6 +772,12 @@ export default function ChartView() {
                 >
                   {playing ? '❚❚ Pause' : '▷ Play story'}
                 </button>
+                <button
+                  onClick={() => setStoryOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-kd-border text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
+                >
+                  ⤢ Story mode
+                </button>
                 <span className="text-[11px] text-muted font-mono">
                   {storyEvents.length} signal events · price × data story
                 </span>
@@ -842,6 +849,19 @@ export default function ChartView() {
         onClose={() => setOverlayDrawerOpen(false)}
         context="overlay"
       />
+
+      {/* Focused single-view story replay */}
+      {isEquity && (
+        <StoryMode
+          open={storyOpen}
+          onClose={() => setStoryOpen(false)}
+          bars={rows}
+          name={name}
+          latest={latest ?? null}
+          snapshot={snapshot}
+          bigMoneyDates={bigMoneyDates}
+        />
+      )}
     </ErrorBoundary>
   );
 }

@@ -9,7 +9,7 @@
  * snapshot verdict — no extra fetches. Observational, not advice.
  */
 
-interface LatestRow {
+export interface LatestRow {
   score_5d?: number | null
   score_22d?: number | null
   rsi_14?: number | null
@@ -31,7 +31,7 @@ interface Props {
   snapshot?: { corrState?: CorrState } | null
 }
 
-interface Pillar {
+export interface Pillar {
   key: string
   label: string
   value: string
@@ -50,7 +50,7 @@ function pct(v: number | null | undefined): string {
   return v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
 }
 
-function buildPillars(l: LatestRow): Pillar[] {
+export function buildPillars(l: LatestRow): Pillar[] {
   const s5 = l.score_5d ?? null
   const s22 = l.score_22d ?? null
   const rsi = l.rsi_14 ?? null
