@@ -9,6 +9,7 @@ import { getPresetMeta } from '@/services/scanEngine'
 import { getFieldsForGroup } from '@/fieldAvailability'
 import VaNiTrigger from '@/components/domain/VaNiTrigger'
 import BookmarkToggle from '@/components/domain/BookmarkToggle'
+import FloatingHScrollbar from '@/components/ui/FloatingHScrollbar'
 
 // ── Preset column overrides ─────────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
   const [sortDir, setSortDir]   = useState<'asc' | 'desc'>(ds.dir)
   const [gearOpen, setGearOpen] = useState(false)
   const gearRef = useRef<HTMLDivElement>(null)
+  const scrollBoxRef = useRef<HTMLDivElement>(null)
 
   const storageKey = `dristiq_cols_${presetId}`
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
@@ -201,7 +203,7 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
       </div>
 
       {/* Table */}
-      <div style={{
+      <div ref={scrollBoxRef} style={{
         overflowX: 'auto',
         overflowY: 'auto',
         // Grows to fit the data up to this cap, then scrolls (sticky header/first
@@ -411,6 +413,10 @@ export default function ScanTable({ stocks, presetId, onRowClick }: ScanTablePro
           </div>
         )}
       </div>
+
+      {/* Always-reachable horizontal scrollbar pinned to the viewport bottom —
+          the table's own bar sits below the fold on tall result sets. */}
+      <FloatingHScrollbar targetRef={scrollBoxRef} />
 
       <div style={{
         marginTop: 6, fontSize: 10, color: 'var(--text-faint)',
