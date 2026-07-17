@@ -366,10 +366,15 @@ def compute_custom_index_indicators(
                 "SELECT compute_indicators_batch('km_index_eod','index_id',%s,%s)",
                 [cid, p_from])
             total += cur.fetchone()[0] or 0
-            # 2. magic_rs vs NIFTY 500 (same benchmark as standard indices)
+            # 2. magic_rs vs NIFTY 500 (same benchmark as standard indices).
+            # MUST pass all 7 args (bench_table/col = NULL → same table): the
+            # 5-arg form is ambiguous with the 7-arg overload's defaults and
+            # errors "function is not unique". This mirrors compute_all_magic_rs,
+            # which passes NULL/NULL for p_table='km_index_eod'.
             if bench is not None:
                 cur.execute(
-                    "SELECT compute_magic_rs_batch('km_index_eod','index_id',%s,%s,%s)",
+                    "SELECT compute_magic_rs_batch("
+                    "'km_index_eod','index_id',%s,%s,%s,NULL,NULL)",
                     [cid, bench, p_from])
             # 3. flow_type / accum_distrib — reads magic_rs + rsi_14 + sma_150
             cur.execute(
