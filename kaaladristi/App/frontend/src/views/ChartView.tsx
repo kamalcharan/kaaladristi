@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, BarChart3, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
@@ -8,7 +8,7 @@ import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
-import { buildStoryEvents, eventAtBar } from '@/services/storyEvents';
+import { buildStoryEvents, type StoryEvent } from '@/services/storyEvents';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
@@ -316,25 +316,41 @@ export default function ChartView() {
       : []),
     [isEquity, tf, rows, bigMoneyEvents],
   );
+  // Events are indexed against `rows` (the chart's data) but the playhead
+  // indexes `pulseBars` — different arrays. Bridge them by DATE, not index.
+  const eventDates = useMemo(() => new Set(storyEvents.map((e) => e.date)), [storyEvents]);
+  const playheadDate = pulseBars[effectiveIdx]?.trade_date ?? null;
   const storyBubble = useMemo(() => {
-    if (dvTab !== 'chart') return null;
-    const e = eventAtBar(storyEvents, effectiveIdx);
-    return e ? { date: e.date, tone: e.tone, title: e.title, detail: e.detail, reactionPct: e.reactionPct } : null;
-  }, [storyEvents, effectiveIdx, dvTab]);
+    if (dvTab !== 'chart' || !playheadDate) return null;
+    let best: StoryEvent | null = null;
+    for (const e of storyEvents) {
+      if (e.date === playheadDate && (!best || e.priority > best.priority)) best = e;
+    }
+    return best ? { date: best.date, tone: best.tone, title: best.title, detail: best.detail, reactionPct: best.reactionPct } : null;
+  }, [storyEvents, playheadDate, dvTab]);
 
-  // Replay playback — advance the playhead one bar at a time.
+  // Replay playback — walk the playhead forward, dwelling on event bars so the
+  // on-candle bubble is readable, then gliding to the next.
   const [playing, setPlaying] = useState(false);
+  const playIdxRef = useRef(effectiveIdx);
+  useEffect(() => { playIdxRef.current = effectiveIdx; }, [effectiveIdx]);
   useEffect(() => {
     if (!playing || pulseBars.length === 0) return;
-    const id = setInterval(() => {
-      setActiveIndex((prev) => {
-        const cur = prev ?? pulseBars.length - 1;
-        if (cur >= pulseBars.length - 1) { setPlaying(false); return cur; }
-        return cur + 1;
-      });
-    }, 700);
-    return () => clearInterval(id);
-  }, [playing, pulseBars.length, setActiveIndex]);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      if (cancelled) return;
+      const cur = playIdxRef.current;
+      if (cur >= pulseBars.length - 1) { setPlaying(false); return; }
+      const next = cur + 1;
+      playIdxRef.current = next;
+      setActiveIndex(next);
+      const isEvent = eventDates.has(pulseBars[next]?.trade_date ?? '');
+      timer = setTimeout(loop, isEvent ? 2200 : 380);
+    };
+    timer = setTimeout(loop, 380);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [playing, pulseBars, eventDates, setActiveIndex]);
 
   // Chart block, extracted so the decision-first layout can place it in its own
   // tier (equity: beside Magic RS / RSI / Divergence; index: full width).
@@ -741,7 +757,14 @@ export default function ChartView() {
               <div className="flex items-center gap-3 mb-2">
                 <button
                   onClick={() => {
-                    if (effectiveIdx >= pulseBars.length - 1) setActiveIndex(0);
+                    if (!playing) {
+                      // Start the story at the first signal event in the window.
+                      const pbIdx = new Map(pulseBars.map((b, i) => [b.trade_date, i]));
+                      const firstEv = storyEvents.find((e) => pbIdx.has(e.date));
+                      const startIdx = firstEv ? (pbIdx.get(firstEv.date) as number) : 0;
+                      setActiveIndex(startIdx);
+                      playIdxRef.current = startIdx;
+                    }
                     setPlaying((p) => !p);
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-glow)] transition-colors"
