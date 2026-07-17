@@ -159,8 +159,8 @@ export interface BookmarkSector {
 
 export async function fetchBookmarkSectors(
   equityIds: number[],
-): Promise<Map<number, BookmarkSector>> {
-  const result = new Map<number, BookmarkSector>();
+): Promise<Map<number, BookmarkSector[]>> {
+  const result = new Map<number, BookmarkSector[]>();
   if (equityIds.length === 0) return result;
 
   const [symRes, idxRes] = await Promise.all([
@@ -176,11 +176,13 @@ export async function fetchBookmarkSectors(
   }
 
   for (const s of (symRes.data ?? []) as { id: number; index_names: string[] | null }[]) {
-    const names = (s.index_names ?? []).slice().sort((a, b) => a.localeCompare(b));
-    for (const n of names) {
+    const secs: BookmarkSector[] = [];
+    const seen = new Set<number>();
+    for (const n of (s.index_names ?? []).slice().sort((a, b) => a.localeCompare(b))) {
       const sec = sectoralByName.get(n.toUpperCase());
-      if (sec) { result.set(s.id, sec); break; }
+      if (sec && !seen.has(sec.id)) { seen.add(sec.id); secs.push(sec); }
     }
+    if (secs.length) result.set(s.id, secs);
   }
 
   return result;
