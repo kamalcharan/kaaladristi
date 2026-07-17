@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Globe, BarChart3, Activity, ChevronRight, type LucideIcon } from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
 import SectorLordsDetail from './settings/SectorLordsDetail';
 import MarketDataHub from './settings/MarketDataHub';
 import PipelineDashboard from './settings/PipelineDashboard';
@@ -43,7 +45,12 @@ const cards: SettingsCard[] = [
 ];
 
 export default function SettingsView() {
+  const { isAdmin } = useAuthStore();
   const [activeCard, setActiveCard] = useState<string | null>(null);
+
+  // Admin-gated: these are master-data reference tables. Non-admins (who can no
+  // longer see Settings in the nav) land on their Account page instead.
+  if (!isAdmin) return <Navigate to="/account" replace />;
 
   return (
     <div className="animate-fade-in">
