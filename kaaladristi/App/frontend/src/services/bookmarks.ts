@@ -7,6 +7,7 @@
 
 import { useAuthStore } from '@/stores/authStore';
 import { from } from '@/services/postgrest';
+import { SECTOR_TAB_CATEGORIES } from '@/services/sectorRotation';
 
 const pipelineUrl = (import.meta.env.VITE_PIPELINE_API_URL as string) ?? '';
 
@@ -137,6 +138,49 @@ export async function fetchBookmarkMarketData(
       score_22d: latest?.score_22d ?? null,
       last5,
     });
+  }
+
+  return result;
+}
+
+// ── Sector membership (batched) ─────────────────────────────────────────────
+// A stock's sector = the sectoral-category index it belongs to, via
+// km_equity_symbols.index_names[] (the solidified Sector path — same source
+// SectorMembershipCard uses). Returns the matched sector index {id,name} so
+// the row can link to /sector-rotation/:id and pull that sector's live signal
+// from Sector Pulse. Batched: two queries for the whole bookmark list, not
+// per-stock. A stock can sit in several sectoral indices — we surface the
+// first (name-sorted) for the compact column.
+
+export interface BookmarkSector {
+  id: number;
+  name: string;
+}
+
+export async function fetchBookmarkSectors(
+  equityIds: number[],
+): Promise<Map<number, BookmarkSector>> {
+  const result = new Map<number, BookmarkSector>();
+  if (equityIds.length === 0) return result;
+
+  const [symRes, idxRes] = await Promise.all([
+    from('km_equity_symbols').select('id,index_names').in('id', equityIds).execute(),
+    from('km_index_symbols').select('id,name,category').is('is_active', 'true').execute(),
+  ]);
+  if (symRes.error || idxRes.error) return result;
+
+  const sectoralCats = new Set(SECTOR_TAB_CATEGORIES.sectoral);
+  const sectoralByName = new Map<string, BookmarkSector>();
+  for (const i of (idxRes.data ?? []) as { id: number; name: string; category: string }[]) {
+    if (sectoralCats.has(i.category)) sectoralByName.set(i.name.toUpperCase(), { id: i.id, name: i.name });
+  }
+
+  for (const s of (symRes.data ?? []) as { id: number; index_names: string[] | null }[]) {
+    const names = (s.index_names ?? []).slice().sort((a, b) => a.localeCompare(b));
+    for (const n of names) {
+      const sec = sectoralByName.get(n.toUpperCase());
+      if (sec) { result.set(s.id, sec); break; }
+    }
   }
 
   return result;
