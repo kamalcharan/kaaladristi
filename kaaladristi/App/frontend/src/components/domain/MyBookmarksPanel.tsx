@@ -15,13 +15,18 @@ import type { MatchedScan } from '@/hooks/useScanPresence';
 
 // Sector money-flow signal → rotation vocabulary (same 5 states the Sector
 // Rotation heatmap uses; this is the solidified path, unlike industry).
-const SECTOR_SIGNAL: Record<FlowSignal, { label: string; color: string }> = {
-  STRONG:  { label: 'Leading',   color: 'var(--risk-green)' },
-  BUILDING:{ label: 'Improving', color: 'color-mix(in srgb, var(--risk-green) 70%, transparent)' },
-  FADING:  { label: 'Fading',    color: 'var(--risk-amber)' },
-  OUTFLOW: { label: 'Outflow',   color: 'var(--risk-red)' },
-  QUIET:   { label: 'Quiet',     color: 'var(--text-faint)' },
+const SECTOR_SIGNAL: Record<FlowSignal, { label: string; color: string; rank: number }> = {
+  STRONG:  { label: 'Leading',   color: 'var(--risk-green)', rank: 0 },
+  BUILDING:{ label: 'Improving', color: 'color-mix(in srgb, var(--risk-green) 70%, transparent)', rank: 1 },
+  FADING:  { label: 'Fading',    color: 'var(--risk-amber)', rank: 2 },
+  OUTFLOW: { label: 'Outflow',   color: 'var(--risk-red)', rank: 3 },
+  QUIET:   { label: 'Quiet',     color: 'var(--text-faint)', rank: 4 },
 };
+
+/** Drop the "NIFTY " prefix so sector chips stay compact ("NIFTY IT" → "IT"). */
+function shortSector(name: string): string {
+  return name.replace(/^NIFTY\s+/i, '');
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function fmtDate(d: string): string {
@@ -31,7 +36,7 @@ function fmtDate(d: string): string {
 
 // Column widths — shared between the header row and each data row so they align.
 const W = {
-  star: 26, stock: 150, price: 88, sector: 148,
+  star: 26, stock: 150, price: 88, sector: 190,
   rsi: 46, rs: 58, s5: 56, s22: 58, scanners: 150,
 } as const;
 
@@ -73,12 +78,15 @@ function HeaderRow() {
   );
 }
 
+interface SectorChip extends BookmarkSector {
+  signal: { label: string; color: string; rank: number } | null;
+}
+
 function BookmarkRowCard({
-  bookmark, sector, sectorSignal, scanTags, market, onRemove,
+  bookmark, sectors, scanTags, market, onRemove,
 }: {
   bookmark: BookmarkRow;
-  sector: BookmarkSector | undefined;
-  sectorSignal: { label: string; color: string } | null;
+  sectors: SectorChip[];
   scanTags: MatchedScan[];
   market: BookmarkMarketData | undefined;
   onRemove: () => void;
@@ -144,28 +152,35 @@ function BookmarkRowCard({
           )}
         </div>
 
-        {/* Sector (name + live rotation signal) · Industry as muted subtext */}
+        {/* Sectors (one chip per sectoral index, strongest signal first, colored
+            by that sector's live rotation signal) · Industry as muted subtext */}
         <div style={{ width: W.sector, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span
-              onClick={sector ? (e) => { e.stopPropagation(); navigate(`/sector-rotation/${sector.id}`); } : undefined}
-              title={sector?.name}
-              style={{
-                fontSize: 11, color: sector ? 'var(--text-secondary)' : 'var(--text-faint)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                cursor: sector ? 'pointer' : 'default', maxWidth: 96,
-              }}
-            >
-              {sector?.name ?? 'No sector'}
-            </span>
-            {sectorSignal && (
-              <span style={{ fontSize: 9, fontWeight: 700, color: sectorSignal.color, flexShrink: 0 }}>
-                {sectorSignal.label}
-              </span>
-            )}
-          </div>
+          {sectors.length === 0 ? (
+            <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>No sector</span>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+              {sectors.map((sec) => {
+                const color = sec.signal?.color ?? 'var(--text-faint)';
+                return (
+                  <span
+                    key={sec.id}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/sector-rotation/${sec.id}`); }}
+                    title={`${sec.name}${sec.signal ? ` — ${sec.signal.label}` : ''}`}
+                    style={{
+                      fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 100, cursor: 'pointer',
+                      border: `1px solid color-mix(in srgb, ${color} 45%, transparent)`,
+                      background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                      color, whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {shortSector(sec.name)}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {bookmark.industry && (
-            <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {bookmark.industry}
             </div>
           )}
@@ -257,7 +272,7 @@ export default function MyBookmarksPanel() {
   // sector index name → live money-flow signal (latest cell), the solidified
   // Sector Rotation verdict.
   const sectorSignalByName = useMemo(() => {
-    const map = new Map<string, { label: string; color: string }>();
+    const map = new Map<string, { label: string; color: string; rank: number }>();
     for (const row of sectorPulse) {
       const latest = row.cells[0]; // cells are NEWEST FIRST (index 0 = latest)
       if (!latest) continue;
@@ -297,16 +312,16 @@ export default function MyBookmarksPanel() {
       <HeaderRow />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {bookmarks.map((b) => {
-          const sector = sectorByEquity.get(b.equity_id);
-          const sectorSignal = sector ? sectorSignalByName.get(sector.name.toUpperCase()) ?? null : null;
+          const sectors: SectorChip[] = (sectorByEquity.get(b.equity_id) ?? [])
+            .map((s) => ({ ...s, signal: sectorSignalByName.get(s.name.toUpperCase()) ?? null }))
+            .sort((a, x) => (a.signal?.rank ?? 9) - (x.signal?.rank ?? 9) || a.name.localeCompare(x.name));
           return (
             <BookmarkRowCard
               key={b.id}
               bookmark={b}
               market={dataByEquity.get(b.equity_id)}
               scanTags={matchedByEquity.get(b.equity_id) ?? []}
-              sector={sector}
-              sectorSignal={sectorSignal}
+              sectors={sectors}
               onRemove={() => toggle(b.equity_id)}
             />
           );

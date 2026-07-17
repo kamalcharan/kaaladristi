@@ -29,7 +29,7 @@ export function useBookmarkSectors(equityIds: number[]) {
   });
 
   return {
-    sectorByEquity: query.data ?? new Map<number, BookmarkSector>(),
+    sectorByEquity: query.data ?? new Map<number, BookmarkSector[]>(),
     isLoading: query.isLoading,
   };
 }
