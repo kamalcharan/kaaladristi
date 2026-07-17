@@ -56,7 +56,7 @@ export const SIGNAL_CLASSES: Record<SignalColor, { text: string; bg: string; bor
   green: { text: 'text-risk-green',  bg: 'bg-risk-green/10',  border: 'border-risk-green/40'  },
   red:   { text: 'text-risk-red',    bg: 'bg-risk-red/10',    border: 'border-risk-red/40'    },
   amber: { text: 'text-risk-amber',  bg: 'bg-risk-amber/10',  border: 'border-risk-amber/40'  },
-  slate: { text: 'text-slate-400',   bg: 'bg-slate-800/60',   border: 'border-white/10'       },
+  slate: { text: 'text-muted',   bg: 'bg-[var(--panel-recess)]',   border: 'border-white/10'       },
 };
 
 /** All valid impact values in display order (use for dropdowns). */

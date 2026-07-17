@@ -2,7 +2,7 @@
 // styles/globals.css (no hardcoded hex here). Chips render theme-aware: a soft
 // color-mix tint of the hue + a small hue dot + neutral theme-token text, so
 // they read cleanly in BOTH light and dark. Previously these were dark-only
-// Tailwind classes (bg-blue-900/60 text-blue-300 …) that turned into heavy,
+// Tailwind palette classes (dark fill + light text) that turned into heavy,
 // muddy fills in light mode.
 export const RULE_TAG_COLORS: Record<string, string> = {
   Panchak:       'var(--tag-panchak)',
