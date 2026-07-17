@@ -414,154 +414,133 @@ export default function ChartView() {
   return (
     <ErrorBoundary>
       <div className="animate-fade-in">
-        {/* ═══ Sticky command header: Back + Name + Verdict + Price + Stats + jump rail ═══
-            Sticky below the Layout topbar (48px) so identity/verdict/navigation
-            stay visible on this long page (Study reorg, owner-approved wireframe). */}
-        <div
-          className="sticky z-30 -mx-1 px-1 mb-3"
-          style={{
-            top: 48,
-            background: 'color-mix(in srgb, var(--bg) 90%, transparent)',
-            backdropFilter: 'blur(10px)',
-            borderBottom: '1px solid var(--border)',
-            paddingBottom: 6,
-          }}
-        >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-          </button>
-          <span className={cn(
-            'text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
-            isIndex
-              ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/8'
-              : 'text-accent-violet border-accent-violet/30 bg-accent-violet/8',
-          )}>
-            {isIndex ? 'INDEX' : 'EQUITY'}
-          </span>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
-          {isEquity && <BookmarkToggle equityId={numId} size={16} />}
-          {/* Pulse/Study toggle hidden (2026-07-09): Study is the single merged
-              stock view. Pulse route still exists but is no longer linked from
-              here. */}
-          {/* Verdict chip — the ONLY decision-layer element allowed on Study
-              (POA Phase 0.2): the Pulse verdict travels with the user. */}
-          {snapshot && (
-            <span
-              title={`${snapshot.corrState.tagline} — open Pulse for the full verdict`}
-              onClick={() => navigate(isEquity ? `/pulse/equity/${numId}` : `/pulse/${numId}`)}
-              className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border cursor-pointer"
-              style={{
-                color: snapshot.corrState.color,
-                borderColor: `color-mix(in srgb, ${snapshot.corrState.color} 40%, transparent)`,
-                background: `color-mix(in srgb, ${snapshot.corrState.color} 12%, transparent)`,
-              }}
+        {/* ═══ Hero — exact-replica 2-column top (Stock DeepDive): identity ·
+            price · stat pills · VaNi read (left) and the verdict card (right,
+            equity). Replaces the old sticky command bar. ═══ */}
+        <div className="mb-4">
+          {/* Back · type badge · bookmark */}
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-1 text-xs text-muted hover:text-[var(--text-primary)] transition-colors"
             >
-              ● Pulse: {snapshot.corrState.state}
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className={cn(
+              'text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border',
+              isIndex
+                ? 'text-accent-cyan border-accent-cyan/30 bg-accent-cyan/8'
+                : 'text-accent-violet border-accent-violet/30 bg-accent-violet/8',
+            )}>
+              {isIndex ? 'INDEX' : 'EQUITY'}
             </span>
-          )}
-          {isEquity && equityPulse.meta?.industry && (
-            <span className="text-[10px] font-mono text-muted px-1.5 py-0.5 rounded bg-kd-elevated">
-              {equityPulse.meta.industry}
-            </span>
-          )}
-          {!isLoading && latest && (
-            <>
-              <span className="text-xl font-bold mono text-[var(--text-primary)]">
-                {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </span>
-              <div className={cn('flex items-center gap-1', isPositive ? 'text-risk-green' : 'text-risk-red')}>
-                {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                <span className="text-xs font-bold mono">
-                  {isPositive ? '+' : ''}{changePct.toFixed(2)}%
-                </span>
+            {isEquity && <BookmarkToggle equityId={numId} size={16} />}
+          </div>
+
+          <div className={cn('grid gap-4 items-start', isEquity ? 'grid-cols-1 lg:grid-cols-[1.35fr_1fr]' : 'grid-cols-1')}>
+            {/* LEFT — identity · price · stats · read */}
+            <div className="min-w-0 flex flex-col gap-3">
+              <div>
+                <h1 className="inline text-2xl font-bold tracking-tight text-[var(--text-primary)]">{name}</h1>
+                {isEquity && equityPulse.meta?.industry && (
+                  <span className="ml-2 text-xs text-muted">NSE · {equityPulse.meta.industry}</span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2 text-xs ml-auto">
-                <StatPill label="H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
-                <StatPill label="52W" value={`${fmt(low52w)} – ${fmt(high52w)}`} />
-                {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
-                {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
-              </div>
-              {/* Equity edge-case badges */}
-              {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
-                <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
-                  Inactive — last traded {latest.trade_date}
-                </span>
-              )}
-              {isEquity && (() => {
-                const todayStr = new Date().toISOString().split('T')[0];
-                const daysSince = Math.round((new Date(todayStr).getTime() - new Date(latest.trade_date).getTime()) / 86400000);
-                return daysSince > 1 && equityPulse.meta?.is_active ? (
-                  <span className="text-[10px] font-mono text-muted">
-                    Last updated: {latest.trade_date} ({daysSince}d ago)
-                  </span>
-                ) : null;
+
+              {!isLoading && latest && (() => {
+                const r5 = (latest as { ret_5d?: number | null }).ret_5d ?? null;
+                const chg = r5 ?? changePct;
+                const pos = chg >= 0;
+                return (
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <span className="text-3xl font-bold mono text-[var(--text-primary)]">
+                      {currentClose.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className={cn('flex items-center gap-1 text-sm font-bold mono', pos ? 'text-risk-green' : 'text-risk-red')}>
+                      {pos ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {pos ? '+' : ''}{chg.toFixed(2)}%
+                      <span className="text-muted font-normal ml-1">/ {r5 != null ? '5D' : '1D'}</span>
+                    </span>
+                  </div>
+                );
               })()}
-            </>
-          )}
-        </div>
 
-        {/* Jump rail — anchors into the page's chapters (equity Study only) */}
-        {isEquity && !isLoading && rows.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-1.5">
-            {([['read', 'Read'], ['strength', 'Strength'], ['flow', 'Money Flow'], ['chart', 'Chart']] as const).map(([anchor, label]) => (
-              <button
-                key={anchor}
-                onClick={() => document.getElementById(`study-${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider border border-kd-border text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-        </div>
+              {!isLoading && latest && (
+                <div className="flex flex-wrap gap-2 text-xs items-center">
+                  <StatPill label="H/L" value={`${fmt(latest.high)} / ${fmt(latest.low)}`} />
+                  <StatPill label="52W" value={`${fmt(low52w)} – ${fmt(high52w)}`} />
+                  {latest.rsi_14 != null && <StatPill label="RSI" value={latest.rsi_14.toFixed(1)} />}
+                  {latest.magic_rs_zone && <StatPill label="RS" value={latest.magic_rs_zone} />}
+                  {isEquity && equityPulse.meta && !equityPulse.meta.is_active && (
+                    <span className="text-[10px] font-mono text-risk-amber bg-risk-amber/10 px-1.5 py-0.5 rounded">
+                      Inactive — last traded {latest.trade_date}
+                    </span>
+                  )}
+                  {isEquity && (() => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const daysSince = Math.round((new Date(todayStr).getTime() - new Date(latest.trade_date).getTime()) / 86400000);
+                    return daysSince > 1 && equityPulse.meta?.is_active ? (
+                      <span className="text-[10px] font-mono text-muted">Last updated: {latest.trade_date} ({daysSince}d ago)</span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
 
-        {/* ═══ Verdict Hero — the decision-first anchor (Stock DeepDive Slice 1):
-            verdict + pillars-aligned + one headline per pillar. Equity only. ═══ */}
-        {isEquity && !isLoading && latest && (
-          <div className="mb-3">
-            <VerdictHero latest={latest} snapshot={snapshot} />
-          </div>
-        )}
-
-        {/* ═══ Decision Band — 4-second read: verdict lives ONCE in the sticky
-            header chip; the VaNi prose is clamped behind an expander so the
-            band scans instead of walling (Study reorg 2026-07-12). ═══ */}
-        {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
-          <div id="study-read" style={{ scrollMarginTop: 118 }} className="mb-3">
-            {snapshot?.corrState.tagline && (
-              <div className="text-[11px] mb-1.5" style={{ color: snapshot.corrState.color }}>
-                ● <span className="font-semibold">{snapshot.corrState.state}</span>
-                <span className="text-muted"> — {snapshot.corrState.tagline}</span>
-              </div>
-            )}
-            <div className="relative overflow-hidden" style={!readExpanded ? { maxHeight: 96 } : undefined}>
-              {/* VaNiInsight brings its own indigo panel styling + chip highlights */}
-              <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips className="mt-0" />
-              {!readExpanded && !aiLoading && (
-                <div
-                  className="absolute inset-x-0 bottom-0 h-10 pointer-events-none"
-                  style={{ background: 'linear-gradient(transparent, var(--bg))' }}
-                />
+              {/* VaNi Read — now in the hero's left column */}
+              {!isLoading && !isError && rows.length > 0 && (aiLoading || aiData?.insight) && (
+                <div id="study-read" style={{ scrollMarginTop: 118 }}>
+                  {!isEquity && snapshot?.corrState.tagline && (
+                    <div className="text-[11px] mb-1.5" style={{ color: snapshot.corrState.color }}>
+                      ● <span className="font-semibold">{snapshot.corrState.state}</span>
+                      <span className="text-muted"> — {snapshot.corrState.tagline}</span>
+                    </div>
+                  )}
+                  <div className="relative overflow-hidden" style={!readExpanded ? { maxHeight: 130 } : undefined}>
+                    <VaNiInsight insight={aiData?.insight} isLoading={aiLoading} highlightChips className="mt-0" />
+                    {!readExpanded && !aiLoading && (
+                      <div className="absolute inset-x-0 bottom-0 h-10 pointer-events-none" style={{ background: 'linear-gradient(transparent, var(--bg))' }} />
+                    )}
+                  </div>
+                  {!aiLoading && aiData?.insight && (
+                    <button
+                      onClick={() => setReadExpanded((e) => !e)}
+                      className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                      {readExpanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-            {!aiLoading && aiData?.insight && (
-              <button
-                onClick={() => setReadExpanded((e) => !e)}
-                className="mt-1 text-[10px] font-mono text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                {readExpanded ? '▴ Collapse' : '▾ Read full VaNi analysis'}
-              </button>
+
+            {/* RIGHT — verdict card (equity only) */}
+            {isEquity && !isLoading && latest && (
+              <div className="min-w-0">
+                <VerdictHero latest={latest} snapshot={snapshot} />
+              </div>
             )}
           </div>
-        )}
 
-        {/* ═══ Snapshot — Conviction · Momentum · Liquidity · Returns ═══ */}
-        {!isLoading && latest && (
+          {/* Jump rail — chapter anchors (temporary until Slice 3 tabs) */}
+          {isEquity && !isLoading && rows.length > 0 && (
+            <div className="flex items-center gap-1.5 mt-3">
+              {([['read', 'Read'], ['strength', 'Strength'], ['flow', 'Money Flow'], ['chart', 'Chart']] as const).map(([anchor, label]) => (
+                <button
+                  key={anchor}
+                  onClick={() => document.getElementById(`study-${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider border border-kd-border text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ═══ Snapshot — index only. For equities the Conviction · Momentum ·
+            Liquidity · Returns detail (StatStrip) moves into the Strength chapter
+            below; the VerdictHero gives the 4-pillar glance up top. ═══ */}
+        {!isLoading && latest && !isEquity && (
           <StatStrip
             latest={latest}
             mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null}
@@ -578,9 +557,9 @@ export default function ChartView() {
         {/* ═══ Chapter: Relative Strength — pills + rotation quadrant + industry
             context together: everything answering "how strong vs market/peers?"
             (RS-Rotation moved DOWN from its provisional prime spot.) ═══ */}
-        {isEquity && (hasRsData || equityPulse.industryContext) && (
+        {isEquity && !isLoading && latest && (
           <section id="study-strength" style={{ scrollMarginTop: 118 }} className="mb-3">
-            <SectionLabel>Relative Strength</SectionLabel>
+            <SectionLabel>Strength</SectionLabel>
             {hasRsData && (
               <div className="mb-2">
                 <MultiTimeframePills
@@ -628,6 +607,16 @@ export default function ChartView() {
                   )}
                 </div>
               </div>
+            </div>
+            {/* Momentum & Returns evidence — the detailed snapshot (StatStrip,
+                reused) now lives with the Strength chapter (Stock DeepDive
+                Slice 2); no new component. */}
+            <div className="mt-3">
+              <StatStrip
+                latest={latest}
+                mcapCr={equityPulse.meta?.mcap_cr ?? scanPresence.stock?.mcap_cr ?? null}
+                isEquity={isEquity}
+              />
             </div>
           </section>
         )}
