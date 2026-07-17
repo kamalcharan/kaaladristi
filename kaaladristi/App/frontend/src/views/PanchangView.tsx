@@ -174,7 +174,7 @@ export default function PanchangView() {
           <select
             value={month}
             onChange={e => setMonth(Number(e.target.value))}
-            className="text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white focus:outline-none focus:border-accent-indigo/50"
+            className="text-sm bg-kd-card border border-white/10 rounded-lg px-2 py-1 text-kd-text-primary focus:outline-none focus:border-accent-indigo/50"
           >
             {MONTH_FULL.map((m, i) => (
               <option key={i + 1} value={i + 1}>{m}</option>
@@ -188,7 +188,7 @@ export default function PanchangView() {
               const v = Number(e.target.value);
               if (v >= 1900 && v <= 2100) setYear(v);
             }}
-            className="w-20 text-sm bg-slate-800/80 border border-white/10 rounded-lg px-2 py-1 text-white text-center focus:outline-none focus:border-accent-indigo/50"
+            className="w-20 text-sm bg-kd-card border border-white/10 rounded-lg px-2 py-1 text-kd-text-primary text-center focus:outline-none focus:border-accent-indigo/50"
           />
           <button
             onClick={next}

@@ -44,5 +44,5 @@ export const STATUS_COLOR_CLASSES: Record<MarketStatusOption['color'], {
   amber:  { text: 'text-risk-amber',   bg: 'bg-risk-amber/10',   border: 'border-risk-amber/40'   },
   violet: { text: 'text-accent-violet',bg: 'bg-accent-violet/10',border: 'border-accent-violet/40'},
   blue:   { text: 'text-accent-indigo',bg: 'bg-accent-indigo/10',border: 'border-accent-indigo/30'},
-  slate:  { text: 'text-slate-400',    bg: 'bg-slate-800/60',    border: 'border-white/10'        },
+  slate:  { text: 'text-muted',    bg: 'bg-[var(--panel-recess)]',    border: 'border-white/10'        },
 };

@@ -16,12 +16,12 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<JobStatus, string> = {
-  queued:    'bg-slate-600/30 text-slate-300',
+  queued:    'bg-[var(--panel-recess)] text-kd-text-secondary',
   running:   'bg-accent-indigo/30 text-accent-indigo animate-pulse',
-  completed: 'bg-emerald-500/20 text-emerald-300',
-  partial:   'bg-amber-500/20 text-amber-300',
-  failed:    'bg-rose-500/20 text-rose-300',
-  cancelled: 'bg-slate-700/30 text-muted',
+  completed: 'bg-[var(--bull-bg)] text-risk-green',
+  partial:   'bg-[var(--caution-bg)] text-risk-amber',
+  failed:    'bg-[var(--bear-bg)] text-risk-red',
+  cancelled: 'bg-[var(--panel-recess)] text-muted',
 };
 
 const COL_COUNT = 8;
@@ -249,10 +249,10 @@ export default function JobQueue({ refreshKey }: Props) {
                           <span className="text-rose-400"> · {group.failed} failed</span>
                         )}
                         {group.partial > 0 && (
-                          <span className="text-amber-300"> · {group.partial} partial</span>
+                          <span className="text-risk-amber"> · {group.partial} partial</span>
                         )}
                       </span>
-                      <div className="w-28 h-1 bg-slate-800 rounded overflow-hidden">
+                      <div className="w-28 h-1 bg-kd-card rounded overflow-hidden">
                         <div
                           className={cn(
                             'h-full transition-all',
@@ -267,7 +267,7 @@ export default function JobQueue({ refreshKey }: Props) {
                         <button
                           onClick={() => onCancelBatch(group.batchId, activeIds)}
                           className="px-1.5 py-0.5 rounded text-[10px] font-medium
-                                     bg-rose-500/10 border border-rose-500/30 text-rose-300
+                                     bg-rose-500/10 border border-rose-500/30 text-risk-red
                                      hover:bg-rose-500/20 transition-colors"
                           title={`Cancel ${activeIds.length} active job(s) in this batch`}
                         >
@@ -336,7 +336,7 @@ function JobRow({ job, onCancel, indent }: {
       <td className="px-2 py-1.5 min-w-[180px]">
         {job.status === 'running' && (
           <div className="space-y-1">
-            <div className="w-full h-1 bg-slate-800 rounded overflow-hidden">
+            <div className="w-full h-1 bg-kd-card rounded overflow-hidden">
               <div
                 className="h-full bg-accent-indigo transition-all"
                 style={{ width: `${job.progress_pct ?? 0}%` }}

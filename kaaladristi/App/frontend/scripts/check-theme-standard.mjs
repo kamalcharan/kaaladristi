@@ -139,6 +139,41 @@ if (unmarked.length > 0) {
   console.log('✓ All dark-literal background fills are either tokenized or explicitly theme-agnostic.');
 }
 
+// ── 3b. Hard gate: dark Tailwind palette FILL classes ──
+// bg-<palette>-800/900/950 are hardcoded dark fills that DON'T follow the app's
+// data-mode theme (Tailwind's own dark: variant keys off prefers-color-scheme,
+// which we don't use). In light mode they render as dark boxes on a light page
+// — the exact class of bug that shipped the tag chips + several admin panels.
+// The literal/phantom gates can't see Tailwind classes, so this closes that
+// blind spot. Escape hatch: a genuinely fixed-dark surface may carry a
+// "theme-agnostic: <reason>" comment on the same/previous line.
+const DARK_TW_FILL = 'bg-(slate|gray|zinc|neutral|stone|blue|indigo|violet|purple|fuchsia|pink|rose|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky)-(800|900|950)';
+const twFillFiles = {};
+for (const l of grep(DARK_TW_FILL, 'src')) {
+  const [file, lineNo] = l.split(':');
+  if (ALLOWLIST.has(file)) continue;
+  (twFillFiles[file] ??= []).push(Number(lineNo));
+}
+const twUnmarked = [];
+for (const [file, lines] of Object.entries(twFillFiles)) {
+  const src = readFileSync(join(ROOT, file), 'utf-8').split('\n');
+  for (const n of lines) {
+    const here = src[n - 1] ?? '', above = src[n - 2] ?? '';
+    if (!here.includes('theme-agnostic') && !above.includes('theme-agnostic')) {
+      twUnmarked.push(`${file}:${n}`);
+    }
+  }
+}
+if (twUnmarked.length > 0) {
+  failed = true;
+  console.error(`\n✗ Dark Tailwind palette fill class(es) — bg-*-800/900/950 don't adapt to the theme and render as dark boxes in light mode.`);
+  console.error(`  Replace with a theme token (bg-kd-card / bg-[var(--panel-recess)] / bg-[var(--bull-bg)]/[--bear-bg]/[--caution-bg]) or, if`);
+  console.error(`  genuinely a fixed-dark surface, add a "theme-agnostic: <reason>" comment on the same/previous line:`);
+  twUnmarked.forEach(h => console.error(`  ${h}`));
+} else {
+  console.log('✓ No dark Tailwind palette fill classes (bg-*-800/900/950).');
+}
+
 // ── 4. Hard gate: literal-count ratchet ──
 const hexCount = grep('#[0-9a-fA-F]{3,8}\\b', 'src').filter(l => !l.includes('config/theme')).length;
 const rgbaCount = grep('rgba?\\(', 'src').filter(l => !l.includes('config/theme')).length;
