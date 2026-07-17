@@ -8,6 +8,7 @@ import VaNiInsight from '@/components/domain/VaNiInsight';
 import { useInstrumentInsight } from '@/hooks';
 import StatStrip from '@/components/domain/StockCockpit/StatStrip';
 import VerdictHero from '@/components/domain/StockCockpit/VerdictHero';
+import { buildStoryEvents, eventAtBar } from '@/services/storyEvents';
 import DeliveryVsTraded from '@/components/domain/StockCockpit/DeliveryVsTraded';
 import SectorMembershipCard from '@/components/domain/StockCockpit/SectorMembershipCard';
 import CockpitIndicatorPanels from '@/components/domain/StockCockpit/CockpitIndicatorPanels';
@@ -308,6 +309,33 @@ export default function ChartView() {
     [bigMoneyEvents],
   );
 
+  // ── Story mode (Chart & Replay) — timed price-vs-signal events ──
+  const storyEvents = useMemo(
+    () => (isEquity && tf === 'daily'
+      ? buildStoryEvents(rows, new Set(bigMoneyEvents.map((e) => e.trade_date)))
+      : []),
+    [isEquity, tf, rows, bigMoneyEvents],
+  );
+  const storyBubble = useMemo(() => {
+    if (dvTab !== 'chart') return null;
+    const e = eventAtBar(storyEvents, effectiveIdx);
+    return e ? { date: e.date, tone: e.tone, title: e.title, detail: e.detail, reactionPct: e.reactionPct } : null;
+  }, [storyEvents, effectiveIdx, dvTab]);
+
+  // Replay playback — advance the playhead one bar at a time.
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (!playing || pulseBars.length === 0) return;
+    const id = setInterval(() => {
+      setActiveIndex((prev) => {
+        const cur = prev ?? pulseBars.length - 1;
+        if (cur >= pulseBars.length - 1) { setPlaying(false); return cur; }
+        return cur + 1;
+      });
+    }, 700);
+    return () => clearInterval(id);
+  }, [playing, pulseBars.length, setActiveIndex]);
+
   // Chart block, extracted so the decision-first layout can place it in its own
   // tier (equity: beside Magic RS / RSI / Divergence; index: full width).
   const chartArea = (
@@ -402,6 +430,7 @@ export default function ChartView() {
             bigMoneyEvents={bigMoneyChartLines}
             benchmarkIndexId={isIndex && id ? Number(id) : null}
             benchmarkName={isIndex ? name : null}
+            storyBubble={storyBubble}
           />
         )}
       </div>
@@ -706,6 +735,24 @@ export default function ChartView() {
 
             {/* Chart & Replay tab — chart tier + the replay scrubber together. */}
             {dvTab === 'chart' && (<>
+            {/* Story replay controls — play walks the candles; the current
+                signal event pops as an on-candle bubble. */}
+            {storyEvents.length > 0 && (
+              <div className="flex items-center gap-3 mb-2">
+                <button
+                  onClick={() => {
+                    if (effectiveIdx >= pulseBars.length - 1) setActiveIndex(0);
+                    setPlaying((p) => !p);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent-glow)] transition-colors"
+                >
+                  {playing ? '❚❚ Pause' : '▷ Play story'}
+                </button>
+                <span className="text-[11px] text-muted font-mono">
+                  {storyEvents.length} signal events · price × data story
+                </span>
+              </div>
+            )}
             <div id="study-chart" style={{ scrollMarginTop: 118 }} className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-3 mb-3">
               <div className="min-w-0">{chartArea}</div>
               <div className="flex flex-col gap-3 min-w-0">

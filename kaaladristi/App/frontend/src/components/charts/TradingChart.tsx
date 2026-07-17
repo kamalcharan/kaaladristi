@@ -95,6 +95,15 @@ interface TradingChartProps {
    *  aggregate when unset or when no per-benchmark row exists yet. */
   benchmarkIndexId?: number | null;
   benchmarkName?: string | null;
+  /** Story-mode on-candle bubble: the current replay event, anchored by X to
+   *  its candle. Null hides it. Observational annotation only. */
+  storyBubble?: {
+    date: string;
+    tone: 'bull' | 'bear' | 'neutral';
+    title: string;
+    detail: string;
+    reactionPct: number | null;
+  } | null;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -211,7 +220,7 @@ const DEFAULT_OVERLAYS: NonNullable<TradingChartProps['overlays']> = [];
 const DEFAULT_BANDS: NonNullable<TradingChartProps['astroBands']> = [];
 const DEFAULT_BM_EVENTS: NonNullable<TradingChartProps['bigMoneyEvents']> = [];
 
-export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null }: TradingChartProps) {
+export default function TradingChart({ data, height = 900, compact = false, workspaceMode = false, highlightDate = null, overlays = DEFAULT_OVERLAYS, astroBands = DEFAULT_BANDS, bigMoneyEvents = DEFAULT_BM_EVENTS, onVisibleRangeChange, onCrosshairMove, onZoneClick, benchmarkIndexId = null, benchmarkName = null, storyBubble = null }: TradingChartProps) {
   const mainRef      = useRef<HTMLDivElement>(null);
   const rsiRef       = useRef<HTMLDivElement>(null);
   const sniperRef    = useRef<HTMLDivElement>(null);
@@ -224,6 +233,23 @@ export default function TradingChart({ data, height = 900, compact = false, work
   const leadOffsetRef = useRef(0);
 
   const chartsRef = useRef<IChartApi[]>([]);
+
+  // Story-mode bubble: track the current event candle's X (pixel) so the bubble
+  // stays anchored to it as the event changes or the chart pans/zooms.
+  const [bubbleX, setBubbleX] = useState<number | null>(null);
+  useEffect(() => {
+    const chart = mainChartRef.current;
+    if (!chart || !storyBubble) { setBubbleX(null); return; }
+    const ts = chart.timeScale();
+    const compute = () => {
+      const x = ts.timeToCoordinate(storyBubble.date as Time);
+      setBubbleX(x != null ? x : null);
+    };
+    compute();
+    ts.subscribeVisibleLogicalRangeChange(compute);
+    return () => ts.unsubscribeVisibleLogicalRangeChange(compute);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyBubble?.date]);
 
   // Tooltip state for astro band hover — bands: ALL events under the cursor
   // (coincident point markers list together instead of only the topmost).
@@ -1134,6 +1160,39 @@ export default function TradingChart({ data, height = 900, compact = false, work
         onMouseLeave={() => { setBandTooltip(null); setHoverBar(null); }}
       >
         <div ref={mainRef} className="rounded-xl overflow-hidden" />
+
+        {/* Story-mode on-candle bubble — anchored by X to the current event's
+            candle, near the top of the pane with a downward caret. */}
+        {storyBubble && bubbleX != null && (() => {
+          const c = storyBubble.tone === 'bull' ? 'var(--risk-green)'
+            : storyBubble.tone === 'bear' ? 'var(--risk-red)' : 'var(--text-secondary)';
+          return (
+            <div style={{ position: 'absolute', top: 8, left: bubbleX, transform: 'translateX(-50%)', zIndex: 20, pointerEvents: 'none', width: 220 }}>
+              <div style={{
+                background: 'var(--verdict-hero-bg)', color: 'var(--verdict-hero-text)',
+                border: `1px solid color-mix(in srgb, ${c} 45%, transparent)`,
+                borderRadius: 10, padding: '8px 11px', boxShadow: 'var(--card-shadow)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                  <span style={{ color: c }}>{storyBubble.title}</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--verdict-hero-muted)', marginTop: 3, lineHeight: 1.4 }}>{storyBubble.detail}</div>
+                {storyBubble.reactionPct != null && (
+                  <div style={{ fontSize: 11, marginTop: 4, fontFamily: 'var(--font-mono, monospace)' }}>
+                    <span style={{ color: 'var(--verdict-hero-muted)' }}>→ price </span>
+                    <span style={{ color: storyBubble.reactionPct >= 0 ? 'var(--risk-green)' : 'var(--risk-red)', fontWeight: 700 }}>
+                      {storyBubble.reactionPct >= 0 ? '+' : ''}{storyBubble.reactionPct.toFixed(1)}%
+                    </span>
+                    <span style={{ color: 'var(--verdict-hero-muted)' }}> over next 5 bars</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ width: 0, height: 0, margin: '0 auto', borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid var(--verdict-hero-bg)' }} />
+            </div>
+          );
+        })()}
+
         {hoverBar != null && (() => {
           const n = (v: unknown, dec = 2) =>
             typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: dec }) : '—';
