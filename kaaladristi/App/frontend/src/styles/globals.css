@@ -82,6 +82,22 @@
   --caution-bg: rgba(224,160,64,0.1);
   --atmosphere-primary: rgba(155,140,255,0.08);
   --atmosphere-accent:  rgba(201,178,140,0.1);
+
+  /* Card elevation shadow. Dark mode reads elevation from the lighter glass
+     fill over a near-black page, so it needs NO shadow (kept none). Light mode
+     has nothing to lift a pale card off a pale canvas, so it gets a soft
+     shadow — the piece the flat/monochrome light look was missing. Colour via
+     color-mix(black) rather than an rgba/hex literal (ratchet-neutral). */
+  --card-shadow: none;
+}
+
+/* Light-only card shadow (data-mode is stamped on <html> by applyTheme and the
+   index.html FOUC script). Two layers: a tight contact shadow + a soft ambient
+   one, the standard "raised card on paper" recipe. */
+:root[data-mode="light"] {
+  --card-shadow:
+    0 1px 2px color-mix(in srgb, black 6%, transparent),
+    0 6px 16px -6px color-mix(in srgb, black 10%, transparent);
 }
 
 body {
@@ -205,12 +221,20 @@ body::before {
     background: var(--kd-card);
     border: 1px solid var(--border);
     backdrop-filter: blur(16px);
+    box-shadow: var(--card-shadow);
   }
 
   .glass-elevated {
     background: var(--kd-elevated);
     border: 1px solid var(--border);
     backdrop-filter: blur(16px);
+    box-shadow: var(--card-shadow);
+  }
+
+  /* Shared hook for the <Card> component (components/ui/Card.tsx) so every Card
+     gets the light-mode elevation shadow without touching each call site. */
+  .kd-card-shadow {
+    box-shadow: var(--card-shadow);
   }
 }
 

@@ -7,7 +7,7 @@ const cardVariants = cva(
   // Was blur-xl/2xl (24-40px) — over-blurring smeared far more of whatever
   // sits behind a card than the recipe calls for, part of the light-mode
   // "muddy" look reported across all 3 themes.
-  'border backdrop-blur-lg transition-all ease-[cubic-bezier(0.16,1,0.3,1)]',
+  'border backdrop-blur-lg kd-card-shadow transition-all ease-[cubic-bezier(0.16,1,0.3,1)]',
   {
     variants: {
       variant: {
