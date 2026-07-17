@@ -100,6 +100,21 @@
     0 10px 28px -8px color-mix(in srgb, black 14%, transparent);
 }
 
+/* Rule-tag identity hues. Referenced by var() from constants/ruleTagColors so
+   tag chips carry no hardcoded hex in component code and render theme-aware
+   (a soft color-mix tint of the hue + a hue dot + neutral theme-token text),
+   reading cleanly in BOTH light and dark. The hue itself is mode-independent —
+   only the chip composition adapts. */
+:root {
+  --tag-panchak: #6366f1;   --tag-mercury: #3b82f6;     --tag-retrograde: #f97316;
+  --tag-conjunction: #a855f7; --tag-nakshatra: #14b8a6; --tag-manifestation: #eab308;
+  --tag-yoga: #22c55e;      --tag-transit: #f43f5e;     --tag-tithi: #f59e0b;
+  --tag-vedh: #06b6d4;      --tag-eclipse: #ef4444;     --tag-seasonal: #84cc16;
+  --tag-signposition: #8b5cf6; --tag-lunar: #94a3b8;    --tag-specialday: #ec4899;
+  --tag-majortransit: #e11d55; --tag-bayer: #d97706;    --tag-gandanta: #dc2626;
+  --tag-neptune: #2563eb;   --tag-default: #94a3b8;
+}
+
 body {
   font-family: var(--font-body);
   background: var(--bg);
