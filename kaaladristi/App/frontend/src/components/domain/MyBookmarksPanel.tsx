@@ -6,18 +6,21 @@ import { displaySymbol, displaySubName, navName as toNavName, bseTooltip } from 
 import { ExchangeBadge } from '@/components/domain/StockCard';
 import FlowIntensityMap, { type CellData } from '@/components/domain/FlowIntensityMap';
 import { useBookmarkStore } from '@/stores/bookmarkStore';
-import { useBookmarkMarketData } from '@/hooks/useBookmarks';
+import { useBookmarkMarketData, useBookmarkSectors } from '@/hooks/useBookmarks';
 import { useScanPresenceForMany } from '@/hooks/useScanPresence';
-import { useIndustryTransition } from '@/hooks/useIndustryRotation';
-import type { TransitionCategory } from '@/services/industryRotation';
-import type { BookmarkRow, BookmarkMarketData } from '@/services/bookmarks';
+import { useSectorPulse } from '@/hooks/useSectorRotation';
+import { flowSignal, STRONG_SCORE_CUT_INDEX, type FlowSignal } from '@/components/domain/FlowIntensityMap';
+import type { BookmarkRow, BookmarkMarketData, BookmarkSector } from '@/services/bookmarks';
 import type { MatchedScan } from '@/hooks/useScanPresence';
 
-const SECTOR_STATUS_LABEL: Record<TransitionCategory, { label: string; color: string }> = {
-  rotating_in:  { label: 'Rotating In',  color: 'var(--risk-green)' },
-  leading:      { label: 'Leading',      color: 'var(--risk-green)' },
-  rotating_out: { label: 'Fading',       color: 'var(--risk-red)' },
-  stable:       { label: 'Stable',       color: 'var(--text-faint)' },
+// Sector money-flow signal → rotation vocabulary (same 5 states the Sector
+// Rotation heatmap uses; this is the solidified path, unlike industry).
+const SECTOR_SIGNAL: Record<FlowSignal, { label: string; color: string }> = {
+  STRONG:  { label: 'Leading',   color: 'var(--risk-green)' },
+  BUILDING:{ label: 'Improving', color: 'color-mix(in srgb, var(--risk-green) 70%, transparent)' },
+  FADING:  { label: 'Fading',    color: 'var(--risk-amber)' },
+  OUTFLOW: { label: 'Outflow',   color: 'var(--risk-red)' },
+  QUIET:   { label: 'Quiet',     color: 'var(--text-faint)' },
 };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -28,7 +31,7 @@ function fmtDate(d: string): string {
 
 // Column widths — shared between the header row and each data row so they align.
 const W = {
-  star: 26, stock: 150, price: 88, industry: 132,
+  star: 26, stock: 150, price: 88, sector: 148,
   rsi: 46, rs: 58, s5: 56, s22: 58, scanners: 150,
 } as const;
 
@@ -58,7 +61,7 @@ function HeaderRow() {
       <div style={{ width: W.star, flexShrink: 0 }} />
       <div style={{ ...HEAD, width: W.stock }}>Stock</div>
       <div style={{ ...HEAD, width: W.price }}>Price</div>
-      <div style={{ ...HEAD, width: W.industry }}>Industry</div>
+      <div style={{ ...HEAD, width: W.sector }}>Sector / Industry</div>
       <div style={{ ...HEAD, width: W.rsi, textAlign: 'right' }}>RSI</div>
       <div style={{ ...HEAD, width: W.rs, textAlign: 'right' }}>RS</div>
       <div style={{ ...HEAD, width: W.s5, textAlign: 'right' }}>Score 5D</div>
@@ -71,10 +74,11 @@ function HeaderRow() {
 }
 
 function BookmarkRowCard({
-  bookmark, sectorStatus, scanTags, market, onRemove,
+  bookmark, sector, sectorSignal, scanTags, market, onRemove,
 }: {
   bookmark: BookmarkRow;
-  sectorStatus: { label: string; color: string } | null;
+  sector: BookmarkSector | undefined;
+  sectorSignal: { label: string; color: string } | null;
   scanTags: MatchedScan[];
   market: BookmarkMarketData | undefined;
   onRemove: () => void;
@@ -140,13 +144,30 @@ function BookmarkRowCard({
           )}
         </div>
 
-        {/* Industry + rotation status */}
-        <div style={{ width: W.industry, flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {bookmark.industry ?? '—'}
+        {/* Sector (name + live rotation signal) · Industry as muted subtext */}
+        <div style={{ width: W.sector, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              onClick={sector ? (e) => { e.stopPropagation(); navigate(`/sector-rotation/${sector.id}`); } : undefined}
+              title={sector?.name}
+              style={{
+                fontSize: 11, color: sector ? 'var(--text-secondary)' : 'var(--text-faint)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                cursor: sector ? 'pointer' : 'default', maxWidth: 96,
+              }}
+            >
+              {sector?.name ?? 'No sector'}
+            </span>
+            {sectorSignal && (
+              <span style={{ fontSize: 9, fontWeight: 700, color: sectorSignal.color, flexShrink: 0 }}>
+                {sectorSignal.label}
+              </span>
+            )}
           </div>
-          {sectorStatus && (
-            <span style={{ fontSize: 10, fontWeight: 600, color: sectorStatus.color }}>{sectorStatus.label}</span>
+          {bookmark.industry && (
+            <div style={{ fontSize: 10, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {bookmark.industry}
+            </div>
           )}
         </div>
 
@@ -221,25 +242,29 @@ function BookmarkRowCard({
 export default function MyBookmarksPanel() {
   const { bookmarks, isLoading, hasLoaded, load, toggle } = useBookmarkStore();
 
+  // Reload from the server on every mount — a bookmark added elsewhere (scanner
+  // row, chart page) must show up when you open this tab without a hard refresh.
   useEffect(() => {
-    if (!hasLoaded) load();
-  }, [hasLoaded, load]);
+    load();
+  }, [load]);
 
   const equityIds = useMemo(() => bookmarks.map((b) => b.equity_id), [bookmarks]);
   const { dataByEquity, isLoading: marketLoading } = useBookmarkMarketData(equityIds);
   const { matchedByEquity, isLoading: scanLoading } = useScanPresenceForMany(equityIds);
-  const { data: transition } = useIndustryTransition();
+  const { sectorByEquity, isLoading: sectorLoading } = useBookmarkSectors(equityIds);
+  const { data: sectorPulse = [] } = useSectorPulse();
 
-  const industryStatus = useMemo(() => {
-    const map = new Map<string, TransitionCategory>();
-    if (transition) {
-      for (const item of transition.rotatingIn) map.set(item.industry, 'rotating_in');
-      for (const item of transition.leading) map.set(item.industry, 'leading');
-      for (const item of transition.rotatingOut) map.set(item.industry, 'rotating_out');
-      for (const item of transition.stable) map.set(item.industry, 'stable');
+  // sector index name → live money-flow signal (latest cell), the solidified
+  // Sector Rotation verdict.
+  const sectorSignalByName = useMemo(() => {
+    const map = new Map<string, { label: string; color: string }>();
+    for (const row of sectorPulse) {
+      const latest = row.cells[0]; // cells are NEWEST FIRST (index 0 = latest)
+      if (!latest) continue;
+      map.set(row.name.toUpperCase(), SECTOR_SIGNAL[flowSignal(latest, STRONG_SCORE_CUT_INDEX)]);
     }
     return map;
-  }, [transition]);
+  }, [sectorPulse]);
 
   if (isLoading && !hasLoaded) {
     return <DristiQLoader message="Loading bookmarks…" />;
@@ -263,28 +288,29 @@ export default function MyBookmarksPanel() {
   // Wait for prices + scanner membership before rendering, so the row shows the
   // complete picture at once (scanner membership runs every preset — a few
   // seconds — and would otherwise flash "No scanner match" until it resolves).
-  if (marketLoading || scanLoading) {
-    return <DristiQLoader message="Loading prices & scanner membership…" />;
+  if (marketLoading || scanLoading || sectorLoading) {
+    return <DristiQLoader message="Loading prices, sector & scanner membership…" />;
   }
 
   return (
     <div style={{ overflowX: 'auto' }}>
       <HeaderRow />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {bookmarks.map((b) => (
-          <BookmarkRowCard
-            key={b.id}
-            bookmark={b}
-            market={dataByEquity.get(b.equity_id)}
-            scanTags={matchedByEquity.get(b.equity_id) ?? []}
-            sectorStatus={
-              b.industry && industryStatus.has(b.industry)
-                ? SECTOR_STATUS_LABEL[industryStatus.get(b.industry)!]
-                : null
-            }
-            onRemove={() => toggle(b.equity_id)}
-          />
-        ))}
+        {bookmarks.map((b) => {
+          const sector = sectorByEquity.get(b.equity_id);
+          const sectorSignal = sector ? sectorSignalByName.get(sector.name.toUpperCase()) ?? null : null;
+          return (
+            <BookmarkRowCard
+              key={b.id}
+              bookmark={b}
+              market={dataByEquity.get(b.equity_id)}
+              scanTags={matchedByEquity.get(b.equity_id) ?? []}
+              sector={sector}
+              sectorSignal={sectorSignal}
+              onRemove={() => toggle(b.equity_id)}
+            />
+          );
+        })}
       </div>
     </div>
   );
