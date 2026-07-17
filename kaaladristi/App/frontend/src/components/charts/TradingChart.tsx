@@ -151,7 +151,11 @@ function getThemeColors() {
   const s = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => s.getPropertyValue(name).trim() || fallback;
   return {
-    bg:         v('--kd-bg',            '#030712'),
+    // Paint the plot from the CARD surface, not the page (--kd-bg). In light
+    // mode the page is warm ivory; a chart painted with it blended into the
+    // canvas and read as "intertwined". --card is the raised white card surface
+    // the chart actually sits on, so the plot now matches its container.
+    bg:         v('--card',              '#030712'),
     grid:       v('--kd-border',        'color-mix(in srgb, var(--text-primary) 6%, transparent)'),
     text:       v('--text-muted',       '#64748b'),
     crosshair:  v('--kd-border-active', 'rgba(99,102,241,0.4)'),

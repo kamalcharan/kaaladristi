@@ -36,7 +36,8 @@ export const KaalaDrishtiTheme: ThemeConfig = {
       // BRIGHTER than the canvas so it lifts off the page; the amber reference
       // had this inverted (near-white canvas over gray cards → cards sank in),
       // which read as flat/monochrome in light. Cards are now the bright layer.
-      primaryBackground:   '#f7f5f0',  // warm ivory canvas
+      primaryBackground:   '#eeebe3',  // warm greige canvas — deeper than the
+                                       // white cards so they clearly separate
       secondaryBackground: '#ffffff',  // white cards — the bright, raised layer
     },
     accent: {
@@ -54,7 +55,7 @@ export const KaalaDrishtiTheme: ThemeConfig = {
     surface: {
       glass:         'rgba(255,255,255,0.92)',  // near-solid white card (--kd-card)
       glassStrong:   '#ffffff',                 // white elevated
-      glassBorder:   '#e7e2d8',                 // warm hairline
+      glassBorder:   '#ded8ca',                 // warm hairline — defined edge
       primaryDim:    'rgba(212,145,30,0.16)',   // amber primary, dim
       primaryGlow:   'rgba(212,145,30,0.28)',   // amber primary, glow
       primarySubtle: 'rgba(154,123,60,0.05)',   // warm gold atmosphere bloom
