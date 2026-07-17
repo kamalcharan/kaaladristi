@@ -245,13 +245,13 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
               onClick={() => handleSelect(item)}
               style={{
                 border: `1px solid ${
-                  active   ? 'rgba(45,212,191,0.28)' :
+                  active   ? 'color-mix(in srgb, var(--bull) 28%, transparent)' :
                   selected ? 'color-mix(in srgb, var(--gold) 45%, transparent)' :
                              'var(--border)'
                 }`,
                 borderRadius: 10,
                 background: active
-                  ? 'rgba(45,212,191,0.04)'
+                  ? 'color-mix(in srgb, var(--bull) 4%, transparent)'
                   : selected
                     ? 'color-mix(in srgb, var(--gold) 4%, transparent)'
                     : 'color-mix(in srgb, var(--text-primary) 2%, transparent)',
@@ -383,7 +383,7 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                   {active ? (
                     <span style={{
                       fontSize: 11, fontFamily: 'var(--font-mono, monospace)',
-                      color: '#2dd4bf', marginLeft: 'auto',
+                      color: 'var(--bull)', marginLeft: 'auto',
                     }}>
                       ✓ added
                     </span>
@@ -394,20 +394,20 @@ export default function IndicatorsSection({ onSelect, compact }: IndicatorsSecti
                         marginLeft: 'auto',
                         padding: '4px 12px', borderRadius: 5, fontSize: 11,
                         cursor: 'pointer',
-                        border: '1px solid rgba(124,106,247,0.35)',
-                        background: 'rgba(124,106,247,0.08)',
-                        color: '#8b7af8', fontFamily: 'inherit',
+                        border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+                        background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+                        color: 'var(--accent)', fontFamily: 'inherit',
                         transition: 'all 0.15s', flexShrink: 0,
                       }}
                       onMouseEnter={e => {
                         const el = e.currentTarget as HTMLElement
-                        el.style.background = 'rgba(124,106,247,0.16)'
-                        el.style.borderColor = 'rgba(124,106,247,0.55)'
+                        el.style.background = 'color-mix(in srgb, var(--accent) 16%, transparent)'
+                        el.style.borderColor = 'color-mix(in srgb, var(--accent) 55%, transparent)'
                       }}
                       onMouseLeave={e => {
                         const el = e.currentTarget as HTMLElement
-                        el.style.background = 'rgba(124,106,247,0.08)'
-                        el.style.borderColor = 'rgba(124,106,247,0.35)'
+                        el.style.background = 'color-mix(in srgb, var(--accent) 8%, transparent)'
+                        el.style.borderColor = 'color-mix(in srgb, var(--accent) 35%, transparent)'
                       }}
                     >
                       + {isChart ? 'Overlay' : 'Add'}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Globe, BarChart3, Activity, ChevronRight, type LucideIcon } from 'lucide-react';
-import ThemeSettings from '@/components/domain/ThemeSettings';
+import { useAuthStore } from '@/stores/authStore';
 import SectorLordsDetail from './settings/SectorLordsDetail';
 import MarketDataHub from './settings/MarketDataHub';
 import PipelineDashboard from './settings/PipelineDashboard';
@@ -44,19 +45,20 @@ const cards: SettingsCard[] = [
 ];
 
 export default function SettingsView() {
+  const { isAdmin } = useAuthStore();
   const [activeCard, setActiveCard] = useState<string | null>(null);
+
+  // Admin-gated: these are master-data reference tables. Non-admins (who can no
+  // longer see Settings in the nav) land on their Account page instead.
+  if (!isAdmin) return <Navigate to="/account" replace />;
 
   return (
     <div className="animate-fade-in">
       <PageHeader eyebrow="Settings" title="Settings" meta="Master data reference tables" />
 
       <div className="pt-6">
-      {/* Theme selector — always visible at top */}
-      {!activeCard && (
-        <div className="bg-kd-surface border border-kd-border rounded-2xl p-5 mb-6" style={{ maxWidth: 360 }}>
-          <ThemeSettings />
-        </div>
-      )}
+      {/* Theme selection moved to Account → Appearance. This page is hidden from
+          the nav and holds the admin data-reference cards only. */}
 
       {/* Detail view or card grid */}
       {activeCard === 'sector-lords' ? (

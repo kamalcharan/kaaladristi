@@ -5,15 +5,16 @@
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { User, Lock, CreditCard } from 'lucide-react'
+import { User, Lock, CreditCard, Palette } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { updateProfile, changePassword } from '@/services/auth'
 import { fmtDate } from '@/lib/dateUtils'
 import { PageHeader, Tabs } from '@/components/ui'
+import ThemeSettings from '@/components/domain/ThemeSettings'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'profile' | 'security' | 'billing'
+type Tab = 'profile' | 'appearance' | 'security' | 'billing'
 
 // ── Plan helpers ─────────────────────────────────────────────────────────────
 
@@ -223,6 +224,25 @@ function ProfileTab() {
   )
 }
 
+// ── Appearance Tab ────────────────────────────────────────────────────────────
+
+function AppearanceTab() {
+  return (
+    <div
+      style={{
+        maxWidth: 380,
+        padding: '20px',
+        borderRadius: '12px',
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--card-shadow)',
+      }}
+    >
+      <ThemeSettings />
+    </div>
+  )
+}
+
 // ── Security Tab ──────────────────────────────────────────────────────────────
 
 function SecurityTab() {
@@ -339,6 +359,7 @@ function BillingTab() {
           borderRadius: '12px',
           background: 'var(--card)',
           border: '1px solid var(--border)',
+          boxShadow: 'var(--card-shadow)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
@@ -511,9 +532,10 @@ function BillingTab() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string; Icon: typeof User }[] = [
-  { id: 'profile',  label: 'Profile',        Icon: User },
-  { id: 'security', label: 'Security',       Icon: Lock },
-  { id: 'billing',  label: 'Plan & Billing', Icon: CreditCard },
+  { id: 'profile',    label: 'Profile',        Icon: User },
+  { id: 'appearance', label: 'Appearance',     Icon: Palette },
+  { id: 'security',   label: 'Security',       Icon: Lock },
+  { id: 'billing',    label: 'Plan & Billing', Icon: CreditCard },
 ]
 
 export default function AccountPage() {
@@ -543,9 +565,10 @@ export default function AccountPage() {
           />
         </div>
 
-        {activeTab === 'profile'  && <ProfileTab />}
-        {activeTab === 'security' && <SecurityTab />}
-        {activeTab === 'billing'  && <BillingTab />}
+        {activeTab === 'profile'    && <ProfileTab />}
+        {activeTab === 'appearance' && <AppearanceTab />}
+        {activeTab === 'security'   && <SecurityTab />}
+        {activeTab === 'billing'    && <BillingTab />}
       </div>
     </div>
   )
