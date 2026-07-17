@@ -12,7 +12,7 @@ import { useToast, ToastContainer } from '@/components/ui'
 import type { CatalogItem } from '@/constants/catalogItems'
 import { ASTRO_GROUP_OVERLAYS, LAUNCH_ACTIVE_GROUP_TAGS, type AstroGroupOverlay } from '@/constants/astroGroupOverlays'
 import type { DeepDiveItem } from './DeepDivePanel'
-import { TagChip, RULE_TAG_COLORS, DEFAULT_TAG_COLOR } from '@/constants/ruleTagColors'
+import { TagChip, RULE_TAG_COLORS, tagHue } from '@/constants/ruleTagColors'
 
 const ASTRO_PALETTE = [
   '#6366f1', 'var(--accent)', 'var(--bull)', 'var(--bull)',
@@ -580,36 +580,42 @@ export default function CatalogAstroSection({ onSelect, compact = false }: Catal
           </button>
           {allTags.map(tag => {
             const active = activeTags.includes(tag)
-            const colorCls = RULE_TAG_COLORS[tag] ?? DEFAULT_TAG_COLOR
+            const hue = tagHue(tag)
             const count = tagCounts[tag] ?? 0
             return (
-              <div key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                <button
-                  onClick={() => toggleTag(tag)}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer',
-                    active ? colorCls : 'bg-transparent text-muted border-kd-border hover:border-kd-border-active',
-                  )}
-                  style={{ fontFamily: 'inherit' }}
-                >
-                  {tag}
-                  <span className={cn(
-                    'text-[10px] leading-none px-1 py-0.5 rounded-full',
-                    active ? 'bg-white/20 text-white' : 'bg-white/10 text-[var(--text-muted)]',
-                  )}>
-                    {count}
-                  </span>
-                </button>
-                {active && (
-                  <TagColorControl
-                    tag={tag}
-                    color={getTagColor(tag)}
-                    opacity={getTagOpacity(tag)}
-                    onColorChange={c => handleTagColorChange(tag, c)}
-                    onOpacityChange={o => handleTagOpacityChange(tag, o)}
-                  />
-                )}
-              </div>
+              <button
+                key={tag}
+                onClick={() => toggleTag(tag)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] border transition-all cursor-pointer"
+                style={{
+                  fontFamily: 'inherit',
+                  background: active
+                    ? `color-mix(in srgb, ${hue} 14%, transparent)`
+                    : 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
+                  borderColor: active
+                    ? `color-mix(in srgb, ${hue} 35%, transparent)`
+                    : 'var(--border)',
+                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6, height: 6, borderRadius: '50%', background: hue,
+                    flexShrink: 0, display: 'inline-block', opacity: active ? 1 : 0.55,
+                  }}
+                />
+                {tag}
+                <span style={{
+                  fontSize: 10, lineHeight: 1, padding: '2px 5px', borderRadius: 999,
+                  background: active
+                    ? `color-mix(in srgb, ${hue} 22%, transparent)`
+                    : 'color-mix(in srgb, var(--text-primary) 8%, transparent)',
+                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                }}>
+                  {count}
+                </span>
+              </button>
             )
           })}
           </div>
