@@ -7091,10 +7091,20 @@ async def update_discovered_theme(theme_id: int, req: _ThemeStatusRequest):
     return {'ok': True, 'id': theme_id, 'status': req.status}
 
 
+class _CustomComputeReq(BaseModel):
+    from_date: Optional[str] = None   # YYYY-MM-DD inclusive; None = full history
+    to_date: Optional[str] = None     # YYYY-MM-DD inclusive; None = latest
+
+
 @app.post('/api/custom-index/{index_id}/compute')
-async def custom_index_compute(index_id: int):
-    """Recompute synthetic EOD (close/ret_5d/22d/66d) + scores for ONE custom
-    index, on demand — the 'Calculate' button.
+async def custom_index_compute(index_id: int, req: Optional[_CustomComputeReq] = None):
+    """Recompute synthetic EOD (close/ret_5d/22d/66d) + scores + indicator
+    layer (ema/rsi/magic_rs/flow) for ONE custom index, on demand — the
+    'Calculate' button, and the per-index step the 'Backfill' panel loops.
+
+    Optional body {from_date, to_date} bounds the recompute (both inclusive,
+    YYYY-MM-DD). Omit both for full history — the default the Calculate button
+    and a freshly-created index use.
 
     A freshly created or edited custom index has no km_index_eod rows (or
     stale ones) until this runs: the nightly pipeline (step 'index_returns')
@@ -7117,7 +7127,20 @@ async def custom_index_compute(index_id: int):
     so this stays fast regardless of how long the index's own history is.
     """
     start = time.time()
-    scores_from = (date.today() - timedelta(days=100)).isoformat()
+    from_date = req.from_date if req else None
+    to_date = req.to_date if req else None
+    for _d in (from_date, to_date):
+        if _d is not None:
+            try:
+                date.fromisoformat(_d)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f'invalid date: {_d!r} (want YYYY-MM-DD)')
+    # Scores are only read by the recent Sector-Rotation view; bound them to the
+    # backfill window (or the last 100 days for a full run) so an old/full range
+    # doesn't recompute scores for every index across all history (that blew the
+    # statement timeout in production).
+    scores_from = from_date or (date.today() - timedelta(days=100)).isoformat()
+    ind_from = date.fromisoformat(from_date) if from_date else None
     # Full-history indicator backfill (ema/rsi/magic_rs/flow over all bars) is
     # heavier than the returns/scores recompute — give it headroom.
     conn = _conn(statement_timeout_ms=180_000)
@@ -7135,7 +7158,7 @@ async def custom_index_compute(index_id: int):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT compute_custom_index_eod(%s, %s, %s)",
-                [None, None, index_id],
+                [from_date, to_date, index_id],
             )
             rows_computed = cur.fetchone()[0] or 0
         conn.commit()
@@ -7145,13 +7168,13 @@ async def custom_index_compute(index_id: int):
             score_rows = cur.fetchall()
         conn.commit()
 
-        # Fill the indicator layer for this index over its FULL history so the
-        # detail page's zone/flow/technical widgets populate (ema_20, rsi_14,
-        # magic_rs, flow_type). refresh=True re-nulls indicators_computed_at so
-        # an edited index (add/remove constituents) recomputes, not just first
-        # run. Same generic per-symbol RPCs standard indices use.
+        # Fill the indicator layer for this index so the detail page's zone/flow/
+        # technical widgets populate (ema_20, rsi_14, magic_rs, flow_type).
+        # refresh=True re-nulls indicators_computed_at so an edited index
+        # (add/remove constituents) recomputes, not just first run. Same generic
+        # per-symbol RPCs standard indices use.
         indicator_rows = compute_custom_index_indicators(
-            conn, from_date=None, index_ids=[index_id], refresh=True)
+            conn, from_date=ind_from, index_ids=[index_id], refresh=True)
     except HTTPException:
         conn.rollback()
         raise
@@ -7169,6 +7192,53 @@ async def custom_index_compute(index_id: int):
         'indicator_rows': indicator_rows,
         'indices_scored': sum(1 for r in score_rows if (r.get('rows_updated') or 0) > 0),
         'elapsed_ms': int((time.time() - start) * 1000),
+    }
+
+
+@app.delete('/api/custom-index/{index_id}')
+async def custom_index_delete(index_id: int):
+    """Delete a custom index and its data — the list-page trash button.
+
+    Guarded to category='custom' so a real NSE/BSE index can never be removed.
+    Removes the synthetic EOD rows and constituents first (no FK cascade exists
+    on km_index_symbols) so nothing orphans, then the symbol row itself.
+    """
+    conn = _conn(statement_timeout_ms=60_000)
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id, name FROM km_index_symbols WHERE id = %s AND category = 'custom'",
+                [index_id],
+            )
+            idx = cur.fetchone()
+            if not idx:
+                raise HTTPException(status_code=404, detail=f'custom index {index_id} not found')
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM km_index_eod WHERE index_id = %s", [index_id])
+            eod_deleted = cur.rowcount
+            cur.execute("DELETE FROM km_index_constituents WHERE index_id = %s", [index_id])
+            const_deleted = cur.rowcount
+            cur.execute(
+                "DELETE FROM km_index_symbols WHERE id = %s AND category = 'custom'",
+                [index_id],
+            )
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f'delete failed: {str(exc)[:300]}')
+    finally:
+        conn.close()
+
+    return {
+        'ok': True,
+        'index_id': index_id,
+        'index_name': idx['name'],
+        'eod_rows_deleted': eod_deleted,
+        'constituents_deleted': const_deleted,
     }
 
 

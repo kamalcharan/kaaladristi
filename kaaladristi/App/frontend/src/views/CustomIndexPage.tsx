@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { from } from '@/services/postgrest';
 import { PageHeader } from '@/components/ui';
 
@@ -50,14 +50,30 @@ function fmtDate(iso: string | null): string {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type DateRange = { from_date: string | null; to_date: string | null };
+
 export default function CustomIndexPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [computeState, setComputeState] = useState<Record<number, { status: ComputeStatus; msg?: string }>>({});
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  async function calculateIndex(id: number) {
+  // Backfill panel
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<{ done: number; total: number } | null>(null);
+
+  async function calculateIndex(id: number, range?: DateRange) {
     setComputeState((prev) => ({ ...prev, [id]: { status: 'loading' } }));
     try {
-      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${id}/compute`, { method: 'POST' });
+      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${id}/compute`, {
+        method: 'POST',
+        ...(range
+          ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(range) }
+          : {}),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? `HTTP ${res.status}`);
@@ -72,6 +88,40 @@ export default function CustomIndexPage() {
         ...prev,
         [id]: { status: 'error', msg: e instanceof Error ? e.message : 'failed' },
       }));
+    }
+  }
+
+  async function runBackfillAll() {
+    if (backfilling) return;
+    const range: DateRange | undefined =
+      fromDate || toDate ? { from_date: fromDate || null, to_date: toDate || null } : undefined;
+    setBackfilling(true);
+    setBackfillProgress({ done: 0, total: indices.length });
+    // Sequential — the compute RPCs take a per-table advisory lock; running them
+    // one index at a time avoids lock contention and keeps the DB responsive.
+    for (let i = 0; i < indices.length; i++) {
+      await calculateIndex(indices[i].id, range);
+      setBackfillProgress({ done: i + 1, total: indices.length });
+    }
+    setBackfilling(false);
+  }
+
+  async function deleteIndex(id: number, name: string) {
+    if (!window.confirm(
+      `Delete custom index "${name}"?\n\nThis permanently removes its synthetic price history and constituent list. This cannot be undone.`,
+    )) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`${PIPELINE_URL}/api/custom-index/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['custom-indices'] });
+    } catch (e) {
+      window.alert(`Delete failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -98,6 +148,21 @@ export default function CustomIndexPage() {
           meta="NSE Only"
           actions={
             <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setBackfillOpen((o) => !o)}
+                title="Recompute synthetic EOD + indicators for all custom indices over a date range"
+                style={{
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  borderRadius: '8px',
+                  border: `1px solid ${backfillOpen ? 'var(--accent-indigo)' : 'var(--border)'}`,
+                  background: backfillOpen ? 'color-mix(in srgb, var(--accent-indigo) 8%, transparent)' : 'transparent',
+                  color: backfillOpen ? 'var(--accent-indigo)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                ⟳ Backfill
+              </button>
               <button
                 onClick={() => navigate('/custom-index/create')}
                 style={{
@@ -130,6 +195,78 @@ export default function CustomIndexPage() {
           }
         />
       </div>
+
+      {/* Backfill panel */}
+      {backfillOpen && (
+        <div style={{ flexShrink: 0, padding: '0 24px 12px' }}>
+          <div style={{
+            border: '1px solid var(--border)', borderRadius: '10px',
+            background: 'var(--card)', padding: '14px 18px',
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+              Backfill all custom indices
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-faint)', marginBottom: '12px', lineHeight: 1.5 }}>
+              Recomputes synthetic EOD + scores + indicators (ema / rsi / magic RS / flow) for every custom index.
+              Leave both dates empty for full history. Runs one index at a time.
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                From
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  disabled={backfilling}
+                  style={{
+                    padding: '6px 10px', fontSize: '13px', borderRadius: '6px',
+                    border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)',
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                To
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  disabled={backfilling}
+                  style={{
+                    padding: '6px 10px', fontSize: '13px', borderRadius: '6px',
+                    border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)',
+                  }}
+                />
+              </label>
+              <button
+                onClick={() => void runBackfillAll()}
+                disabled={backfilling || indices.length === 0}
+                style={{
+                  padding: '7px 16px', fontSize: '13px', borderRadius: '8px',
+                  border: '1px solid var(--accent-indigo)',
+                  background: 'color-mix(in srgb, var(--accent-indigo) 12%, transparent)', color: 'var(--accent-indigo)',
+                  cursor: backfilling ? 'not-allowed' : 'pointer', fontWeight: 600,
+                }}
+              >
+                {backfilling && backfillProgress
+                  ? `Backfilling ${backfillProgress.done}/${backfillProgress.total}…`
+                  : `Run backfill (${indices.length} ${indices.length === 1 ? 'index' : 'indices'})`}
+              </button>
+              {(fromDate || toDate) && !backfilling && (
+                <button
+                  onClick={() => { setFromDate(''); setToDate(''); }}
+                  style={{
+                    padding: '7px 12px', fontSize: '12px', borderRadius: '8px',
+                    border: '1px solid var(--border)', background: 'transparent',
+                    color: 'var(--text-faint)', cursor: 'pointer',
+                  }}
+                >
+                  Clear dates
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
@@ -266,6 +403,27 @@ export default function CustomIndexPage() {
                   }}
                 >
                   ✎ Manage
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void deleteIndex(idx.id, idx.name);
+                  }}
+                  disabled={deletingId === idx.id}
+                  title="Delete this custom index"
+                  style={{
+                    fontSize: '11px',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--risk-red)',
+                    background: 'transparent',
+                    color: 'var(--risk-red)',
+                    cursor: deletingId === idx.id ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                    opacity: deletingId === idx.id ? 0.5 : 1,
+                  }}
+                >
+                  {deletingId === idx.id ? 'Deleting…' : '🗑 Delete'}
                 </button>
                 <div style={{ fontSize: '14px', color: 'var(--text-faint)', flexShrink: 0 }}>›</div>
               </div>
