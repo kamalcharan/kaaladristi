@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, ChevronLeft, Download, Copy, Check } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, Download, Copy, Check } from 'lucide-react';
 import { Card, DristiQLoader } from '@/components/ui';
 import { useScan, useAllScanCounts, useScanPresets, useFpbActive } from '@/hooks/useScan';
 import { SCAN_PRESETS, type ExchangeFilter, type ScanTimeframe, type FpbActiveRow } from '@/services/scanEngine';
@@ -1550,6 +1550,14 @@ export default function ScanView() {
   const { data: allCountsData } = useAllScanCounts('combined');
   const allCounts = allCountsData?.counts;
 
+  // Scanner category rail — collapsible on click (preference remembered).
+  const [railOpen, setRailOpen] = useState(() => localStorage.getItem('kd_scanner_rail_open') !== '0');
+  const toggleRail = () => setRailOpen((o) => {
+    const next = !o;
+    localStorage.setItem('kd_scanner_rail_open', next ? '1' : '0');
+    return next;
+  });
+
   // Build category groups
   const categories = useMemo(() => {
     const map = new Map<string, {
@@ -1591,32 +1599,57 @@ export default function ScanView() {
       display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden',
       margin: '-24px', height: 'calc(100vh - 46px)',
     }}>
-      {/* Left sidebar — always visible */}
+      {/* Left category rail — collapsible on click */}
       <div style={{
-        width: '220px', minWidth: '220px',
+        width: railOpen ? '220px' : '44px',
+        minWidth: railOpen ? '220px' : '44px',
         background: 'var(--card)',
         borderRight: '1px solid var(--border)',
-        overflowY: 'auto', padding: '14px 0', flexShrink: 0,
+        overflowY: 'auto', overflowX: 'hidden', padding: '14px 0', flexShrink: 0,
+        transition: 'width 0.18s ease, min-width 0.18s ease',
       }}>
+        {/* Header: label + collapse/expand toggle */}
         <div style={{
-          fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '10px',
-          letterSpacing: '1.5px', textTransform: 'uppercase',
-          color: 'var(--text-faint)', padding: '0 14px 10px',
+          display: 'flex', alignItems: 'center',
+          justifyContent: railOpen ? 'space-between' : 'center',
+          padding: railOpen ? '0 10px 10px 14px' : '0 0 10px',
         }}>
-          Scanner
+          {railOpen && (
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '10px',
+              letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text-faint)',
+            }}>
+              Scanner
+            </span>
+          )}
+          <button
+            onClick={toggleRail}
+            title={railOpen ? 'Collapse' : 'Expand scanner list'}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 24, height: 24, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'transparent',
+              color: 'var(--text-faint)',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-faint)')}
+          >
+            {railOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+          </button>
         </div>
         {categories.map((cat) => {
           const defaultPreset = cat.defaultPreset ?? cat.presets[0];
           const isActive = cat.id === activeCategoryId;
-          // count = default tab count only (4a)
-          const catCount = defaultPreset ? (allCounts?.[defaultPreset.id] ?? 0) : 0;
           return (
             <div
               key={cat.id}
               onClick={() => defaultPreset && navigate(`/scanner/${defaultPreset.id}`)}
+              title={!railOpen ? cat.label : undefined}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '8px 14px', cursor: 'pointer',
+                padding: railOpen ? '8px 14px' : '9px 0',
+                justifyContent: railOpen ? 'flex-start' : 'center',
+                cursor: 'pointer',
                 background: isActive ? 'rgba(240,165,0,0.06)' : 'transparent',
                 transition: 'background 0.15s',
               }}
@@ -1624,22 +1657,17 @@ export default function ScanView() {
               <span style={{
                 width: '7px', height: '7px', borderRadius: '50%',
                 background: cat.color, flexShrink: 0,
+                boxShadow: isActive ? `0 0 0 3px color-mix(in srgb, ${cat.color} 25%, transparent)` : 'none',
               }} />
-              <span style={{
-                fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '11px',
-                letterSpacing: '0.8px', textTransform: 'uppercase', flex: 1,
-                color: isActive ? 'var(--gold)' : 'var(--text-muted)',
-              }}>
-                {cat.label}
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-mono)', fontSize: '10px',
-                color: isActive ? 'var(--gold)' : 'var(--text-faint)',
-                background: isActive ? 'rgba(240,165,0,0.1)' : 'var(--panel-recess)',
-                padding: '1px 6px', borderRadius: '3px',
-              }}>
-                {catCount > 0 ? catCount : '—'}
-              </span>
+              {railOpen && (
+                <span style={{
+                  fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '11px',
+                  letterSpacing: '0.8px', textTransform: 'uppercase', flex: 1,
+                  color: isActive ? 'var(--gold)' : 'var(--text-muted)',
+                }}>
+                  {cat.label}
+                </span>
+              )}
             </div>
           );
         })}
