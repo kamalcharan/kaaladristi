@@ -17,6 +17,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -102,6 +103,46 @@ def _is_cancelled(conn, job_id: int) -> bool:
 
 # ── Job execution ─────────────────────────────────────────────────────────
 
+def _reconcile_daily_run_after_fix(conn, dim: str, trade_date_obj: date) -> None:
+    """After a step is re-run successfully, drop it from the parent daily_run's
+    error_msg so the admin pipeline-health bar reflects the fix.
+
+    The bar reads the latest daily_run's error_msg (has_error = bool(error_msg)).
+    A fix job writes only its OWN record, so without this the bar keeps showing
+    the original failure until the next nightly run — the admin re-runs the step
+    but the notice never clears. We parse the 'failed steps: A, B.' prefix, remove
+    the just-fixed dim, and rewrite (NULL when nothing is left failing).
+    Best-effort: never let a reconcile error affect the fix job's own outcome.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, error_msg FROM km_jobs "
+                "WHERE job_type = 'daily_run' AND trade_date = %s "
+                "ORDER BY created_at DESC, id DESC LIMIT 1",
+                [str(trade_date_obj)],
+            )
+            row = cur.fetchone()
+            if not row or not row[1]:
+                return
+            job_id, error_msg = row[0], row[1]
+            m = re.match(r'failed steps: ([^.]+)\.', error_msg)
+            if not m:
+                return
+            steps = [s.strip() for s in m.group(1).split(',') if s.strip()]
+            if dim not in steps:
+                return
+            remaining = [s for s in steps if s != dim]
+            new_msg = f'failed steps: {", ".join(remaining)}.' if remaining else None
+            cur.execute("UPDATE km_jobs SET error_msg = %s WHERE id = %s", [new_msg, job_id])
+        conn.commit()
+        log.info(f'daily_run {trade_date_obj}: cleared fixed step {dim!r} '
+                 f'({"still failing: " + ", ".join(remaining) if remaining else "all clear"})')
+    except Exception as e:
+        conn.rollback()
+        log.warning(f'reconcile daily_run after fixing {dim} {trade_date_obj} failed: {e}')
+
+
 def _run_fix(conn, job: dict) -> None:
     """Execute a fix:<dimension> job."""
     job_id = job['id']
@@ -165,6 +206,11 @@ def _run_fix(conn, job: dict) -> None:
         f'{result.fill_rate_before:.1f}% -> {result.fill_rate_after:.1f}% '
         f'[{result.status}]'
     )
+
+    # Step no longer erroring → clear it from the parent daily_run so the
+    # admin health bar updates (see _reconcile_daily_run_after_fix).
+    if result.status != 'failed' and not result.error_msg:
+        _reconcile_daily_run_after_fix(conn, dim, trade_date_obj)
 
 
 def _run_daily(conn, job: dict) -> None:
