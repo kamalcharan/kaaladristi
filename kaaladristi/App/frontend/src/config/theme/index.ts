@@ -4,21 +4,19 @@
 //   import { applyThemeById } from '@/config/theme';
 //   applyThemeById(import.meta.env.VITE_THEME ?? 'kaaladristi');
 //
-// VITE_THEME values: 'kaaladristi' | 'tech-ai' | 'jade-thorn'
+// VITE_THEME values: 'kaaladristi' | 'jade-thorn'
 
 import type { ThemeConfig, ThemeColorSet } from './types';
 import { KaalaDrishtiTheme } from './themes/kaaladristi';
-import { TechAITheme }       from './themes/techAI';
 import { JadeThornTheme }    from './themes/jadeThorn';
 
 export type { ThemeConfig, ThemeColorSet };
-export { KaalaDrishtiTheme, TechAITheme, JadeThornTheme };
+export { KaalaDrishtiTheme, JadeThornTheme };
 
 // ── Registry ────────────────────────────────────────────────────────────────
 
 const REGISTRY: Record<string, ThemeConfig> = {
   [KaalaDrishtiTheme.id]: KaalaDrishtiTheme,
-  [TechAITheme.id]:       TechAITheme,
   [JadeThornTheme.id]:    JadeThornTheme,
 };
 

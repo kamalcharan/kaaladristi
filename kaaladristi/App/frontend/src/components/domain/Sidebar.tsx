@@ -4,7 +4,6 @@ import { LogOut, Shield, ChevronRight, ChevronDown, LayoutGrid } from 'lucide-re
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
-import { useThemeStore, THEMES } from '@/stores/themeStore';
 import { signOut } from '@/services/auth';
 
 // ── Nav definition ──────────────────────────────────────────────────────────
@@ -88,47 +87,6 @@ function marketStatus(): string {
   if (mins < 9 * 60 + 15) return 'Pre-market';
   if (mins <= 15 * 60 + 30) return 'Market open';
   return 'Market closed';
-}
-
-// ── ThemeSwitcher ────────────────────────────────────────────────────────────
-
-function ThemeSwitcher({ collapsed }: { collapsed: boolean }) {
-  const { activeTheme, setTheme } = useThemeStore()
-  const currentTheme = THEMES.find(t => t.id === activeTheme) ?? THEMES[0]
-
-  if (collapsed) {
-    return (
-      <div className="flex flex-col items-center gap-1.5 pb-3">
-        <div
-          title={`Theme: ${currentTheme.label}`}
-          style={{ width: 8, height: 8, borderRadius: '50%', background: currentTheme.dot,
-            boxShadow: `0 0 6px ${currentTheme.dot}`, cursor: 'default' }}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {THEMES.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTheme(t.id)}
-            title={t.label}
-            style={{
-              width: 10, height: 10, borderRadius: '50%',
-              background: t.dot,
-              boxShadow: activeTheme === t.id ? `0 0 7px ${t.dot}` : 'none',
-              border: activeTheme === t.id ? `2px solid ${t.dot}` : '2px solid transparent',
-              cursor: 'pointer', flexShrink: 0, padding: 0,
-              outline: 'none', transition: 'box-shadow .15s',
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  )
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -380,9 +338,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           );
         })}
       </div>
-
-      {/* ── Theme switcher ── */}
-      <ThemeSwitcher collapsed={collapsed} />
 
       {/* ── Footer: user + date ── */}
       <div
