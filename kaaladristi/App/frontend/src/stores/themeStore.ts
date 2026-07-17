@@ -5,8 +5,7 @@ const THEME_KEY = 'kd-theme'
 const MODE_KEY = 'kd-theme-mode'
 
 export const THEMES = [
-  { id: 'kaaladristi', label: 'Vikuna Black', dot: '#9b8cff' },
-  { id: 'tech-ai',     label: 'Tech AI',      dot: '#06d5cd' },
+  { id: 'kaaladristi', label: 'Vikuna Black', dot: '#f5a623' },
   { id: 'jade-thorn',  label: 'Jade Thorn',   dot: '#3aad7e' },
 ] as const
 
